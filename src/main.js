@@ -1,11 +1,8 @@
-import { supabase } from './supabase.js';
-
-
-
 let dynamicFormSchema = null;
 async function fetchDynamicForm() {
     try {
-        const { data, error } = await supabase.from('forms').select('*').order('created_at', { ascending: false }).limit(1);
+        if (!supabaseClient) return;
+        const { data, error } = await supabaseClient.from('forms').select('*').order('created_at', { ascending: false }).limit(1);
         if (!error && data && data.length > 0) {
             dynamicFormSchema = data[0].schema;
             console.log("Form loaded from Supabase:", dynamicFormSchema);
