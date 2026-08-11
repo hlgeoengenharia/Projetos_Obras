@@ -909,141 +909,142 @@ function renderFeatureInfo() {
 
   // OLD LOGIC FALLBACK
 
-   {
-  const container = document.getElementById('feature-info-content');
-  container.innerHTML = '';
-  if (!activeFeatureLayer.feature.properties) {
-      activeFeatureLayer.feature.properties = {};
-  }
-  const properties = activeFeatureLayer.feature.properties;
-  const geomType = activeFeatureLayer.feature.geometry.type;
-  const isLine = geomType === 'LineString' || geomType === 'MultiLineString';
-  
-  // Set default coordinates if point
-  if ((geomType === 'Point' || geomType === 'MultiPoint') && !properties['Coordenadas Geográficas WGS 84']) {
-      const latlng = activeFeatureLayer.getLatLng();
-      properties['Coordenadas Geográficas WGS 84'] = `Latitude: ${latlng.lat.toFixed(6)} e Longitude: ${latlng.lng.toFixed(6)}`;
-  }
+  {
+    const container = document.getElementById('feature-info-content');
+    container.innerHTML = '';
+    if (!activeFeatureLayer.feature.properties) {
+        activeFeatureLayer.feature.properties = {};
+    }
+    const properties = activeFeatureLayer.feature.properties;
+    const geomType = activeFeatureLayer.feature.geometry.type;
+    const isLine = geomType === 'LineString' || geomType === 'MultiLineString';
+    
+    // Set default coordinates if point
+    if ((geomType === 'Point' || geomType === 'MultiPoint') && !properties['Coordenadas Geográficas WGS 84']) {
+        const latlng = activeFeatureLayer.getLatLng();
+        properties['Coordenadas Geográficas WGS 84'] = `Latitude: ${latlng.lat.toFixed(6)} e Longitude: ${latlng.lng.toFixed(6)}`;
+    }
 
-  let html = '';
-  
-  if (isLine) {
-     const fields = ["Descrição", "Extensão (m)", "Observações"];
-     fields.forEach(key => {
-        const value = properties[key] || '';
-        if (isFeatureEditMode) {
-          const readonly = key === 'Extensão (m)' ? 'readonly' : '';
-          const extraClass = key === 'Extensão (m)' ? 'bg-slate-200 dark:bg-slate-800 cursor-not-allowed' : 'bg-slate-50 dark:bg-slate-900';
-          html += `
-            <div class="flex flex-col gap-1">
-              <label class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">${key}</label>
-              ${key === 'Observações' 
-                ? `<textarea data-key="${key}" class="feature-data-input w-full px-3 py-2 ${extraClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">${value}</textarea>`
-                : `<input type="text" data-key="${key}" value="${value}" ${readonly} class="feature-data-input w-full px-3 py-2 ${extraClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">`
-              }
-            </div>
-          `;
-        } else {
-          html += `
-            <div class="flex flex-col border-b border-slate-100 dark:border-slate-800 pb-3 last:border-0">
-              <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">${key}</span>
-              <span class="text-sm text-slate-800 dark:text-slate-200 font-medium">${value || '<span class="text-slate-300 dark:text-slate-600 italic">Não informado</span>'}</span>
-            </div>
-          `;
-        }
-     });
-  } else {
-     // Point or Polygon complex form
-     const fields = [
-         {key: "Descrição", type: "text"},
-         {key: "Situação", type: "select", options: ["Regular", "Irregular"]},
-         {key: "Tipo de estrutura", type: "select", options: ["Alvenaria", "Madeira", "Palafita", "Trailer", "Container", "Barraco", "Taipa", "Não se aplica", "Outros"]},
-         {key: "Estrutura Outros", type: "text", condition: "Tipo de estrutura", condValue: "Outros"},
-         {key: "Uso", type: "select", options: ["Comercial", "Residencial", "Mista", "Sem uso definido"]},
-         {key: "Motivo da visita", type: "text"},
-         {key: "Endereço", type: "text"},
-         {key: "Número do imóvel", type: "text"},
-         {key: "Bairro", type: "text"},
-         {key: "Município", type: "text"},
-         {key: "UF", type: "text"},
-         {key: "Coordenadas Geográficas WGS 84", type: "text", readonly: true},
-         {key: "Ocupante", type: "select", options: ["Não", "Sim"]},
-         {key: "Nome Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
-         {key: "CPF Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
-         {key: "RG Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
-         {key: "Endereço Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
-         {key: "Número Residencia Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
-         {key: "Bairro Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
-         {key: "Cidade Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
-         {key: "UF Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
-         {key: "CEP Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
-         {key: "Observação", type: "textarea"}
-     ];
-     
-     if (isFeatureEditMode) {
-         fields.forEach(f => {
-             const value = properties[f.key] || '';
-             const display = f.condition && properties[f.condition] !== f.condValue ? 'none' : 'flex';
-             const extraClass = f.readonly ? 'bg-slate-200 dark:bg-slate-800 cursor-not-allowed' : 'bg-slate-50 dark:bg-slate-900';
-             
-             let inputHtml = '';
-             if (f.type === 'select') {
-                 let opts = `<option value="">Selecione...</option>`;
-                 f.options.forEach(opt => {
-                     opts += `<option value="${opt}" ${value === opt ? 'selected' : ''}>${opt}</option>`;
-                 });
-                 inputHtml = `<select data-key="${f.key}" class="feature-data-input w-full px-3 py-2 ${extraClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm" onchange="handleFeatureSelectChange(this)">${opts}</select>`;
-             } else if (f.type === 'textarea') {
-                 inputHtml = `<textarea data-key="${f.key}" class="feature-data-input w-full px-3 py-2 ${extraClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">${value}</textarea>`;
-             } else {
-                 inputHtml = `<input type="text" data-key="${f.key}" value="${value}" ${f.readonly ? 'readonly' : ''} class="feature-data-input w-full px-3 py-2 ${extraClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">`;
-             }
-             
-             html += `
-                <div class="flex-col gap-1 feature-field-container" data-field="${f.key}" data-condition="${f.condition || ''}" data-condvalue="${f.condValue || ''}" style="display: ${display}">
-                  <label class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">${f.key}</label>
-                  ${inputHtml}
-                </div>
-             `;
-         });
-         
-         // Photos field
-         html += `
-            <div class="flex flex-col gap-1 feature-field-container mt-2">
-               <label class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Fotos Adicionais da Feição</label>
-               <input type="file" id="feature-photos-upload" accept="image/*" multiple capture="environment" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20">
-            </div>
-         `;
-     } else {
-         fields.forEach(f => {
-             const value = properties[f.key] || '';
-             // Only display if it has value
-             if (!value) return;
-             if (f.condition && properties[f.condition] !== f.condValue) return;
-             
-             html += `
-                <div class="flex flex-col border-b border-slate-100 dark:border-slate-800 pb-3 last:border-0">
-                  <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">${f.key}</span>
-                  <span class="text-sm text-slate-800 dark:text-slate-200 font-medium">${value}</span>
-                </div>
-             `;
-         });
-         
-         if (properties.photos && properties.photos.length > 0) {
-             let imgs = '';
-             properties.photos.forEach(p => {
-                 imgs += `<img src="${p}" class="w-full rounded border border-slate-200 mt-2">`;
-             });
-             html += `
-                <div class="flex flex-col border-b border-slate-100 dark:border-slate-800 pb-3 last:border-0 mt-4">
-                  <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Fotos da Feição</span>
-                  ${imgs}
-                </div>
-             `;
-         }
-     }
+    let html = '';
+    
+    if (isLine) {
+       const fields = ["Descrição", "Extensão (m)", "Observações"];
+       fields.forEach(key => {
+          const value = properties[key] || '';
+          if (isFeatureEditMode) {
+            const readonly = key === 'Extensão (m)' ? 'readonly' : '';
+            const extraClass = key === 'Extensão (m)' ? 'bg-slate-200 dark:bg-slate-800 cursor-not-allowed' : 'bg-slate-50 dark:bg-slate-900';
+            html += `
+              <div class="flex flex-col gap-1">
+                <label class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">${key}</label>
+                ${key === 'Observações' 
+                  ? `<textarea data-key="${key}" class="feature-data-input w-full px-3 py-2 ${extraClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">${value}</textarea>`
+                  : `<input type="text" data-key="${key}" value="${value}" ${readonly} class="feature-data-input w-full px-3 py-2 ${extraClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">`
+                }
+              </div>
+            `;
+          } else {
+            html += `
+              <div class="flex flex-col border-b border-slate-100 dark:border-slate-800 pb-3 last:border-0">
+                <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">${key}</span>
+                <span class="text-sm text-slate-800 dark:text-slate-200 font-medium">${value || '<span class="text-slate-300 dark:text-slate-600 italic">Não informado</span>'}</span>
+              </div>
+            `;
+          }
+       });
+    } else {
+       // Point or Polygon complex form
+       const fields = [
+           {key: "Descrição", type: "text"},
+           {key: "Situação", type: "select", options: ["Regular", "Irregular"]},
+           {key: "Tipo de estrutura", type: "select", options: ["Alvenaria", "Madeira", "Palafita", "Trailer", "Container", "Barraco", "Taipa", "Não se aplica", "Outros"]},
+           {key: "Estrutura Outros", type: "text", condition: "Tipo de estrutura", condValue: "Outros"},
+           {key: "Uso", type: "select", options: ["Comercial", "Residencial", "Mista", "Sem uso definido"]},
+           {key: "Motivo da visita", type: "text"},
+           {key: "Endereço", type: "text"},
+           {key: "Número do imóvel", type: "text"},
+           {key: "Bairro", type: "text"},
+           {key: "Município", type: "text"},
+           {key: "UF", type: "text"},
+           {key: "Coordenadas Geográficas WGS 84", type: "text", readonly: true},
+           {key: "Ocupante", type: "select", options: ["Não", "Sim"]},
+           {key: "Nome Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
+           {key: "CPF Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
+           {key: "RG Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
+           {key: "Endereço Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
+           {key: "Número Residencia Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
+           {key: "Bairro Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
+           {key: "Cidade Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
+           {key: "UF Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
+           {key: "CEP Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
+           {key: "Observação", type: "textarea"}
+       ];
+       
+       if (isFeatureEditMode) {
+           fields.forEach(f => {
+               const value = properties[f.key] || '';
+               const display = f.condition && properties[f.condition] !== f.condValue ? 'none' : 'flex';
+               const extraClass = f.readonly ? 'bg-slate-200 dark:bg-slate-800 cursor-not-allowed' : 'bg-slate-50 dark:bg-slate-900';
+               
+               let inputHtml = '';
+               if (f.type === 'select') {
+                   let opts = `<option value="">Selecione...</option>`;
+                   f.options.forEach(opt => {
+                       opts += `<option value="${opt}" ${value === opt ? 'selected' : ''}>${opt}</option>`;
+                   });
+                   inputHtml = `<select data-key="${f.key}" class="feature-data-input w-full px-3 py-2 ${extraClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm" onchange="handleFeatureSelectChange(this)">${opts}</select>`;
+               } else if (f.type === 'textarea') {
+                   inputHtml = `<textarea data-key="${f.key}" class="feature-data-input w-full px-3 py-2 ${extraClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">${value}</textarea>`;
+               } else {
+                   inputHtml = `<input type="text" data-key="${f.key}" value="${value}" ${f.readonly ? 'readonly' : ''} class="feature-data-input w-full px-3 py-2 ${extraClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">`;
+               }
+               
+               html += `
+                  <div class="flex-col gap-1 feature-field-container" data-field="${f.key}" data-condition="${f.condition || ''}" data-condvalue="${f.condValue || ''}" style="display: ${display}">
+                    <label class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">${f.key}</label>
+                    ${inputHtml}
+                  </div>
+               `;
+           });
+           
+           // Photos field
+           html += `
+              <div class="flex flex-col gap-1 feature-field-container mt-2">
+                 <label class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Fotos Adicionais da Feição</label>
+                 <input type="file" id="feature-photos-upload" accept="image/*" multiple capture="environment" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20">
+              </div>
+           `;
+       } else {
+           fields.forEach(f => {
+               const value = properties[f.key] || '';
+               // Only display if it has value
+               if (!value) return;
+               if (f.condition && properties[f.condition] !== f.condValue) return;
+               
+               html += `
+                  <div class="flex flex-col border-b border-slate-100 dark:border-slate-800 pb-3 last:border-0">
+                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">${f.key}</span>
+                    <span class="text-sm text-slate-800 dark:text-slate-200 font-medium">${value}</span>
+                  </div>
+               `;
+           });
+           
+           if (properties.photos && properties.photos.length > 0) {
+               let imgs = '';
+               properties.photos.forEach(p => {
+                   imgs += `<img src="${p}" class="w-full rounded border border-slate-200 mt-2">`;
+               });
+               html += `
+                  <div class="flex flex-col border-b border-slate-100 dark:border-slate-800 pb-3 last:border-0 mt-4">
+                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Fotos da Feição</span>
+                    ${imgs}
+                  </div>
+               `;
+           }
+       }
+    }
+    container.innerHTML = html;
   }
-  container.innerHTML = html;
 }
 
 function handleFeatureSelectChange(selectElem) {
