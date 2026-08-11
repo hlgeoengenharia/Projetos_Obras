@@ -1,62 +1,38 @@
-# Guia de Deploy com a Vercel via Terminal
+# 🚀 Manual de Deploy - Projetos Obras
 
-Se a publicação automática pelo GitHub estiver apresentando falhas, você pode utilizar a interface de linha de comando (CLI) da Vercel para realizar o deploy direto do seu terminal. Isso geralmente evita problemas de configuração e mostra erros de forma mais detalhada.
+Este guia contém o passo a passo padrão para subir suas atualizações com segurança utilizando o GitHub, que se comunica automaticamente com a Vercel.
 
-Siga o passo a passo abaixo:
+## 1. Verificação Pré-vôo (Local)
+Sempre teste as alterações no seu servidor local antes de subir.
+*   No terminal do projeto, rode: `npm run dev`
+*   Acesse o link gerado (ex: `http://localhost:5173`) no seu navegador.
+*   Dica: Use o Inspetor do Navegador (F12) para testar o layout em modo celular.
 
-## Passo 1: Instalar a Vercel CLI
-Se você ainda não tem a ferramenta da Vercel instalada, abra o seu terminal (no ambiente de desenvolvimento) e rode o seguinte comando:
+## 2. Preparando o Envio (Git)
+Abra o terminal na pasta raiz do projeto (`Projetos_Obras`) e execute os seguintes comandos em ordem:
+
 ```bash
-npm install -g vercel
-```
-*(No Windows, se houver erros de política de execução, certifique-se de estar rodando como Administrador ou use ferramentas como o Git Bash).*
+# Passo 1: Capturar todas as alterações
+git add .
 
-## Passo 2: Fazer o Login na Vercel
-Antes de publicar, autentique sua conta da Vercel no terminal:
-```bash
-vercel login
-```
-*Um link será aberto no seu navegador. Escolha o seu método de login (ex: GitHub).*
+# Passo 2: Carimbar a versão com uma mensagem do que foi feito
+# Altere o texto entre aspas para descrever sua atualização
+git commit -m "feat: descrição das melhorias realizadas"
 
-## Passo 3: Iniciar o Deploy
-Com o login feito, e estando na **pasta raiz** do projeto, rode apenas:
-```bash
-vercel
-```
-
-A Vercel fará algumas perguntas interativas no terminal:
-1. **Set up and deploy “~/.../Projetos_Obras”?** Digite `Y` (Sim) e aperte Enter.
-2. **Which scope do you want to deploy to?** Aperte Enter para selecionar a sua conta pessoal.
-3. **Link to existing project?** Digite `N` (Não).
-4. **What’s your project’s name?** Aperte Enter para manter o nome sugerido ou digite outro.
-5. **In which directory is your code located?** Aperte Enter para confirmar que é o diretório atual (`./`).
-6. **Want to modify these settings?** A Vercel vai reconhecer que é um projeto **Vite**. Ela vai sugerir `Build Command: vite build` e `Output Directory: dist`. Se os dados estiverem corretos, aperte `N` e depois Enter.
-
-Aguarde o upload e a construção do projeto. Se der tudo certo, ela vai te devolver um link de "Preview".
-
-## Passo 4: Configurar Variáveis de Ambiente
-O aplicativo precisa se conectar ao Supabase. Você pode adicionar as chaves de duas formas:
-
-**Opção A: No Painel (Recomendado)**
-- Acesse [vercel.com](https://vercel.com) e clique no projeto recém-criado.
-- Vá em **Settings > Environment Variables**.
-- Adicione as chaves `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`.
-
-**Opção B: Pelo Terminal**
-Rode no terminal:
-```bash
-vercel env add VITE_SUPABASE_URL
-```
-*(Cole a URL e selecione em quais ambientes aplicar - Production, Preview, Development).*
-Faça o mesmo para a chave:
-```bash
-vercel env add VITE_SUPABASE_ANON_KEY
+# Passo 3: Enviar para o GitHub
+git push origin main
 ```
 
-## Passo 5: Publicar em Produção
-O primeiro comando `vercel` criou uma versão de Preview (testes). Para aplicar suas chaves de ambiente e gerar o link final oficial, rode:
-```bash
-vercel --prod
-```
+## 3. Finalização (Vercel)
+Após o `git push`, o GitHub avisa a Vercel, que começa a construir (build) e publicar o seu site automaticamente.
+1.  Acesse seu painel na [Vercel](https://vercel.com/) e clique no projeto **Projetos_Obras**.
+2.  Acompanhe o status na aba **"Deployments"**.
+3.  Quando a bolinha ficar verde (**Ready**), o site está atualizado e no ar!
 
-Pronto! Ao final desse comando, o terminal te dará o link definitivo de produção, já com o sistema rodando.
+## 4. Dicas de Ouro do Camisa 10
+*   **Cache:** Se o site abrir a versão antiga no celular ou no computador, use uma aba anônima (Ctrl+Shift+N) ou limpe o cache do navegador.
+*   **Mensagens de Commit:** Tente ser específico (ex: "ajuste no formulário de configurações" em vez de "ajuste"). Isso ajuda muito a organizar o histórico do seu projeto.
+*   **Erros de Conflito:** Se o `git push` falhar por "conflito", significa que há arquivos no GitHub que você não tem localmente. Use `git pull origin main` antes de tentar o push novamente.
+
+---
+*Manual criado e atualizado por seu assistente Antigravity - 2026*
