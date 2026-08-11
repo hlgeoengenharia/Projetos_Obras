@@ -476,8 +476,25 @@
       renderFormsList();
     }
 
-    function saveFormsToStorage() {
+    async function saveFormsToStorage() {
       localStorage.setItem('constructive_forms', JSON.stringify(forms));
+      
+      if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        try {
+          for (const form of forms) {
+            const { error } = await supabaseClient
+              .from('forms')
+              .upsert({ 
+                id: form.id, 
+                title: form.name, 
+                schema: form.tabs 
+              });
+            if (error) console.error('Erro ao salvar no Supabase:', error);
+          }
+        } catch (e) {
+          console.error('Erro de conexão ao salvar no Supabase:', e);
+        }
+      }
     }
 
     function renderFormsList() {
