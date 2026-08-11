@@ -1,0 +1,1519 @@
+import { supabase } from './supabase.js';
+
+
+
+let dynamicFormSchema = null;
+async function fetchDynamicForm() {
+    try {
+        const { data, error } = await supabase.from('forms').select('*').order('created_at', { ascending: false }).limit(1);
+        if (!error && data && data.length > 0) {
+            dynamicFormSchema = data[0].schema;
+            console.log("Form loaded from Supabase:", dynamicFormSchema);
+        }
+    } catch(e) {
+        console.error("Error loading forms", e);
+    }
+}
+// Call it on load
+fetchDynamicForm();
+
+const cabedeloCenter = [-7.0182, -34.8336];
+
+let map;
+let currentMapType = 'Mapa';
+let themes = [];
+let editingThemeId = null;
+let geojsonLayer;
+let baseLayers = {};
+
+// --- DADOS E LOCALSTORAGE ---
+function loadThemes() {
+  const saved = localStorage.getItem('constructive_themes');
+  if (saved) {
+    themes = JSON.parse(saved);
+  } else {
+    themes = [
+      { id: 'obras', name: 'Projetos / Obras', color: '#051125', features: [] }
+    ];
+    saveThemes();
+  }
+}
+
+function saveThemes() {
+  localStorage.setItem('constructive_themes', JSON.stringify(themes));
+}
+
+// --- LEAFLET MAP ---
+function initMap() {
+  map = L.map('map', {
+    zoomControl: false, // We use our custom zoom buttons
+    maxZoom: 24
+  }).setView(cabedeloCenter, 13);
+
+  // Define Base Layers
+  baseLayers['Mapa'] = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors',
+    maxNativeZoom: 19,
+    maxZoom: 24
+  });
+  
+  baseLayers['Satélite'] = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri',
+    maxNativeZoom: 19,
+    maxZoom: 24
+  });
+
+  baseLayers['Híbrido'] = L.layerGroup([
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 24 }),
+    L.tileLayer('https://stamen-tiles-{s}.a.ssl.fastly.net/toner-hybrid/{z}/{x}/{y}{r}.png', { maxNativeZoom: 20, maxZoom: 24 })
+  ]);
+
+  baseLayers['Mapa'].addTo(map);
+
+  // Geoman Options
+  if (map.pm) {
+    try {
+        map.pm.setLang('pt_br');
+    } catch(e) {}
+    map.pm.addControls({
+      position: 'topleft',
+      drawMarker: false,
+      drawCircleMarker: false,
+      drawPolyline: false,
+      drawRectangle: false,
+      drawPolygon: false,
+      drawCircle: false,
+      drawText: false,
+      editMode: false,
+      dragMode: false,
+      cutPolygon: false,
+      removalMode: false,
+    });
+  } else {
+    console.warn("Leaflet Geoman não foi carregado corretamente.");
+  }
+
+  // Layer Group for all GeoJSON features
+  geojsonLayer = L.geoJSON(null, {
+    style: function(feature) {
+      const themeId = feature.properties.themeId;
+      const theme = themes.find(t => t.id === themeId);
+      const color = theme ? theme.color : '#333333';
+      return {
+        fillColor: color,
+        fillOpacity: 0.4,
+        color: color,
+        weight: 2
+      };
+    },
+    pointToLayer: function(feature, latlng) {
+      const themeId = feature.properties.themeId;
+      const theme = themes.find(t => t.id === themeId);
+      const color = theme ? theme.color : '#333333';
+      const iconName = theme && theme.icon ? theme.icon : 'circle';
+      
+      const customIcon = L.divIcon({
+        className: 'custom-div-icon',
+        html: `<div style="background-color: ${color}; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
+                 <span class="material-symbols-outlined" style="color: white; font-size: 14px;">${iconName}</span>
+               </div>`,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      });
+      return L.marker(latlng, { icon: customIcon });
+    },
+    onEachFeature: function(feature, layer) {
+      if (!feature.properties) feature.properties = {};
+      if (!feature.properties._tempId) feature.properties._tempId = 'feat_' + Math.random().toString(36).substr(2, 9);
+      
+      layer.on('click', function(e) {
+        L.DomEvent.stopPropagation(e);
+        const fid = feature.properties._tempId;
+        highlightFeature(fid);
+        showFeatureInfoModal(layer);
+      });
+    }
+  }).addTo(map);
+
+  // Drawing Complete Event
+  map.on('pm:create', function(e) {
+    if (!editingThemeId) return;
+    
+    const feature = e.layer.toGeoJSON();
+    if (!feature.properties) feature.properties = {};
+    feature.properties.themeId = editingThemeId;
+    
+    const geomType = feature.geometry.type;
+    if (geomType === 'LineString' || geomType === 'MultiLineString') {
+        let length = 0;
+        const latlngs = e.layer.getLatLngs();
+        const points = Array.isArray(latlngs[0]) ? latlngs[0] : latlngs;
+        for (let i = 0; i < points.length - 1; i++) {
+            length += points[i].distanceTo(points[i + 1]);
+        }
+        feature.properties['Extensão (m)'] = length.toFixed(2);
+    } else if (geomType === 'Point' || geomType === 'MultiPoint') {
+        const latlng = e.layer.getLatLng();
+        feature.properties['Coordenadas Geográficas WGS 84'] = `Latitude: ${latlng.lat.toFixed(6)} e Longitude: ${latlng.lng.toFixed(6)}`;
+    }
+    
+    map.removeLayer(e.layer);
+    geojsonLayer.addData(feature);
+    syncMapDataToThemes();
+  });
+
+  loadThemes();
+  renderThemes();
+  loadAllFeaturesToMap();
+}
+
+// Call initMap and setupIconDropdowns on window load since we no longer have a Google Maps callback
+// This is now done at the bottom of the file
+
+
+function loadAllFeaturesToMap() {
+  geojsonLayer.clearLayers();
+  
+  const allFeatures = [];
+  themes.forEach(theme => {
+    if (theme.visible !== false) {
+      if (theme.features && theme.features.length > 0) {
+        allFeatures.push(...theme.features);
+      }
+    }
+  });
+  
+  if (allFeatures.length > 0) {
+    geojsonLayer.addData(allFeatures);
+  }
+}
+
+function syncMapDataToThemes() {
+  const geojson = geojsonLayer.toGeoJSON();
+  
+  themes.forEach(t => t.features = []);
+  
+  if (geojson.features) {
+    geojson.features.forEach(f => {
+      const tId = f.properties.themeId;
+      const theme = themes.find(t => t.id === tId);
+      if (theme) {
+        theme.features.push(f);
+      }
+    });
+  }
+  saveThemes();
+  renderThemes();
+}
+
+// --- INTERFACE DE TEMAS ---
+function renderThemes() {
+  const container = document.getElementById('themes-container');
+  container.innerHTML = '';
+
+  themes.forEach(theme => {
+    const featureCount = theme.features ? theme.features.length : 0;
+    const isVisible = theme.visible !== false;
+    
+    const card = document.createElement('div');
+    card.className = "bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden";
+    card.innerHTML = `
+      <div class="px-4 py-3 flex flex-col" style="background-color: ${theme.color}20; border-left: 4px solid ${theme.color}">
+        <div class="flex justify-end gap-1 mb-2">
+          <button onclick="toggleThemeVisibility('${theme.id}')" class="p-1.5 hover:bg-white/50 dark:hover:bg-black/20 rounded tooltip text-slate-700 dark:text-slate-300 transition-colors" title="${isVisible ? 'Ocultar' : 'Mostrar'} Camada">
+            <span class="material-symbols-outlined text-[18px]">${isVisible ? 'visibility' : 'visibility_off'}</span>
+          </button>
+          <button onclick="startEditingTheme('${theme.id}', '${theme.name}', '${theme.color}', '${theme.geomType || ''}')" class="p-1.5 hover:bg-white/50 dark:hover:bg-black/20 rounded tooltip text-slate-700 dark:text-slate-300 transition-colors" title="Adicionar Feição">
+            <span class="material-symbols-outlined text-[18px]">add_location_alt</span>
+          </button>
+          <button onclick="openEditThemeModal('${theme.id}')" class="p-1.5 hover:bg-white/50 dark:hover:bg-black/20 rounded tooltip text-slate-700 dark:text-slate-300 transition-colors" title="Editar Camada">
+            <span class="material-symbols-outlined text-[18px]">edit</span>
+          </button>
+          <button onclick="triggerUpload('${theme.id}')" class="p-1.5 hover:bg-white/50 dark:hover:bg-black/20 rounded tooltip text-slate-700 dark:text-slate-300 transition-colors" title="Importar GeoJSON">
+            <span class="material-symbols-outlined text-[18px]">upload</span>
+          </button>
+          <button onclick="downloadGeoJSON('${theme.id}')" class="p-1.5 hover:bg-white/50 dark:hover:bg-black/20 rounded tooltip text-slate-700 dark:text-slate-300 transition-colors" title="Exportar GeoJSON">
+            <span class="material-symbols-outlined text-[18px]">download</span>
+          </button>
+          <button onclick="deleteTheme('${theme.id}')" class="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded tooltip text-red-600 dark:text-red-400 transition-colors" title="Excluir Camada">
+            <span class="material-symbols-outlined text-[18px]">delete</span>
+          </button>
+        </div>
+        <div class="flex items-center gap-2 cursor-pointer" onclick="document.getElementById('list-${theme.id}').classList.toggle('hidden')">
+          <div class="w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-white shadow-sm ${!isVisible ? 'opacity-50' : ''}" style="background-color: ${theme.color}">
+             <span class="material-symbols-outlined text-[14px]">${theme.icon || 'circle'}</span>
+          </div>
+          <h3 class="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider line-clamp-1 ${!isVisible ? 'opacity-50' : ''}" title="${theme.name}">${theme.name}</h3>
+        </div>
+      </div>
+      <div id="list-${theme.id}" class="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 hidden">
+        <div class="px-4 py-2 text-[11px] text-slate-500 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-100 dark:border-slate-800 flex justify-between">
+            <span>${featureCount} elemento(s) mapeado(s).</span>
+        </div>
+        <div class="theme-feature-list flex flex-col max-h-64 overflow-y-auto ${!isVisible ? 'opacity-50' : ''}">
+          ${renderFeatureListItems(theme)}
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function toggleThemeVisibility(themeId) {
+  const theme = themes.find(t => t.id === themeId);
+  if (theme) {
+    theme.visible = theme.visible === false ? true : false;
+    saveThemes();
+    loadAllFeaturesToMap();
+    renderThemes();
+  }
+}
+
+function renderFeatureListItems(theme) {
+  if (!theme.features || theme.features.length === 0) {
+    return `<div class="px-4 py-3 text-xs text-slate-400 italic">Nenhuma feição adicionada.</div>`;
+  }
+  
+  const disp1 = theme.disp1 || 'Lote';
+  const disp2 = theme.disp2 || 'Quadra';
+  
+  let html = '';
+  theme.features.forEach((f, idx) => {
+    // Collect all values for search filtering
+    const searchData = Object.values(f.properties || {}).join(' ').toLowerCase();
+    
+    // We need a stable identifier. Since properties might not have an ID, we use index.
+    // Better to assign a temporary ID for clicking if not exists.
+    if (!f.properties._tempId) f.properties._tempId = 'feat_' + Math.random().toString(36).substr(2, 9);
+    const fid = f.properties._tempId;
+    
+    const propName = f.properties['Proprietário'] || 'Proprietário não informado';
+    const val1 = f.properties[disp1] || '-';
+    const val2 = f.properties[disp2] || '-';
+    
+    html += `
+      <div id="sidebar-item-${fid}" class="feature-list-item px-4 py-2 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-all duration-300 border-l-4 border-l-transparent"
+           data-search="${searchData}"
+           onclick="zoomToFeature('${fid}')">
+         <div class="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate" title="${propName}">${propName}</div>
+         <div class="text-[11px] text-slate-500 truncate mt-0.5" title="${disp1}: ${val1} | ${disp2}: ${val2}">
+            <span class="font-medium">${disp1}:</span> ${val1} <span class="mx-1 text-slate-300 dark:text-slate-700">&bull;</span> <span class="font-medium">${disp2}:</span> ${val2}
+         </div>
+      </div>
+    `;
+  });
+  return html;
+}
+
+function highlightFeature(fid) {
+  if (!geojsonLayer) return;
+  
+  // 1. Destaque no Mapa
+  let targetLayer = null;
+  geojsonLayer.eachLayer(layer => {
+    if (layer.feature && layer.feature.properties._tempId === fid) {
+      targetLayer = layer;
+    }
+  });
+  
+  if (targetLayer) {
+    if (targetLayer.setStyle) {
+      targetLayer.setStyle({ color: '#f59e0b', weight: 6, fillOpacity: 0.8 });
+      setTimeout(() => {
+        if (geojsonLayer && map.hasLayer(targetLayer)) {
+          geojsonLayer.resetStyle(targetLayer);
+        }
+      }, 2000);
+    } else if (targetLayer.getLatLng) {
+      const highlight = L.circleMarker(targetLayer.getLatLng(), {
+        radius: 15, color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.8, weight: 2
+      }).addTo(map);
+      
+      let opacity = 0.8;
+      let radius = 15;
+      const interval = setInterval(() => {
+        opacity -= 0.05;
+        radius += 1.5;
+        if (opacity <= 0) {
+          clearInterval(interval);
+          map.removeLayer(highlight);
+        } else {
+          highlight.setStyle({ fillOpacity: opacity, opacity: opacity });
+          highlight.setRadius(radius);
+        }
+      }, 50);
+    }
+  }
+
+  // 2. Destaque no Menu Lateral
+  const sidebarItem = document.getElementById(`sidebar-item-${fid}`);
+  if (sidebarItem) {
+    // Garantir que a lista do tema está aberta
+    const themeList = sidebarItem.closest('[id^="list-theme_"]');
+    if (themeList && themeList.classList.contains('hidden')) {
+      themeList.classList.remove('hidden');
+    }
+    
+    // Rolar até o item
+    sidebarItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    // Aplicar classes de destaque
+    sidebarItem.classList.add('bg-amber-100', 'dark:bg-amber-900/40', 'border-l-amber-500');
+    sidebarItem.classList.remove('border-l-transparent');
+    
+    setTimeout(() => {
+      if (sidebarItem) {
+        sidebarItem.classList.remove('bg-amber-100', 'dark:bg-amber-900/40', 'border-l-amber-500');
+        sidebarItem.classList.add('border-l-transparent');
+      }
+    }, 2000);
+  }
+}
+
+function zoomToFeature(fid) {
+  if (!geojsonLayer) return;
+  
+  let targetLayer = null;
+  geojsonLayer.eachLayer(layer => {
+    if (layer.feature && layer.feature.properties._tempId === fid) {
+      targetLayer = layer;
+    }
+  });
+  
+  if (targetLayer) {
+    if (targetLayer.getBounds) {
+      map.fitBounds(targetLayer.getBounds(), { padding: [50, 50], maxZoom: 21 });
+    } else if (targetLayer.getLatLng) {
+      map.setView(targetLayer.getLatLng(), 21);
+    }
+    
+    highlightFeature(fid);
+    
+    // Fechar menu lateral em telas menores
+    if (window.innerWidth < 768) {
+      document.getElementById('side-drawer').classList.add('-translate-x-full');
+      document.getElementById('drawer-overlay').classList.add('hidden');
+    }
+  }
+}
+
+function filterFeatures() {
+  const query = document.getElementById('global-search-input').value.toLowerCase();
+  const themeCards = document.querySelectorAll('#themes-container > div');
+  
+  themeCards.forEach(card => {
+    const featureItems = card.querySelectorAll('.feature-list-item');
+    let hasVisibleFeatures = false;
+    
+    featureItems.forEach(item => {
+      const searchData = item.getAttribute('data-search');
+      if (searchData.includes(query)) {
+        item.style.display = 'block';
+        hasVisibleFeatures = true;
+      } else {
+        item.style.display = 'none';
+      }
+    });
+    
+    // If no features are visible and there's a query, maybe hide the card?
+    // But what if the theme name matches?
+    const themeName = card.querySelector('h3').innerText.toLowerCase();
+    if (query === '' || hasVisibleFeatures || themeName.includes(query)) {
+      card.style.display = 'block';
+    } else {
+      card.style.display = 'none';
+    }
+  });
+}
+
+function openNewThemeModal() {
+  document.getElementById('new-theme-modal').classList.remove('hidden');
+  document.getElementById('theme-name-input').value = '';
+}
+
+function closeNewThemeModal() {
+  document.getElementById('new-theme-modal').classList.add('hidden');
+}
+
+let themeBeingEdited = null;
+
+function saveNewTheme() {
+  const name = document.getElementById('theme-name-input').value;
+  const color = document.getElementById('theme-color-input').value;
+  const geomType = document.getElementById('theme-geom-type-input').value;
+  const icon = document.getElementById('theme-icon-input').value;
+  if (!name) return;
+
+  const id = 'theme_' + Date.now();
+  themes.push({ id, name, color, geomType, icon, features: [] });
+  saveThemes();
+  renderThemes();
+  closeNewThemeModal();
+  
+  startEditingTheme(id, name, color, geomType);
+}
+
+function openEditThemeModal(themeId) {
+  const theme = themes.find(t => t.id === themeId);
+  if (!theme) return;
+  themeBeingEdited = themeId;
+  document.getElementById('edit-theme-name-input').value = theme.name;
+  document.getElementById('edit-theme-color-input').value = theme.color;
+  
+  // Extract all unique property keys from features, plus standard ones
+  let allKeys = new Set(["Proprietário", "CPF/CNPJ", "Endereço", "Número do imóvel", "Lote", "Quadra", "Bairro", "Loteamento", "Município"]);
+  if (theme.features) {
+    theme.features.forEach(f => {
+      if (f.properties) Object.keys(f.properties).forEach(k => {
+        if (k !== 'themeId' && k !== '_tempId') allKeys.add(k);
+      });
+    });
+  }
+  const keysArray = Array.from(allKeys);
+  const optionsHtml = keysArray.map(k => `<option value="${k}">${k}</option>`).join('');
+  
+  const disp1Select = document.getElementById('edit-theme-disp1-input');
+  const disp2Select = document.getElementById('edit-theme-disp2-input');
+  disp1Select.innerHTML = optionsHtml;
+  disp2Select.innerHTML = optionsHtml;
+  
+  disp1Select.value = theme.disp1 || 'Lote';
+  disp2Select.value = theme.disp2 || 'Quadra';
+  
+  const iconVal = theme.icon || 'circle';
+  document.getElementById('edit-theme-icon-input').value = iconVal;
+  
+  const option = availableIcons.find(o => o.val === iconVal) || availableIcons[0];
+  document.getElementById('edit-icon-preview').innerText = option.val;
+  document.getElementById('edit-icon-label').innerText = option.label;
+  
+  document.getElementById('edit-theme-modal').classList.remove('hidden');
+}
+
+function closeEditThemeModal() {
+  document.getElementById('edit-theme-modal').classList.add('hidden');
+  themeBeingEdited = null;
+}
+
+function updateIconDropdownSelection(prefix, val) {
+  const option = availableIcons.find(o => o.val === val) || availableIcons[0];
+  document.getElementById(`${prefix}-theme-icon-input`).value = option.val;
+  document.getElementById(`${prefix}-preview`).innerText = option.val;
+  document.getElementById(`${prefix}-label`).innerText = option.label;
+}
+
+function saveEditedTheme() {
+  const name = document.getElementById('edit-theme-name-input').value;
+  const color = document.getElementById('edit-theme-color-input').value;
+  const icon = document.getElementById('edit-theme-icon-input').value;
+  const disp1 = document.getElementById('edit-theme-disp1-input').value;
+  const disp2 = document.getElementById('edit-theme-disp2-input').value;
+  
+  if (!name || !themeBeingEdited) return;
+
+  const theme = themes.find(t => t.id === themeBeingEdited);
+  if (theme) {
+    theme.name = name;
+    theme.color = color;
+    theme.icon = icon;
+    theme.disp1 = disp1 || 'Lote';
+    theme.disp2 = disp2 || 'Quadra';
+    saveThemes();
+    loadAllFeaturesToMap(); // Update colors on the map
+    renderThemes();
+  }
+  closeEditThemeModal();
+}
+
+function deleteTheme(themeId) {
+  if (!confirm("Tem certeza que deseja excluir esta camada e todos os seus dados?")) return;
+  
+  themes = themes.filter(t => t.id !== themeId);
+  saveThemes();
+  loadAllFeaturesToMap();
+  renderThemes();
+}
+
+// --- FERRAMENTAS DE DESENHO E ADERÊNCIA ---
+let isSnapping = true;
+function toggleSnapping() {
+  isSnapping = !isSnapping;
+  map.pm.setGlobalOptions({ snappable: isSnapping });
+  
+  const btn = document.getElementById('snap-btn');
+  if (isSnapping) {
+    btn.classList.add('text-primary');
+    btn.classList.remove('text-slate-400');
+    btn.title = "Aderência Ativada (Vértices e Arestas)";
+  } else {
+    btn.classList.remove('text-primary');
+    btn.classList.add('text-slate-400');
+    btn.title = "Aderência Desativada";
+  }
+}
+
+function startEditingTheme(id, name, color, geomType) {
+  editingThemeId = id;
+  
+  const theme = themes.find(t => t.id === id);
+  // Configuração global de aderência (Snap) do Geoman
+  map.pm.setGlobalOptions({
+    snappable: true,
+    snapDistance: 20,
+    snapMiddle: true,
+    snapSegment: true
+  });
+
+  // Configurações e estilos do Geoman para desenhos a camada já possui feições, deduzimos da primeira feição
+  if (!geomType && theme && theme.features && theme.features.length > 0) {
+    const fType = theme.features[0].geometry.type;
+    if (fType === 'Point' || fType === 'MultiPoint') geomType = 'marker';
+    else if (fType === 'LineString' || fType === 'MultiLineString') geomType = 'polyline';
+    else if (fType === 'Polygon' || fType === 'MultiPolygon') geomType = 'polygon';
+  }
+  
+  const toolbar = document.getElementById('drawing-toolbar');
+  toolbar.classList.remove('hidden');
+  toolbar.classList.add('flex');
+  
+  const nameLabel = document.getElementById('drawing-theme-name');
+  nameLabel.textContent = "Editando: " + name;
+  nameLabel.style.color = color;
+  
+  // Show only the relevant button
+  ['marker', 'polyline', 'polygon'].forEach(type => {
+    const btn = document.getElementById('draw-btn-' + type);
+    if (btn) {
+      if (type === geomType || !geomType) {
+        btn.classList.remove('hidden');
+      } else {
+        btn.classList.add('hidden');
+      }
+    }
+  });
+
+  // Automatically start drawing
+  if (geomType) {
+    setDrawingMode(geomType);
+  }
+  
+  document.getElementById('side-drawer').classList.add('-translate-x-full'); 
+  document.getElementById('drawer-overlay').classList.add('hidden');
+}
+
+function setDrawingMode(mode) {
+  if (mode === 'marker') map.pm.enableDraw('Marker');
+  else if (mode === 'polyline') map.pm.enableDraw('Line');
+  else if (mode === 'polygon') map.pm.enableDraw('Polygon');
+}
+
+function stopDrawingMode() {
+  editingThemeId = null;
+  map.pm.disableDraw();
+  const toolbar = document.getElementById('drawing-toolbar');
+  toolbar.classList.add('hidden');
+  toolbar.classList.remove('flex');
+}
+
+// --- IMPORT / EXPORT GEOJSON ---
+let activeUploadThemeId = null;
+
+function triggerUpload(themeId) {
+  activeUploadThemeId = themeId;
+  document.getElementById('geojson-upload-input').click();
+}
+
+document.getElementById('geojson-upload-input').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file || !activeUploadThemeId) return;
+
+  const reader = new FileReader();
+  reader.onload = function(event) {
+    try {
+      const geojson = JSON.parse(event.target.result);
+      if (geojson.features) {
+        geojson.features.forEach(f => {
+          if (!f.properties) f.properties = {};
+          f.properties.themeId = activeUploadThemeId;
+        });
+      }
+      
+      const newLayer = L.geoJSON(geojson);
+      geojsonLayer.addData(geojson);
+      syncMapDataToThemes();
+      
+      const bounds = newLayer.getBounds();
+      if (bounds.isValid()) {
+          map.fitBounds(bounds);
+      }
+    } catch(err) {
+      alert("Erro ao ler GeoJSON: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+function downloadGeoJSON(themeId) {
+  const theme = themes.find(t => t.id === themeId);
+  if (!theme || !theme.features) return;
+  
+  const geojson = {
+    type: "FeatureCollection",
+    features: theme.features
+  };
+  
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(geojson));
+  const downloadAnchorNode = document.createElement('a');
+  downloadAnchorNode.setAttribute("href",     dataStr);
+  downloadAnchorNode.setAttribute("download", theme.name.replace(/\s+/g, '_') + ".geojson");
+  document.body.appendChild(downloadAnchorNode);
+  downloadAnchorNode.click();
+  downloadAnchorNode.remove();
+}
+
+// --- GLOBAL GEOJSON IMPORT ---
+let pendingGlobalGeoJSON = null;
+
+document.getElementById('global-geojson-upload').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(event) {
+    try {
+      const geojson = JSON.parse(event.target.result);
+      if (!geojson.features || geojson.features.length === 0) {
+        alert("Nenhuma feição (feature) encontrada no arquivo.");
+        return;
+      }
+      
+      pendingGlobalGeoJSON = geojson;
+      
+      let geomType = "Misto";
+      if (geojson.features[0] && geojson.features[0].geometry) {
+        geomType = geojson.features[0].geometry.type;
+      }
+      
+      const geomTypeNames = {
+        "Point": "Ponto",
+        "LineString": "Linha",
+        "Polygon": "Polígono",
+        "MultiPoint": "Múltiplos Pontos",
+        "MultiLineString": "Múltiplas Linhas",
+        "MultiPolygon": "Múltiplos Polígonos"
+      };
+      
+      document.getElementById('global-import-geom-type').textContent = "Tipo Detectado: " + (geomTypeNames[geomType] || geomType);
+      
+      let suggestedName = file.name.replace(/\.[^/.]+$/, "");
+      document.getElementById('global-import-theme-name').value = suggestedName;
+      
+      let detectedProperties = [];
+      if (geojson.features[0] && geojson.features[0].properties) {
+        detectedProperties = Object.keys(geojson.features[0].properties);
+      }
+      
+      const fieldsContainer = document.getElementById('global-import-fields-container');
+      fieldsContainer.innerHTML = '';
+      
+      if (detectedProperties.length === 0) {
+        fieldsContainer.innerHTML = '<span class="text-sm text-slate-500">Nenhum campo de dados encontrado.</span>';
+      } else {
+        fieldsContainer.innerHTML = `
+          <datalist id="standard-fields-list">
+            <option value="Proprietário">
+            <option value="CPF/CNPJ">
+            <option value="Endereço">
+            <option value="Número do imóvel">
+            <option value="Bairro">
+            <option value="Loteamento">
+            <option value="Quadra">
+            <option value="Lote">
+            <option value="Município">
+          </datalist>
+        `;
+        detectedProperties.forEach(prop => {
+          fieldsContainer.innerHTML += `
+            <div class="flex items-center gap-2">
+              <input type="checkbox" checked class="property-import-checkbox w-4 h-4 text-primary rounded border-slate-300 dark:border-slate-700 focus:ring-primary" data-original="${prop}">
+              <span class="w-1/3 text-sm text-slate-600 dark:text-slate-400 font-mono truncate" title="${prop}">${prop}</span>
+              <span class="material-symbols-outlined text-slate-400 text-sm">arrow_forward</span>
+              <input type="text" list="standard-fields-list" data-original="${prop}" value="${prop}" class="flex-1 px-2 py-1 text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-1 focus:ring-primary dark:text-white property-rename-input">
+            </div>
+          `;
+        });
+      }
+      
+      document.getElementById('global-import-modal').classList.remove('hidden');
+      
+    } catch(err) {
+      alert("Erro ao ler GeoJSON: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+function closeGlobalImportModal() {
+  document.getElementById('global-import-modal').classList.add('hidden');
+  pendingGlobalGeoJSON = null;
+}
+
+function confirmGlobalImport() {
+  if (!pendingGlobalGeoJSON) return;
+  
+  const themeName = document.getElementById('global-import-theme-name').value.trim() || "Tema Importado";
+  
+  const colors = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"];
+  const themeColor = colors[Math.floor(Math.random() * colors.length)];
+  
+  const themeId = 'theme_' + Date.now();
+  
+  const mapping = {};
+  const ignored = new Set();
+  
+  document.querySelectorAll('.property-import-checkbox').forEach(checkbox => {
+    const original = checkbox.getAttribute('data-original');
+    if (!checkbox.checked) {
+      ignored.add(original);
+    }
+  });
+
+  document.querySelectorAll('.property-rename-input').forEach(input => {
+    const original = input.getAttribute('data-original');
+    if (!ignored.has(original)) {
+      const newName = input.value.trim() || original;
+      mapping[original] = newName;
+    }
+  });
+  
+  const standardFields = ["Proprietário", "CPF/CNPJ", "Endereço", "Número do imóvel", "Bairro", "Loteamento", "Quadra", "Lote", "Município"];
+
+  pendingGlobalGeoJSON.features.forEach(f => {
+    if (!f.properties) f.properties = {};
+    
+    const newProps = { themeId: themeId };
+    Object.keys(f.properties).forEach(key => {
+      if (key !== 'themeId' && !ignored.has(key)) {
+        const mappedKey = mapping[key] || key;
+        newProps[mappedKey] = f.properties[key];
+      }
+    });
+    
+    standardFields.forEach(field => {
+      if (!(field in newProps)) {
+        newProps[field] = "";
+      }
+    });
+    
+    f.properties = newProps;
+  });
+  
+  themes.push({ id: themeId, name: themeName, color: themeColor, features: [] });
+  
+  const newLayer = L.geoJSON(pendingGlobalGeoJSON);
+  geojsonLayer.addData(pendingGlobalGeoJSON);
+  syncMapDataToThemes();
+  
+  const bounds = newLayer.getBounds();
+  if (bounds.isValid()) {
+      map.fitBounds(bounds);
+  }
+  
+  closeGlobalImportModal();
+  document.getElementById('side-drawer').classList.add('-translate-x-full');
+  document.getElementById('drawer-overlay').classList.add('hidden');
+}
+
+// --- FEATURE INFO ---
+let activeFeatureLayer = null;
+let isFeatureEditMode = false;
+
+function showFeatureInfoModal(layer) {
+  activeFeatureLayer = layer;
+  isFeatureEditMode = false;
+  renderFeatureInfo();
+  
+  document.getElementById('feature-info-modal').classList.remove('hidden');
+  document.getElementById('feature-actions-container').classList.remove('hidden');
+  document.getElementById('feature-save-container').classList.add('hidden');
+}
+
+function renderFeatureInfo() {
+  const container = document.getElementById('feature-info-content');
+  container.innerHTML = '';
+  if (!activeFeatureLayer.feature.properties) {
+      activeFeatureLayer.feature.properties = {};
+  }
+  const properties = activeFeatureLayer.feature.properties;
+  const geomType = activeFeatureLayer.feature.geometry.type;
+  const isLine = geomType === 'LineString' || geomType === 'MultiLineString';
+  
+  // Set default coordinates if point
+  if ((geomType === 'Point' || geomType === 'MultiPoint') && !properties['Coordenadas Geográficas WGS 84']) {
+      const latlng = activeFeatureLayer.getLatLng();
+      properties['Coordenadas Geográficas WGS 84'] = `Latitude: ${latlng.lat.toFixed(6)} e Longitude: ${latlng.lng.toFixed(6)}`;
+  }
+
+  if (dynamicFormSchema && dynamicFormSchema.length > 0) {
+      // Use Dynamic Form Builder Schema
+      let html = '<div class="flex flex-col gap-4">';
+      let primaryTabId = dynamicFormSchema.find(t=>t.isPrimary)?.id || dynamicFormSchema[0].id;
+      
+      dynamicFormSchema.forEach((tab) => {
+         let isPrimary = tab.id === primaryTabId;
+         html += `
+           <div class="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-800 shadow-sm transition-all accordion-section" id="acc-section-${tab.id}">
+             <button type="button" onclick="switchDynamicTab('${tab.id}')" class="w-full px-4 py-3 flex items-center justify-center bg-slate-50 hover:bg-slate-100 dark:bg-slate-900/50 dark:hover:bg-slate-800 transition-colors">
+               <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wide flex items-center gap-2 text-center">
+                 ${tab.title}
+               </h3>
+             </button>
+             <div id="acc-content-${tab.id}" class="accordion-content transition-all duration-300 ${isPrimary ? 'block p-4 border-t border-slate-200 dark:border-slate-700' : 'hidden'}">
+         `;
+         
+         if (tab.fields && tab.fields.length > 0) {
+            html += '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">';
+            tab.fields.forEach(f => {
+               const value = properties[f.id] || '';
+               html += `
+                  <div class="col-span-1 ${f.type === 'textarea' || f.type === 'geolocation' || f.type === 'photo' ? 'md:col-span-2' : ''}">
+                    <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">${f.label}</label>
+               `;
+               if (isFeatureEditMode) {
+                   if (f.type === 'select') {
+                       const opts = (f.options || '').split(',').map(o=>o.trim()).filter(o=>o);
+                       html += `<select data-key="${f.id}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">
+                           <option value="">Selecione...</option>
+                           ${opts.map(o => `<option value="${o}" ${value===o?'selected':''}>${o}</option>`).join('')}
+                       </select>`;
+                   } else if (f.type === 'textarea') {
+                       html += `<textarea data-key="${f.id}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">${value}</textarea>`;
+                   } else {
+                       html += `<input type="${f.type==='date'?'date':f.type==='number'?'number':'text'}" data-key="${f.id}" value="${value}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">`;
+                   }
+               } else {
+                   html += `<span class="text-sm text-slate-800 dark:text-slate-200 font-medium">${value || '<span class="text-slate-300 italic">Não informado</span>'}</span>`;
+               }
+               html += `</div>`;
+            });
+            html += '</div>';
+         }
+         html += `</div></div>`;
+      });
+      html += '</div>';
+      container.innerHTML = html;
+      return;
+  }
+
+  // OLD LOGIC FALLBACK
+
+   {
+  const container = document.getElementById('feature-info-content');
+  container.innerHTML = '';
+  if (!activeFeatureLayer.feature.properties) {
+      activeFeatureLayer.feature.properties = {};
+  }
+  const properties = activeFeatureLayer.feature.properties;
+  const geomType = activeFeatureLayer.feature.geometry.type;
+  const isLine = geomType === 'LineString' || geomType === 'MultiLineString';
+  
+  // Set default coordinates if point
+  if ((geomType === 'Point' || geomType === 'MultiPoint') && !properties['Coordenadas Geográficas WGS 84']) {
+      const latlng = activeFeatureLayer.getLatLng();
+      properties['Coordenadas Geográficas WGS 84'] = `Latitude: ${latlng.lat.toFixed(6)} e Longitude: ${latlng.lng.toFixed(6)}`;
+  }
+
+  let html = '';
+  
+  if (isLine) {
+     const fields = ["Descrição", "Extensão (m)", "Observações"];
+     fields.forEach(key => {
+        const value = properties[key] || '';
+        if (isFeatureEditMode) {
+          const readonly = key === 'Extensão (m)' ? 'readonly' : '';
+          const extraClass = key === 'Extensão (m)' ? 'bg-slate-200 dark:bg-slate-800 cursor-not-allowed' : 'bg-slate-50 dark:bg-slate-900';
+          html += `
+            <div class="flex flex-col gap-1">
+              <label class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">${key}</label>
+              ${key === 'Observações' 
+                ? `<textarea data-key="${key}" class="feature-data-input w-full px-3 py-2 ${extraClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">${value}</textarea>`
+                : `<input type="text" data-key="${key}" value="${value}" ${readonly} class="feature-data-input w-full px-3 py-2 ${extraClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">`
+              }
+            </div>
+          `;
+        } else {
+          html += `
+            <div class="flex flex-col border-b border-slate-100 dark:border-slate-800 pb-3 last:border-0">
+              <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">${key}</span>
+              <span class="text-sm text-slate-800 dark:text-slate-200 font-medium">${value || '<span class="text-slate-300 dark:text-slate-600 italic">Não informado</span>'}</span>
+            </div>
+          `;
+        }
+     });
+  } else {
+     // Point or Polygon complex form
+     const fields = [
+         {key: "Descrição", type: "text"},
+         {key: "Situação", type: "select", options: ["Regular", "Irregular"]},
+         {key: "Tipo de estrutura", type: "select", options: ["Alvenaria", "Madeira", "Palafita", "Trailer", "Container", "Barraco", "Taipa", "Não se aplica", "Outros"]},
+         {key: "Estrutura Outros", type: "text", condition: "Tipo de estrutura", condValue: "Outros"},
+         {key: "Uso", type: "select", options: ["Comercial", "Residencial", "Mista", "Sem uso definido"]},
+         {key: "Motivo da visita", type: "text"},
+         {key: "Endereço", type: "text"},
+         {key: "Número do imóvel", type: "text"},
+         {key: "Bairro", type: "text"},
+         {key: "Município", type: "text"},
+         {key: "UF", type: "text"},
+         {key: "Coordenadas Geográficas WGS 84", type: "text", readonly: true},
+         {key: "Ocupante", type: "select", options: ["Não", "Sim"]},
+         {key: "Nome Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
+         {key: "CPF Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
+         {key: "RG Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
+         {key: "Endereço Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
+         {key: "Número Residencia Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
+         {key: "Bairro Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
+         {key: "Cidade Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
+         {key: "UF Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
+         {key: "CEP Ocupante", type: "text", condition: "Ocupante", condValue: "Sim"},
+         {key: "Observação", type: "textarea"}
+     ];
+     
+     if (isFeatureEditMode) {
+         fields.forEach(f => {
+             const value = properties[f.key] || '';
+             const display = f.condition && properties[f.condition] !== f.condValue ? 'none' : 'flex';
+             const extraClass = f.readonly ? 'bg-slate-200 dark:bg-slate-800 cursor-not-allowed' : 'bg-slate-50 dark:bg-slate-900';
+             
+             let inputHtml = '';
+             if (f.type === 'select') {
+                 let opts = `<option value="">Selecione...</option>`;
+                 f.options.forEach(opt => {
+                     opts += `<option value="${opt}" ${value === opt ? 'selected' : ''}>${opt}</option>`;
+                 });
+                 inputHtml = `<select data-key="${f.key}" class="feature-data-input w-full px-3 py-2 ${extraClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm" onchange="handleFeatureSelectChange(this)">${opts}</select>`;
+             } else if (f.type === 'textarea') {
+                 inputHtml = `<textarea data-key="${f.key}" class="feature-data-input w-full px-3 py-2 ${extraClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">${value}</textarea>`;
+             } else {
+                 inputHtml = `<input type="text" data-key="${f.key}" value="${value}" ${f.readonly ? 'readonly' : ''} class="feature-data-input w-full px-3 py-2 ${extraClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">`;
+             }
+             
+             html += `
+                <div class="flex-col gap-1 feature-field-container" data-field="${f.key}" data-condition="${f.condition || ''}" data-condvalue="${f.condValue || ''}" style="display: ${display}">
+                  <label class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">${f.key}</label>
+                  ${inputHtml}
+                </div>
+             `;
+         });
+         
+         // Photos field
+         html += `
+            <div class="flex flex-col gap-1 feature-field-container mt-2">
+               <label class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Fotos Adicionais da Feição</label>
+               <input type="file" id="feature-photos-upload" accept="image/*" multiple capture="environment" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20">
+            </div>
+         `;
+     } else {
+         fields.forEach(f => {
+             const value = properties[f.key] || '';
+             // Only display if it has value
+             if (!value) return;
+             if (f.condition && properties[f.condition] !== f.condValue) return;
+             
+             html += `
+                <div class="flex flex-col border-b border-slate-100 dark:border-slate-800 pb-3 last:border-0">
+                  <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">${f.key}</span>
+                  <span class="text-sm text-slate-800 dark:text-slate-200 font-medium">${value}</span>
+                </div>
+             `;
+         });
+         
+         if (properties.photos && properties.photos.length > 0) {
+             let imgs = '';
+             properties.photos.forEach(p => {
+                 imgs += `<img src="${p}" class="w-full rounded border border-slate-200 mt-2">`;
+             });
+             html += `
+                <div class="flex flex-col border-b border-slate-100 dark:border-slate-800 pb-3 last:border-0 mt-4">
+                  <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Fotos da Feição</span>
+                  ${imgs}
+                </div>
+             `;
+         }
+     }
+  }
+  container.innerHTML = html;
+}
+
+function handleFeatureSelectChange(selectElem) {
+    const key = selectElem.getAttribute('data-key');
+    const val = selectElem.value;
+    document.querySelectorAll('.feature-field-container').forEach(container => {
+        if (container.getAttribute('data-condition') === key) {
+            if (val === container.getAttribute('data-condvalue')) {
+                container.style.display = 'flex';
+            } else {
+                container.style.display = 'none';
+            }
+        }
+    });
+}
+
+function toggleFeatureEditMode() {
+  isFeatureEditMode = true;
+  renderFeatureInfo();
+  document.getElementById('feature-actions-container').classList.add('hidden');
+  document.getElementById('feature-save-container').classList.remove('hidden');
+}
+
+function cancelFeatureEdit() {
+  isFeatureEditMode = false;
+  renderFeatureInfo();
+  document.getElementById('feature-actions-container').classList.remove('hidden');
+  document.getElementById('feature-save-container').classList.add('hidden');
+}
+
+async function saveFeatureData() {
+  const inputs = document.querySelectorAll('.feature-data-input');
+  inputs.forEach(input => {
+    const key = input.getAttribute('data-key');
+    activeFeatureLayer.feature.properties[key] = input.value;
+  });
+  
+  const photoInput = document.getElementById('feature-photos-upload');
+  if (photoInput && photoInput.files.length > 0) {
+      if (!activeFeatureLayer.feature.properties.photos) activeFeatureLayer.feature.properties.photos = [];
+      for(let i=0; i<photoInput.files.length; i++) {
+          const base64 = await toBase64(photoInput.files[i]);
+          activeFeatureLayer.feature.properties.photos.push(base64);
+      }
+  }
+  
+  syncMapDataToThemes(); 
+  
+  isFeatureEditMode = false;
+  renderFeatureInfo();
+  document.getElementById('feature-actions-container').classList.remove('hidden');
+  document.getElementById('feature-save-container').classList.add('hidden');
+}
+
+function closeFeatureInfoModal(keepLayer = false) {
+  document.getElementById('feature-info-modal').classList.add('hidden');
+  if (!keepLayer) {
+    activeFeatureLayer = null;
+  }
+}
+
+function editFeatureGeometry() {
+  const layerToEdit = activeFeatureLayer;
+  closeFeatureInfoModal(true); // Keep activeFeatureLayer
+  
+  if (layerToEdit && layerToEdit.pm) {
+      layerToEdit.pm.enable({
+        allowSelfIntersection: false,
+        preventMarkerRemoval: false,
+        snappable: true,
+      });
+      const toolbar = document.getElementById('geometry-edit-toolbar');
+      toolbar.classList.remove('hidden');
+      toolbar.classList.add('flex');
+  }
+}
+
+function stopGeometryEditing() {
+  if (activeFeatureLayer && activeFeatureLayer.pm) {
+    activeFeatureLayer.pm.disable();
+    activeFeatureLayer.feature.geometry = activeFeatureLayer.toGeoJSON().geometry;
+    
+    const geomType = activeFeatureLayer.feature.geometry.type;
+    if (geomType === 'LineString' || geomType === 'MultiLineString') {
+        let length = 0;
+        const latlngs = activeFeatureLayer.getLatLngs();
+        const points = Array.isArray(latlngs[0]) ? latlngs[0] : latlngs;
+        for (let i = 0; i < points.length - 1; i++) {
+            length += points[i].distanceTo(points[i + 1]);
+        }
+        activeFeatureLayer.feature.properties['Extensão (m)'] = length.toFixed(2);
+    }
+    
+    syncMapDataToThemes();
+  }
+  const toolbar = document.getElementById('geometry-edit-toolbar');
+  toolbar.classList.add('hidden');
+  toolbar.classList.remove('flex');
+}
+
+function deleteActiveFeature() {
+  if (!activeFeatureLayer) return;
+  
+  if (!confirm("Tem certeza que deseja excluir esta feição permanentemente?")) return;
+  
+  geojsonLayer.removeLayer(activeFeatureLayer);
+  syncMapDataToThemes();
+  closeFeatureInfoModal();
+}
+
+// --- ICON DROPDOWNS ---
+const availableIcons = [
+  { val: 'circle', label: 'Círculo Básico' },
+  { val: 'location_on', label: 'Pino (Localização)' },
+  { val: 'home', label: 'Casa' },
+  { val: 'business', label: 'Prédio' },
+  { val: 'park', label: 'Árvore / Parque' },
+  { val: 'directions_car', label: 'Carro' },
+  { val: 'build', label: 'Ferramenta / Obra' },
+  { val: 'warning', label: 'Alerta' },
+  { val: 'flag', label: 'Bandeira' },
+  { val: 'train', label: 'Linha Férrea' },
+  { val: 'route', label: 'Estradas' },
+  { val: 'water_drop', label: 'Água / Maré' },
+  { val: 'local_hospital', label: 'Hospital' },
+  { val: 'local_gas_station', label: 'Posto de Combustível' },
+  { val: 'school', label: 'Escola' },
+  { val: 'restaurant', label: 'Restaurante' },
+  { val: 'factory', label: 'Indústria' }
+];
+
+function setupIconDropdowns() {
+  const buildOptions = (prefix) => {
+    return availableIcons.map(opt => `
+      <button type="button" onclick="selectIcon('${prefix}', '${opt.val}', '${opt.label}')" class="flex items-center gap-3 w-full px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-left transition-colors dark:text-slate-200">
+        <span class="material-symbols-outlined text-[20px] text-slate-600 dark:text-slate-300">${opt.val}</span> 
+        <span class="text-sm">${opt.label}</span>
+      </button>
+    `).join('');
+  };
+
+  document.getElementById('new-icon-options').innerHTML = buildOptions('new');
+  document.getElementById('edit-icon-options').innerHTML = buildOptions('edit');
+
+  // Close dropdowns on outside click
+  document.addEventListener('click', function(e) {
+    ['new', 'edit'].forEach(prefix => {
+      const container = document.getElementById(`${prefix}-icon-container`);
+      const dropdown = document.getElementById(`${prefix}-icon-dropdown`);
+      if (container && dropdown && !container.contains(e.target)) {
+        dropdown.classList.add('hidden');
+      }
+    });
+  });
+}
+
+function selectIcon(prefix, val, label) {
+  const inputId = prefix === 'new' ? 'theme-icon-input' : 'edit-theme-icon-input';
+  document.getElementById(inputId).value = val;
+  document.getElementById(`${prefix}-icon-preview`).innerText = val;
+  document.getElementById(`${prefix}-icon-label`).innerText = label;
+  document.getElementById(`${prefix}-icon-dropdown`).classList.add('hidden');
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  initMap();
+  setupIconDropdowns();
+});
+
+// --- CONTROLES DE MAPA ORIGINAIS ---
+function switchLayer(name) {
+  if (!map) return;
+  
+  Object.values(baseLayers).forEach(layer => map.removeLayer(layer));
+  
+  if (baseLayers[name]) {
+    baseLayers[name].addTo(map);
+  }
+  
+  currentMapType = name;
+}
+
+function zoomIn() { if (map) map.zoomIn(); }
+function zoomOut() { if (map) map.zoomOut(); }
+function goToMyLocation() {
+  if (!map || !navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(function(position) {
+    map.setView([position.coords.latitude, position.coords.longitude], 15);
+  });
+}
+
+// Expose all functions to global scope for ESM
+window.loadThemes = loadThemes;
+window.saveThemes = saveThemes;
+window.initMap = initMap;
+window.loadAllFeaturesToMap = loadAllFeaturesToMap;
+window.syncMapDataToThemes = syncMapDataToThemes;
+window.renderThemes = renderThemes;
+window.toggleThemeVisibility = toggleThemeVisibility;
+window.renderFeatureListItems = renderFeatureListItems;
+window.highlightFeature = highlightFeature;
+window.zoomToFeature = zoomToFeature;
+window.filterFeatures = filterFeatures;
+window.openNewThemeModal = openNewThemeModal;
+window.closeNewThemeModal = closeNewThemeModal;
+window.saveNewTheme = saveNewTheme;
+window.openEditThemeModal = openEditThemeModal;
+window.closeEditThemeModal = closeEditThemeModal;
+window.updateIconDropdownSelection = updateIconDropdownSelection;
+window.saveEditedTheme = saveEditedTheme;
+window.deleteTheme = deleteTheme;
+window.toggleSnapping = toggleSnapping;
+window.startEditingTheme = startEditingTheme;
+window.setDrawingMode = setDrawingMode;
+window.stopDrawingMode = stopDrawingMode;
+window.triggerUpload = triggerUpload;
+window.downloadGeoJSON = downloadGeoJSON;
+window.closeGlobalImportModal = closeGlobalImportModal;
+window.confirmGlobalImport = confirmGlobalImport;
+window.showFeatureInfoModal = showFeatureInfoModal;
+window.renderFeatureInfo = renderFeatureInfo;
+window.handleFeatureSelectChange = handleFeatureSelectChange;
+window.toggleFeatureEditMode = toggleFeatureEditMode;
+window.cancelFeatureEdit = cancelFeatureEdit;
+window.saveFeatureData = saveFeatureData;
+window.closeFeatureInfoModal = closeFeatureInfoModal;
+window.editFeatureGeometry = editFeatureGeometry;
+window.stopGeometryEditing = stopGeometryEditing;
+window.deleteActiveFeature = deleteActiveFeature;
+window.setupIconDropdowns = setupIconDropdowns;
+window.selectIcon = selectIcon;
+window.switchLayer = switchLayer;
+window.zoomIn = zoomIn;
+window.zoomOut = zoomOut;
+window.goToMyLocation = goToMyLocation;
+// Second script block from code.html
+
+function openVisitsModal() {
+    if(!activeFeatureLayer) return;
+    document.getElementById('visits-modal').classList.remove('hidden');
+    renderVisitsList();
+}
+
+function closeVisitsModal() {
+    document.getElementById('visits-modal').classList.add('hidden');
+}
+
+function renderVisitsList() {
+    const container = document.getElementById('visits-list-container');
+    container.innerHTML = '';
+    
+    if(!activeFeatureLayer.feature.properties.visits) {
+        activeFeatureLayer.feature.properties.visits = [];
+    }
+    
+    const visits = activeFeatureLayer.feature.properties.visits;
+    
+    if(visits.length === 0) {
+        container.innerHTML = '<p class="text-sm text-slate-500 text-center mt-4">Nenhuma visita registrada.</p>';
+        return;
+    }
+    
+    visits.forEach((v, index) => {
+        container.innerHTML += `
+            <div class="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4 flex flex-col gap-2 relative shadow-sm">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <div class="text-sm font-bold text-slate-900 dark:text-white">${new Date(v.date).toLocaleString('pt-BR')}</div>
+                        <div class="text-xs text-slate-500">Técnico: ${v.tech}</div>
+                    </div>
+                    <button onclick="printReport(${index})" class="text-primary hover:bg-primary/10 p-1.5 rounded transition-colors tooltip" title="Gerar Relatório A4">
+                        <span class="material-symbols-outlined text-[20px]">print</span>
+                    </button>
+                </div>
+                <div class="text-sm mt-2"><span class="font-semibold text-slate-700 dark:text-slate-300">Motivo:</span> ${v.reason}</div>
+                <div class="text-sm"><span class="font-semibold text-slate-700 dark:text-slate-300">Situação:</span> ${v.situation}</div>
+            </div>
+        `;
+    });
+}
+
+let currentVisitCoords = null;
+
+function openNewVisitModal() {
+    document.getElementById('new-visit-modal').classList.remove('hidden');
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    document.getElementById('visit-date').value = now.toISOString().slice(0,16);
+    document.getElementById('visit-reason').value = '';
+    document.getElementById('visit-situation').value = '';
+    document.getElementById('visit-notes').value = '';
+    document.getElementById('visit-photos').value = '';
+    
+    currentVisitCoords = null;
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => { currentVisitCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude }; },
+            (err) => { console.warn("Geolocalização negada ou indisponível."); },
+            { enableHighAccuracy: true, timeout: 5000 }
+        );
+    }
+}
+
+function closeNewVisitModal() {
+    document.getElementById('new-visit-modal').classList.add('hidden');
+}
+
+async function saveNewVisit() {
+    const date = document.getElementById('visit-date').value;
+    const tech = document.getElementById('visit-tech').value;
+    const reason = document.getElementById('visit-reason').value;
+    const situation = document.getElementById('visit-situation').value;
+    const notes = document.getElementById('visit-notes').value;
+    const fileInput = document.getElementById('visit-photos');
+    
+    let photos = [];
+    if(fileInput.files.length > 0) {
+        for(let i=0; i<fileInput.files.length; i++) {
+            const base64 = await toBase64(fileInput.files[i]);
+            photos.push(base64);
+        }
+    }
+    
+    if(!activeFeatureLayer.feature.properties.visits) {
+        activeFeatureLayer.feature.properties.visits = [];
+    }
+    
+    activeFeatureLayer.feature.properties.visits.push({
+        date, tech, reason, situation, notes, photos, coords: currentVisitCoords
+    });
+    
+    syncMapDataToThemes();
+    closeNewVisitModal();
+    renderVisitsList();
+}
+
+const toBase64 = file => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = error => reject(error);
+});
+
+function printReport(visitIndex) {
+    const visit = activeFeatureLayer.feature.properties.visits[visitIndex];
+    const props = activeFeatureLayer.feature.properties;
+    
+    const printWindow = window.open('', '', 'width=800,height=900');
+    
+    let photosHtml = '';
+    if(visit.photos && visit.photos.length > 0) {
+        photosHtml = '<h3 style="color: #051125; border-bottom: 2px solid #ccc; padding-bottom: 5px; margin-top: 30px;">Anexos Fotográficos</h3><div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px;">';
+        visit.photos.forEach(p => {
+            photosHtml += `<img src="${p}" style="max-width: 48%; border: 1px solid #ccc; border-radius: 4px; object-fit: contain; max-height: 400px;" />`;
+        });
+        photosHtml += '</div>';
+    }
+    
+    const html = `
+        <html>
+        <head>
+            <title>Relatório de Visita Técnica</title>
+            <style>
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 21cm; margin: 0 auto; padding: 40px 20px; background: white;}
+                h1 { border-bottom: 3px solid #051125; color: #051125; padding-bottom: 10px; text-align: center;}
+                h2 { color: #47607e; border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-top: 30px; font-size: 1.2rem;}
+                .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+                .box { border: 1px solid #eee; padding: 15px; background: #fafafa; border-radius: 6px;}
+                .box strong { display: block; font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;}
+                .box div { font-size: 14px; font-weight: 500;}
+                .header-logo { text-align: center; margin-bottom: 20px; font-weight: 900; font-size: 24px; color: #051125; }
+                @media print {
+                    body { max-width: 100%; margin: 0; padding: 0; }
+                    .page-break { page-break-before: always; }
+                }
+            </style>
+        </head>
+        <body onload="setTimeout(() => window.print(), 500)">
+            <div class="header-logo">CONSTRUCTIVE</div>
+            <h1>Relatório de Visita Técnica</h1>
+            
+            <h2>Dados da Visita</h2>
+            <div class="grid">
+                <div class="box"><strong>Data e Hora</strong> <div>${new Date(visit.date).toLocaleString('pt-BR')}</div></div>
+                <div class="box"><strong>Técnico Responsável</strong> <div>${visit.tech}</div></div>
+                <div class="box"><strong>Motivo da Visita</strong> <div>${visit.reason || '-'}</div></div>
+                <div class="box"><strong>Coordenadas (GPS Local)</strong> <div>${visit.coords ? visit.coords.lat.toFixed(6) + ', ' + visit.coords.lng.toFixed(6) : 'Não coletado'}</div></div>
+            </div>
+            
+            <div class="box" style="margin-bottom: 20px;">
+                <strong>Situação Encontrada</strong>
+                <div style="font-weight: normal; margin-top: 8px;">${visit.situation || '-'}</div>
+            </div>
+            
+            <div class="box" style="margin-bottom: 20px;">
+                <strong>Observações Gerais</strong>
+                <div style="font-weight: normal; margin-top: 8px;">${(visit.notes || '').replace(/\\n/g, '<br/>') || 'Nenhuma observação registrada.'}</div>
+            </div>
+            
+            <h2>Dados do Imóvel / Elemento</h2>
+            <div class="grid">
+                <div class="box"><strong>Proprietário / Titular</strong> <div>${props['Proprietário'] || '-'}</div></div>
+                <div class="box"><strong>Identificação (CPF/CNPJ)</strong> <div>${props['CPF/CNPJ'] || '-'}</div></div>
+                <div class="box"><strong>Endereço</strong> <div>${props['Endereço'] || '-'}</div></div>
+                <div class="box"><strong>Localização (Lote/Quadra)</strong> <div>Lote ${props['Lote'] || '-'} / Quadra ${props['Quadra'] || '-'}</div></div>
+            </div>
+            
+            ${photosHtml ? '<div class="page-break"></div>' + photosHtml : ''}
+            
+            <div style="margin-top: 80px; text-align: center;">
+                <div style="width: 300px; border-top: 1px solid #333; margin: 0 auto; padding-top: 10px;">
+                    Assinatura do Técnico
+                </div>
+            </div>
+        </body>
+        </html>
+    `;
+    
+    printWindow.document.write(html);
+    printWindow.document.close();
+}
+
+// Expose second block functions
+window.loadThemes = loadThemes;
+window.saveThemes = saveThemes;
+window.initMap = initMap;
+window.loadAllFeaturesToMap = loadAllFeaturesToMap;
+window.syncMapDataToThemes = syncMapDataToThemes;
+window.renderThemes = renderThemes;
+window.toggleThemeVisibility = toggleThemeVisibility;
+window.renderFeatureListItems = renderFeatureListItems;
+window.highlightFeature = highlightFeature;
+window.zoomToFeature = zoomToFeature;
+window.filterFeatures = filterFeatures;
+window.openNewThemeModal = openNewThemeModal;
+window.closeNewThemeModal = closeNewThemeModal;
+window.saveNewTheme = saveNewTheme;
+window.openEditThemeModal = openEditThemeModal;
+window.closeEditThemeModal = closeEditThemeModal;
+window.updateIconDropdownSelection = updateIconDropdownSelection;
+window.saveEditedTheme = saveEditedTheme;
+window.deleteTheme = deleteTheme;
+window.toggleSnapping = toggleSnapping;
+window.startEditingTheme = startEditingTheme;
+window.setDrawingMode = setDrawingMode;
+window.stopDrawingMode = stopDrawingMode;
+window.triggerUpload = triggerUpload;
+window.downloadGeoJSON = downloadGeoJSON;
+window.closeGlobalImportModal = closeGlobalImportModal;
+window.confirmGlobalImport = confirmGlobalImport;
+window.showFeatureInfoModal = showFeatureInfoModal;
+window.renderFeatureInfo = renderFeatureInfo;
+window.handleFeatureSelectChange = handleFeatureSelectChange;
+window.toggleFeatureEditMode = toggleFeatureEditMode;
+window.cancelFeatureEdit = cancelFeatureEdit;
+window.saveFeatureData = saveFeatureData;
+window.closeFeatureInfoModal = closeFeatureInfoModal;
+window.editFeatureGeometry = editFeatureGeometry;
+window.stopGeometryEditing = stopGeometryEditing;
+window.deleteActiveFeature = deleteActiveFeature;
+window.setupIconDropdowns = setupIconDropdowns;
+window.selectIcon = selectIcon;
+window.switchLayer = switchLayer;
+window.zoomIn = zoomIn;
+window.zoomOut = zoomOut;
+window.goToMyLocation = goToMyLocation;
+window.openVisitsModal = openVisitsModal;
+window.closeVisitsModal = closeVisitsModal;
+window.renderVisitsList = renderVisitsList;
+window.openNewVisitModal = openNewVisitModal;
+window.closeNewVisitModal = closeNewVisitModal;
+window.saveNewVisit = saveNewVisit;
+window.printReport = printReport;

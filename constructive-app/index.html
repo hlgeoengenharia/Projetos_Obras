@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+
+<html class="light" lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
+<script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+              "background": "#f0f3f8",
+              "surface": "#ffffff",
+              "surface-container": "#f8fafc",
+              "surface-container-low": "#f1f5f9",
+              "surface-container-high": "#e2e8f0",
+              "primary": "#0ea5e9",
+              "on-primary": "#ffffff",
+              "primary-container": "#e0f2fe",
+              "on-primary-container": "#0369a1",
+              "secondary": "#94a3b8",
+              "on-secondary": "#ffffff",
+              "secondary-container": "#f1f5f9",
+              "on-secondary-container": "#334155",
+              "tertiary": "#cbd5e1",
+              "on-tertiary": "#0f172a",
+              "tertiary-container": "#f8fafc",
+              "on-tertiary-container": "#1e293b",
+              "error": "#ef4444",
+              "on-error": "#ffffff",
+              "error-container": "#fee2e2",
+              "on-error-container": "#991b1b",
+              "outline": "#94a3b8",
+              "outline-variant": "#cbd5e1",
+              "inverse-surface": "#0f172a",
+              "inverse-on-surface": "#f8fafc",
+              "inverse-primary": "#7dd3fc"
+            },
+            "boxShadow": {
+              "neu-light": "5px 5px 10px #d1d9e6, -5px -5px 10px #ffffff",
+              "neu-inset": "inset 5px 5px 10px #d1d9e6, inset -5px -5px 10px #ffffff",
+              "glass": "0 8px 32px 0 rgba(31, 38, 135, 0.07)"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.5rem",
+                    "xl": "1rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "sm": "8px",
+                    "unit": "4px",
+                    "margin": "24px",
+                    "gutter": "16px",
+                    "xl": "32px",
+                    "md": "16px",
+                    "lg": "24px",
+                    "xs": "4px"
+            },
+            "fontFamily": {
+                    "body-md": ["Inter"],
+                    "h3": ["Inter"],
+                    "h1": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "h2": ["Inter"],
+                    "label-caps": ["Inter"],
+                    "data-tabular": ["Inter"]
+            },
+            "fontSize": {
+                    "body-md": ["14px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}],
+                    "h3": ["20px", {"lineHeight": "1.4", "letterSpacing": "0", "fontWeight": "600"}],
+                    "h1": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-lg": ["16px", {"lineHeight": "1.6", "letterSpacing": "0", "fontWeight": "400"}],
+                    "body-sm": ["13px", {"lineHeight": "1.5", "letterSpacing": "0.01em", "fontWeight": "400"}],
+                    "h2": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "label-caps": ["11px", {"lineHeight": "1", "letterSpacing": "0.06em", "fontWeight": "700"}],
+                    "data-tabular": ["14px", {"lineHeight": "1.4", "fontWeight": "500"}]
+            }
+          },
+        },
+      }
+    </script>
+    <style id="futuristic-3d">
+      /* Neumorphism and 3D Traits - Futuristic Layout */
+      body {
+        background-color: #f0f3f8 !important;
+        color: #334155 !important;
+      }
+      
+      /* Elevate panels with soft shadows */
+      .bg-white, .bg-slate-50, .bg-surface {
+        background-color: #ffffff !important;
+        box-shadow: 10px 10px 20px #d1d9e6, -10px -10px 20px #ffffff !important;
+        border: 1px solid rgba(255,255,255,0.6) !important;
+        border-radius: 0.5rem !important;
+      }
+      
+      /* Glassmorphism for fixed headers / overlays */
+      header, aside, .drawer, #side-drawer {
+        background: rgba(255, 255, 255, 0.75) !important;
+        backdrop-filter: blur(12px) saturate(150%) !important;
+        -webkit-backdrop-filter: blur(12px) saturate(150%) !important;
+        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05) !important;
+        border: 1px solid rgba(255, 255, 255, 0.6) !important;
+      }
+
+      /* Inset shadow for active or input elements to create depth */
+      input, textarea, select, .bg-surface-container {
+        background: #f1f5f9 !important;
+        box-shadow: inset 4px 4px 8px #d1d9e6, inset -4px -4px 8px #ffffff !important;
+        border: none !important;
+        border-radius: 0.25rem !important;
+      }
+
+      /* Extruded buttons with hover effects */
+      button {
+        box-shadow: 4px 4px 8px #d1d9e6, -4px -4px 8px #ffffff !important;
+        transition: all 0.2s ease-in-out !important;
+        border-radius: 0.375rem !important;
+      }
+      button:active {
+        box-shadow: inset 4px 4px 8px #d1d9e6, inset -4px -4px 8px #ffffff !important;
+        transform: translateY(2px);
+      }
+      
+      /* Exceptions for tabs to look flat */
+      button.tab-btn {
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+      }
+      button.tab-btn:active {
+        box-shadow: none !important;
+        transform: none !important;
+      }
+      
+      /* Circular shape for icon buttons */
+      button.p-1, button.p-2, button.p-3, button.rounded-full {
+         border-radius: 9999px !important;
+      }
+      
+      /* Subtler borders */
+      .border-b, .border-r, .border-t, .border-l, .border {
+        border-color: rgba(226, 232, 240, 0.5) !important;
+      }
+
+      /* Emphasize the primary accent color */
+      .text-primary, .text-blue-900 {
+        color: #0ea5e9 !important;
+        text-shadow: 0 0 10px rgba(14, 165, 233, 0.3) !important;
+      }
+      .bg-primary {
+        background: linear-gradient(135deg, #38bdf8, #0ea5e9) !important;
+        color: white !important;
+      }
+      
+      /* Adjust map z-index so it doesn't overlap frosted glass */
+      .leaflet-control-container {
+        z-index: 10 !important;
+      }
+    </style>
+
+</head>
+<body class="bg-surface text-on-surface overflow-hidden">
+<!-- TopAppBar -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-2 md:px-4 h-14 md:h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 font-sans antialiased tracking-tight">
+<div class="flex items-center gap-2 md:gap-4">
+<button class="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors rounded-full shrink-0" onclick="document.getElementById('side-drawer').classList.remove('-translate-x-full'); document.getElementById('drawer-overlay').classList.remove('hidden')">
+<span class="material-symbols-outlined text-slate-900 dark:text-slate-50">menu</span>
+</button>
+<h1 class="text-lg font-bold tracking-tighter text-slate-900 dark:text-slate-50"></h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="hidden md:flex gap-6 mr-6">
+<a class="text-blue-900 dark:text-blue-400 font-semibold text-body-md" href="#">Início</a>
+<a class="text-blue-900 dark:text-blue-400 font-semibold text-body-md" href="#">Projetos</a>
+<a class="text-blue-900 dark:text-blue-400 font-semibold text-body-md" href="#">Obras</a>
+</div>
+<div class="w-8 h-8 rounded-full bg-primary-container flex items-center shrink-0 justify-center overflow-hidden border border-outline-variant">
+<img alt="Avatar" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCc0RYeJ85EwHW4BJ4ZRmN9WYDAnOz5EFFNO3bx5XdbDIkNCRYBBysRNyY53k3kzDdU9seuTeFmYvMXtMDCL1UbpKvFNeY23l3z4U9FCZOYErFcRImNItGPpgG_W5bVuwtWn-6WMk8SDB99zq3Dt-MC71VCZyEVd4TqkBE32-OMGnSHpid3s70wq18nEDKvtj8p1j-2l4IrBibDsMAPK8QH6puGnFKJNt-aiAhAmbQzoqrnGeO6vWoOnEZLChi1lnkv29X777poaFA_"/>
+</div>
+</div>
+</header>
+<!-- NavigationDrawer Overlay -->
+<div class="fixed inset-0 bg-black/50 z-[55] hidden" id="drawer-overlay" onclick="this.classList.add('hidden'); document.getElementById('side-drawer').classList.add('-translate-x-full')"></div>
+<!-- NavigationDrawer -->
+<aside class="fixed inset-y-0 left-0 z-[60] flex flex-col h-full w-64 sm:w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 shadow-xl transition-transform duration-300 ease-in-out -translate-x-full" id="side-drawer">
+<div class="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+<h2 class="text-xl font-bold tracking-tighter text-slate-900 dark:text-slate-50 uppercase">Camadas</h2>
+<div class="flex items-center gap-1">
+<button class="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-primary dark:text-blue-400 transition-colors" title="Criar Camada (Desenhar)" onclick="openNewThemeModal()">
+<span class="material-symbols-outlined">add_circle</span>
+</button>
+<button class="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors" onclick="document.getElementById('side-drawer').classList.add('-translate-x-full'); document.getElementById('drawer-overlay').classList.add('hidden')">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+</div>
+<div class="px-6 py-3 border-b border-slate-200 dark:border-slate-800">
+  <div class="relative w-full">
+    <span class="material-symbols-outlined text-[20px] absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+    <input type="text" id="global-search-input" placeholder="Pesquisar lotes, nomes..." class="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm transition-all" onkeyup="filterFeatures()">
+  </div>
+</div>
+<nav class="flex-1 overflow-y-auto">
+<div class="p-4 flex flex-col gap-4" id="themes-container">
+<!-- Themes will be dynamically generated here -->
+</div>
+</nav>
+<div class="p-6 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-2">
+<button class="flex items-center gap-4 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg font-medium text-sm transition-all" onclick="document.getElementById('global-geojson-upload').click()">
+<span class="material-symbols-outlined text-lg">upload_file</span> Importar GeoJSON
+</button>
+<a class="flex items-center gap-4 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg font-medium text-sm transition-all" href="settings.html">
+<span class="material-symbols-outlined text-lg">settings</span> Configurações
+        </a>
+</div>
+</aside>
+<!-- Main Map Canvas -->
+<main class="relative w-full h-[calc(100vh-3.5rem)] md:h-screen pt-14 md:pt-16 pb-14 md:pb-0">
+<!-- Google Map -->
+<div id="map" class="absolute inset-0 z-0"></div>
+<!-- Floating Map Controls -->
+<div class="absolute top-20 right-4 md:top-24 md:right-6 z-20 flex flex-col gap-2">
+<div class="bg-white dark:bg-slate-900 rounded-lg shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
+<button class="p-2 md:p-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border-b border-slate-100 dark:border-slate-800 flex items-center justify-center text-slate-500" title="Mapa" onclick="switchLayer('Mapa')">
+<span class="material-symbols-outlined">map</span>
+</button>
+<button class="p-2 md:p-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border-b border-slate-100 dark:border-slate-800 flex items-center justify-center text-slate-500" title="Satélite" onclick="switchLayer('Satélite')">
+<span class="material-symbols-outlined">satellite_alt</span>
+</button>
+<button class="p-2 md:p-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-blue-900 dark:text-blue-400" title="Híbrido" onclick="switchLayer('Híbrido')">
+<span class="material-symbols-outlined">layers</span>
+</button>
+</div>
+<div class="bg-white dark:bg-slate-900 rounded-lg shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col mt-4">
+<button class="p-2 md:p-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border-b border-slate-100 dark:border-slate-800 flex items-center justify-center text-slate-900 dark:text-slate-50" title="Aumentar Zoom" onclick="zoomIn()">
+<span class="material-symbols-outlined">add</span>
+</button>
+<button class="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border-b border-slate-100 dark:border-slate-800 flex items-center justify-center text-slate-900 dark:text-slate-50" title="Diminuir Zoom" onclick="zoomOut()">
+<span class="material-symbols-outlined">remove</span>
+</button>
+<button class="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-primary dark:text-blue-400" title="Minha Localização" onclick="goToMyLocation()">
+<span class="material-symbols-outlined">my_location</span>
+</button>
+</div>
+</div>
+</main>
+
+<!-- Modals -->
+<!-- New Theme Modal -->
+<div id="new-theme-modal" class="fixed inset-0 z-[100] bg-black/50 hidden flex items-center justify-center">
+  <div class="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-6 w-full max-w-sm border border-slate-200 dark:border-slate-800">
+    <h3 class="text-xl font-bold mb-4 text-slate-900 dark:text-white">Criar Novo Tema</h3>
+    <div class="flex flex-col gap-4">
+      <div>
+        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome do Tema</label>
+        <input type="text" id="theme-name-input" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white" placeholder="Ex: Arborização">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cor</label>
+        <input type="color" id="theme-color-input" class="w-full h-10 cursor-pointer rounded bg-slate-50 border-none" value="#10b981">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Ícone</label>
+        <div class="relative w-full" id="new-icon-container">
+          <input type="hidden" id="theme-icon-input" value="circle">
+          <button type="button" onclick="document.getElementById('new-icon-dropdown').classList.toggle('hidden')" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none flex justify-between items-center transition-colors">
+            <div class="flex items-center gap-2 dark:text-white">
+                <span class="material-symbols-outlined text-[20px] text-primary" id="new-icon-preview">circle</span>
+                <span id="new-icon-label" class="text-sm">Círculo Básico</span>
+            </div>
+            <span class="material-symbols-outlined text-slate-400">expand_more</span>
+          </button>
+          <div id="new-icon-dropdown" class="hidden absolute z-50 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl max-h-56 overflow-y-auto">
+             <div class="p-1 flex flex-col" id="new-icon-options"></div>
+          </div>
+        </div>
+      </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tipo de Feição</label>
+            <select id="theme-geometry" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white">
+                <option value="Point">Ponto</option>
+                <option value="LineString">Linha</option>
+                <option value="Polygon">Polígono</option>
+            </select>
+        </div>
+        
+        <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tipo de Cadastro (Template)</label>
+            <select id="theme-cadastro-type" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white">
+                <option value="padrao">Padrão Genérico</option>
+                <option value="irregulares">Pontos Irregulares (Completo)</option>
+            </select>
+        </div>
+    </div>
+    <div class="mt-6 flex justify-end gap-3">
+      <button onclick="closeNewThemeModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg font-medium transition-colors">Cancelar</button>
+      <button onclick="saveNewTheme()" class="px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Theme Modal -->
+<div id="edit-theme-modal" class="fixed inset-0 z-[100] bg-black/50 hidden flex items-center justify-center">
+  <div class="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-6 w-full max-w-sm border border-slate-200 dark:border-slate-800">
+    <h3 class="text-xl font-bold mb-4 text-slate-900 dark:text-white">Editar Tema</h3>
+    <div class="flex flex-col gap-4">
+      <div>
+        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome do Tema</label>
+        <input type="text" id="edit-theme-name-input" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cor</label>
+        <input type="color" id="edit-theme-color-input" class="w-full h-10 cursor-pointer rounded bg-slate-50 border-none">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Ícone</label>
+        <div class="relative w-full" id="edit-icon-container">
+          <input type="hidden" id="edit-theme-icon-input" value="circle">
+          <button type="button" onclick="document.getElementById('edit-icon-dropdown').classList.toggle('hidden')" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none flex justify-between items-center transition-colors">
+            <div class="flex items-center gap-2 dark:text-white">
+                <span class="material-symbols-outlined text-[20px] text-primary" id="edit-icon-preview">circle</span>
+                <span id="edit-icon-label" class="text-sm">Círculo Básico</span>
+            </div>
+            <span class="material-symbols-outlined text-slate-400">expand_more</span>
+          </button>
+          <div id="edit-icon-dropdown" class="hidden absolute z-50 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl max-h-56 overflow-y-auto">
+             <div class="p-1 flex flex-col" id="edit-icon-options"></div>
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <div class="flex-1">
+          <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1" title="Campo que será exibido na listagem">Exibição 1</label>
+          <select id="edit-theme-disp1-input" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">
+            <!-- Injected by JS -->
+          </select>
+        </div>
+        <div class="flex-1">
+          <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1" title="Campo secundário na listagem">Exibição 2</label>
+          <select id="edit-theme-disp2-input" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">
+            <!-- Injected by JS -->
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="mt-6 flex justify-end gap-3">
+      <button onclick="closeEditThemeModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg font-medium transition-colors">Cancelar</button>
+      <button onclick="saveEditedTheme()" class="px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Global Import Modal -->
+<div id="global-import-modal" class="fixed inset-0 z-[100] bg-black/50 hidden flex items-center justify-center">
+  <div class="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-6 w-full max-w-lg border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col">
+    <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Importar GeoJSON</h3>
+    
+    <div class="mb-4">
+      <span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold rounded" id="global-import-geom-type">Tipo: Desconhecido</span>
+    </div>
+
+    <div class="flex-1 overflow-y-auto pr-2">
+      <div class="flex flex-col gap-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome do Tema</label>
+          <input type="text" id="global-import-theme-name" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white">
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Mapeamento de Campos (Opcional)</label>
+          <p class="text-xs text-slate-500 mb-2">Renomeie os campos identificados ou deixe como estão.</p>
+          <div id="global-import-fields-container" class="flex flex-col gap-2">
+            <!-- Fields will be dynamically generated here -->
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="mt-6 flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+      <button onclick="closeGlobalImportModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg font-medium transition-colors">Cancelar</button>
+      <button onclick="confirmGlobalImport()" class="px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors">Importar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Professional Feature Info Panel -->
+<div id="feature-info-modal" class="fixed inset-0 z-[100] bg-black/50 hidden flex justify-end">
+  <div class="bg-white dark:bg-slate-900 shadow-2xl w-full max-w-sm sm:max-w-md h-full flex flex-col">
+    <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+        <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary dark:text-blue-400">info</span>
+            Detalhes do Elemento
+        </h3>
+        <button onclick="closeFeatureInfoModal()" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-500 transition-colors">
+            <span class="material-symbols-outlined">close</span>
+        </button>
+    </div>
+    
+    <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex gap-2" id="feature-actions-container">
+        <button onclick="toggleFeatureEditMode()" class="flex-1 flex items-center justify-center gap-2 px-2 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded font-medium text-xs sm:text-sm transition-colors">
+            <span class="material-symbols-outlined text-[18px]">edit_document</span>
+            Dados
+        </button>
+        <button onclick="editFeatureGeometry()" class="flex-1 flex items-center justify-center gap-2 px-2 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded font-medium text-xs sm:text-sm transition-colors">
+            <span class="material-symbols-outlined text-[18px]">edit_location_alt</span>
+            Ajustar
+        </button>
+        <button onclick="openVisitsModal()" class="flex-1 flex items-center justify-center gap-2 px-2 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded font-medium text-xs sm:text-sm transition-colors">
+            <span class="material-symbols-outlined text-[18px]">assignment</span>
+            Visitas
+        </button>
+        <button onclick="deleteActiveFeature()" class="flex-none flex items-center justify-center px-3 py-2 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 rounded font-medium transition-colors tooltip" title="Excluir Feição">
+            <span class="material-symbols-outlined text-[18px]">delete</span>
+        </button>
+    </div>
+
+    <div id="feature-info-content" class="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
+        <!-- Rendered via JS -->
+    </div>
+    
+    <div id="feature-save-container" class="hidden p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-end gap-2">
+      <button onclick="cancelFeatureEdit()" class="px-4 py-2 text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700 rounded font-medium transition-colors text-sm">Cancelar</button>
+      <button onclick="saveFeatureData()" class="px-4 py-2 bg-primary text-white hover:bg-primary/90 rounded font-medium transition-colors text-sm flex items-center gap-2">
+         <span class="material-symbols-outlined text-[18px]">save</span> Salvar
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Drawing Tools Toolbar (Hidden by default, shown when editing a theme) -->
+<div id="drawing-toolbar" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-slate-900 rounded-full shadow-2xl border border-slate-200 dark:border-slate-800 p-2 hidden items-center gap-2">
+  <div class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mr-2" id="drawing-theme-name">
+    Editando Tema
+  </div>
+  <button id="draw-btn-marker" class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-700 dark:text-slate-200 tooltip" title="Adicionar Ponto" onclick="setDrawingMode('marker')">
+    <span class="material-symbols-outlined">location_on</span>
+  </button>
+  <button id="draw-btn-polyline" class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-700 dark:text-slate-200 tooltip" title="Adicionar Linha" onclick="setDrawingMode('polyline')">
+    <span class="material-symbols-outlined">polyline</span>
+  </button>
+  <button id="draw-btn-polygon" class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-700 dark:text-slate-200 tooltip" title="Adicionar Polígono" onclick="setDrawingMode('polygon')">
+    <span class="material-symbols-outlined">pentagon</span>
+  </button>
+  <div class="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
+  <button id="snap-btn" class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-primary tooltip" title="Aderência Ativada (Vértices e Arestas)" onclick="toggleSnapping()">
+    <span class="material-symbols-outlined">hub</span>
+  </button>
+  <button class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors text-red-500 tooltip" title="Parar Edição" onclick="stopDrawingMode()">
+    <span class="material-symbols-outlined">close</span>
+  </button>
+</div>
+
+<!-- Geometry Edit Toolbar -->
+<div id="geometry-edit-toolbar" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-slate-900 rounded-full shadow-2xl border border-slate-200 dark:border-slate-800 p-2 hidden items-center gap-2">
+  <div class="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-bold uppercase tracking-wider mr-2 flex items-center gap-1">
+    <span class="material-symbols-outlined text-[16px]">edit_location_alt</span>
+    Ajustando
+  </div>
+  <div class="text-[11px] text-slate-500 hidden sm:block mr-2 px-2 border-l border-slate-200 dark:border-slate-700 leading-tight">
+     <span class="font-bold text-slate-700 dark:text-slate-300">Arrastar:</span> Move ou Cria Nós<br/>
+     <span class="font-bold text-slate-700 dark:text-slate-300">Botão Direito:</span> Exclui Nós
+  </div>
+  <button class="px-4 py-2 bg-primary text-white rounded-full font-medium text-sm hover:bg-primary/90 transition-colors shadow" onclick="stopGeometryEditing()">
+    Concluir
+  </button>
+</div>
+
+<input type="file" id="geojson-upload-input" accept=".geojson,.json" class="hidden">
+<input type="file" id="global-geojson-upload" accept=".geojson,.json" class="hidden">
+
+
+<!-- Visits Modal -->
+<div id="visits-modal" class="fixed inset-0 z-[110] bg-black/50 hidden flex justify-end">
+  <div class="bg-white dark:bg-slate-900 shadow-2xl w-full max-w-md h-full flex flex-col">
+    <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+        <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary dark:text-blue-400">assignment</span>
+            Visitas Técnicas
+        </h3>
+        <button onclick="closeVisitsModal()" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-500 transition-colors">
+            <span class="material-symbols-outlined">close</span>
+        </button>
+    </div>
+    <div class="p-4 border-b border-slate-200 dark:border-slate-800">
+        <button onclick="openNewVisitModal()" class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white rounded font-medium transition-colors hover:bg-primary/90">
+            <span class="material-symbols-outlined">add</span> Nova Visita
+        </button>
+    </div>
+    <div id="visits-list-container" class="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+        <!-- Visits will be listed here -->
+    </div>
+  </div>
+</div>
+
+<!-- New Visit Modal -->
+<div id="new-visit-modal" class="fixed inset-0 z-[120] bg-black/50 hidden flex items-center justify-center">
+  <div class="bg-white dark:bg-slate-900 shadow-2xl rounded-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+    <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 rounded-t-xl">
+        <h3 class="text-lg font-bold text-slate-900 dark:text-white">Registrar Nova Visita</h3>
+        <button onclick="closeNewVisitModal()" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-500 transition-colors">
+            <span class="material-symbols-outlined">close</span>
+        </button>
+    </div>
+    <div class="p-6 overflow-y-auto flex-1 flex flex-col gap-4">
+        <div class="flex gap-4">
+            <div class="flex-1">
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data/Hora</label>
+                <input type="datetime-local" id="visit-date" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">
+            </div>
+            <div class="flex-1">
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Técnico</label>
+                <input type="text" id="visit-tech" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm" value="Técnico Logado" readonly>
+            </div>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Motivo da Visita</label>
+            <input type="text" id="visit-reason" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Situação Encontrada</label>
+            <input type="text" id="visit-situation" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Observações</label>
+            <textarea id="visit-notes" rows="3" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm"></textarea>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Fotos</label>
+            <input type="file" id="visit-photos" accept="image/*" multiple capture="environment" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20">
+        </div>
+    </div>
+    <div class="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-end gap-2 rounded-b-xl">
+        <button onclick="closeNewVisitModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700 rounded font-medium transition-colors text-sm">Cancelar</button>
+        <button onclick="saveNewVisit()" class="px-4 py-2 bg-primary text-white hover:bg-primary/90 rounded font-medium transition-colors text-sm">Salvar Visita</button>
+    </div>
+  </div>
+</div>
+
+
+<script type="module" src="/src/main.js"></script>
+</body></html>
