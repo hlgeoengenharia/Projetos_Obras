@@ -91,44 +91,68 @@
     <style id="futuristic-3d">
       /* Neumorphism and 3D Traits - Futuristic Layout */
       body {
-        background-color: #f0f3f8 !important;
+        background-color: #f8fafc !important;
         color: #334155 !important;
+      }
+      html.dark body {
+        background-color: #0f172a !important;
+        color: #e2e8f0 !important;
       }
       
       /* Elevate panels with soft shadows */
       .bg-white, .bg-slate-50, .bg-surface {
         background-color: #ffffff !important;
-        box-shadow: 10px 10px 20px #d1d9e6, -10px -10px 20px #ffffff !important;
-        border: 1px solid rgba(255,255,255,0.6) !important;
+        box-shadow: 4px 4px 12px rgba(209, 217, 230, 0.4), -4px -4px 12px rgba(255, 255, 255, 0.8) !important;
+        border: 1px solid rgba(226, 232, 240, 0.6) !important;
         border-radius: 0.5rem !important;
+      }
+      html.dark .bg-white, html.dark .bg-slate-50, html.dark .bg-surface, html.dark .dark\:bg-slate-800 {
+        background-color: #1e293b !important;
+        box-shadow: 4px 4px 12px rgba(11, 17, 32, 0.4), -4px -4px 12px rgba(39, 55, 77, 0.4) !important;
+        border: 1px solid rgba(255, 255, 255, 0.05) !important;
       }
       
       /* Glassmorphism for fixed headers / overlays */
       header, aside, .drawer, #side-drawer {
-        background: rgba(255, 255, 255, 0.75) !important;
-        backdrop-filter: blur(12px) saturate(150%) !important;
-        -webkit-backdrop-filter: blur(12px) saturate(150%) !important;
-        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05) !important;
-        border: 1px solid rgba(255, 255, 255, 0.6) !important;
+        background: rgba(255, 255, 255, 0.85) !important;
+        backdrop-filter: blur(8px) !important;
+        -webkit-backdrop-filter: blur(8px) !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03) !important;
+        border-bottom: 1px solid rgba(226, 232, 240, 0.8) !important;
+      }
+      html.dark header, html.dark aside, html.dark .drawer, html.dark #side-drawer {
+        background: rgba(15, 23, 42, 0.85) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
       }
 
       /* Inset shadow for active or input elements to create depth */
       input, textarea, select, .bg-surface-container {
         background: #f1f5f9 !important;
-        box-shadow: inset 4px 4px 8px #d1d9e6, inset -4px -4px 8px #ffffff !important;
+        box-shadow: inset 2px 2px 5px rgba(209, 217, 230, 0.5), inset -2px -2px 5px rgba(255, 255, 255, 0.8) !important;
         border: none !important;
         border-radius: 0.25rem !important;
+      }
+      html.dark input, html.dark textarea, html.dark select, html.dark .bg-surface-container {
+        background: #0f172a !important;
+        box-shadow: inset 2px 2px 5px rgba(11, 17, 32, 0.5), inset -2px -2px 5px rgba(30, 41, 59, 0.5) !important;
+        color: #f8fafc !important;
       }
 
       /* Extruded buttons with hover effects */
       button {
-        box-shadow: 4px 4px 8px #d1d9e6, -4px -4px 8px #ffffff !important;
+        box-shadow: 2px 2px 6px rgba(209, 217, 230, 0.5), -2px -2px 6px rgba(255, 255, 255, 0.8) !important;
         transition: all 0.2s ease-in-out !important;
         border-radius: 0.375rem !important;
       }
+      html.dark button {
+        box-shadow: 2px 2px 6px rgba(11, 17, 32, 0.4), -2px -2px 6px rgba(39, 55, 77, 0.3) !important;
+      }
       button:active {
-        box-shadow: inset 4px 4px 8px #d1d9e6, inset -4px -4px 8px #ffffff !important;
-        transform: translateY(2px);
+        box-shadow: inset 2px 2px 5px rgba(209, 217, 230, 0.5), inset -2px -2px 5px rgba(255, 255, 255, 0.8) !important;
+        transform: translateY(1px);
+      }
+      html.dark button:active {
+        box-shadow: inset 2px 2px 5px rgba(11, 17, 32, 0.5), inset -2px -2px 5px rgba(30, 41, 59, 0.5) !important;
       }
       
       /* Exceptions for tabs to look flat */
@@ -149,7 +173,10 @@
       
       /* Subtler borders */
       .border-b, .border-r, .border-t, .border-l, .border {
-        border-color: rgba(226, 232, 240, 0.5) !important;
+        border-color: rgba(226, 232, 240, 0.7) !important;
+      }
+      html.dark .border-b, html.dark .border-r, html.dark .border-t, html.dark .border-l, html.dark .border {
+        border-color: rgba(255, 255, 255, 0.08) !important;
       }
 
       /* Emphasize the primary accent color */
