@@ -1,17 +1,35 @@
-let dynamicFormSchema = null;
+let allForms = [];
 async function fetchDynamicForm() {
-    try {
-        if (!supabaseClient) return;
-        const { data, error } = await supabaseClient.from('forms').select('*').order('created_at', { ascending: false }).limit(1);
-        if (!error && data && data.length > 0) {
-            dynamicFormSchema = data[0].schema;
-            console.log("Form loaded from Supabase:", dynamicFormSchema);
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        try {
+            const { data, error } = await supabaseClient.from('forms').select('*').order('created_at', { ascending: false });
+            if (data) {
+                allForms = data;
+                console.log("All Forms loaded from Supabase:", allForms);
+                populateFormSelects();
+            }
+        } catch(e) { console.error(e); }
+    } else {
+        const saved = localStorage.getItem('constructive_forms');
+        if (saved) {
+            allForms = JSON.parse(saved);
+            populateFormSelects();
         }
-    } catch(e) {
-        console.error("Error loading forms", e);
     }
 }
-// Call it on load
+function populateFormSelects() {
+    const selects = ['theme-cadastro-type', 'edit-theme-cadastro-type', 'global-import-cadastro-type'];
+    selects.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            let html = '<option value="">Padrão Genérico</option>';
+            allForms.forEach(f => {
+                html += `<option value="${f.id}">${f.title || f.name}</option>`;
+            });
+            el.innerHTML = html;
+        }
+    });
+}
 fetchDynamicForm();
 
 const cabedeloCenter = [-7.0182, -34.8336];
@@ -302,8 +320,22 @@ function renderFeatureListItems(theme) {
   return html;
 }
 
+let currentHighlightData = null;
+
+function clearHighlight() {
+  if (!currentHighlightData) return;
+  if (currentHighlightData.type === 'style' && typeof geojsonLayer !== 'undefined' && geojsonLayer && map.hasLayer(currentHighlightData.layer)) {
+    geojsonLayer.resetStyle(currentHighlightData.layer);
+  } else if (currentHighlightData.type === 'marker' && map.hasLayer(currentHighlightData.layer)) {
+    map.removeLayer(currentHighlightData.layer);
+  }
+  currentHighlightData = null;
+}
+
 function highlightFeature(fid) {
-  if (!geojsonLayer) return;
+  if (typeof geojsonLayer === 'undefined' || !geojsonLayer) return;
+  
+  clearHighlight();
   
   // 1. Destaque no Mapa
   let targetLayer = null;
@@ -314,31 +346,21 @@ function highlightFeature(fid) {
   });
   
   if (targetLayer) {
+    // Zoom/Center to feature
+    if (targetLayer.getBounds) {
+      map.flyToBounds(targetLayer.getBounds(), { maxZoom: 18, duration: 0.5 });
+    } else if (targetLayer.getLatLng) {
+      map.flyTo(targetLayer.getLatLng(), Math.max(map.getZoom(), 18), { duration: 0.5 });
+    }
+
     if (targetLayer.setStyle) {
       targetLayer.setStyle({ color: '#f59e0b', weight: 6, fillOpacity: 0.8 });
-      setTimeout(() => {
-        if (geojsonLayer && map.hasLayer(targetLayer)) {
-          geojsonLayer.resetStyle(targetLayer);
-        }
-      }, 2000);
+      currentHighlightData = { type: 'style', layer: targetLayer };
     } else if (targetLayer.getLatLng) {
       const highlight = L.circleMarker(targetLayer.getLatLng(), {
-        radius: 15, color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.8, weight: 2
+        radius: 12, color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.8, weight: 3
       }).addTo(map);
-      
-      let opacity = 0.8;
-      let radius = 15;
-      const interval = setInterval(() => {
-        opacity -= 0.05;
-        radius += 1.5;
-        if (opacity <= 0) {
-          clearInterval(interval);
-          map.removeLayer(highlight);
-        } else {
-          highlight.setStyle({ fillOpacity: opacity, opacity: opacity });
-          highlight.setRadius(radius);
-        }
-      }, 50);
+      currentHighlightData = { type: 'marker', layer: highlight };
     }
   }
 
@@ -442,7 +464,7 @@ function saveNewTheme() {
   if (!name) return;
 
   const id = 'theme_' + Date.now();
-  themes.push({ id, name, color, geomType, icon, features: [] });
+  themes.push({ id, name, color, geomType, icon, formId, features: [] });
   saveThemes();
   renderThemes();
   closeNewThemeModal();
@@ -505,6 +527,7 @@ function saveEditedTheme() {
   const icon = document.getElementById('edit-theme-icon-input').value;
   const disp1 = document.getElementById('edit-theme-disp1-input').value;
   const disp2 = document.getElementById('edit-theme-disp2-input').value;
+    const formId = document.getElementById('edit-theme-cadastro-type') ? document.getElementById('edit-theme-cadastro-type').value : '';
   
   if (!name || !themeBeingEdited) return;
 
@@ -837,6 +860,8 @@ function showFeatureInfoModal(layer) {
   document.getElementById('feature-save-container').classList.add('hidden');
 }
 
+
+
 function renderFeatureInfo() {
   const container = document.getElementById('feature-info-content');
   container.innerHTML = '';
@@ -844,6 +869,15 @@ function renderFeatureInfo() {
       activeFeatureLayer.feature.properties = {};
   }
   const properties = activeFeatureLayer.feature.properties;
+    const themeId = properties.themeId;
+    const theme = themes.find(t => t.id === themeId);
+    
+    let dynamicFormSchema = null;
+    if (theme && theme.formId) {
+        const form = allForms.find(f => f.id === theme.formId);
+        if (form) dynamicFormSchema = form.schema || form.tabs;
+    }
+
   const geomType = activeFeatureLayer.feature.geometry.type;
   const isLine = geomType === 'LineString' || geomType === 'MultiLineString';
   
@@ -854,56 +888,11 @@ function renderFeatureInfo() {
   }
 
   if (dynamicFormSchema && dynamicFormSchema.length > 0) {
-      // Use Dynamic Form Builder Schema
-      let html = '<div class="flex flex-col gap-4">';
-      let primaryTabId = dynamicFormSchema.find(t=>t.isPrimary)?.id || dynamicFormSchema[0].id;
-      
-      dynamicFormSchema.forEach((tab) => {
-         let isPrimary = tab.id === primaryTabId;
-         html += `
-           <div class="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-800 shadow-sm transition-all accordion-section" id="acc-section-${tab.id}">
-             <button type="button" onclick="switchDynamicTab('${tab.id}')" class="w-full px-4 py-3 flex items-center justify-center bg-slate-50 hover:bg-slate-100 dark:bg-slate-900/50 dark:hover:bg-slate-800 transition-colors">
-               <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wide flex items-center gap-2 text-center">
-                 ${tab.title}
-               </h3>
-             </button>
-             <div id="acc-content-${tab.id}" class="accordion-content transition-all duration-300 ${isPrimary ? 'block p-4 border-t border-slate-200 dark:border-slate-700' : 'hidden'}">
-         `;
-         
-         if (tab.fields && tab.fields.length > 0) {
-            html += '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">';
-            tab.fields.forEach(f => {
-               const value = properties[f.id] || '';
-               html += `
-                  <div class="col-span-1 ${f.type === 'textarea' || f.type === 'geolocation' || f.type === 'photo' ? 'md:col-span-2' : ''}">
-                    <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">${f.label}</label>
-               `;
-               if (isFeatureEditMode) {
-                   if (f.type === 'select') {
-                       const opts = (f.options || '').split(',').map(o=>o.trim()).filter(o=>o);
-                       html += `<select data-key="${f.id}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">
-                           <option value="">Selecione...</option>
-                           ${opts.map(o => `<option value="${o}" ${value===o?'selected':''}>${o}</option>`).join('')}
-                       </select>`;
-                   } else if (f.type === 'textarea') {
-                       html += `<textarea data-key="${f.id}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">${value}</textarea>`;
-                   } else {
-                       html += `<input type="${f.type==='date'?'date':f.type==='number'?'number':'text'}" data-key="${f.id}" value="${value}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">`;
-                   }
-               } else {
-                   html += `<span class="text-sm text-slate-800 dark:text-slate-200 font-medium">${value || '<span class="text-slate-300 italic">Não informado</span>'}</span>`;
-               }
-               html += `</div>`;
-            });
-            html += '</div>';
-         }
-         html += `</div></div>`;
-      });
-      html += '</div>';
-      container.innerHTML = html;
-      return;
+      if (typeof window.renderDynamicForm === 'function') {
+          window.renderDynamicForm(dynamicFormSchema, properties, isFeatureEditMode, 'feature-info-content');
+          return;
+      }
   }
-
   // OLD LOGIC FALLBACK
 
   {
@@ -1074,6 +1063,22 @@ function cancelFeatureEdit() {
 
 async function saveFeatureData() {
   const inputs = document.querySelectorAll('.feature-data-input');
+  
+  // Validação: Exigir título para todos os anexos não excluídos
+  for (let input of inputs) {
+      if (input.classList.contains('complex-file-input')) {
+          try {
+              let files = JSON.parse(input.value);
+              for (let f of files) {
+                  if (!f.deleted && (!f.title || f.title.trim() === '')) {
+                      alert(`Por favor, digite um título obrigatório para o anexo: ${f.name}`);
+                      return; // Impede o salvamento
+                  }
+              }
+          } catch(e) {}
+      }
+  }
+
   inputs.forEach(input => {
     const key = input.getAttribute('data-key');
     activeFeatureLayer.feature.properties[key] = input.value;
@@ -1100,6 +1105,7 @@ function closeFeatureInfoModal(keepLayer = false) {
   document.getElementById('feature-info-modal').classList.add('hidden');
   if (!keepLayer) {
     activeFeatureLayer = null;
+    if (typeof clearHighlight === 'function') clearHighlight();
   }
 }
 
@@ -1515,3 +1521,5 @@ window.openNewVisitModal = openNewVisitModal;
 window.closeNewVisitModal = closeNewVisitModal;
 window.saveNewVisit = saveNewVisit;
 window.printReport = printReport;
+
+window.clearHighlight = clearHighlight;

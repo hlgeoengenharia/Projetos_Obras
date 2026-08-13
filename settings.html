@@ -17,6 +17,8 @@
   })();
 </script>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script src="/src/customFields.js"></script>
+<script src="/src/formRenderer.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <script id="tailwind-config">
@@ -212,6 +214,7 @@
   <!-- Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/supabase-config.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
 </head>
 <body class="bg-surface text-on-surface min-h-screen">
 <!-- TopAppBar -->
@@ -897,7 +900,13 @@
       if(confirm('Tem certeza que deseja excluir este formulário? As camadas que o utilizam poderão perder as definições de campos.')) {
         forms = forms.filter(f => f.id !== id);
         saveFormsToStorage();
-        renderFormsList();
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            supabaseClient.from('forms').delete().eq('id', id).then(() => {
+                renderFormsList();
+            }).catch(e => console.error("Erro ao deletar form:", e));
+        } else {
+            renderFormsList();
+        }
       }
     }
 
@@ -1108,378 +1117,17 @@
     function previewForm(id) {
       const form = forms.find(f => f.id === id);
       if (!form) return;
-      
       document.getElementById('preview-title').innerText = form.name;
       const container = document.getElementById('preview-container');
       container.innerHTML = '';
-      
-      let html = '<div class="flex flex-col gap-4">';
-      
-      if (form.tabs && form.tabs.length > 0) {
-         let primaryTabId = form.tabs.find(t=>t.isPrimary)?.id;
-         if (!primaryTabId) primaryTabId = form.tabs[0].id;
-         
-         form.tabs.forEach((tab) => {
-           let isPrimary = tab.id === primaryTabId;
-           
-           html += `
-             <div class="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-800 shadow-sm transition-all accordion-section" id="acc-section-${tab.id}" ${(tab.condition && tab.condition.enabled && tab.condition.fieldId) ? `data-condition-field="${tab.condition.fieldId}" data-condition-operator="${tab.condition.operator}" data-condition-value="${(tab.condition.value || '').toLowerCase()}"` : ''}>
-               <button type="button" onclick="switchPreviewTab('${tab.id}')" class="w-full px-4 py-4 sm:px-6 sm:py-5 flex items-center justify-center bg-slate-50 hover:bg-slate-100 dark:bg-slate-900/50 dark:hover:bg-slate-800 transition-colors">
-                 <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wide flex items-center gap-2 text-center">
-                   ${isPrimary ? '<span class="material-symbols-outlined text-amber-500">star</span>' : ''}
-                   ${tab.title}
-                 </h3>
-               </button>
-               
-               <div id="acc-content-${tab.id}" class="accordion-content transition-all duration-300 ${isPrimary ? 'block p-4 sm:p-6 border-t border-slate-200 dark:border-slate-700' : 'hidden'}">
-                 `;
-           
-           if(tab.isMultiple) {
-             html += `
-                 <!-- 1:N Table View -->
-                 <div id="multiple-table-view-${tab.id}">
-                    <div class="flex justify-between items-center mb-4">
-                       <h4 class="text-sm font-bold text-slate-700 dark:text-slate-300">Histórico de Registros</h4>
-                       <button type="button" onclick="toggleMultipleForm('${tab.id}', true)" class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors text-sm font-medium shadow-sm">
-                          <span class="material-symbols-outlined text-[18px]">add</span> Novo Registro
-                       </button>
-                    </div>
-                    
-                    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden">
-                       <table class="w-full text-left text-xs sm:text-sm">
-                          <thead class="bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 uppercase font-semibold">
-                             <tr>
-                                <th class="px-4 py-3">Data</th>
-                                <th class="px-4 py-3 hidden sm:table-cell">Responsável</th>
-                                <th class="px-4 py-3">Resumo</th>
-                                <th class="px-4 py-3 text-right">Ações</th>
-                             </tr>
-                          </thead>
-                          <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
-                             <!-- Fake history row -->
-                             <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                <td class="px-4 py-3 text-slate-900 dark:text-slate-100">01/08/2026</td>
-                                <td class="px-4 py-3 hidden sm:table-cell text-slate-600 dark:text-slate-300">Carlos Lima</td>
-                                <td class="px-4 py-3 text-slate-500 max-w-[150px] truncate">Visita inicial do terreno...</td>
-                                <td class="px-4 py-3 text-right">
-                                   <button type="button" class="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors" title="Visualizar"><span class="material-symbols-outlined text-[18px]">visibility</span></button>
-                                </td>
-                             </tr>
-                          </tbody>
-                       </table>
-                    </div>
-                 </div>
-                 
-                 <!-- 1:N Inline Form View -->
-                 <div id="multiple-form-view-${tab.id}" class="hidden">
-                    <div class="flex items-center gap-3 mb-6 pb-4 border-b border-slate-200 dark:border-slate-700">
-                       <button type="button" onclick="toggleMultipleForm('${tab.id}', false)" class="p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
-                          <span class="material-symbols-outlined">arrow_back</span>
-                       </button>
-                       <h4 class="text-base font-bold text-slate-800 dark:text-slate-100">Criar Novo Registro</h4>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-             `;
-           } else {
-             html += `<div class="grid grid-cols-1 md:grid-cols-2 gap-5">`;
-           }
-                 
-           tab.fields.forEach(f => {
-             html += `<div class="${['textarea', 'attachment', 'photo', 'geolocation', 'cep'].includes(f.type) ? 'md:col-span-2' : ''}">
-               <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">${f.label}</label>
-               ${generateInputHtml(f)}
-             </div>`;
-           });
-           
-           if(tab.isMultiple) {
-              html += `
-                    </div>
-                    
-                    <div class="mt-8 pt-4 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3">
-                       <button type="button" onclick="toggleMultipleForm('${tab.id}', false)" class="px-5 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 rounded-md font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm shadow-sm">Cancelar</button>
-                       <button type="button" onclick="alert('Registro salvo com sucesso!'); toggleMultipleForm('${tab.id}', false)" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium transition-colors text-sm shadow-sm flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">save</span> Salvar Registro</button>
-                    </div>
-                 </div>
-              `;
-           } else {
-              html += `</div>`;
-           }
-           
-           html += `
-               </div>
-             </div>`;
-         });
-      }
-      
-      html += '</div>';
-      
-      // Inject Tab Logic Engine
-      html += `
-      <script>
-         function evaluateTabConditions() {
-             const accordions = document.querySelectorAll('.accordion-section[data-condition-field]');
-             accordions.forEach(acc => {
-                 const triggerFieldId = acc.getAttribute('data-condition-field');
-                 const operator = acc.getAttribute('data-condition-operator') || 'equals';
-                 const expectedValue = acc.getAttribute('data-condition-value');
-                 
-                 const triggerInput = document.querySelector(\`[id$="\${triggerFieldId}"]\`);
-                 
-                 let isMatch = false;
-                 if (triggerInput) {
-                     const val = (triggerInput.value || '').toLowerCase().trim();
-                     if (operator === 'equals') {
-                         isMatch = (val === expectedValue);
-                     } else if (operator === 'not_equals') {
-                         isMatch = (val !== expectedValue && val !== '');
-                     }
-                 }
-                 
-                 if (isMatch) {
-                     acc.style.display = 'block';
-                 } else {
-                     acc.style.display = 'none';
-                 }
-             });
-         }
-         
-         // Attach event listeners to all inputs to trigger re-evaluation
-         setTimeout(() => {
-             const allInputs = document.querySelectorAll('#preview-container input, #preview-container select, #preview-container textarea');
-             allInputs.forEach(inp => {
-                 inp.addEventListener('input', evaluateTabConditions);
-                 inp.addEventListener('change', evaluateTabConditions);
-             });
-             
-             // Initial evaluation
-             evaluateTabConditions();
-         }, 100);
-      <\/script>
-      `;
-
-      container.innerHTML = html;
-      
+      if (typeof window.renderDynamicForm === 'function') {
+          if (!window.mockAttachments) window.mockAttachments = {};
+          window.renderDynamicForm(form.tabs, {}, true, 'preview-container', { isPreview: true });
+      } else { container.innerHTML = '<p>Erro ao carregar formRenderer</p>'; }
       document.getElementById('forms-view').classList.add('hidden');
       document.getElementById('form-builder-view').classList.add('hidden');
       document.getElementById('form-preview-view').classList.remove('hidden');
     }
-
-    function switchPreviewTab(tabId) {
-      const content = document.getElementById('acc-content-' + tabId);
-      const isAlreadyOpen = content && !content.classList.contains('hidden');
-
-      document.querySelectorAll('.accordion-content').forEach(el => {
-        el.classList.add('hidden');
-        el.classList.remove('block', 'p-4', 'sm:p-6', 'border-t', 'border-slate-200', 'dark:border-slate-700');
-      });
-      
-      if(content && !isAlreadyOpen) {
-         content.classList.remove('hidden');
-         content.classList.add('block', 'p-4', 'sm:p-6', 'border-t', 'border-slate-200', 'dark:border-slate-700');
-         
-         setTimeout(() => {
-            const section = document.getElementById('acc-section-' + tabId);
-            if(section) {
-               section.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-         }, 100);
-      }
-    }
-    function generateInputHtml(f) {
-      if (f.type === 'text') {
-        return `<input type="text" id="preview-input-${f.id}" class="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white" placeholder="Digite aqui..." />`;
-      } else if (f.type === 'number') {
-        return `<input type="number" id="preview-input-${f.id}" class="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white" placeholder="0" />`;
-      } else if (f.type === 'date') {
-        return `<input type="date" id="preview-input-${f.id}" class="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white" />`;
-      } else if (f.type === 'textarea') {
-        return `<textarea id="preview-input-${f.id}" class="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white min-h-[100px]" placeholder="Digite aqui..."></textarea>`;
-      } else if (f.type === 'photo') {
-        return `
-          <div class="space-y-4">
-            <!-- Simulated Camera Button -->
-            <div class="flex justify-center">
-              <button type="button" class="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors font-medium shadow-sm">
-                <span class="material-symbols-outlined">photo_camera</span> Tirar / Adicionar Foto
-              </button>
-            </div>
-            
-            <!-- Simulated Gallery (Fake Data) -->
-            <div class="flex flex-wrap justify-center gap-4 mt-4">
-              <div class="relative group w-32 h-32 sm:w-40 sm:h-40 shrink-0 bg-slate-200 dark:bg-slate-700 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600">
-                <img src="https://images.unsplash.com/photo-1541888081255-6b3a325164bc?auto=format&fit=crop&w=300&q=80" class="w-full h-full object-cover" onerror="this.onerror=null; this.src='https://placehold.co/300x300/e2e8f0/64748b?text=Foto';" />
-                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2 text-[10px] sm:text-xs text-white">
-                  <span class="font-bold">Eng. Silva</span>
-                  <span>10/08/2026 14:32</span>
-                </div>
-                <button type="button" class="absolute top-1 right-1 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-md">
-                  <span class="material-symbols-outlined text-[14px]">delete</span>
-                </button>
-              </div>
-              <div class="relative group w-32 h-32 sm:w-40 sm:h-40 shrink-0 bg-slate-200 dark:bg-slate-700 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600">
-                <img src="https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=300&q=80" class="w-full h-full object-cover" onerror="this.onerror=null; this.src='https://placehold.co/300x300/e2e8f0/64748b?text=Foto';" />
-                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2 text-[10px] sm:text-xs text-white">
-                  <span class="font-bold">Eng. Silva</span>
-                  <span>10/08/2026 14:35</span>
-                </div>
-                <button type="button" class="absolute top-1 right-1 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-md">
-                  <span class="material-symbols-outlined text-[14px]">delete</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        `;
-      } else if (f.type === 'attachment') {
-        // Inicializa o mock no momento em que gera o HTML do preview
-        if (!window.mockAttachments) window.mockAttachments = {};
-        if (!window.mockAttachments[f.id]) {
-           window.mockAttachments[f.id] = [
-              { title: 'Laudo Ambiental', filename: 'Licenca_Ambiental_V1.pdf', type: 'pdf', user: 'Ana Souza', date: '11/08/2026 09:15', status: 'active', url: null },
-              { title: 'Alvará de Construção', filename: 'Alvará_Antigo.docx', type: 'doc', user: 'Carlos Lima', date: '05/08/2026 16:40', status: 'deleted', deletedBy: 'Ana', deletedAt: '11/08 09:10', url: null },
-              { title: 'Planta Baixa', filename: 'Planta_Baixa_Revisada.docx', type: 'doc', user: 'Carlos Lima', date: '01/08/2026 10:20', status: 'active', url: null }
-           ];
-        }
-        // Agendar o render para rodar assim que o DOM for atualizado
-        setTimeout(() => renderAttachmentTable(f.id), 0);
-
-        return `
-          <div class="space-y-4">
-            <!-- Título do Documento e Botão Anexar Lado a Lado -->
-            <div class="flex items-end gap-3">
-              <div class="flex-1">
-                <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Título / Categoria do Documento</label>
-                <input type="text" id="attachment-title-${f.id}" class="w-full px-4 py-[9px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white" placeholder="Ex: Alvará de Construção..." />
-              </div>
-              
-              <input type="file" id="file-upload-${f.id}" class="hidden" onchange="handleFileSelected(event, '${f.id}')">
-              <button type="button" onclick="triggerUpload('${f.id}')" class="w-[40px] h-[40px] flex-shrink-0 flex items-center justify-center bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors shadow-sm tooltip" title="Anexar Arquivo">
-                <span class="material-symbols-outlined">upload_file</span>
-              </button>
-            </div>
-            
-            <!-- Simulated File History Table -->
-            <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg mt-4 shadow-sm">
-              <table class="w-full text-left text-xs sm:text-sm">
-                <thead class="bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 uppercase font-semibold">
-                  <tr>
-                    <th class="px-4 py-3">Arquivo</th>
-                    <th class="px-4 py-3 hidden sm:table-cell">Responsável</th>
-                    <th class="px-4 py-3 hidden sm:table-cell">Data</th>
-                    <th class="px-4 py-3 text-right">Ações</th>
-                  </tr>
-                </thead>
-                <tbody id="attachment-tbody-${f.id}" class="divide-y divide-slate-200 dark:divide-slate-700">
-                  <!-- JS Injects Rows here -->
-                </tbody>
-              </table>
-            </div>
-          </div>
-        `;
-      } else if (f.type === 'geolocation') {
-        return `
-          <div class="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden bg-slate-50 dark:bg-slate-900/50 shadow-sm">
-            <!-- Simulated Map -->
-            <div class="h-32 sm:h-40 bg-slate-200 dark:bg-slate-800 relative flex items-center justify-center overflow-hidden">
-               <!-- Placeholder map image -->
-               <img src="https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=600&q=80" class="absolute inset-0 w-full h-full object-cover opacity-60 mix-blend-overlay dark:opacity-30" onerror="this.onerror=null; this.src='https://placehold.co/600x200/e2e8f0/64748b?text=Mapa';" />
-               <!-- Pin -->
-               <div class="relative flex flex-col items-center -mt-6">
-                  <span class="material-symbols-outlined text-red-500 text-[32px] drop-shadow-md z-10">location_on</span>
-                  <div class="w-3 h-1.5 bg-black/40 rounded-[50%] blur-[1px] -mt-1.5"></div>
-               </div>
-               
-               <!-- Badge -->
-               <div class="absolute top-2 left-2 bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-slate-200 dark:border-slate-700 px-2 py-1 rounded text-[10px] font-bold text-slate-600 dark:text-slate-300 shadow-sm flex items-center gap-1 uppercase tracking-wider">
-                  <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Centróide
-               </div>
-            </div>
-            
-            <!-- Info and Action -->
-            <div class="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-               <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full md:w-auto flex-1">
-                 <div>
-                   <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Decimal (Lat / Lng)</p>
-                   <p class="text-xs font-medium text-slate-800 dark:text-slate-200 font-mono">-23.550520, -46.633308</p>
-                 </div>
-                 <div>
-                   <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">GMS (Graus, Min, Seg)</p>
-                   <p class="text-xs font-medium text-slate-800 dark:text-slate-200 font-mono">23°33'01.9"S, 46°37'59.9"W</p>
-                 </div>
-                 <div>
-                   <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">UTM (Fuso 23K)</p>
-                   <p class="text-xs font-medium text-slate-800 dark:text-slate-200 font-mono">E: 333350, N: 7394500</p>
-                 </div>
-               </div>
-               <button type="button" class="w-full md:w-auto flex-shrink-0 flex items-center justify-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors shadow-sm text-sm font-medium" onclick="alert('Simulação: GPS Acionado! Coordenadas atualizadas para sua localização atual.')">
-                 <span class="material-symbols-outlined text-[18px] text-blue-500">my_location</span> Atualizar GPS
-               </button>
-            </div>
-          </div>
-        `;
-      } else if (f.type === 'cep') {
-        return `
-          <div class="space-y-3 bg-slate-50 dark:bg-slate-900/30 p-4 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm relative" id="cep-container-${f.id}">
-             <!-- Loading Overlay -->
-             <div id="cep-loading-${f.id}" class="hidden absolute inset-0 bg-white/50 dark:bg-slate-900/50 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
-                <span class="material-symbols-outlined animate-spin text-blue-500 text-3xl">autorenew</span>
-             </div>
-             
-             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div class="md:col-span-1">
-                   <label class="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">CEP *</label>
-                   <input type="text" id="cep-input-${f.id}" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white font-mono" placeholder="00000-000" onkeyup="simulateCepSearch(this.value, '${f.id}')" maxlength="9" />
-                </div>
-                <div class="md:col-span-3">
-                   <label class="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Logradouro (Rua/Av) *</label>
-                   <input type="text" id="cep-logradouro-${f.id}" class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-md text-sm text-slate-500 dark:text-slate-400" readonly placeholder="Preenchimento automático" />
-                </div>
-             </div>
-             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div class="md:col-span-2">
-                   <label class="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Bairro *</label>
-                   <input type="text" id="cep-bairro-${f.id}" class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-md text-sm text-slate-500 dark:text-slate-400" readonly placeholder="Preenchimento automático" />
-                </div>
-                <div class="md:col-span-1">
-                   <label class="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Cidade *</label>
-                   <input type="text" id="cep-cidade-${f.id}" class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-md text-sm text-slate-500 dark:text-slate-400" readonly placeholder="Automático" />
-                </div>
-                <div class="md:col-span-1">
-                   <label class="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">UF *</label>
-                   <input type="text" id="cep-uf-${f.id}" class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-md text-sm text-slate-500 dark:text-slate-400" readonly placeholder="Automático" />
-                </div>
-             </div>
-             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div class="md:col-span-1">
-                   <label class="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Número *</label>
-                   <input type="text" id="cep-numero-${f.id}" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white" placeholder="Nº" />
-                </div>
-                <div class="md:col-span-3">
-                   <label class="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Complemento (Opcional)</label>
-                   <input type="text" id="cep-complemento-${f.id}" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white" placeholder="Apto, Bloco, Quadra, Lote..." />
-                </div>
-             </div>
-          </div>
-        `;
-      } else if (f.type === 'cpfcnpj') {
-        return `
-          <div class="relative">
-             <div class="relative">
-                 <input type="text" id="cpfcnpj-input-${f.id}" class="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white font-mono transition-colors" placeholder="000.000.000-00 ou 00.000.000/0000-00" maxlength="18" oninput="maskCpfCnpj(this)" onblur="validateCpfCnpj(this, '${f.id}')" />
-                 <span id="cpfcnpj-icon-${f.id}" class="material-symbols-outlined absolute right-3 top-2.5 hidden"></span>
-             </div>
-             <p id="cpfcnpj-msg-${f.id}" class="mt-1.5 text-xs font-semibold hidden"></p>
-          </div>
-        `;
-      } else if (f.type === 'select') {
-        const opts = f.options.split(',').map(o => o.trim()).filter(o => o);
-        return `<select id="preview-input-${f.id}" class="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white">
-          <option value="">Selecione uma opção...</option>
-          ${opts.map(o => `<option value="${o}">${o}</option>`).join('')}
-        </select>`;
-      }
-      return '';
-    }
-
     function closePreviewForm() {
       document.getElementById('forms-view').classList.remove('hidden');
       document.getElementById('form-preview-view').classList.add('hidden');
