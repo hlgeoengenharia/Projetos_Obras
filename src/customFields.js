@@ -52,31 +52,26 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
                 return '<p class="text-sm font-medium text-slate-500 dark:text-slate-400">Nenhum arquivo anexado</p>';
             }
         } else if (f.type === 'geolocation') {
-            let decStr = "N/A", dmsStr = "N/A", utmStr = "N/A";
-            if (value && value.lat !== undefined && value.lng !== undefined) {
-                decStr = `${parseFloat(value.lat).toFixed(6)}, ${parseFloat(value.lng).toFixed(6)}`;
-                if(typeof formatDMS === 'function') {
-                    dmsStr = formatDMS(value.lat, value.lng);
-                    utmStr = formatUTM(value.lat, value.lng);
-                }
-            }
+            const lat = value.lat;
+            const lng = value.lng;
+            
             return `
                 <div class="space-y-1">
-                    <span class="text-[10px] uppercase text-slate-400 font-bold block">Geográfica (Decimal)</span>
-                    <div class="text-sm font-mono text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-3 py-2 rounded border border-slate-200 dark:border-slate-700 select-all">${decStr}</div>
+                    <span class="text-[9px] uppercase text-slate-400 font-bold block">Decimal</span>
+                    <div class="text-xs font-mono text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1.5 rounded border border-slate-200 dark:border-slate-700 select-all">${parseFloat(lat).toFixed(6)}, ${parseFloat(lng).toFixed(6)}</div>
                 </div>
-                <div class="space-y-1 mt-2">
-                    <span class="text-[10px] uppercase text-slate-400 font-bold block">Geográfica (GMS)</span>
-                    <div class="text-sm font-mono text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-3 py-2 rounded border border-slate-200 dark:border-slate-700 select-all">${dmsStr}</div>
+                <div class="space-y-1 mt-1.5">
+                    <span class="text-[9px] uppercase text-slate-400 font-bold block">Graus, Min, Seg</span>
+                    <div class="text-xs font-mono text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1.5 rounded border border-slate-200 dark:border-slate-700 select-all">${typeof formatDMS === 'function' ? formatDMS(lat, lng) : 'N/A'}</div>
                 </div>
-                <div class="space-y-1 mt-2">
-                    <span class="text-[10px] uppercase text-slate-400 font-bold block">UTM (WGS84)</span>
-                    <div class="text-sm font-mono text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-3 py-2 rounded border border-slate-200 dark:border-slate-700 select-all">${utmStr}</div>
+                <div class="space-y-1 mt-1.5">
+                    <span class="text-[9px] uppercase text-slate-400 font-bold block">UTM (WGS84)</span>
+                    <div class="text-xs font-mono text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1.5 rounded border border-slate-200 dark:border-slate-700 select-all">${typeof formatUTM === 'function' ? formatUTM(lat, lng) : 'N/A'}</div>
                 </div>
             `;
         }
         
-        return `<div class="text-sm text-slate-700 dark:text-slate-300">${value}</div>`;
+        return `<div class="text-xs text-slate-700 dark:text-slate-300 break-words">${value || '<span class="text-slate-400 opacity-50 tracking-widest">---</span>'}</div>`;
     }
 
     // MODO EDIÇÃO

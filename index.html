@@ -25,6 +25,9 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
 <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script id="tailwind-config">
       tailwind.config = {
         darkMode: "class",
@@ -214,9 +217,9 @@
 </head>
 <body class="bg-surface text-on-surface overflow-hidden">
 <!-- TopAppBar -->
-<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-2 md:px-4 h-14 md:h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 font-sans antialiased tracking-tight">
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-2 md:px-4 h-14 md:h-16 bg-white/85 dark:bg-[#0B1120]/75 backdrop-blur-md border-b border-white/20 dark:border-white/10 shadow-sm font-sans antialiased tracking-tight">
 <div class="flex items-center gap-2 md:gap-4">
-<button class="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors rounded-full shrink-0" onclick="document.getElementById('side-drawer').classList.remove('-translate-x-full'); document.getElementById('drawer-overlay').classList.remove('hidden')">
+<button class="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors rounded-full shrink-0" onclick="document.getElementById('side-drawer').classList.remove('-translate-x-[120%]'); document.getElementById('drawer-overlay').classList.remove('hidden')">
 <span class="material-symbols-outlined text-slate-900 dark:text-slate-50">menu</span>
 </button>
 <h1 class="text-lg font-bold tracking-tighter text-slate-900 dark:text-slate-50"></h1>
@@ -233,16 +236,16 @@
 </div>
 </header>
 <!-- NavigationDrawer Overlay -->
-<div class="fixed inset-0 bg-black/50 z-[55] hidden" id="drawer-overlay" onclick="this.classList.add('hidden'); document.getElementById('side-drawer').classList.add('-translate-x-full')"></div>
+<div class="fixed inset-0 bg-black/50 z-[55] hidden" id="drawer-overlay" onclick="this.classList.add('hidden'); document.getElementById('side-drawer').classList.add('-translate-x-[120%]')"></div>
 <!-- NavigationDrawer -->
-<aside class="fixed inset-y-0 left-0 z-[60] flex flex-col h-full w-80 sm:w-96 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 shadow-xl transition-transform duration-300 ease-in-out -translate-x-full" id="side-drawer">
+<aside class="fixed top-[4.5rem] left-4 z-[60] flex flex-col h-[calc(100vh-5.5rem)] w-80 sm:w-96 bg-white/85 dark:bg-[#0B1120]/75 backdrop-blur-2xl rounded-2xl border border-slate-200/50 dark:border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-out -translate-x-[120%] overflow-hidden" id="side-drawer">
 <div class="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
 <h2 class="text-xl font-bold tracking-tighter text-slate-900 dark:text-slate-50 uppercase">Camadas</h2>
 <div class="flex items-center gap-1">
 <button class="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-primary dark:text-blue-400 transition-colors" title="Criar Camada (Desenhar)" onclick="openNewThemeModal()">
 <span class="material-symbols-outlined">add_circle</span>
 </button>
-<button class="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors" onclick="document.getElementById('side-drawer').classList.add('-translate-x-full'); document.getElementById('drawer-overlay').classList.add('hidden')">
+<button class="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors" onclick="document.getElementById('side-drawer').classList.add('-translate-x-[120%]'); document.getElementById('drawer-overlay').classList.add('hidden')">
 <span class="material-symbols-outlined">close</span>
 </button>
 </div>
@@ -273,30 +276,62 @@
 <div id="map" class="absolute inset-0 z-0"></div>
 <!-- Floating Map Controls -->
 <div class="absolute top-20 right-4 md:top-24 md:right-6 z-20 flex flex-col gap-2">
-<div class="bg-white dark:bg-slate-900 rounded-lg shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
-<button class="p-2 md:p-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border-b border-slate-100 dark:border-slate-800 flex items-center justify-center text-slate-500" title="Mapa" onclick="switchLayer('Mapa')">
-<span class="material-symbols-outlined">map</span>
-</button>
-<button class="p-2 md:p-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border-b border-slate-100 dark:border-slate-800 flex items-center justify-center text-slate-500" title="Satélite" onclick="switchLayer('Satélite')">
-<span class="material-symbols-outlined">satellite_alt</span>
-</button>
-<button class="p-2 md:p-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-blue-900 dark:text-blue-400" title="Híbrido" onclick="switchLayer('Híbrido')">
+<div class="bg-white/85 dark:bg-[#0B1120]/75 backdrop-blur-xl rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.3)] border border-slate-200/50 dark:border-white/10 overflow-hidden flex flex-col">
+<button id="btn-toggle-map" class="p-2 md:p-3 hover:bg-slate-100/80 dark:hover:bg-white/10 transition-colors flex items-center justify-center text-blue-600 dark:text-blue-400" title="Alternar Mapa (Satélite/Padrão)" onclick="toggleMapType()">
 <span class="material-symbols-outlined">layers</span>
 </button>
 </div>
-<div class="bg-white dark:bg-slate-900 rounded-lg shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col mt-4">
-<button class="p-2 md:p-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border-b border-slate-100 dark:border-slate-800 flex items-center justify-center text-slate-900 dark:text-slate-50" title="Aumentar Zoom" onclick="zoomIn()">
+<div class="bg-white/85 dark:bg-[#0B1120]/75 backdrop-blur-xl rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.3)] border border-slate-200/50 dark:border-white/10 overflow-hidden flex flex-col mt-4">
+<button class="p-2 md:p-3 hover:bg-slate-100/80 dark:hover:bg-white/10 transition-colors border-b border-slate-200/50 dark:border-white/10 flex items-center justify-center text-slate-700 dark:text-slate-300" title="Aumentar Zoom" onclick="zoomIn()">
 <span class="material-symbols-outlined">add</span>
 </button>
-<button class="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border-b border-slate-100 dark:border-slate-800 flex items-center justify-center text-slate-900 dark:text-slate-50" title="Diminuir Zoom" onclick="zoomOut()">
+<button class="p-3 hover:bg-slate-100/80 dark:hover:bg-white/10 transition-colors border-b border-slate-200/50 dark:border-white/10 flex items-center justify-center text-slate-700 dark:text-slate-300" title="Diminuir Zoom" onclick="zoomOut()">
 <span class="material-symbols-outlined">remove</span>
 </button>
-<button class="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-primary dark:text-blue-400" title="Minha Localização" onclick="goToMyLocation()">
+<button class="p-3 hover:bg-slate-100/80 dark:hover:bg-white/10 transition-colors border-b border-slate-200/50 dark:border-white/10 flex items-center justify-center text-blue-600 dark:text-blue-400" title="Minha Localização" onclick="goToMyLocation()">
 <span class="material-symbols-outlined">my_location</span>
+</button>
+<button class="p-3 hover:bg-slate-100/80 dark:hover:bg-white/10 transition-colors flex items-center justify-center text-emerald-600 dark:text-emerald-400" title="Ferramenta de Medição" onclick="toggleMeasurementPanel()">
+<span class="material-symbols-outlined">square_foot</span>
 </button>
 </div>
 </div>
 </main>
+
+<!-- Measurement Panel -->
+<div id="measurement-panel" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] hidden flex flex-col gap-3 w-[90%] max-w-sm bg-white/90 dark:bg-[#0B1120]/90 backdrop-blur-xl rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.5)] border border-slate-200/50 dark:border-white/10 p-4 transition-all duration-300">
+    <!-- Header / Type Selection -->
+    <div class="flex items-center justify-between border-b border-slate-200/50 dark:border-white/10 pb-3">
+        <h3 class="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2"><span class="material-symbols-outlined text-emerald-500">square_foot</span> Medição</h3>
+        <div class="flex gap-1" id="measurement-tools">
+            <button class="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors text-slate-600 dark:text-slate-300 tooltip" title="Ponto" onclick="startMeasurementDraw('Marker')">
+                <span class="material-symbols-outlined text-[18px]">location_on</span>
+            </button>
+            <button class="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors text-slate-600 dark:text-slate-300 tooltip" title="Linha" onclick="startMeasurementDraw('Line')">
+                <span class="material-symbols-outlined text-[18px]">timeline</span>
+            </button>
+            <button class="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors text-slate-600 dark:text-slate-300 tooltip" title="Polígono" onclick="startMeasurementDraw('Polygon')">
+                <span class="material-symbols-outlined text-[18px]">pentagon</span>
+            </button>
+        </div>
+    </div>
+    
+    <!-- Results -->
+    <div id="measurement-results" class="flex flex-col gap-2 min-h-[60px] justify-center items-center text-center text-sm text-slate-500 dark:text-slate-400">
+        Selecione uma ferramenta acima para iniciar a medição no mapa.
+    </div>
+    
+    <!-- Actions -->
+    <div class="flex gap-2 pt-3 border-t border-slate-200/50 dark:border-white/10">
+        <button class="flex-1 py-2 px-3 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2" onclick="closeMeasurementPanel()">
+            <span class="material-symbols-outlined text-[16px]">close</span> Sair
+        </button>
+        <button id="btn-save-measurement" class="flex-1 py-2 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 opacity-50 cursor-not-allowed" disabled onclick="saveMeasurementPDF()">
+            <span class="material-symbols-outlined text-[16px]">picture_as_pdf</span> Salvar
+        </button>
+    </div>
+</div>
+
 
 <!-- Modals -->
 <!-- New Theme Modal -->
@@ -448,36 +483,36 @@
   </div>
 </div>
 
-<!-- Professional Feature Info Panel -->
-<div id="feature-info-modal" class="fixed inset-0 z-[100] bg-black/50 hidden flex justify-end">
-  <div class="bg-white dark:bg-slate-900 shadow-2xl w-full max-w-sm sm:max-w-md h-full flex flex-col">
-    <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
-        <div id="feature-actions-container" class="flex gap-2">
-            <button onclick="toggleFeatureEditMode()" class="flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-md font-medium text-sm transition-colors shadow-sm">
+<!-- Professional Feature Info Panel (Floating & Glassmorphism) -->
+<div id="feature-info-modal" class="fixed inset-0 z-[100] bg-transparent pointer-events-none hidden flex justify-end p-4 sm:p-6 pt-20 sm:pt-20">
+  <div class="bg-white/85 dark:bg-[#0B1120]/75 backdrop-blur-2xl rounded-2xl border border-slate-200/50 dark:border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.5)] w-full max-w-sm sm:max-w-md h-full flex flex-col overflow-hidden pointer-events-auto">
+    <div class="px-4 py-3 border-b border-slate-200/50 dark:border-white/10 flex justify-between items-center">
+        <div id="feature-actions-container" class="flex items-center rounded-lg overflow-hidden border border-slate-300/50 dark:border-white/10 shadow-sm bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
+            <button onclick="toggleFeatureEditMode()" class="flex items-center justify-center gap-2 px-3 py-1.5 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-800 dark:text-slate-200 font-medium text-sm transition-all border-r border-slate-300/50 dark:border-white/10">
                 <span class="material-symbols-outlined text-[18px]">edit_document</span>
                 Editar Cadastro
             </button>
-            <button onclick="editFeatureGeometry()" class="flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-md font-medium text-sm transition-colors shadow-sm tooltip" title="Ajustar no Mapa">
+            <button onclick="editFeatureGeometry()" class="flex items-center justify-center gap-2 px-3 py-1.5 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-800 dark:text-slate-200 font-medium text-sm transition-all tooltip" title="Ajustar no Mapa">
                 <span class="material-symbols-outlined text-[18px]">edit_location_alt</span>
                 Ajustar Mapa
             </button>
         </div>
-        <div class="flex items-center gap-1">
-            <button onclick="deleteActiveFeature()" class="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/20 rounded-full text-red-500 transition-colors tooltip" title="Excluir Feição">
+        <div class="flex items-center rounded-lg overflow-hidden border border-slate-300/50 dark:border-white/10 shadow-sm ml-2 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
+            <button onclick="deleteActiveFeature()" class="p-1.5 px-2 hover:bg-red-50/50 active:bg-red-100/50 dark:hover:bg-red-900/40 dark:active:bg-red-900/60 text-red-500 transition-all border-r border-slate-300/50 dark:border-white/10 tooltip" title="Excluir Feição">
                 <span class="material-symbols-outlined text-[18px]">delete</span>
             </button>
-            <button onclick="closeFeatureInfoModal()" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-500 transition-colors ml-2" title="Fechar">
+            <button onclick="closeFeatureInfoModal()" class="p-1.5 px-2 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-500 dark:text-slate-400 transition-all tooltip" title="Fechar">
                 <span class="material-symbols-outlined">close</span>
             </button>
         </div>
     </div>
 
-    <div id="feature-info-content" class="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
+    <div id="feature-info-content" class="flex-1 overflow-y-auto flex flex-col">
         <!-- Rendered via JS -->
     </div>
     
-    <div id="feature-save-container" class="hidden p-4 sm:p-6 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex flex-col-reverse sm:flex-row justify-end gap-3 rounded-b-2xl mobile-sticky-bottom">
-      <button onclick="cancelFeatureEdit()" class="px-5 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm w-full sm:w-auto text-sm">Cancelar</button>
+    <div id="feature-save-container" class="hidden p-4 border-t border-slate-200/50 dark:border-white/10 flex flex-col-reverse sm:flex-row justify-end gap-3 mobile-sticky-bottom">
+      <button onclick="cancelFeatureEdit()" class="px-5 py-2.5 bg-slate-100/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-white/10 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition-colors shadow-sm w-full sm:w-auto text-sm">Cancelar</button>
       <button onclick="saveFeatureData()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto text-sm">
          <span class="material-symbols-outlined text-[18px]">save</span> Salvar
       </button>
@@ -598,8 +633,13 @@
 
 <!-- Configuração do Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="/supabase-config.js"></script>
-<script src="/src/customFields.js"></script>
-<script src="/src/formRenderer.js"></script>
-<script src="/src/main.js"></script>
-</body></html>
+<script src="https://unpkg.com/@turf/turf/turf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="src/formBuilder.js"></script>
+<script src="src/formRenderer.js"></script>
+<script src="src/customFields.js"></script>
+<script src="src/main.js"></script>
+<script src="src/measurement.js"></script>
+</body>
+</html>

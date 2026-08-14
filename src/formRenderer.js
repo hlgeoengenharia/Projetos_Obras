@@ -24,7 +24,7 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
     window.currentFormIsEditMode = isEditMode;
     window.currentFormIsPreview = options.isPreview || false;
     
-    let html = '<div class="flex flex-col gap-4">';
+    let html = '<div class="flex flex-col border-t border-slate-200 dark:border-slate-700">';
     
     let primaryTabId = options.activeTabId || formConfig.find(t => t.isPrimary)?.id;
     if (!primaryTabId && formConfig.length > 0) primaryTabId = formConfig[0].id;
@@ -33,28 +33,41 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
         let isPrimary = tab.id === primaryTabId;
         
         html += `
-            <div class="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-800 shadow-sm transition-all accordion-section" id="acc-section-${tab.id}" ${(tab.condition && tab.condition.enabled && tab.condition.fieldId) ? `data-condition-field="${tab.condition.fieldId}" data-condition-operator="${tab.condition.operator}" data-condition-value="${(tab.condition.value || '').toLowerCase()}"` : ''}>
-                <button type="button" onclick="switchDynamicTab('${tab.id}')" class="w-full px-4 py-4 sm:px-6 sm:py-5 flex items-center justify-center bg-slate-50 hover:bg-slate-100 dark:bg-slate-900/50 dark:hover:bg-slate-800 transition-colors">
-                    <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wide flex items-center gap-2 text-center">
-                        ${isPrimary ? '<span class="material-symbols-outlined text-amber-500">star</span>' : ''}
+            <div class="border-b last:border-b-0 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 transition-all accordion-section" id="acc-section-${tab.id}" ${(tab.condition && tab.condition.enabled && tab.condition.fieldId) ? `data-condition-field="${tab.condition.fieldId}" data-condition-operator="${tab.condition.operator}" data-condition-value="${(tab.condition.value || '').toLowerCase()}"` : ''}>
+                <button type="button" onclick="switchDynamicTab('${tab.id}')" class="group w-full px-3 py-3 sm:px-4 sm:py-3.5 flex items-center justify-center bg-slate-50 dark:bg-transparent hover:bg-blue-600 dark:hover:bg-blue-600 active:bg-blue-700 dark:active:bg-blue-700 active:scale-95 hover:shadow-[0_0_25px_rgba(59,130,246,0.6)] hover:z-10 relative transition-all duration-300 ease-out overflow-hidden">
+                    <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-150%] group-hover:translate-x-[150%] transition-transform duration-1000 ease-in-out"></div>
+                    <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200 group-hover:text-white dark:group-hover:text-white uppercase tracking-wider flex items-center gap-2 text-center transition-all duration-300 group-hover:scale-105 group-hover:tracking-widest relative z-10">
+                        ${isPrimary ? '<span class="material-symbols-outlined text-amber-500 group-hover:text-yellow-300 group-hover:drop-shadow-[0_0_8px_rgba(253,224,71,0.8)] transition-all text-[18px]">star</span>' : ''}
                         ${tab.title}
                     </h3>
                 </button>
                 
-                <div id="acc-content-${tab.id}" class="accordion-content transition-all duration-300 ${isPrimary ? 'block p-4 sm:p-6 border-t border-slate-200 dark:border-slate-700' : 'hidden'}">
+                <div id="acc-content-${tab.id}" class="accordion-content transition-all duration-300 ${isPrimary ? 'block p-2 sm:p-3 border-t border-slate-200 dark:border-slate-700' : 'hidden'}">
         `;
         
         if (tab.isMultiple) {
             html += renderMultipleTab(tab, featureData, isEditMode);
         } else {
-            html += `<div class="grid grid-cols-1 md:grid-cols-2 gap-5">`;
+            html += `<div class="flex flex-col gap-2">`;
             if (tab.fields && tab.fields.length > 0) {
                 tab.fields.forEach(f => {
                     const value = featureData[f.id] !== undefined ? featureData[f.id] : '';
-                    html += `<div class="${['textarea', 'attachment', 'photo', 'geolocation', 'cep'].includes(f.type) ? 'md:col-span-2' : ''}">
-                        <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">${f.label}</label>
-                        ${window.generateFeatureInputHtml ? window.generateFeatureInputHtml(f, value, isEditMode) : ''}
-                    </div>`;
+                    if (isEditMode) {
+                        html += `<div>
+                            <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-0.5">${f.label}</label>
+                            ${window.generateFeatureInputHtml ? window.generateFeatureInputHtml(f, value, isEditMode) : ''}
+                        </div>`;
+                    } else {
+                        html += `
+                        <div class="flex flex-col gap-0.5">
+                            <div class="bg-blue-50/50 dark:bg-slate-800/50 border-l-[2px] border-cyan-500 rounded-md px-1.5 py-0.5 w-fit shadow-sm">
+                                <span class="text-[10px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">${f.label}</span>
+                            </div>
+                            <div class="border border-dashed border-slate-300/50 dark:border-slate-600/50 rounded-md px-2 py-1 bg-slate-50/30 dark:bg-slate-900/10 min-h-[24px] flex flex-col justify-center">
+                                ${window.generateFeatureInputHtml ? window.generateFeatureInputHtml(f, value, isEditMode) : ''}
+                            </div>
+                        </div>`;
+                    }
                 });
             }
             html += `</div>`;

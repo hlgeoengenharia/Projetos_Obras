@@ -150,6 +150,20 @@ function initMap() {
     }
   }).addTo(map);
 
+  // Close feature info modal when clicking on the map
+  map.on('click', function(e) {
+    const featureModal = document.getElementById('feature-info-modal');
+    if (featureModal && !featureModal.classList.contains('hidden')) {
+      // Check if we are not actively drawing or editing geometry
+      const isDrawing = document.getElementById('drawing-toolbar') && !document.getElementById('drawing-toolbar').classList.contains('hidden');
+      const isEditing = document.getElementById('geometry-edit-toolbar') && !document.getElementById('geometry-edit-toolbar').classList.contains('hidden');
+      
+      if (!isDrawing && !isEditing) {
+        closeFeatureInfoModal();
+      }
+    }
+  });
+
   // Drawing Complete Event
   map.on('pm:create', function(e) {
     if (!editingThemeId) return;
@@ -231,41 +245,62 @@ function renderThemes() {
     const isVisible = theme.visible !== false;
     
     const card = document.createElement('div');
-    card.className = "bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden";
+    card.className = "relative rounded-2xl overflow-hidden mb-4 transition-all duration-300 hover:scale-[1.02] cursor-default border-t border-l border-white/10 dark:border-white/5";
+    card.style.borderRight = `1px solid ${theme.color}40`;
+    card.style.borderBottom = `1px solid ${theme.color}40`;
+    card.style.boxShadow = isVisible ? `0 8px 32px rgba(0,0,0,0.3), 0 0 15px ${theme.color}30, inset 0 0 20px ${theme.color}10` : '0 8px 32px rgba(0,0,0,0.3)';
+    card.style.background = `linear-gradient(135deg, ${theme.color}25 0%, rgba(15,23,42,0.8) 100%)`;
+    
     card.innerHTML = `
-      <div class="px-4 py-3 flex flex-col" style="background-color: ${theme.color}20; border-left: 4px solid ${theme.color}">
-        <div class="flex justify-end gap-1 mb-2">
-          <button onclick="toggleThemeVisibility('${theme.id}')" class="p-1.5 hover:bg-white/50 dark:hover:bg-black/20 rounded tooltip text-slate-700 dark:text-slate-300 transition-colors" title="${isVisible ? 'Ocultar' : 'Mostrar'} Camada">
-            <span class="material-symbols-outlined text-[18px]">${isVisible ? 'visibility' : 'visibility_off'}</span>
-          </button>
-          <button onclick="startEditingTheme('${theme.id}', '${theme.name}', '${theme.color}', '${theme.geomType || ''}')" class="p-1.5 hover:bg-white/50 dark:hover:bg-black/20 rounded tooltip text-slate-700 dark:text-slate-300 transition-colors" title="Adicionar Feição">
-            <span class="material-symbols-outlined text-[18px]">add_location_alt</span>
-          </button>
-          <button onclick="openEditThemeModal('${theme.id}')" class="p-1.5 hover:bg-white/50 dark:hover:bg-black/20 rounded tooltip text-slate-700 dark:text-slate-300 transition-colors" title="Editar Camada">
-            <span class="material-symbols-outlined text-[18px]">edit</span>
-          </button>
-          <button onclick="triggerUpload('${theme.id}')" class="p-1.5 hover:bg-white/50 dark:hover:bg-black/20 rounded tooltip text-slate-700 dark:text-slate-300 transition-colors" title="Importar GeoJSON">
-            <span class="material-symbols-outlined text-[18px]">upload</span>
-          </button>
-          <button onclick="downloadGeoJSON('${theme.id}')" class="p-1.5 hover:bg-white/50 dark:hover:bg-black/20 rounded tooltip text-slate-700 dark:text-slate-300 transition-colors" title="Exportar GeoJSON">
-            <span class="material-symbols-outlined text-[18px]">download</span>
-          </button>
-          <button onclick="deleteTheme('${theme.id}')" class="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded tooltip text-red-600 dark:text-red-400 transition-colors" title="Excluir Camada">
-            <span class="material-symbols-outlined text-[18px]">delete</span>
-          </button>
-        </div>
-        <div class="flex items-center gap-2 cursor-pointer" onclick="document.getElementById('list-${theme.id}').classList.toggle('hidden')">
-          <div class="w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-white shadow-sm ${!isVisible ? 'opacity-50' : ''}" style="background-color: ${theme.color}">
-             <span class="material-symbols-outlined text-[14px]">${theme.icon || 'circle'}</span>
+      <div class="px-4 pt-4 pb-3 flex flex-col backdrop-blur-md">
+        
+        <!-- Header: Icon, Title, and Toggle -->
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-xl shrink-0 flex items-center justify-center text-white shadow-lg transition-transform hover:scale-110 cursor-pointer border border-white/20" onclick="document.getElementById('list-${theme.id}').classList.toggle('hidden')" style="background-color: ${theme.color}; box-shadow: 0 4px 20px ${theme.color}80;">
+               <span class="material-symbols-outlined text-[24px]">${theme.icon || 'layers'}</span>
+            </div>
+            <div class="flex flex-col cursor-pointer" onclick="document.getElementById('list-${theme.id}').classList.toggle('hidden')">
+              <h3 class="text-base font-black text-slate-800 dark:text-white tracking-widest uppercase drop-shadow-md ${!isVisible ? 'opacity-50' : ''}">${theme.name}</h3>
+              <span class="text-[11px] text-slate-600 dark:text-slate-300/80 uppercase tracking-widest">Camada do Mapa</span>
+            </div>
           </div>
-          <h3 class="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider break-words ${!isVisible ? 'opacity-50' : ''}" title="${theme.name}">${theme.name}</h3>
+          
+          <!-- iOS-style Neon Toggle -->
+          <label class="relative inline-flex items-center cursor-pointer" title="${isVisible ? 'Ocultar' : 'Mostrar'} Camada">
+            <input type="checkbox" class="sr-only peer" ${isVisible ? 'checked' : ''} onchange="toggleThemeVisibility('${theme.id}')">
+            <div class="w-11 h-6 bg-slate-300 dark:bg-slate-700/50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all" style="${isVisible ? `background-color: ${theme.color}; box-shadow: 0 0 12px ${theme.color}90; border-color: ${theme.color}` : ''}"></div>
+          </label>
         </div>
+        
+        <!-- Footer: Counts and Actions -->
+        <div class="flex justify-between items-end border-t border-white/20 dark:border-white/10 pt-3">
+          <div class="text-[14px] font-bold text-slate-800 dark:text-white tracking-widest">
+            ${featureCount} <span class="text-[10px] text-slate-600 dark:text-slate-400 font-normal">Registros</span>
+          </div>
+          <div class="flex justify-end gap-1">
+            <button onclick="startEditingTheme('${theme.id}', '${theme.name}', '${theme.color}', '${theme.geomType || ''}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-800 dark:text-slate-200 transition-colors" title="Adicionar Feição">
+              <span class="material-symbols-outlined text-[18px]">add</span>
+            </button>
+            <button onclick="openEditThemeModal('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-800 dark:text-slate-200 transition-colors" title="Editar Camada">
+              <span class="material-symbols-outlined text-[18px]">settings</span>
+            </button>
+            <button onclick="triggerUpload('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-800 dark:text-slate-200 transition-colors" title="Importar GeoJSON">
+              <span class="material-symbols-outlined text-[18px]">upload</span>
+            </button>
+            <button onclick="downloadGeoJSON('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-800 dark:text-slate-200 transition-colors" title="Exportar">
+              <span class="material-symbols-outlined text-[18px]">download</span>
+            </button>
+            <button onclick="deleteTheme('${theme.id}')" class="p-1.5 hover:bg-red-500/30 rounded-lg tooltip text-red-500 transition-colors" title="Excluir">
+              <span class="material-symbols-outlined text-[18px]">delete</span>
+            </button>
+          </div>
+        </div>
+        
       </div>
-      <div id="list-${theme.id}" class="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 hidden">
-        <div class="px-4 py-2 text-[11px] text-slate-500 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-100 dark:border-slate-800 flex justify-between">
-            <span>${featureCount} elemento(s) mapeado(s).</span>
-        </div>
-        <div class="theme-feature-list flex flex-col max-h-64 overflow-y-auto ${!isVisible ? 'opacity-50' : ''}">
+      
+      <div id="list-${theme.id}" class="bg-black/20 dark:bg-black/40 border-t border-white/10 hidden backdrop-blur-md">
+        <div class="theme-feature-list flex flex-col max-h-64 overflow-y-auto ${!isVisible ? 'opacity-50' : ''} p-2 gap-2">
           ${renderFeatureListItems(theme)}
         </div>
       </div>
@@ -1228,6 +1263,14 @@ function switchLayer(name) {
   }
   
   currentMapType = name;
+}
+
+function toggleMapType() {
+  if (currentMapType === 'Mapa') {
+    switchLayer('Híbrido');
+  } else {
+    switchLayer('Mapa');
+  }
 }
 
 function zoomIn() { if (map) map.zoomIn(); }
