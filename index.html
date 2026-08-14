@@ -25,6 +25,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
 <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
+<link rel="icon" href="data:,">
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -224,15 +225,24 @@
 </button>
 <h1 class="text-lg font-bold tracking-tighter text-slate-900 dark:text-slate-50"></h1>
 </div>
-<div class="flex items-center gap-4">
-<div class="hidden md:flex gap-6 mr-6">
-<a class="text-blue-900 dark:text-blue-400 font-semibold text-body-md" href="#">Início</a>
-<a class="text-blue-900 dark:text-blue-400 font-semibold text-body-md" href="#">Projetos</a>
-<a class="text-blue-900 dark:text-blue-400 font-semibold text-body-md" href="#">Obras</a>
-</div>
-<div class="w-8 h-8 rounded-full bg-primary-container flex items-center shrink-0 justify-center overflow-hidden border border-outline-variant">
-<img alt="Avatar" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCc0RYeJ85EwHW4BJ4ZRmN9WYDAnOz5EFFNO3bx5XdbDIkNCRYBBysRNyY53k3kzDdU9seuTeFmYvMXtMDCL1UbpKvFNeY23l3z4U9FCZOYErFcRImNItGPpgG_W5bVuwtWn-6WMk8SDB99zq3Dt-MC71VCZyEVd4TqkBE32-OMGnSHpid3s70wq18nEDKvtj8p1j-2l4IrBibDsMAPK8QH6puGnFKJNt-aiAhAmbQzoqrnGeO6vWoOnEZLChi1lnkv29X777poaFA_"/>
-</div>
+<div class="flex items-center gap-1 md:gap-2 mr-2">
+  <button id="btn-toggle-map" class="w-9 h-9 md:w-10 md:h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-blue-600 dark:text-blue-400 tooltip tooltip-bottom" title="Alternar Mapa (Satélite/Padrão)" onclick="toggleMapType()">
+    <span class="material-symbols-outlined text-[20px] md:text-[22px]">layers</span>
+  </button>
+  <button class="w-9 h-9 md:w-10 md:h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-emerald-600 dark:text-emerald-400 tooltip tooltip-bottom" title="Ferramenta de Medição" onclick="toggleMeasurementPanel()">
+    <span class="material-symbols-outlined text-[20px] md:text-[22px]">square_foot</span>
+  </button>
+  <div class="w-[1px] h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
+  <button class="w-9 h-9 md:w-10 md:h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-slate-700 dark:text-slate-300 tooltip tooltip-bottom" title="Aumentar Zoom" onclick="zoomIn()">
+    <span class="material-symbols-outlined text-[20px] md:text-[22px]">add</span>
+  </button>
+  <button class="w-9 h-9 md:w-10 md:h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-slate-700 dark:text-slate-300 tooltip tooltip-bottom" title="Diminuir Zoom" onclick="zoomOut()">
+    <span class="material-symbols-outlined text-[20px] md:text-[22px]">remove</span>
+  </button>
+  <div class="w-[1px] h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
+  <button class="w-9 h-9 md:w-10 md:h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-blue-600 dark:text-blue-400 tooltip tooltip-bottom" title="Minha Localização" onclick="goToMyLocation()">
+    <span class="material-symbols-outlined text-[20px] md:text-[22px]">my_location</span>
+  </button>
 </div>
 </header>
 <!-- NavigationDrawer Overlay -->
@@ -261,6 +271,15 @@
 <!-- Themes will be dynamically generated here -->
 </div>
 </nav>
+<div class="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center gap-3">
+  <div class="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center shrink-0 justify-center overflow-hidden border border-slate-300 dark:border-slate-600 shadow-sm">
+    <img alt="Avatar" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCc0RYeJ85EwHW4BJ4ZRmN9WYDAnOz5EFFNO3bx5XdbDIkNCRYBBysRNyY53k3kzDdU9seuTeFmYvMXtMDCL1UbpKvFNeY23l3z4U9FCZOYErFcRImNItGPpgG_W5bVuwtWn-6WMk8SDB99zq3Dt-MC71VCZyEVd4TqkBE32-OMGnSHpid3s70wq18nEDKvtj8p1j-2l4IrBibDsMAPK8QH6puGnFKJNt-aiAhAmbQzoqrnGeO6vWoOnEZLChi1lnkv29X777poaFA_"/>
+  </div>
+  <div class="flex flex-col">
+    <span class="text-sm font-bold text-slate-800 dark:text-slate-100">Usuário Logado</span>
+    <span class="text-xs text-slate-500 dark:text-slate-400">usuario@construtora.com</span>
+  </div>
+</div>
 <div class="p-6 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-2">
 <button class="flex items-center gap-4 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg font-medium text-sm transition-all" onclick="document.getElementById('global-geojson-upload').click()">
 <span class="material-symbols-outlined text-lg">upload_file</span> Importar GeoJSON
@@ -274,28 +293,7 @@
 <main class="relative w-full h-[calc(100vh-3.5rem)] md:h-screen pt-14 md:pt-16 pb-14 md:pb-0">
 <!-- Google Map -->
 <div id="map" class="absolute inset-0 z-0"></div>
-<!-- Floating Map Controls -->
-<div class="absolute top-20 right-4 md:top-24 md:right-6 z-20 flex flex-col gap-2">
-<div class="bg-white/85 dark:bg-[#0B1120]/75 backdrop-blur-xl rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.3)] border border-slate-200/50 dark:border-white/10 overflow-hidden flex flex-col">
-<button id="btn-toggle-map" class="p-2 md:p-3 hover:bg-slate-100/80 dark:hover:bg-white/10 transition-colors flex items-center justify-center text-blue-600 dark:text-blue-400" title="Alternar Mapa (Satélite/Padrão)" onclick="toggleMapType()">
-<span class="material-symbols-outlined">layers</span>
-</button>
-</div>
-<div class="bg-white/85 dark:bg-[#0B1120]/75 backdrop-blur-xl rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.3)] border border-slate-200/50 dark:border-white/10 overflow-hidden flex flex-col mt-4">
-<button class="p-2 md:p-3 hover:bg-slate-100/80 dark:hover:bg-white/10 transition-colors border-b border-slate-200/50 dark:border-white/10 flex items-center justify-center text-slate-700 dark:text-slate-300" title="Aumentar Zoom" onclick="zoomIn()">
-<span class="material-symbols-outlined">add</span>
-</button>
-<button class="p-3 hover:bg-slate-100/80 dark:hover:bg-white/10 transition-colors border-b border-slate-200/50 dark:border-white/10 flex items-center justify-center text-slate-700 dark:text-slate-300" title="Diminuir Zoom" onclick="zoomOut()">
-<span class="material-symbols-outlined">remove</span>
-</button>
-<button class="p-3 hover:bg-slate-100/80 dark:hover:bg-white/10 transition-colors border-b border-slate-200/50 dark:border-white/10 flex items-center justify-center text-blue-600 dark:text-blue-400" title="Minha Localização" onclick="goToMyLocation()">
-<span class="material-symbols-outlined">my_location</span>
-</button>
-<button class="p-3 hover:bg-slate-100/80 dark:hover:bg-white/10 transition-colors flex items-center justify-center text-emerald-600 dark:text-emerald-400" title="Ferramenta de Medição" onclick="toggleMeasurementPanel()">
-<span class="material-symbols-outlined">square_foot</span>
-</button>
-</div>
-</div>
+<!-- Floating Map Controls Removed (Moved to TopAppBar) -->
 </main>
 
 <!-- Measurement Panel -->
@@ -343,24 +341,37 @@
         <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome do Tema</label>
         <input type="text" id="theme-name-input" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white" placeholder="Ex: Arborização">
       </div>
-      <div>
-        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cor</label>
-        <input type="color" id="theme-color-input" class="w-full h-10 cursor-pointer rounded bg-slate-50 border-none" value="#10b981">
+      <div class="flex gap-4">
+        <div class="flex-1">
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cor</label>
+          <input type="color" id="theme-color-input" class="w-full h-10 cursor-pointer rounded bg-slate-50 border-none" value="#10b981">
+        </div>
+        <div class="flex-1">
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Transparência (<span id="theme-opacity-val">40%</span>)</label>
+          <input type="range" id="theme-opacity-input" min="0" max="1" step="0.1" value="0.4" class="w-full mt-2 accent-primary" oninput="document.getElementById('theme-opacity-val').textContent = Math.round(this.value * 100) + '%'">
+        </div>
       </div>
       <div>
         <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Ícone</label>
-        <div class="relative w-full" id="new-icon-container">
-          <input type="hidden" id="theme-icon-input" value="circle">
-          <button type="button" onclick="document.getElementById('new-icon-dropdown').classList.toggle('hidden')" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none flex justify-between items-center transition-colors">
-            <div class="flex items-center gap-2 dark:text-white">
-                <span class="material-symbols-outlined text-[20px] text-primary" id="new-icon-preview">circle</span>
-                <span id="new-icon-label" class="text-sm">Círculo Básico</span>
+        <div class="flex gap-2">
+            <div class="relative flex-1" id="new-icon-container">
+              <input type="hidden" id="theme-icon-input" value="circle">
+              <button type="button" onclick="document.getElementById('new-icon-dropdown').classList.toggle('hidden')" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none flex justify-between items-center transition-colors">
+                <div class="flex items-center gap-2 dark:text-white" id="new-icon-preview-container">
+                    <span class="material-symbols-outlined text-[20px] text-primary" id="new-icon-preview">circle</span>
+                    <span id="new-icon-label" class="text-sm">Círculo Básico</span>
+                </div>
+                <span class="material-symbols-outlined text-slate-400">expand_more</span>
+              </button>
+              <div id="new-icon-dropdown" class="hidden absolute z-50 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl max-h-56 overflow-y-auto">
+                 <div class="p-1 flex flex-col" id="new-icon-options"></div>
+              </div>
             </div>
-            <span class="material-symbols-outlined text-slate-400">expand_more</span>
-          </button>
-          <div id="new-icon-dropdown" class="hidden absolute z-50 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl max-h-56 overflow-y-auto">
-             <div class="p-1 flex flex-col" id="new-icon-options"></div>
-          </div>
+            <button type="button" class="px-3 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-300 dark:border-slate-600 rounded-lg transition-colors flex items-center justify-center tooltip" title="Upload Ícone Personalizado (.SVG, .PNG)" onclick="document.getElementById('theme-custom-icon-file').click()">
+                <span class="material-symbols-outlined text-slate-600 dark:text-slate-300">upload</span>
+            </button>
+            <input type="file" id="theme-custom-icon-file" accept=".svg, .png" class="hidden" onchange="handleCustomIconUpload(this, 'new-icon-preview-container', 'theme-custom-icon-data', 'new-icon-label')">
+            <input type="hidden" id="theme-custom-icon-data" value="">
         </div>
       </div>
         <div>
@@ -395,24 +406,37 @@
         <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome do Tema</label>
         <input type="text" id="edit-theme-name-input" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white">
       </div>
-      <div>
-        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cor</label>
-        <input type="color" id="edit-theme-color-input" class="w-full h-10 cursor-pointer rounded bg-slate-50 border-none">
+      <div class="flex gap-4">
+        <div class="flex-1">
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cor</label>
+          <input type="color" id="edit-theme-color-input" class="w-full h-10 cursor-pointer rounded bg-slate-50 border-none">
+        </div>
+        <div class="flex-1">
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Transparência (<span id="edit-theme-opacity-val">40%</span>)</label>
+          <input type="range" id="edit-theme-opacity-input" min="0" max="1" step="0.1" value="0.4" class="w-full mt-2 accent-primary" oninput="document.getElementById('edit-theme-opacity-val').textContent = Math.round(this.value * 100) + '%'">
+        </div>
       </div>
       <div>
         <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Ícone</label>
-        <div class="relative w-full" id="edit-icon-container">
-          <input type="hidden" id="edit-theme-icon-input" value="circle">
-          <button type="button" onclick="document.getElementById('edit-icon-dropdown').classList.toggle('hidden')" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none flex justify-between items-center transition-colors">
-            <div class="flex items-center gap-2 dark:text-white">
-                <span class="material-symbols-outlined text-[20px] text-primary" id="edit-icon-preview">circle</span>
-                <span id="edit-icon-label" class="text-sm">Círculo Básico</span>
+        <div class="flex gap-2">
+            <div class="relative flex-1" id="edit-icon-container">
+              <input type="hidden" id="edit-theme-icon-input" value="circle">
+              <button type="button" onclick="document.getElementById('edit-icon-dropdown').classList.toggle('hidden')" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none flex justify-between items-center transition-colors">
+                <div class="flex items-center gap-2 dark:text-white" id="edit-icon-preview-container">
+                    <span class="material-symbols-outlined text-[20px] text-primary" id="edit-icon-preview">circle</span>
+                    <span id="edit-icon-label" class="text-sm">Círculo Básico</span>
+                </div>
+                <span class="material-symbols-outlined text-slate-400">expand_more</span>
+              </button>
+              <div id="edit-icon-dropdown" class="hidden absolute z-50 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl max-h-56 overflow-y-auto">
+                 <div class="p-1 flex flex-col" id="edit-icon-options"></div>
+              </div>
             </div>
-            <span class="material-symbols-outlined text-slate-400">expand_more</span>
-          </button>
-          <div id="edit-icon-dropdown" class="hidden absolute z-50 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl max-h-56 overflow-y-auto">
-             <div class="p-1 flex flex-col" id="edit-icon-options"></div>
-          </div>
+            <button type="button" class="px-3 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-300 dark:border-slate-600 rounded-lg transition-colors flex items-center justify-center tooltip" title="Upload Ícone Personalizado (.SVG, .PNG)" onclick="document.getElementById('edit-theme-custom-icon-file').click()">
+                <span class="material-symbols-outlined text-slate-600 dark:text-slate-300">upload</span>
+            </button>
+            <input type="file" id="edit-theme-custom-icon-file" accept=".svg, .png" class="hidden" onchange="handleCustomIconUpload(this, 'edit-icon-preview-container', 'edit-theme-custom-icon-data', 'edit-icon-label')">
+            <input type="hidden" id="edit-theme-custom-icon-data" value="">
         </div>
       </div>
       <div class="flex gap-2">
@@ -636,7 +660,6 @@
 <script src="https://unpkg.com/@turf/turf/turf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="src/formBuilder.js"></script>
 <script src="src/formRenderer.js"></script>
 <script src="src/customFields.js"></script>
 <script src="src/main.js"></script>

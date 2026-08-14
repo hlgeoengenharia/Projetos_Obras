@@ -114,9 +114,10 @@ function initMap() {
       const themeId = feature.properties.themeId;
       const theme = themes.find(t => t.id === themeId);
       const color = theme ? theme.color : '#333333';
+      const opacity = theme && theme.opacity !== undefined ? theme.opacity : 0.4;
       return {
         fillColor: color,
-        fillOpacity: 0.4,
+        fillOpacity: opacity,
         color: color,
         weight: 2
       };
@@ -126,11 +127,16 @@ function initMap() {
       const theme = themes.find(t => t.id === themeId);
       const color = theme ? theme.color : '#333333';
       const iconName = theme && theme.icon ? theme.icon : 'circle';
+      const customIconData = theme && theme.customIcon ? theme.customIcon : null;
       
+      const iconHtml = customIconData 
+        ? `<img src="${customIconData}" style="width:16px; height:16px; object-fit:contain;">`
+        : `<span class="material-symbols-outlined" style="color: white; font-size: 14px;">${iconName}</span>`;
+
       const customIcon = L.divIcon({
         className: 'custom-div-icon',
-        html: `<div style="background-color: ${color}; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
-                 <span class="material-symbols-outlined" style="color: white; font-size: 14px;">${iconName}</span>
+        html: `<div style="background-color: ${customIconData ? 'white' : color}; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid ${customIconData ? color : 'white'}; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
+                 ${iconHtml}
                </div>`,
         iconSize: [24, 24],
         iconAnchor: [12, 12]
@@ -489,17 +495,34 @@ function closeNewThemeModal() {
   document.getElementById('new-theme-modal').classList.add('hidden');
 }
 
+function handleCustomIconUpload(input, previewContainerId, dataInputId, labelId) {
+  if (input.files && input.files[0]) {
+    const file = input.files[0];
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const dataUrl = e.target.result;
+      document.getElementById(dataInputId).value = dataUrl;
+      document.getElementById(previewContainerId).innerHTML = `<img src="${dataUrl}" class="w-5 h-5 object-contain">`;
+      if (labelId) document.getElementById(labelId).innerText = file.name;
+    };
+    reader.readAsDataURL(file);
+  }
+}
+
 let themeBeingEdited = null;
 
 function saveNewTheme() {
   const name = document.getElementById('theme-name-input').value;
   const color = document.getElementById('theme-color-input').value;
-  const geomType = document.getElementById('theme-geom-type-input').value;
+  const opacity = parseFloat(document.getElementById('theme-opacity-input').value);
+  const geomType = document.getElementById('theme-geometry') ? document.getElementById('theme-geometry').value : null;
   const icon = document.getElementById('theme-icon-input').value;
+  const customIcon = document.getElementById('theme-custom-icon-data').value;
+  const formId = document.getElementById('theme-cadastro-type') ? document.getElementById('theme-cadastro-type').value : '';
   if (!name) return;
 
   const id = 'theme_' + Date.now();
-  themes.push({ id, name, color, geomType, icon, formId, features: [] });
+  themes.push({ id, name, color, opacity, geomType, icon, customIcon, formId, features: [] });
   saveThemes();
   renderThemes();
   closeNewThemeModal();
@@ -513,6 +536,13 @@ function openEditThemeModal(themeId) {
   themeBeingEdited = themeId;
   document.getElementById('edit-theme-name-input').value = theme.name;
   document.getElementById('edit-theme-color-input').value = theme.color;
+  
+  const opacityVal = theme.opacity !== undefined ? theme.opacity : 0.4;
+  document.getElementById('edit-theme-opacity-input').value = opacityVal;
+  document.getElementById('edit-theme-opacity-val').textContent = Math.round(opacityVal * 100) + '%';
+  
+  const customIconVal = theme.customIcon || '';
+  document.getElementById('edit-theme-custom-icon-data').value = customIconVal;
   
   // Extract all unique property keys from features, plus standard ones
   let allKeys = new Set(["Proprietário", "CPF/CNPJ", "Endereço", "Número do imóvel", "Lote", "Quadra", "Bairro", "Loteamento", "Município"]);
@@ -538,8 +568,12 @@ function openEditThemeModal(themeId) {
   document.getElementById('edit-theme-icon-input').value = iconVal;
   
   const option = availableIcons.find(o => o.val === iconVal) || availableIcons[0];
-  document.getElementById('edit-icon-preview').innerText = option.val;
-  document.getElementById('edit-icon-label').innerText = option.label;
+  if (customIconVal) {
+    document.getElementById('edit-icon-preview-container').innerHTML = `<img src="${customIconVal}" class="w-5 h-5 object-contain">`;
+    document.getElementById('edit-icon-label').innerText = "Ícone Personalizado";
+  } else {
+    document.getElementById('edit-icon-preview-container').innerHTML = `<span class="material-symbols-outlined text-[20px] text-primary" id="edit-icon-preview">${option.val}</span><span id="edit-icon-label" class="text-sm">${option.label}</span>`;
+  }
   
   document.getElementById('edit-theme-modal').classList.remove('hidden');
 }
@@ -559,10 +593,12 @@ function updateIconDropdownSelection(prefix, val) {
 function saveEditedTheme() {
   const name = document.getElementById('edit-theme-name-input').value;
   const color = document.getElementById('edit-theme-color-input').value;
+  const opacity = parseFloat(document.getElementById('edit-theme-opacity-input').value);
   const icon = document.getElementById('edit-theme-icon-input').value;
+  const customIcon = document.getElementById('edit-theme-custom-icon-data').value;
   const disp1 = document.getElementById('edit-theme-disp1-input').value;
   const disp2 = document.getElementById('edit-theme-disp2-input').value;
-    const formId = document.getElementById('edit-theme-cadastro-type') ? document.getElementById('edit-theme-cadastro-type').value : '';
+  const formId = document.getElementById('edit-theme-cadastro-type') ? document.getElementById('edit-theme-cadastro-type').value : '';
   
   if (!name || !themeBeingEdited) return;
 
@@ -570,7 +606,9 @@ function saveEditedTheme() {
   if (theme) {
     theme.name = name;
     theme.color = color;
+    theme.opacity = opacity;
     theme.icon = icon;
+    theme.customIcon = customIcon;
     theme.disp1 = disp1 || 'Lote';
     theme.disp2 = disp2 || 'Quadra';
     saveThemes();
@@ -611,12 +649,20 @@ function startEditingTheme(id, name, color, geomType) {
   editingThemeId = id;
   
   const theme = themes.find(t => t.id === id);
-  // Configuração global de aderência (Snap) do Geoman
+  const themeOpacity = theme && theme.opacity !== undefined ? theme.opacity : 0.4;
+  
+  // Configuração global de aderência (Snap) e estilo do Geoman
   map.pm.setGlobalOptions({
     snappable: true,
     snapDistance: 20,
     snapMiddle: true,
-    snapSegment: true
+    snapSegment: true,
+    pathOptions: {
+      color: color,
+      fillColor: color,
+      fillOpacity: themeOpacity,
+      weight: 2
+    }
   });
 
   // Configurações e estilos do Geoman para desenhos a camada já possui feições, deduzimos da primeira feição
