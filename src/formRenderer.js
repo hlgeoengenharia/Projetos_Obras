@@ -207,7 +207,7 @@ function renderMultipleTab(tab, featureData, isEditMode) {
     
     html += `
             </div>
-            <div class="mt-8 pt-4 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3">
+            <div class="mt-6 flex flex-col sm:flex-row justify-end gap-3 pt-6 border-t border-slate-200 dark:border-slate-700 mobile-sticky-bottom">
                 <button type="button" onclick="toggleMultipleForm('${tab.id}', false)" class="px-5 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 rounded-md font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm shadow-sm">Cancelar</button>
                 <button type="button" onclick="saveMultipleRecord('${tab.id}')" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium transition-colors text-sm shadow-sm flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">save</span> Salvar Registro</button>
             </div>

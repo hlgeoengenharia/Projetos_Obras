@@ -258,7 +258,7 @@ function renderThemes() {
           <div class="w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-white shadow-sm ${!isVisible ? 'opacity-50' : ''}" style="background-color: ${theme.color}">
              <span class="material-symbols-outlined text-[14px]">${theme.icon || 'circle'}</span>
           </div>
-          <h3 class="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider line-clamp-1 ${!isVisible ? 'opacity-50' : ''}" title="${theme.name}">${theme.name}</h3>
+          <h3 class="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider break-words ${!isVisible ? 'opacity-50' : ''}" title="${theme.name}">${theme.name}</h3>
         </div>
       </div>
       <div id="list-${theme.id}" class="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 hidden">
@@ -310,8 +310,8 @@ function renderFeatureListItems(theme) {
       <div id="sidebar-item-${fid}" class="feature-list-item px-4 py-2 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-all duration-300 border-l-4 border-l-transparent"
            data-search="${searchData}"
            onclick="zoomToFeature('${fid}')">
-         <div class="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate" title="${propName}">${propName}</div>
-         <div class="text-[11px] text-slate-500 truncate mt-0.5" title="${disp1}: ${val1} | ${disp2}: ${val2}">
+         <div class="text-xs font-semibold text-slate-800 dark:text-slate-200 break-words" title="${propName}">${propName}</div>
+         <div class="text-[10px] text-slate-500 break-words mt-0.5" title="${disp1}: ${val1} | ${disp2}: ${val2}">
             <span class="font-medium">${disp1}:</span> ${val1} <span class="mx-1 text-slate-300 dark:text-slate-700">&bull;</span> <span class="font-medium">${disp2}:</span> ${val2}
          </div>
       </div>

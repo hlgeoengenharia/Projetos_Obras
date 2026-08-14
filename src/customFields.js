@@ -8,49 +8,48 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
     if (!isFeatureEditMode) {
         if (f.type === 'photo' || f.type === 'attachment') {
             try {
-                const files = typeof value === 'string' && value.startsWith('[') ? JSON.parse(value) : (value ? [value] : []);
+                const files = Array.isArray(value) ? value : (typeof value === 'string' && value.startsWith('[') ? JSON.parse(value) : (value ? [value] : []));
                 if (files.length === 0) return '<p class="text-sm font-medium text-slate-500 dark:text-slate-400">Nenhum arquivo anexado</p>';
                 
-                let html = '<div class="flex flex-wrap gap-2">';
+                let html = '<div class="flex flex-col gap-2 @container w-full">';
                 files.forEach(file => {
                     const url = typeof file === 'string' ? file : file.url;
                     const name = typeof file === 'string' ? 'Arquivo' : file.name;
-                    if (f.type === 'photo') {
-                        html += `<a href="${url}" target="_blank" class="w-20 h-20 bg-slate-200 dark:bg-slate-700 rounded overflow-hidden shadow-sm hover:opacity-80 transition-opacity">
-                                    <img src="${url}" class="w-full h-full object-cover" />
-                                 </a>`;
-                    } else {
-                        const title = file.title || name;
-                        const author = file.uploadedBy || 'Usuário Local';
-                        const dateStr = file.uploadedAt ? new Date(file.uploadedAt).toLocaleString('pt-BR') : 'Data desconhecida';
-                        
-                        if (!file.deleted) {
-                            html += `
-                            <div class="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 w-full shadow-sm mb-2">
-                                <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-[150px]">
-                                    ${leftIconActive}
-                                    <div class="flex flex-col overflow-hidden w-full">
-                                        <div class="font-semibold text-base truncate" title="${title}">${title || 'Sem título'}</div>
-                                        <div class="text-sm text-slate-500 mt-1 truncate">Arq: ${name}</div>
+                    const title = file.title || name;
+                    const author = file.uploadedBy || 'Usuário Local';
+                    const dateStr = file.uploadedAt ? new Date(file.uploadedAt).toLocaleString('pt-BR') : 'Data desconhecida';
+                    const isPhoto = f.type === 'photo';
+                    
+                    const leftIconActive = isPhoto 
+                        ? `<div class="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-700 shrink-0 overflow-hidden border border-slate-200 dark:border-slate-600 cursor-pointer" onclick="window.open('${url}', '_blank')"><img src="${url}" class="w-full h-full object-cover hover:scale-110 transition-transform duration-300" /></div>`
+                        : `<div class="w-12 h-12 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0 text-blue-600 dark:text-blue-400"><span class="material-symbols-outlined">description</span></div>`;
+                    
+                    if (!file.deleted) {
+                        html += `
+                        <div class="flex flex-col @sm:flex-row items-center justify-between gap-4 text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 w-full shadow-sm mb-2">
+                            <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-[150px] w-full @sm:w-auto">
+                                ${leftIconActive}
+                                <div class="flex flex-col overflow-hidden w-full">
+                                        <div class="font-semibold text-sm break-words" title="${title}">${title || 'Sem título'}</div>
+                                        <div class="text-xs text-slate-500 mt-1 break-words">Arq: ${name}</div>
                                     </div>
                                 </div>
-                                <div class="flex flex-col gap-1 min-w-[150px] text-slate-500 border-l border-slate-200 dark:border-slate-700 pl-4">
-                                    <div class="flex items-center gap-1 truncate"><span class="material-symbols-outlined text-[16px]">person</span> ${author}</div>
-                                    <div class="flex items-center gap-1 truncate"><span class="material-symbols-outlined text-[16px]">calendar_today</span> ${dateStr}</div>
+                                <div class="flex flex-col gap-1 min-w-[150px] w-full @sm:w-auto text-slate-500 border-t @sm:border-t-0 @sm:border-l border-slate-200 dark:border-slate-700 pt-2 @sm:pt-0 @sm:pl-4">
+                                    <div class="flex items-center gap-1 break-words text-xs"><span class="material-symbols-outlined text-[14px]">person</span> ${author}</div>
+                                    <div class="flex items-center gap-1 break-words text-xs"><span class="material-symbols-outlined text-[14px]">calendar_today</span> ${dateStr}</div>
                                 </div>
-                                <div class="flex items-center gap-2">
-                                    <a href="${url}" target="_blank" class="text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded border border-blue-200 dark:border-blue-800 hover:bg-blue-100 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
+                                <div class="flex items-center gap-2 w-full @sm:w-auto">
+                                    <a href="${url}" target="_blank" class="w-full @sm:w-auto text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded border border-blue-200 dark:border-blue-800 hover:bg-blue-100 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
                                         <span class="material-symbols-outlined text-[16px]">visibility</span> Abrir
                                     </a>
                                 </div>
                             </div>`;
-                        }
                     }
                 });
                 html += '</div>';
                 return html;
             } catch(e) {
-                return '<p class="text-sm text-red-500">Erro ao carregar arquivos</p>';
+                return '<p class="text-sm font-medium text-slate-500 dark:text-slate-400">Nenhum arquivo anexado</p>';
             }
         } else if (f.type === 'geolocation') {
             let decStr = "N/A", dmsStr = "N/A", utmStr = "N/A";
@@ -87,11 +86,11 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
         const icon = isPhoto ? 'photo_camera' : 'upload_file';
         const label = isPhoto ? 'Adicionar Foto' : 'Adicionar Anexo';
         let files = [];
-        try { files = typeof value === 'string' && value.startsWith('[') ? JSON.parse(value) : (value ? [value] : []); } catch(e){}
+        try { files = Array.isArray(value) ? value : (typeof value === 'string' && value.startsWith('[') ? JSON.parse(value) : (value ? [value] : [])); } catch(e){}
         
         return `
             <div class="space-y-2">
-                <div class="flex flex-col gap-2" id="file-preview-${f.id}">
+                <div class="flex flex-col gap-2 @container w-full" id="file-preview-${f.id}">
                     ${files.map(file => {
                         const url = typeof file === 'string' ? file : file.url;
                         const name = typeof file === 'string' ? 'Arquivo' : (file.name || 'Arquivo');
@@ -107,14 +106,14 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
                             const delDate = file.deletedAt ? new Date(file.deletedAt).toLocaleString('pt-BR') : '';
                             const delBy = file.deletedBy || 'Usuário';
                             return `
-<div class="flex flex-col sm:flex-row items-center gap-4 text-sm text-red-500 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-200 dark:border-red-800 w-full opacity-75 shadow-sm" data-url="${url}">
-    <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-[150px]">
+<div class="flex flex-col @sm:flex-row items-center gap-4 text-sm text-red-500 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-200 dark:border-red-800 w-full opacity-75 shadow-sm" data-url="${url}">
+    <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-[150px] w-full @sm:w-auto">
         ${leftIconDeleted}
         <div class="flex flex-col overflow-hidden w-full">
-            <div class="font-semibold text-base line-through truncate" title="${title}">${title}</div>
+            <div class="font-semibold text-sm line-through break-words" title="${title}">${title}</div>
         </div>
     </div>
-    <div class="flex flex-col gap-1 min-w-[150px] border-l border-red-200 dark:border-red-800 pl-4">
+    <div class="flex flex-col gap-1 min-w-[150px] w-full @sm:w-auto border-t @sm:border-t-0 @sm:border-l border-red-200 dark:border-red-800 pt-2 @sm:pt-0 @sm:pl-4">
         <div class="flex items-center gap-1 text-sm">
             <span class="material-symbols-outlined text-[16px]">person</span> Excluído por ${delBy}
         </div>
@@ -122,29 +121,29 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
             <span class="material-symbols-outlined text-[16px]">calendar_today</span> ${delDate}
         </div>
     </div>
-    <button type="button" onclick="restoreFile('${f.id}', '${url}')" class="text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800 px-3 py-1.5 rounded border border-slate-300 dark:border-slate-600 hover:bg-slate-100 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
+    <button type="button" onclick="restoreFile('${f.id}', '${url}')" class="w-full @sm:w-auto text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800 px-3 py-1.5 rounded border border-slate-300 dark:border-slate-600 hover:bg-slate-100 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
         <span class="material-symbols-outlined text-[16px]">undo</span> Restaurar
     </button>
 </div>`;
                         } else {
                             return `
-<div class="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 w-full shadow-sm" data-url="${url}">
-    <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-[150px]">
+<div class="flex flex-col @sm:flex-row items-center justify-between gap-4 text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 w-full shadow-sm" data-url="${url}">
+    <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-[150px] w-full @sm:w-auto">
         ${leftIconActive}
         <div class="flex flex-col overflow-hidden w-full cursor-pointer hover:opacity-80 transition-opacity" onclick="window.open('${url}', '_blank')" title="Clique para abrir ${name}">
-            <div class="font-semibold text-base truncate" title="${title}">${title || 'Sem título'}</div>
-            <div class="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 mt-1 truncate" title="${name}">Arq: ${name}</div>
+            <div class="font-semibold text-sm break-words" title="${title}">${title || 'Sem título'}</div>
+            <div class="text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 mt-1 break-words" title="${name}">Arq: ${name}</div>
         </div>
     </div>
-    <div class="flex flex-col gap-1 min-w-[150px] text-slate-500 border-l border-slate-200 dark:border-slate-700 pl-4">
-        <div class="flex items-center gap-1 truncate" title="${author}">
-            <span class="material-symbols-outlined text-[16px]">person</span> ${author}
+    <div class="flex flex-col gap-1 min-w-[150px] w-full @sm:w-auto text-slate-500 border-t @sm:border-t-0 @sm:border-l border-slate-200 dark:border-slate-700 pt-2 @sm:pt-0 @sm:pl-4">
+        <div class="flex items-center gap-1 break-words text-xs" title="${author}">
+            <span class="material-symbols-outlined text-[14px]">person</span> ${author}
         </div>
-        <div class="flex items-center gap-1 truncate">
-            <span class="material-symbols-outlined text-[16px]">calendar_today</span> ${dateStr}
+        <div class="flex items-center gap-1 break-words text-xs">
+            <span class="material-symbols-outlined text-[14px]">calendar_today</span> ${dateStr}
         </div>
     </div>
-    <div class="flex flex-col gap-2 shrink-0">
+    <div class="flex flex-col gap-2 shrink-0 w-full @sm:w-auto">
         <button type="button" onclick="editFileTitlePrompt('${f.id}', '${url}')" class="w-full text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/30 px-3 py-1.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
             <span class="material-symbols-outlined text-[16px]">edit</span> Editar
         </button>

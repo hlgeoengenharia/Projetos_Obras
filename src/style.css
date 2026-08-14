@@ -4,18 +4,96 @@
 
 @layer base {
   body {
-    @apply antialiased text-slate-900 bg-white dark:bg-slate-950 dark:text-slate-100;
+    @apply antialiased text-slate-900 bg-white dark:bg-slate-950 dark:text-slate-100 transition-colors duration-300;
   }
 }
 
+/* Base UI configurations */
+.material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+body { font-family: 'Inter', sans-serif; }
+body { min-height: max(884px, 100dvh); }
+#map { height: 100%; width: 100%; }
 
-        .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-        }
-        body { font-family: 'Inter', sans-serif; }
-        body {
-          min-height: max(884px, 100dvh);
-        }
-        #map { height: 100%; width: 100%; }
-        
-    
+/* Custom Futuristic Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 dark:bg-slate-700 rounded-full;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-400 dark:bg-slate-600;
+}
+
+/* Neon Theme Global Styles */
+html.neon body {
+  background-color: #050a14 !important;
+  color: #e2e8f0;
+}
+
+/* Neon Accents for Buttons and Borders */
+html.neon .bg-primary, html.neon .bg-blue-500, html.neon .bg-blue-600 {
+  background-color: transparent !important;
+  border: 1px solid #00f0ff;
+  color: #00f0ff;
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.4), inset 0 0 8px rgba(0, 240, 255, 0.2);
+}
+html.neon .bg-primary:hover, html.neon .bg-blue-600:hover {
+  background-color: rgba(0, 240, 255, 0.1) !important;
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.6), inset 0 0 10px rgba(0, 240, 255, 0.3);
+}
+
+html.neon .text-primary, html.neon .text-blue-500, html.neon .text-blue-600 {
+  color: #00f0ff !important;
+  text-shadow: 0 0 5px rgba(0, 240, 255, 0.5);
+}
+
+/* Dark/Neon Inputs and Containers */
+html.neon .bg-white.dark\:bg-slate-800, html.neon .dark\:bg-slate-900, html.neon .dark\:bg-slate-950 {
+  background-color: rgba(10, 15, 30, 0.6) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+}
+
+/* Animations */
+@keyframes fade-in-up {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up {
+  animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Sticky Bottom Bar for Mobile */
+@media (max-width: 640px) {
+  .mobile-sticky-bottom {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid #e2e8f0;
+    padding: 1rem;
+    padding-bottom: env(safe-area-inset-bottom, 1rem); /* iPhone notch support */
+    box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1);
+  }
+  html.dark .mobile-sticky-bottom {
+    background: rgba(15, 23, 42, 0.85);
+    border-top: 1px solid #334155;
+  }
+  html.neon .mobile-sticky-bottom {
+    background: rgba(5, 10, 20, 0.85);
+    border-top: 1px solid rgba(0, 240, 255, 0.3);
+    box-shadow: 0 -4px 10px -1px rgba(0, 240, 255, 0.15);
+  }
+}
