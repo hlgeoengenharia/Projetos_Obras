@@ -26,7 +26,7 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
     
     let html = '<div class="flex flex-col gap-4">';
     
-    let primaryTabId = formConfig.find(t => t.isPrimary)?.id;
+    let primaryTabId = options.activeTabId || formConfig.find(t => t.isPrimary)?.id;
     if (!primaryTabId && formConfig.length > 0) primaryTabId = formConfig[0].id;
     
     formConfig.forEach((tab) => {
@@ -352,7 +352,7 @@ window.saveMultipleRecord = function(tabId) {
     
     // Instead of appending a row, just re-render the whole dynamic form to keep it simple and clean
     if (typeof window.renderDynamicForm === 'function' && window.currentFormContainerId) {
-        window.renderDynamicForm(window.currentFormFeatures, window.currentFormFeatureData, window.currentFormIsEditMode, window.currentFormContainerId, { isPreview: window.currentFormIsPreview });
+        window.renderDynamicForm(window.currentFormFeatures, window.currentFormFeatureData, window.currentFormIsEditMode, window.currentFormContainerId, { isPreview: window.currentFormIsPreview, activeTabId: tabId });
     } else {
         toggleMultipleForm(tabId, false);
     }

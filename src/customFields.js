@@ -252,6 +252,20 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
                 </div>
             </div>
         `;
+    } else if (f.type === 'textarea') {
+        html += `<textarea data-key="${f.id}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm" rows="4">${value}</textarea>`;
+    } else if (f.type === 'current_date') {
+        if (!value) {
+            const now = new Date();
+            const pad = n => n < 10 ? '0'+n : n;
+            value = `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        }
+        html += `<input type="text" data-key="${f.id}" value="${value}" readonly class="feature-data-input w-full px-3 py-2 bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none text-slate-600 dark:text-slate-400 text-sm cursor-not-allowed font-medium">`;
+    } else if (f.type === 'current_user') {
+        if (!value) {
+            value = 'Usuário Logado';
+        }
+        html += `<input type="text" data-key="${f.id}" value="${value}" readonly class="feature-data-input w-full px-3 py-2 bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none text-slate-600 dark:text-slate-400 text-sm cursor-not-allowed font-medium">`;
     } else {
         html += `<input type="${f.type==='date'?'date':f.type==='number'?'number':'text'}" data-key="${f.id}" value="${value}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">`;
     }
@@ -532,10 +546,59 @@ function maskCpfCnpj(input) {
     input.value = v;
 }
 
+function isValidCPF(cpf) {
+    if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+    let sum = 0, rest;
+    for (let i = 1; i <= 9; i++) sum = sum + parseInt(cpf.substring(i-1, i)) * (11 - i);
+    rest = (sum * 10) % 11;
+    if ((rest === 10) || (rest === 11)) rest = 0;
+    if (rest !== parseInt(cpf.substring(9, 10))) return false;
+    sum = 0;
+    for (let i = 1; i <= 10; i++) sum = sum + parseInt(cpf.substring(i-1, i)) * (12 - i);
+    rest = (sum * 10) % 11;
+    if ((rest === 10) || (rest === 11)) rest = 0;
+    if (rest !== parseInt(cpf.substring(10, 11))) return false;
+    return true;
+}
+
+function isValidCNPJ(cnpj) {
+    if (cnpj.length !== 14 || /^(\d)\1{13}$/.test(cnpj)) return false;
+    let size = cnpj.length - 2;
+    let numbers = cnpj.substring(0, size);
+    let digits = cnpj.substring(size);
+    let sum = 0;
+    let pos = size - 7;
+    for (let i = size; i >= 1; i--) {
+      sum += numbers.charAt(size - i) * pos--;
+      if (pos < 2) pos = 9;
+    }
+    let result = sum % 11 < 2 ? 0 : 11 - sum % 11;
+    if (result != digits.charAt(0)) return false;
+    size = size + 1;
+    numbers = cnpj.substring(0, size);
+    sum = 0;
+    pos = size - 7;
+    for (let i = size; i >= 1; i--) {
+      sum += numbers.charAt(size - i) * pos--;
+      if (pos < 2) pos = 9;
+    }
+    result = sum % 11 < 2 ? 0 : 11 - sum % 11;
+    if (result != digits.charAt(1)) return false;
+    return true;
+}
+
 function validateCpfCnpj(input, fieldId) {
     const val = input.value.replace(/\D/g, "");
     const icon = document.getElementById(`cpfcnpj-icon-${fieldId}`);
-    if (val.length === 11 || val.length === 14) {
+    
+    let isValid = false;
+    if (val.length === 11) {
+        isValid = isValidCPF(val);
+    } else if (val.length === 14) {
+        isValid = isValidCNPJ(val);
+    }
+    
+    if (isValid) {
         input.classList.remove('border-red-500', 'border-slate-300');
         input.classList.add('border-green-500');
         if (icon) icon.classList.remove('hidden');
