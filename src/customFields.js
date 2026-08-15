@@ -69,6 +69,41 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
                     <div class="text-xs font-mono text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1.5 rounded border border-slate-200 dark:border-slate-700 select-all">${typeof formatUTM === 'function' ? formatUTM(lat, lng) : 'N/A'}</div>
                 </div>
             `;
+        } else if (f.type === 'cpfcnpj') {
+            let cleanVal = (value || '').replace(/\D/g, '');
+            let formattedVal = value;
+            if (cleanVal.length === 11) {
+                formattedVal = cleanVal.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+            } else if (cleanVal.length === 14) {
+                formattedVal = cleanVal.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+            }
+            return `<div class="text-xs font-mono text-slate-700 dark:text-slate-300 break-words">${formattedVal || '<span class="text-slate-400 opacity-50 tracking-widest">---</span>'}</div>`;
+        } else if (f.type === 'cep') {
+            let cepData = {};
+            try { cepData = typeof value === 'string' && value.startsWith('{') ? JSON.parse(value) : {}; } catch(e){}
+            if (!cepData.cep && !cepData.logradouro && !value) {
+                return `<div class="text-xs text-slate-700 dark:text-slate-300 break-words"><span class="text-slate-400 opacity-50 tracking-widest">---</span></div>`;
+            }
+            
+            let htmlStr = `<div class="text-xs text-slate-700 dark:text-slate-300 space-y-1">`;
+            if (cepData.cep) {
+                let maskCep = cepData.cep.replace(/\D/g, '');
+                if (maskCep.length === 8) maskCep = maskCep.replace(/^(\d{5})(\d{3})/, "$1-$2");
+                htmlStr += `<div><span class="font-semibold text-slate-500">CEP:</span> ${maskCep || value}</div>`;
+            }
+            if (cepData.logradouro) {
+                htmlStr += `<div><span class="font-semibold text-slate-500">Endereço:</span> ${cepData.logradouro}${cepData.numero ? ', ' + cepData.numero : ''}${cepData.complemento ? ' (' + cepData.complemento + ')' : ''}</div>`;
+            }
+            if (cepData.bairro || cepData.cidade || cepData.uf) {
+                let locParts = [cepData.bairro, cepData.cidade, cepData.uf].filter(Boolean);
+                if(locParts.length > 0) htmlStr += `<div><span class="font-semibold text-slate-500">Local:</span> ${locParts.join(' - ')}</div>`;
+            }
+            htmlStr += `</div>`;
+            // Fallback for raw string
+            if (Object.keys(cepData).length === 0 && typeof value === 'string' && value.length > 0) {
+                return `<div class="text-xs text-slate-700 dark:text-slate-300 break-words">${value}</div>`;
+            }
+            return htmlStr;
         }
         
         return `<div class="text-xs text-slate-700 dark:text-slate-300 break-words">${value || '<span class="text-slate-400 opacity-50 tracking-widest">---</span>'}</div>`;
@@ -281,30 +316,52 @@ async function handleSupabaseUpload(event, fieldId, isPhoto) {
     }
     inputTitle = inputTitle.trim();
 
-    if (!supabaseClient) {
-        alert("Erro: Banco de dados não configurado.");
-        return;
-    }
-
     const btnText = document.getElementById(`file-upload-btn-text-${fieldId}`);
     const originalText = btnText.innerText;
-    btnText.innerText = 'Enviando...';
+    btnText.innerText = 'Processando...';
     
-    try {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-        const filePath = `${fileName}`; // Base path inside bucket
+    let publicUrl = '';
+    let filePath = '';
 
-        const { data, error } = await supabaseClient.storage.from('arquivos-obras').upload(filePath, file);
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+            filePath = fileName; // Base path inside bucket
 
-        if (error) {
-            console.error('Upload Error:', error);
-            alert('Erro ao enviar! Detalhe: ' + error.message);
+            const { data, error } = await supabaseClient.storage.from('arquivos-obras').upload(filePath, file);
+
+            if (error) {
+                console.error('Upload Error:', error);
+                alert('Erro ao enviar! Detalhe: ' + error.message);
+                btnText.innerText = originalText;
+                return;
+            }
+
+            const { data: { publicUrl: url } } = supabaseClient.storage.from('arquivos-obras').getPublicUrl(filePath);
+            publicUrl = url;
+        } catch (err) {
+            console.error(err);
+            alert('Erro de comunicação com o banco.');
             btnText.innerText = originalText;
             return;
         }
-
-        const { data: { publicUrl } } = supabaseClient.storage.from('arquivos-obras').getPublicUrl(filePath);
+    } else {
+        // Fallback Local (Base64)
+        try {
+            publicUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = e => reject(e);
+                reader.readAsDataURL(file);
+            });
+            filePath = `local_${Date.now()}_${file.name}`;
+        } catch (e) {
+            alert('Erro ao processar arquivo localmente.');
+            btnText.innerText = originalText;
+            return;
+        }
+    }
 
         // Update hidden input
         const hiddenInput = document.querySelector(`input[data-key="${fieldId}"]`);
@@ -357,13 +414,8 @@ async function handleSupabaseUpload(event, fieldId, isPhoto) {
                 </button>
             </div>
         </div>`;
-    } catch (e) {
-        console.error(e);
-        alert('Ocorreu um erro inesperado no envio.');
-    }
-    
-    btnText.innerText = originalText;
-    event.target.value = ''; // Reset input file
+        btnText.innerText = originalText;
+        event.target.value = ''; // Reset input file
 }
 
 function removeFile(fieldId, fileUrl, titleParam) {

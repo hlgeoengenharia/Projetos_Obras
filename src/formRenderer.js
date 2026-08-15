@@ -240,12 +240,15 @@ window.switchDynamicTab = function(tabId) {
     });
     
     if (content && !isAlreadyOpen) {
+        window.currentActiveTabId = tabId;
         content.classList.remove('hidden');
         content.classList.add('block', 'p-4', 'sm:p-6', 'border-t', 'border-slate-200', 'dark:border-slate-700');
         setTimeout(() => {
             const section = document.getElementById('acc-section-' + tabId);
             if (section) section.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 100);
+    } else {
+        window.currentActiveTabId = null;
     }
 };
 
