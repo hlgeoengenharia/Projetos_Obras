@@ -512,6 +512,10 @@ function renderThemes() {
             <button onclick="triggerUpload('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-800 dark:text-slate-200 transition-colors" title="Importar GeoJSON">
               <span class="material-symbols-outlined text-[18px]">upload</span>
             </button>
+            <button onclick="triggerTableUpload('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-800 dark:text-slate-200 transition-colors" title="Vincular Tabela (CSV)">
+              <span class="material-symbols-outlined text-[18px]">table_chart</span>
+            </button>
+            <input type="file" id="table-upload-${theme.id}" class="hidden" accept=".csv" onchange="handleTableUpload(event, '${theme.id}')">
             <button onclick="downloadGeoJSON('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-800 dark:text-slate-200 transition-colors" title="Exportar">
               <span class="material-symbols-outlined text-[18px]">download</span>
             </button>

@@ -29,6 +29,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script id="tailwind-config">
       tailwind.config = {
         darkMode: "class",
@@ -554,6 +555,54 @@
   </div>
 </div>
 
+<!-- Table Join Modal -->
+<div id="table-join-modal" class="fixed inset-0 z-[100] bg-black/50 hidden flex items-center justify-center">
+  <div class="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-6 w-full max-w-lg border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col">
+    <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Vincular Tabela (CSV)</h3>
+    <p class="text-xs text-slate-500 mb-4" id="table-join-info">Carregando...</p>
+
+    <div class="flex-1 overflow-y-auto pr-2">
+      <div class="flex flex-col gap-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">1. Qual coluna da tabela identifica o imóvel/feição?</label>
+          <select id="table-join-csv-key" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white">
+          </select>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">2. Qual campo no Mapa faz correspondência?</label>
+            <select id="table-join-map-key" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white">
+            </select>
+        </div>
+        
+        <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">3. Destino dos Dados</label>
+            <select id="table-join-mode" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white" onchange="document.getElementById('table-join-tab-container').style.display = this.value === '1N' ? 'block' : 'none'; document.getElementById('table-join-overwrite-container').style.display = this.value === '11' ? 'flex' : 'none';">
+                <option value="11">Atualizar Cadastro Único (1:1)</option>
+                <option value="1N">Adicionar na Aba Múltipla (1:N)</option>
+            </select>
+        </div>
+
+        <div id="table-join-tab-container" style="display:none;">
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Selecione a Aba Destino</label>
+            <select id="table-join-target-tab" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white">
+            </select>
+        </div>
+
+        <div id="table-join-overwrite-container" class="flex items-center gap-2 mt-2">
+            <input type="checkbox" id="table-join-overwrite" checked class="w-4 h-4 text-primary bg-slate-100 border-slate-300 rounded focus:ring-primary dark:focus:ring-primary dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600">
+            <label for="table-join-overwrite" class="text-sm text-slate-700 dark:text-slate-300">Sobrescrever campos já preenchidos?</label>
+        </div>
+      </div>
+    </div>
+    
+    <div class="mt-6 flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+      <button onclick="closeTableJoinModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg font-medium transition-colors">Cancelar</button>
+      <button onclick="confirmTableJoin()" class="px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors">Vincular</button>
+    </div>
+  </div>
+</div>
+
 <!-- Professional Feature Info Panel (Floating & Glassmorphism) -->
 <div id="feature-info-modal" class="fixed inset-0 z-[100] bg-transparent pointer-events-none hidden flex justify-end p-4 sm:p-6 pt-20 sm:pt-20">
   <div class="bg-white/85 dark:bg-[#0B1120]/75 backdrop-blur-2xl rounded-2xl border border-slate-200/50 dark:border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.5)] w-full max-w-sm sm:max-w-md h-full flex flex-col overflow-hidden pointer-events-auto">
@@ -709,7 +758,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="src/formRenderer.js"></script>
 <script src="src/customFields.js"></script>
+<script src="src/tableJoin.js"></script>
 <script src="src/main.js"></script>
-<script src="src/measurement.js"></script>
 </body>
 </html>

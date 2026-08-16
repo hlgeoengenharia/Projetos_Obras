@@ -32,6 +32,19 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
     formConfig.forEach((tab) => {
         let isPrimary = tab.id === primaryTabId;
         
+        let recordCountHtml = '';
+        if (tab.isMultiple) {
+            let records = [];
+            try {
+                records = typeof featureData[tab.id] === 'string' ? JSON.parse(featureData[tab.id]) : (featureData[tab.id] || []);
+            } catch(e) { records = []; }
+            if (!Array.isArray(records)) records = [];
+            
+            if (records.length > 0) {
+                recordCountHtml = `<span class="ml-1 bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm group-hover:bg-white group-hover:text-emerald-600 transition-colors">${records.length}</span>`;
+            }
+        }
+        
         html += `
             <div class="border-b last:border-b-0 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 transition-all accordion-section" id="acc-section-${tab.id}" ${(tab.condition && tab.condition.enabled && tab.condition.fieldId) ? `data-condition-field="${tab.condition.fieldId}" data-condition-operator="${tab.condition.operator}" data-condition-value="${(tab.condition.value || '').toLowerCase()}"` : ''}>
                 <button type="button" onclick="switchDynamicTab('${tab.id}')" class="group w-full px-3 py-3 sm:px-4 sm:py-3.5 flex items-center justify-center bg-slate-50 dark:bg-transparent hover:bg-blue-600 dark:hover:bg-blue-600 active:bg-blue-700 dark:active:bg-blue-700 active:scale-95 hover:shadow-[0_0_25px_rgba(59,130,246,0.6)] hover:z-10 relative transition-all duration-300 ease-out overflow-hidden">
@@ -39,6 +52,7 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
                     <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200 group-hover:text-white dark:group-hover:text-white uppercase tracking-wider flex items-center gap-2 text-center transition-all duration-300 group-hover:scale-105 group-hover:tracking-widest relative z-10">
                         ${isPrimary ? '<span class="material-symbols-outlined text-amber-500 group-hover:text-yellow-300 group-hover:drop-shadow-[0_0_8px_rgba(253,224,71,0.8)] transition-all text-[18px]">star</span>' : ''}
                         ${tab.title}
+                        ${recordCountHtml}
                     </h3>
                 </button>
                 
