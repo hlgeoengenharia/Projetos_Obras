@@ -1169,6 +1169,15 @@ function renderImportFieldMapping() {
        formFields.forEach(f => {
            const isSelected = (match && match.id === f.id) ? 'selected' : '';
            options += `<option value="${f.id}" ${isSelected}>${f.label}</option>`;
+           if (f.type === 'cep') {
+               options += `<option value="${f.id}__cep"> ↳ ${f.label} (CEP)</option>`;
+               options += `<option value="${f.id}__logradouro"> ↳ ${f.label} (Rua/Logradouro)</option>`;
+               options += `<option value="${f.id}__numero"> ↳ ${f.label} (Número)</option>`;
+               options += `<option value="${f.id}__complemento"> ↳ ${f.label} (Complemento)</option>`;
+               options += `<option value="${f.id}__bairro"> ↳ ${f.label} (Bairro)</option>`;
+               options += `<option value="${f.id}__cidade"> ↳ ${f.label} (Cidade)</option>`;
+               options += `<option value="${f.id}__uf"> ↳ ${f.label} (UF)</option>`;
+           }
        });
        
        mappingControl = `<select data-original="${prop}" class="flex-1 px-2 py-1 text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-1 focus:ring-primary dark:text-white property-rename-select">${options}</select>`;
@@ -1268,23 +1277,45 @@ function confirmGlobalImport() {
         const mappedKey = mapping[key] || key;
         let val = f.properties[key];
         
-        if (formFieldsMap[mappedKey]) {
-            const fieldType = formFieldsMap[mappedKey];
+        let actualKey = mappedKey;
+        let subField = null;
+        if (mappedKey.includes('__')) {
+            const parts = mappedKey.split('__');
+            actualKey = parts[0];
+            subField = parts[1];
+        }
+        
+        if (formFieldsMap[actualKey]) {
+            const fieldType = formFieldsMap[actualKey];
             if (fieldType === 'cpfcnpj' && typeof val === 'string') {
                 val = val.replace(/\D/g, ''); // Extract only numbers
-            } else if (fieldType === 'cep' && typeof val === 'string') {
-                if (!val.startsWith('{')) {
-                    let justNumbers = val.replace(/\D/g, '');
-                    if (justNumbers.length >= 7 && justNumbers.length <= 9) {
-                        val = JSON.stringify({ cep: val, logradouro: "" });
-                    } else {
-                        val = JSON.stringify({ cep: "", logradouro: val });
-                    }
+            } else if (fieldType === 'cep') {
+                let currentCep = { cep: "", logradouro: "", numero: "", bairro: "", cidade: "", uf: "", complemento: "" };
+                if (newProps[actualKey] && newProps[actualKey].startsWith('{')) {
+                    try { currentCep = Object.assign(currentCep, JSON.parse(newProps[actualKey])); } catch(e) {}
                 }
+                
+                let lowerVal = String(val).trim();
+                
+                if (subField) {
+                    if (subField === 'cep') currentCep.cep = lowerVal.replace(/\D/g, '');
+                    else currentCep[subField] = lowerVal;
+                } else {
+                    let lowerKey = key.toLowerCase();
+                    if (lowerKey.includes('cep')) currentCep.cep = lowerVal.replace(/\D/g, '');
+                    else if (lowerKey === 'numero' || lowerKey === 'num' || lowerKey === 'nº' || lowerKey === 'n') currentCep.numero = lowerVal;
+                    else if (lowerKey.includes('bairro')) currentCep.bairro = lowerVal;
+                    else if (lowerKey.includes('cid') || lowerKey.includes('mun')) currentCep.cidade = lowerVal;
+                    else if (lowerKey.includes('uf') || lowerKey === 'estado') currentCep.uf = lowerVal;
+                    else if (lowerKey.includes('comp')) currentCep.complemento = lowerVal;
+                    else currentCep.logradouro = currentCep.logradouro ? currentCep.logradouro + " " + lowerVal : lowerVal;
+                }
+                
+                val = JSON.stringify(currentCep);
             }
         }
         
-        newProps[mappedKey] = val;
+        newProps[actualKey] = val;
       }
     });
     

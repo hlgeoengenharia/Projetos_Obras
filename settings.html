@@ -303,9 +303,17 @@
                  <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Nome da Aba Atual</label>
                  <input type="text" id="active-tab-name" oninput="updateActiveTabName(this.value)" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white" />
                </div>
-               <button id="active-tab-primary-btn" onclick="setPrimaryTab()" class="w-full md:w-auto flex justify-center items-center gap-2 px-3 py-2 border border-amber-300 bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100 transition-colors text-sm font-medium">
-                 <span class="material-symbols-outlined text-[18px]">star</span> Definir como Principal
-               </button>
+               <div class="flex flex-wrap gap-2 w-full md:w-auto mt-2 md:mt-0">
+                 <button onclick="moveActiveTab(-1)" class="p-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-md hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors tooltip" title="Mover para Esquerda">
+                   <span class="material-symbols-outlined text-[18px]">arrow_back</span>
+                 </button>
+                 <button onclick="moveActiveTab(1)" class="p-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-md hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors tooltip" title="Mover para Direita">
+                   <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+                 </button>
+                 <button id="active-tab-primary-btn" onclick="setPrimaryTab()" class="flex-1 md:flex-none flex justify-center items-center gap-2 px-3 py-2 border border-amber-300 bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100 transition-colors text-sm font-medium">
+                   <span class="material-symbols-outlined text-[18px]">star</span> Definir como Principal
+                 </button>
+               </div>
              </div>
              <!-- Tab Type Settings -->
              <div class="w-full mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6">
@@ -798,6 +806,19 @@
           renderBuilderTabsOnly();
        }
     }
+    function moveActiveTab(direction) {
+       if (!activeBuilderTabId) return;
+       syncActiveTabFields();
+       const currentIndex = builderTabs.findIndex(t => t.id === activeBuilderTabId);
+       if (currentIndex === -1) return;
+       
+       const newIndex = currentIndex + direction;
+       if (newIndex >= 0 && newIndex < builderTabs.length) {
+          const [tab] = builderTabs.splice(currentIndex, 1);
+          builderTabs.splice(newIndex, 0, tab);
+          renderBuilderTabsOnly();
+       }
+    }
     function moveFieldToTab(fieldId, targetTabId) {
        if(activeBuilderTabId === targetTabId) return; // same tab
        
@@ -1014,6 +1035,10 @@
                 <option value="text" ${f.type === 'text' ? 'selected' : ''}>Texto Curto</option>
                 <option value="textarea" ${f.type === 'textarea' ? 'selected' : ''}>Texto Longo</option>
                 <option value="number" ${f.type === 'number' ? 'selected' : ''}>Número</option>
+                <option value="currency" ${f.type === 'currency' ? 'selected' : ''}>Moeda (Padrão: R$ 1.000,00)</option>
+                <option value="area_m2" ${f.type === 'area_m2' ? 'selected' : ''}>m² (Padrão: 10,00 m²)</option>
+                <option value="length_m" ${f.type === 'length_m' ? 'selected' : ''}>m (Padrão: 10,00 m)</option>
+                <option value="volume_m3" ${f.type === 'volume_m3' ? 'selected' : ''}>m³ (Padrão: 10,00 m³)</option>
                 <option value="date" ${f.type === 'date' ? 'selected' : ''}>Data</option>
                 <option value="current_date" ${f.type === 'current_date' ? 'selected' : ''}>Data atual</option>
                 <option value="current_user" ${f.type === 'current_user' ? 'selected' : ''}>Usuário atual</option>

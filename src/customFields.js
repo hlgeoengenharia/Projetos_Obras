@@ -106,11 +106,43 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
             return htmlStr;
         }
         
-        return `<div class="text-xs text-slate-700 dark:text-slate-300 break-words">${value || '<span class="text-slate-400 opacity-50 tracking-widest">---</span>'}</div>`;
+        // FORMATTED VIEW OUTPUTS
+        let formattedValue = value;
+        if (value && value !== '') {
+            // Smart parser: detects if value is BR format (1.000,50) or raw (720.62)
+            const parseLocalNumber = (v) => {
+                const s = String(v).trim();
+                if (s.includes(',')) {
+                    // Brazilian format: dots are thousands, comma is decimal
+                    return parseFloat(s.replace(/\./g, '').replace(',', '.'));
+                }
+                // International/raw format: dot is decimal
+                return parseFloat(s);
+            };
+            if (f.type === 'currency') {
+                const num = parseLocalNumber(value);
+                if (!isNaN(num)) formattedValue = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
+            } else if (f.type === 'area_m2') {
+                const num = parseLocalNumber(value);
+                if (!isNaN(num)) formattedValue = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num) + ' m²';
+            } else if (f.type === 'length_m') {
+                const num = parseLocalNumber(value);
+                if (!isNaN(num)) formattedValue = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num) + ' m';
+            } else if (f.type === 'volume_m3') {
+                const num = parseLocalNumber(value);
+                if (!isNaN(num)) formattedValue = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num) + ' m³';
+            }
+        }
+        
+        return `<div class="text-xs text-slate-700 dark:text-slate-300 break-words">${formattedValue || '<span class="text-slate-400 opacity-50 tracking-widest">---</span>'}</div>`;
     }
 
     // MODO EDIÇÃO
     let html = '';
+    
+    // Formatting script for input masking (money/numbers)
+    const onInputMaskScript = `oninput="let v = this.value.replace(/\\D/g,''); if(v.length > 0) { v = (parseInt(v, 10)/100).toFixed(2).replace('.', ','); v = v.replace(/(\\d)(?=(\\d{3})+(?!\\d))/g, '$1.'); this.value = v; } else { this.value = ''; }"`;
+
     if (f.type === 'photo' || f.type === 'attachment') {
         const isPhoto = f.type === 'photo';
         const icon = isPhoto ? 'photo_camera' : 'upload_file';
@@ -295,6 +327,28 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
             value = 'Usuário Logado';
         }
         html += `<input type="text" data-key="${f.id}" value="${value}" readonly class="feature-data-input w-full px-3 py-2 bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none text-slate-600 dark:text-slate-400 text-sm cursor-not-allowed font-medium">`;
+    } else if (f.type === 'currency' || f.type === 'area_m2' || f.type === 'length_m' || f.type === 'volume_m3') {
+        const unitMap = { currency: { prefix: 'R$', suffix: '' }, area_m2: { prefix: '', suffix: 'm²' }, length_m: { prefix: '', suffix: 'm' }, volume_m3: { prefix: '', suffix: 'm³' } };
+        const unit = unitMap[f.type];
+        // Format initial value for display in the input
+        let displayValue = value || '';
+        if (displayValue) {
+            const s = String(displayValue).trim();
+            let num;
+            if (s.includes(',')) {
+                num = parseFloat(s.replace(/\./g, '').replace(',', '.'));
+            } else {
+                num = parseFloat(s);
+            }
+            if (!isNaN(num)) {
+                displayValue = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
+            }
+        }
+        html += `<div class="flex items-center gap-0">`;
+        if (unit.prefix) html += `<span class="px-2.5 py-2 bg-slate-200 dark:bg-slate-700 border border-r-0 border-slate-300 dark:border-slate-600 rounded-l-lg text-sm font-bold text-slate-600 dark:text-slate-300">${unit.prefix}</span>`;
+        html += `<input type="text" data-key="${f.id}" value="${displayValue}" inputmode="decimal" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 ${unit.prefix && !unit.suffix ? 'rounded-r-lg' : (!unit.prefix && unit.suffix ? 'rounded-l-lg' : (unit.prefix && unit.suffix ? '' : 'rounded-lg'))} focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm text-right font-mono" ${onInputMaskScript} placeholder="0,00">`;
+        if (unit.suffix) html += `<span class="px-2.5 py-2 bg-slate-200 dark:bg-slate-700 border border-l-0 border-slate-300 dark:border-slate-600 rounded-r-lg text-sm font-bold text-slate-600 dark:text-slate-300">${unit.suffix}</span>`;
+        html += `</div>`;
     } else {
         html += `<input type="${f.type==='date'?'date':f.type==='number'?'number':'text'}" data-key="${f.id}" value="${value}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">`;
     }
