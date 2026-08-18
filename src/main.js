@@ -1533,6 +1533,139 @@ function closeGlobalImportModal() {
   pendingGlobalGeoJSON = null;
 }
 
+function findBestSelectOption(val, options) {
+  if (val === undefined || val === null) return '';
+  const strVal = String(val).trim();
+  if (strVal === '') return '';
+  
+  // 1. Try exact match
+  if (options.includes(strVal)) return strVal;
+  
+  // 2. Try case-insensitive and accent-insensitive and trim-sensitive match
+  const cleanStr = strVal.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+  
+  for (const opt of options) {
+      const cleanOpt = opt.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+      if (cleanStr === cleanOpt) {
+          return opt; // Returns the exact case option defined in the form list!
+      }
+  }
+  
+  // 3. Try substring/containment match (e.g. if option is "Jardim" and val is "Jardim Atlântico", or vice-versa)
+  for (const opt of options) {
+      const cleanOpt = opt.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+      if (cleanStr.includes(cleanOpt) || cleanOpt.includes(cleanStr)) {
+          return opt;
+      }
+  }
+  
+  // 4. Fallback: if we still can't find a match, just return the value as is.
+  return strVal;
+}
+
+function updateValueMappings() {
+    const valueMappingContainer = document.getElementById('value-mapping-container');
+    const valueMappingList = document.getElementById('value-mapping-list');
+    if (!valueMappingContainer || !valueMappingList) return;
+    
+    valueMappingList.innerHTML = '';
+    let hasSelectMappings = false;
+    
+    // Find all select fields in the selected template
+    const selectedFormId = document.getElementById('global-import-cadastro-type') ? document.getElementById('global-import-cadastro-type').value : '';
+    let formFields = [];
+    if (selectedFormId && typeof allForms !== 'undefined') {
+        const form = allForms.find(f => f.id === selectedFormId);
+        if (form && (form.schema || form.tabs)) {
+            (form.schema || form.tabs).forEach(tab => {
+                if (tab.fields) formFields.push(...tab.fields);
+            });
+        }
+    }
+    
+    // Get all current mappings
+    const selectElements = document.querySelectorAll('.property-rename-select');
+    selectElements.forEach(select => {
+        const originalProp = select.getAttribute('data-original');
+        const targetFieldId = select.value;
+        
+        // Find if targetFieldId is a select field
+        const field = formFields.find(f => f.id === targetFieldId);
+        if (field && field.type === 'select') {
+            hasSelectMappings = true;
+            
+            // Get all options for this select field
+            const opts = (typeof field.options === 'string') 
+                ? field.options.split(',').map(o => o.trim()).filter(o => o)
+                : (Array.isArray(field.options) ? field.options : []);
+                
+            // Find all unique values in the imported GeoJSON for originalProp
+            const uniqueValues = new Set();
+            if (pendingGlobalGeoJSON && pendingGlobalGeoJSON.features) {
+                pendingGlobalGeoJSON.features.forEach(f => {
+                    if (f.properties && f.properties[originalProp] !== undefined && f.properties[originalProp] !== null) {
+                        const trimmedVal = String(f.properties[originalProp]).trim();
+                        if (trimmedVal !== '') {
+                            uniqueValues.add(trimmedVal);
+                        }
+                    }
+                });
+            }
+            
+            if (uniqueValues.size > 0) {
+                const header = document.createElement('div');
+                header.className = 'text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mt-3 mb-1.5 border-t border-slate-100 dark:border-slate-800/50 pt-2';
+                header.textContent = `Valores de "${originalProp}" ➔ Opções de "${field.label}":`;
+                valueMappingList.appendChild(header);
+                
+                uniqueValues.forEach(val => {
+                    const row = document.createElement('div');
+                    row.className = 'flex items-center gap-2 mb-1.5';
+                    
+                    // Label showing the original value
+                    const originalLabel = document.createElement('span');
+                    originalLabel.className = 'w-1/2 text-sm text-slate-600 dark:text-slate-400 font-mono truncate text-right';
+                    originalLabel.title = val;
+                    originalLabel.textContent = val;
+                    
+                    const arrow = document.createElement('span');
+                    arrow.className = 'material-symbols-outlined text-slate-400 text-sm';
+                    arrow.textContent = 'arrow_forward';
+                    
+                    // Select element containing the dropdown options
+                    const selectMapping = document.createElement('select');
+                    selectMapping.className = 'flex-1 px-2 py-1 text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-1 focus:ring-primary dark:text-white value-mapping-select';
+                    selectMapping.setAttribute('data-original-prop', originalProp);
+                    selectMapping.setAttribute('data-original-value', val);
+                    selectMapping.setAttribute('data-target-field-id', targetFieldId);
+                    
+                    // Pre-match options using case-insensitive/fuzzy logic
+                    let bestMatchOption = findBestSelectOption(val, opts);
+                    
+                    let mappingOptionsHtml = `<option value="">-- Deixar em branco --</option>`;
+                    opts.forEach(opt => {
+                        const isSel = (opt === bestMatchOption) ? 'selected' : '';
+                        mappingOptionsHtml += `<option value="${opt}" ${isSel}>${opt}</option>`;
+                    });
+                    
+                    selectMapping.innerHTML = mappingOptionsHtml;
+                    
+                    row.appendChild(originalLabel);
+                    row.appendChild(arrow);
+                    row.appendChild(selectMapping);
+                    valueMappingList.appendChild(row);
+                });
+            }
+        }
+    });
+    
+    if (hasSelectMappings) {
+        valueMappingContainer.classList.remove('hidden');
+    } else {
+        valueMappingContainer.classList.add('hidden');
+    }
+}
+
 function renderImportFieldMapping() {
   if (!pendingGlobalGeoJSON) return;
   
@@ -1596,7 +1729,7 @@ function renderImportFieldMapping() {
            }
        });
        
-       mappingControl = `<select data-original="${prop}" class="flex-1 px-2 py-1 text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-1 focus:ring-primary dark:text-white property-rename-select">${options}</select>`;
+       mappingControl = `<select data-original="${prop}" onchange="updateValueMappings()" class="flex-1 px-2 py-1 text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-1 focus:ring-primary dark:text-white property-rename-select">${options}</select>`;
     } else {
         mappingControl = `<input type="text" list="standard-fields-list" data-original="${prop}" value="${prop}" class="flex-1 px-2 py-1 text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-1 focus:ring-primary dark:text-white property-rename-input">`;
     }
@@ -1628,6 +1761,9 @@ function renderImportFieldMapping() {
   } else {
       fieldsContainer.innerHTML = htmlContent;
   }
+  
+  // Update value mapping UI on load
+  updateValueMappings();
 }
 
 function confirmGlobalImport() {
@@ -1665,6 +1801,7 @@ function confirmGlobalImport() {
   const formId = document.getElementById('global-import-cadastro-type') ? document.getElementById('global-import-cadastro-type').value : '';
 
   let formFieldsMap = {};
+  let selectFieldOptionsMap = {};
   if (formId && typeof allForms !== 'undefined') {
       const form = allForms.find(f => f.id === formId);
       if (form) {
@@ -1675,12 +1812,30 @@ function confirmGlobalImport() {
                   if (tab.fields) {
                       tab.fields.forEach(field => {
                           formFieldsMap[field.id] = field.type;
+                          if (field.type === 'select' && field.options) {
+                              const opts = (typeof field.options === 'string')
+                                  ? field.options.split(',').map(o => o.trim()).filter(o => o)
+                                  : (Array.isArray(field.options) ? field.options : []);
+                              selectFieldOptionsMap[field.id] = opts;
+                          }
                       });
                   }
               });
           }
       }
   }
+
+  // Get selected option value mappings
+  const valueMappings = {};
+  document.querySelectorAll('.value-mapping-select').forEach(select => {
+      const targetFieldId = select.getAttribute('data-target-field-id');
+      const origVal = select.getAttribute('data-original-value');
+      const mappedVal = select.value;
+      if (!valueMappings[targetFieldId]) {
+          valueMappings[targetFieldId] = {};
+      }
+      valueMappings[targetFieldId][origVal] = mappedVal;
+  });
 
   pendingGlobalGeoJSON.features.forEach(f => {
     if (!f.properties) f.properties = {};
@@ -1705,6 +1860,16 @@ function confirmGlobalImport() {
             const fieldType = formFieldsMap[actualKey];
             if ((fieldType === 'cpfcnpj' || fieldType === 'ipf' || fieldType === 'insc_imob_cabedelo') && typeof val === 'string') {
                 val = val.replace(/\D/g, ''); // Extract only numbers
+            } else if (fieldType === 'select') {
+                const strVal = val !== undefined && val !== null ? String(val).trim() : '';
+                if (valueMappings[actualKey] && valueMappings[actualKey][strVal] !== undefined) {
+                    val = valueMappings[actualKey][strVal];
+                } else {
+                    const opts = selectFieldOptionsMap[actualKey];
+                    if (opts && opts.length > 0) {
+                        val = findBestSelectOption(strVal, opts);
+                    }
+                }
             } else if (fieldType === 'cep') {
                 let currentCep = { cep: "", logradouro: "", numero: "", bairro: "", cidade: "", uf: "", complemento: "" };
                 if (newProps[actualKey] && newProps[actualKey].startsWith('{')) {
