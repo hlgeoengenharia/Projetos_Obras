@@ -143,14 +143,13 @@ async function loadThemes() {
                       
                       if (insertedT && insertedT.length > 0 && t.features && t.features.length > 0) {
                           const newThemeId = insertedT[0].id;
-                          for (const f of t.features) {
-                              const { error: insertFErr } = await supabaseClient.from('feicoes').insert({
-                                  theme_id: newThemeId,
-                                  propriedades: f.properties,
-                                  geometria: f.geometry
-                              });
-                              if (insertFErr) console.error("Erro ao migrar feição:", insertFErr);
-                          }
+                          const payloads = t.features.map(f => ({
+                              theme_id: newThemeId,
+                              propriedades: f.properties,
+                              geometria: f.geometry
+                          }));
+                          const { error: insertFErr } = await supabaseClient.from('feicoes').insert(payloads);
+                          if (insertFErr) console.error("Erro ao migrar feições em lote:", insertFErr);
                       }
                   }
                   localStorage.setItem('constructive_themes_migrated_db', 'true');
