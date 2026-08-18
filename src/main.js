@@ -110,15 +110,98 @@ let geojsonLayer;
 let baseLayers = {};
 
 // --- DADOS E LOCALSTORAGE ---
-function loadThemes() {
-  const saved = localStorage.getItem('constructive_themes');
-  if (saved) {
-    themes = JSON.parse(saved);
+async function loadThemes() {
+  if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+      try {
+          const { data: dbTemas, error: errTemas } = await supabaseClient.from('temas').select('*');
+          const { data: dbFeicoes, error: errFeicoes } = await supabaseClient.from('feicoes').select('*');
+          
+          if (errTemas) console.error("Erro ao carregar temas:", errTemas);
+          if (errFeicoes) console.error("Erro ao carregar feições:", errFeicoes);
+
+          // Automatic migration check
+          const savedLocal = localStorage.getItem('constructive_themes');
+          const migrationFlag = localStorage.getItem('constructive_themes_migrated_db');
+          
+          if (savedLocal && !migrationFlag && dbTemas && dbTemas.length === 0) {
+              console.log("Iniciando migração automática para o Supabase...");
+              try {
+                  const localThemes = JSON.parse(savedLocal);
+                  for (const t of localThemes) {
+                      const { data: insertedT, error: insertTErr } = await supabaseClient.from('temas').insert({
+                          nome: t.name,
+                          cor: t.color || '#051125',
+                          icone: t.icon || 'map',
+                          tipo_geometria: t.geometryType || 'Polygon',
+                          tipo_cadastro: t.formId || 'padrao'
+                      }).select();
+                      
+                      if (insertTErr) {
+                          console.error("Erro ao migrar tema:", insertTErr);
+                          continue;
+                      }
+                      
+                      if (insertedT && insertedT.length > 0 && t.features && t.features.length > 0) {
+                          const newThemeId = insertedT[0].id;
+                          for (const f of t.features) {
+                              const { error: insertFErr } = await supabaseClient.from('feicoes').insert({
+                                  theme_id: newThemeId,
+                                  propriedades: f.properties,
+                                  geometria: f.geometry
+                              });
+                              if (insertFErr) console.error("Erro ao migrar feição:", insertFErr);
+                          }
+                      }
+                  }
+                  localStorage.setItem('constructive_themes_migrated_db', 'true');
+                  console.log("Migração concluída com sucesso!");
+                  return loadThemes();
+              } catch(e) {
+                  console.error("Erro durante a migração automática:", e);
+              }
+          }
+
+          themes = [];
+          if (dbTemas) {
+              dbTemas.forEach(t => {
+                  const theme = {
+                      id: t.id,
+                      name: t.nome,
+                      color: t.cor,
+                      icon: t.icone,
+                      geometryType: t.tipo_geometria,
+                      cadastroType: t.tipo_cadastro,
+                      formId: t.tipo_cadastro,
+                      disp1Active: false,
+                      disp2Active: false,
+                      features: []
+                  };
+                  if (dbFeicoes) {
+                      const fcs = dbFeicoes.filter(f => f.theme_id === t.id);
+                      fcs.forEach(fc => {
+                          theme.features.push({
+                              type: "Feature",
+                              properties: { ...fc.propriedades, id_banco: fc.id },
+                              geometry: fc.geometria
+                          });
+                      });
+                  }
+                  themes.push(theme);
+              });
+          }
+      } catch(e) {
+          console.error("Erro ao carregar dados do Supabase:", e);
+      }
   } else {
-    themes = [
-      { id: 'obras', name: 'Projetos / Obras', color: '#051125', features: [] }
-    ];
-    saveThemes();
+      const saved = localStorage.getItem('constructive_themes');
+      if (saved) {
+        themes = JSON.parse(saved);
+      } else {
+        themes = [
+          { id: 'obras', name: 'Projetos / Obras', color: '#051125', features: [] }
+        ];
+        saveThemes();
+      }
   }
 }
 
@@ -390,9 +473,10 @@ function initMap() {
     updateLabelsVisibility();
   });
 
-  loadThemes();
-  renderThemes();
-  loadAllFeaturesToMap();
+  loadThemes().then(() => {
+    renderThemes();
+    loadAllFeaturesToMap();
+  });
   
   // Call it once after everything is loaded
   setTimeout(updateLabelsVisibility, 500);
@@ -460,22 +544,66 @@ function loadAllFeaturesToMap() {
   }
 }
 
-function syncMapDataToThemes() {
-  const geojson = geojsonLayer.toGeoJSON();
-  
+async function syncMapDataToThemes() {
   themes.forEach(t => t.features = []);
   
-  if (geojson.features) {
-    geojson.features.forEach(f => {
+  const layers = geojsonLayer.getLayers();
+  
+  // Build lists of features for local themes
+  layers.forEach(layer => {
+    if (layer.feature) {
+      const f = layer.feature;
       const tId = f.properties.themeId;
       const theme = themes.find(t => t.id === tId);
       if (theme) {
         theme.features.push(f);
       }
-    });
+    }
+  });
+
+  if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+      const dbPayloads = layers.map(layer => {
+          if (!layer.feature) return null;
+          const f = layer.feature;
+          const tId = f.properties.themeId;
+          
+          const payload = {
+              theme_id: tId,
+              propriedades: f.properties,
+              geometria: f.geometry
+          };
+          if (f.properties.id_banco) {
+              payload.id = f.properties.id_banco;
+          }
+          return { layer, payload };
+      }).filter(item => item !== null);
+      
+      if (dbPayloads.length > 0) {
+          const payloads = dbPayloads.map(item => item.payload);
+          try {
+              const { data, error } = await supabaseClient.from('feicoes').upsert(payloads).select();
+              if (error) {
+                  console.error("Erro ao sincronizar feições em lote no Supabase:", error);
+              } else if (data && data.length > 0) {
+                  data.forEach(dbRow => {
+                      const tempId = dbRow.propriedades && dbRow.propriedades._tempId;
+                      if (tempId) {
+                          const match = dbPayloads.find(item => item.layer.feature.properties._tempId === tempId);
+                          if (match) {
+                              match.layer.feature.properties.id_banco = dbRow.id;
+                          }
+                      }
+                  });
+              }
+          } catch(e) {
+              console.error("Erro ao sincronizar feições em lote:", e);
+          }
+      }
   }
+
   saveThemes();
   renderThemes();
+  if (typeof renderFeatureTable === 'function') renderFeatureTable();
 }
 
 // --- INTERFACE DE TEMAS ---
@@ -1156,7 +1284,7 @@ function handleCustomIconUpload(input, previewContainerId, dataInputId, labelId)
 
 let themeBeingEdited = null;
 
-function saveNewTheme() {
+async function saveNewTheme() {
   const name = document.getElementById('theme-name-input').value;
   const color = document.getElementById('theme-color-input').value;
   const opacity = parseFloat(document.getElementById('theme-opacity-input').value);
@@ -1166,8 +1294,46 @@ function saveNewTheme() {
   const formId = document.getElementById('theme-cadastro-type') ? document.getElementById('theme-cadastro-type').value : '';
   if (!name) return;
 
-  const id = 'theme_' + Date.now();
-  themes.push({ id, name, color, opacity, geomType, icon, customIcon, formId, disp1Active: false, disp2Active: false, features: [] });
+  let id = 'theme_' + Date.now();
+  
+  if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+      try {
+          const { data, error } = await supabaseClient.from('temas').insert({
+              nome: name,
+              cor: color,
+              icone: icon || 'map',
+              tipo_geometria: geomType || 'Polygon',
+              tipo_cadastro: formId || 'padrao'
+          }).select();
+          
+          if (error) {
+              console.error("Erro ao criar tema no Supabase:", error);
+              alert("Erro ao criar tema no banco de dados: " + error.message);
+              return;
+          }
+          if (data && data.length > 0) {
+              id = data[0].id;
+          }
+      } catch(e) {
+          console.error("Erro ao conectar ao Supabase:", e);
+      }
+  }
+
+  themes.push({ 
+      id: id, 
+      name: name, 
+      color: color, 
+      opacity: opacity, 
+      geomType: geomType, 
+      icon: icon, 
+      customIcon: customIcon, 
+      formId: formId, 
+      cadastroType: formId, 
+      disp1Active: false, 
+      disp2Active: false, 
+      features: [] 
+  });
+  
   saveThemes();
   renderThemes();
   closeNewThemeModal();
@@ -1275,7 +1441,7 @@ function updateEditThemeFields() {
     if (mainTitleSelect) mainTitleSelect.innerHTML = optionsHtml;
 }
 
-function saveEditedTheme() {
+async function saveEditedTheme() {
   const name = document.getElementById('edit-theme-name-input').value;
   const color = document.getElementById('edit-theme-color-input').value;
   const opacity = parseFloat(document.getElementById('edit-theme-opacity-input').value);
@@ -1307,6 +1473,21 @@ function saveEditedTheme() {
     theme.disp1Active = disp1Active;
     theme.disp2Active = disp2Active;
     theme.formId = formId;
+    theme.cadastroType = formId;
+    
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        try {
+            await supabaseClient.from('temas').update({
+                nome: name,
+                cor: color,
+                icone: icon || 'map',
+                tipo_cadastro: formId || 'padrao'
+            }).eq('id', themeBeingEdited);
+        } catch(e) {
+            console.error("Erro ao atualizar tema no Supabase:", e);
+        }
+    }
+    
     saveThemes();
     loadAllFeaturesToMap(); // Update colors on the map
     renderThemes();
@@ -1314,9 +1495,21 @@ function saveEditedTheme() {
   closeEditThemeModal();
 }
 
-function deleteTheme(themeId) {
+async function deleteTheme(themeId) {
   if (!confirm("Tem certeza que deseja excluir esta camada e todos os seus dados?")) return;
   
+  if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+      try {
+          // Delete associated features first to respect RLS/Foreign Key integrity
+          await supabaseClient.from('feicoes').delete().eq('theme_id', themeId);
+          // Delete theme
+          const { error } = await supabaseClient.from('temas').delete().eq('id', themeId);
+          if (error) console.error("Erro ao deletar tema no Supabase:", error);
+      } catch(e) {
+          console.error("Erro ao deletar tema no Supabase:", e);
+      }
+  }
+
   themes = themes.filter(t => t.id !== themeId);
   saveThemes();
   loadAllFeaturesToMap();
@@ -1766,15 +1959,47 @@ function renderImportFieldMapping() {
   updateValueMappings();
 }
 
-function confirmGlobalImport() {
+async function confirmGlobalImport() {
   if (!pendingGlobalGeoJSON) return;
   
   let themeName = document.getElementById('global-import-theme-name').value.trim();
+  const formId = document.getElementById('global-import-cadastro-type') ? document.getElementById('global-import-cadastro-type').value : '';
+  
+  if (formId && typeof allForms !== 'undefined') {
+      const form = allForms.find(f => f.id === formId);
+      if (form) {
+          themeName = form.name || form.title || themeName;
+      }
+  }
+  if (!themeName) themeName = "Tema Importado";
   
   const colors = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"];
   const themeColor = colors[Math.floor(Math.random() * colors.length)];
   
-  const themeId = 'theme_' + Date.now();
+  let themeId = 'theme_' + Date.now();
+  
+  if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+      try {
+          const { data, error } = await supabaseClient.from('temas').insert({
+              nome: themeName,
+              cor: themeColor,
+              icone: 'map',
+              tipo_geometria: 'Polygon',
+              tipo_cadastro: formId || 'padrao'
+          }).select();
+          
+          if (error) {
+              console.error("Erro ao criar tema na importação:", error);
+              alert("Erro ao criar camada no banco de dados: " + error.message);
+              return;
+          }
+          if (data && data.length > 0) {
+              themeId = data[0].id;
+          }
+      } catch(e) {
+          console.error("Erro ao conectar ao Supabase na importação:", e);
+      }
+  }
   
   const mapping = {};
   const hiddenFields = [];
@@ -1798,7 +2023,7 @@ function confirmGlobalImport() {
   });
   
   const standardFields = ["Proprietário", "CPF/CNPJ", "Endereço", "Número do imóvel", "Bairro", "Loteamento", "Quadra", "Lote", "Município"];
-  const formId = document.getElementById('global-import-cadastro-type') ? document.getElementById('global-import-cadastro-type').value : '';
+  // formId is already declared at the top of this function
 
   let formFieldsMap = {};
   let selectFieldOptionsMap = {};
@@ -1839,8 +2064,9 @@ function confirmGlobalImport() {
 
   pendingGlobalGeoJSON.features.forEach(f => {
     if (!f.properties) f.properties = {};
+    if (!f.properties._tempId) f.properties._tempId = 'feat_' + Math.random().toString(36).substr(2, 9);
     
-    const newProps = { themeId: themeId };
+    const newProps = { themeId: themeId, _tempId: f.properties._tempId };
     
     // Process all properties
     Object.keys(f.properties).forEach(key => {
@@ -1918,11 +2144,11 @@ function confirmGlobalImport() {
   });
   
   if (!themeName) themeName = "Tema Importado";
-  themes.push({ id: themeId, name: themeName, color: themeColor, formId: formId, disp1Active: false, disp2Active: false, features: [] });
+  themes.push({ id: themeId, name: themeName, color: themeColor, formId: formId, cadastroType: formId, disp1Active: false, disp2Active: false, features: [] });
   
   const newLayer = L.geoJSON(pendingGlobalGeoJSON);
   geojsonLayer.addData(pendingGlobalGeoJSON);
-  syncMapDataToThemes();
+  await syncMapDataToThemes();
   
   const bounds = newLayer.getBounds();
   if (bounds.isValid()) {
@@ -2301,11 +2527,22 @@ function stopGeometryEditing() {
   toolbar.classList.remove('flex');
 }
 
-function deleteActiveFeature() {
+async function deleteActiveFeature() {
   if (!activeFeatureLayer) return;
   
   if (!confirm("Tem certeza que deseja excluir esta feição permanentemente?")) return;
   
+  if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+      const idBanco = activeFeatureLayer.feature && activeFeatureLayer.feature.properties && activeFeatureLayer.feature.properties.id_banco;
+      if (idBanco) {
+          try {
+              await supabaseClient.from('feicoes').delete().eq('id', idBanco);
+          } catch(e) {
+              console.error("Erro ao deletar feição no Supabase:", e);
+          }
+      }
+  }
+
   geojsonLayer.removeLayer(activeFeatureLayer);
   syncMapDataToThemes();
   closeFeatureInfoModal();
