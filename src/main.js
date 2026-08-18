@@ -4,7 +4,23 @@ async function fetchDynamicForm() {
         try {
             const { data, error } = await supabaseClient.from('forms').select('*').order('created_at', { ascending: false });
             if (data) {
-                allForms = data;
+                allForms = data.map(row => {
+                    let tabs = row.schema;
+                    let statsConfig = row.statsConfig;
+                    if (row.schema && !Array.isArray(row.schema) && row.schema.tabs) {
+                        tabs = row.schema.tabs;
+                        if (!statsConfig) statsConfig = row.schema.statsConfig;
+                    }
+                    return {
+                        id: row.id,
+                        title: row.title,
+                        name: row.title,
+                        schema: tabs,
+                        tabs: tabs,
+                        statsConfig: statsConfig,
+                        created_at: row.created_at
+                    };
+                });
                 console.log("All Forms loaded from Supabase:", allForms);
                 populateFormSelects();
             }

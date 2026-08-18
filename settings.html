@@ -844,11 +844,20 @@
         try {
           const { data, error } = await supabaseClient.from('forms').select('*').order('created_at', { ascending: false });
           if (!error && data && data.length > 0) {
-            forms = data.map(row => ({
-                id: row.id,
-                name: row.title,
-                tabs: row.schema
-            }));
+            forms = data.map(row => {
+                let tabs = row.schema;
+                let statsConfig = null;
+                if (row.schema && !Array.isArray(row.schema) && row.schema.tabs) {
+                    tabs = row.schema.tabs;
+                    statsConfig = row.schema.statsConfig;
+                }
+                return {
+                    id: row.id,
+                    name: row.title,
+                    tabs: tabs,
+                    statsConfig: statsConfig
+                };
+            });
             renderFormsList();
             return;
           }
@@ -911,7 +920,7 @@
               .upsert({ 
                 id: form.id, 
                 title: form.name, 
-                schema: form.tabs 
+                schema: { tabs: form.tabs, statsConfig: form.statsConfig } 
               });
             if (error) console.error('Erro ao salvar no Supabase:', error);
           }
