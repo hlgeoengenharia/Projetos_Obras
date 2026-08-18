@@ -134,14 +134,14 @@
       
       /* Glassmorphism for fixed headers / overlays */
       header, .drawer {
-        background: rgba(255, 255, 255, 0.85) !important;
+        background: rgba(255, 255, 255, 0.5) !important;
         backdrop-filter: blur(8px) !important;
         -webkit-backdrop-filter: blur(8px) !important;
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03) !important;
         border-bottom: 1px solid rgba(226, 232, 240, 0.8) !important;
       }
       html.dark header, html.dark .drawer {
-        background: rgba(15, 23, 42, 0.85) !important;
+        background: rgba(7, 11, 20, 0.5) !important;
         border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
       }
 
@@ -246,7 +246,7 @@
 </head>
 <body class="bg-surface text-on-surface overflow-hidden">
 <!-- TopAppBar -->
-<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-2 md:px-4 h-14 md:h-16 bg-white/85 dark:bg-[#0B1120]/75 backdrop-blur-md border-b border-white/20 dark:border-white/10 shadow-sm font-sans antialiased tracking-tight">
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-2 md:px-4 h-14 md:h-16 bg-white/50 dark:bg-[#070b14]/50 backdrop-blur-md border-b border-white/20 dark:border-white/10 shadow-sm font-sans antialiased tracking-tight">
 <div class="flex items-center gap-2 md:gap-4">
 <button class="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors rounded-full shrink-0" onclick="document.getElementById('side-drawer').classList.remove('-translate-x-[120%]'); document.getElementById('drawer-overlay').classList.remove('hidden')">
 <span class="material-symbols-outlined text-slate-900 dark:text-slate-50">menu</span>
@@ -278,7 +278,11 @@
 <!-- NavigationDrawer -->
 <aside class="fixed top-0 left-0 md:top-[4.5rem] md:left-4 z-[60] flex flex-col h-[100dvh] md:h-[calc(100vh-5.5rem)] w-full md:w-80 lg:w-96 bg-white/50 dark:bg-[#070b14]/50 backdrop-blur-md rounded-none md:rounded-2xl border-0 md:border border-slate-200/50 dark:border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-out -translate-x-[120%] overflow-hidden" id="side-drawer">
 <div class="p-0 border-b border-slate-200 dark:border-slate-800 flex items-center justify-center">
-    <button class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 group" title="Usuário Logado">
+    <a href="settings.html" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400">
+        <span class="material-symbols-outlined text-[22px]">settings</span>
+        <span class="text-[9px] font-medium tracking-wide uppercase">Ajustes</span>
+    </a>
+    <button class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 group border-l border-slate-200/50 dark:border-slate-800/50" title="Usuário Logado">
         <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuCc0RYeJ85EwHW4BJ4ZRmN9WYDAnOz5EFFNO3bx5XdbDIkNCRYBBysRNyY53k3kzDdU9seuTeFmYvMXtMDCL1UbpKvFNeY23l3z4U9FCZOYErFcRImNItGPpgG_W5bVuwtWn-6WMk8SDB99zq3Dt-MC71VCZyEVd4TqkBE32-OMGnSHpid3s70wq18nEDKvtj8p1j-2l4IrBibDsMAPK8QH6puGnFKJNt-aiAhAmbQzoqrnGeO6vWoOnEZLChi1lnkv29X777poaFA_" alt="Avatar" class="w-[22px] h-[22px] rounded-full border border-slate-300 dark:border-slate-600 group-hover:border-primary dark:group-hover:border-sky-400 transition-colors object-cover">
         <span class="text-[9px] font-medium tracking-wide uppercase">Perfil</span>
     </button>
@@ -290,10 +294,6 @@
         <span class="material-symbols-outlined text-[22px]">add_circle</span>
         <span class="text-[9px] font-medium tracking-wide uppercase">Nova</span>
     </button>
-    <a href="settings.html" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 border-l border-slate-200/50 dark:border-slate-800/50">
-        <span class="material-symbols-outlined text-[22px]">settings</span>
-        <span class="text-[9px] font-medium tracking-wide uppercase">Ajustes</span>
-    </a>
     <button onclick="document.getElementById('side-drawer').classList.add('-translate-x-[120%]'); document.getElementById('drawer-overlay').classList.add('hidden')" class="flex-1 h-16 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 border-l border-slate-200/50 dark:border-slate-800/50">
         <span class="material-symbols-outlined text-[22px]">close</span>
         <span class="text-[9px] font-medium tracking-wide uppercase">Fechar</span>

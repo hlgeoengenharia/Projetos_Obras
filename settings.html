@@ -125,16 +125,29 @@
       }
       
       /* Glassmorphism for fixed headers / overlays */
-      header, aside, .drawer, #side-drawer {
+      header, .drawer {
         background: rgba(255, 255, 255, 0.85) !important;
         backdrop-filter: blur(8px) !important;
         -webkit-backdrop-filter: blur(8px) !important;
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03) !important;
         border-bottom: 1px solid rgba(226, 232, 240, 0.8) !important;
       }
-      html.dark header, html.dark aside, html.dark .drawer, html.dark #side-drawer {
+      aside, #side-drawer {
+        background: rgba(255, 255, 255, 0.85) !important;
+        backdrop-filter: blur(8px) !important;
+        -webkit-backdrop-filter: blur(8px) !important;
+        box-shadow: 4px 0 15px rgba(0, 0, 0, 0.03) !important;
+        border-right: 1px solid rgba(226, 232, 240, 0.8) !important;
+        border-bottom: none !important;
+      }
+      html.dark header, html.dark .drawer {
         background: rgba(15, 23, 42, 0.85) !important;
         border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+      }
+      html.dark aside, html.dark #side-drawer {
+        background: rgba(15, 23, 42, 0.85) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+        border-bottom: none !important;
       }
 
       /* Inset shadow for active or input elements to create depth */
@@ -209,8 +222,22 @@
 <style>
   .tab-content { display: none; }
   .tab-content.active { display: block; }
-  .tab-btn.active { border-bottom-color: #051125; color: #051125; }
-  .dark .tab-btn.active { border-bottom-color: #d7e2ff; color: #d7e2ff; }
+  
+  .tab-btn {
+    transition: all 0.3s ease !important;
+  }
+  .tab-btn.active {
+    background-color: rgba(14, 165, 233, 0.15) !important;
+    color: #0ea5e9 !important;
+    border: 1px solid rgba(14, 165, 233, 0.25) !important;
+    box-shadow: 0 0 15px rgba(14, 165, 233, 0.2) !important;
+  }
+  html.dark .tab-btn.active {
+    background-color: rgba(56, 189, 248, 0.15) !important;
+    color: #38bdf8 !important;
+    border: 1px solid rgba(56, 189, 248, 0.3) !important;
+    box-shadow: 0 0 15px rgba(56, 189, 248, 0.2) !important;
+  }
 </style>
   <!-- Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -220,21 +247,30 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body class="bg-surface text-on-surface min-h-screen">
-<!-- TopAppBar -->
-<header class="fixed top-0 left-0 w-full z-50 flex items-center px-4 h-14 md:h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 font-sans antialiased tracking-tight">
-  <div class="flex items-center gap-4 mr-8">
-    <a href="index.html" class="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors rounded-full flex items-center justify-center">
-      <span class="material-symbols-outlined text-slate-900 dark:text-slate-50">arrow_back</span>
-    </a>
-  </div>
-  <div class="flex h-full gap-6">
-    <button class="tab-btn active h-full px-1 text-sm font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onclick="switchTab('geral', this)">Geral</button>
-    <button class="tab-btn h-full px-1 text-sm font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onclick="switchTab('cadastros', this)">Criar Cadastro</button>
-    <button class="tab-btn h-full px-1 text-sm font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onclick="switchTab('layout', this)">Layout</button>
-  </div>
-</header>
+<!-- TopAppBar Removed -->
 
-<main class="pt-20 md:pt-24 px-4 md:px-8 max-w-6xl mx-auto">
+<aside class="fixed top-0 left-0 h-screen w-24 bg-white/50 dark:bg-[#070b14]/50 backdrop-blur-md border-r border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden" id="side-drawer">
+  <div class="flex flex-col h-full items-center py-6 gap-4">
+      <a href="index.html" class="w-16 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 rounded-xl transition-all flex flex-col items-center justify-center gap-1 text-slate-900 dark:text-slate-50 mb-4 border border-transparent hover:border-slate-200 dark:hover:border-slate-700" title="Voltar ao Mapa">
+          <span class="material-symbols-outlined text-[28px]">menu</span>
+      </a>
+      
+      <button onclick="switchTab('geral', this)" class="tab-btn active w-20 h-20 hover:bg-slate-100 dark:hover:bg-slate-800/60 rounded-xl transition-all flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400" title="Geral">
+          <span class="material-symbols-outlined text-[24px]">tune</span>
+          <span class="text-[9px] uppercase tracking-wide">Geral</span>
+      </button>
+      <button onclick="switchTab('cadastros', this)" class="tab-btn w-20 h-20 hover:bg-slate-100 dark:hover:bg-slate-800/60 rounded-xl transition-all flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400" title="Cadastro">
+          <span class="material-symbols-outlined text-[24px]">assignment</span>
+          <span class="text-[9px] uppercase tracking-wide">Cadastro</span>
+      </button>
+      <button onclick="switchTab('layout', this)" class="tab-btn w-20 h-20 hover:bg-slate-100 dark:hover:bg-slate-800/60 rounded-xl transition-all flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400" title="Layout">
+          <span class="material-symbols-outlined text-[24px]">palette</span>
+          <span class="text-[9px] uppercase tracking-wide">Layout</span>
+      </button>
+  </div>
+</aside>
+
+<main class="pt-8 md:pt-10 px-4 md:px-8 max-w-6xl pl-28 md:pl-32 mx-auto">
 
   <!-- Tab Content: Geral -->
   <div id="geral" class="tab-content active">
@@ -250,14 +286,6 @@
             <option value="Escuro">Escuro</option>
             <option value="Automático">Automático</option>
           </select>
-        </div>
-        
-        <div class="pt-4 border-t border-slate-200 dark:border-slate-700">
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-2">
-            <span class="material-symbols-outlined text-amber-500 text-[18px]">smart_toy</span> Chave da API Gemini (IA)
-          </label>
-          <input type="password" id="gemini-api-key" placeholder="AIzaSy..." onchange="saveGeminiKey(this.value)" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm font-mono">
-          <p class="text-xs text-slate-500 mt-1">Sua chave fica salva apenas neste navegador. Necessária para a geração de estatísticas com IA.</p>
         </div>
       </div>
     </div>
@@ -1107,7 +1135,7 @@
               builderTabs.forEach(t => {
                   if(t.id !== activeTab.id) {
                       t.fields.forEach(f => {
-                          if(['text', 'number', 'select', 'cpfcnpj'].includes(f.type)) {
+                          if(['text', 'number', 'select', 'cpfcnpj', 'ipf', 'insc_imob_cabedelo'].includes(f.type)) {
                               let optsJson = (typeof f.options === 'string') ? f.options.split(',').map(o => o.trim()).filter(o => o).join('|') : '';
                               optionsHtml += `<option value="${f.id}" data-opts="${optsJson}">[${t.title}] ${f.label || 'Campo Sem Nome'}</option>`;
                           }
@@ -1461,6 +1489,8 @@
                 <option value="geolocation" ${f.type === 'geolocation' ? 'selected' : ''}>Geolocalização (Mapa)</option>
                 <option value="cep" ${f.type === 'cep' ? 'selected' : ''}>Endereço (Autocompletar via CEP)</option>
                 <option value="cpfcnpj" ${f.type === 'cpfcnpj' ? 'selected' : ''}>Documento (CPF / CNPJ)</option>
+                <option value="ipf" ${f.type === 'ipf' ? 'selected' : ''}>IPF</option>
+                <option value="insc_imob_cabedelo" ${f.type === 'insc_imob_cabedelo' ? 'selected' : ''}>Insc. Imob. Cabedelo</option>
                 <option value="hiperlink" ${f.type === 'hiperlink' ? 'selected' : ''}>Link Elegante (Título e URL)</option>
               </select>
             </div>

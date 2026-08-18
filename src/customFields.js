@@ -73,6 +73,20 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
                 formattedVal = cleanVal.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
             }
             return `<div class="text-xs font-mono text-slate-700 dark:text-slate-300 break-words">${formattedVal || '<span class="text-slate-400 opacity-50 tracking-widest">---</span>'}</div>`;
+        } else if (f.type === 'ipf') {
+            let cleanVal = (value || '').replace(/\D/g, '');
+            let formattedVal = value;
+            if (cleanVal.length === 21) {
+                formattedVal = cleanVal.replace(/(\d{1})(\d{7})(\d{2})(\d{4})(\d{1})(\d{2})(\d{4})/, "$1_$2-$3.$4.$5.$6.$7");
+            }
+            return `<div class="text-xs font-mono text-slate-700 dark:text-slate-300 break-words">${formattedVal || '<span class="text-slate-400 opacity-50 tracking-widest">---</span>'}</div>`;
+        } else if (f.type === 'insc_imob_cabedelo') {
+            let cleanVal = (value || '').replace(/\D/g, '');
+            let formattedVal = value;
+            if (cleanVal.length === 19) {
+                formattedVal = cleanVal.replace(/(\d{1})(\d{4})(\d{3})(\d{2})(\d{4})(\d{4})(\d{1})/, "$1.$2.$3.$4.$5.$6.$7");
+            }
+            return `<div class="text-xs font-mono text-slate-700 dark:text-slate-300 break-words">${formattedVal || '<span class="text-slate-400 opacity-50 tracking-widest">---</span>'}</div>`;
         } else if (f.type === 'cep') {
             let cepData = {};
             try { cepData = typeof value === 'string' && value.startsWith('{') ? JSON.parse(value) : {}; } catch(e){}
@@ -290,6 +304,18 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
           <div class="relative">
               <input type="text" data-key="${f.id}" id="cpfcnpj-input-${f.id}" value="${value}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white font-mono transition-colors pr-10" placeholder="000.000.000-00 ou 00.000.000/0000-00" maxlength="18" oninput="maskCpfCnpj(this)" onblur="validateCpfCnpj(this, '${f.id}')" />
               <span id="cpfcnpj-icon-${f.id}" class="material-symbols-outlined absolute right-3 top-2.5 text-green-500 hidden pointer-events-none">check_circle</span>
+          </div>
+        `;
+    } else if (f.type === 'ipf') {
+        html += `
+          <div class="relative">
+              <input type="text" data-key="${f.id}" id="ipf-input-${f.id}" value="${value}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white font-mono transition-colors pr-10" placeholder="1_0800973-41.2024.4.05.8200" maxlength="27" oninput="maskIpf(this)" />
+          </div>
+        `;
+    } else if (f.type === 'insc_imob_cabedelo') {
+        html += `
+          <div class="relative">
+              <input type="text" data-key="${f.id}" id="insc-imob-cabedelo-input-${f.id}" value="${value}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white font-mono transition-colors pr-10" placeholder="1.0004.028.04.0521.0039.8" maxlength="25" oninput="maskInscImobCabedelo(this)" />
           </div>
         `;
     } else if (f.type === 'cep') {
@@ -694,6 +720,64 @@ function maskCpfCnpj(input) {
     input.value = v;
 }
 
+function maskIpf(input) {
+    let v = input.value.replace(/\D/g, "");
+    if (v.length > 0) {
+        v = v.substring(0, 21);
+        let res = "";
+        res += v.substring(0, 1);
+        if (v.length > 1) {
+            res += "_" + v.substring(1, 8);
+        }
+        if (v.length > 8) {
+            res += "-" + v.substring(8, 10);
+        }
+        if (v.length > 10) {
+            res += "." + v.substring(10, 14);
+        }
+        if (v.length > 14) {
+            res += "." + v.substring(14, 15);
+        }
+        if (v.length > 15) {
+            res += "." + v.substring(15, 17);
+        }
+        if (v.length > 17) {
+            res += "." + v.substring(17, 21);
+        }
+        v = res;
+    }
+    input.value = v;
+}
+
+function maskInscImobCabedelo(input) {
+    let v = input.value.replace(/\D/g, "");
+    if (v.length > 0) {
+        v = v.substring(0, 19);
+        let res = "";
+        res += v.substring(0, 1);
+        if (v.length > 1) {
+            res += "." + v.substring(1, 5);
+        }
+        if (v.length > 5) {
+            res += "." + v.substring(5, 8);
+        }
+        if (v.length > 8) {
+            res += "." + v.substring(8, 10);
+        }
+        if (v.length > 10) {
+            res += "." + v.substring(10, 14);
+        }
+        if (v.length > 14) {
+            res += "." + v.substring(14, 18);
+        }
+        if (v.length > 18) {
+            res += "." + v.substring(18, 19);
+        }
+        v = res;
+    }
+    input.value = v;
+}
+
 function isValidCPF(cpf) {
     if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
     let sum = 0, rest;
@@ -789,6 +873,8 @@ window.fetchCepData = fetchCepData;
 window.updateCepHidden = updateCepHidden;
 window.maskCpfCnpj = maskCpfCnpj;
 window.validateCpfCnpj = validateCpfCnpj;
+window.maskIpf = maskIpf;
+window.maskInscImobCabedelo = maskInscImobCabedelo;
 window.updateGeolocation = updateGeolocation;
 
 
