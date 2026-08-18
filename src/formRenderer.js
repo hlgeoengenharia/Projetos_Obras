@@ -23,6 +23,7 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
     window.currentFormFeatureData = featureData;
     window.currentFormIsEditMode = isEditMode;
     window.currentFormIsPreview = options.isPreview || false;
+    window.currentFormEditTabId = options.editTabId || null;
     
     let html = '<div class="flex flex-col border-t border-slate-200 dark:border-slate-700">';
     
@@ -59,17 +60,37 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
                 <div id="acc-content-${tab.id}" class="accordion-content transition-all duration-300 ${isPrimary ? 'block p-2 sm:p-3 border-t border-slate-200 dark:border-slate-700' : 'hidden'}">
         `;
         
+        let isTabEditMode = false;
+        if (isEditMode) {
+            if (window.currentFormEditTabId) {
+                isTabEditMode = (tab.id === window.currentFormEditTabId);
+            } else {
+                isTabEditMode = true;
+            }
+        }
+        
+        // Render Edit button inside the tab if we are NOT in edit mode
+        if (!isEditMode) {
+            html += `
+            <div class="flex justify-center mb-4">
+                <button type="button" onclick="toggleFeatureEditMode('${tab.id}')" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto text-sm">
+                    <span class="material-symbols-outlined text-[18px]">edit</span>
+                    Editar esta aba
+                </button>
+            </div>`;
+        }
+
         if (tab.isMultiple) {
-            html += renderMultipleTab(tab, featureData, isEditMode);
+            html += renderMultipleTab(tab, featureData, isTabEditMode);
         } else {
             html += `<div class="flex flex-col gap-2">`;
             if (tab.fields && tab.fields.length > 0) {
                 tab.fields.forEach(f => {
                     const value = featureData[f.id] !== undefined ? featureData[f.id] : '';
-                    if (isEditMode) {
+                    if (isTabEditMode) {
                         html += `<div>
                             <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-0.5">${f.label}</label>
-                            ${window.generateFeatureInputHtml ? window.generateFeatureInputHtml(f, value, isEditMode) : ''}
+                            ${window.generateFeatureInputHtml ? window.generateFeatureInputHtml(f, value, true) : ''}
                         </div>`;
                     } else {
                         html += `
@@ -78,13 +99,25 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
                                 <span class="text-[10px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">${f.label}</span>
                             </div>
                             <div class="border border-dashed border-slate-300/50 dark:border-slate-600/50 rounded-md px-2 py-1 bg-slate-50/30 dark:bg-slate-900/10 min-h-[24px] flex flex-col justify-center">
-                                ${window.generateFeatureInputHtml ? window.generateFeatureInputHtml(f, value, isEditMode) : ''}
+                                ${window.generateFeatureInputHtml ? window.generateFeatureInputHtml(f, value, false) : ''}
                             </div>
                         </div>`;
                     }
                 });
             }
             html += `</div>`;
+        }
+        
+        if (isTabEditMode) {
+            html += `
+            <div class="mt-6 pt-4 border-t border-slate-200/50 dark:border-slate-700/50 flex flex-col-reverse sm:flex-row justify-end gap-3">
+                <button type="button" onclick="cancelFeatureEdit()" class="px-5 py-2.5 bg-slate-100/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-white/10 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition-colors shadow-sm w-full sm:w-auto text-sm">
+                    Cancelar
+                </button>
+                <button type="button" onclick="saveFeatureData()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto text-sm">
+                    <span class="material-symbols-outlined text-[18px]">save</span> Salvar
+                </button>
+            </div>`;
         }
         
         html += `
