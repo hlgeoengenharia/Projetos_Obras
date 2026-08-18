@@ -260,6 +260,9 @@
   <button class="w-9 h-9 md:w-10 md:h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-emerald-600 dark:text-emerald-400 tooltip tooltip-bottom" title="Ferramenta de Medição" onclick="toggleMeasurementPanel()">
     <span class="material-symbols-outlined text-[20px] md:text-[22px]">square_foot</span>
   </button>
+  <button class="w-9 h-9 md:w-10 md:h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-amber-500 dark:text-amber-400 tooltip tooltip-bottom" title="Google Street View" onclick="openStreetView()">
+    <span class="material-symbols-outlined text-[20px] md:text-[22px]">streetview</span>
+  </button>
   <div class="w-[1px] h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
   <button class="w-9 h-9 md:w-10 md:h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-slate-700 dark:text-slate-300 tooltip tooltip-bottom" title="Aumentar Zoom" onclick="zoomIn()">
     <span class="material-symbols-outlined text-[20px] md:text-[22px]">add</span>
@@ -624,13 +627,9 @@
     <div class="px-4 py-3 border-b border-slate-200/50 dark:border-white/10 flex justify-between items-center cursor-move" id="feature-info-header">
         <div id="feature-actions-container" class="flex items-center rounded-lg overflow-hidden border border-slate-300/50 dark:border-white/10 shadow-sm bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
 
-            <button onclick="editFeatureGeometry()" class="flex items-center justify-center gap-2 px-3 py-1.5 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-800 dark:text-slate-200 font-medium text-sm transition-all tooltip border-r border-slate-300/50 dark:border-white/10" title="Ajustar no Mapa">
+            <button onclick="editFeatureGeometry()" class="flex items-center justify-center gap-2 px-3 py-1.5 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-800 dark:text-slate-200 font-medium text-sm transition-all tooltip" title="Ajustar no Mapa">
                 <span class="material-symbols-outlined text-[18px]">edit_location_alt</span>
                 Ajustar Mapa
-            </button>
-            <button onclick="openStreetView()" class="flex items-center justify-center gap-2 px-3 py-1.5 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-800 dark:text-slate-200 font-medium text-sm transition-all tooltip" title="Abrir no Google Street View">
-                <span class="material-symbols-outlined text-[18px] text-amber-500">streetview</span>
-                Street View
             </button>
         </div>
         <div class="flex items-center rounded-lg overflow-hidden border border-slate-300/50 dark:border-white/10 shadow-sm ml-2 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
