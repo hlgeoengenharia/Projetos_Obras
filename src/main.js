@@ -24,6 +24,7 @@ async function fetchDynamicForm() {
                 console.log("All Forms loaded from Supabase:", allForms);
                 populateFormSelects();
                 if (typeof renderThemes === 'function') renderThemes();
+                if (typeof loadAllFeaturesToMap === 'function') loadAllFeaturesToMap();
             }
         } catch(e) { console.error(e); }
     } else {
@@ -32,6 +33,7 @@ async function fetchDynamicForm() {
             allForms = JSON.parse(saved);
             populateFormSelects();
             if (typeof renderThemes === 'function') renderThemes();
+            if (typeof loadAllFeaturesToMap === 'function') loadAllFeaturesToMap();
         }
     }
 }
@@ -1103,25 +1105,6 @@ function openStatsDashboard(themeId) {
         modal.classList.remove('hidden');
         renderStats(theme);
     }
-}
-
-function getThemeFieldLabel(theme, fieldId) {
-    if (!theme.formId || typeof allForms === 'undefined') return fieldId;
-    const form = allForms.find(f => f.id === theme.formId);
-    if (!form) return fieldId;
-    
-    let label = fieldId;
-    const schema = form.schema || form.tabs;
-    if (schema) {
-        schema.forEach(tab => {
-            if (tab.fields) {
-                tab.fields.forEach(f => {
-                    if (f.id === fieldId) label = f.label;
-                });
-            }
-        });
-    }
-    return label;
 }
 
 function filterThemeFeatures(themeId) {
