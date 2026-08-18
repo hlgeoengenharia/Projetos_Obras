@@ -23,6 +23,7 @@ async function fetchDynamicForm() {
                 });
                 console.log("All Forms loaded from Supabase:", allForms);
                 populateFormSelects();
+                if (typeof renderThemes === 'function') renderThemes();
             }
         } catch(e) { console.error(e); }
     } else {
@@ -30,6 +31,7 @@ async function fetchDynamicForm() {
         if (saved) {
             allForms = JSON.parse(saved);
             populateFormSelects();
+            if (typeof renderThemes === 'function') renderThemes();
         }
     }
 }
