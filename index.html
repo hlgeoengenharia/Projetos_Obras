@@ -133,14 +133,14 @@
       }
       
       /* Glassmorphism for fixed headers / overlays */
-      header, aside, .drawer, #side-drawer {
+      header, .drawer {
         background: rgba(255, 255, 255, 0.85) !important;
         backdrop-filter: blur(8px) !important;
         -webkit-backdrop-filter: blur(8px) !important;
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03) !important;
         border-bottom: 1px solid rgba(226, 232, 240, 0.8) !important;
       }
-      html.dark header, html.dark aside, html.dark .drawer, html.dark #side-drawer {
+      html.dark header, html.dark .drawer {
         background: rgba(15, 23, 42, 0.85) !important;
         border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
       }
@@ -276,7 +276,7 @@
 <!-- NavigationDrawer Overlay -->
 <div class="fixed inset-0 bg-black/50 z-[55] hidden" id="drawer-overlay" onclick="this.classList.add('hidden'); document.getElementById('side-drawer').classList.add('-translate-x-[120%]')"></div>
 <!-- NavigationDrawer -->
-<aside class="fixed top-0 left-0 md:top-[4.5rem] md:left-4 z-[60] flex flex-col h-[100dvh] md:h-[calc(100vh-5.5rem)] w-full md:w-80 lg:w-96 bg-white/95 md:bg-white/85 dark:bg-[#0B1120]/95 md:dark:bg-[#0B1120]/75 backdrop-blur-2xl rounded-none md:rounded-2xl border-0 md:border border-slate-200/50 dark:border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-out -translate-x-[120%] overflow-hidden" id="side-drawer">
+<aside class="fixed top-0 left-0 md:top-[4.5rem] md:left-4 z-[60] flex flex-col h-[100dvh] md:h-[calc(100vh-5.5rem)] w-full md:w-80 lg:w-96 bg-white/50 dark:bg-[#070b14]/50 backdrop-blur-md rounded-none md:rounded-2xl border-0 md:border border-slate-200/50 dark:border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-out -translate-x-[120%] overflow-hidden" id="side-drawer">
 <div class="p-0 border-b border-slate-200 dark:border-slate-800 flex items-center justify-center">
     <button class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 group" title="Usuário Logado">
         <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuCc0RYeJ85EwHW4BJ4ZRmN9WYDAnOz5EFFNO3bx5XdbDIkNCRYBBysRNyY53k3kzDdU9seuTeFmYvMXtMDCL1UbpKvFNeY23l3z4U9FCZOYErFcRImNItGPpgG_W5bVuwtWn-6WMk8SDB99zq3Dt-MC71VCZyEVd4TqkBE32-OMGnSHpid3s70wq18nEDKvtj8p1j-2l4IrBibDsMAPK8QH6puGnFKJNt-aiAhAmbQzoqrnGeO6vWoOnEZLChi1lnkv29X777poaFA_" alt="Avatar" class="w-[22px] h-[22px] rounded-full border border-slate-300 dark:border-slate-600 group-hover:border-primary dark:group-hover:border-sky-400 transition-colors object-cover">
@@ -310,15 +310,30 @@
 <main class="relative w-full h-[calc(100vh-3.5rem)] md:h-screen pt-14 md:pt-16 pb-14 md:pb-0">
 <!-- Google Map -->
 <div id="map" class="absolute inset-0 z-0"></div>
+
+<!-- Print Viewfinder (A4 Aspect Ratio) -->
+<div id="print-viewfinder" class="pointer-events-none absolute inset-0 z-[1000] hidden items-center justify-center bg-black/60 transition-opacity opacity-0" style="margin-top: 3.5rem;">
+  <div style="aspect-ratio: 1 / 1.414; height: 85%;" class="border-2 border-dashed border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] relative overflow-hidden ring-4 ring-primary ring-offset-2 ring-offset-black/50">
+      <div class="absolute top-2 left-2 text-white font-black text-xs uppercase tracking-widest drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] px-2 py-1 bg-black/40 rounded-lg">Área de Impressão (A4)</div>
+      <div class="absolute inset-0 shadow-[inset_0_0_50px_rgba(0,0,0,0.8)]"></div>
+      <div class="absolute inset-0 flex items-center justify-center opacity-30">
+          <span class="material-symbols-outlined text-[100px] text-white">crop_free</span>
+      </div>
+  </div>
+</div>
 <!-- Floating Map Controls Removed (Moved to TopAppBar) -->
 </main>
 
 <!-- Measurement Panel -->
-<div id="measurement-panel" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] hidden flex flex-col gap-3 w-[90%] max-w-sm bg-white/90 dark:bg-[#0B1120]/90 backdrop-blur-xl rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.5)] border border-slate-200/50 dark:border-white/10 p-4 transition-all duration-300">
+<div id="measurement-panel" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[1001] hidden flex flex-col gap-3 w-[90%] max-w-sm bg-white/90 dark:bg-[#0B1120]/90 backdrop-blur-xl rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.5)] border border-slate-200/50 dark:border-white/10 p-4 transition-all duration-300">
     <!-- Header / Type Selection -->
-    <div class="flex items-center justify-between border-b border-slate-200/50 dark:border-white/10 pb-3">
-        <h3 class="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2"><span class="material-symbols-outlined text-emerald-500">square_foot</span> Medição</h3>
+    <div class="flex items-center justify-between border-b border-slate-200/50 dark:border-white/10 pb-3 cursor-move" id="measurement-panel-header">
+        <h3 class="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2 pointer-events-none"><span class="material-symbols-outlined text-emerald-500">square_foot</span> Medição</h3>
         <div class="flex gap-1" id="measurement-tools">
+            <button id="btn-toggle-viewfinder" class="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors text-slate-600 dark:text-slate-300 tooltip" title="Enquadrar Impressão A4" onclick="togglePrintViewfinder()">
+                <span class="material-symbols-outlined text-[18px]">crop_free</span>
+            </button>
+            <div class="w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
             <button class="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors text-slate-600 dark:text-slate-300 tooltip" title="Ponto" onclick="startMeasurementDraw('Marker')">
                 <span class="material-symbols-outlined text-[18px]">location_on</span>
             </button>
@@ -604,9 +619,9 @@
 </div>
 
 <!-- Professional Feature Info Panel (Floating & Glassmorphism) -->
-<div id="feature-info-modal" class="fixed inset-0 z-[100] bg-transparent pointer-events-none hidden flex justify-end p-4 sm:p-6 pt-20 sm:pt-20">
-  <div class="bg-white/85 dark:bg-[#0B1120]/75 backdrop-blur-2xl rounded-2xl border border-slate-200/50 dark:border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.5)] w-full max-w-sm sm:max-w-md h-full flex flex-col overflow-hidden pointer-events-auto">
-    <div class="px-4 py-3 border-b border-slate-200/50 dark:border-white/10 flex justify-between items-center">
+<div id="feature-info-modal" class="z-[100] bg-transparent pointer-events-none hidden">
+  <div id="feature-info-card" class="fixed top-[4.5rem] md:top-[5rem] right-4 md:right-6 bottom-4 bg-white/85 dark:bg-[#0B1120]/75 backdrop-blur-2xl rounded-2xl border border-slate-200/50 dark:border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.5)] w-[90%] max-w-sm sm:max-w-md flex flex-col overflow-hidden pointer-events-auto transition-transform duration-300">
+    <div class="px-4 py-3 border-b border-slate-200/50 dark:border-white/10 flex justify-between items-center cursor-move" id="feature-info-header">
         <div id="feature-actions-container" class="flex items-center rounded-lg overflow-hidden border border-slate-300/50 dark:border-white/10 shadow-sm bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
             <button onclick="toggleFeatureEditMode()" class="flex items-center justify-center gap-2 px-3 py-1.5 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-800 dark:text-slate-200 font-medium text-sm transition-all border-r border-slate-300/50 dark:border-white/10">
                 <span class="material-symbols-outlined text-[18px]">edit_document</span>
@@ -620,6 +635,9 @@
         <div class="flex items-center rounded-lg overflow-hidden border border-slate-300/50 dark:border-white/10 shadow-sm ml-2 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
             <button onclick="deleteActiveFeature()" class="p-1.5 px-2 hover:bg-red-50/50 active:bg-red-100/50 dark:hover:bg-red-900/40 dark:active:bg-red-900/60 text-red-500 transition-all border-r border-slate-300/50 dark:border-white/10 tooltip" title="Excluir Feição">
                 <span class="material-symbols-outlined text-[18px]">delete</span>
+            </button>
+            <button onclick="toggleFeatureInfoFullscreen()" id="btn-feature-fullscreen" class="p-1.5 px-2 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-500 dark:text-slate-400 transition-all border-r border-slate-300/50 dark:border-white/10 tooltip" title="Expandir Tela">
+                <span class="material-symbols-outlined text-[18px]">open_in_full</span>
             </button>
             <button onclick="closeFeatureInfoModal()" class="p-1.5 px-2 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-500 dark:text-slate-400 transition-all tooltip" title="Fechar">
                 <span class="material-symbols-outlined">close</span>
@@ -681,6 +699,14 @@
 
 <input type="file" id="geojson-upload-input" accept=".geojson,.json" class="hidden">
 <input type="file" id="global-geojson-upload" accept=".geojson,.json" class="hidden">
+
+<!-- Stats Dashboard Modal (Floating Side Panel) -->
+<div id="stats-dashboard-modal" style="top: 80px; right: 20px; left: auto; bottom: auto;" class="fixed w-96 md:w-[450px] z-[120] transform scale-95 opacity-0 translate-y-[-20px] transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] pointer-events-none flex flex-col justify-center items-end">
+    <!-- Content (Charts) -->
+    <div id="stats-dashboard-content" class="w-full pointer-events-auto">
+        <!-- Charts will be generated here -->
+    </div>
+</div>
 
 
 <!-- Visits Modal -->
@@ -756,6 +782,7 @@
 <script src="https://unpkg.com/@turf/turf/turf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="src/formRenderer.js"></script>
 <script src="src/customFields.js"></script>
 <script src="src/tableJoin.js"></script>

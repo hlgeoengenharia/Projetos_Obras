@@ -104,6 +104,28 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
                 return `<div class="text-xs text-slate-700 dark:text-slate-300 break-words">${value}</div>`;
             }
             return htmlStr;
+        } else if (f.type === 'hiperlink') {
+            let linkData = {};
+            try { linkData = typeof value === 'string' && value.startsWith('{') ? JSON.parse(value) : { url: value }; } catch(e){ linkData = { url: value }; }
+            
+            if (!linkData.url || linkData.url.trim() === '') {
+                return `<div class="text-xs text-slate-700 dark:text-slate-300 break-words"><span class="text-slate-400 opacity-50 tracking-widest">---</span></div>`;
+            }
+            
+            const title = linkData.title && linkData.title.trim() !== '' ? linkData.title : linkData.url;
+            let finalUrl = linkData.url.trim();
+            if (!/^https?:\/\//i.test(finalUrl)) {
+                finalUrl = 'https://' + finalUrl;
+            }
+            
+            return `
+            <div class="flex flex-col gap-1 w-full overflow-hidden bg-blue-50/50 dark:bg-blue-900/10 p-2 rounded-lg border border-blue-100 dark:border-blue-900/30">
+                <a href="${finalUrl}" target="_blank" title="Abrir link" class="font-bold text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline flex items-center gap-1.5 break-words transition-colors">
+                    <span class="material-symbols-outlined text-[16px] shrink-0">link</span>
+                    <span class="truncate">${title}</span>
+                </a>
+                ${linkData.title && linkData.title.trim() !== '' ? `<div class="text-[10px] text-slate-500 truncate ml-5 opacity-70" title="${linkData.url}">${linkData.url}</div>` : ''}
+            </div>`;
         }
         
         // FORMATTED VIEW OUTPUTS
@@ -163,6 +185,8 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
                         const leftIconActive = isPhoto 
                             ? `<div class="w-14 h-14 rounded-xl bg-slate-100 dark:bg-slate-700 shrink-0 overflow-hidden border border-slate-200 dark:border-slate-600 cursor-pointer" onclick="window.open('${url}', '_blank')"><img src="${url}" class="w-full h-full object-cover hover:scale-110 transition-transform duration-300" /></div>`
                             : '';
+
+                        const leftIconDeleted = `<div class="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center shrink-0 border border-red-200 dark:border-red-800 text-red-500"><span class="material-symbols-outlined text-[20px]">delete_forever</span></div>`;
 
                         if (file.deleted) {
                             const delDate = file.deletedAt ? new Date(file.deletedAt).toLocaleString('pt-BR') : '';
@@ -349,6 +373,29 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
         html += `<input type="text" data-key="${f.id}" value="${displayValue}" inputmode="decimal" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 ${unit.prefix && !unit.suffix ? 'rounded-r-lg' : (!unit.prefix && unit.suffix ? 'rounded-l-lg' : (unit.prefix && unit.suffix ? '' : 'rounded-lg'))} focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm text-right font-mono" ${onInputMaskScript} placeholder="0,00">`;
         if (unit.suffix) html += `<span class="px-2.5 py-2 bg-slate-200 dark:bg-slate-700 border border-l-0 border-slate-300 dark:border-slate-600 rounded-r-lg text-sm font-bold text-slate-600 dark:text-slate-300">${unit.suffix}</span>`;
         html += `</div>`;
+    } else if (f.type === 'hiperlink') {
+        let linkData = { title: '', url: '' };
+        try { 
+            linkData = typeof value === 'string' && value.startsWith('{') ? JSON.parse(value) : { url: value || '', title: '' }; 
+        } catch(e){}
+        
+        html += `
+        <div class="flex flex-col gap-2">
+            <input type="text" placeholder="Título (Ex: Autor, Dono do Arquivo)" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm" value="${linkData.title || ''}" onchange="updateHiperlinkData('${f.id}')">
+            <input type="url" placeholder="URL (Ex: https://drive.google.com/...)" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm" value="${linkData.url || ''}" onchange="updateHiperlinkData('${f.id}')">
+            <input type="hidden" data-key="${f.id}" id="input-hiperlink-${f.id}" class="feature-data-input" value="${value ? value.replace(/"/g, '&quot;') : ''}">
+        </div>
+        `;
+    } else if (f.type === 'select') {
+        const optionsList = (f.options || '').split(',').map(o => o.trim()).filter(o => o !== '');
+        html += `
+        <div class="relative">
+            <select data-key="${f.id}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm appearance-none cursor-pointer">
+                <option value="">Selecione...</option>
+                ${optionsList.map(opt => `<option value="${opt}" ${value === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+            </select>
+            <span class="material-symbols-outlined absolute right-3 top-2.5 text-slate-400 pointer-events-none">expand_more</span>
+        </div>`;
     } else {
         html += `<input type="${f.type==='date'?'date':f.type==='number'?'number':'text'}" data-key="${f.id}" value="${value}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">`;
     }
@@ -827,4 +874,11 @@ window.editFileTitlePrompt = function(fieldId, fileUrl) {
             }
         }
     }
+};
+
+window.updateHiperlinkData = function(fieldId) {
+    const inputs = document.querySelectorAll('#input-hiperlink-' + fieldId)[0].parentElement.querySelectorAll('input[type="text"], input[type="url"]');
+    const title = inputs[0].value.trim();
+    const url = inputs[1].value.trim();
+    document.getElementById('input-hiperlink-' + fieldId).value = JSON.stringify({ title, url });
 };

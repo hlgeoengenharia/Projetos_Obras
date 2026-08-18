@@ -1,5 +1,25 @@
 let measurementLayerGroup = null;
 let currentMeasurementMode = null;
+window.isMeasurementActive = false;
+window.isMeasurementSnappingEnabled = true;
+
+window.toggleMeasurementSnapping = function() {
+    window.isMeasurementSnappingEnabled = !window.isMeasurementSnappingEnabled;
+    const btn = document.getElementById('btn-measure-snap');
+    if (window.isMeasurementSnappingEnabled) {
+        btn.classList.add('text-emerald-600', 'dark:text-emerald-400');
+        btn.classList.remove('text-slate-600', 'dark:text-slate-300');
+        btn.title = "Aderência Ativada";
+    } else {
+        btn.classList.remove('text-emerald-600', 'dark:text-emerald-400');
+        btn.classList.add('text-slate-600', 'dark:text-slate-300');
+        btn.title = "Aderência Desativada";
+    }
+    
+    if (currentMeasurementMode && map && map.pm) {
+        map.pm.setGlobalOptions({ snappable: window.isMeasurementSnappingEnabled });
+    }
+};
 
 function toggleMeasurementPanel() {
     const panel = document.getElementById('measurement-panel');
@@ -9,9 +29,38 @@ function toggleMeasurementPanel() {
         if (!measurementLayerGroup) {
             measurementLayerGroup = L.featureGroup().addTo(map);
         }
+        window.isMeasurementActive = true;
+        
+        // Initialize drag if not done yet
+        if (!window.isMeasurementDragInitialized) {
+            initMeasurementPanelDrag();
+            window.isMeasurementDragInitialized = true;
+        }
     } else {
         // Close
         closeMeasurementPanel();
+    }
+}
+
+window.togglePrintViewfinder = function() {
+    const viewfinder = document.getElementById('print-viewfinder');
+    const btn = document.getElementById('btn-toggle-viewfinder');
+    if (!viewfinder || !btn) return;
+    
+    if (viewfinder.classList.contains('hidden')) {
+        viewfinder.classList.remove('hidden');
+        viewfinder.classList.add('flex');
+        setTimeout(() => viewfinder.classList.remove('opacity-0'), 10);
+        btn.classList.add('bg-primary/20', 'text-primary');
+        btn.classList.remove('text-slate-600', 'dark:text-slate-300');
+    } else {
+        viewfinder.classList.add('opacity-0');
+        setTimeout(() => {
+            viewfinder.classList.add('hidden');
+            viewfinder.classList.remove('flex');
+        }, 300);
+        btn.classList.remove('bg-primary/20', 'text-primary');
+        btn.classList.add('text-slate-600', 'dark:text-slate-300');
     }
 }
 
@@ -22,6 +71,13 @@ function closeMeasurementPanel() {
         measurementLayerGroup.clearLayers();
     }
     resetMeasurementResults();
+    window.isMeasurementActive = false;
+    
+    // Hide Print Viewfinder overlay safely
+    const viewfinder = document.getElementById('print-viewfinder');
+    if (viewfinder && !viewfinder.classList.contains('hidden')) {
+        window.togglePrintViewfinder();
+    }
 }
 
 function resetMeasurementResults() {
@@ -36,6 +92,69 @@ function stopMeasurementDraw() {
         map.pm.disableDraw();
     }
     currentMeasurementMode = null;
+    
+    // Enable other map interactions
+    document.getElementById('map').style.cursor = '';
+}
+
+// --- DRAG LOGIC FOR MEASUREMENT PANEL ---
+let isDraggingMeasurement = false;
+let dragStartX, dragStartY;
+let panelStartLeft, panelStartTop;
+
+function initMeasurementPanelDrag() {
+    const header = document.getElementById('measurement-panel-header');
+    const panel = document.getElementById('measurement-panel');
+    if (!header || !panel) return;
+
+    header.addEventListener('mousedown', (e) => {
+        if (e.target.tagName.toLowerCase() === 'button' || e.target.closest('button')) return;
+        
+        isDraggingMeasurement = true;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        
+        // Convert panel positioning to absolute fixed pixels based on current screen position
+        const rect = panel.getBoundingClientRect();
+        
+        // Remove Tailwind centering classes
+        panel.classList.remove('bottom-6', 'left-1/2', '-translate-x-1/2');
+        
+        // Apply exact pixel coordinates
+        panel.style.bottom = 'auto';
+        panel.style.right = 'auto';
+        panel.style.left = rect.left + 'px';
+        panel.style.top = rect.top + 'px';
+        
+        panelStartLeft = rect.left;
+        panelStartTop = rect.top;
+        
+        // Disable transitions for smooth dragging
+        panel.style.transition = 'none';
+        
+        header.style.cursor = 'grabbing';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDraggingMeasurement) return;
+        const dx = e.clientX - dragStartX;
+        const dy = e.clientY - dragStartY;
+        panel.style.left = (panelStartLeft + dx) + 'px';
+        panel.style.top = (panelStartTop + dy) + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isDraggingMeasurement) {
+            isDraggingMeasurement = false;
+            header.style.cursor = 'move';
+            // Restore transitions
+            panel.style.transition = '';
+        }
+    });
+}
+
+function formatArea(sqMeters) {
+    return (sqMeters / 10000).toFixed(4) + ' ha';
 }
 
 function startMeasurementDraw(shape) {
@@ -53,7 +172,7 @@ function startMeasurementDraw(shape) {
     document.getElementById('measurement-results').innerHTML = '<span class="text-emerald-500 font-bold animate-pulse mt-2">Desenhe no mapa...</span>';
     
     map.pm.enableDraw(shape, {
-        snappable: true,
+        snappable: window.isMeasurementSnappingEnabled,
         snapDistance: 20,
         hintlineStyle: { color: '#10b981', dashArray: '5,5' },
         templineStyle: { color: '#10b981' },
@@ -185,36 +304,187 @@ function saveMeasurementPDF() {
     btn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span> Gerando...';
     
     setTimeout(() => {
-        html2canvas(document.body, {
+        // Step 1: Capture Map Container
+        const mapElement = document.getElementById('map');
+        html2canvas(mapElement, {
             useCORS: true,
             allowTaint: true
-        }).then(canvas => {
-            const imgData = canvas.toDataURL('image/jpeg', 1.0);
+        }).then(mapCanvas => {
+            const mapImgData = mapCanvas.toDataURL('image/jpeg', 1.0);
             
-            const { jsPDF } = window.jspdf;
+            // Step 2: Build Virtual A4 Paper (2480x3508)
+            const a4 = document.createElement('div');
+            a4.style.position = 'absolute';
+            a4.style.left = '-9999px';
+            a4.style.top = '0';
+            a4.style.width = '2480px';
+            a4.style.height = '3508px';
+            a4.style.backgroundColor = '#ffffff';
+            a4.style.overflow = 'hidden';
+            a4.style.zIndex = '-1000';
+            document.body.appendChild(a4);
+
+            // Load Layout Settings
+            const savedSettings = localStorage.getItem('layout_settings');
+            let settings = {
+                marginTop: 20, marginBottom: 20, marginLeft: 20, marginRight: 20,
+                texts: []
+            };
+            if (savedSettings) {
+                try { settings = JSON.parse(savedSettings); } catch(e) {}
+            }
             
-            // Determine orientation based on canvas dimensions
-            const orientation = canvas.width > canvas.height ? 'l' : 'p';
-            const pdf = new jsPDF(orientation, 'mm', 'a4');
+            // Background Header
+            if (settings.headerImg && settings.headerImg.startsWith('data:image')) {
+                const hImg = document.createElement('img');
+                hImg.src = settings.headerImg;
+                hImg.style.position = 'absolute';
+                hImg.style.top = '0';
+                hImg.style.left = '0';
+                hImg.style.width = '100%';
+                a4.appendChild(hImg);
+            }
+
+            // Background Footer
+            if (settings.footerImg && settings.footerImg.startsWith('data:image')) {
+                const fImg = document.createElement('img');
+                fImg.src = settings.footerImg;
+                fImg.style.position = 'absolute';
+                fImg.style.bottom = '0';
+                fImg.style.left = '0';
+                fImg.style.width = '100%';
+                a4.appendChild(fImg);
+            }
             
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
+            // Margins px
+            const mt = (settings.marginTop || 20) * 11.81;
+            const mb = (settings.marginBottom || 20) * 11.81;
+            const ml = (settings.marginLeft || 20) * 11.81;
+            const mr = (settings.marginRight || 20) * 11.81;
+
+            // Map Image Area
+            const mapArea = document.createElement('div');
+            mapArea.style.position = 'absolute';
+            mapArea.style.top = mt + 'px';
+            mapArea.style.bottom = mb + 'px';
+            mapArea.style.left = ml + 'px';
+            mapArea.style.right = mr + 'px';
+            mapArea.style.border = '2px solid #ccc';
+            mapArea.style.boxSizing = 'border-box';
+            mapArea.style.overflow = 'hidden';
             
-            // Scale image to fit PDF page
-            const ratio = Math.min(pdfWidth / canvas.width, pdfHeight / canvas.height);
-            const imgX = (pdfWidth - canvas.width * ratio) / 2;
-            const imgY = 0; // Top align
+            // Use manual cropping to avoid html2canvas background-size/object-fit distortion bugs
+            const cropCanvas = document.createElement('canvas');
+            const mapAreaWidth = 2480 - ml - mr;
+            const mapAreaHeight = 3508 - mt - mb;
+            cropCanvas.width = mapAreaWidth;
+            cropCanvas.height = mapAreaHeight;
+            const ctx = cropCanvas.getContext('2d');
             
-            pdf.addImage(imgData, 'JPEG', imgX, imgY, canvas.width * ratio, canvas.height * ratio);
+            let srcAspect = mapCanvas.width / mapCanvas.height;
+            let dstAspect = mapAreaWidth / mapAreaHeight;
+
+            let sWidth = mapCanvas.width;
+            let sHeight = mapCanvas.height;
+            let sx = 0;
+            let sy = 0;
+
+            if (srcAspect > dstAspect) {
+                // Source is wider, crop sides
+                sWidth = mapCanvas.height * dstAspect;
+                sx = (mapCanvas.width - sWidth) / 2;
+            } else {
+                // Source is taller, crop top/bottom
+                sHeight = mapCanvas.width / dstAspect;
+                sy = (mapCanvas.height - sHeight) / 2;
+            }
+
+            // Draw image exactly scaled to the destination without distortion
+            ctx.drawImage(mapCanvas, sx, sy, sWidth, sHeight, 0, 0, mapAreaWidth, mapAreaHeight);
+
+            const croppedImgData = cropCanvas.toDataURL('image/jpeg', 1.0);
             
-            const dateStr = new Date().toISOString().slice(0, 10);
-            pdf.save(`Medicao_${dateStr}.pdf`);
+            const finalMapImg = document.createElement('img');
+            finalMapImg.src = croppedImgData;
+            finalMapImg.style.width = '100%';
+            finalMapImg.style.height = '100%';
+            finalMapImg.style.objectFit = 'fill'; // Already cropped manually
+            mapArea.appendChild(finalMapImg);
             
-            btn.innerHTML = originalText;
+            a4.appendChild(mapArea);
+
+            // Measurement Panel overlay at bottom right of the Map Area
+            // We clone the measurement panel HTML to render it
+            const panelHtml = document.getElementById('measurement-panel').outerHTML;
+            const panelContainer = document.createElement('div');
+            panelContainer.innerHTML = panelHtml;
+            const clonedPanel = panelContainer.firstElementChild;
+            
+            // Remove absolute positioning, adjust for print scale (make it larger so it's readable on A4)
+            clonedPanel.style.position = 'absolute';
+            clonedPanel.style.left = '';
+            clonedPanel.style.top = '';
+            clonedPanel.style.bottom = '20px';
+            clonedPanel.style.right = '20px';
+            clonedPanel.style.transform = 'scale(3)'; // Scale up the UI since A4 is huge
+            clonedPanel.style.transformOrigin = 'bottom right';
+            clonedPanel.classList.remove('hidden', 'md:block', 'top-20', 'right-4');
+            
+            // Hide the 'Sair' and 'Gerando...' buttons inside the clone
+            const buttonsArea = clonedPanel.querySelector('.flex.gap-2.mt-4');
+            if (buttonsArea) buttonsArea.style.display = 'none';
+
+            mapArea.appendChild(clonedPanel);
+
+            // Add Custom Texts
+            if (settings.texts && Array.isArray(settings.texts)) {
+                settings.texts.forEach(item => {
+                    const txt = document.createElement('div');
+                    txt.style.position = 'absolute';
+                    txt.style.left = item.x + 'px';
+                    txt.style.top = item.y + 'px';
+                    txt.style.fontSize = item.fontSize + 'px';
+                    txt.style.color = item.color || '#1e293b';
+                    txt.style.fontWeight = 'bold';
+                    txt.style.transform = 'translate(-50%, -50%)';
+                    txt.style.whiteSpace = 'nowrap';
+                    txt.style.zIndex = '50';
+                    txt.innerText = item.text;
+                    a4.appendChild(txt);
+                });
+            }
+
+            // Step 3: Capture the Final A4 Layout
+            html2canvas(a4, {
+                useCORS: true,
+                allowTaint: true,
+                scale: 1, // 1:1 scale for 2480x3508
+                windowWidth: 2480,
+                windowHeight: 3508
+            }).then(finalCanvas => {
+                const finalImgData = finalCanvas.toDataURL('image/jpeg', 0.9);
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                pdf.addImage(finalImgData, 'JPEG', 0, 0, 210, 297);
+                
+                const dateStr = new Date().toISOString().slice(0, 10);
+                pdf.save(`Medicao_${dateStr}.pdf`);
+                
+                // Cleanup
+                document.body.removeChild(a4);
+                btn.innerHTML = originalText;
+                
+            }).catch(err => {
+                console.error("Erro ao gerar PDF final", err);
+                document.body.removeChild(a4);
+                btn.innerHTML = '<span class="material-symbols-outlined text-[16px]">error</span> Erro';
+                setTimeout(() => { btn.innerHTML = originalText; }, 2000);
+            });
+
         }).catch(err => {
-            console.error("Erro ao gerar PDF", err);
+            console.error("Erro ao capturar mapa", err);
             btn.innerHTML = '<span class="material-symbols-outlined text-[16px]">error</span> Erro';
             setTimeout(() => { btn.innerHTML = originalText; }, 2000);
         });
-    }, 100);
+    }, 500);
 }

@@ -225,7 +225,7 @@ function renderMultipleTab(tab, featureData, isEditMode) {
     
     if (tab.fields && tab.fields.length > 0) {
         tab.fields.forEach(f => {
-            html += `<div class="${['textarea', 'attachment', 'photo', 'geolocation', 'cep'].includes(f.type) ? 'md:col-span-2' : ''}">
+            html += `<div class="${['textarea', 'attachment', 'photo', 'geolocation', 'cep', 'hiperlink'].includes(f.type) ? 'md:col-span-2' : ''}">
                 <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">${f.label}</label>
                 ${window.generateFeatureInputHtml ? window.generateFeatureInputHtml(f, '', true, true) : ''}
             </div>`;

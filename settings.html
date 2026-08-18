@@ -212,10 +212,12 @@
   .tab-btn.active { border-bottom-color: #051125; color: #051125; }
   .dark .tab-btn.active { border-bottom-color: #d7e2ff; color: #d7e2ff; }
 </style>
-  <!-- Supabase -->
+  <!-- Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/supabase-config.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body class="bg-surface text-on-surface min-h-screen">
 <!-- TopAppBar -->
@@ -228,6 +230,7 @@
   <div class="flex h-full gap-6">
     <button class="tab-btn active h-full px-1 text-sm font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onclick="switchTab('geral', this)">Geral</button>
     <button class="tab-btn h-full px-1 text-sm font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onclick="switchTab('cadastros', this)">Criar Cadastro</button>
+    <button class="tab-btn h-full px-1 text-sm font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap" onclick="switchTab('layout', this)">Layout</button>
   </div>
 </header>
 
@@ -247,6 +250,14 @@
             <option value="Escuro">Escuro</option>
             <option value="Automático">Automático</option>
           </select>
+        </div>
+        
+        <div class="pt-4 border-t border-slate-200 dark:border-slate-700">
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-2">
+            <span class="material-symbols-outlined text-amber-500 text-[18px]">smart_toy</span> Chave da API Gemini (IA)
+          </label>
+          <input type="password" id="gemini-api-key" placeholder="AIzaSy..." onchange="saveGeminiKey(this.value)" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm font-mono">
+          <p class="text-xs text-slate-500 mt-1">Sua chave fica salva apenas neste navegador. Necessária para a geração de estatísticas com IA.</p>
         </div>
       </div>
     </div>
@@ -380,6 +391,23 @@
             </button>
           </div>
         </div>
+        
+        <!-- Manual Stats Builder -->
+        <div class="mb-4 mt-8 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-4">
+          <div class="flex justify-between items-center mb-4">
+              <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <span class="material-symbols-outlined text-indigo-500">query_stats</span> Configuração do Dashboard
+              </h3>
+              <button onclick="addManualStatConfig()" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors shadow-sm">
+                  <span class="material-symbols-outlined text-[18px]">add</span> Novo Gráfico
+              </button>
+          </div>
+          <p class="text-sm text-slate-500 mb-4">Configure quais gráficos e totalizadores aparecerão na tela inicial para este formulário.</p>
+          
+          <div id="manual-stats-list" class="flex flex-col gap-3">
+             <!-- Javascript will populate this list -->
+          </div>
+        </div>
       </div>
 
 
@@ -403,8 +431,131 @@
           </form>
         </div>
       </div>
+  </div> <!-- Fecha tab-content de Cadastros -->
 
+  <!-- Tab Content: Layout -->
+  <div id="layout" class="tab-content">
+    <div class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 border-b border-slate-200 dark:border-slate-700 pb-4">
+        <div>
+          <h2 class="text-lg font-bold">Layout de Impressão</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm">Configure os modelos de folha A4 e A3 para os relatórios.</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="openSimulator()" class="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm shrink-0">
+            <span class="material-symbols-outlined text-[18px]">design_services</span> Simulador Interativo
+          </button>
+        </div>
+      </div>
+      
+      <div class="space-y-8">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+          
+          <!-- Imagens do Layout -->
+          <div class="space-y-6">
+            <h3 class="text-md font-bold text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-slate-700 pb-2">Imagens de Fundo</h3>
+            
+            <div>
+              <label class="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Logo / Banner (Cabeçalho)</label>
+              <input type="file" id="layout-header-img" accept="image/*" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer" onchange="encodeImageFileAsURL(this, 'preview-header')">
+              <div id="preview-header-container" class="mt-2 hidden">
+                 <img id="preview-header" class="max-h-20 object-contain border border-slate-200 dark:border-slate-700 rounded p-1 bg-white" src="" />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Logo / Banner (Rodapé)</label>
+              <input type="file" id="layout-footer-img" accept="image/*" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer" onchange="encodeImageFileAsURL(this, 'preview-footer')">
+              <div id="preview-footer-container" class="mt-2 hidden">
+                 <img id="preview-footer" class="max-h-20 object-contain border border-slate-200 dark:border-slate-700 rounded p-1 bg-white" src="" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+          <div class="flex items-center gap-2">
+            <h3 class="text-md font-bold text-slate-800 dark:text-slate-200">Dimensões e Margens</h3>
+            <span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded dark:bg-blue-900 dark:text-blue-300">Em milímetros (mm)</span>
+          </div>
+          
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Margem Superior</label>
+              <input type="number" id="layout-mt" value="20" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Margem Inferior</label>
+              <input type="number" id="layout-mb" value="20" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Margem Esquerda</label>
+              <input type="number" id="layout-ml" value="20" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Margem Direita</label>
+              <input type="number" id="layout-mr" value="20" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </main>
+
+  <!-- Simulador A4 Modal -->
+  <div id="layout-preview-modal" class="fixed inset-0 z-[100] hidden bg-slate-900/80 backdrop-blur-sm flex flex-col pt-4 sm:pt-10">
+      <div class="bg-white dark:bg-slate-800 rounded-t-xl shadow-2xl w-full mx-auto max-w-[95%] sm:max-w-7xl flex flex-col sm:flex-row justify-between items-center px-4 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0 gap-4">
+          <div class="flex items-center gap-4">
+              <h3 class="font-bold text-slate-800 dark:text-white flex items-center gap-2 hidden sm:flex"><span class="material-symbols-outlined">design_services</span> Simulador (A4)</h3>
+              <div class="flex items-center gap-2 border-l border-slate-200 dark:border-slate-700 pl-4">
+                 <input type="color" id="sim-text-color" value="#1e293b" title="Cor do Texto" class="w-8 h-8 rounded cursor-pointer border border-slate-300" onchange="updateSelectedText()">
+                 <div class="flex items-center bg-slate-100 dark:bg-slate-700 rounded px-2">
+                    <span class="text-xs font-bold mr-1">T</span>
+                    <input type="number" id="sim-text-size" value="60" min="10" max="300" title="Tamanho do Texto" class="w-16 bg-transparent text-sm py-1 outline-none text-center" onchange="updateSelectedText()">
+                 </div>
+                 <button onclick="addTextElement()" class="flex items-center gap-1 bg-primary/10 text-primary px-3 py-1.5 rounded text-sm font-medium hover:bg-primary/20 transition-colors">
+                     <span class="material-symbols-outlined text-[18px]">add</span> Adicionar
+                 </button>
+              </div>
+          </div>
+          <div class="flex items-center gap-3">
+              <button onclick="saveLayoutSettings()" class="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-green-700 transition-colors">
+                  <span class="material-symbols-outlined text-[18px]">save</span> Salvar Layout
+              </button>
+              <button onclick="closeSimulator()" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full text-slate-500 transition-colors"><span class="material-symbols-outlined">close</span></button>
+          </div>
+      </div>
+      
+      <div id="simulator-workspace" class="flex-1 overflow-auto flex justify-center items-start bg-slate-300 dark:bg-slate-900 relative p-4">
+          <!-- Wrapper applied with transform: scale() to fit -->
+          <div id="paper-wrapper" class="relative origin-top mt-4 mb-16 shadow-2xl bg-white border border-slate-200 transition-transform">
+              <!-- Actual Canvas exactly 2480x3508 -->
+              <div id="a4-paper" class="bg-white relative overflow-hidden text-slate-800 box-border" style="width: 2480px; height: 3508px;">
+                  
+                  <!-- Background Header Img -->
+                  <img id="a4-header-img" src="" class="absolute top-0 left-0 w-full object-fill hidden z-0" />
+                  
+                  <!-- Background Footer Img -->
+                  <img id="a4-footer-img" src="" class="absolute bottom-0 left-0 w-full object-fill hidden z-0" />
+                  
+                  <!-- Area do Mapa / Formulário Simulado -->
+                  <div class="absolute inset-x-0 flex items-center justify-center border-y border-dashed border-slate-300 bg-slate-50/50 z-0" style="top: 300px; bottom: 300px;">
+                      <div class="text-center opacity-30 select-none">
+                         <span class="material-symbols-outlined block mb-2" style="font-size: 200px;">map</span>
+                         <h1 class="font-bold uppercase tracking-widest" style="font-size: 80px;">Área do Mapa</h1>
+                      </div>
+                  </div>
+
+                  <!-- Margin Guides (Dashed) -->
+                  <div id="a4-margins-guide" class="absolute border-[4px] border-dashed border-blue-400/50 pointer-events-none z-10"></div>
+                  
+                  <!-- Drag and Drop Texts Container -->
+                  <div id="a4-texts-container" class="absolute inset-0 z-20"></div>
+              </div>
+          </div>
+      </div>
+  </div>
 
   <script>
 
@@ -430,7 +581,251 @@
            changeTheme('Automático');
         }
       });
+      
+      const savedGeminiKey = localStorage.getItem('gemini_api_key');
+      if (savedGeminiKey && document.getElementById('gemini-api-key')) {
+          document.getElementById('gemini-api-key').value = savedGeminiKey;
+      }
+      
+      loadLayoutSettings();
     });
+
+    function encodeImageFileAsURL(element, previewId) {
+      const file = element.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onloadend = function() {
+        const preview = document.getElementById(previewId);
+        if (preview) {
+           preview.src = reader.result;
+           preview.parentElement.classList.remove('hidden');
+        }
+      }
+      reader.readAsDataURL(file);
+    }
+
+    let simulatorTexts = [];
+    let isDragging = false;
+    let activeElement = null;
+    let selectedTextId = null;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
+
+    function updateSelectedText() {
+        if (!selectedTextId) return;
+        const item = simulatorTexts.find(t => t.id === selectedTextId);
+        if(item) {
+            item.color = document.getElementById('sim-text-color').value;
+            item.fontSize = parseInt(document.getElementById('sim-text-size').value) || 60;
+            renderSimulatorTexts();
+        }
+    }
+
+    function saveLayoutSettings() {
+       const settings = {
+           marginTop: document.getElementById('layout-mt').value,
+           marginBottom: document.getElementById('layout-mb').value,
+           marginLeft: document.getElementById('layout-ml').value,
+           marginRight: document.getElementById('layout-mr').value,
+           headerImg: document.getElementById('preview-header').src,
+           footerImg: document.getElementById('preview-footer').src,
+           texts: simulatorTexts
+       };
+       localStorage.setItem('layout_settings', JSON.stringify(settings));
+       alert("Configurações de Layout salvas com sucesso!");
+    }
+
+    function loadLayoutSettings() {
+       const saved = localStorage.getItem('layout_settings');
+       if (saved) {
+           try {
+               const settings = JSON.parse(saved);
+               if(settings.marginTop) document.getElementById('layout-mt').value = settings.marginTop;
+               if(settings.marginBottom) document.getElementById('layout-mb').value = settings.marginBottom;
+               if(settings.marginLeft) document.getElementById('layout-ml').value = settings.marginLeft;
+               if(settings.marginRight) document.getElementById('layout-mr').value = settings.marginRight;
+               
+               if(settings.headerImg && settings.headerImg.startsWith('data:image')) {
+                  document.getElementById('preview-header').src = settings.headerImg;
+                  document.getElementById('preview-header-container').classList.remove('hidden');
+               }
+               if(settings.footerImg && settings.footerImg.startsWith('data:image')) {
+                  document.getElementById('preview-footer').src = settings.footerImg;
+                  document.getElementById('preview-footer-container').classList.remove('hidden');
+               }
+
+               if(settings.texts && Array.isArray(settings.texts)) {
+                   simulatorTexts = settings.texts;
+               }
+           } catch(e) { console.error("Error loading layout settings", e); }
+       }
+    }
+
+    function openSimulator() {
+        const modal = document.getElementById('layout-preview-modal');
+        modal.classList.remove('hidden');
+        
+        updatePaperScale();
+        window.addEventListener('resize', updatePaperScale);
+        
+        // Sync Images
+        const headerSrc = document.getElementById('preview-header').src;
+        const footerSrc = document.getElementById('preview-footer').src;
+        const hImg = document.getElementById('a4-header-img');
+        const fImg = document.getElementById('a4-footer-img');
+        if (headerSrc && headerSrc.startsWith('data:image')) {
+            hImg.src = headerSrc; hImg.classList.remove('hidden');
+        } else { hImg.classList.add('hidden'); }
+        
+        if (footerSrc && footerSrc.startsWith('data:image')) {
+            fImg.src = footerSrc; fImg.classList.remove('hidden');
+        } else { fImg.classList.add('hidden'); }
+
+        // Apply margins guide
+        const mt = (document.getElementById('layout-mt').value || 20) * 11.81; // 2480/210 ≈ 11.81 px/mm
+        const mb = (document.getElementById('layout-mb').value || 20) * 11.81;
+        const ml = (document.getElementById('layout-ml').value || 20) * 11.81;
+        const mr = (document.getElementById('layout-mr').value || 20) * 11.81;
+        const guide = document.getElementById('a4-margins-guide');
+        guide.style.top = mt + 'px';
+        guide.style.bottom = mb + 'px';
+        guide.style.left = ml + 'px';
+        guide.style.right = mr + 'px';
+        
+        renderSimulatorTexts();
+    }
+
+    function closeSimulator() {
+        document.getElementById('layout-preview-modal').classList.add('hidden');
+        window.removeEventListener('resize', updatePaperScale);
+    }
+
+    function updatePaperScale() {
+        const workspace = document.getElementById('simulator-workspace');
+        const wrapper = document.getElementById('paper-wrapper');
+        const padding = 60;
+        const availableWidth = workspace.clientWidth - padding;
+        const scale = Math.min(availableWidth / 2480, 1);
+        wrapper.style.transform = `scale(${scale})`;
+    }
+
+    function addTextElement() {
+        const color = document.getElementById('sim-text-color').value || '#1e293b';
+        const size = parseInt(document.getElementById('sim-text-size').value) || 60;
+        const newText = {
+            id: Date.now().toString(),
+            text: "Novo Texto",
+            x: 1240,
+            y: 350,
+            fontSize: size,
+            color: color,
+            fontWeight: 'bold'
+        };
+        simulatorTexts.push(newText);
+        renderSimulatorTexts();
+    }
+
+    function renderSimulatorTexts() {
+        const container = document.getElementById('a4-texts-container');
+        container.innerHTML = '';
+        simulatorTexts.forEach(item => {
+            const div = document.createElement('div');
+            // Remove drop-shadow and use direct font-bold styling
+            div.className = 'absolute cursor-move hover:outline hover:outline-[4px] hover:outline-blue-500 whitespace-nowrap z-50 p-4 font-bold';
+            div.style.left = item.x + 'px';
+            div.style.top = item.y + 'px';
+            div.style.fontSize = item.fontSize + 'px';
+            div.style.color = item.color || '#1e293b';
+            div.contentEditable = true;
+            div.innerText = item.text;
+            div.dataset.id = item.id;
+            
+            // Centralize initial anchor (transform translate)
+            div.style.transform = 'translate(-50%, -50%)';
+            
+            div.addEventListener('mousedown', startDrag);
+            div.addEventListener('input', (e) => {
+                item.text = e.target.innerText;
+            });
+            div.addEventListener('dblclick', (e) => {
+                if(confirm("Excluir este texto?")) {
+                    simulatorTexts = simulatorTexts.filter(t => t.id !== item.id);
+                    if (selectedTextId === item.id) selectedTextId = null;
+                    renderSimulatorTexts();
+                }
+            });
+            div.addEventListener('keydown', (e) => { e.stopPropagation(); });
+
+            container.appendChild(div);
+        });
+    }
+
+    function startDrag(e) {
+        if(e.target.tagName === 'DIV' && e.target.contentEditable === 'true') {
+            activeElement = e.target;
+            const id = activeElement.dataset.id;
+            selectedTextId = id;
+            
+            // Update toolbar controls with selected item properties
+            const item = simulatorTexts.find(t => t.id === id);
+            if(item) {
+                document.getElementById('sim-text-color').value = item.color || '#1e293b';
+                document.getElementById('sim-text-size').value = item.fontSize || 60;
+            }
+
+            const wrapper = document.getElementById('paper-wrapper');
+            const scaleMatch = wrapper.style.transform.match(/scale\(([^)]+)\)/);
+            const scale = scaleMatch ? parseFloat(scaleMatch[1]) : 1;
+            
+            const rect = activeElement.getBoundingClientRect();
+            // drag offset relative to top-left of the box
+            dragOffsetX = (e.clientX - rect.left) / scale;
+            dragOffsetY = (e.clientY - rect.top) / scale;
+            
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', stopDrag);
+        }
+    }
+
+    function drag(e) {
+        if (!activeElement) return;
+        e.preventDefault();
+        
+        const paper = document.getElementById('a4-paper');
+        const paperRect = paper.getBoundingClientRect();
+        const wrapper = document.getElementById('paper-wrapper');
+        const scaleMatch = wrapper.style.transform.match(/scale\(([^)]+)\)/);
+        const scale = scaleMatch ? parseFloat(scaleMatch[1]) : 1;
+        
+        let x = (e.clientX - paperRect.left) / scale - dragOffsetX;
+        let y = (e.clientY - paperRect.top) / scale - dragOffsetY;
+        
+        // Compensate for the translate(-50%, -50%) we added
+        const rect = activeElement.getBoundingClientRect();
+        const unscaledWidth = rect.width / scale;
+        const unscaledHeight = rect.height / scale;
+        
+        activeElement.style.left = (x + unscaledWidth / 2) + 'px';
+        activeElement.style.top = (y + unscaledHeight / 2) + 'px';
+    }
+
+    function stopDrag(e) {
+        if (activeElement) {
+            const id = activeElement.dataset.id;
+            const item = simulatorTexts.find(t => t.id === id);
+            if(item) {
+                item.x = parseFloat(activeElement.style.left);
+                item.y = parseFloat(activeElement.style.top);
+            }
+            activeElement = null;
+        }
+        document.removeEventListener('mousemove', drag);
+        document.removeEventListener('mouseup', stopDrag);
+    }
+
+    function saveGeminiKey(val) {
+      localStorage.setItem('gemini_api_key', val.trim());
+    }
 
     function switchTab(tabId, btn) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -887,6 +1282,8 @@
          name: 'nome', label: 'Nome', type: 'text', options: ''
       });
       
+      window._currentFormStatsConfig = [];
+      renderManualStats();
       renderBuilderTabs();
       
       document.getElementById('forms-view').classList.add('hidden');
@@ -912,6 +1309,13 @@
          builderTabs = [{ id: 'tab_' + Math.random().toString(36).substr(2, 9), title: 'Dados Principais', isPrimary: true, fields: [] }];
       }
       activeBuilderTabId = builderTabs[0].isPrimary ? builderTabs[0].id : (builderTabs.find(t=>t.isPrimary) || builderTabs[0]).id;
+      
+      if (form.statsConfig) {
+          window._currentFormStatsConfig = form.statsConfig;
+      } else {
+          window._currentFormStatsConfig = [];
+      }
+      renderManualStats();
       
       renderBuilderTabs();
       
@@ -1048,6 +1452,7 @@
                 <option value="geolocation" ${f.type === 'geolocation' ? 'selected' : ''}>Geolocalização (Mapa)</option>
                 <option value="cep" ${f.type === 'cep' ? 'selected' : ''}>Endereço (Autocompletar via CEP)</option>
                 <option value="cpfcnpj" ${f.type === 'cpfcnpj' ? 'selected' : ''}>Documento (CPF / CNPJ)</option>
+                <option value="hiperlink" ${f.type === 'hiperlink' ? 'selected' : ''}>Link Elegante (Título e URL)</option>
               </select>
             </div>
           </div>
@@ -1129,6 +1534,7 @@
         id: currentFormId,
         name: name,
         tabs: JSON.parse(JSON.stringify(builderTabs)),
+        statsConfig: window._currentFormStatsConfig || null,
         updatedAt: new Date().toISOString()
       };
 
@@ -1598,6 +2004,113 @@
           document.getElementById(`multiple-table-view-${tabId}`).classList.remove('hidden');
           document.getElementById(`multiple-form-view-${tabId}`).classList.add('hidden');
        }
+    }
+
+    function renderManualStats() {
+        const listContainer = document.getElementById('manual-stats-list');
+        if (!listContainer) return;
+        
+        listContainer.innerHTML = '';
+        if (!window._currentFormStatsConfig) window._currentFormStatsConfig = [];
+        
+        if (window._currentFormStatsConfig.length === 0) {
+            listContainer.innerHTML = '<div class="text-center text-sm text-slate-400 py-6 border border-dashed border-slate-300 dark:border-slate-700 rounded-lg bg-white/50 dark:bg-slate-800/50">Nenhum gráfico configurado. Clique em "Novo Gráfico" para adicionar.</div>';
+            return;
+        }
+
+        window._currentFormStatsConfig.forEach((stat, index) => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center justify-between p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded shadow-sm';
+            
+            const icon = stat.type === 'pie' ? 'pie_chart' : (stat.type === 'bar' ? 'bar_chart' : 'pin');
+            const typeName = stat.type === 'pie' ? 'Pizza' : (stat.type === 'bar' ? 'Barras' : 'Indicador');
+            
+            div.innerHTML = `
+                <div class="flex items-center gap-3">
+                   <div class="w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                      <span class="material-symbols-outlined">${icon}</span>
+                   </div>
+                   <div>
+                      <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">${stat.title || 'Sem título'}</h4>
+                      <p class="text-xs text-slate-500 dark:text-slate-400">Tipo: ${typeName} | Campo Origem: ${stat.fieldId || 'Todos (Total)'}</p>
+                   </div>
+                </div>
+                <button onclick="removeManualStat(${index})" class="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors" title="Remover"><span class="material-symbols-outlined">delete</span></button>
+            `;
+            listContainer.appendChild(div);
+        });
+    }
+
+    function addManualStatConfig() {
+        const listContainer = document.getElementById('manual-stats-list');
+        
+        // Remove "empty" message if it exists
+        if (window._currentFormStatsConfig.length === 0) {
+            listContainer.innerHTML = '';
+        }
+
+        let fieldOptions = '<option value="">(Nenhum / Total de Registros)</option>';
+        builderTabs.forEach(tab => {
+            tab.fields.forEach(f => {
+                if(f.type === 'select' || f.type === 'radio' || f.type === 'checkbox') {
+                    fieldOptions += `<option value="${f.id}">${f.label} (${tab.title})</option>`;
+                }
+            });
+        });
+
+        const formDiv = document.createElement('div');
+        formDiv.className = 'p-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg flex flex-col gap-3 shadow-sm mb-2';
+        formDiv.id = 'manual-stat-form';
+        formDiv.innerHTML = `
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+               <div>
+                  <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Tipo de Gráfico</label>
+                  <select id="new-stat-type" class="w-full px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 text-sm bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none">
+                      <option value="indicator">Indicador Numérico (Apenas Total)</option>
+                      <option value="pie">Gráfico de Pizza</option>
+                      <option value="bar">Gráfico de Barras</option>
+                  </select>
+               </div>
+               <div>
+                  <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Campo Fonte de Dados</label>
+                  <select id="new-stat-field" class="w-full px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 text-sm bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none">
+                      ${fieldOptions}
+                  </select>
+               </div>
+            </div>
+            <div>
+               <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Título do Gráfico</label>
+               <input type="text" id="new-stat-title" placeholder="Ex: Total de Obras por Situação" class="w-full px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 text-sm bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none">
+            </div>
+            <div class="flex justify-end gap-2 mt-2 pt-2 border-t border-indigo-100 dark:border-indigo-800/50">
+               <button onclick="renderManualStats()" class="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md transition-colors">Cancelar</button>
+               <button onclick="saveNewManualStat()" class="px-4 py-2 text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 rounded-md transition-colors shadow-sm">Salvar Gráfico</button>
+            </div>
+        `;
+        
+        listContainer.insertBefore(formDiv, listContainer.firstChild);
+    }
+
+    function saveNewManualStat() {
+        const type = document.getElementById('new-stat-type').value;
+        const fieldId = document.getElementById('new-stat-field').value;
+        const title = document.getElementById('new-stat-title').value.trim() || 'Novo Gráfico';
+        
+        if (!window._currentFormStatsConfig) window._currentFormStatsConfig = [];
+        window._currentFormStatsConfig.push({
+            type: type,
+            title: title,
+            fieldId: fieldId,
+            description: ""
+        });
+        renderManualStats();
+    }
+
+    function removeManualStat(index) {
+        if(confirm('Remover este gráfico do Dashboard?')) {
+            window._currentFormStatsConfig.splice(index, 1);
+            renderManualStats();
+        }
     }
 
   </script>

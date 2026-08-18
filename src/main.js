@@ -106,11 +106,38 @@ function saveThemes() {
   localStorage.setItem('constructive_themes', JSON.stringify(themes));
 }
 
+function showWarningToast(message) {
+    const existing = document.getElementById('warning-toast');
+    if (existing) existing.remove();
+    
+    const toast = document.createElement('div');
+    toast.id = 'warning-toast';
+    toast.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md text-white px-6 py-4 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-primary/30 z-[9999] flex items-center gap-3 transition-all duration-300 transform translate-y-10 opacity-0';
+    toast.innerHTML = `
+        <span class="material-symbols-outlined text-primary text-2xl">info</span>
+        <span class="font-medium tracking-wide">${message}</span>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Animate in
+    setTimeout(() => {
+        toast.classList.remove('translate-y-10', 'opacity-0');
+    }, 10);
+    
+    // Remove after 3s
+    setTimeout(() => {
+        toast.classList.add('translate-y-10', 'opacity-0');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
 // --- LEAFLET MAP ---
 function initMap() {
   map = L.map('map', {
     zoomControl: false, // We use our custom zoom buttons
-    maxZoom: 24
+    maxZoom: 24,
+    preferCanvas: true // Fixes html2canvas vector offset issues
   }).setView(cabedeloCenter, 13);
 
   // Define Base Layers
@@ -170,7 +197,8 @@ function initMap() {
         fillOpacity: opacity,
         color: color,
         weight: weight,
-        dashArray: dashArray
+        dashArray: dashArray,
+        className: `theme-feature theme-${themeId}`
       };
     },
     pointToLayer: function(feature, latlng) {
@@ -185,7 +213,7 @@ function initMap() {
         : `<span class="material-symbols-outlined" style="color: white; font-size: 14px;">${iconName}</span>`;
 
       const customIcon = L.divIcon({
-        className: 'custom-div-icon',
+        className: `custom-div-icon theme-feature theme-${themeId}`,
         html: `<div style="background-color: ${customIconData ? 'white' : color}; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid ${customIconData ? color : 'white'}; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
                  ${iconHtml}
                </div>`,
@@ -271,6 +299,10 @@ function initMap() {
       }
       
       layer.on('click', function(e) {
+        if (!window.activeSelectionThemeId) {
+            showWarningToast("Selecione uma camada no painel lateral clicando nela para poder inspecionar suas feições.");
+            return;
+        }
         L.DomEvent.stopPropagation(e);
         const fid = feature.properties._tempId;
         highlightFeature(fid);
@@ -413,6 +445,88 @@ function syncMapDataToThemes() {
 }
 
 // --- INTERFACE DE TEMAS ---
+window.activeSelectionThemeId = null;
+
+function toggleSelectionTheme(themeId, forceState = null) {
+    const tIdStr = String(themeId);
+    
+    if (forceState === true) {
+        window.activeSelectionThemeId = tIdStr;
+    } else if (forceState === false) {
+        window.activeSelectionThemeId = null;
+    } else {
+        if (window.activeSelectionThemeId === tIdStr) {
+            window.activeSelectionThemeId = null;
+        } else {
+            window.activeSelectionThemeId = tIdStr;
+        }
+    }
+    
+    // Update UI styles directly without full re-render
+    themes.forEach(theme => {
+        const card = document.getElementById(`theme-card-${theme.id}`);
+        if (!card) return;
+        
+        if (window.activeSelectionThemeId === String(theme.id)) {
+            card.classList.add('scale-[1.02]', 'z-10', 'ring-2', 'ring-offset-2', 'ring-offset-slate-900');
+            card.style.setProperty('--tw-ring-color', theme.color);
+            card.style.boxShadow = `0 0 30px ${theme.color}80, inset 0 0 20px ${theme.color}60`;
+            card.style.borderColor = theme.color;
+        } else {
+            card.classList.remove('scale-[1.02]', 'z-10', 'ring-2', 'ring-offset-2', 'ring-offset-slate-900');
+            const isVisible = theme.visible !== false;
+            card.style.borderRight = `1px solid ${theme.color}40`;
+            card.style.borderBottom = `1px solid ${theme.color}40`;
+            card.style.borderTop = '1px solid rgba(255,255,255,0.05)';
+            card.style.borderLeft = '1px solid rgba(255,255,255,0.05)';
+            card.style.boxShadow = isVisible ? `0 8px 32px rgba(0,0,0,0.3), 0 0 15px ${theme.color}30, inset 0 0 20px ${theme.color}10` : '0 8px 32px rgba(0,0,0,0.3)';
+            card.style.removeProperty('--tw-ring-color');
+        }
+    });
+    
+    // Update map interactivity using CSS to guarantee Leaflet redraws don't override it
+    let styleTag = document.getElementById('dynamic-selection-style');
+    if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = 'dynamic-selection-style';
+        document.head.appendChild(styleTag);
+    }
+    
+    if (window.activeSelectionThemeId) {
+        styleTag.innerHTML = `
+            .theme-feature { pointer-events: none !important; }
+            .theme-${window.activeSelectionThemeId} { pointer-events: auto !important; }
+        `;
+    } else {
+        styleTag.innerHTML = '';
+    }
+}
+
+function toggleThemeListAndSelection(themeId) {
+    const listEl = document.getElementById('list-' + themeId);
+    if (!listEl) return;
+    
+    const isCurrentlyHidden = listEl.classList.contains('hidden');
+    
+    if (isCurrentlyHidden) {
+        // Accordion: Close all other lists
+        themes.forEach(theme => {
+            const otherList = document.getElementById('list-' + theme.id);
+            if (otherList) otherList.classList.add('hidden');
+        });
+        
+        // Open this one
+        listEl.classList.remove('hidden');
+        
+        // Make this the active selection
+        toggleSelectionTheme(themeId, true);
+    } else {
+        // Closing this layer
+        listEl.classList.add('hidden');
+        toggleSelectionTheme(themeId, false);
+    }
+}
+
 function renderThemes() {
   const container = document.getElementById('themes-container');
   container.innerHTML = '';
@@ -422,9 +536,11 @@ function renderThemes() {
   themes.forEach((theme, index) => {
     const featureCount = theme.features ? theme.features.length : 0;
     const isVisible = theme.visible !== false;
+    const isActiveSelection = window.activeSelectionThemeId === String(theme.id);
     
     const card = document.createElement('div');
-    card.className = "relative overflow-hidden cursor-move transition-colors hover:bg-slate-800/30 mx-2 mb-2 rounded-xl border border-white/5";
+    card.id = `theme-card-${theme.id}`;
+    card.className = `theme-card relative overflow-hidden cursor-move transition-all duration-300 hover:bg-slate-800/30 mx-2 mb-2 rounded-xl border border-white/5 ${isActiveSelection ? 'scale-[1.02] z-10' : ''}`;
     card.draggable = true;
     card.dataset.index = index;
     card.dataset.id = theme.id;
@@ -472,21 +588,63 @@ function renderThemes() {
     
     card.style.borderRight = `1px solid ${theme.color}40`;
     card.style.borderBottom = `1px solid ${theme.color}40`;
-    card.style.boxShadow = isVisible ? `0 8px 32px rgba(0,0,0,0.3), 0 0 15px ${theme.color}30, inset 0 0 20px ${theme.color}10` : '0 8px 32px rgba(0,0,0,0.3)';
+    if (isActiveSelection) {
+        card.classList.add('ring-2', 'ring-offset-2', 'ring-offset-slate-900');
+        card.style.setProperty('--tw-ring-color', theme.color);
+        card.style.boxShadow = `0 0 30px ${theme.color}80, inset 0 0 20px ${theme.color}60`;
+        card.style.borderColor = theme.color;
+    } else {
+        card.style.boxShadow = isVisible ? `0 8px 32px rgba(0,0,0,0.3), 0 0 15px ${theme.color}30, inset 0 0 20px ${theme.color}10` : '0 8px 32px rgba(0,0,0,0.3)';
+    }
     card.style.background = `linear-gradient(135deg, ${theme.color}25 0%, rgba(15,23,42,0.8) 100%)`;
     
+    let statsListHtml = '';
+    const form = typeof allForms !== 'undefined' ? allForms.find(f => f.id === theme.formId) : null;
+    if (form && form.statsConfig && form.statsConfig.length > 0) {
+        statsListHtml = `<div id="stats-list-${theme.id}" class="hidden flex-col gap-2 mt-3 pt-3 border-t border-white/10 w-full transition-all">`;
+        form.statsConfig.forEach((widget, idx) => {
+            let iconHtml = widget.type === 'indicator' ? '123' : (widget.type === 'pie' ? 'pie_chart' : 'bar_chart');
+            if (widget.type === 'indicator') {
+                statsListHtml += `
+                    <div class="flex items-center justify-between bg-slate-800/40 rounded-lg p-2 cursor-pointer hover:bg-slate-700/50 transition-colors" onclick="openStatsDashboard('${theme.id}', ${idx})" title="Ver Indicador">
+                        <div class="flex items-center gap-2 text-slate-300">
+                            <span class="material-symbols-outlined text-[16px] text-cyan-400">${iconHtml}</span>
+                            <span class="text-xs font-semibold">${widget.title || 'Indicador'}</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                statsListHtml += `
+                    <div class="flex items-center justify-between bg-slate-800/40 rounded-lg p-2">
+                        <div class="flex items-center gap-2 text-slate-300">
+                            <span class="material-symbols-outlined text-[16px] text-cyan-400">${iconHtml}</span>
+                            <span class="text-xs font-semibold">${widget.title || 'Gráfico'}</span>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer group" title="Ativar Análise no Mapa">
+                            <input type="checkbox" name="layer-stat-toggle" class="sr-only peer layer-stat-toggle-${theme.id}" onchange="handleStatToggle('${theme.id}', ${idx}, this)">
+                            <div class="w-8 h-4 bg-slate-700/50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-500"></div>
+                        </label>
+                    </div>
+                `;
+            }
+        });
+        statsListHtml += `</div>`;
+    }
+
     card.innerHTML = `
       <div class="px-4 pt-4 pb-3 flex flex-col backdrop-blur-md">
         
         <!-- Header: Icon, Title, and Toggle -->
         <div class="flex items-center justify-between mb-4">
-          <div class="flex items-center gap-3">
-            <div class="w-12 h-12 rounded-xl shrink-0 flex items-center justify-center text-white shadow-lg transition-transform hover:scale-110 cursor-pointer border border-white/20" onclick="document.getElementById('list-${theme.id}').classList.toggle('hidden')" style="background-color: ${theme.color}; box-shadow: 0 4px 20px ${theme.color}80;">
+          <div class="flex items-center gap-3 cursor-pointer group" onclick="toggleThemeListAndSelection('${theme.id}')" title="Clique para expandir e isolar seleção no mapa">
+            <div class="w-12 h-12 rounded-xl shrink-0 flex items-center justify-center text-white shadow-lg transition-transform group-hover:scale-110 border border-white/20" style="background-color: ${theme.color}; box-shadow: 0 4px 20px ${theme.color}80;">
                <span class="material-symbols-outlined text-[24px]">${theme.icon || 'layers'}</span>
             </div>
-            <div class="flex flex-col cursor-pointer" onclick="document.getElementById('list-${theme.id}').classList.toggle('hidden')">
+            <div class="flex flex-col">
               <h3 class="text-base font-black text-slate-800 dark:text-white tracking-widest uppercase drop-shadow-md ${!isVisible ? 'opacity-50' : ''}">${theme.name}</h3>
-              <span class="text-[11px] text-slate-600 dark:text-slate-300/80 uppercase tracking-widest">Camada do Mapa</span>
+              <div class="text-[12px] font-bold text-slate-800 dark:text-slate-300 mt-0.5">
+                ${featureCount} <span class="text-[10px] text-slate-500 font-normal uppercase tracking-wider">Registros</span>
+              </div>
             </div>
           </div>
           
@@ -497,12 +655,11 @@ function renderThemes() {
           </label>
         </div>
         
-        <!-- Footer: Counts and Actions -->
-        <div class="flex justify-between items-end border-t border-white/20 dark:border-white/10 pt-3">
-          <div class="text-[14px] font-bold text-slate-800 dark:text-white tracking-widest">
-            ${featureCount} <span class="text-[10px] text-slate-600 dark:text-slate-400 font-normal">Registros</span>
-          </div>
-          <div class="flex justify-end gap-1">
+        <!-- Footer: Actions -->
+        <div class="flex justify-between items-center border-t border-white/20 dark:border-white/10 pt-3 w-full">
+            <button onclick="toggleThemeStatsList('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-800 dark:text-slate-200 transition-colors" title="Painel de Estatísticas">
+              <span class="material-symbols-outlined text-[18px]">pie_chart</span>
+            </button>
             <button onclick="startEditingTheme('${theme.id}', '${theme.name}', '${theme.color}', '${theme.geomType || ''}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-800 dark:text-slate-200 transition-colors" title="Adicionar Feição">
               <span class="material-symbols-outlined text-[18px]">add</span>
             </button>
@@ -522,16 +679,33 @@ function renderThemes() {
             <button onclick="deleteTheme('${theme.id}')" class="p-1.5 hover:bg-red-500/30 rounded-lg tooltip text-red-500 transition-colors" title="Excluir">
               <span class="material-symbols-outlined text-[18px]">delete</span>
             </button>
-          </div>
         </div>
-        
+        ${statsListHtml}
       </div>
       
       <div id="list-${theme.id}" class="bg-black/20 dark:bg-black/40 border-t border-white/10 hidden backdrop-blur-md">
-        <div class="p-2 border-b border-white/5">
-          <div class="relative w-full">
-            <span class="material-symbols-outlined text-[16px] absolute left-2 top-1/2 -translate-y-1/2 text-slate-400">search</span>
-            <input type="text" id="search-${theme.id}" placeholder="Pesquisar nesta camada..." class="w-full pl-8 pr-2 py-1.5 bg-slate-100/50 dark:bg-slate-800/50 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-primary dark:text-white text-xs transition-all" onkeyup="filterThemeFeatures('${theme.id}')">
+        <div class="p-2 border-b border-white/5 bg-slate-50 dark:bg-slate-900/50">
+          <div class="flex items-center justify-between mb-2">
+             <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Filtro Avançado</span>
+             <div class="flex items-center gap-1">
+                 <button onclick="clearAllFilters('${theme.id}')" class="text-[10px] bg-white/50 dark:bg-white/10 text-slate-700 dark:text-slate-200 px-1.5 py-1 rounded hover:bg-white/80 dark:hover:bg-white/20 transition-colors flex items-center justify-center tooltip" title="Limpar Filtro">
+                    <span class="material-symbols-outlined text-[14px]">close</span>
+                 </button>
+                 <button onclick="addFilterRow('${theme.id}')" class="text-[10px] bg-white/50 dark:bg-white/10 text-slate-700 dark:text-slate-200 px-2 py-1 rounded hover:bg-white/80 dark:hover:bg-white/20 transition-colors flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[12px]">add</span> Condição
+                 </button>
+             </div>
+          </div>
+          <div id="filters-container-${theme.id}" class="flex flex-col gap-1.5">
+             <div class="filter-row flex gap-1">
+                <select class="filter-field w-1/3 text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-1 py-1 text-slate-700 dark:text-slate-300" onchange="updateFilterValueInput(this, '${theme.id}')">
+                   <option value="ALL">Qualquer Campo</option>
+                   ${getThemeFieldsOptions(theme)}
+                </select>
+                <div class="flex w-2/3 gap-1 filter-value-container">
+                   <input type="text" class="filter-value w-full text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300" placeholder="Contém..." onkeyup="executeSearch('${theme.id}')">
+                </div>
+             </div>
           </div>
         </div>
         <div class="theme-feature-list flex flex-col max-h-64 overflow-y-auto ${!isVisible ? 'opacity-50' : ''} p-2 gap-2" id="feature-list-${theme.id}">
@@ -602,6 +776,108 @@ function renderFeatureListItems(theme) {
     `;
   });
   return html;
+}
+
+function getThemeFieldsOptions(theme) {
+    let optionsHtml = '';
+    if (theme.formId && typeof allForms !== 'undefined') {
+        const form = allForms.find(f => f.id === theme.formId);
+        if (form && (form.schema || form.tabs)) {
+            const schema = form.schema || form.tabs;
+            schema.forEach(tab => {
+                if (tab.fields) {
+                    tab.fields.forEach(f => {
+                        optionsHtml += `<option value="${f.id}">${f.label}</option>`;
+                    });
+                }
+            });
+            return optionsHtml;
+        }
+    }
+    // Fallback: extract properties from first feature
+    if (theme.features && theme.features.length > 0) {
+        const props = theme.features[0].properties;
+        for (let key in props) {
+            if (!key.startsWith('_') && key !== 'themeId') {
+                optionsHtml += `<option value="${key}">${key}</option>`;
+            }
+        }
+    }
+    return optionsHtml;
+}
+
+function addFilterRow(themeId) {
+    const theme = themes.find(t => t.id === themeId);
+    if (!theme) return;
+    
+    const container = document.getElementById('filters-container-' + themeId);
+    const row = document.createElement('div');
+    row.className = "filter-row flex gap-1";
+    row.innerHTML = `
+        <select class="filter-field w-1/3 text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-1 py-1 text-slate-700 dark:text-slate-300" onchange="updateFilterValueInput(this, '${theme.id}')">
+           <option value="ALL">Qualquer Campo</option>
+           ${getThemeFieldsOptions(theme)}
+        </select>
+        <div class="flex w-2/3 gap-1 filter-value-container">
+           <input type="text" class="filter-value w-full text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300" placeholder="Contém..." onkeyup="executeSearch('${theme.id}')">
+           <button onclick="this.parentElement.parentElement.remove(); executeSearch('${theme.id}')" class="text-red-500 hover:text-red-700 px-1"><span class="material-symbols-outlined text-[14px]">remove_circle</span></button>
+        </div>
+    `;
+    container.appendChild(row);
+}
+
+function clearAllFilters(themeId) {
+    const theme = themes.find(t => t.id === themeId);
+    if (!theme) return;
+    const container = document.getElementById('filters-container-' + themeId);
+    if (!container) return;
+    
+    container.innerHTML = `
+         <div class="filter-row flex gap-1">
+            <select class="filter-field w-1/3 text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-1 py-1 text-slate-700 dark:text-slate-300" onchange="updateFilterValueInput(this, '${theme.id}')">
+               <option value="ALL">Qualquer Campo</option>
+               ${getThemeFieldsOptions(theme)}
+            </select>
+            <div class="flex w-2/3 gap-1 filter-value-container">
+               <input type="text" class="filter-value w-full text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300" placeholder="Contém..." onkeyup="executeSearch('${theme.id}')">
+            </div>
+         </div>
+    `;
+    executeSearch(themeId);
+}
+
+function updateFilterValueInput(selectEl, themeId) {
+    const theme = themes.find(t => t.id === themeId);
+    if (!theme) return;
+    
+    const container = selectEl.closest('.filter-row');
+    const valueContainer = container.querySelector('.filter-value-container');
+    const fieldId = selectEl.value;
+    
+    const hasRemoveBtn = valueContainer.innerHTML.includes('remove_circle');
+    const btnHtml = hasRemoveBtn ? `<button onclick="this.parentElement.parentElement.remove(); executeSearch('${theme.id}')" class="text-red-500 hover:text-red-700 px-1"><span class="material-symbols-outlined text-[14px]">remove_circle</span></button>` : '';
+    
+    if (fieldId === 'ALL') {
+        valueContainer.innerHTML = `<input type="text" class="filter-value w-full text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300" placeholder="Contém..." onkeyup="executeSearch('${theme.id}')">` + btnHtml;
+    } else {
+        const uniqueValues = new Set();
+        if (theme.features) {
+            theme.features.forEach(f => {
+                const val = getFeaturePropertyValue(theme, f, fieldId);
+                if (val !== undefined && val !== null && val !== '') {
+                    uniqueValues.add(val.toString().trim());
+                }
+            });
+        }
+        
+        const optionsHtml = Array.from(uniqueValues).sort().map(v => `<option value="${v}">${v}</option>`).join('');
+        
+        valueContainer.innerHTML = `<select class="filter-value w-full text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-1 py-1 text-slate-700 dark:text-slate-300" onchange="executeSearch('${theme.id}')">
+            <option value="">-- Todos --</option>
+            ${optionsHtml}
+        </select>` + btnHtml;
+    }
+    executeSearch(theme.id);
 }
 
 let currentHighlightData = null;
@@ -696,6 +972,131 @@ function zoomToFeature(fid) {
       document.getElementById('drawer-overlay').classList.add('hidden');
     }
   }
+}
+
+function executeSearch(themeId) {
+  const container = document.getElementById('filters-container-' + themeId);
+  if (!container) return;
+  
+  const rules = [];
+  container.querySelectorAll('.filter-row').forEach(row => {
+      const field = row.querySelector('.filter-field').value;
+      const value = row.querySelector('.filter-value').value.toLowerCase().trim();
+      if (value !== '') {
+          rules.push({ field, value });
+      }
+  });
+
+  const theme = themes.find(t => t.id === themeId);
+  if(!theme) return;
+
+  const listContainer = document.getElementById('feature-list-' + themeId);
+  if (!listContainer) return;
+  
+  const featureItems = listContainer.querySelectorAll('.feature-list-item');
+  const visibleFids = new Set();
+  const hasAnyFilter = rules.length > 0;
+  
+  featureItems.forEach(item => {
+    const fid = item.id.replace('sidebar-item-', '');
+    const feature = theme.features.find(f => f.properties._tempId === fid);
+    
+    let match = true;
+    
+    if (hasAnyFilter) {
+        for (let rule of rules) {
+            if (rule.field === 'ALL') {
+                const searchData = item.getAttribute('data-search') || '';
+                if (!searchData.includes(rule.value)) { match = false; break; }
+            } else {
+                if (feature) {
+                    const val = getFeaturePropertyValue(theme, feature, rule.field) || '';
+                    if (!val.toString().toLowerCase().includes(rule.value)) { match = false; break; }
+                } else {
+                    match = false; break;
+                }
+            }
+        }
+    }
+
+    if (match) {
+      item.style.display = 'block';
+      visibleFids.add(fid);
+    } else {
+      item.style.display = 'none';
+    }
+  });
+
+  // Filter map layer directly
+  let bounds = L.latLngBounds();
+  let hasVisibleFeatures = false;
+
+  if (geojsonLayer) {
+    geojsonLayer.eachLayer(layer => {
+      if (layer.feature && layer.feature.properties.themeId === themeId) {
+        const fid = layer.feature.properties._tempId;
+        if (visibleFids.has(fid)) {
+          if (!map.hasLayer(layer)) {
+             map.addLayer(layer);
+          }
+          if (hasAnyFilter) {
+            if (layer.getBounds) {
+                bounds.extend(layer.getBounds());
+            } else if (layer.getLatLng) {
+                bounds.extend(layer.getLatLng());
+            }
+            hasVisibleFeatures = true;
+          }
+        } else {
+          if (map.hasLayer(layer)) {
+             map.removeLayer(layer);
+          }
+        }
+      }
+    });
+
+    if (hasAnyFilter && hasVisibleFeatures && bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 21 });
+        
+        // Fechar menu lateral em telas menores para visualizar melhor os resultados
+        if (window.innerWidth < 768) {
+            document.getElementById('side-drawer').classList.add('-translate-x-[120%]');
+            const overlay = document.getElementById('drawer-overlay');
+            if (overlay) overlay.classList.add('hidden');
+        }
+    }
+  }
+}
+
+function openStatsDashboard(themeId) {
+    const theme = themes.find(t => t.id === themeId);
+    if (!theme) return;
+    
+    // UI logic to open stats modal
+    const modal = document.getElementById('stats-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        renderStats(theme);
+    }
+}
+
+function getThemeFieldLabel(theme, fieldId) {
+    if (!theme.formId || typeof allForms === 'undefined') return fieldId;
+    const form = allForms.find(f => f.id === theme.formId);
+    if (!form) return fieldId;
+    
+    let label = fieldId;
+    const schema = form.schema || form.tabs;
+    if (schema) {
+        schema.forEach(tab => {
+            if (tab.fields) {
+                tab.fields.forEach(f => {
+                    if (f.id === fieldId) label = f.label;
+                });
+            }
+        });
+    }
+    return label;
 }
 
 function filterThemeFeatures(themeId) {
@@ -1658,6 +2059,21 @@ async function saveFeatureData() {
 
 function closeFeatureInfoModal(keepLayer = false) {
   document.getElementById('feature-info-modal').classList.add('hidden');
+  
+  // Reset card positioning and fullscreen state
+  const card = document.getElementById('feature-info-card');
+  const icon = document.querySelector('#btn-feature-fullscreen span');
+  if (card) {
+      card.classList.remove('left-0', 'right-0', 'bottom-0', 'w-full', 'rounded-none');
+      card.classList.add('right-4', 'md:right-6', 'bottom-4', 'rounded-2xl', 'w-[90%]', 'max-w-sm', 'sm:max-w-md');
+      card.style.left = '';
+      card.style.top = '';
+      card.style.right = '';
+      card.style.bottom = '';
+  }
+  if (icon) icon.textContent = 'open_in_full';
+  window.isFeatureInfoFullscreen = false;
+
   if (!keepLayer) {
     activeFeatureLayer = null;
     if (typeof clearHighlight === 'function') clearHighlight();
@@ -2115,6 +2531,92 @@ window.zoomIn = zoomIn;
 window.zoomOut = zoomOut;
 window.goToMyLocation = goToMyLocation;
 window.openVisitsModal = openVisitsModal;
+
+// --- Feature Info Card Dragging & Fullscreen ---
+window.isFeatureInfoFullscreen = false;
+let featureInfoStartLeft, featureInfoStartTop;
+
+window.toggleFeatureInfoFullscreen = function() {
+    const card = document.getElementById('feature-info-card');
+    const icon = document.querySelector('#btn-feature-fullscreen span');
+    if (!card) return;
+
+    if (window.isFeatureInfoFullscreen) {
+        // Restore
+        card.classList.remove('left-0', 'right-0', 'bottom-0', 'w-full', 'rounded-none');
+        card.classList.add('right-4', 'md:right-6', 'bottom-4', 'rounded-2xl', 'w-[90%]', 'max-w-sm', 'sm:max-w-md');
+        card.style.left = '';
+        card.style.top = '';
+        card.style.right = '';
+        card.style.bottom = '';
+        if (icon) icon.textContent = 'open_in_full';
+        window.isFeatureInfoFullscreen = false;
+    } else {
+        // Fullscreen
+        card.classList.remove('right-4', 'md:right-6', 'bottom-4', 'rounded-2xl', 'w-[90%]', 'max-w-sm', 'sm:max-w-md');
+        card.classList.add('left-0', 'right-0', 'bottom-0', 'w-full', 'rounded-none');
+        card.style.left = '0px';
+        card.style.top = ''; // Vazio para que top-[4.5rem] aja normalmente
+        card.style.right = '0px';
+        card.style.bottom = '0px';
+        if (icon) icon.textContent = 'close_fullscreen';
+        window.isFeatureInfoFullscreen = true;
+    }
+};
+
+function makeFeatureInfoDraggable() {
+    const card = document.getElementById('feature-info-card');
+    const header = document.getElementById('feature-info-header');
+    if (!card || !header) return;
+    
+    let isDragging = false;
+    let dragStartX, dragStartY;
+    
+    header.addEventListener('mousedown', (e) => {
+        if (window.isFeatureInfoFullscreen) return; // Don't drag if fullscreen
+        if (e.target.closest('button')) return;
+        
+        isDragging = true;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        
+        const rect = card.getBoundingClientRect();
+        
+        // Remove fixed positioning classes that interfere with top/left
+        card.classList.remove('top-[4.5rem]', 'md:top-[5rem]', 'right-4', 'md:right-6', 'bottom-4');
+        
+        card.style.bottom = 'auto';
+        card.style.right = 'auto';
+        card.style.left = rect.left + 'px';
+        card.style.top = rect.top + 'px';
+        
+        featureInfoStartLeft = rect.left;
+        featureInfoStartTop = rect.top;
+        
+        card.style.transition = 'none';
+        header.style.cursor = 'grabbing';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - dragStartX;
+        const dy = e.clientY - dragStartY;
+        card.style.left = (featureInfoStartLeft + dx) + 'px';
+        card.style.top = (featureInfoStartTop + dy) + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            header.style.cursor = 'move';
+            card.style.transition = '';
+        }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    makeFeatureInfoDraggable();
+});
 window.closeVisitsModal = closeVisitsModal;
 window.renderVisitsList = renderVisitsList;
 window.openNewVisitModal = openNewVisitModal;
@@ -2123,3 +2625,397 @@ window.saveNewVisit = saveNewVisit;
 window.printReport = printReport;
 
 window.clearHighlight = clearHighlight;
+
+window.toggleThemeStatsList = function(themeId) {
+    const listEl = document.getElementById(`stats-list-${themeId}`);
+    if (listEl) {
+        listEl.classList.toggle('hidden');
+        listEl.classList.toggle('flex');
+    }
+};
+
+window.handleStatToggle = function(themeId, chartIndex, checkbox) {
+    // Exclusivity: uncheck all other stats toggles globally
+    const allToggles = document.querySelectorAll('input[name="layer-stat-toggle"]');
+    allToggles.forEach(t => {
+        if (t !== checkbox) t.checked = false;
+    });
+
+    if (checkbox.checked) {
+        // Open specific chart dashboard
+        openStatsDashboard(themeId, chartIndex);
+    } else {
+        // Close dashboard and reset
+        closeStatsDashboard();
+    }
+};
+
+async function openStatsDashboard(themeId, specificIndex) {
+    const theme = themes.find(t => t.id === themeId);
+    if (!theme) return;
+
+    if (!theme.formId) {
+        alert("Este tema não possui um formulário (cadastro) associado. Edite a camada e vincule um formulário primeiro.");
+        return;
+    }
+
+    const form = allForms.find(f => f.id === theme.formId);
+    if (!form) {
+        alert("Formulário associado não encontrado.");
+        return;
+    }
+
+    const config = form.statsConfig;
+    if (!config || !Array.isArray(config) || config.length === 0) {
+        alert("Este formulário ainda não possui uma configuração de Dashboard. Vá até as Configurações > Cadastros > Editar, e configure os gráficos manualmente.");
+        return;
+    }
+
+    const modal = document.getElementById('stats-dashboard-modal');
+    
+    // --- Função para tornar o modal arrastável ---
+    function makeModalDraggable(modal) {
+        const header = modal.querySelector('.cursor-move');
+        if (!header) return;
+        
+        let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+        
+        header.onmousedown = dragMouseDown;
+
+        function dragMouseDown(e) {
+            e = e || window.event;
+            if (e.target.closest('button')) return; // ignora botões
+            e.preventDefault();
+            pos3 = e.clientX;
+            pos4 = e.clientY;
+            
+            // Remove transitions to allow smooth dragging
+            modal.style.transition = 'none';
+
+            document.onmouseup = closeDragElement;
+            document.onmousemove = elementDrag;
+        }
+
+        function elementDrag(e) {
+            e = e || window.event;
+            e.preventDefault();
+            pos1 = pos3 - e.clientX;
+            pos2 = pos4 - e.clientY;
+            pos3 = e.clientX;
+            pos4 = e.clientY;
+            
+            modal.style.top = (modal.offsetTop - pos2) + "px";
+            modal.style.left = (modal.offsetLeft - pos1) + "px";
+            modal.style.right = 'auto';
+            modal.style.bottom = 'auto';
+        }
+
+        function closeDragElement() {
+            document.onmouseup = null;
+            document.onmousemove = null;
+            // Restore transitions
+            modal.style.transition = '';
+        }
+    }
+
+    modal.dataset.themeId = theme.id;
+    
+    const features = theme.features || [];
+    
+    // Zoom para a camada
+    if (features.length > 0 && typeof L !== 'undefined') {
+        try {
+            const bounds = L.latLngBounds();
+            geojsonLayer.eachLayer(layer => {
+                if (layer.feature && layer.feature.properties.themeId === theme.id) {
+                    if (layer.getBounds) bounds.extend(layer.getBounds());
+                    else if (layer.getLatLng) bounds.extend(layer.getLatLng());
+                }
+            });
+            if (bounds.isValid()) {
+                map.flyToBounds(bounds, { paddingRightBottom: [400, 50], paddingTopLeft: [50, 50], duration: 1.5 });
+            }
+        } catch(e) {}
+    }
+
+    const container = document.getElementById('stats-dashboard-content');
+    container.innerHTML = '';
+    
+    // Animação de Abertura
+    modal.classList.remove('pointer-events-none');
+    
+
+    setTimeout(() => {
+        modal.classList.remove('scale-95', 'opacity-0', 'translate-y-[-20px]');
+        modal.classList.add('scale-100', 'opacity-100', 'translate-y-0');
+        const content = document.getElementById('stats-dashboard-content');
+        if (content) {
+            content.classList.remove('opacity-0');
+            content.classList.add('opacity-100');
+        }
+    }, 10);
+
+    let chartIndex = -1;
+    
+    config.forEach(widget => {
+        chartIndex++;
+        // If specificIndex is provided, skip other charts
+        if (typeof specificIndex !== 'undefined' && chartIndex !== specificIndex) return;
+
+        const card = document.createElement('div');
+        // Novo estilo de card (dark glass container)
+        card.className = "bg-[#070b14]/50 backdrop-blur-md rounded-2xl border border-white/10 p-5 flex flex-col flex-shrink-0 min-w-[250px] relative overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.5)]";
+        
+        const closeBtn = document.createElement('button');
+        closeBtn.onclick = closeStatsDashboard;
+        closeBtn.className = "absolute top-3 right-3 p-1.5 hover:bg-white/10 rounded-full text-white/50 hover:text-white transition-colors z-20";
+        closeBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">close</span>';
+        card.appendChild(closeBtn);
+
+        const headerGroup = document.createElement('div');
+        headerGroup.className = "flex justify-between items-start mb-1 z-10 relative pr-6 cursor-move"; // cursor-move para indicar área de arrasto
+
+        const titleEl = document.createElement('h4');
+        titleEl.className = "text-sm font-bold text-white tracking-wide flex items-center gap-2";
+        let iconHtml = widget.type === 'indicator' ? '123' : (widget.type === 'pie' ? 'pie_chart' : 'bar_chart');
+        titleEl.innerHTML = `<span class="material-symbols-outlined text-cyan-400 text-[18px]">${iconHtml}</span> ${widget.title || 'Estatística'}`;
+        headerGroup.appendChild(titleEl);
+        
+        card.appendChild(headerGroup);
+        
+        if (widget.description) {
+            const descEl = document.createElement('p');
+            descEl.className = "text-xs text-white/50 mb-4 z-10 relative";
+            descEl.textContent = widget.description;
+            card.appendChild(descEl);
+        }
+
+        if (widget.type === 'indicator') {
+            let count = 0;
+            if (widget.fieldId) {
+                count = features.filter(f => {
+                    const val = getFeaturePropertyValue(theme, f, widget.fieldId);
+                    return val !== undefined && val !== null && val !== '';
+                }).length;
+            } else {
+                count = features.length;
+            }
+            const countEl = document.createElement('div');
+            countEl.className = "text-4xl font-light text-cyan-50 mt-2 z-10 relative";
+            countEl.textContent = "0";
+            card.appendChild(countEl);
+
+            // Animar contagem
+            setTimeout(() => {
+                let startTimestamp = null;
+                const duration = 1500;
+                const step = (timestamp) => {
+                    if (!startTimestamp) startTimestamp = timestamp;
+                    const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                    const easeProgress = 1 - Math.pow(1 - progress, 4); // easeOutQuart
+                    countEl.textContent = Math.floor(easeProgress * count).toLocaleString();
+                    if (progress < 1) window.requestAnimationFrame(step);
+                    else countEl.textContent = count.toLocaleString();
+                };
+                window.requestAnimationFrame(step);
+            }, 300);
+        } else if (widget.type === 'pie' || widget.type === 'bar') {
+            const fieldId = widget.fieldId;
+            if (!fieldId) return;
+
+            const counts = {};
+            features.forEach(f => {
+                let val = getFeaturePropertyValue(theme, f, fieldId);
+                if (val === undefined || val === null || val === '') {
+                    val = "N/I"; // Simplificado para caber melhor no mini-gráfico
+                }
+                counts[val] = (counts[val] || 0) + 1;
+            });
+
+            const rawLabels = Object.keys(counts);
+            const data = Object.values(counts);
+            
+            // Gerar mapa de cores para cada label
+            const pieColors = ['#06b6d4', '#3b82f6', '#8b5cf6', '#14b8a6', '#6366f1', '#475569'];
+            const barColor = '#06b6d4';
+            const colorsMap = {};
+            
+            rawLabels.forEach((label, i) => {
+                if (widget.type === 'pie') {
+                    colorsMap[label] = pieColors[i % pieColors.length];
+                } else {
+                    colorsMap[label] = barColor; // Barras podem ter uma cor só ou mesma lógica, vamos usar mesma lógica para colorir mapa
+                    // Mas se o gráfico for barra, vamos usar as cores variadas no mapa também para diferenciar
+                    colorsMap[label] = pieColors[i % pieColors.length];
+                }
+            });
+            const colorsJson = JSON.stringify(colorsMap);
+
+            const chartLabels = rawLabels.map((label, i) => {
+                const count = data[i];
+                const pct = features.length > 0 ? ((count / features.length) * 100).toFixed(1) : 0;
+                return `${label} (${count} - ${pct}%)`;
+            });
+
+            const canvasContainer = document.createElement('div');
+            canvasContainer.className = "relative w-full h-44 mt-auto flex items-center justify-center z-10";
+            const canvas = document.createElement('canvas');
+            canvas.id = `chart-${theme.id}-${chartIndex}`;
+            canvasContainer.appendChild(canvas);
+            card.appendChild(canvasContainer);
+
+            setTimeout(() => {
+                const ctx = canvas.getContext('2d');
+                new Chart(ctx, {
+                    type: widget.type === 'pie' ? 'doughnut' : 'bar',
+                    data: {
+                        labels: chartLabels,
+                        datasets: [{
+                            data: data,
+                            backgroundColor: widget.type === 'pie' ? pieColors : barColor + '80',
+                            hoverBackgroundColor: barColor,
+                            borderWidth: 0,
+                            borderRadius: widget.type === 'bar' ? 4 : 0,
+                            barPercentage: 0.6
+                        }]
+                    },
+                    options: {
+                        animation: {
+                            duration: 2000,
+                            easing: 'easeOutQuart'
+                        },
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        layout: { padding: 0 },
+                        plugins: {
+                            legend: {
+                                display: widget.type === 'pie',
+                                position: 'right',
+                                labels: { color: '#cbd5e1', font: { size: 10 }, usePointStyle: true, boxWidth: 6 }
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                                titleColor: '#fff',
+                                bodyColor: '#cbd5e1',
+                                borderColor: 'rgba(6, 182, 212, 0.5)',
+                                borderWidth: 1,
+                                padding: 10,
+                                cornerRadius: 8
+                            }
+                        },
+                        scales: widget.type === 'bar' ? {
+                            y: { display: false, beginAtZero: true },
+                            x: { 
+                                display: true, 
+                                ticks: { color: '#cbd5e1', font: { size: 10 } }, 
+                                grid: { display: false } 
+                            }
+                        } : undefined
+                    }
+                });
+            }, 500); // Aguarda a animação de abertura
+            
+            // Apply map classification automatically
+            const colorsJsonAuto = JSON.stringify(colorsMap);
+            applyThemeClassification(theme.id, fieldId, colorsJsonAuto);
+        }
+        
+        // Efeito visual sutil de brilho no fundo do card
+        const glow = document.createElement('div');
+        glow.className = "absolute -bottom-10 -right-10 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl z-0 group-hover:bg-cyan-500/20 transition-colors";
+        card.appendChild(glow);
+        
+        container.appendChild(card);
+    });
+
+    // Configurar arrastar após gerar os cards
+    makeModalDraggable(modal);
+}
+window.openStatsDashboard = openStatsDashboard;
+
+window.closeStatsDashboard = function() {
+    const modal = document.getElementById('stats-dashboard-modal');
+    const content = document.getElementById('stats-dashboard-content');
+    if (!modal || !content) return;
+    
+    content.classList.remove('opacity-100');
+    content.classList.add('opacity-0');
+    
+    modal.classList.remove('scale-100', 'opacity-100', 'translate-y-0');
+    modal.classList.add('scale-95', 'opacity-0', 'translate-y-[-20px]', 'pointer-events-none');
+    
+    // resetar posição do modal para a próxima abertura
+    setTimeout(() => {
+        modal.style.top = '80px';
+        modal.style.right = '20px';
+        modal.style.left = 'auto';
+        modal.style.bottom = 'auto';
+    }, 500);
+    
+    const themeId = modal.dataset.themeId;
+    if (themeId) {
+        resetThemeClassification(themeId);
+    }
+    
+    // Uncheck all stats toggles in the layer list
+    const allToggles = document.querySelectorAll('input[name="layer-stat-toggle"]');
+    allToggles.forEach(t => t.checked = false);
+    
+    setTimeout(() => {
+        modal.classList.add('pointer-events-none');
+    }, 500);
+};
+
+
+window.applyThemeClassification = function(themeId, fieldId, colorsJson) {
+    const theme = themes.find(t => t.id === themeId);
+    if (!theme) return;
+
+    const colorsMap = JSON.parse(colorsJson);
+    
+    geojsonLayer.eachLayer(layer => {
+        if (!layer.feature || layer.feature.properties.themeId !== themeId) return;
+        
+        // Salvar estilo original da feição
+        if (!layer.options.originalStyle) {
+            layer.options.originalStyle = {
+                fillColor: layer.options.fillColor || theme.color || '#3388ff',
+                color: layer.options.color || theme.color || '#3388ff',
+                weight: layer.options.weight,
+                fillOpacity: layer.options.fillOpacity
+            };
+        }
+
+        const val = getFeaturePropertyValue(theme, layer.feature, fieldId);
+        const valStr = (val === undefined || val === null || val === '') ? "N/I" : String(val);
+        const newColor = colorsMap[valStr] || theme.color || '#3388ff';
+
+        if (layer.setStyle) {
+            layer.setStyle({
+                fillColor: newColor,
+                color: newColor,
+                fillOpacity: 0.8,
+                weight: 2
+            });
+        }
+    });
+};
+
+window.resetThemeClassification = function(themeId) {
+    const theme = themes.find(t => t.id === themeId);
+    if (!theme) return;
+
+    geojsonLayer.eachLayer(layer => {
+        if (!layer.feature || layer.feature.properties.themeId !== themeId) return;
+        
+        if (layer.options.originalStyle && layer.setStyle) {
+            layer.setStyle({
+                fillColor: layer.options.originalStyle.fillColor,
+                color: layer.options.originalStyle.color,
+                weight: layer.options.originalStyle.weight,
+                fillOpacity: layer.options.originalStyle.fillOpacity
+            });
+            delete layer.options.originalStyle;
+        }
+    });
+};
