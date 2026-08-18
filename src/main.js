@@ -2065,7 +2065,7 @@ function closeFeatureInfoModal(keepLayer = false) {
   const icon = document.querySelector('#btn-feature-fullscreen span');
   if (card) {
       card.classList.remove('left-0', 'right-0', 'bottom-0', 'w-full', 'rounded-none');
-      card.classList.add('right-4', 'md:right-6', 'bottom-4', 'rounded-2xl', 'w-[90%]', 'max-w-sm', 'sm:max-w-md');
+      card.classList.add('right-4', 'md:right-6', 'bottom-4', 'rounded-2xl', 'w-[90%]', 'max-w-sm', 'sm:max-w-md', 'top-[4.5rem]', 'md:top-[5rem]');
       card.style.left = '';
       card.style.top = '';
       card.style.right = '';
@@ -2544,7 +2544,7 @@ window.toggleFeatureInfoFullscreen = function() {
     if (window.isFeatureInfoFullscreen) {
         // Restore
         card.classList.remove('left-0', 'right-0', 'bottom-0', 'w-full', 'rounded-none');
-        card.classList.add('right-4', 'md:right-6', 'bottom-4', 'rounded-2xl', 'w-[90%]', 'max-w-sm', 'sm:max-w-md');
+        card.classList.add('right-4', 'md:right-6', 'bottom-4', 'rounded-2xl', 'w-[90%]', 'max-w-sm', 'sm:max-w-md', 'top-[4.5rem]', 'md:top-[5rem]');
         card.style.left = '';
         card.style.top = '';
         card.style.right = '';
@@ -2554,9 +2554,9 @@ window.toggleFeatureInfoFullscreen = function() {
     } else {
         // Fullscreen
         card.classList.remove('right-4', 'md:right-6', 'bottom-4', 'rounded-2xl', 'w-[90%]', 'max-w-sm', 'sm:max-w-md');
-        card.classList.add('left-0', 'right-0', 'bottom-0', 'w-full', 'rounded-none');
+        card.classList.add('left-0', 'right-0', 'bottom-0', 'w-full', 'rounded-none', 'top-[4.5rem]', 'md:top-[5rem]');
         card.style.left = '0px';
-        card.style.top = ''; // Vazio para que top-[4.5rem] aja normalmente
+        card.style.top = ''; // top-[4.5rem] agora vai funcionar porque readicionamos a classe
         card.style.right = '0px';
         card.style.bottom = '0px';
         if (icon) icon.textContent = 'close_fullscreen';
