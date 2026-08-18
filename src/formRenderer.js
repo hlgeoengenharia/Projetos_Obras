@@ -163,8 +163,8 @@ function renderMultipleTab(tab, featureData, isEditMode) {
                     <thead class="bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 uppercase font-semibold">
                         <tr>
                             <th class="px-4 py-3">Data</th>
-                            <th class="px-4 py-3">Resumo</th>
-                            <th class="px-4 py-3 text-right">Ações</th>
+                            <th class="px-4 py-3">Título</th>
+                            ${isEditMode ? '<th class="px-4 py-3 text-right">Ações</th>' : ''}
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-200 dark:divide-slate-700" id="multiple-table-body-${tab.id}">
@@ -179,27 +179,40 @@ function renderMultipleTab(tab, featureData, isEditMode) {
             // Pega o primeiro campo preenchido pra usar como resumo
             if (tab.fields && tab.fields.length > 0) {
                 const firstField = tab.fields.find(f => rec[f.id]);
-                if (firstField) summary = String(rec[firstField.id]) || '';
+                if (firstField) {
+                    let val = rec[firstField.id];
+                    try {
+                        if (typeof val === 'string' && (val.startsWith('[') || val.startsWith('{'))) {
+                            let parsed = JSON.parse(val);
+                            if (Array.isArray(parsed) && parsed.length > 0) {
+                                summary = parsed[0].title || parsed[0].name || 'Arquivo Anexado';
+                            } else if (parsed.title || parsed.name) {
+                                summary = parsed.title || parsed.name;
+                            } else {
+                                summary = 'Registro Completo';
+                            }
+                        } else {
+                            summary = String(val);
+                        }
+                    } catch(e) {
+                        summary = String(val);
+                    }
+                }
             }
             if(summary.length > 50) summary = summary.substring(0, 50) + '...';
             
             html += `
-                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                <tr class="bg-white even:bg-slate-50/50 dark:bg-slate-900 dark:even:bg-slate-800/40 hover:!bg-blue-50/80 dark:hover:!bg-blue-900/30 active:!bg-blue-100 dark:active:!bg-blue-900/50 transition-all duration-200 cursor-pointer" onclick="viewMultipleRecord('${tab.id}', ${idx})">
                     <td class="px-4 py-3 text-slate-900 dark:text-slate-100 font-medium">${dateVal}</td>
                     <td class="px-4 py-3 text-slate-500">${summary}</td>
-                    <td class="px-4 py-3 text-right">
-                        ${isEditMode ? `
-                            <div class="flex items-center justify-end gap-1">
-                                <button type="button" onclick="viewMultipleRecord('${tab.id}', ${idx})" class="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors" title="Visualizar"><span class="material-symbols-outlined text-[18px]">visibility</span></button>
-                                <button type="button" onclick="editMultipleRecord('${tab.id}', ${idx})" class="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-900/20 rounded transition-colors" title="Editar"><span class="material-symbols-outlined text-[18px]">edit</span></button>
-                                <button type="button" onclick="deleteMultipleRecord('${tab.id}', ${idx})" class="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors" title="Excluir"><span class="material-symbols-outlined text-[18px]">delete</span></button>
-                            </div>
-                        ` : `
-                            <div class="flex items-center justify-end gap-1">
-                                <button type="button" onclick="viewMultipleRecord('${tab.id}', ${idx})" class="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors" title="Visualizar"><span class="material-symbols-outlined text-[18px]">visibility</span></button>
-                            </div>
-                        `}
+                    ${isEditMode ? `
+                    <td class="px-4 py-3 text-right" onclick="event.stopPropagation()">
+                        <div class="flex items-center justify-end gap-1">
+                            <button type="button" onclick="editMultipleRecord('${tab.id}', ${idx})" class="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-900/20 rounded transition-colors" title="Editar"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+                            <button type="button" onclick="deleteMultipleRecord('${tab.id}', ${idx})" class="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors" title="Excluir"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+                        </div>
                     </td>
+                    ` : ''}
                 </tr>
             `;
         });
@@ -280,7 +293,7 @@ window.toggleMultipleForm = function(tabId, showForm) {
             const subformContainer = formView.querySelector('#multiple-form-inputs-' + tabId);
             if (subformContainer) {
                 subformContainer.innerHTML = tab.fields.map(f => {
-                    return `<div class="${['textarea', 'attachment', 'photo', 'geolocation', 'cep'].includes(f.type) ? 'md:col-span-2' : ''}">
+                    return `<div class="${['textarea', 'attachment', 'photo', 'geolocation', 'cep', 'hiperlink'].includes(f.type) ? 'md:col-span-2' : ''}">
                         <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">${f.label}</label>
                         ${typeof generateFeatureInputHtml !== 'undefined' ? generateFeatureInputHtml(f, '', true, true) : ''}
                     </div>`;
@@ -319,7 +332,7 @@ window.editMultipleRecord = function(tabId, idx, readonly = false) {
         const subformContainer = formView.querySelector('#multiple-form-inputs-' + tabId);
         if (subformContainer) {
             subformContainer.innerHTML = tab.fields.map(f => {
-                return `<div class="${['textarea', 'attachment', 'photo', 'geolocation', 'cep'].includes(f.type) ? 'md:col-span-2' : ''}">
+                return `<div class="${['textarea', 'attachment', 'photo', 'geolocation', 'cep', 'hiperlink'].includes(f.type) ? 'md:col-span-2' : ''}">
                     <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">${f.label}</label>
                     ${typeof generateFeatureInputHtml !== 'undefined' ? generateFeatureInputHtml(f, record[f.id] || '', !readonly, true) : ''}
                 </div>`;
@@ -332,13 +345,13 @@ window.editMultipleRecord = function(tabId, idx, readonly = false) {
         }
     }
     
-    const saveBtn = formView.querySelector('button[onclick^="saveMultipleRecord"]');
+    const actionButtonsContainer = formView.querySelector('.mobile-sticky-bottom');
     if (readonly) {
         formView.removeAttribute('data-edit-index'); // don't save view
-        if (saveBtn) saveBtn.style.display = 'none';
+        if (actionButtonsContainer) actionButtonsContainer.style.display = 'none';
     } else {
         formView.setAttribute('data-edit-index', idx);
-        if (saveBtn) saveBtn.style.display = 'inline-flex';
+        if (actionButtonsContainer) actionButtonsContainer.style.display = 'flex';
     }
 };
 

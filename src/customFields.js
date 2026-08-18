@@ -26,7 +26,7 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
                     
                     if (!file.deleted) {
                         html += `
-                        <div class="flex flex-col @sm:flex-row items-center justify-between gap-4 text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 w-full shadow-sm mb-2">
+                        <div class="flex flex-col @sm:flex-row items-center justify-between gap-4 text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 w-full shadow-sm mb-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors" onclick="window.open('${url}', '_blank')" title="Clique para abrir ${name}">
                             <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-[150px] w-full @sm:w-auto">
                                 ${leftIconActive}
                                 <div class="flex flex-col overflow-hidden w-full">
@@ -37,11 +37,6 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
                                 <div class="flex flex-col gap-1 min-w-[150px] w-full @sm:w-auto text-slate-500 border-t @sm:border-t-0 @sm:border-l border-slate-200 dark:border-slate-700 pt-2 @sm:pt-0 @sm:pl-4">
                                     <div class="flex items-center gap-1 break-words text-xs"><span class="material-symbols-outlined text-[14px]">person</span> ${author}</div>
                                     <div class="flex items-center gap-1 break-words text-xs"><span class="material-symbols-outlined text-[14px]">calendar_today</span> ${dateStr}</div>
-                                </div>
-                                <div class="flex items-center gap-2 w-full @sm:w-auto">
-                                    <a href="${url}" target="_blank" class="w-full @sm:w-auto text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded border border-blue-200 dark:border-blue-800 hover:bg-blue-100 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
-                                        <span class="material-symbols-outlined text-[16px]">visibility</span> Abrir
-                                    </a>
                                 </div>
                             </div>`;
                     }
@@ -213,27 +208,29 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
 </div>`;
                         } else {
                             return `
-<div class="flex flex-col @sm:flex-row items-center justify-between gap-4 text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 w-full shadow-sm" data-url="${url}">
-    <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-[150px] w-full @sm:w-auto">
-        ${leftIconActive}
-        <div class="flex flex-col overflow-hidden w-full cursor-pointer hover:opacity-80 transition-opacity" onclick="window.open('${url}', '_blank')" title="Clique para abrir ${name}">
-            <div class="font-semibold text-sm break-words" title="${title}">${title || 'Sem título'}</div>
-            <div class="text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 mt-1 break-words" title="${name}">Arq: ${name}</div>
+<div class="flex flex-col gap-3 text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 w-full shadow-sm" data-url="${url}">
+    <div class="flex flex-col @sm:flex-row justify-between gap-4 w-full">
+        <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
+            ${leftIconActive}
+            <div class="flex flex-col overflow-hidden w-full cursor-pointer hover:opacity-80 transition-opacity" onclick="window.open('${url}', '_blank')" title="Clique para abrir ${name}">
+                <div class="font-semibold text-sm break-words" title="${title}">${title || 'Sem título'}</div>
+                <div class="text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 mt-1 break-words" title="${name}">Arq: ${name}</div>
+            </div>
+        </div>
+        <div class="flex flex-col gap-1 min-w-[150px] shrink-0 text-slate-500 border-t @sm:border-t-0 @sm:border-l border-slate-200 dark:border-slate-700 pt-2 @sm:pt-0 @sm:pl-4">
+            <div class="flex items-center gap-1 break-words text-xs" title="${author}">
+                <span class="material-symbols-outlined text-[14px]">person</span> ${author}
+            </div>
+            <div class="flex items-center gap-1 break-words text-xs">
+                <span class="material-symbols-outlined text-[14px]">calendar_today</span> ${dateStr}
+            </div>
         </div>
     </div>
-    <div class="flex flex-col gap-1 min-w-[150px] w-full @sm:w-auto text-slate-500 border-t @sm:border-t-0 @sm:border-l border-slate-200 dark:border-slate-700 pt-2 @sm:pt-0 @sm:pl-4">
-        <div class="flex items-center gap-1 break-words text-xs" title="${author}">
-            <span class="material-symbols-outlined text-[14px]">person</span> ${author}
-        </div>
-        <div class="flex items-center gap-1 break-words text-xs">
-            <span class="material-symbols-outlined text-[14px]">calendar_today</span> ${dateStr}
-        </div>
-    </div>
-    <div class="flex flex-col gap-2 shrink-0 w-full @sm:w-auto">
-        <button type="button" onclick="editFileTitlePrompt('${f.id}', '${url}')" class="w-full text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/30 px-3 py-1.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
+    <div class="flex flex-col sm:flex-row items-center gap-2 w-full pt-2 border-t border-slate-100 dark:border-slate-700 mt-1">
+        <button type="button" onclick="editFileTitlePrompt('${f.id}', '${url}')" class="flex-1 w-full text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/30 px-3 py-1.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
             <span class="material-symbols-outlined text-[16px]">edit</span> Editar
         </button>
-        <button type="button" onclick="removeFile('${f.id}', '${url}', '${title}')" class="w-full text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded border border-red-200 dark:border-red-800 hover:bg-red-100 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
+        <button type="button" onclick="removeFile('${f.id}', '${url}', '${title}')" class="flex-1 w-full text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded border border-red-200 dark:border-red-800 hover:bg-red-100 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
             <span class="material-symbols-outlined text-[16px]">delete</span> Excluir
         </button>
     </div>
@@ -490,31 +487,33 @@ async function handleSupabaseUpload(event, fieldId, isPhoto) {
                             : '';
 
         previewDiv.innerHTML += `
-        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 w-full shadow-sm" data-url="${publicUrl}">
-            <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-[150px]">
-                ${leftIconActive}
-                <div class="flex flex-col overflow-hidden w-full cursor-pointer hover:opacity-80 transition-opacity" onclick="window.open('${publicUrl}', '_blank')" title="Clique para abrir ${file.name}">
-                    <div class="font-semibold text-base truncate" title="${titleToRender}">${titleToRender || 'Sem título'}</div>
-                    <div class="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 mt-1 truncate" title="${file.name}">Arq: ${file.name}</div>
-                </div>
+        <div class="flex flex-col gap-3 text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 w-full shadow-sm" data-url="${publicUrl}">
+    <div class="flex flex-col @sm:flex-row justify-between gap-4 w-full">
+        <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
+            ${leftIconActive}
+            <div class="flex flex-col overflow-hidden w-full cursor-pointer hover:opacity-80 transition-opacity" onclick="window.open('${publicUrl}', '_blank')" title="Clique para abrir ${file.name}">
+                <div class="font-semibold text-base truncate" title="${titleToRender}">${titleToRender || 'Sem título'}</div>
+                <div class="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 mt-1 truncate" title="${file.name}">Arq: ${file.name}</div>
             </div>
-            <div class="flex flex-col gap-1 min-w-[150px] text-slate-500 border-l border-slate-200 dark:border-slate-700 pl-4">
-                <div class="flex items-center gap-1 truncate" title="${author}">
-                    <span class="material-symbols-outlined text-[16px]">person</span> ${author}
-                </div>
-                <div class="flex items-center gap-1 truncate">
-                    <span class="material-symbols-outlined text-[16px]">calendar_today</span> ${dateStr}
-                </div>
+        </div>
+        <div class="flex flex-col gap-1 min-w-[150px] shrink-0 text-slate-500 border-t @sm:border-t-0 @sm:border-l border-slate-200 dark:border-slate-700 pt-2 @sm:pt-0 @sm:pl-4">
+            <div class="flex items-center gap-1 truncate" title="${author}">
+                <span class="material-symbols-outlined text-[16px]">person</span> ${author}
             </div>
-            <div class="flex flex-col gap-2 shrink-0">
-                <button type="button" onclick="editFileTitlePrompt('${fieldId}', '${publicUrl}')" class="w-full text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/30 px-3 py-1.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
-                    <span class="material-symbols-outlined text-[16px]">edit</span> Editar
-                </button>
-                <button type="button" onclick="removeFile('${fieldId}', '${publicUrl}', '${titleToRender}')" class="w-full text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded border border-red-200 dark:border-red-800 hover:bg-red-100 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
-                    <span class="material-symbols-outlined text-[16px]">delete</span> Excluir
-                </button>
+            <div class="flex items-center gap-1 truncate">
+                <span class="material-symbols-outlined text-[16px]">calendar_today</span> ${dateStr}
             </div>
-        </div>`;
+        </div>
+    </div>
+    <div class="flex flex-col sm:flex-row items-center gap-2 w-full pt-2 border-t border-slate-100 dark:border-slate-700 mt-1">
+        <button type="button" onclick="editFileTitlePrompt('${fieldId}', '${publicUrl}')" class="flex-1 w-full text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/30 px-3 py-1.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
+            <span class="material-symbols-outlined text-[16px]">edit</span> Editar
+        </button>
+        <button type="button" onclick="removeFile('${fieldId}', '${publicUrl}', '${titleToRender}')" class="flex-1 w-full text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded border border-red-200 dark:border-red-800 hover:bg-red-100 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
+            <span class="material-symbols-outlined text-[16px]">delete</span> Excluir
+        </button>
+    </div>
+</div>`;
         btnText.innerText = originalText;
         event.target.value = ''; // Reset input file
 }
@@ -605,27 +604,29 @@ window.restoreFile = function(fieldId, fileUrl) {
             ? `<div class="w-14 h-14 rounded-xl bg-slate-100 dark:bg-slate-700 shrink-0 overflow-hidden border border-slate-200 dark:border-slate-600 cursor-pointer" onclick="window.open('${fileUrl}', '_blank')"><img src="${fileUrl}" class="w-full h-full object-cover hover:scale-110 transition-transform duration-300" /></div>`
             : '';
         el.innerHTML = `
-<div class="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 w-full shadow-sm" data-url="${fileUrl}">
-    <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-[150px]">
-        ${leftIconActive}
-        <div class="flex flex-col overflow-hidden w-full cursor-pointer hover:opacity-80 transition-opacity" onclick="window.open('${fileUrl}', '_blank')" title="Clique para abrir ${name}">
-            <div class="font-semibold text-base truncate">${title || 'Sem título'}</div>
-            <div class="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 mt-1 truncate">Arq: ${name}</div>
+<div class="flex flex-col gap-3 text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 w-full shadow-sm" data-url="${fileUrl}">
+    <div class="flex flex-col @sm:flex-row justify-between gap-4 w-full">
+        <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
+            ${leftIconActive}
+            <div class="flex flex-col overflow-hidden w-full cursor-pointer hover:opacity-80 transition-opacity" onclick="window.open('${fileUrl}', '_blank')" title="Clique para abrir ${name}">
+                <div class="font-semibold text-base truncate">${title || 'Sem título'}</div>
+                <div class="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 mt-1 truncate">Arq: ${name}</div>
+            </div>
+        </div>
+        <div class="flex flex-col gap-1 min-w-[150px] shrink-0 text-slate-500 border-t @sm:border-t-0 @sm:border-l border-slate-200 dark:border-slate-700 pt-2 @sm:pt-0 @sm:pl-4">
+            <div class="flex items-center gap-1 truncate" title="${author}">
+                <span class="material-symbols-outlined text-[16px]">person</span> ${author}
+            </div>
+            <div class="flex items-center gap-1 truncate">
+                <span class="material-symbols-outlined text-[16px]">calendar_today</span> ${dateStr}
+            </div>
         </div>
     </div>
-    <div class="flex flex-col gap-1 min-w-[150px] text-slate-500 border-l border-slate-200 dark:border-slate-700 pl-4">
-        <div class="flex items-center gap-1 truncate" title="${author}">
-            <span class="material-symbols-outlined text-[16px]">person</span> ${author}
-        </div>
-        <div class="flex items-center gap-1 truncate">
-            <span class="material-symbols-outlined text-[16px]">calendar_today</span> ${dateStr}
-        </div>
-    </div>
-    <div class="flex flex-col gap-2 shrink-0">
-        <button type="button" onclick="editFileTitlePrompt('${fieldId}', '${fileUrl}')" class="w-full text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/30 px-3 py-1.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
+    <div class="flex flex-col sm:flex-row items-center gap-2 w-full pt-2 border-t border-slate-100 dark:border-slate-700 mt-1">
+        <button type="button" onclick="editFileTitlePrompt('${fieldId}', '${fileUrl}')" class="flex-1 w-full text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/30 px-3 py-1.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
             <span class="material-symbols-outlined text-[16px]">edit</span> Editar
         </button>
-        <button type="button" onclick="removeFile('${fieldId}', '${fileUrl}', '${title}')" class="w-full text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded border border-red-200 dark:border-red-800 hover:bg-red-100 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
+        <button type="button" onclick="removeFile('${fieldId}', '${fileUrl}', '${title}')" class="flex-1 w-full text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded border border-red-200 dark:border-red-800 hover:bg-red-100 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
             <span class="material-symbols-outlined text-[16px]">delete</span> Excluir
         </button>
     </div>
