@@ -624,9 +624,13 @@
     <div class="px-4 py-3 border-b border-slate-200/50 dark:border-white/10 flex justify-between items-center cursor-move" id="feature-info-header">
         <div id="feature-actions-container" class="flex items-center rounded-lg overflow-hidden border border-slate-300/50 dark:border-white/10 shadow-sm bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
 
-            <button onclick="editFeatureGeometry()" class="flex items-center justify-center gap-2 px-3 py-1.5 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-800 dark:text-slate-200 font-medium text-sm transition-all tooltip" title="Ajustar no Mapa">
+            <button onclick="editFeatureGeometry()" class="flex items-center justify-center gap-2 px-3 py-1.5 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-800 dark:text-slate-200 font-medium text-sm transition-all tooltip border-r border-slate-300/50 dark:border-white/10" title="Ajustar no Mapa">
                 <span class="material-symbols-outlined text-[18px]">edit_location_alt</span>
                 Ajustar Mapa
+            </button>
+            <button onclick="openStreetView()" class="flex items-center justify-center gap-2 px-3 py-1.5 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-800 dark:text-slate-200 font-medium text-sm transition-all tooltip" title="Abrir no Google Street View">
+                <span class="material-symbols-outlined text-[18px] text-amber-500">streetview</span>
+                Street View
             </button>
         </div>
         <div class="flex items-center rounded-lg overflow-hidden border border-slate-300/50 dark:border-white/10 shadow-sm ml-2 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
@@ -768,6 +772,37 @@
   </div>
 </div>
 
+
+<!-- Street View Backdrop Overlay -->
+<div id="streetview-overlay" class="fixed inset-0 bg-black/40 z-[110] hidden pointer-events-auto" onclick="closeStreetViewModal()"></div>
+
+<!-- Street View Draggable & Resizable Card -->
+<div id="streetview-card" class="fixed z-[120] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/50 dark:border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] w-[85%] max-w-4xl h-[65vh] flex flex-col overflow-hidden hidden pointer-events-auto left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style="min-width: 350px; min-height: 250px;">
+  <div class="px-4 py-3 border-b border-slate-200/50 dark:border-white/10 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 cursor-move" id="streetview-header">
+      <h3 class="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2 select-none pointer-events-none">
+          <span class="material-symbols-outlined text-[18px] text-amber-500">streetview</span>
+          Google Street View
+      </h3>
+      <div class="flex items-center gap-2">
+          <!-- Fullscreen button inside Street View modal -->
+          <button onclick="toggleStreetViewFullscreen()" id="btn-streetview-fullscreen" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full flex items-center justify-center text-slate-500 dark:text-slate-400 transition-all tooltip" title="Tela Cheia">
+              <span class="material-symbols-outlined text-[18px]">open_in_full</span>
+          </button>
+          <button onclick="closeStreetViewModal()" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full flex items-center justify-center text-slate-500 dark:text-slate-400 transition-all tooltip" title="Fechar">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+          </button>
+      </div>
+  </div>
+  <div class="flex-1 w-full h-full bg-slate-900 relative">
+      <iframe id="streetview-iframe" src="" class="w-full h-full border-0" allowfullscreen loading="lazy" referrerpolicy="no-referrer" allow="accelerometer; gyroscope; magnetometer"></iframe>
+      <!-- Transparent iframe mask to ensure smooth resizing and dragging -->
+      <div id="streetview-iframe-mask" class="absolute inset-0 bg-transparent z-[130] hidden"></div>
+  </div>
+  <!-- Resize handle in the bottom-right corner -->
+  <div id="streetview-resize-handle" class="absolute bottom-0 right-0 w-6 h-6 cursor-se-resize z-[140] flex items-end justify-end p-0.5 text-slate-400 dark:text-slate-600 hover:text-primary">
+      <span class="material-symbols-outlined text-[16px] pointer-events-none select-none">south_east</span>
+  </div>
+</div>
 
 <!-- Configuração do Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
