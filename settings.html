@@ -99,7 +99,364 @@
           },
         },
       }
-    </script>
+    // --- FORMULA BUILDER CONTROLLER ---
+    let currentFormulaFieldId = null;
+    let currentFormulaConfig = null;
+
+    function openFormulaModal(fieldId) {
+       currentFormulaFieldId = fieldId;
+       
+       const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+       if (!activeTab) return;
+       
+       const field = activeTab.fields.find(f => f.id === fieldId);
+       if (!field) return;
+       
+       document.getElementById('formula-modal-title').innerText = `Configurar Fórmulas: ${field.label || 'Campo Sem Nome'}`;
+       
+       // Clone config to avoid modifying directly
+       currentFormulaConfig = field.formulaConfig ? JSON.parse(JSON.stringify(field.formulaConfig)) : { rules: [], fallbackFormula: '' };
+       if (!currentFormulaConfig.fallbackAction) {
+           currentFormulaConfig.fallbackAction = { fieldId: '', operator: 'none', valueType: 'fixed', value: currentFormulaConfig.fallbackFormula || '0' };
+       }
+       
+       renderFormulaRules();
+       renderFallbackAction();
+       
+       const modal = document.getElementById('formula-modal');
+       modal.classList.remove('hidden');
+       modal.classList.add('flex');
+    }
+
+    function closeFormulaModal() {
+       const modal = document.getElementById('formula-modal');
+       modal.classList.add('hidden');
+       modal.classList.remove('flex');
+       document.getElementById('formula-field-picker').classList.add('hidden');
+    }
+
+    function renderFormulaRules() {
+       const container = document.getElementById('formula-rules-container');
+       container.innerHTML = '';
+       
+       if (!currentFormulaConfig.rules || currentFormulaConfig.rules.length === 0) {
+          container.innerHTML = `<div class="text-center py-6 text-xs text-slate-400 italic bg-slate-50 dark:bg-slate-900/50 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">Nenhuma regra de cálculo configurada. Crie uma regra clicando no botão abaixo.</div>`;
+          return;
+       }
+       
+       currentFormulaConfig.rules.forEach((rule, ruleIdx) => {
+          if (!rule.action) {
+              rule.action = { fieldId: '', operator: 'none', valueType: 'fixed', value: '' };
+          }
+          const ruleDiv = document.createElement('div');
+          ruleDiv.className = 'bg-slate-50 dark:bg-slate-950/20 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-4 relative';
+          
+          let headerHtml = `
+             <div class="flex justify-between items-center pb-2 border-b border-slate-200/50 dark:border-slate-800/50">
+                 <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Regra #${ruleIdx + 1}</span>
+                 <div class="flex gap-1.5">
+                     <button type="button" onclick="moveRule(${ruleIdx}, -1)" ${ruleIdx === 0 ? 'disabled class="opacity-30"' : ''} class="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-all" title="Mover para Cima">
+                         <span class="material-symbols-outlined text-[16px]">arrow_upward</span>
+                     </button>
+                     <button type="button" onclick="moveRule(${ruleIdx}, 1)" ${ruleIdx === currentFormulaConfig.rules.length - 1 ? 'disabled class="opacity-30"' : ''} class="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-all" title="Mover para Baixo">
+                         <span class="material-symbols-outlined text-[16px]">arrow_downward</span>
+                     </button>
+                     <button type="button" onclick="deleteRule(${ruleIdx})" class="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded transition-all" title="Excluir Regra">
+                         <span class="material-symbols-outlined text-[16px]">delete</span>
+                     </button>
+                 </div>
+             </div>
+          `;
+          
+          let conditionsHtml = `
+             <div class="space-y-2">
+                 <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Se atender às condições (Todas - AND)</label>
+                 <div class="space-y-2" id="conditions-list-${ruleIdx}">
+          `;
+          
+          if (!rule.conditions || rule.conditions.length === 0) {
+             conditionsHtml += `<div class="text-xs text-slate-400 italic">Sempre ativa (sem condições)</div>`;
+          } else {
+             rule.conditions.forEach((cond, condIdx) => {
+                 conditionsHtml += `
+                     <div class="flex flex-wrap md:flex-nowrap gap-2 items-center">
+                         <select onchange="updateConditionField(${ruleIdx}, ${condIdx}, this.value)" class="w-full md:w-1/3 px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-md focus:outline-none text-slate-800 dark:text-white">
+                             ${getFormFieldsOptionsForRules(cond.fieldId)}
+                         </select>
+                         <select onchange="updateConditionOperator(${ruleIdx}, ${condIdx}, this.value)" class="w-full md:w-1/4 px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-md focus:outline-none text-slate-800 dark:text-white">
+                             <option value="eq" ${cond.operator === 'eq' ? 'selected' : ''}>igual a</option>
+                             <option value="neq" ${cond.operator === 'neq' ? 'selected' : ''}>diferente de</option>
+                             <option value="gt" ${cond.operator === 'gt' ? 'selected' : ''}>maior que</option>
+                             <option value="gte" ${cond.operator === 'gte' ? 'selected' : ''}>maior ou igual a</option>
+                             <option value="lt" ${cond.operator === 'lt' ? 'selected' : ''}>menor que</option>
+                             <option value="lte" ${cond.operator === 'lte' ? 'selected' : ''}>menor ou igual a</option>
+                             <option value="contains" ${cond.operator === 'contains' ? 'selected' : ''}>contém texto</option>
+                         </select>
+                         ${getConditionValueInputHtml(ruleIdx, condIdx, cond)}
+                         <button type="button" onclick="deleteCondition(${ruleIdx}, ${condIdx})" class="p-1.5 text-slate-400 hover:text-red-500 rounded transition-all">
+                             <span class="material-symbols-outlined text-[16px]">close</span>
+                         </button>
+                     </div>
+                 `;
+             });
+          }
+          
+          conditionsHtml += `
+                 </div>
+                 <button type="button" onclick="addCondition(${ruleIdx})" class="text-[10px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded transition-all flex items-center gap-1 mt-1 border border-slate-200 dark:border-slate-700">
+                     <span class="material-symbols-outlined text-[12px]">add</span> Condição
+                 </button>
+             </div>
+          `;
+          
+          let actionHtml = `
+             <div class="pt-2 border-t border-slate-200/50 dark:border-slate-800/50">
+                 <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Então o valor será calculado como</label>
+                 <div class="flex flex-wrap md:flex-nowrap gap-2 items-center">
+                     <select onchange="updateRuleActionField(${ruleIdx}, this.value)" class="w-full md:w-1/3 px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-md focus:outline-none text-slate-800 dark:text-white">
+                         ${getFormFieldsOptionsForRules(rule.action.fieldId)}
+                     </select>
+                     <select onchange="updateRuleActionOperator(${ruleIdx}, this.value)" class="w-full md:w-1/4 px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-md focus:outline-none text-slate-800 dark:text-white">
+                         <option value="none" ${rule.action.operator === 'none' ? 'selected' : ''}>Copiar Valor</option>
+                         <option value="multiply" ${rule.action.operator === 'multiply' ? 'selected' : ''}>multiplicar por (*)</option>
+                         <option value="divide" ${rule.action.operator === 'divide' ? 'selected' : ''}>dividir por (/)</option>
+                         <option value="add" ${rule.action.operator === 'add' ? 'selected' : ''}>somar com (+)</option>
+                         <option value="subtract" ${rule.action.operator === 'subtract' ? 'selected' : ''}>subtrair de (-)</option>
+                     </select>
+                     <select onchange="updateRuleActionValueType(${ruleIdx}, this.value)" class="w-full md:w-1/5 px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-md focus:outline-none text-slate-800 dark:text-white">
+                         <option value="fixed" ${rule.action.valueType === 'fixed' ? 'selected' : ''}>Número Fixo</option>
+                         <option value="field" ${rule.action.valueType === 'field' ? 'selected' : ''}>Outro Campo</option>
+                     </select>
+                     ${getRuleActionValueInputHtml(ruleIdx, rule.action)}
+                 </div>
+             </div>
+          `;
+          
+          ruleDiv.innerHTML = headerHtml + conditionsHtml + actionHtml;
+          container.appendChild(ruleDiv);
+       });
+    }
+
+    function getRuleActionValueInputHtml(ruleIdx, action) {
+       const valueType = action ? action.valueType : 'fixed';
+       const value = action ? action.value : '';
+       
+       if (valueType === 'field') {
+          return `
+             <select onchange="updateRuleActionValue(${ruleIdx}, this.value)" class="w-full md:flex-1 px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-md focus:outline-none text-slate-800 dark:text-white">
+                 ${getFormFieldsOptionsForRules(value)}
+             </select>
+          `;
+       } else {
+          return `
+             <input type="number" step="any" value="${value || ''}" oninput="updateRuleActionValue(${ruleIdx}, this.value)" class="w-full md:flex-1 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-md focus:outline-none text-xs text-slate-800 dark:text-white" placeholder="Digite o número...">
+          `;
+       }
+    }
+
+    function renderFallbackAction() {
+       const container = document.getElementById('fallback-action-container');
+       if (!container) return;
+       const action = currentFormulaConfig.fallbackAction || { fieldId: '', operator: 'none', valueType: 'fixed', value: '0' };
+       
+       container.innerHTML = `
+           <select onchange="updateFallbackActionField(this.value)" class="w-full md:w-1/3 px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-md focus:outline-none text-slate-800 dark:text-white">
+               ${getFormFieldsOptionsForRules(action.fieldId)}
+           </select>
+           <select onchange="updateFallbackActionOperator(this.value)" class="w-full md:w-1/4 px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-md focus:outline-none text-slate-800 dark:text-white">
+               <option value="none" ${action.operator === 'none' ? 'selected' : ''}>Copiar Valor</option>
+               <option value="multiply" ${action.operator === 'multiply' ? 'selected' : ''}>multiplicar por (*)</option>
+               <option value="divide" ${action.operator === 'divide' ? 'selected' : ''}>dividir por (/)</option>
+               <option value="add" ${action.operator === 'add' ? 'selected' : ''}>somar com (+)</option>
+               <option value="subtract" ${action.operator === 'subtract' ? 'selected' : ''}>subtrair de (-)</option>
+           </select>
+           <select onchange="updateFallbackActionValueType(this.value)" class="w-full md:w-1/5 px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-md focus:outline-none text-slate-800 dark:text-white">
+               <option value="fixed" ${action.valueType === 'fixed' ? 'selected' : ''}>Número Fixo</option>
+               <option value="field" ${action.valueType === 'field' ? 'selected' : ''}>Outro Campo</option>
+           </select>
+           ${getFallbackActionValueInputHtml(action)}
+       `;
+    }
+
+    function getFallbackActionValueInputHtml(action) {
+       const valueType = action.valueType || 'fixed';
+       const value = action.value || '';
+       
+       if (valueType === 'field') {
+          return `
+             <select onchange="updateFallbackActionValue(this.value)" class="w-full md:flex-1 px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-md focus:outline-none text-slate-800 dark:text-white">
+                 ${getFormFieldsOptionsForRules(value)}
+             </select>
+          `;
+       } else {
+          return `
+             <input type="number" step="any" value="${value}" oninput="updateFallbackActionValue(this.value)" class="w-full md:flex-1 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-md focus:outline-none text-xs text-slate-800 dark:text-white" placeholder="Digite o número...">
+          `;
+       }
+    }
+
+    function getFormFieldsOptionsForRules(selectedValue) {
+       let optionsHtml = '<option value="">Escolha um campo...</option>';
+       builderTabs.forEach(tab => {
+          tab.fields.forEach(f => {
+             if (f.id !== currentFormulaFieldId && f.label.trim() !== '') {
+                 optionsHtml += `<option value="${f.id}" ${f.id === selectedValue ? 'selected' : ''}>[${tab.title}] ${f.label}</option>`;
+             }
+          });
+       });
+       return optionsHtml;
+    }
+
+    function getConditionValueInputHtml(ruleIdx, condIdx, cond) {
+       let fieldType = 'text';
+       let fieldOptions = [];
+       
+       builderTabs.forEach(tab => {
+          tab.fields.forEach(f => {
+             if (f.id === cond.fieldId) {
+                 fieldType = f.type;
+                 if (f.type === 'select' && f.options) {
+                     fieldOptions = f.options.split(',').map(o => o.trim()).filter(o => o);
+                 }
+             }
+          });
+       });
+       
+       if (fieldType === 'select' && fieldOptions.length > 0) {
+          const optionsHtml = fieldOptions.map(opt => `<option value="${opt}" ${cond.value === opt ? 'selected' : ''}>${opt}</option>`).join('');
+          return `
+             <select onchange="updateConditionValue(${ruleIdx}, ${condIdx}, this.value)" class="w-full md:flex-1 px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-md focus:outline-none text-slate-800 dark:text-white">
+                 <option value="">Escolha uma opção...</option>
+                 ${optionsHtml}
+             </select>
+          `;
+       } else {
+          return `
+             <input type="text" value="${cond.value || ''}" oninput="updateConditionValue(${ruleIdx}, ${condIdx}, this.value)" class="w-full md:flex-1 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-md focus:outline-none text-xs text-slate-800 dark:text-white" placeholder="Valor comparativo...">
+          `;
+       }
+    }
+
+    function addFormulaRule() {
+       currentFormulaConfig.rules.push({
+          conditions: [],
+          action: { fieldId: '', operator: 'none', valueType: 'fixed', value: '' }
+       });
+       renderFormulaRules();
+    }
+
+    function deleteRule(idx) {
+       currentFormulaConfig.rules.splice(idx, 1);
+       renderFormulaRules();
+    }
+
+    function moveRule(idx, dir) {
+       const targetIdx = idx + dir;
+       if (targetIdx >= 0 && targetIdx < currentFormulaConfig.rules.length) {
+          const rule = currentFormulaConfig.rules[idx];
+          currentFormulaConfig.rules[idx] = currentFormulaConfig.rules[targetIdx];
+          currentFormulaConfig.rules[targetIdx] = rule;
+          renderFormulaRules();
+       }
+    }
+
+    function addCondition(ruleIdx) {
+       const rule = currentFormulaConfig.rules[ruleIdx];
+       if (!rule.conditions) rule.conditions = [];
+       rule.conditions.push({
+          fieldId: '',
+          operator: 'eq',
+          value: ''
+       });
+       renderFormulaRules();
+    }
+
+    function deleteCondition(ruleIdx, condIdx) {
+       currentFormulaConfig.rules[ruleIdx].conditions.splice(condIdx, 1);
+       renderFormulaRules();
+    }
+
+    function updateConditionField(ruleIdx, condIdx, fieldId) {
+       currentFormulaConfig.rules[ruleIdx].conditions[condIdx].fieldId = fieldId;
+       currentFormulaConfig.rules[ruleIdx].conditions[condIdx].value = '';
+       renderFormulaRules();
+    }
+
+    function updateConditionOperator(ruleIdx, condIdx, operator) {
+       currentFormulaConfig.rules[ruleIdx].conditions[condIdx].operator = operator;
+    }
+
+    function updateConditionValue(ruleIdx, condIdx, value) {
+       currentFormulaConfig.rules[ruleIdx].conditions[condIdx].value = value;
+    }
+
+    function updateRuleActionField(ruleIdx, fieldId) {
+       currentFormulaConfig.rules[ruleIdx].action.fieldId = fieldId;
+    }
+
+    function updateRuleActionOperator(ruleIdx, operator) {
+       currentFormulaConfig.rules[ruleIdx].action.operator = operator;
+    }
+
+    function updateRuleActionValueType(ruleIdx, valueType) {
+       currentFormulaConfig.rules[ruleIdx].action.valueType = valueType;
+       currentFormulaConfig.rules[ruleIdx].action.value = '';
+       renderFormulaRules();
+    }
+
+    function updateRuleActionValue(ruleIdx, value) {
+       currentFormulaConfig.rules[ruleIdx].action.value = value;
+    }
+
+    function updateFallbackActionField(fieldId) {
+       currentFormulaConfig.fallbackAction.fieldId = fieldId;
+    }
+
+    function updateFallbackActionOperator(operator) {
+       currentFormulaConfig.fallbackAction.operator = operator;
+    }
+
+    function updateFallbackActionValueType(valueType) {
+       currentFormulaConfig.fallbackAction.valueType = valueType;
+       currentFormulaConfig.fallbackAction.value = '';
+       renderFallbackAction();
+    }
+
+    function updateFallbackActionValue(value) {
+       currentFormulaConfig.fallbackAction.value = value;
+    }
+
+    function saveFormulaConfig() {
+       const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+       if (!activeTab) return;
+       
+       const field = activeTab.fields.find(f => f.id === currentFormulaFieldId);
+       if (!field) return;
+       
+       // Backwards-compatible fallback formula string generation if needed by old engine
+       if (currentFormulaConfig.fallbackAction) {
+           const act = currentFormulaConfig.fallbackAction;
+           if (act.operator === 'none') {
+               currentFormulaConfig.fallbackFormula = act.valueType === 'fixed' ? act.value : `[${act.value}]`;
+           } else {
+               const opSign = act.operator === 'multiply' ? '*' : act.operator === 'divide' ? '/' : act.operator === 'add' ? '+' : '-';
+               const valPart = act.valueType === 'fixed' ? act.value : `[${act.value}]`;
+               currentFormulaConfig.fallbackFormula = `[${act.fieldId}] ${opSign} ${valPart}`;
+           }
+       }
+       
+       field.formulaConfig = currentFormulaConfig;
+       
+       const btn = document.getElementById(`fx-btn-${currentFormulaFieldId}`);
+       if (btn) {
+          const hasFormula = currentFormulaConfig.rules.length > 0 || (currentFormulaConfig.fallbackAction && currentFormulaConfig.fallbackAction.value !== '');
+          btn.className = `p-2 mt-6 ${hasFormula ? 'text-sky-500 bg-sky-50 dark:bg-sky-950/40 border border-sky-200/50 dark:border-sky-800/50' : 'text-slate-400 hover:text-sky-500 hover:bg-sky-50 dark:hover:bg-slate-800'} rounded-full transition-colors flex items-center justify-center`;
+       }
+       
+       syncActiveTabFields();
+       closeFormulaModal();
+    }
+   </script>
     <style id="futuristic-3d">
       /* Neumorphism and 3D Traits - Futuristic Layout */
       body {
@@ -587,6 +944,68 @@
                   <div id="a4-texts-container" class="absolute inset-0 z-20"></div>
               </div>
           </div>
+      </div>
+  </div>
+
+  <!-- Modal: Construtor de Fórmulas e Regras -->
+  <div id="formula-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150] hidden items-center justify-center p-4">
+      <div class="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[85vh] overflow-hidden text-slate-800 dark:text-slate-100 transition-all scale-95 duration-200">
+          <!-- Modal Header -->
+          <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/20">
+              <div class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-sky-500 text-[24px]">functions</span>
+                  <div>
+                      <h3 class="text-base font-bold text-slate-800 dark:text-white" id="formula-modal-title">Configurar Regras de Cálculo</h3>
+                      <p class="text-xs text-slate-500" id="formula-modal-subtitle">Defina condições para calcular o valor automaticamente.</p>
+                  </div>
+              </div>
+              <button onclick="closeFormulaModal()" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center justify-center">
+                  <span class="material-symbols-outlined text-[20px]">close</span>
+              </button>
+          </div>
+          
+          <!-- Modal Body (Scrollable) -->
+          <div class="flex-1 overflow-y-auto p-6 space-y-6">
+              <!-- Info Alert -->
+              <div class="bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/50 rounded-lg p-3 text-xs text-sky-850 dark:text-sky-300 flex items-start gap-2">
+                  <span class="material-symbols-outlined text-[18px] text-sky-500 shrink-0">info</span>
+                  <div>
+                      As regras são avaliadas de cima para baixo. A primeira regra cujas condições forem satisfeitas definirá o valor do campo. Fórmulas usam o formato matemático padrão: ex. <code>[area_invadida] * 120</code>.
+                  </div>
+              </div>
+              
+              <!-- Rules List Container -->
+              <div id="formula-rules-container" class="space-y-4">
+                  <!-- Rules will be injected here -->
+              </div>
+              
+              <!-- Add Rule Button -->
+              <div class="flex justify-start">
+                  <button type="button" onclick="addFormulaRule()" class="text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 font-medium border border-slate-200 dark:border-slate-700">
+                      <span class="material-symbols-outlined text-[14px]">add</span> Adicionar Regra
+                  </button>
+              </div>
+
+              <!-- Fallback Formula -->
+              <div class="pt-4 border-t border-slate-200 dark:border-slate-800">
+                  <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Caso contrário (Valor Padrão / Fallback)</label>
+                  <div class="flex flex-wrap md:flex-nowrap gap-2 items-center" id="fallback-action-container">
+                      <!-- Populated dynamically via JS -->
+                  </div>
+                  <p class="text-[10px] text-slate-400 mt-1.5">Definido se nenhuma das regras acima for satisfeita.</p>
+              </div>
+          </div>
+          
+          <!-- Modal Footer -->
+          <div class="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3 bg-slate-50 dark:bg-slate-950/20">
+              <button onclick="closeFormulaModal()" class="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors">Cancelar</button>
+              <button onclick="saveFormulaConfig()" class="px-4 py-2 text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors shadow-sm">Salvar Fórmulas</button>
+          </div>
+      </div>
+      
+      <!-- Field Picker Dropdown Overlay -->
+      <div id="formula-field-picker" class="hidden absolute z-[200] bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 w-64 max-h-48 overflow-y-auto py-1 text-sm">
+          <!-- Populated dynamically -->
       </div>
   </div>
 
@@ -1286,26 +1705,31 @@
     }
 
     function syncActiveTabFields() {
-      const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
-      if (!activeTab) return;
-      
-      const fieldElements = document.querySelectorAll('.field-item');
-      const fields = [];
-      fieldElements.forEach(el => {
-        const id = el.dataset.id;
-        const label = el.querySelector('.field-label').value;
-        const type = el.querySelector('.field-type').value;
-        const options = el.querySelector('.field-options').value;
-        fields.push({
-           id: id,
-           name: label.trim().toLowerCase().replace(/[^a-z0-9]/g, '_'),
-           label: label.trim(),
-           type: type,
-           options: type === 'select' ? options : ''
-        });
-      });
-      activeTab.fields = fields;
-    }
+       const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+       if (!activeTab) return;
+       
+       const fieldElements = document.querySelectorAll('.field-item');
+       const fields = [];
+       fieldElements.forEach(el => {
+         const id = el.dataset.id;
+         const label = el.querySelector('.field-label').value;
+         const type = el.querySelector('.field-type').value;
+         const options = el.querySelector('.field-options').value;
+         
+         const existingField = activeTab.fields.find(f => f.id === id);
+         const formulaConfig = existingField ? existingField.formulaConfig : null;
+         
+         fields.push({
+            id: id,
+            name: label.trim().toLowerCase().replace(/[^a-z0-9]/g, '_'),
+            label: label.trim(),
+            type: type,
+            options: type === 'select' ? options : '',
+            formulaConfig: formulaConfig
+         });
+       });
+       activeTab.fields = fields;
+     }
 
     function openFormBuilder() {
       currentFormId = generateUUID();
@@ -1400,6 +1824,11 @@
     }
     
     function renderFieldInBuilder(f) {
+      const hasFormula = f.formulaConfig && ((f.formulaConfig.rules && f.formulaConfig.rules.length > 0) || (f.formulaConfig.fallbackFormula && f.formulaConfig.fallbackFormula.trim() !== ''));
+      const fxClass = hasFormula 
+         ? 'text-sky-500 bg-sky-50 dark:bg-sky-950/40 border border-sky-200/50 dark:border-sky-800/50' 
+         : 'text-slate-400 hover:text-sky-500 hover:bg-sky-50 dark:hover:bg-slate-800';
+
       let moveOptionsHtml = '<div class="px-4 py-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">Mover para Aba:</div>';
       builderTabs.forEach(t => {
          if (t.id !== activeBuilderTabId) {
@@ -1505,6 +1934,9 @@
             <p class="text-xs text-slate-400 mt-1">O usuário final verá essas opções em um menu para selecionar.</p>
           </div>
         </div>
+        <button onclick="openFormulaModal('${f.id}')" id="fx-btn-${f.id}" class="p-2 mt-6 ${fxClass} rounded-full transition-colors flex items-center justify-center" title="Configurar Fórmula de Cálculo">
+          <span class="material-symbols-outlined text-[20px]">functions</span>
+        </button>
         <button onclick="this.closest('.field-item').remove()" class="p-2 mt-6 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-slate-800 rounded-full transition-colors" title="Remover Campo">
           <span class="material-symbols-outlined">delete</span>
         </button>

@@ -4,6 +4,12 @@
 function generateFeatureInputHtml(f, value, isFeatureEditMode) {
     if (!value) value = '';
     
+    const hasFormula = f.formulaConfig && ((f.formulaConfig.rules && f.formulaConfig.rules.length > 0) || (f.formulaConfig.fallbackFormula && f.formulaConfig.fallbackFormula.trim() !== ''));
+    const calcReadonly = hasFormula ? 'readonly' : '';
+    const calcDisabled = hasFormula ? 'disabled' : '';
+    const calcBgClass = hasFormula ? 'bg-slate-200 dark:bg-slate-800 text-slate-500 cursor-not-allowed font-medium' : 'bg-slate-50 dark:bg-slate-900 dark:text-white';
+    const formulaAttr = f.formulaConfig ? `data-formula="${JSON.stringify(f.formulaConfig).replace(/"/g, '&quot;')}" data-type="${f.type}"` : '';
+
     // MODO VISUALIZAÇÃO (Somente Leitura)
     if (!isFeatureEditMode) {
         if (f.type === 'photo' || f.type === 'attachment') {
@@ -305,7 +311,7 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
     } else if (f.type === 'cpfcnpj') {
         html += `
           <div class="relative">
-              <input type="text" data-key="${f.id}" id="cpfcnpj-input-${f.id}" value="${value}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white font-mono transition-colors pr-10" placeholder="000.000.000-00 ou 00.000.000/0000-00" maxlength="18" oninput="maskCpfCnpj(this)" onblur="validateCpfCnpj(this, '${f.id}')" />
+              <input type="text" data-key="${f.id}" id="cpfcnpj-input-${f.id}" value="${value}" class="feature-data-input w-full px-3 py-2 ${calcBgClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm font-mono transition-colors pr-10" placeholder="000.000.000-00 ou 00.000.000/0000-00" maxlength="18" oninput="maskCpfCnpj(this)" onblur="validateCpfCnpj(this, '${f.id}')" ${calcReadonly} ${formulaAttr} />
               <span id="cpfcnpj-icon-${f.id}" class="material-symbols-outlined absolute right-3 top-2.5 text-green-500 hidden pointer-events-none">check_circle</span>
           </div>
         `;
@@ -318,13 +324,13 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
         }
         html += `
           <div class="relative">
-              <input type="text" data-key="${f.id}" id="ipl-input-${f.id}" value="${displayVal}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white font-mono transition-colors pr-10" placeholder="0800926-67.2024.4.05.8200" maxlength="25" oninput="maskIpl(this)" />
+              <input type="text" data-key="${f.id}" id="ipl-input-${f.id}" value="${displayVal}" class="feature-data-input w-full px-3 py-2 ${calcBgClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white font-mono transition-colors pr-10" placeholder="0800926-67.2024.4.05.8200" maxlength="25" oninput="maskIpl(this)" ${calcReadonly} ${formulaAttr} />
           </div>
         `;
     } else if (f.type === 'insc_imob_cabedelo') {
         html += `
           <div class="relative">
-              <input type="text" data-key="${f.id}" id="insc-imob-cabedelo-input-${f.id}" value="${value}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white font-mono transition-colors pr-10" placeholder="1.0004.028.04.0521.0039.8" maxlength="25" oninput="maskInscImobCabedelo(this)" />
+              <input type="text" data-key="${f.id}" id="insc-imob-cabedelo-input-${f.id}" value="${value}" class="feature-data-input w-full px-3 py-2 ${calcBgClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white font-mono transition-colors pr-10" placeholder="1.0004.028.04.0521.0039.8" maxlength="25" oninput="maskInscImobCabedelo(this)" ${calcReadonly} ${formulaAttr} />
           </div>
         `;
     } else if (f.type === 'cep') {
@@ -370,7 +376,7 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
             </div>
         `;
     } else if (f.type === 'textarea') {
-        html += `<textarea data-key="${f.id}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm" rows="4">${value}</textarea>`;
+        html += `<textarea data-key="${f.id}" class="feature-data-input w-full px-3 py-2 ${calcBgClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm" rows="4" ${calcReadonly} ${formulaAttr}>${value}</textarea>`;
     } else if (f.type === 'current_date') {
         if (!value) {
             const now = new Date();
@@ -386,7 +392,6 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
     } else if (f.type === 'currency' || f.type === 'area_m2' || f.type === 'length_m' || f.type === 'volume_m3') {
         const unitMap = { currency: { prefix: 'R$', suffix: '' }, area_m2: { prefix: '', suffix: 'm²' }, length_m: { prefix: '', suffix: 'm' }, volume_m3: { prefix: '', suffix: 'm³' } };
         const unit = unitMap[f.type];
-        // Format initial value for display in the input
         let displayValue = value || '';
         if (displayValue) {
             const s = String(displayValue).trim();
@@ -400,9 +405,9 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
                 displayValue = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
             }
         }
-        html += `<div class="flex items-center gap-0">`;
+        html += `<div class="flex items-center gap-0 w-full">`;
         if (unit.prefix) html += `<span class="px-2.5 py-2 bg-slate-200 dark:bg-slate-700 border border-r-0 border-slate-300 dark:border-slate-600 rounded-l-lg text-sm font-bold text-slate-600 dark:text-slate-300">${unit.prefix}</span>`;
-        html += `<input type="text" data-key="${f.id}" value="${displayValue}" inputmode="decimal" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 ${unit.prefix && !unit.suffix ? 'rounded-r-lg' : (!unit.prefix && unit.suffix ? 'rounded-l-lg' : (unit.prefix && unit.suffix ? '' : 'rounded-lg'))} focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm text-right font-mono" ${onInputMaskScript} placeholder="0,00">`;
+        html += `<input type="text" data-key="${f.id}" value="${displayValue}" inputmode="decimal" class="feature-data-input w-full px-3 py-2 ${calcBgClass} border border-slate-300 dark:border-slate-700 ${unit.prefix && !unit.suffix ? 'rounded-r-lg' : (!unit.prefix && unit.suffix ? 'rounded-l-lg' : (unit.prefix && unit.suffix ? '' : 'rounded-lg'))} focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm text-right font-mono" ${onInputMaskScript} placeholder="0,00" ${calcReadonly} ${formulaAttr}>`;
         if (unit.suffix) html += `<span class="px-2.5 py-2 bg-slate-200 dark:bg-slate-700 border border-l-0 border-slate-300 dark:border-slate-600 rounded-r-lg text-sm font-bold text-slate-600 dark:text-slate-300">${unit.suffix}</span>`;
         html += `</div>`;
     } else if (f.type === 'hiperlink') {
@@ -412,7 +417,7 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
         } catch(e){}
         
         html += `
-        <div class="flex flex-col gap-2">
+        <div class="flex flex-col gap-2 w-full">
             <input type="text" placeholder="Título (Ex: Autor, Dono do Arquivo)" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm" value="${linkData.title || ''}" onchange="updateHiperlinkData('${f.id}')">
             <input type="url" placeholder="URL (Ex: https://drive.google.com/...)" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm" value="${linkData.url || ''}" onchange="updateHiperlinkData('${f.id}')">
             <input type="hidden" data-key="${f.id}" id="input-hiperlink-${f.id}" class="feature-data-input" value="${value ? value.replace(/"/g, '&quot;') : ''}">
@@ -421,15 +426,15 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
     } else if (f.type === 'select') {
         const optionsList = (f.options || '').split(',').map(o => o.trim()).filter(o => o !== '');
         html += `
-        <div class="relative">
-            <select data-key="${f.id}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm appearance-none cursor-pointer">
+        <div class="relative w-full">
+            <select data-key="${f.id}" class="feature-data-input w-full px-3 py-2 ${calcBgClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm appearance-none cursor-pointer" ${calcDisabled} ${formulaAttr}>
                 <option value="">Selecione...</option>
                 ${optionsList.map(opt => `<option value="${opt}" ${value === opt ? 'selected' : ''}>${opt}</option>`).join('')}
             </select>
             <span class="material-symbols-outlined absolute right-3 top-2.5 text-slate-400 pointer-events-none">expand_more</span>
         </div>`;
     } else {
-        html += `<input type="${f.type==='date'?'date':f.type==='number'?'number':'text'}" data-key="${f.id}" value="${value}" class="feature-data-input w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">`;
+        html += `<input type="${f.type==='date'?'date':f.type==='number'?'number':'text'}" data-key="${f.id}" value="${value}" class="feature-data-input w-full px-3 py-2 ${calcBgClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm" ${calcReadonly} ${formulaAttr}>`;
     }
     return html;
 }
@@ -982,3 +987,199 @@ window.updateHiperlinkData = function(fieldId) {
     const url = inputs[1].value.trim();
     document.getElementById('input-hiperlink-' + fieldId).value = JSON.stringify({ title, url });
 };
+
+// --- CLIENT-SIDE DYNAMIC FORMULA CALCULATOR ENGINE ---
+function getNumericValue(val) {
+    if (val === undefined || val === null) return 0;
+    const s = String(val).trim();
+    if (!s) return 0;
+    let num;
+    if (s.includes(',')) {
+        num = parseFloat(s.replace(/\./g, '').replace(',', '.'));
+    } else {
+        num = parseFloat(s);
+    }
+    return isNaN(num) ? 0 : num;
+}
+
+function evaluateMathExpression(expr, valuesMap) {
+    let replacedExpr = expr;
+    const placeholderRegex = /\[([a-zA-Z0-9_\-]+)\]/g;
+    replacedExpr = replacedExpr.replace(placeholderRegex, (match, fieldId) => {
+        const val = valuesMap[fieldId];
+        return val !== undefined ? String(getNumericValue(val)) : '0';
+    });
+    
+    // Allow only numeric calculations
+    const sanitized = replacedExpr.replace(/[^0-9\+\-\*\/\(\)\.\s]/g, '');
+    
+    try {
+        const result = new Function(`return (${sanitized});`)();
+        return isNaN(result) || !isFinite(result) ? 0 : result;
+    } catch (e) {
+        console.error("Erro ao avaliar formula matematica:", sanitized, e);
+        return 0;
+    }
+}
+
+function evaluateAction(action, valuesMap) {
+    if (!action) return 0;
+    
+    let valB = 0;
+    if (action.valueType === 'field') {
+        valB = action.value ? getNumericValue(valuesMap[action.value]) : 0;
+    } else {
+        valB = parseFloat(action.value) || 0;
+    }
+    
+    if (!action.fieldId) {
+        return valB;
+    }
+    
+    const valA = getNumericValue(valuesMap[action.fieldId]);
+    
+    switch (action.operator) {
+        case 'multiply':
+            return valA * valB;
+        case 'divide':
+            return valB !== 0 ? valA / valB : 0;
+        case 'add':
+            return valA + valB;
+        case 'subtract':
+            return valA - valB;
+        case 'none':
+        default:
+            return valA;
+    }
+}
+
+function checkCondition(cond, valuesMap) {
+    const fieldId = cond.fieldId;
+    if (!fieldId) return false;
+    
+    const rawVal = valuesMap[fieldId] !== undefined ? valuesMap[fieldId] : '';
+    const condVal = cond.value || '';
+    
+    switch (cond.operator) {
+        case 'eq':
+            return String(rawVal).toLowerCase().trim() === String(condVal).toLowerCase().trim();
+        case 'neq':
+            return String(rawVal).toLowerCase().trim() !== String(condVal).toLowerCase().trim();
+        case 'gt':
+            return getNumericValue(rawVal) > getNumericValue(condVal);
+        case 'gte':
+            return getNumericValue(rawVal) >= getNumericValue(condVal);
+        case 'lt':
+            return getNumericValue(rawVal) < getNumericValue(condVal);
+        case 'lte':
+            return getNumericValue(rawVal) <= getNumericValue(condVal);
+        case 'contains':
+            return String(rawVal).toLowerCase().includes(String(condVal).toLowerCase());
+        default:
+            return false;
+    }
+}
+
+let isEvaluatingCalculations = false;
+function evaluateFormCalculations(container) {
+    if (!container) return;
+    if (isEvaluatingCalculations) return;
+    
+    isEvaluatingCalculations = true;
+    try {
+        const inputEls = Array.from(container.querySelectorAll('.feature-data-input'));
+        
+        const valuesMap = {};
+        inputEls.forEach(el => {
+            const key = el.dataset.key;
+            if (key) {
+                valuesMap[key] = el.value;
+            }
+        });
+        
+        const calculatedEls = inputEls.filter(el => el.dataset.formula);
+        
+        calculatedEls.forEach(el => {
+            let formulaConfig = null;
+            try {
+                formulaConfig = JSON.parse(el.dataset.formula);
+            } catch(e) {
+                console.error("Erro ao fazer parse da formulaConfig do input:", el, e);
+            }
+            
+            if (!formulaConfig) return;
+            
+            let calculatedValue = null;
+            let matched = false;
+            
+            if (formulaConfig.rules && formulaConfig.rules.length > 0) {
+                for (const rule of formulaConfig.rules) {
+                    let rulePassed = true;
+                    if (rule.conditions && rule.conditions.length > 0) {
+                        rulePassed = rule.conditions.every(cond => checkCondition(cond, valuesMap));
+                    }
+                    
+                    if (rulePassed) {
+                        if (rule.action) {
+                            calculatedValue = evaluateAction(rule.action, valuesMap);
+                        } else if (rule.formula) {
+                            calculatedValue = evaluateMathExpression(rule.formula, valuesMap);
+                        }
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (!matched) {
+                if (formulaConfig.fallbackAction) {
+                    calculatedValue = evaluateAction(formulaConfig.fallbackAction, valuesMap);
+                    matched = true;
+                } else if (formulaConfig.fallbackFormula) {
+                    calculatedValue = evaluateMathExpression(formulaConfig.fallbackFormula, valuesMap);
+                    matched = true;
+                }
+            }
+            
+            if (matched && calculatedValue !== null) {
+                const fieldType = el.dataset.type;
+                let displayVal = "";
+                if (fieldType === 'currency' || fieldType === 'area_m2' || fieldType === 'length_m' || fieldType === 'volume_m3') {
+                    displayVal = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(calculatedValue);
+                } else {
+                    displayVal = String(calculatedValue);
+                }
+                
+                if (el.value !== displayVal) {
+                    el.value = displayVal;
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
+        });
+    } finally {
+        isEvaluatingCalculations = false;
+    }
+}
+
+// Global exposure
+window.evaluateFormCalculations = evaluateFormCalculations;
+
+// EVENT DELEGATION FOR AUTOMATIC LIVE REFRESH
+document.addEventListener('input', (e) => {
+    if (e.target && e.target.classList.contains('feature-data-input')) {
+        const formContainer = e.target.closest('form, .feature-modal-body, #feature-edit-form, #custom-fields-form-container, .form-container, .modal-body, .flex') || document.body;
+        if (formContainer) {
+            evaluateFormCalculations(formContainer);
+        }
+    }
+});
+
+document.addEventListener('change', (e) => {
+    if (e.target && e.target.classList.contains('feature-data-input')) {
+        const formContainer = e.target.closest('form, .feature-modal-body, #feature-edit-form, #custom-fields-form-container, .form-container, .modal-body, .flex') || document.body;
+        if (formContainer) {
+            evaluateFormCalculations(formContainer);
+        }
+    }
+});
