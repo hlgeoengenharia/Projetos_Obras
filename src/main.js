@@ -162,7 +162,18 @@ async function loadThemes() {
 
           themes = [];
           if (dbTemas) {
+              const hasMetadataColumn = dbTemas.length > 0 && ('metadata' in dbTemas[0]);
+              window.supabaseTemasHasMetadata = hasMetadataColumn;
+              
+              let localMeta = {};
+              try {
+                  const savedMeta = localStorage.getItem('constructive_themes_meta');
+                  if (savedMeta) localMeta = JSON.parse(savedMeta);
+              } catch(e) {}
+
               dbTemas.forEach(t => {
+                  const tMeta = (hasMetadataColumn && t.metadata) ? t.metadata : (localMeta[t.id] || {});
+                  
                   const theme = {
                       id: t.id,
                       name: t.nome,
@@ -171,8 +182,15 @@ async function loadThemes() {
                       geometryType: t.tipo_geometria,
                       cadastroType: t.tipo_cadastro,
                       formId: t.tipo_cadastro,
-                      disp1Active: false,
-                      disp2Active: false,
+                      opacity: tMeta.opacity !== undefined ? tMeta.opacity : 0.4,
+                      weight: tMeta.weight !== undefined ? tMeta.weight : 2,
+                      dashed: !!tMeta.dashed,
+                      disp1: tMeta.disp1 || 'Lote',
+                      disp2: tMeta.disp2 || 'Quadra',
+                      mainTitle: tMeta.mainTitle || '',
+                      disp1Active: tMeta.disp1Active !== false,
+                      disp2Active: tMeta.disp2Active !== false,
+                      customIcon: tMeta.customIcon || '',
                       features: []
                   };
                   if (dbFeicoes) {
@@ -206,6 +224,22 @@ async function loadThemes() {
 
 function saveThemes() {
   localStorage.setItem('constructive_themes', JSON.stringify(themes));
+  
+  const meta = {};
+  themes.forEach(t => {
+      meta[t.id] = {
+          opacity: t.opacity,
+          weight: t.weight,
+          dashed: t.dashed,
+          disp1: t.disp1,
+          disp2: t.disp2,
+          mainTitle: t.mainTitle,
+          disp1Active: t.disp1Active,
+          disp2Active: t.disp2Active,
+          customIcon: t.customIcon
+      };
+  });
+  localStorage.setItem('constructive_themes_meta', JSON.stringify(meta));
 }
 
 function showWarningToast(message) {
@@ -1297,13 +1331,27 @@ async function saveNewTheme() {
   
   if (typeof supabaseClient !== 'undefined' && supabaseClient) {
       try {
-          const { data, error } = await supabaseClient.from('temas').insert({
+          const insertPayload = {
               nome: name,
               cor: color,
               icone: icon || 'map',
               tipo_geometria: geomType || 'Polygon',
               tipo_cadastro: formId || 'padrao'
-          }).select();
+          };
+          if (window.supabaseTemasHasMetadata) {
+              insertPayload.metadata = {
+                  opacity: opacity,
+                  weight: 2,
+                  dashed: false,
+                  disp1: 'Lote',
+                  disp2: 'Quadra',
+                  mainTitle: '',
+                  disp1Active: false,
+                  disp2Active: false,
+                  customIcon: customIcon
+              };
+          }
+          const { data, error } = await supabaseClient.from('temas').insert(insertPayload).select();
           
           if (error) {
               console.error("Erro ao criar tema no Supabase:", error);
@@ -1476,12 +1524,28 @@ async function saveEditedTheme() {
     
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         try {
-            await supabaseClient.from('temas').update({
+            const updatePayload = {
                 nome: name,
                 cor: color,
                 icone: icon || 'map',
                 tipo_cadastro: formId || 'padrao'
-            }).eq('id', themeBeingEdited);
+            };
+            
+            if (window.supabaseTemasHasMetadata) {
+                updatePayload.metadata = {
+                    opacity: opacity,
+                    weight: weight,
+                    dashed: dashed,
+                    disp1: disp1,
+                    disp2: disp2,
+                    mainTitle: mainTitle,
+                    disp1Active: disp1Active,
+                    disp2Active: disp2Active,
+                    customIcon: customIcon
+                };
+            }
+            
+            await supabaseClient.from('temas').update(updatePayload).eq('id', themeBeingEdited);
         } catch(e) {
             console.error("Erro ao atualizar tema no Supabase:", e);
         }
