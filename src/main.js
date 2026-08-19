@@ -836,9 +836,9 @@ function renderThemes() {
                <span class="material-symbols-outlined text-[24px]">${theme.icon || 'layers'}</span>
             </div>
             <div class="flex flex-col">
-              <h3 class="text-base font-black text-slate-800 dark:text-white tracking-widest uppercase drop-shadow-md ${!isVisible ? 'opacity-50' : ''}">${theme.name}</h3>
-              <div class="text-[12px] font-bold text-slate-800 dark:text-slate-300 mt-0.5">
-                ${featureCount} <span class="text-[10px] text-slate-500 font-normal uppercase tracking-wider">Registros</span>
+              <h3 class="text-base font-black text-white tracking-widest uppercase drop-shadow-md ${!isVisible ? 'opacity-50' : ''}">${theme.name}</h3>
+              <div class="text-[12px] font-bold text-slate-200 mt-0.5">
+                ${featureCount} <span class="text-[10px] text-slate-300 font-normal uppercase tracking-wider">Registros</span>
               </div>
             </div>
           </div>
@@ -852,23 +852,23 @@ function renderThemes() {
         
         <!-- Footer: Actions -->
         <div class="flex justify-between items-center border-t border-white/20 dark:border-white/10 pt-3 w-full">
-            <button onclick="toggleThemeStatsList('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-800 dark:text-slate-200 transition-colors" title="Painel de Estatísticas">
+            <button onclick="toggleThemeStatsList('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Painel de Estatísticas">
               <span class="material-symbols-outlined text-[18px]">pie_chart</span>
             </button>
-            <button onclick="startEditingTheme('${theme.id}', '${theme.name}', '${theme.color}', '${theme.geomType || ''}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-800 dark:text-slate-200 transition-colors" title="Adicionar Feição">
+            <button onclick="startEditingTheme('${theme.id}', '${theme.name}', '${theme.color}', '${theme.geomType || ''}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Adicionar Feição">
               <span class="material-symbols-outlined text-[18px]">add</span>
             </button>
-            <button onclick="openEditThemeModal('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-800 dark:text-slate-200 transition-colors" title="Editar Camada">
+            <button onclick="openEditThemeModal('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Editar Camada">
               <span class="material-symbols-outlined text-[18px]">settings</span>
             </button>
-            <button onclick="triggerUpload('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-800 dark:text-slate-200 transition-colors" title="Importar GeoJSON">
+            <button onclick="triggerUpload('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Importar GeoJSON">
               <span class="material-symbols-outlined text-[18px]">upload</span>
             </button>
-            <button onclick="triggerTableUpload('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-800 dark:text-slate-200 transition-colors" title="Vincular Tabela (CSV)">
+            <button onclick="triggerTableUpload('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Vincular Tabela (CSV)">
               <span class="material-symbols-outlined text-[18px]">table_chart</span>
             </button>
             <input type="file" id="table-upload-${theme.id}" class="hidden" accept=".csv" onchange="handleTableUpload(event, '${theme.id}')">
-            <button onclick="downloadGeoJSON('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-800 dark:text-slate-200 transition-colors" title="Exportar">
+            <button onclick="downloadGeoJSON('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Exportar">
               <span class="material-symbols-outlined text-[18px]">download</span>
             </button>
             <button onclick="deleteTheme('${theme.id}')" class="p-1.5 hover:bg-red-500/30 rounded-lg tooltip text-red-500 transition-colors" title="Excluir">
@@ -954,7 +954,7 @@ function renderFeatureListItems(theme) {
     
     let subHtml = '';
     if (showDisp1 && showDisp2) {
-        subHtml = `<span class="font-medium">${disp1Label}:</span> ${val1} <span class="mx-1 text-slate-300 dark:text-slate-700">&bull;</span> <span class="font-medium">${disp2Label}:</span> ${val2}`;
+        subHtml = `<span class="font-medium">${disp1Label}:</span> ${val1} <span class="mx-1 opacity-50">&bull;</span> <span class="font-medium">${disp2Label}:</span> ${val2}`;
     } else if (showDisp1) {
         subHtml = `<span class="font-medium">${disp1Label}:</span> ${val1}`;
     } else if (showDisp2) {
@@ -962,11 +962,11 @@ function renderFeatureListItems(theme) {
     }
     
     html += `
-      <div id="sidebar-item-${fid}" class="feature-list-item px-4 py-2 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-all duration-300 border-l-4 border-l-transparent"
+      <div id="sidebar-item-${fid}" class="feature-list-item px-4 py-2 border-b border-white/5 hover:bg-white/10 cursor-pointer transition-all duration-300 border-l-4 border-l-transparent"
            data-search="${searchData}"
            onclick="zoomToFeature('${fid}')">
-         <div class="text-xs font-semibold text-slate-800 dark:text-slate-200 break-words" title="${propName}">${propName}</div>
-         ${subHtml ? `<div class="text-[10px] text-slate-500 break-words mt-0.5">${subHtml}</div>` : ''}
+         <div class="text-xs font-semibold text-slate-100 break-words" title="${propName}">${propName}</div>
+         ${subHtml ? `<div class="text-[10px] text-slate-300 break-words mt-0.5">${subHtml}</div>` : ''}
       </div>
     `;
   });
