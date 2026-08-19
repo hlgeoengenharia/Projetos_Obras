@@ -3744,6 +3744,8 @@ window.resetThemeClassification = function(themeId) {
     });
 };
 
+let feicoesRealtimeTimeout = null;
+
 function setupSupabaseRealtime() {
   if (typeof supabaseClient !== 'undefined' && supabaseClient) {
       // 1. Listen for changes in the 'temas' table
@@ -3769,11 +3771,7 @@ function setupSupabaseRealtime() {
               async (payload) => {
                   console.log("Realtime: feicoes table changed!", payload);
                   
-                  await loadThemes();
-                  renderThemes();
-                  loadAllFeaturesToMap();
-                  
-                  // If the active feature being edited/inspected was deleted, close modal
+                  // Se a feição ativa que está sendo visualizada/editada foi excluída, fecha o modal imediatamente
                   if (payload.eventType === 'DELETE' && activeFeatureLayer) {
                       const deletedId = payload.old && payload.old.id;
                       const activeId = activeFeatureLayer.feature && activeFeatureLayer.feature.properties && activeFeatureLayer.feature.properties.id_banco;
@@ -3783,6 +3781,15 @@ function setupSupabaseRealtime() {
                           showWarningToast("A feição que você estava visualizando foi excluída por outro usuário.");
                       }
                   }
+                  
+                  // Debouncer para recarregar o mapa e a interface evitando concorrência em upserts em lote
+                  clearTimeout(feicoesRealtimeTimeout);
+                  feicoesRealtimeTimeout = setTimeout(async () => {
+                      console.log("Processando atualização de feições Realtime...");
+                      await loadThemes();
+                      renderThemes();
+                      loadAllFeaturesToMap();
+                  }, 300);
               }
           )
           .subscribe();
