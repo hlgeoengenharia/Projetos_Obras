@@ -135,6 +135,8 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
                 </a>
                 ${linkData.title && linkData.title.trim() !== '' ? `<div class="text-[10px] text-slate-500 truncate ml-5 opacity-70" title="${linkData.url}">${linkData.url}</div>` : ''}
             </div>`;
+        } else if (f.type === 'textarea') {
+            return `<div class="text-xs text-slate-700 dark:text-slate-300 text-justify whitespace-pre-wrap leading-relaxed">${value || '<span class="text-slate-400 opacity-50 tracking-widest">---</span>'}</div>`;
         }
         
         // FORMATTED VIEW OUTPUTS
