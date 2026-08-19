@@ -2585,35 +2585,6 @@ function editFeatureGeometry() {
   closeFeatureInfoModal(true); // Keep activeFeatureLayer
   
   if (layerToEdit && layerToEdit.pm) {
-      // 1. Configurar ouvinte para interceptar a criação dos marcadores de vértices
-      layerToEdit.off('pm:markercreate');
-      layerToEdit.on('pm:markercreate', (e) => {
-          const marker = e.marker;
-          const parent = e.parent || layerToEdit;
-          const indexPath = e.indexPath;
-          
-          if (marker) {
-              // Atalho 1: Duplo clique no círculo do vértice para excluir
-              marker.on('dblclick', (me) => {
-                  L.DomEvent.stopPropagation(me);
-                  if (typeof parent.pm.removeVertex === 'function') {
-                      parent.pm.removeVertex(indexPath);
-                  }
-              });
-              
-              // Atalho 2: Shift + clique no círculo do vértice para excluir
-              marker.on('click', (me) => {
-                  if (me.originalEvent && (me.originalEvent.shiftKey || me.originalEvent.altKey || me.originalEvent.ctrlKey)) {
-                      L.DomEvent.stopPropagation(me);
-                      if (typeof parent.pm.removeVertex === 'function') {
-                          parent.pm.removeVertex(indexPath);
-                      }
-                  }
-              });
-          }
-      });
-
-      // 2. Ativar a edição de geometria
       layerToEdit.pm.enable({
         allowSelfIntersection: false,
         preventMarkerRemoval: false,
@@ -3839,6 +3810,12 @@ function setupSupabaseRealtime() {
                   // Debouncer para recarregar o mapa e a interface evitando concorrência em upserts em lote
                   clearTimeout(feicoesRealtimeTimeout);
                   feicoesRealtimeTimeout = setTimeout(async () => {
+                      const isEditingGeom = document.getElementById('geometry-edit-toolbar') && !document.getElementById('geometry-edit-toolbar').classList.contains('hidden');
+                      if (isEditingGeom || (typeof isFeatureEditMode !== 'undefined' && isFeatureEditMode)) {
+                          console.log("Realtime: Edição geométrica ou de atributos ativa. Ignorando recarregamento automático.");
+                          return;
+                      }
+
                       console.log("Processando atualização de feições Realtime...");
                       await loadThemes();
                       renderThemes();
