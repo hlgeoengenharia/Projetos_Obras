@@ -2668,6 +2668,7 @@ function selectIcon(prefix, val, label) {
 window.addEventListener('DOMContentLoaded', () => {
   initMap();
   setupIconDropdowns();
+  setupSupabaseRealtime();
 });
 
 // --- CONTROLES DE MAPA ORIGINAIS ---
@@ -3737,3 +3738,48 @@ window.resetThemeClassification = function(themeId) {
         }
     });
 };
+
+function setupSupabaseRealtime() {
+  if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+      // 1. Listen for changes in the 'temas' table
+      supabaseClient
+          .channel('temas-realtime')
+          .on(
+              'postgres_changes',
+              { event: '*', schema: 'public', table: 'temas' },
+              async (payload) => {
+                  console.log("Realtime: temas table changed!", payload);
+                  await loadThemes();
+                  renderThemes();
+              }
+          )
+          .subscribe();
+
+      // 2. Listen for changes in the 'feicoes' table
+      supabaseClient
+          .channel('feicoes-realtime')
+          .on(
+              'postgres_changes',
+              { event: '*', schema: 'public', table: 'feicoes' },
+              async (payload) => {
+                  console.log("Realtime: feicoes table changed!", payload);
+                  
+                  await loadThemes();
+                  renderThemes();
+                  loadAllFeaturesToMap();
+                  
+                  // If the active feature being edited/inspected was deleted, close modal
+                  if (payload.eventType === 'DELETE' && activeFeatureLayer) {
+                      const deletedId = payload.old && payload.old.id;
+                      const activeId = activeFeatureLayer.feature && activeFeatureLayer.feature.properties && activeFeatureLayer.feature.properties.id_banco;
+                      if (deletedId && activeId && String(deletedId) === String(activeId)) {
+                          map.removeLayer(activeFeatureLayer);
+                          closeFeatureInfoModal();
+                          showWarningToast("A feição que você estava visualizando foi excluída por outro usuário.");
+                      }
+                  }
+              }
+          )
+          .subscribe();
+  }
+}
