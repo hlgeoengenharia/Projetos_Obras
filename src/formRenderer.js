@@ -57,7 +57,7 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
                     </h3>
                 </button>
                 
-                <div id="acc-content-${tab.id}" class="accordion-content transition-all duration-300 ${isPrimary ? 'block p-4 sm:p-6 border-t border-slate-200 dark:border-slate-700 bg-slate-100/60 dark:bg-slate-900/50' : 'hidden'}">
+                <div id="acc-content-${tab.id}" class="accordion-content transition-all duration-300 ${isPrimary ? 'block p-4 sm:p-6 border-t border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900' : 'hidden'}">
         `;
         
         let isTabEditMode = false;
@@ -296,14 +296,14 @@ window.switchDynamicTab = function(tabId) {
 
     document.querySelectorAll('.accordion-content').forEach(el => {
         el.classList.add('hidden');
-        el.classList.remove('block', 'p-4', 'sm:p-6', 'border-t', 'border-slate-200', 'dark:border-slate-700', 'bg-slate-50/50', 'dark:bg-slate-900/40');
+        el.classList.remove('block', 'p-4', 'sm:p-6', 'border-t', 'border-slate-200', 'dark:border-slate-700', 'bg-slate-100', 'dark:bg-slate-900');
     });
     
     document.querySelectorAll('.accordion-section').forEach(el => {
-        el.classList.remove('border-l-4', 'border-l-primary', 'shadow-inner');
+        el.classList.remove('border-l-4', 'border-l-sky-500', 'shadow-inner');
         const btn = el.querySelector('button');
         if (btn) {
-            btn.classList.remove('bg-blue-50/50', 'dark:bg-slate-800/50');
+            btn.classList.remove('bg-blue-50', 'dark:bg-blue-950/20');
             btn.classList.add('bg-slate-50', 'dark:bg-transparent');
         }
     });
@@ -311,15 +311,15 @@ window.switchDynamicTab = function(tabId) {
     if (content && !isAlreadyOpen) {
         window.currentActiveTabId = tabId;
         content.classList.remove('hidden');
-        content.classList.add('block', 'p-4', 'sm:p-6', 'border-t', 'border-slate-200', 'dark:border-slate-700', 'bg-slate-50/50', 'dark:bg-slate-900/40');
+        content.classList.add('block', 'p-4', 'sm:p-6', 'border-t', 'border-slate-200', 'dark:border-slate-700', 'bg-slate-100', 'dark:bg-slate-900');
         
         const section = document.getElementById('acc-section-' + tabId);
         if (section) {
-            section.classList.add('border-l-4', 'border-l-primary', 'shadow-inner');
+            section.classList.add('border-l-4', 'border-l-sky-500', 'shadow-inner');
             const btn = section.querySelector('button');
             if (btn) {
                 btn.classList.remove('bg-slate-50', 'dark:bg-transparent');
-                btn.classList.add('bg-blue-50/50', 'dark:bg-slate-800/50');
+                btn.classList.add('bg-blue-50', 'dark:bg-blue-950/20');
             }
             setTimeout(() => {
                 section.scrollIntoView({ behavior: 'smooth', block: 'center' });
