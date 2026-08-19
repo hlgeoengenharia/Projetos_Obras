@@ -2590,6 +2590,17 @@ function editFeatureGeometry() {
         preventMarkerRemoval: false,
         snappable: true,
       });
+      
+      // Atalho alternativo: Remover vértice clicando enquanto segura a tecla SHIFT, ALT ou CTRL
+      layerToEdit.off('pm:vertexclick');
+      layerToEdit.on('pm:vertexclick', (e) => {
+          if (e.originalEvent && (e.originalEvent.shiftKey || e.originalEvent.altKey || e.originalEvent.ctrlKey)) {
+              if (typeof e.layer.pm.removeVertex === 'function') {
+                  e.layer.pm.removeVertex(e.indexPath);
+              }
+          }
+      });
+
       const toolbar = document.getElementById('geometry-edit-toolbar');
       toolbar.classList.remove('hidden');
       toolbar.classList.add('flex');
