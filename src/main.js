@@ -206,6 +206,11 @@ async function loadThemes() {
                   themes.push(theme);
               });
           }
+          try {
+              await loadRasterLayers();
+          } catch(eRaster) {
+              console.error("Erro ao carregar camadas raster:", eRaster);
+          }
       } catch(e) {
           console.error("Erro ao carregar dados do Supabase:", e);
       }
@@ -3783,3 +3788,432 @@ function setupSupabaseRealtime() {
           .subscribe();
   }
 }
+
+// --- MOTOR DE IMAGENS GEORREFERENCIADAS (GeoTIFF) ---
+let rasterLayers = [];
+let leafletRasterOverlays = {};
+
+// Registrar projeções mais comuns do Brasil no Proj4
+if (typeof proj4 !== 'undefined') {
+    proj4.defs([
+        ["EPSG:31981", "+proj=utm +zone=21 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"],
+        ["EPSG:31982", "+proj=utm +zone=22 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"],
+        ["EPSG:31983", "+proj=utm +zone=23 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"],
+        ["EPSG:31984", "+proj=utm +zone=24 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"],
+        ["EPSG:29192", "+proj=utm +zone=22 +south +ellps=aust_SA +units=m +no_defs"],
+        ["EPSG:29193", "+proj=utm +zone=23 +south +ellps=aust_SA +units=m +no_defs"],
+        ["EPSG:32721", "+proj=utm +zone=21 +south +datum=WGS84 +units=m +no_defs"],
+        ["EPSG:32722", "+proj=utm +zone=22 +south +datum=WGS84 +units=m +no_defs"],
+        ["EPSG:32723", "+proj=utm +zone=23 +south +datum=WGS84 +units=m +no_defs"],
+        ["EPSG:32724", "+proj=utm +zone=24 +south +datum=WGS84 +units=m +no_defs"]
+    ]);
+}
+
+// Obter definição Proj4 via API epsg.io caso não esteja local
+async function getProj4Def(epsgCode) {
+    const code = `EPSG:${epsgCode}`;
+    if (typeof proj4 === 'undefined') return null;
+    try {
+        if (proj4.defs(code)) return code;
+    } catch(e) {}
+    
+    try {
+        const res = await fetch(`https://epsg.io/${epsgCode}.proj4`);
+        if (res.ok) {
+            const def = await res.text();
+            proj4.defs(code, def);
+            return code;
+        }
+    } catch(e) {
+        console.error("Erro ao carregar proj4 de epsg.io:", e);
+    }
+    return null;
+}
+
+// Carregar camadas raster salvas no Supabase
+async function loadRasterLayers() {
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        try {
+            const { data, error } = await supabaseClient.from('imagens_raster').select('*').order('created_at', { ascending: true });
+            if (error) {
+                if (error.code === 'PGRST116' || error.message.includes('does not exist')) {
+                    return;
+                }
+                console.error("Erro ao carregar imagens raster:", error);
+                return;
+            }
+            
+            // Limpar overlays antigos do mapa
+            Object.values(leafletRasterOverlays).forEach(overlay => {
+                if (map) map.removeLayer(overlay);
+            });
+            leafletRasterOverlays = {};
+            rasterLayers = data || [];
+            
+            // Adicionar novos overlays
+            rasterLayers.forEach(raster => {
+                if (raster.visivel && map) {
+                    const bounds = raster.bbox;
+                    const overlay = L.imageOverlay(raster.url_imagem, bounds, {
+                        opacity: raster.opacidade !== undefined ? raster.opacidade : 0.8,
+                        interactive: false
+                    });
+                    overlay.addTo(map);
+                    leafletRasterOverlays[raster.id] = overlay;
+                }
+            });
+            
+            renderRasterLayersList();
+        } catch(e) {
+            console.error("Erro no loadRasterLayers:", e);
+        }
+    }
+}
+
+// Renderizar a lista de camadas raster na barra lateral
+function renderRasterLayersList() {
+    const container = document.getElementById('rasters-container');
+    if (!container) return;
+    
+    if (rasterLayers.length === 0) {
+        container.innerHTML = `<div class="text-xs text-slate-400 dark:text-slate-500 italic p-2 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-center">Nenhuma imagem importada.</div>`;
+        return;
+    }
+    
+    container.innerHTML = '';
+    rasterLayers.forEach(raster => {
+        const item = document.createElement('div');
+        item.className = 'flex flex-col gap-2 p-3 bg-slate-50 dark:bg-slate-900/40 border border-slate-200/50 dark:border-white/5 rounded-xl transition-all';
+        
+        item.innerHTML = `
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2 overflow-hidden">
+                    <span class="material-symbols-outlined text-[18px] text-emerald-500 shrink-0">satellite</span>
+                    <span class="text-xs font-bold text-slate-700 dark:text-slate-300 truncate w-36" title="${raster.nome}">${raster.nome}</span>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <label class="relative inline-flex items-center cursor-pointer" title="${raster.visivel ? 'Ocultar' : 'Mostrar'} Imagem">
+                        <input type="checkbox" class="sr-only peer" ${raster.visivel ? 'checked' : ''} onchange="toggleRasterVisibility('${raster.id}', this)">
+                        <div class="w-8 h-4.5 bg-slate-300 dark:bg-slate-700/50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-emerald-500"></div>
+                    </label>
+                    <button onclick="deleteRasterLayer('${raster.id}')" class="text-slate-400 hover:text-red-500 dark:hover:text-red-400 p-1 rounded transition-colors">
+                        <span class="material-symbols-outlined text-[16px]">delete</span>
+                    </button>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 pt-1.5 border-t border-slate-100 dark:border-slate-800/50">
+                <span class="material-symbols-outlined text-[14px] text-slate-400 shrink-0">opacity</span>
+                <input type="range" min="0" max="1" step="0.05" value="${raster.opacidade !== undefined ? raster.opacidade : 0.8}" 
+                       oninput="changeRasterOpacity('${raster.id}', this.value)" 
+                       class="w-full h-1 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+            </div>
+        `;
+        container.appendChild(item);
+    });
+}
+
+// Alterar opacidade do raster
+window.changeRasterOpacity = async function(rasterId, opacity) {
+    const raster = rasterLayers.find(r => r.id === rasterId);
+    if (raster) {
+        raster.opacidade = parseFloat(opacity);
+        const overlay = leafletRasterOverlays[rasterId];
+        if (overlay) overlay.setOpacity(raster.opacidade);
+        
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            try {
+                await supabaseClient.from('imagens_raster').update({ opacidade: raster.opacidade }).eq('id', rasterId);
+            } catch(e) {}
+        }
+    }
+};
+
+// Alternar visibilidade do raster
+window.toggleRasterVisibility = async function(rasterId, checkbox) {
+    const isVisible = checkbox.checked;
+    const raster = rasterLayers.find(r => r.id === rasterId);
+    if (raster) {
+        raster.visivel = isVisible;
+        const overlay = leafletRasterOverlays[rasterId];
+        
+        if (isVisible) {
+            if (overlay && map) {
+                overlay.addTo(map);
+            } else if (map) {
+                const bounds = raster.bbox;
+                const newOverlay = L.imageOverlay(raster.url_imagem, bounds, {
+                    opacity: raster.opacidade !== undefined ? raster.opacidade : 0.8,
+                    interactive: false
+                });
+                newOverlay.addTo(map);
+                leafletRasterOverlays[rasterId] = newOverlay;
+            }
+        } else {
+            if (overlay && map) map.removeLayer(overlay);
+        }
+        
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            try {
+                await supabaseClient.from('imagens_raster').update({ visivel: isVisible }).eq('id', rasterId);
+            } catch(e) {}
+        }
+    }
+};
+
+// Excluir raster
+window.deleteRasterLayer = async function(rasterId) {
+    if (!confirm("Tem certeza que deseja excluir esta imagem de fundo?")) return;
+    
+    const overlay = leafletRasterOverlays[rasterId];
+    if (overlay && map) {
+        map.removeLayer(overlay);
+        delete leafletRasterOverlays[rasterId];
+    }
+    
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        try {
+            const raster = rasterLayers.find(r => r.id === rasterId);
+            if (raster) {
+                const parts = raster.url_imagem.split('/');
+                const fileName = parts[parts.length - 1];
+                await supabaseClient.storage.from('rasters').remove([fileName]);
+            }
+            await supabaseClient.from('imagens_raster').delete().eq('id', rasterId);
+        } catch(e) {
+            console.error("Erro ao deletar raster:", e);
+        }
+    }
+    
+    rasterLayers = rasterLayers.filter(r => r.id !== rasterId);
+    renderRasterLayersList();
+};
+
+// Event handler de importação de arquivo
+async function handleRasterImport(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    showWarningToast("Lendo arquivo GeoTIFF...");
+    
+    const reader = new FileReader();
+    reader.onload = async function(event) {
+        try {
+            await processGeoTIFF(event.target.result, file.name);
+        } catch(err) {
+            console.error("Erro ao processar GeoTIFF:", err);
+            alert("Erro ao processar arquivo GeoTIFF. Verifique se é uma imagem georreferenciada válida. Erro: " + err.message);
+        }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = '';
+}
+
+// Processamento e compressão da imagem
+async function processGeoTIFF(arrayBuffer, fileName) {
+    if (typeof GeoTIFF === 'undefined') {
+        alert("A biblioteca GeoTIFF.js não foi carregada com sucesso.");
+        return;
+    }
+    
+    const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
+    const image = await tiff.getImage();
+    
+    // 1. Obter Bounding Box original
+    const bbox = image.getBoundingBox(); // [xMin, yMin, xMax, yMax]
+    if (!bbox || bbox.length < 4) {
+        throw new Error("Arquivo não possui metadados geográficos (Bounding Box) válidos.");
+    }
+    
+    // 2. Detectar Projeção
+    const geoKeys = image.getGeoKeys();
+    let epsg = 4326; // Padrão WGS 84
+    if (geoKeys) {
+        if (geoKeys.ProjectedCSTypeGeoKey) {
+            epsg = geoKeys.ProjectedCSTypeGeoKey;
+        } else if (geoKeys.GeographicTypeGeoKey) {
+            epsg = geoKeys.GeographicTypeGeoKey;
+        }
+    }
+    
+    showWarningToast(`Reprojetando coordenadas (EPSG:${epsg})...`);
+    
+    // 3. Garantir definição da projeção no proj4
+    const srcProjection = await getProj4Def(epsg);
+    if (!srcProjection) {
+        throw new Error(`Sistema de Projeção EPSG:${epsg} não suportado ou falha ao baixar definição.`);
+    }
+    
+    // 4. Reprojetar Bounding Box para WGS84 (EPSG:4326)
+    const destProjection = 'EPSG:4326';
+    let latLngBounds;
+    if (epsg === 4326) {
+        latLngBounds = [
+            [bbox[1], bbox[0]], // [latMin, lngMin]
+            [bbox[3], bbox[2]]  // [latMax, lngMax]
+        ];
+    } else {
+        const bl = proj4(srcProjection, destProjection, [bbox[0], bbox[1]]);
+        const tr = proj4(srcProjection, destProjection, [bbox[2], bbox[3]]);
+        latLngBounds = [
+            [bl[1], bl[0]], // [latMin, lngMin]
+            [tr[1], tr[0]]  // [latMax, lngMax]
+        ];
+    }
+    
+    showWarningToast("Decodificando e compactando imagem...");
+    
+    // 5. Redimensionar/Subamostrar para otimizar tamanho
+    const width = image.getWidth();
+    const height = image.getHeight();
+    const maxDimension = 2048; // Limite de resolução máxima para visualização leve no cliente
+    let scaleWidth = width;
+    let scaleHeight = height;
+    if (width > maxDimension || height > maxDimension) {
+        if (width > height) {
+            scaleWidth = maxDimension;
+            scaleHeight = Math.round((height * maxDimension) / width);
+        } else {
+            scaleHeight = maxDimension;
+            scaleWidth = Math.round((width * maxDimension) / height);
+        }
+    }
+    
+    // Ler os dados RGB subamostrados
+    const rgbData = await image.readRGB({
+        width: scaleWidth,
+        height: scaleHeight
+    });
+    
+    // Criar Canvas temporário
+    const canvas = document.createElement('canvas');
+    canvas.width = scaleWidth;
+    canvas.height = scaleHeight;
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.createImageData(scaleWidth, scaleHeight);
+    
+    const numComponents = rgbData.length / (scaleWidth * scaleHeight);
+    let srcIdx = 0;
+    let destIdx = 0;
+    
+    // Preencher pixels no Canvas
+    for (let i = 0; i < scaleWidth * scaleHeight; i++) {
+        imgData.data[destIdx] = rgbData[srcIdx];       // R
+        imgData.data[destIdx+1] = rgbData[srcIdx+1];   // G
+        imgData.data[destIdx+2] = rgbData[srcIdx+2];   // B
+        imgData.data[destIdx+3] = numComponents === 4 ? rgbData[srcIdx+3] : 255; // A
+        srcIdx += numComponents;
+        destIdx += 4;
+    }
+    ctx.putImageData(imgData, 0, 0);
+    
+    showWarningToast("Fazendo upload da imagem...");
+    
+    // 6. Compactar para WebP e salvar no Supabase Storage
+    canvas.toBlob(async (blob) => {
+        if (!blob) {
+            alert("Erro ao compactar imagem raster no formato WebP.");
+            return;
+        }
+        
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            const fileExt = 'webp';
+            const cleanFileName = fileName.replace(/\.[^/.]+$/, "");
+            const uniqueFileName = `${cleanFileName}_${Date.now()}.${fileExt}`;
+            
+            const { data: storageData, error: storageError } = await supabaseClient.storage
+                .from('rasters')
+                .upload(uniqueFileName, blob, {
+                    contentType: 'image/webp',
+                    cacheControl: '3600',
+                    upsert: false
+                });
+                
+            if (storageError) {
+                console.error("Erro ao subir arquivo para o Storage:", storageError);
+                alert("Erro ao salvar arquivo no Supabase Storage. Verifique se o bucket 'rasters' foi criado e está público. Detalhe: " + storageError.message);
+                return;
+            }
+            
+            // Obter URL pública
+            const { data: urlData } = supabaseClient.storage
+                .from('rasters')
+                .getPublicUrl(uniqueFileName);
+            const imageUrl = urlData.publicUrl;
+            
+            // Gravar metadados no banco
+            const { data: dbData, error: dbError } = await supabaseClient
+                .from('imagens_raster')
+                .insert({
+                    nome: cleanFileName,
+                    url_imagem: imageUrl,
+                    bbox: latLngBounds,
+                    opacidade: 0.8,
+                    visivel: true
+                })
+                .select();
+                
+            if (dbError) {
+                console.error("Erro ao gravar metadados no banco:", dbError);
+                alert("Imagem salva no Storage, mas ocorreu um erro ao cadastrá-la no banco: " + dbError.message);
+                return;
+            }
+            
+            showWarningToast("Imagem georreferenciada importada com sucesso!");
+            
+            // Adicionar localmente
+            if (dbData && dbData.length > 0) {
+                rasterLayers.push(dbData[0]);
+                
+                // Renderizar no mapa
+                const bounds = dbData[0].bbox;
+                const overlay = L.imageOverlay(dbData[0].url_imagem, bounds, {
+                    opacity: 0.8,
+                    interactive: false
+                });
+                if (map) overlay.addTo(map);
+                leafletRasterOverlays[dbData[0].id] = overlay;
+                
+                renderRasterLayersList();
+            }
+        } else {
+            alert("Supabase não está configurado. A imagem compactada foi gerada no console.");
+        }
+    }, 'image/webp', 0.8);
+}
+
+// Configurar ouvintes e funções de UI Globais
+window.openImportOptionsModal = function() {
+    const modal = document.getElementById('import-options-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        setTimeout(() => modal.classList.remove('scale-95'), 10);
+    }
+};
+
+window.closeImportOptionsModal = function() {
+    const modal = document.getElementById('import-options-modal');
+    if (modal) {
+        modal.classList.add('scale-95');
+        setTimeout(() => modal.classList.add('hidden'), 150);
+    }
+};
+
+window.triggerGeoJSONImport = function() {
+    closeImportOptionsModal();
+    const input = document.getElementById('global-geojson-upload');
+    if (input) input.click();
+};
+
+window.triggerGeoTIFFImport = function() {
+    closeImportOptionsModal();
+    const input = document.getElementById('global-geotiff-upload');
+    if (input) input.click();
+};
+
+// Adicionar ouvinte de alteração para upload de raster
+window.addEventListener('DOMContentLoaded', () => {
+    const input = document.getElementById('global-geotiff-upload');
+    if (input) {
+        input.addEventListener('change', handleRasterImport);
+    }
+});

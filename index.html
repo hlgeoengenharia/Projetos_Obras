@@ -289,7 +289,7 @@
         <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuCc0RYeJ85EwHW4BJ4ZRmN9WYDAnOz5EFFNO3bx5XdbDIkNCRYBBysRNyY53k3kzDdU9seuTeFmYvMXtMDCL1UbpKvFNeY23l3z4U9FCZOYErFcRImNItGPpgG_W5bVuwtWn-6WMk8SDB99zq3Dt-MC71VCZyEVd4TqkBE32-OMGnSHpid3s70wq18nEDKvtj8p1j-2l4IrBibDsMAPK8QH6puGnFKJNt-aiAhAmbQzoqrnGeO6vWoOnEZLChi1lnkv29X777poaFA_" alt="Avatar" class="w-[22px] h-[22px] rounded-full border border-slate-300 dark:border-slate-600 group-hover:border-primary dark:group-hover:border-sky-400 transition-colors object-cover">
         <span class="text-[9px] font-medium tracking-wide uppercase">Perfil</span>
     </button>
-    <button onclick="document.getElementById('global-geojson-upload').click()" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 border-l border-slate-200/50 dark:border-slate-800/50">
+    <button onclick="openImportOptionsModal()" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 border-l border-slate-200/50 dark:border-slate-800/50">
         <span class="material-symbols-outlined text-[22px]">upload_file</span>
         <span class="text-[9px] font-medium tracking-wide uppercase">Importar</span>
     </button>
@@ -303,10 +303,23 @@
     </button>
 </div>
 
-<nav class="flex-1 overflow-y-auto">
-<div class="pt-3 pb-2 flex flex-col" id="themes-container">
-<!-- Themes will be dynamically generated here -->
-</div>
+<nav class="flex-1 overflow-y-auto flex flex-col">
+  <!-- Vector Layers -->
+  <div class="pt-3 pb-2 flex flex-col" id="themes-container">
+    <!-- Themes will be dynamically generated here -->
+  </div>
+  
+  <!-- Divider -->
+  <div class="border-t border-slate-200/50 dark:border-slate-800/50 my-2 mx-4"></div>
+  
+  <!-- Raster Layers -->
+  <div class="px-4 pb-4 flex flex-col">
+    <span class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">Imagens de Fundo (GeoTIFF)</span>
+    <div id="rasters-container" class="flex flex-col gap-2">
+      <!-- Raster list items will be dynamically generated here -->
+      <div class="text-xs text-slate-400 dark:text-slate-500 italic p-2 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-center">Nenhuma imagem importada.</div>
+    </div>
+  </div>
 </nav>
 </aside>
 <!-- Main Map Canvas -->
@@ -533,6 +546,42 @@
   </div>
 </div>
 
+<!-- Import Options Selection Modal -->
+<div id="import-options-modal" class="fixed inset-0 z-[100] bg-black/50 hidden flex items-center justify-center">
+  <div class="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-6 w-full max-w-md border border-slate-200 dark:border-slate-800 flex flex-col transition-all duration-300 transform scale-95">
+    <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+      <h3 class="text-lg font-bold text-slate-900 dark:text-white">Opções de Importação</h3>
+      <button onclick="closeImportOptionsModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+        <span class="material-symbols-outlined text-[20px]">close</span>
+      </button>
+    </div>
+    
+    <div class="flex flex-col gap-3">
+      <!-- Option 1: GeoJSON -->
+      <button onclick="triggerGeoJSONImport()" class="flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-primary dark:hover:border-sky-500 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-left transition-all duration-300">
+        <div class="w-10 h-10 rounded-lg bg-sky-100 dark:bg-sky-950/40 text-primary dark:text-sky-400 flex items-center justify-center shrink-0">
+          <span class="material-symbols-outlined text-[24px]">map</span>
+        </div>
+        <div class="flex-1">
+          <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">Camada Vetorial (GeoJSON)</h4>
+          <p class="text-xs text-slate-500 mt-1">Importar pontos, linhas ou polígonos contendo dados cadastrais de formulário.</p>
+        </div>
+      </button>
+      
+      <!-- Option 2: GeoTIFF -->
+      <button onclick="triggerGeoTIFFImport()" class="flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-primary dark:hover:border-sky-500 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-left transition-all duration-300">
+        <div class="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+          <span class="material-symbols-outlined text-[24px]">satellite</span>
+        </div>
+        <div class="flex-1">
+          <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">Imagem Georreferenciada (GeoTIFF)</h4>
+          <p class="text-xs text-slate-500 mt-1">Importar mapas de drone, ortofotos e imagens aéreas com posicionamento automático no mapa.</p>
+        </div>
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Global Import Modal -->
 <div id="global-import-modal" class="fixed inset-0 z-[100] bg-black/50 hidden flex items-center justify-center">
   <div class="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-6 w-full max-w-lg border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col">
@@ -703,6 +752,7 @@
 
 <input type="file" id="geojson-upload-input" accept=".geojson,.json" class="hidden">
 <input type="file" id="global-geojson-upload" accept=".geojson,.json" class="hidden">
+<input type="file" id="global-geotiff-upload" accept=".tif,.tiff,.geotiff" class="hidden">
 
 <!-- Stats Dashboard Modal (Floating Side Panel) -->
 <div id="stats-dashboard-modal" style="top: 80px; right: 20px; left: auto; bottom: auto;" class="fixed w-96 md:w-[450px] z-[120] transform scale-95 opacity-0 translate-y-[-20px] transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] pointer-events-none flex flex-col justify-center items-end">
@@ -819,6 +869,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.1/dist-browser/geotiff.js"></script>
 <script src="src/formRenderer.js"></script>
 <script src="src/customFields.js"></script>
 <script src="src/tableJoin.js"></script>
