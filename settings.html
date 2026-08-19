@@ -2481,6 +2481,55 @@
        }
     }
 
+    window._editingStatIndex = null;
+
+    function getStatFormHtml(stat = null, index = null) {
+        const isEditing = stat !== null && index !== null;
+        let fieldOptions = '<option value="">(Nenhum / Total de Registros)</option>';
+        builderTabs.forEach(tab => {
+            tab.fields.forEach(f => {
+                if(f.type === 'select' || f.type === 'radio' || f.type === 'checkbox') {
+                    const selected = (isEditing && stat.fieldId === f.id) ? 'selected' : '';
+                    fieldOptions += `<option value="${f.id}" ${selected}>${f.label} (${tab.title})</option>`;
+                }
+            });
+        });
+
+        const statType = isEditing ? stat.type : 'indicator';
+        const statTitle = isEditing ? (stat.title || '') : '';
+        const suffix = index !== null ? index : 'new';
+
+        return `
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+               <div>
+                  <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Tipo de Gráfico</label>
+                  <select id="edit-stat-type-${suffix}" class="w-full px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 text-sm bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none">
+                      <option value="indicator" ${statType === 'indicator' ? 'selected' : ''}>Indicador Numérico (Apenas Total)</option>
+                      <option value="pie" ${statType === 'pie' ? 'selected' : ''}>Gráfico de Pizza</option>
+                      <option value="bar" ${statType === 'bar' ? 'selected' : ''}>Gráfico de Barras</option>
+                  </select>
+               </div>
+               <div>
+                  <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Campo Fonte de Dados</label>
+                  <select id="edit-stat-field-${suffix}" class="w-full px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 text-sm bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none">
+                      ${fieldOptions}
+                  </select>
+               </div>
+            </div>
+            <div>
+               <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Título do Gráfico</label>
+               <input type="text" id="edit-stat-title-${suffix}" value="${statTitle}" placeholder="Ex: Total de Obras por Situação" class="w-full px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 text-sm bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none">
+            </div>
+            <div id="stat-color-mapping-container-${suffix}" class="hidden flex flex-col gap-2 mt-1">
+               <!-- Seletor de cores dinâmico -->
+            </div>
+            <div class="flex justify-end gap-2 mt-2 pt-2 border-t border-indigo-100 dark:border-indigo-800/50">
+               <button onclick="cancelStatEdit(${index})" class="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md transition-colors">Cancelar</button>
+               <button onclick="saveStatEdit(${index})" class="px-4 py-2 text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 rounded-md transition-colors shadow-sm">Salvar Gráfico</button>
+            </div>
+        `;
+    }
+
     function renderManualStats() {
         const listContainer = document.getElementById('manual-stats-list');
         if (!listContainer) return;
@@ -2488,31 +2537,72 @@
         listContainer.innerHTML = '';
         if (!window._currentFormStatsConfig) window._currentFormStatsConfig = [];
         
-        if (window._currentFormStatsConfig.length === 0) {
+        if (window._currentFormStatsConfig.length === 0 && window._editingStatIndex === null && !document.getElementById('manual-stat-form')) {
             listContainer.innerHTML = '<div class="text-center text-sm text-slate-400 py-6 border border-dashed border-slate-300 dark:border-slate-700 rounded-lg bg-white/50 dark:bg-slate-800/50">Nenhum gráfico configurado. Clique em "Novo Gráfico" para adicionar.</div>';
             return;
         }
 
         window._currentFormStatsConfig.forEach((stat, index) => {
             const div = document.createElement('div');
-            div.className = 'flex items-center justify-between p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded shadow-sm';
             
-            const icon = stat.type === 'pie' ? 'pie_chart' : (stat.type === 'bar' ? 'bar_chart' : 'pin');
-            const typeName = stat.type === 'pie' ? 'Pizza' : (stat.type === 'bar' ? 'Barras' : 'Indicador');
-            
-            div.innerHTML = `
-                <div class="flex items-center gap-3">
-                   <div class="w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                      <span class="material-symbols-outlined">${icon}</span>
-                   </div>
-                   <div>
-                      <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">${stat.title || 'Sem título'}</h4>
-                      <p class="text-xs text-slate-500 dark:text-slate-400">Tipo: ${typeName} | Campo Origem: ${stat.fieldId || 'Todos (Total)'}</p>
-                   </div>
-                </div>
-                <button onclick="removeManualStat(${index})" class="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors" title="Remover"><span class="material-symbols-outlined">delete</span></button>
-            `;
-            listContainer.appendChild(div);
+            if (window._editingStatIndex === index) {
+                div.className = 'p-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg flex flex-col gap-3 shadow-sm mb-2';
+                div.id = `manual-stat-edit-form-${index}`;
+                div.innerHTML = getStatFormHtml(stat, index);
+                listContainer.appendChild(div);
+                
+                // Add event listeners for editing stat color mapping
+                setTimeout(() => {
+                    const typeSelect = document.getElementById(`edit-stat-type-${index}`);
+                    const fieldSelect = document.getElementById(`edit-stat-field-${index}`);
+                    if (typeSelect && fieldSelect) {
+                        typeSelect.addEventListener('change', () => updateColorMappingInputs(index));
+                        fieldSelect.addEventListener('change', () => updateColorMappingInputs(index));
+                        updateColorMappingInputs(index);
+                    }
+                }, 0);
+            } else {
+                div.className = 'flex items-center justify-between p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded shadow-sm';
+                
+                const icon = stat.type === 'pie' ? 'pie_chart' : (stat.type === 'bar' ? 'bar_chart' : 'pin');
+                const typeName = stat.type === 'pie' ? 'Pizza' : (stat.type === 'bar' ? 'Barras' : 'Indicador');
+                
+                let colorsHtml = '';
+                if (stat.colorMap && Object.keys(stat.colorMap).length > 0) {
+                    colorsHtml = '<div class="flex flex-wrap gap-1 mt-1.5">';
+                    Object.keys(stat.colorMap).forEach(key => {
+                        const isNone = stat.colorMap[key] === 'none';
+                        const dotHtml = isNone
+                            ? `<span class="w-2 h-2 rounded-full border border-dashed border-slate-400 dark:border-slate-600 flex items-center justify-center bg-transparent text-[8px] font-bold text-slate-500 dark:text-slate-400 leading-none shrink-0" title="Sem cor">/</span>`
+                            : `<span class="w-2 h-2 rounded-full border border-white/20 shadow-sm shrink-0" style="background-color: ${stat.colorMap[key]}"></span>`;
+                        colorsHtml += `
+                            <span class="inline-flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 shadow-sm">
+                                ${dotHtml}
+                                <span class="truncate max-w-[80px]">${key}</span>
+                            </span>
+                        `;
+                    });
+                    colorsHtml += '</div>';
+                }
+                
+                div.innerHTML = `
+                    <div class="flex items-center gap-3">
+                       <div class="w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                          <span class="material-symbols-outlined">${icon}</span>
+                       </div>
+                       <div>
+                          <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">${stat.title || 'Sem título'}</h4>
+                          <p class="text-xs text-slate-500 dark:text-slate-400">Tipo: ${typeName} | Campo Origem: ${stat.fieldId || 'Todos (Total)'}</p>
+                          ${colorsHtml}
+                       </div>
+                    </div>
+                    <div class="flex items-center gap-1 shrink-0">
+                        <button onclick="startStatEdit(${index})" class="text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors" title="Editar"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+                        <button onclick="removeManualStat(${index})" class="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors" title="Remover"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+                    </div>
+                `;
+                listContainer.appendChild(div);
+            }
         });
     }
 
@@ -2524,69 +2614,215 @@
             listContainer.innerHTML = '';
         }
 
-        let fieldOptions = '<option value="">(Nenhum / Total de Registros)</option>';
-        builderTabs.forEach(tab => {
-            tab.fields.forEach(f => {
-                if(f.type === 'select' || f.type === 'radio' || f.type === 'checkbox') {
-                    fieldOptions += `<option value="${f.id}">${f.label} (${tab.title})</option>`;
-                }
-            });
-        });
-
+        // Evita abrir múltiplos formulários de criação
+        if (document.getElementById('manual-stat-form')) return;
+        
         const formDiv = document.createElement('div');
         formDiv.className = 'p-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg flex flex-col gap-3 shadow-sm mb-2';
         formDiv.id = 'manual-stat-form';
-        formDiv.innerHTML = `
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-               <div>
-                  <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Tipo de Gráfico</label>
-                  <select id="new-stat-type" class="w-full px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 text-sm bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none">
-                      <option value="indicator">Indicador Numérico (Apenas Total)</option>
-                      <option value="pie">Gráfico de Pizza</option>
-                      <option value="bar">Gráfico de Barras</option>
-                  </select>
-               </div>
-               <div>
-                  <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Campo Fonte de Dados</label>
-                  <select id="new-stat-field" class="w-full px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 text-sm bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none">
-                      ${fieldOptions}
-                  </select>
-               </div>
-            </div>
-            <div>
-               <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Título do Gráfico</label>
-               <input type="text" id="new-stat-title" placeholder="Ex: Total de Obras por Situação" class="w-full px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 text-sm bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none">
-            </div>
-            <div class="flex justify-end gap-2 mt-2 pt-2 border-t border-indigo-100 dark:border-indigo-800/50">
-               <button onclick="renderManualStats()" class="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md transition-colors">Cancelar</button>
-               <button onclick="saveNewManualStat()" class="px-4 py-2 text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 rounded-md transition-colors shadow-sm">Salvar Gráfico</button>
+        formDiv.innerHTML = getStatFormHtml(null, null);
+        
+        listContainer.insertBefore(formDiv, listContainer.firstChild);
+        
+        // Listeners for dynamic color mapping
+        const typeSelect = document.getElementById('edit-stat-type-new');
+        const fieldSelect = document.getElementById('edit-stat-field-new');
+        
+        typeSelect.addEventListener('change', () => updateColorMappingInputs('new'));
+        fieldSelect.addEventListener('change', () => updateColorMappingInputs('new'));
+        
+        updateColorMappingInputs('new');
+    }
+
+    function updateColorMappingInputs(index = 'new') {
+        const suffix = index === 'new' ? 'new' : index;
+        const typeSelect = document.getElementById(`edit-stat-type-${suffix}`);
+        const fieldSelect = document.getElementById(`edit-stat-field-${suffix}`);
+        const container = document.getElementById(`stat-color-mapping-container-${suffix}`);
+        if (!container || !typeSelect || !fieldSelect) return;
+        
+        const fieldId = fieldSelect.value;
+        const type = typeSelect.value;
+        
+        container.innerHTML = '';
+        
+        if (type === 'indicator' || !fieldId) {
+            container.classList.add('hidden');
+            return;
+        }
+        
+        // Find the field options
+        let field = null;
+        builderTabs.forEach(tab => {
+            const found = tab.fields.find(f => f.id === fieldId);
+            if (found) field = found;
+        });
+        
+        if (!field || !field.options) {
+            container.classList.add('hidden');
+            return;
+        }
+        
+        const options = field.options.split(',').map(o => o.trim()).filter(o => o);
+        if (options.length === 0) {
+            container.classList.add('hidden');
+            return;
+        }
+        
+        container.classList.remove('hidden');
+        
+        let html = '<label class="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Cores das Opções (Legenda e Mapa)</label><div class="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-indigo-100/50 dark:bg-slate-900 p-3 rounded-lg border border-indigo-200 dark:border-slate-800">';
+        
+        const defaultColors = ['#06b6d4', '#3b82f6', '#8b5cf6', '#14b8a6', '#6366f1', '#475569', '#10b981', '#ef4444', '#f59e0b'];
+        
+        // Se estivermos editando, obter o colorMap existente do stat para não perder as cores configuradas
+        let existingColorMap = null;
+        if (index !== 'new' && window._currentFormStatsConfig && window._currentFormStatsConfig[index]) {
+            existingColorMap = window._currentFormStatsConfig[index].colorMap;
+        }
+        
+        options.forEach((opt, idx) => {
+            let colorVal = defaultColors[idx % defaultColors.length];
+            let isNone = false;
+            if (existingColorMap && existingColorMap[opt]) {
+                if (existingColorMap[opt] === 'none') {
+                    isNone = true;
+                } else {
+                    colorVal = existingColorMap[opt];
+                }
+            }
+            html += `
+                <div class="flex items-center justify-between bg-white dark:bg-slate-800/60 px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg">
+                    <div class="flex items-center gap-2 truncate">
+                        <input type="color" id="color-picker-${suffix}-${idx}" data-option="${opt}" value="${colorVal}" class="stat-option-color-${suffix} w-7 h-7 rounded cursor-pointer border border-slate-300 dark:border-slate-600 bg-transparent shrink-0 ${isNone ? 'opacity-30 pointer-events-none' : ''}">
+                        <span class="text-xs font-semibold text-slate-755 dark:text-slate-300 truncate">${opt}</span>
+                    </div>
+                    <label class="inline-flex items-center gap-1.5 cursor-pointer shrink-0 ml-1">
+                        <input type="checkbox" id="color-none-${suffix}-${idx}" data-option="${opt}" ${isNone ? 'checked' : ''} onchange="toggleOptionColorDisable(this, '${suffix}', '${idx}')" class="stat-option-none-${suffix} rounded border-slate-350 dark:border-slate-600 text-green-500 focus:ring-green-500/50 w-4 h-4 cursor-pointer">
+                        <span class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Sem Cor</span>
+                        <span id="check-icon-${suffix}-${idx}" class="material-symbols-outlined text-green-500 text-[16px] font-extrabold ${isNone ? '' : 'hidden'} select-none shrink-0 ml-0.5">check</span>
+                    </label>
+                </div>
+            `;
+        });
+        
+        // Add default color for "N/I"
+        let niColor = '#64748b';
+        let niIsNone = false;
+        if (existingColorMap && existingColorMap['N/I']) {
+            if (existingColorMap['N/I'] === 'none') {
+                niIsNone = true;
+            } else {
+                niColor = existingColorMap['N/I'];
+            }
+        }
+        const niIdx = options.length;
+        html += `
+            <div class="flex items-center justify-between bg-white dark:bg-slate-800/60 px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg">
+                <div class="flex items-center gap-2 truncate">
+                    <input type="color" id="color-picker-${suffix}-${niIdx}" data-option="N/I" value="${niColor}" class="stat-option-color-${suffix} w-7 h-7 rounded cursor-pointer border border-slate-300 dark:border-slate-600 bg-transparent shrink-0 ${niIsNone ? 'opacity-30 pointer-events-none' : ''}">
+                    <span class="text-xs font-semibold text-slate-750 dark:text-slate-300 truncate">N/I (Não Informado)</span>
+                </div>
+                <label class="inline-flex items-center gap-1.5 cursor-pointer shrink-0 ml-1">
+                    <input type="checkbox" id="color-none-${suffix}-${niIdx}" data-option="N/I" ${niIsNone ? 'checked' : ''} onchange="toggleOptionColorDisable(this, '${suffix}', '${niIdx}')" class="stat-option-none-${suffix} rounded border-slate-350 dark:border-slate-600 text-green-500 focus:ring-green-500/50 w-4 h-4 cursor-pointer">
+                    <span class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Sem Cor</span>
+                    <span id="check-icon-${suffix}-${niIdx}" class="material-symbols-outlined text-green-500 text-[16px] font-extrabold ${niIsNone ? '' : 'hidden'} select-none shrink-0 ml-0.5">check</span>
+                </label>
             </div>
         `;
         
-        listContainer.insertBefore(formDiv, listContainer.firstChild);
+        html += '</div>';
+        container.innerHTML = html;
     }
 
-    function saveNewManualStat() {
-        const type = document.getElementById('new-stat-type').value;
-        const fieldId = document.getElementById('new-stat-field').value;
-        const title = document.getElementById('new-stat-title').value.trim() || 'Novo Gráfico';
+    function startStatEdit(index) {
+        window._editingStatIndex = index;
+        renderManualStats();
+    }
+
+    function cancelStatEdit(index) {
+        if (index === null) {
+            renderManualStats();
+        } else {
+            window._editingStatIndex = null;
+            renderManualStats();
+        }
+    }
+
+    function saveStatEdit(index) {
+        const suffix = index === null ? 'new' : index;
+        const type = document.getElementById(`edit-stat-type-${suffix}`).value;
+        const fieldId = document.getElementById(`edit-stat-field-${suffix}`).value;
+        const title = document.getElementById(`edit-stat-title-${suffix}`).value.trim() || 'Gráfico';
         
-        if (!window._currentFormStatsConfig) window._currentFormStatsConfig = [];
-        window._currentFormStatsConfig.push({
+        const colorMap = {};
+        const noneCheckboxes = document.querySelectorAll(`.stat-option-none-${suffix}`);
+        const noneOptions = new Set();
+        noneCheckboxes.forEach(cb => {
+            if (cb.checked) {
+                noneOptions.add(cb.getAttribute('data-option'));
+            }
+        });
+
+        const colorInputs = document.querySelectorAll(`.stat-option-color-${suffix}`);
+        colorInputs.forEach(input => {
+            const opt = input.getAttribute('data-option');
+            if (noneOptions.has(opt)) {
+                colorMap[opt] = 'none';
+            } else {
+                colorMap[opt] = input.value;
+            }
+        });
+        
+        const statData = {
             type: type,
             title: title,
             fieldId: fieldId,
+            colorMap: Object.keys(colorMap).length > 0 ? colorMap : null,
             description: ""
-        });
+        };
+        
+        if (!window._currentFormStatsConfig) window._currentFormStatsConfig = [];
+        
+        if (index === null) {
+            window._currentFormStatsConfig.push(statData);
+        } else {
+            window._currentFormStatsConfig[index] = statData;
+            window._editingStatIndex = null;
+        }
+        
         renderManualStats();
     }
 
     function removeManualStat(index) {
         if(confirm('Remover este gráfico do Dashboard?')) {
             window._currentFormStatsConfig.splice(index, 1);
+            if (window._editingStatIndex === index) {
+                window._editingStatIndex = null;
+            }
             renderManualStats();
         }
     }
+
+    window.toggleOptionColorDisable = function(checkbox, suffix, idx) {
+        const picker = document.getElementById(`color-picker-${suffix}-${idx}`);
+        if (picker) {
+            if (checkbox.checked) {
+                picker.classList.add('opacity-30', 'pointer-events-none');
+            } else {
+                picker.classList.remove('opacity-30', 'pointer-events-none');
+            }
+        }
+        
+        const checkIcon = document.getElementById(`check-icon-${suffix}-${idx}`);
+        if (checkIcon) {
+            if (checkbox.checked) {
+                checkIcon.classList.remove('hidden');
+            } else {
+                checkIcon.classList.add('hidden');
+            }
+        }
+    };
 
   </script>
 </body>

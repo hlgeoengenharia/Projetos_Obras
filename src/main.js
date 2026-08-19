@@ -3714,17 +3714,16 @@ async function openStatsDashboard(themeId, specificIndex) {
             const data = Object.values(counts);
             
             // Gerar mapa de cores para cada label
-            const pieColors = ['#06b6d4', '#3b82f6', '#8b5cf6', '#14b8a6', '#6366f1', '#475569'];
-            const barColor = '#06b6d4';
+            const defaultColors = ['#06b6d4', '#3b82f6', '#8b5cf6', '#14b8a6', '#6366f1', '#475569', '#10b981', '#ef4444', '#f59e0b'];
             const colorsMap = {};
             
             rawLabels.forEach((label, i) => {
-                if (widget.type === 'pie') {
-                    colorsMap[label] = pieColors[i % pieColors.length];
+                if (widget.colorMap && widget.colorMap[label]) {
+                    colorsMap[label] = widget.colorMap[label];
+                } else if (widget.colorMap && widget.colorMap['N/I'] && label === 'N/I') {
+                    colorsMap[label] = widget.colorMap['N/I'];
                 } else {
-                    colorsMap[label] = barColor; // Barras podem ter uma cor só ou mesma lógica, vamos usar mesma lógica para colorir mapa
-                    // Mas se o gráfico for barra, vamos usar as cores variadas no mapa também para diferenciar
-                    colorsMap[label] = pieColors[i % pieColors.length];
+                    colorsMap[label] = defaultColors[i % defaultColors.length];
                 }
             });
             const colorsJson = JSON.stringify(colorsMap);
@@ -3750,8 +3749,16 @@ async function openStatsDashboard(themeId, specificIndex) {
                         labels: chartLabels,
                         datasets: [{
                             data: data,
-                            backgroundColor: widget.type === 'pie' ? pieColors : barColor + '80',
-                            hoverBackgroundColor: barColor,
+                            backgroundColor: rawLabels.map(label => {
+                                const col = colorsMap[label];
+                                if (col === 'none') return 'rgba(148, 163, 184, 0.2)';
+                                return col + (widget.type === 'bar' ? 'cc' : '');
+                            }),
+                            hoverBackgroundColor: rawLabels.map(label => {
+                                const col = colorsMap[label];
+                                if (col === 'none') return 'rgba(148, 163, 184, 0.35)';
+                                return col;
+                            }),
                             borderWidth: 0,
                             borderRadius: widget.type === 'bar' ? 4 : 0,
                             barPercentage: 0.6
@@ -3868,13 +3875,24 @@ window.applyThemeClassification = function(themeId, fieldId, colorsJson) {
         const valStr = (val === undefined || val === null || val === '') ? "N/I" : String(val);
         const newColor = colorsMap[valStr] || theme.color || '#3388ff';
 
-        if (layer.setStyle) {
-            layer.setStyle({
-                fillColor: newColor,
-                color: newColor,
-                fillOpacity: 0.8,
-                weight: 2
-            });
+        if (newColor === 'none') {
+            if (layer.options.originalStyle && layer.setStyle) {
+                layer.setStyle({
+                    fillColor: layer.options.originalStyle.fillColor,
+                    color: layer.options.originalStyle.color,
+                    fillOpacity: layer.options.originalStyle.fillOpacity,
+                    weight: layer.options.originalStyle.weight
+                });
+            }
+        } else {
+            if (layer.setStyle) {
+                layer.setStyle({
+                    fillColor: newColor,
+                    color: newColor,
+                    fillOpacity: 0.8,
+                    weight: 2
+                });
+            }
         }
     });
 };
