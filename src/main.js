@@ -566,6 +566,10 @@ function updateLabelsVisibility() {
 
 
 function loadAllFeaturesToMap() {
+  // Guardar o ID temporário ou ID do banco da feição selecionada no momento
+  const activeTempId = activeFeatureLayer && activeFeatureLayer.feature && activeFeatureLayer.feature.properties && activeFeatureLayer.feature.properties._tempId;
+  const activeDbId = activeFeatureLayer && activeFeatureLayer.feature && activeFeatureLayer.feature.properties && activeFeatureLayer.feature.properties.id_banco;
+
   geojsonLayer.clearLayers();
   
   const allFeatures = [];
@@ -579,6 +583,24 @@ function loadAllFeaturesToMap() {
   
   if (allFeatures.length > 0) {
     geojsonLayer.addData(allFeatures);
+  }
+
+  // Re-estabelecer o activeFeatureLayer com o novo objeto correspondente recém-criado
+  if (activeTempId || activeDbId) {
+      let foundLayer = null;
+      geojsonLayer.eachLayer(layer => {
+          if (layer.feature && layer.feature.properties) {
+              const props = layer.feature.properties;
+              if ((activeTempId && props._tempId === activeTempId) || (activeDbId && props.id_banco === activeDbId)) {
+                  foundLayer = layer;
+              }
+          }
+      });
+      if (foundLayer) {
+          activeFeatureLayer = foundLayer;
+          // Reaplica o destaque visual no mapa sem mover/puxar a câmera
+          highlightFeature(activeFeatureLayer.feature.properties._tempId, true);
+      }
   }
 }
 
@@ -1097,7 +1119,7 @@ function clearHighlight() {
   currentHighlightData = null;
 }
 
-function highlightFeature(fid) {
+function highlightFeature(fid, dontPan = false) {
   if (typeof geojsonLayer === 'undefined' || !geojsonLayer) return;
   
   clearHighlight();
@@ -1112,10 +1134,12 @@ function highlightFeature(fid) {
   
   if (targetLayer) {
     // Zoom/Center to feature
-    if (targetLayer.getBounds) {
-      map.flyToBounds(targetLayer.getBounds(), { maxZoom: 18, duration: 0.5 });
-    } else if (targetLayer.getLatLng) {
-      map.flyTo(targetLayer.getLatLng(), Math.max(map.getZoom(), 18), { duration: 0.5 });
+    if (!dontPan) {
+        if (targetLayer.getBounds) {
+          map.flyToBounds(targetLayer.getBounds(), { maxZoom: 18, duration: 0.5 });
+        } else if (targetLayer.getLatLng) {
+          map.flyTo(targetLayer.getLatLng(), Math.max(map.getZoom(), 18), { duration: 0.5 });
+        }
     }
 
     if (targetLayer.setStyle) {
