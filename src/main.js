@@ -1067,6 +1067,35 @@ function clearAllFilters(themeId) {
     `;
     executeSearch(themeId);
 }
+function getThemeField(theme, key) {
+    if (!key) return null;
+    if (theme && theme.formId && typeof allForms !== 'undefined') {
+        const form = allForms.find(f => f.id === theme.formId);
+        if (form && (form.schema || form.tabs)) {
+            const schema = form.schema || form.tabs;
+            for (const tab of schema) {
+                if (tab.fields) {
+                    const field = tab.fields.find(f => f.id === key || (f.name && f.name.toLowerCase() === key.toLowerCase()) || (f.label && f.label.toLowerCase() === key.toLowerCase()));
+                    if (field) return field;
+                }
+            }
+        }
+    }
+    return null;
+}
+
+function formatFilterValue(theme, fieldId, value) {
+    if (value === undefined || value === null || value === '') return '';
+    const field = getThemeField(theme, fieldId);
+    if (field && (field.type === 'ipl' || field.type === 'ipf')) {
+        const cleanVal = String(value).replace(/\D/g, '');
+        if (cleanVal.length >= 20) {
+            const cnj = cleanVal.substring(cleanVal.length - 20);
+            return cnj.replace(/(\d{7})(\d{2})(\d{4})(\d{1})(\d{2})(\d{4})/, "$1-$2.$3.$4.$5.$6");
+        }
+    }
+    return String(value).trim();
+}
 
 function updateFilterValueInput(selectEl, themeId) {
     const theme = themes.find(t => t.id === themeId);
@@ -1085,9 +1114,10 @@ function updateFilterValueInput(selectEl, themeId) {
         const uniqueValues = new Set();
         if (theme.features) {
             theme.features.forEach(f => {
-                const val = getFeaturePropertyValue(theme, f, fieldId);
+                let val = getFeaturePropertyValue(theme, f, fieldId);
                 if (val !== undefined && val !== null && val !== '') {
-                    uniqueValues.add(val.toString().trim());
+                    val = formatFilterValue(theme, fieldId, val);
+                    if (val) uniqueValues.add(val);
                 }
             });
         }
@@ -1234,8 +1264,9 @@ function executeSearch(themeId) {
                 if (!searchData.includes(rule.value)) { match = false; break; }
             } else {
                 if (feature) {
-                    const val = getFeaturePropertyValue(theme, feature, rule.field) || '';
-                    if (!val.toString().toLowerCase().includes(rule.value)) { match = false; break; }
+                    let val = getFeaturePropertyValue(theme, feature, rule.field) || '';
+                    val = formatFilterValue(theme, rule.field, val);
+                    if (!val.toLowerCase().includes(rule.value)) { match = false; break; }
                 } else {
                     match = false; break;
                 }
@@ -1337,8 +1368,9 @@ function refreshFilterDropdownOptions(themeId) {
             // Filtrar as feições baseado nas outras regras
             const filteredFeatures = theme.features.filter(f => {
                 for (let rule of otherRules) {
-                    const val = getFeaturePropertyValue(theme, f, rule.field);
-                    if (val === undefined || val === null || !val.toString().toLowerCase().includes(rule.value)) {
+                    let val = getFeaturePropertyValue(theme, f, rule.field);
+                    val = formatFilterValue(theme, rule.field, val);
+                    if (val === undefined || val === null || !val.toLowerCase().includes(rule.value)) {
                         return false;
                     }
                 }
@@ -1348,9 +1380,10 @@ function refreshFilterDropdownOptions(themeId) {
             // Extrair valores únicos
             const uniqueValues = new Set();
             filteredFeatures.forEach(f => {
-                const val = getFeaturePropertyValue(theme, f, currentFieldId);
+                let val = getFeaturePropertyValue(theme, f, currentFieldId);
                 if (val !== undefined && val !== null && val !== '') {
-                    uniqueValues.add(val.toString().trim());
+                    val = formatFilterValue(theme, currentFieldId, val);
+                    if (val) uniqueValues.add(val);
                 }
             });
             
