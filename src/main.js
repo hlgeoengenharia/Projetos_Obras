@@ -1290,6 +1290,90 @@ function executeSearch(themeId) {
         }
     }
   }
+
+  // Atualizar dinamicamente os valores de outros dropdowns de filtro (cascata)
+  if (!isRefreshingDropdowns) {
+      isRefreshingDropdowns = true;
+      try {
+          refreshFilterDropdownOptions(themeId);
+      } finally {
+          isRefreshingDropdowns = false;
+      }
+  }
+}
+
+let isRefreshingDropdowns = false;
+
+function refreshFilterDropdownOptions(themeId) {
+    const theme = themes.find(t => t.id === themeId);
+    if (!theme) return;
+    
+    const container = document.getElementById('filters-container-' + themeId);
+    if (!container) return;
+    
+    const rows = Array.from(container.querySelectorAll('.filter-row'));
+    let anyValueReset = false;
+    
+    rows.forEach((currentRow, currentIndex) => {
+        const fieldSelect = currentRow.querySelector('.filter-field');
+        const valueSelect = currentRow.querySelector('.filter-value');
+        
+        if (fieldSelect && valueSelect && valueSelect.tagName === 'SELECT') {
+            const currentFieldId = fieldSelect.value;
+            const currentValue = valueSelect.value;
+            
+            // Coletar regras dos outros filtros (excluindo a linha atual)
+            const otherRules = [];
+            rows.forEach((row, idx) => {
+                if (idx !== currentIndex) {
+                    const fSelect = row.querySelector('.filter-field');
+                    const vInput = row.querySelector('.filter-value');
+                    if (fSelect && vInput && fSelect.value !== 'ALL' && vInput.value !== '') {
+                        otherRules.push({ field: fSelect.value, value: vInput.value.toLowerCase().trim() });
+                    }
+                }
+            });
+            
+            // Filtrar as feições baseado nas outras regras
+            const filteredFeatures = theme.features.filter(f => {
+                for (let rule of otherRules) {
+                    const val = getFeaturePropertyValue(theme, f, rule.field);
+                    if (val === undefined || val === null || !val.toString().toLowerCase().includes(rule.value)) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+            
+            // Extrair valores únicos
+            const uniqueValues = new Set();
+            filteredFeatures.forEach(f => {
+                const val = getFeaturePropertyValue(theme, f, currentFieldId);
+                if (val !== undefined && val !== null && val !== '') {
+                    uniqueValues.add(val.toString().trim());
+                }
+            });
+            
+            const sortedValues = Array.from(uniqueValues).sort();
+            
+            // Se o valor selecionado não é mais válido devido a outros filtros, reseta para ""
+            let newValue = '';
+            if (sortedValues.includes(currentValue)) {
+                newValue = currentValue;
+            } else if (currentValue !== '') {
+                anyValueReset = true;
+            }
+            
+            const optionsHtml = sortedValues.map(v => `<option value="${v}" ${v === newValue ? 'selected' : ''}>${v}</option>`).join('');
+            valueSelect.innerHTML = `<option value="">-- Todos --</option>${optionsHtml}`;
+            valueSelect.value = newValue;
+        }
+    });
+    
+    // Se algum valor foi limpo por incompatibilidade, re-executa a busca para atualizar o mapa/painel
+    if (anyValueReset) {
+        executeSearch(themeId);
+    }
 }
 
 function openStatsDashboard(themeId) {
