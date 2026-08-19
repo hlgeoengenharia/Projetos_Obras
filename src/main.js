@@ -2260,7 +2260,7 @@ async function confirmGlobalImport() {
         
         if (formFieldsMap[actualKey]) {
             const fieldType = formFieldsMap[actualKey];
-            if ((fieldType === 'cpfcnpj' || fieldType === 'ipf' || fieldType === 'insc_imob_cabedelo') && typeof val === 'string') {
+            if ((fieldType === 'cpfcnpj' || fieldType === 'ipl' || fieldType === 'ipf' || fieldType === 'insc_imob_cabedelo') && typeof val === 'string') {
                 val = val.replace(/\D/g, ''); // Extract only numbers
             } else if (fieldType === 'select') {
                 const strVal = val !== undefined && val !== null ? String(val).trim() : '';
@@ -3198,16 +3198,9 @@ function openStreetViewAtCoordinate(latlng) {
   const iframe = document.getElementById('streetview-iframe');
   
   if (overlay && card && iframe) {
-      const apiKey = localStorage.getItem('google_maps_api_key');
-      let url;
-      if (apiKey && apiKey.trim() !== '') {
-          // Official Embed API (Autosnapping enabled!)
-          url = `https://www.google.com/maps/embed/v1/streetview?key=${apiKey.trim()}&location=${latlng.lat},${latlng.lng}`;
-      } else {
-          // Legacy keyless fallback
-          url = `https://maps.google.com/maps?q=${latlng.lat},${latlng.lng}&layer=c&cbll=${latlng.lat},${latlng.lng}&output=embed`;
-          showWarningToast("Para abrir o 3D direto na rua automaticamente, adicione sua Chave da API do Google Maps em Ajustes.");
-      }
+      // Chave embutida permanente e gratuita para o Street View
+      const apiKey = 'AIzaSyCjmV_PqXvAiSw5Db-CD0v_SMnY6tkHGXw';
+      const url = `https://www.google.com/maps/embed/v1/streetview?key=${apiKey}&location=${latlng.lat},${latlng.lng}`;
       iframe.src = url;
       overlay.classList.remove('hidden');
       card.classList.remove('hidden');
