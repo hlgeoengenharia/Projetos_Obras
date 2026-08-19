@@ -2585,20 +2585,39 @@ function editFeatureGeometry() {
   closeFeatureInfoModal(true); // Keep activeFeatureLayer
   
   if (layerToEdit && layerToEdit.pm) {
+      // 1. Configurar ouvinte para interceptar a criação dos marcadores de vértices
+      layerToEdit.off('pm:markercreate');
+      layerToEdit.on('pm:markercreate', (e) => {
+          const marker = e.marker;
+          const parent = e.parent || layerToEdit;
+          const indexPath = e.indexPath;
+          
+          if (marker) {
+              // Atalho 1: Duplo clique no círculo do vértice para excluir
+              marker.on('dblclick', (me) => {
+                  L.DomEvent.stopPropagation(me);
+                  if (typeof parent.pm.removeVertex === 'function') {
+                      parent.pm.removeVertex(indexPath);
+                  }
+              });
+              
+              // Atalho 2: Shift + clique no círculo do vértice para excluir
+              marker.on('click', (me) => {
+                  if (me.originalEvent && (me.originalEvent.shiftKey || me.originalEvent.altKey || me.originalEvent.ctrlKey)) {
+                      L.DomEvent.stopPropagation(me);
+                      if (typeof parent.pm.removeVertex === 'function') {
+                          parent.pm.removeVertex(indexPath);
+                      }
+                  }
+              });
+          }
+      });
+
+      // 2. Ativar a edição de geometria
       layerToEdit.pm.enable({
         allowSelfIntersection: false,
         preventMarkerRemoval: false,
         snappable: true,
-      });
-      
-      // Atalho alternativo: Remover vértice clicando enquanto segura a tecla SHIFT, ALT ou CTRL
-      layerToEdit.off('pm:vertexclick');
-      layerToEdit.on('pm:vertexclick', (e) => {
-          if (e.originalEvent && (e.originalEvent.shiftKey || e.originalEvent.altKey || e.originalEvent.ctrlKey)) {
-              if (typeof e.layer.pm.removeVertex === 'function') {
-                  e.layer.pm.removeVertex(e.indexPath);
-              }
-          }
       });
 
       const toolbar = document.getElementById('geometry-edit-toolbar');
