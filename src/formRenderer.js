@@ -48,16 +48,16 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
         
         html += `
             <div class="border-b last:border-b-0 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 transition-all accordion-section ${isPrimary ? 'border-l-4 border-l-sky-500 shadow-inner' : ''}" id="acc-section-${tab.id}" ${(tab.condition && tab.condition.enabled && tab.condition.fieldId) ? `data-condition-field="${tab.condition.fieldId}" data-condition-operator="${tab.condition.operator}" data-condition-value="${(tab.condition.value || '').toLowerCase()}"` : ''}>
-                <button type="button" onclick="switchDynamicTab('${tab.id}')" class="group w-full px-3 py-3 sm:px-4 sm:py-3.5 flex items-center justify-center ${isPrimary ? 'bg-blue-50 dark:bg-blue-950/20' : 'bg-slate-50 dark:bg-transparent'} hover:bg-blue-600 dark:hover:bg-blue-600 active:bg-blue-700 dark:active:bg-blue-700 active:scale-95 hover:shadow-[0_0_25px_rgba(59,130,246,0.6)] hover:z-10 relative transition-all duration-300 ease-out overflow-hidden">
+                <button type="button" onclick="switchDynamicTab('${tab.id}')" class="group w-full px-3 py-3 sm:px-4 sm:py-3.5 flex items-center justify-center ${isPrimary ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold' : 'bg-slate-50 dark:bg-slate-900/40 text-slate-700 dark:text-slate-300'} hover:bg-blue-600 dark:hover:bg-blue-600 active:bg-blue-700 dark:active:bg-blue-700 active:scale-95 hover:shadow-[0_0_25px_rgba(59,130,246,0.6)] hover:z-10 relative transition-all duration-300 ease-out overflow-hidden">
                     <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-150%] group-hover:translate-x-[150%] transition-transform duration-1000 ease-in-out"></div>
-                    <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200 group-hover:text-white dark:group-hover:text-white uppercase tracking-wider flex items-center gap-2 text-center transition-all duration-300 group-hover:scale-105 group-hover:tracking-widest relative z-10">
+                    <h3 class="text-sm font-bold uppercase tracking-wider flex items-center gap-2 text-center transition-all duration-300 group-hover:scale-105 group-hover:tracking-widest relative z-10">
                         ${isPrimary ? '<span class="material-symbols-outlined text-amber-500 group-hover:text-yellow-300 group-hover:drop-shadow-[0_0_8px_rgba(253,224,71,0.8)] transition-all text-[18px]">star</span>' : ''}
                         ${tab.title}
                         ${recordCountHtml}
                     </h3>
                 </button>
                 
-                <div id="acc-content-${tab.id}" class="accordion-content transition-all duration-300 ${isPrimary ? 'block p-4 sm:p-6 border-t border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900' : 'hidden'}">
+                <div id="acc-content-${tab.id}" class="accordion-content transition-all duration-300 ${isPrimary ? 'block p-4 sm:p-5 border-t border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-950' : 'hidden'}">
         `;
         
         let isTabEditMode = false;
@@ -296,30 +296,30 @@ window.switchDynamicTab = function(tabId) {
 
     document.querySelectorAll('.accordion-content').forEach(el => {
         el.classList.add('hidden');
-        el.classList.remove('block', 'p-4', 'sm:p-6', 'border-t', 'border-slate-200', 'dark:border-slate-700', 'bg-slate-100', 'dark:bg-slate-900');
+        el.classList.remove('block', 'p-4', 'sm:p-5', 'border-t', 'border-slate-200', 'dark:border-slate-700', 'bg-slate-100', 'dark:bg-slate-950');
     });
     
     document.querySelectorAll('.accordion-section').forEach(el => {
         el.classList.remove('border-l-4', 'border-l-sky-500', 'shadow-inner');
         const btn = el.querySelector('button');
         if (btn) {
-            btn.classList.remove('bg-blue-50', 'dark:bg-blue-950/20');
-            btn.classList.add('bg-slate-50', 'dark:bg-transparent');
+            btn.classList.remove('bg-white', 'dark:bg-slate-800', 'text-blue-600', 'dark:text-blue-400', 'font-bold');
+            btn.classList.add('bg-slate-50', 'dark:bg-slate-900/40', 'text-slate-700', 'dark:text-slate-300');
         }
     });
     
     if (content && !isAlreadyOpen) {
         window.currentActiveTabId = tabId;
         content.classList.remove('hidden');
-        content.classList.add('block', 'p-4', 'sm:p-6', 'border-t', 'border-slate-200', 'dark:border-slate-700', 'bg-slate-100', 'dark:bg-slate-900');
+        content.classList.add('block', 'p-4', 'sm:p-5', 'border-t', 'border-slate-200', 'dark:border-slate-700', 'bg-slate-100', 'dark:bg-slate-950');
         
         const section = document.getElementById('acc-section-' + tabId);
         if (section) {
             section.classList.add('border-l-4', 'border-l-sky-500', 'shadow-inner');
             const btn = section.querySelector('button');
             if (btn) {
-                btn.classList.remove('bg-slate-50', 'dark:bg-transparent');
-                btn.classList.add('bg-blue-50', 'dark:bg-blue-950/20');
+                btn.classList.remove('bg-slate-50', 'dark:bg-slate-900/40', 'text-slate-700', 'dark:text-slate-300');
+                btn.classList.add('bg-white', 'dark:bg-slate-800', 'text-blue-600', 'dark:text-blue-400', 'font-bold');
             }
             setTimeout(() => {
                 section.scrollIntoView({ behavior: 'smooth', block: 'center' });
