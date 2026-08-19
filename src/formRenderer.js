@@ -170,6 +170,10 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
     `;
     
     container.innerHTML = html;
+    
+    if (typeof window.evaluateFormCalculations === 'function') {
+        window.evaluateFormCalculations(container);
+    }
 };
 
 // Abaixo vamos colocar funções auxiliares de 1:N que a interface precisa

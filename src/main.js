@@ -2635,6 +2635,9 @@ function cancelFeatureEdit() {
 }
 
 async function saveFeatureData() {
+  if (typeof window.evaluateFormCalculations === 'function') {
+      window.evaluateFormCalculations(document.body);
+  }
   const inputs = document.querySelectorAll('.feature-data-input');
   
   // Validação: Exigir título para todos os anexos não excluídos
