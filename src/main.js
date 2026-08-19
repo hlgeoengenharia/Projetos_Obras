@@ -3883,29 +3883,39 @@ function renderRasterLayersList() {
     container.innerHTML = '';
     rasterLayers.forEach(raster => {
         const item = document.createElement('div');
-        item.className = 'flex flex-col gap-2 p-3 bg-slate-50 dark:bg-slate-900/40 border border-slate-200/50 dark:border-white/5 rounded-xl transition-all';
+        item.className = 'flex flex-col rounded-xl overflow-hidden shadow-lg border border-white/10 transition-all duration-300';
+        item.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.1) 0%, rgba(15,23,42,0.8) 100%)';
         
         item.innerHTML = `
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2 overflow-hidden">
-                    <span class="material-symbols-outlined text-[18px] text-emerald-500 shrink-0">satellite</span>
-                    <span class="text-xs font-bold text-slate-700 dark:text-slate-300 truncate w-36" title="${raster.nome}">${raster.nome}</span>
-                </div>
-                <div class="flex items-center gap-2 shrink-0">
-                    <label class="relative inline-flex items-center cursor-pointer" title="${raster.visivel ? 'Ocultar' : 'Mostrar'} Imagem">
+            <div class="p-3 flex flex-col backdrop-blur-md">
+                <!-- Header: Icon, Title, and Toggle -->
+                <div class="flex items-center justify-between mb-2.5">
+                    <div class="flex items-center gap-2.5 overflow-hidden">
+                        <div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                            <span class="material-symbols-outlined text-[18px] text-emerald-400">satellite</span>
+                        </div>
+                        <div class="flex flex-col overflow-hidden">
+                            <span class="text-xs font-bold text-white truncate w-36 sm:w-44" title="${raster.nome}">${raster.nome}</span>
+                            <span class="text-[9px] text-slate-400 font-normal uppercase tracking-wider mt-0.5">GeoTIFF • Imagem</span>
+                        </div>
+                    </div>
+                    
+                    <!-- iOS-style Toggle -->
+                    <label class="relative inline-flex items-center cursor-pointer shrink-0" title="${raster.visivel ? 'Ocultar' : 'Mostrar'} Imagem">
                         <input type="checkbox" class="sr-only peer" ${raster.visivel ? 'checked' : ''} onchange="toggleRasterVisibility('${raster.id}', this)">
-                        <div class="w-8 h-4.5 bg-slate-300 dark:bg-slate-700/50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-emerald-500"></div>
+                        <div class="w-9 h-5 bg-slate-700/50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
                     </label>
-                    <button onclick="deleteRasterLayer('${raster.id}')" class="text-slate-400 hover:text-red-500 dark:hover:text-red-400 p-1 rounded transition-colors">
-                        <span class="material-symbols-outlined text-[16px]">delete</span>
+                </div>
+                
+                <!-- Footer: Actions -->
+                <div class="flex justify-start items-center border-t border-white/20 dark:border-white/10 pt-3 gap-2 w-full">
+                    <button onclick="openEditRasterModal('${raster.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Configurações da Imagem">
+                        <span class="material-symbols-outlined text-[18px]">settings</span>
+                    </button>
+                    <button onclick="deleteRasterLayer('${raster.id}')" class="p-1.5 hover:bg-red-500/30 rounded-lg tooltip text-red-500 transition-colors" title="Excluir Imagem">
+                        <span class="material-symbols-outlined text-[18px]">delete</span>
                     </button>
                 </div>
-            </div>
-            <div class="flex items-center gap-2 pt-1.5 border-t border-slate-100 dark:border-slate-800/50">
-                <span class="material-symbols-outlined text-[14px] text-slate-400 shrink-0">opacity</span>
-                <input type="range" min="0" max="1" step="0.05" value="${raster.opacidade !== undefined ? raster.opacidade : 0.8}" 
-                       oninput="changeRasterOpacity('${raster.id}', this.value)" 
-                       class="w-full h-1 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500">
             </div>
         `;
         container.appendChild(item);
@@ -3989,11 +3999,51 @@ window.deleteRasterLayer = async function(rasterId) {
 };
 
 // Event handler de importação de arquivo
+// --- CENTRALIZED LOADING OVERLAY ---
+window.showLoadingOverlay = function(message) {
+    let overlay = document.getElementById('import-loading-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'import-loading-overlay';
+        overlay.className = 'fixed inset-0 z-[10000] bg-black/60 backdrop-blur-sm flex items-center justify-center transition-all duration-300 opacity-0';
+        overlay.innerHTML = `
+            <div class="bg-slate-900/90 border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col items-center gap-4 max-w-sm w-full mx-4 text-center transform scale-95 transition-transform duration-300">
+                <div class="w-12 h-12 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin"></div>
+                <div class="flex flex-col gap-1">
+                    <h3 class="text-sm font-bold text-white uppercase tracking-wider">Processando GeoTIFF</h3>
+                    <p id="import-loading-message" class="text-xs text-slate-300 font-medium px-2 leading-relaxed">${message}</p>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        
+        // Trigger reflow for animations
+        overlay.offsetHeight; 
+        overlay.classList.remove('opacity-0');
+        overlay.querySelector('div').classList.remove('scale-95');
+    } else {
+        const msgEl = document.getElementById('import-loading-message');
+        if (msgEl) {
+            msgEl.textContent = message;
+        }
+    }
+};
+
+window.hideLoadingOverlay = function() {
+    const overlay = document.getElementById('import-loading-overlay');
+    if (overlay) {
+        overlay.classList.add('opacity-0');
+        overlay.querySelector('div').classList.add('scale-95');
+        setTimeout(() => overlay.remove(), 300);
+    }
+};
+
+// Event handler de importação de arquivo
 async function handleRasterImport(e) {
     const file = e.target.files[0];
     if (!file) return;
     
-    showWarningToast("Lendo arquivo GeoTIFF...");
+    showLoadingOverlay("Lendo arquivo GeoTIFF...");
     
     const reader = new FileReader();
     reader.onload = async function(event) {
@@ -4001,8 +4051,13 @@ async function handleRasterImport(e) {
             await processGeoTIFF(event.target.result, file.name);
         } catch(err) {
             console.error("Erro ao processar GeoTIFF:", err);
+            hideLoadingOverlay();
             alert("Erro ao processar arquivo GeoTIFF. Verifique se é uma imagem georreferenciada válida. Erro: " + err.message);
         }
+    };
+    reader.onerror = function() {
+        hideLoadingOverlay();
+        alert("Erro ao ler o arquivo local.");
     };
     reader.readAsArrayBuffer(file);
     e.target.value = '';
@@ -4011,6 +4066,7 @@ async function handleRasterImport(e) {
 // Processamento e compressão da imagem
 async function processGeoTIFF(arrayBuffer, fileName) {
     if (typeof GeoTIFF === 'undefined') {
+        hideLoadingOverlay();
         alert("A biblioteca GeoTIFF.js não foi carregada com sucesso.");
         return;
     }
@@ -4035,7 +4091,7 @@ async function processGeoTIFF(arrayBuffer, fileName) {
         }
     }
     
-    showWarningToast(`Reprojetando coordenadas (EPSG:${epsg})...`);
+    showLoadingOverlay(`Reprojetando coordenadas (EPSG:${epsg})...`);
     
     // 3. Garantir definição da projeção no proj4
     const srcProjection = await getProj4Def(epsg);
@@ -4060,7 +4116,7 @@ async function processGeoTIFF(arrayBuffer, fileName) {
         ];
     }
     
-    showWarningToast("Decodificando e compactando imagem...");
+    showLoadingOverlay("Decodificando e compactando imagem...");
     
     // 5. Redimensionar/Subamostrar para otimizar tamanho
     const width = image.getWidth();
@@ -4106,11 +4162,12 @@ async function processGeoTIFF(arrayBuffer, fileName) {
     }
     ctx.putImageData(imgData, 0, 0);
     
-    showWarningToast("Fazendo upload da imagem...");
+    showLoadingOverlay("Fazendo upload da imagem...");
     
     // 6. Compactar para WebP e salvar no Supabase Storage
     canvas.toBlob(async (blob) => {
         if (!blob) {
+            hideLoadingOverlay();
             alert("Erro ao compactar imagem raster no formato WebP.");
             return;
         }
@@ -4130,6 +4187,7 @@ async function processGeoTIFF(arrayBuffer, fileName) {
                 
             if (storageError) {
                 console.error("Erro ao subir arquivo para o Storage:", storageError);
+                hideLoadingOverlay();
                 alert("Erro ao salvar arquivo no Supabase Storage. Verifique se o bucket 'rasters' foi criado e está público. Detalhe: " + storageError.message);
                 return;
             }
@@ -4154,10 +4212,12 @@ async function processGeoTIFF(arrayBuffer, fileName) {
                 
             if (dbError) {
                 console.error("Erro ao gravar metadados no banco:", dbError);
+                hideLoadingOverlay();
                 alert("Imagem salva no Storage, mas ocorreu um erro ao cadastrá-la no banco: " + dbError.message);
                 return;
             }
             
+            hideLoadingOverlay();
             showWarningToast("Imagem georreferenciada importada com sucesso!");
             
             // Adicionar localmente
@@ -4176,6 +4236,7 @@ async function processGeoTIFF(arrayBuffer, fileName) {
                 renderRasterLayersList();
             }
         } else {
+            hideLoadingOverlay();
             alert("Supabase não está configurado. A imagem compactada foi gerada no console.");
         }
     }, 'image/webp', 0.8);
@@ -4217,3 +4278,73 @@ window.addEventListener('DOMContentLoaded', () => {
         input.addEventListener('change', handleRasterImport);
     }
 });
+
+// --- EDIT RASTER MODAL HANDLERS ---
+window.openEditRasterModal = function(rasterId) {
+    const raster = rasterLayers.find(r => r.id === rasterId);
+    if (!raster) return;
+    
+    document.getElementById('edit-raster-id').value = raster.id;
+    document.getElementById('edit-raster-name').value = raster.nome;
+    
+    const opacity = raster.opacidade !== undefined ? raster.opacidade : 0.8;
+    document.getElementById('edit-raster-opacity').value = opacity;
+    document.getElementById('edit-raster-opacity-value').textContent = Math.round(opacity * 100) + '%';
+    
+    const modal = document.getElementById('edit-raster-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        setTimeout(() => modal.classList.remove('scale-95'), 10);
+    }
+};
+
+window.closeEditRasterModal = function() {
+    const modal = document.getElementById('edit-raster-modal');
+    if (modal) {
+        modal.classList.add('scale-95');
+        setTimeout(() => modal.classList.add('hidden'), 150);
+    }
+};
+
+window.saveEditedRaster = async function() {
+    const id = document.getElementById('edit-raster-id').value;
+    const name = document.getElementById('edit-raster-name').value.trim();
+    const opacity = parseFloat(document.getElementById('edit-raster-opacity').value);
+    
+    if (!name) {
+        alert("O nome da imagem não pode ser vazio.");
+        return;
+    }
+    
+    const raster = rasterLayers.find(r => r.id === id);
+    if (raster) {
+        raster.nome = name;
+        raster.opacidade = opacity;
+        
+        // Atualizar opacidade no Leaflet em tempo real
+        const overlay = leafletRasterOverlays[id];
+        if (overlay) {
+            overlay.setOpacity(opacity);
+        }
+        
+        // Atualizar no banco Supabase
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            try {
+                showWarningToast("Salvando alterações...");
+                const { error } = await supabaseClient
+                    .from('imagens_raster')
+                    .update({ nome: name, opacidade: opacity })
+                    .eq('id', id);
+                    
+                if (error) throw error;
+            } catch(e) {
+                console.error("Erro ao salvar alterações da imagem:", e);
+                alert("Erro ao salvar alterações no banco: " + e.message);
+            }
+        }
+        
+        renderRasterLayersList();
+    }
+    
+    closeEditRasterModal();
+};
