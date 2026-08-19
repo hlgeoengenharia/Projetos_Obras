@@ -2585,8 +2585,12 @@ function editFeatureGeometry() {
   closeFeatureInfoModal(true); // Keep activeFeatureLayer
   
   if (layerToEdit && layerToEdit.pm) {
+      // Temporariamente suspende o bloqueio de pointer-events na seleção para permitir edição
+      const styleTag = document.getElementById('dynamic-selection-style');
+      if (styleTag) styleTag.innerHTML = '';
+
       layerToEdit.pm.enable({
-        allowSelfIntersection: false,
+        allowSelfIntersection: true,
         preventMarkerRemoval: false,
         snappable: true,
       });
@@ -2596,7 +2600,7 @@ function editFeatureGeometry() {
       toolbar.classList.add('flex');
   }
 }
-
+ 
 function stopGeometryEditing() {
   if (activeFeatureLayer && activeFeatureLayer.pm) {
     activeFeatureLayer.pm.disable();
@@ -2615,6 +2619,18 @@ function stopGeometryEditing() {
     
     syncMapDataToThemes();
   }
+
+  // Restaura o estilo de pointer-events se houver uma seleção ativa
+  if (window.activeSelectionThemeId) {
+      const styleTag = document.getElementById('dynamic-selection-style');
+      if (styleTag) {
+          styleTag.innerHTML = `
+              .theme-feature { pointer-events: none !important; }
+              .theme-${window.activeSelectionThemeId} { pointer-events: auto !important; }
+          `;
+      }
+  }
+
   const toolbar = document.getElementById('geometry-edit-toolbar');
   toolbar.classList.add('hidden');
   toolbar.classList.remove('flex');
