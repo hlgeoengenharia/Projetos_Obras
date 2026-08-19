@@ -180,7 +180,7 @@ async function loadThemes() {
                       fcs.forEach(fc => {
                           theme.features.push({
                               type: "Feature",
-                              properties: { ...fc.propriedades, id_banco: fc.id },
+                              properties: { ...fc.propriedades, themeId: t.id, id_banco: fc.id },
                               geometry: fc.geometria
                           });
                       });
