@@ -278,7 +278,8 @@ function initMap() {
   map = L.map('map', {
     zoomControl: false, // We use our custom zoom buttons
     maxZoom: 24,
-    preferCanvas: true // Fixes html2canvas vector offset issues
+    preferCanvas: true, // Fixes html2canvas vector offset issues
+    tap: false // Corrige problemas de clique e travamentos em botões no Mobile
   }).setView(cabedeloCenter, 13);
 
   // Define Base Layers
@@ -1313,12 +1314,8 @@ function executeSearch(themeId) {
     if (hasAnyFilter && hasVisibleFeatures && bounds.isValid()) {
         map.fitBounds(bounds, { padding: [50, 50], maxZoom: 21 });
         
-        // Fechar menu lateral em telas menores para visualizar melhor os resultados
-        if (window.innerWidth < 768) {
-            document.getElementById('side-drawer').classList.add('-translate-x-[120%]');
-            const overlay = document.getElementById('drawer-overlay');
-            if (overlay) overlay.classList.add('hidden');
-        }
+        // Comportamento removido: O menu lateral não fecha mais automaticamente no celular
+        // para permitir que o usuário aplique múltiplos filtros continuamente.
     }
   }
 

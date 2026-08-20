@@ -42,9 +42,9 @@ const highlightTarget = `function highlightFeature(fid) {
     }
   }
 
-  // 2. Destaque no Menu Lateral;
+  // 2. Destaque no Menu Lateral;`;
 
-const highlightReplacement = let currentHighlightData = null;
+const highlightReplacement = `let currentHighlightData = null;
 
 function clearHighlight() {
   if (!currentHighlightData) return;
@@ -88,24 +88,24 @@ function highlightFeature(fid) {
     }
   }
 
-  // 2. Destaque no Menu Lateral;
+  // 2. Destaque no Menu Lateral;`;
 
 content = content.replace(highlightTarget, highlightReplacement);
 
 // 2. closeFeatureInfoModal replacement
-const closeTarget = unction closeFeatureInfoModal(keepLayer = false) {
+const closeTarget = `function closeFeatureInfoModal(keepLayer = false) {
   document.getElementById('feature-info-modal').classList.add('hidden');
   if (!keepLayer) {
     activeFeatureLayer = null;
   }
-};
-const closeReplacement = unction closeFeatureInfoModal(keepLayer = false) {
+}`;
+const closeReplacement = `function closeFeatureInfoModal(keepLayer = false) {
   document.getElementById('feature-info-modal').classList.add('hidden');
   if (!keepLayer) {
     activeFeatureLayer = null;
     if (typeof clearHighlight === 'function') clearHighlight();
   }
-};
+}`;
 content = content.replace(closeTarget, closeReplacement);
 
 // 3. export windows functions

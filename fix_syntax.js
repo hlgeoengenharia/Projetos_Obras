@@ -4,65 +4,7 @@ let content = fs.readFileSync('src/customFields.js', 'utf8');
 // I need to replace the entire generateFeatureInputHtml function from line 4 to line 90.
 // I will use substring to replace the exact block.
 
-const correctFunction = `function generateFeatureInputHtml(f, value, isFeatureEditMode) {
-    if (!value) value = '';
-    
-    // MODO VISUALIZAÇÃO (Somente Leitura)
-    if (!isFeatureEditMode) {
-        if (f.type === 'photo' || f.type === 'attachment') {
-            try {
-                const files = typeof value === 'string' && value.startsWith('[') ? JSON.parse(value) : (value ? [value] : []);
-                if (files.length === 0) return '<p class="text-sm font-medium text-slate-500 dark:text-slate-400">Nenhum arquivo anexado</p>';
-                
-                let html = '<div class="flex flex-wrap gap-2">';
-                files.forEach(file => {
-                    const url = typeof file === 'string' ? file : file.url;
-                    const name = typeof file === 'string' ? 'Arquivo' : (file.name || 'Arquivo');
-                    const title = file.title || name;
-                    const author = file.uploadedBy || 'Usuário Local';
-                    const dateStr = file.uploadedAt ? new Date(file.uploadedAt).toLocaleString('pt-BR') : 'Data desconhecida';
-                    const isPhoto = f.type === 'photo';
-                    
-                    if (!file.deleted) {
-                        const leftIconActive = isPhoto 
-                            ? \`<div class="w-14 h-14 rounded-xl bg-slate-100 dark:bg-slate-700 shrink-0 overflow-hidden border border-slate-200 dark:border-slate-600 cursor-pointer" onclick="window.open('\${url}', '_blank')"><img src="\${url}" class="w-full h-full object-cover hover:scale-110 transition-transform duration-300" /></div>\`
-                            : \`<div class="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-[24px]">description</span></div>\`;
-                        
-                        html += \`
-                        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 w-full shadow-sm mb-2">
-                            <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-[150px]">
-                                \${leftIconActive}
-                                <div class="flex flex-col overflow-hidden w-full">
-                                    <div class="font-semibold text-base truncate" title="\${title}">\${title || 'Sem título'}</div>
-                                    <div class="text-sm text-slate-500 mt-1 truncate">Arq: \${name}</div>
-                                </div>
-                            </div>
-                            <div class="flex flex-col gap-1 min-w-[150px] text-slate-500 border-l border-slate-200 dark:border-slate-700 pl-4">
-                                <div class="flex items-center gap-1 truncate"><span class="material-symbols-outlined text-[16px]">person</span> \${author}</div>
-                                <div class="flex items-center gap-1 truncate"><span class="material-symbols-outlined text-[16px]">calendar_today</span> \${dateStr}</div>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <a href="\${url}" target="_blank" class="text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded border border-blue-200 dark:border-blue-800 hover:bg-blue-100 transition-colors font-medium flex items-center justify-center gap-1 whitespace-nowrap">
-                                    <span class="material-symbols-outlined text-[16px]">visibility</span> Abrir
-                                </a>
-                            </div>
-                        </div>\`;
-                    }
-                });
-                html += '</div>';
-                return html;
-            } catch(e) {
-                return '<p class="text-sm text-red-500">Erro ao carregar arquivos</p>';
-            }
-        } else if (f.type === 'geolocation') {
-`;
-
-// Wait, since I only need to replace the start of the function up to `} else if (f.type === 'geolocation') {` ...
-// Oh wait, I also need to fix the `isFeatureEditMode === true` part! The `isFeatureEditMode === true` part was completely deleted.
-// Let's add the `isFeatureEditMode` part which is further down in the original function.
-// Let me just grab the entire correct `generateFeatureInputHtml` function.
-
-const correctFullFunction = \`function generateFeatureInputHtml(f, value, isFeatureEditMode) {
+const correctFullFunction = `function generateFeatureInputHtml(f, value, isFeatureEditMode) {
     if (!value) value = '';
     
     // MODO VISUALIZAÇÃO (Somente Leitura)
@@ -229,7 +171,7 @@ const correctFullFunction = \`function generateFeatureInputHtml(f, value, isFeat
                 </button>
             </div>
         \\\`;
-    } else if (f.type === 'geolocation') {`
+    } else if (f.type === 'geolocation') {`;
 
 const startIdx = content.indexOf('function generateFeatureInputHtml(f, value, isFeatureEditMode) {');
 const endIdx = content.indexOf("} else if (f.type === 'geolocation') {");
