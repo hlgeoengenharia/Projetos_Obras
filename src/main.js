@@ -3629,6 +3629,7 @@ async function openStatsDashboard(themeId, specificIndex) {
     
     // Animação de Abertura
     modal.style.display = ''; // Resetar o hard hide
+    modal.style.zIndex = ''; // Restaurar o z-index original do Tailwind (removendo o -1)
     modal.classList.remove('pointer-events-none', 'hidden');
     
 
