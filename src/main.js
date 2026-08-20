@@ -278,8 +278,7 @@ function initMap() {
   map = L.map('map', {
     zoomControl: false, // We use our custom zoom buttons
     maxZoom: 24,
-    preferCanvas: true, // Fixes html2canvas vector offset issues
-    tap: false // Corrige problemas de clique e travamentos em botões no Mobile
+    preferCanvas: true // Fixes html2canvas vector offset issues
   }).setView(cabedeloCenter, 13);
 
   // Define Base Layers
@@ -2377,9 +2376,21 @@ function showFeatureInfoModal(layer) {
   
   document.getElementById('feature-info-modal').classList.remove('hidden');
   document.getElementById('feature-actions-container').classList.remove('hidden');
+  
+  // Força o card a receber cliques (bypass de cache do HTML/Tailwind)
+  const card = document.getElementById('feature-info-card');
+  if (card) {
+      card.style.pointerEvents = 'auto';
+  }
+
+  // Garantia absoluta de que o stats-dashboard-modal não está bloqueando (cliques fantasmas)
+  const statsModal = document.getElementById('stats-dashboard-modal');
+  if (statsModal && statsModal.classList.contains('opacity-0')) {
+      statsModal.style.display = 'none';
+      statsModal.style.zIndex = '-1';
+      statsModal.classList.add('pointer-events-none', 'hidden');
+  }
 }
-
-
 
 function renderFeatureInfo() {
   const container = document.getElementById('feature-info-content');
@@ -3617,7 +3628,8 @@ async function openStatsDashboard(themeId, specificIndex) {
     container.innerHTML = '';
     
     // Animação de Abertura
-    modal.classList.remove('pointer-events-none');
+    modal.style.display = ''; // Resetar o hard hide
+    modal.classList.remove('pointer-events-none', 'hidden');
     
 
     setTimeout(() => {
@@ -3844,73 +3856,92 @@ window.closeStatsDashboard = function() {
     allToggles.forEach(t => t.checked = false);
     
     setTimeout(() => {
-        modal.classList.add('pointer-events-none');
+        modal.classList.add('pointer-events-none', 'hidden');
+        modal.style.display = 'none'; // Garantia absoluta
+        content.innerHTML = ''; // Destruir os cards fantasmas
+        console.log("Stats dashboard fechado e limpo.");
     }, 500);
 };
 
 
 window.applyThemeClassification = function(themeId, fieldId, colorsJson) {
-    const theme = themes.find(t => t.id === themeId);
-    if (!theme) return;
+    try {
+        const theme = themes.find(t => t.id === themeId);
+        if (!theme) return;
 
-    const colorsMap = JSON.parse(colorsJson);
-    
-    geojsonLayer.eachLayer(layer => {
-        if (!layer.feature || layer.feature.properties.themeId !== themeId) return;
+        const colorsMap = JSON.parse(colorsJson);
         
-        // Salvar estilo original da feição
-        if (!layer.options.originalStyle) {
-            layer.options.originalStyle = {
-                fillColor: layer.options.fillColor || theme.color || '#3388ff',
-                color: layer.options.color || theme.color || '#3388ff',
-                weight: layer.options.weight,
-                fillOpacity: layer.options.fillOpacity
-            };
-        }
+        geojsonLayer.eachLayer(layer => {
+            if (!layer || !layer.feature || !layer.feature.properties || layer.feature.properties.themeId !== themeId) return;
+            
+            // Salvar estilo original da feição
+            if (!layer.options.originalStyle) {
+                layer.options.originalStyle = {
+                    fillColor: layer.options.fillColor || theme.color || '#3388ff',
+                    color: layer.options.color || theme.color || '#3388ff',
+                    weight: layer.options.weight,
+                    fillOpacity: layer.options.fillOpacity
+                };
+            }
 
-        const val = getFeaturePropertyValue(theme, layer.feature, fieldId);
-        const valStr = (val === undefined || val === null || val === '') ? "N/I" : String(val);
-        const newColor = colorsMap[valStr] || theme.color || '#3388ff';
+            const val = getFeaturePropertyValue(theme, layer.feature, fieldId);
+            const valStr = (val === undefined || val === null || val === '') ? "N/I" : String(val);
+            const newColor = colorsMap[valStr] || theme.color || '#3388ff';
 
-        if (newColor === 'none') {
+            if (newColor === 'none') {
+                if (layer.options.originalStyle && layer.setStyle) {
+                    layer.setStyle({
+                        fillColor: layer.options.originalStyle.fillColor,
+                        color: layer.options.originalStyle.color,
+                        fillOpacity: layer.options.originalStyle.fillOpacity,
+                        weight: layer.options.originalStyle.weight
+                    });
+                }
+            } else {
+                if (layer.setStyle) {
+                    layer.setStyle({
+                        fillColor: newColor,
+                        color: newColor,
+                        fillOpacity: 0.8,
+                        weight: 2
+                    });
+                }
+            }
+        });
+    } catch (e) {
+        console.error("Erro em applyThemeClassification:", e);
+    }
+};
+
+window.resetThemeClassification = function(themeId) {
+    try {
+        const theme = themes.find(t => t.id === themeId);
+        if (!theme) return;
+
+        geojsonLayer.eachLayer(layer => {
+            if (!layer || !layer.feature || !layer.feature.properties || layer.feature.properties.themeId !== themeId) return;
+            
             if (layer.options.originalStyle && layer.setStyle) {
                 layer.setStyle({
                     fillColor: layer.options.originalStyle.fillColor,
                     color: layer.options.originalStyle.color,
-                    fillOpacity: layer.options.originalStyle.fillOpacity,
-                    weight: layer.options.originalStyle.weight
+                    weight: layer.options.originalStyle.weight,
+                    fillOpacity: layer.options.originalStyle.fillOpacity
                 });
+                delete layer.options.originalStyle;
             }
-        } else {
-            if (layer.setStyle) {
-                layer.setStyle({
-                    fillColor: newColor,
-                    color: newColor,
-                    fillOpacity: 0.8,
-                    weight: 2
-                });
+            
+            // Remove pulse effect if any safely
+            if (layer.getElement) {
+                const el = layer.getElement();
+                if (el && el.classList && typeof el.classList.remove === 'function') {
+                    el.classList.remove('animate-pulse', 'z-50');
+                }
             }
-        }
-    });
-};
-
-window.resetThemeClassification = function(themeId) {
-    const theme = themes.find(t => t.id === themeId);
-    if (!theme) return;
-
-    geojsonLayer.eachLayer(layer => {
-        if (!layer.feature || layer.feature.properties.themeId !== themeId) return;
-        
-        if (layer.options.originalStyle && layer.setStyle) {
-            layer.setStyle({
-                fillColor: layer.options.originalStyle.fillColor,
-                color: layer.options.originalStyle.color,
-                weight: layer.options.originalStyle.weight,
-                fillOpacity: layer.options.originalStyle.fillOpacity
-            });
-            delete layer.options.originalStyle;
-        }
-    });
+        });
+    } catch (e) {
+        console.error("Erro em resetThemeClassification:", e);
+    }
 };
 
 let feicoesRealtimeTimeout = null;
