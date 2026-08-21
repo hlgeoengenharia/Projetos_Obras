@@ -128,7 +128,15 @@ let geojsonLayer;
 let baseLayers = {};
 
 // --- DADOS E LOCALSTORAGE ---
+let isLoadingThemes = false; // Evita recarregamentos simultâneos
+
 async function loadThemes() {
+  if (isLoadingThemes) {
+      console.log("loadThemes: Já está carregando, ignorando chamada duplicada.");
+      return;
+  }
+  isLoadingThemes = true;
+  try {
   if (typeof supabaseClient !== 'undefined' && supabaseClient) {
       try {
           const { data: dbTemas, error: errTemas } = await supabaseClient.from('temas').select('*');
@@ -136,36 +144,34 @@ async function loadThemes() {
 
           let dbFeicoes = [];
           
-          // 1. Obter o total de feições para paralelizar o download
-          const { count, error: countErr } = await supabaseClient
-              .from('feicoes')
-              .select('*', { count: 'exact', head: true });
-              
-          if (countErr) {
-              console.error("Erro ao obter total de feições:", countErr);
-          } else if (count > 0) {
-              const fetchStep = 1000;
-              const maxConcurrentRequests = 5; // Baixa 5 mil registros por vez
-              
-              // 2. Prepara as chamadas
-              const rangePromises = [];
-              for (let i = 0; i < count; i += fetchStep) {
-                  rangePromises.push(() => supabaseClient.from('feicoes').select('*').range(i, i + fetchStep - 1));
+          // Busca sequencial com no máximo 2 requisições paralelas para não sobrecarregar o plano gratuito
+          const fetchStep = 1000;
+          let fetchStart = 0;
+          let fetchHasMore = true;
+          const maxConcurrent = 2;
+          
+          while (fetchHasMore) {
+              const batch = [];
+              for (let b = 0; b < maxConcurrent; b++) {
+                  batch.push(supabaseClient.from('feicoes').select('*').range(fetchStart, fetchStart + fetchStep - 1));
+                  fetchStart += fetchStep;
               }
-              
-              // 3. Executa as chamadas em lotes concorrentes
-              for (let i = 0; i < rangePromises.length; i += maxConcurrentRequests) {
-                  const currentBatch = rangePromises.slice(i, i + maxConcurrentRequests).map(fn => fn());
-                  const results = await Promise.all(currentBatch);
-                  
-                  results.forEach(result => {
-                      if (result.error) {
-                          console.error("Erro ao carregar lote de feições:", result.error);
-                      } else if (result.data) {
-                          dbFeicoes.push(...result.data);
+              const results = await Promise.all(batch);
+              let gotAnyData = false;
+              for (const result of results) {
+                  if (result.error) {
+                      console.error("Erro ao carregar lote de feições:", result.error);
+                  } else if (result.data && result.data.length > 0) {
+                      dbFeicoes.push(...result.data);
+                      gotAnyData = true;
+                      if (result.data.length < fetchStep) {
+                          fetchHasMore = false;
                       }
-                  });
+                  } else {
+                      fetchHasMore = false;
+                  }
               }
+              if (!gotAnyData) fetchHasMore = false;
           }
 
           // Automatic migration check
@@ -273,6 +279,9 @@ async function loadThemes() {
         ];
         saveThemes();
       }
+  }
+  } finally {
+      isLoadingThemes = false;
   }
 }
 
@@ -4112,46 +4121,97 @@ function setupSupabaseRealtime() {
               { event: '*', schema: 'public', table: 'temas' },
               async (payload) => {
                   console.log("Realtime: temas table changed!", payload);
-                  await loadThemes();
+                  // Para temas, é seguro recarregar (são poucos registros)
+                  const { data: dbTemas } = await supabaseClient.from('temas').select('*');
+                  if (dbTemas) {
+                      // Reconstroi somente os temas, preservando features já carregadas
+                      dbTemas.forEach(t => {
+                          const existing = themes.find(th => String(th.id) === String(t.id));
+                          if (!existing) {
+                              themes.push({ id: t.id, name: t.nome, color: t.cor, features: [] });
+                          }
+                      });
+                      themes = themes.filter(th => dbTemas.some(t => String(t.id) === String(th.id)));
+                  }
                   renderThemes();
               }
           )
           .subscribe();
 
-      // 2. Listen for changes in the 'feicoes' table
+      // 2. Listen for changes in the 'feicoes' table — atualização CIRÚRGICA (sem recarregar tudo)
       supabaseClient
           .channel('feicoes-realtime')
           .on(
               'postgres_changes',
               { event: '*', schema: 'public', table: 'feicoes' },
               async (payload) => {
-                  // console.log("Realtime: feicoes table changed!", payload);
-                  
-                  // Se a feição ativa que está sendo visualizada/editada foi excluída, fecha o modal imediatamente
-                  if (payload.eventType === 'DELETE' && activeFeatureLayer) {
-                      const deletedId = payload.old && payload.old.id;
-                      const activeId = activeFeatureLayer.feature && activeFeatureLayer.feature.properties && activeFeatureLayer.feature.properties.id_banco;
-                      if (deletedId && activeId && String(deletedId) === String(activeId)) {
-                          map.removeLayer(activeFeatureLayer);
-                          closeFeatureInfoModal();
-                          showWarningToast("A feição que você estava visualizando foi excluída por outro usuário.");
-                      }
+                  const isEditingGeom = document.getElementById('geometry-edit-toolbar') && !document.getElementById('geometry-edit-toolbar').classList.contains('hidden');
+                  if (isEditingGeom || (typeof isFeatureEditMode !== 'undefined' && isFeatureEditMode)) {
+                      return; // Não interfere durante edição
                   }
-                  
-                  // Debouncer para recarregar o mapa e a interface evitando concorrência em upserts em lote
-                  clearTimeout(feicoesRealtimeTimeout);
-                  feicoesRealtimeTimeout = setTimeout(async () => {
-                      const isEditingGeom = document.getElementById('geometry-edit-toolbar') && !document.getElementById('geometry-edit-toolbar').classList.contains('hidden');
-                      if (isEditingGeom || (typeof isFeatureEditMode !== 'undefined' && isFeatureEditMode)) {
-                          console.log("Realtime: Edição geométrica ou de atributos ativa. Ignorando recarregamento automático.");
-                          return;
-                      }
 
-                      console.log("Processando atualização de feições Realtime...");
-                      await loadThemes();
-                      renderThemes();
-                      loadAllFeaturesToMap();
-                  }, 300);
+                  const eventType = payload.eventType;
+                  
+                  if (eventType === 'DELETE') {
+                      // Remove só a feição excluída do mapa
+                      const deletedId = payload.old && payload.old.id;
+                      if (deletedId) {
+                          if (activeFeatureLayer) {
+                              const activeId = activeFeatureLayer.feature && activeFeatureLayer.feature.properties && activeFeatureLayer.feature.properties.id_banco;
+                              if (activeId && String(deletedId) === String(activeId)) {
+                                  map.removeLayer(activeFeatureLayer);
+                                  closeFeatureInfoModal();
+                                  showWarningToast("A feição que você estava visualizando foi excluída.");
+                              }
+                          }
+                          geojsonLayer.eachLayer(l => {
+                              if (l.feature && String(l.feature.properties.id_banco) === String(deletedId)) {
+                                  geojsonLayer.removeLayer(l);
+                              }
+                          });
+                      }
+                      return;
+                  }
+
+                  if (eventType === 'INSERT' || eventType === 'UPDATE') {
+                      clearTimeout(feicoesRealtimeTimeout);
+                      feicoesRealtimeTimeout = setTimeout(async () => {
+                          const record = payload.new;
+                          if (!record) return;
+
+                          const theme = themes.find(t => String(t.id) === String(record.theme_id));
+                          if (!theme) return;
+
+                          const geojsonFeature = {
+                              type: 'Feature',
+                              geometry: record.geometria,
+                              properties: { ...record.propriedades, themeId: record.theme_id, id_banco: record.id }
+                          };
+
+                          if (eventType === 'UPDATE') {
+                              // Remove a versão antiga e adiciona a nova
+                              geojsonLayer.eachLayer(l => {
+                                  if (l.feature && String(l.feature.properties.id_banco) === String(record.id)) {
+                                      geojsonLayer.removeLayer(l);
+                                  }
+                              });
+                          }
+
+                          // Só adiciona se a camada estiver visível
+                          if (theme.visible !== false) {
+                              geojsonLayer.addData(geojsonFeature);
+                          }
+
+                          // Atualiza o contador no painel
+                          const countEl = document.getElementById(`theme-count-${theme.id}`);
+                          if (countEl) {
+                              const allInTheme = [];
+                              geojsonLayer.eachLayer(l => { if (l.feature && String(l.feature.properties.themeId) === String(theme.id)) allInTheme.push(l); });
+                              countEl.textContent = `${allInTheme.length} REGISTRO${allInTheme.length !== 1 ? 'S' : ''}`;
+                          }
+                      }, 500); // Debounce 500ms para lotes de importação
+                      return;
+                  }
               }
           )
           .subscribe();
