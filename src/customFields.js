@@ -129,19 +129,47 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
             }
             
             const title = linkData.title && linkData.title.trim() !== '' ? linkData.title : linkData.url;
+            const numberHtml = linkData.number && linkData.number.trim() !== '' ? `<span class="text-slate-500 font-normal ml-1"> - ${linkData.number}</span>` : '';
             let finalUrl = linkData.url.trim();
             if (!/^https?:\/\//i.test(finalUrl)) {
                 finalUrl = 'https://' + finalUrl;
             }
             
             return `
-            <div class="flex flex-col gap-1 w-full overflow-hidden bg-blue-50/50 dark:bg-blue-900/10 p-2 rounded-lg border border-blue-100 dark:border-blue-900/30">
-                <a href="${finalUrl}" target="_blank" title="Abrir link" class="font-bold text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline flex items-center gap-1.5 break-words transition-colors">
+            <a href="${finalUrl}" target="_blank" title="Abrir link" class="flex flex-col gap-1 w-full overflow-hidden bg-blue-50/50 hover:bg-blue-100/50 dark:bg-blue-900/10 dark:hover:bg-blue-900/30 p-2 rounded-lg border border-blue-100 dark:border-blue-900/30 transition-colors group cursor-pointer" style="text-decoration: none;">
+                <div class="font-bold text-sm text-blue-600 dark:text-blue-400 group-hover:text-blue-800 dark:group-hover:text-blue-300 flex items-center gap-1.5 break-words transition-colors">
                     <span class="material-symbols-outlined text-[16px] shrink-0">link</span>
-                    <span class="truncate">${title}</span>
-                </a>
-                ${linkData.title && linkData.title.trim() !== '' ? `<div class="text-[10px] text-slate-500 truncate ml-5 opacity-70" title="${linkData.url}">${linkData.url}</div>` : ''}
-            </div>`;
+                    <span>${title}${numberHtml}</span>
+                </div>
+                ${linkData.title && linkData.title.trim() !== '' ? `<div class="text-[10px] text-slate-500 truncate ml-6 opacity-70 group-hover:opacity-100 transition-opacity" title="${linkData.url}">${linkData.url}</div>` : ''}
+            </a>`;
+        } else if (f.type === 'hiperlink_1n') {
+            let links = [];
+            try { links = typeof value === 'string' && value.startsWith('[') ? JSON.parse(value) : []; } catch(e){}
+            if (!Array.isArray(links)) links = [];
+            if (links.length === 0) {
+                return `<div class="text-xs text-slate-700 dark:text-slate-300 break-words"><span class="text-slate-400 opacity-50 tracking-widest">---</span></div>`;
+            }
+            
+            let htmlStr = '<div class="flex flex-col gap-2 w-full">';
+            links.forEach(linkData => {
+                const title = linkData.title && linkData.title.trim() !== '' ? linkData.title : linkData.url;
+                const numberHtml = linkData.number && linkData.number.trim() !== '' ? `<span class="text-slate-500 font-normal ml-1"> - ${linkData.number}</span>` : '';
+                let finalUrl = (linkData.url || '').trim();
+                if (finalUrl !== '' && !/^https?:\/\//i.test(finalUrl)) {
+                    finalUrl = 'https://' + finalUrl;
+                }
+                htmlStr += `
+                <a href="${finalUrl}" target="_blank" title="Abrir link" class="flex flex-col gap-1 w-full overflow-hidden bg-blue-50/50 hover:bg-blue-100/50 dark:bg-blue-900/10 dark:hover:bg-blue-900/30 p-2 rounded-lg border border-blue-100 dark:border-blue-900/30 transition-colors group cursor-pointer" style="text-decoration: none;">
+                    <div class="font-bold text-sm text-blue-600 dark:text-blue-400 group-hover:text-blue-800 dark:group-hover:text-blue-300 flex items-center gap-1.5 break-words transition-colors">
+                        <span class="material-symbols-outlined text-[16px] shrink-0">link</span>
+                        <span>${title}${numberHtml}</span>
+                    </div>
+                    ${linkData.title && linkData.title.trim() !== '' ? `<div class="text-[10px] text-slate-500 truncate ml-6 opacity-70 group-hover:opacity-100 transition-opacity" title="${linkData.url}">${linkData.url}</div>` : ''}
+                </a>`;
+            });
+            htmlStr += '</div>';
+            return htmlStr;
         } else if (f.type === 'textarea') {
             return `<div class="text-xs text-slate-700 dark:text-slate-300 text-justify whitespace-pre-wrap leading-relaxed">${value || '<span class="text-slate-400 opacity-50 tracking-widest">---</span>'}</div>`;
         }
@@ -315,6 +343,12 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
               <span id="cpfcnpj-icon-${f.id}" class="material-symbols-outlined absolute right-3 top-2.5 text-green-500 hidden pointer-events-none">check_circle</span>
           </div>
         `;
+    } else if (f.type === 'pa_anpp_ap') {
+        html += `
+          <div class="relative">
+              <input type="text" data-key="${f.id}" id="pa_anpp_ap-input-${f.id}" value="${value}" class="feature-data-input w-full px-3 py-2 ${calcBgClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm font-mono transition-colors" placeholder="0.00.000.000000/0000-00" maxlength="23" oninput="maskPaAnppAp(this)" ${calcReadonly} ${formulaAttr} />
+          </div>
+        `;
     } else if (f.type === 'ipl' || f.type === 'ipf') {
         let displayVal = value || '';
         const cleanVal = displayVal.replace(/\D/g, '');
@@ -324,7 +358,7 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
         }
         html += `
           <div class="relative">
-              <input type="text" data-key="${f.id}" id="ipl-input-${f.id}" value="${displayVal}" class="feature-data-input w-full px-3 py-2 ${calcBgClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white font-mono transition-colors pr-10" placeholder="0800926-67.2024.4.05.8200" maxlength="25" oninput="maskIpl(this)" ${calcReadonly} ${formulaAttr} />
+              <input type="text" data-key="${f.id}" id="ipl-input-${f.id}" value="${displayVal}" class="feature-data-input w-full px-3 py-2 ${calcBgClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white font-mono transition-colors pr-10" placeholder="0000000-00.0000.0.00.0000" maxlength="25" oninput="maskIpl(this)" ${calcReadonly} ${formulaAttr} />
           </div>
         `;
     } else if (f.type === 'insc_imob_cabedelo') {
@@ -411,16 +445,46 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
         if (unit.suffix) html += `<span class="px-2.5 py-2 bg-slate-200 dark:bg-slate-700 border border-l-0 border-slate-300 dark:border-slate-600 rounded-r-lg text-sm font-bold text-slate-600 dark:text-slate-300">${unit.suffix}</span>`;
         html += `</div>`;
     } else if (f.type === 'hiperlink') {
-        let linkData = { title: '', url: '' };
+        let linkData = { title: '', number: '', url: '' };
         try { 
-            linkData = typeof value === 'string' && value.startsWith('{') ? JSON.parse(value) : { url: value || '', title: '' }; 
+            linkData = typeof value === 'string' && value.startsWith('{') ? JSON.parse(value) : { url: value || '', title: '', number: '' }; 
         } catch(e){}
         
         html += `
         <div class="flex flex-col gap-2 w-full">
             <input type="text" placeholder="Título (Ex: Autor, Dono do Arquivo)" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm" value="${linkData.title || ''}" onchange="updateHiperlinkData('${f.id}')">
+            <input type="text" placeholder="Número (Opcional)" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm" value="${linkData.number || ''}" onchange="updateHiperlinkData('${f.id}')">
             <input type="url" placeholder="URL (Ex: https://drive.google.com/...)" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm" value="${linkData.url || ''}" onchange="updateHiperlinkData('${f.id}')">
             <input type="hidden" data-key="${f.id}" id="input-hiperlink-${f.id}" class="feature-data-input" value="${value ? value.replace(/"/g, '&quot;') : ''}">
+        </div>
+        `;
+    } else if (f.type === 'hiperlink_1n') {
+        let links = [];
+        try { 
+            links = typeof value === 'string' && value.startsWith('[') ? JSON.parse(value) : []; 
+        } catch(e){}
+        if (!Array.isArray(links)) links = [];
+        
+        let listHtml = '';
+        links.forEach((link, idx) => {
+            // we will rely on window.renderHiperlink1nItem which we will define
+            listHtml += window.renderHiperlink1nItem ? window.renderHiperlink1nItem(link.title, link.number, link.url, f.id, idx) : '';
+        });
+        
+        html += `
+        <div class="flex flex-col w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md p-3">
+            <div class="flex flex-col gap-2 mb-3">
+                <input type="text" id="hiperlink1n-title-${f.id}" placeholder="Título (Ex: Autor, Dono do Arquivo)" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">
+                <input type="text" id="hiperlink1n-number-${f.id}" placeholder="Número (Opcional)" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">
+                <input type="url" id="hiperlink1n-url-${f.id}" placeholder="URL (Ex: https://drive.google.com/...)" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm" onkeydown="if(event.key==='Enter'){event.preventDefault();addHiperlink1n('${f.id}')}">
+                <button type="button" onclick="addHiperlink1n('${f.id}')" class="mt-1 w-full flex items-center justify-center gap-1 bg-blue-100 hover:bg-blue-200 text-blue-700 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-400 py-1.5 rounded-md text-sm font-medium transition-colors">
+                    <span class="material-symbols-outlined text-[18px]">add</span> Adicionar Link
+                </button>
+            </div>
+            <div id="hiperlink1n-list-${f.id}" class="flex flex-col gap-2 empty:hidden">
+                ${listHtml}
+            </div>
+            <input type="hidden" data-key="${f.id}" id="input-hiperlink1n-${f.id}" class="feature-data-input" value="${value ? value.replace(/"/g, '&quot;') : '[]'}">
         </div>
         `;
     } else if (f.type === 'select') {
@@ -734,6 +798,19 @@ function maskCpfCnpj(input) {
     input.value = v;
 }
 
+function maskPaAnppAp(input) {
+    let v = input.value.replace(/\D/g, "");
+    if (v.length > 0) {
+        v = v.substring(0, 18);
+        v = v.replace(/^(\d{1})(\d)/, "$1.$2");
+        v = v.replace(/^(\d{1})\.(\d{2})(\d)/, "$1.$2.$3");
+        v = v.replace(/^(\d{1})\.(\d{2})\.(\d{3})(\d)/, "$1.$2.$3.$4");
+        v = v.replace(/^(\d{1})\.(\d{2})\.(\d{3})\.(\d{6})(\d)/, "$1.$2.$3.$4/$5");
+        v = v.replace(/^(\d{1})\.(\d{2})\.(\d{3})\.(\d{6})\/(\d{4})(\d)/, "$1.$2.$3.$4/$5-$6");
+    }
+    input.value = v;
+}
+
 function maskIpl(input) {
     let v = input.value.replace(/\D/g, "");
     if (v.length > 0) {
@@ -894,6 +971,7 @@ window.maskIpf = maskIpf;
 window.maskIpl = maskIpl;
 window.maskInscImobCabedelo = maskInscImobCabedelo;
 window.updateGeolocation = updateGeolocation;
+window.maskPaAnppAp = maskPaAnppAp;
 
 
 function formatDMS(lat, lng) {
@@ -983,9 +1061,92 @@ window.editFileTitlePrompt = function(fieldId, fileUrl) {
 
 window.updateHiperlinkData = function(fieldId) {
     const inputs = document.querySelectorAll('#input-hiperlink-' + fieldId)[0].parentElement.querySelectorAll('input[type="text"], input[type="url"]');
-    const title = inputs[0].value.trim();
-    const url = inputs[1].value.trim();
-    document.getElementById('input-hiperlink-' + fieldId).value = JSON.stringify({ title, url });
+    const title = inputs[0] ? inputs[0].value.trim() : '';
+    const number = inputs[1] ? inputs[1].value.trim() : '';
+    const url = inputs[2] ? inputs[2].value.trim() : '';
+    document.getElementById('input-hiperlink-' + fieldId).value = JSON.stringify({ title, number, url });
+};
+
+window.renderHiperlink1nItem = function(title, number, url, fieldId, idx) {
+    return `
+    <div class="flex flex-col gap-1 w-full bg-white dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700 relative pr-14 group">
+        <div class="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">${title || url}${number ? `<span class="text-slate-500 font-normal ml-1"> - ${number}</span>` : ''}</div>
+        <div class="text-[10px] text-slate-500 truncate" title="${url}">${url}</div>
+        <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+            <button type="button" onclick="editHiperlink1n('${fieldId}', ${idx})" class="text-slate-400 hover:text-blue-500 p-1" title="Editar">
+                <span class="material-symbols-outlined text-[18px]">edit</span>
+            </button>
+            <button type="button" onclick="removeHiperlink1n('${fieldId}', ${idx})" class="text-slate-400 hover:text-red-500 p-1" title="Excluir">
+                <span class="material-symbols-outlined text-[18px]">delete</span>
+            </button>
+        </div>
+    </div>`;
+};
+
+window.addHiperlink1n = function(fieldId) {
+    const titleInput = document.getElementById(`hiperlink1n-title-${fieldId}`);
+    const numberInput = document.getElementById(`hiperlink1n-number-${fieldId}`);
+    const urlInput = document.getElementById(`hiperlink1n-url-${fieldId}`);
+    const hiddenInput = document.getElementById(`input-hiperlink1n-${fieldId}`);
+    const listContainer = document.getElementById(`hiperlink1n-list-${fieldId}`);
+    
+    if (!urlInput.value.trim()) return;
+    
+    let links = [];
+    try { links = JSON.parse(hiddenInput.value); } catch(e){}
+    if(!Array.isArray(links)) links = [];
+    
+    const newLink = {
+        title: titleInput.value.trim(),
+        number: numberInput.value.trim(),
+        url: urlInput.value.trim()
+    };
+    links.push(newLink);
+    
+    hiddenInput.value = JSON.stringify(links);
+    
+    listContainer.innerHTML = links.map((link, idx) => window.renderHiperlink1nItem(link.title, link.number, link.url, fieldId, idx)).join('');
+    
+    titleInput.value = '';
+    numberInput.value = '';
+    urlInput.value = '';
+    urlInput.focus();
+};
+
+window.removeHiperlink1n = function(fieldId, idx) {
+    const hiddenInput = document.getElementById(`input-hiperlink1n-${fieldId}`);
+    const listContainer = document.getElementById(`hiperlink1n-list-${fieldId}`);
+    
+    let links = [];
+    try { links = JSON.parse(hiddenInput.value); } catch(e){}
+    if(!Array.isArray(links)) links = [];
+    
+    links.splice(idx, 1);
+    hiddenInput.value = JSON.stringify(links);
+    
+    listContainer.innerHTML = links.map((link, idx) => window.renderHiperlink1nItem(link.title, link.number, link.url, fieldId, idx)).join('');
+};
+
+window.editHiperlink1n = function(fieldId, idx) {
+    const hiddenInput = document.getElementById(`input-hiperlink1n-${fieldId}`);
+    
+    let links = [];
+    try { links = JSON.parse(hiddenInput.value); } catch(e){}
+    if(!Array.isArray(links)) return;
+    
+    const linkToEdit = links[idx];
+    if (!linkToEdit) return;
+    
+    // Populate inputs
+    document.getElementById(`hiperlink1n-title-${fieldId}`).value = linkToEdit.title || '';
+    document.getElementById(`hiperlink1n-number-${fieldId}`).value = linkToEdit.number || '';
+    document.getElementById(`hiperlink1n-url-${fieldId}`).value = linkToEdit.url || '';
+    
+    // Remove the item so it can be added again
+    window.removeHiperlink1n(fieldId, idx);
+    
+    // Focus the URL input
+    document.getElementById(`hiperlink1n-url-${fieldId}`).focus();
 };
 
 // --- CLIENT-SIDE DYNAMIC FORMULA CALCULATOR ENGINE ---

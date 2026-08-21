@@ -601,6 +601,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 </head>
 <body class="bg-surface text-on-surface min-h-screen">
 <!-- TopAppBar Removed -->
@@ -614,17 +615,17 @@
   
   <!-- Abas centralizadas no rodateto -->
   <div class="flex items-center h-full justify-center">
-      <button onclick="switchTab('geral', this)" class="tab-btn active h-full px-6 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 border-l border-r border-slate-200/50 dark:border-slate-800/50 min-w-[80px]" title="Geral">
-          <span class="material-symbols-outlined text-[22px]">tune</span>
-          <span class="text-[9px] font-medium tracking-wide uppercase">Geral</span>
-      </button>
-      <button onclick="switchTab('cadastros', this)" class="tab-btn h-full px-6 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[80px]" title="Cadastro">
+      <button onclick="switchTab('cadastros', this)" class="tab-btn active h-full px-6 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 border-l border-r border-slate-200/50 dark:border-slate-800/50 min-w-[80px]" title="Cadastro">
           <span class="material-symbols-outlined text-[22px]">assignment</span>
           <span class="text-[9px] font-medium tracking-wide uppercase">Cadastro</span>
       </button>
       <button onclick="switchTab('layout', this)" class="tab-btn h-full px-6 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[80px]" title="Layout">
           <span class="material-symbols-outlined text-[22px]">palette</span>
           <span class="text-[9px] font-medium tracking-wide uppercase">Layout</span>
+      </button>
+      <button onclick="switchTab('storage', this)" class="tab-btn h-full px-6 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[80px]" title="Armazenamento">
+          <span class="material-symbols-outlined text-[22px]">cloud_upload</span>
+          <span class="text-[9px] font-medium tracking-wide uppercase">Arquivos</span>
       </button>
   </div>
   
@@ -634,27 +635,8 @@
 
 <main class="pt-24 pb-12 px-4 md:px-8 max-w-6xl mx-auto">
 
-  <!-- Tab Content: Geral -->
-  <div id="geral" class="tab-content active">
-    <div class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
-      <h2 class="text-lg font-bold mb-4">Configurações Gerais</h2>
-      <p class="text-slate-600 dark:text-slate-400 text-sm mb-6">Ajuste as preferências básicas do sistema.</p>
-      
-      <div class="space-y-4 max-w-sm">
-        <div>
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tema do Sistema</label>
-          <select id="theme-select" onchange="changeTheme(this.value)" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">
-            <option value="Claro">Claro</option>
-            <option value="Escuro">Escuro</option>
-            <option value="Automático">Automático</option>
-          </select>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- Tab Content: Cadastros Personalizados -->
-  <div id="cadastros" class="tab-content">
+  <div id="cadastros" class="tab-content active">
     <div id="forms-view">
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <div>
@@ -891,6 +873,59 @@
       </div>
     </div>
   </div>
+  <!-- Tab Content: Storage (Armazenamento) -->
+  <div id="storage" class="tab-content">
+    <div class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
+      <h2 class="text-lg font-bold mb-2">Gerenciador de Arquivos (Storage)</h2>
+      <p class="text-slate-600 dark:text-slate-400 text-sm mb-6">Envie Ortofotos (COG), GeoJSON, Projetos 3D (.glb) e outros arquivos direto para o Supabase.</p>
+      
+      <!-- Upload Area -->
+      <div class="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-5 border border-slate-200 dark:border-slate-700 mb-8">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                  <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">1. Pasta de Destino (Município/Projeto)</label>
+                  <input type="text" id="storage-folder-name" class="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm dark:text-white placeholder-slate-400" placeholder="Ex: joao_pessoa">
+                  <p class="text-[10px] text-slate-500 mt-1">Isso ajuda a isolar os arquivos caso o sistema seja usado por várias prefeituras.</p>
+              </div>
+              <div>
+                  <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">2. Selecione o Arquivo</label>
+                  <input type="file" id="storage-file-input" class="w-full text-sm text-slate-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer">
+              </div>
+          </div>
+          
+          <button onclick="uploadToSupabaseStorage()" class="w-full md:w-auto px-6 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-sky-600 transition-colors flex items-center justify-center gap-2">
+              <span class="material-symbols-outlined text-[20px]">cloud_upload</span> Enviar Arquivo
+          </button>
+          
+          <!-- Progress Bar -->
+          <div id="upload-progress-container" class="hidden mt-4">
+              <div class="flex justify-between text-xs text-slate-500 mb-1">
+                  <span id="upload-status-text">Enviando...</span>
+                  <span id="upload-percent-text">0%</span>
+              </div>
+              <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
+                  <div id="upload-progress-bar" class="bg-primary h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+              </div>
+          </div>
+      </div>
+      
+      <!-- File List -->
+      <div class="flex justify-between items-center mb-4">
+          <h3 class="text-md font-bold text-slate-800 dark:text-slate-200">Arquivos Hospedados</h3>
+          <button onclick="loadSupabaseStorageFiles()" class="text-xs text-primary hover:text-sky-400 flex items-center gap-1">
+              <span class="material-symbols-outlined text-[16px]">refresh</span> Atualizar
+          </button>
+      </div>
+      
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+          <div id="storage-files-list" class="divide-y divide-slate-100 dark:divide-slate-800 max-h-[400px] overflow-y-auto">
+              <!-- Files will be listed here -->
+              <div class="p-8 text-center text-slate-500 text-sm">Carregando arquivos...</div>
+          </div>
+      </div>
+    </div>
+  </div>
+
 </main>
 
   <!-- Simulador A4 Modal -->
@@ -1010,29 +1045,12 @@
   </div>
 
   <script>
-
-    function changeTheme(theme) {
-      localStorage.setItem('constructive_theme', theme);
-      document.documentElement.classList.remove('light', 'dark', 'neon');
-      if (theme === 'Azul neon') {
-        document.documentElement.classList.add('neon', 'dark');
-      } else if (theme === 'Escuro' || (theme === 'Automático' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.add('light');
-      }
-    }
     
     window.addEventListener('DOMContentLoaded', () => {
       const savedTheme = localStorage.getItem('constructive_theme') || 'Claro';
       const themeSelect = document.getElementById('theme-select');
       if (themeSelect) themeSelect.value = savedTheme;
       
-      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
-        if(localStorage.getItem('constructive_theme') === 'Automático') {
-           changeTheme('Automático');
-        }
-      });
       
       const savedGeminiKey = localStorage.getItem('gemini_api_key');
       if (savedGeminiKey && document.getElementById('gemini-api-key')) {
@@ -1922,16 +1940,30 @@
                 <option value="geolocation" ${f.type === 'geolocation' ? 'selected' : ''}>Geolocalização (Mapa)</option>
                 <option value="cep" ${f.type === 'cep' ? 'selected' : ''}>Endereço (Autocompletar via CEP)</option>
                 <option value="cpfcnpj" ${f.type === 'cpfcnpj' ? 'selected' : ''}>Documento (CPF / CNPJ)</option>
+                <option value="pa_anpp_ap" ${f.type === 'pa_anpp_ap' ? 'selected' : ''}>PA/ANPP/AP</option>
                  <option value="ipl" ${f.type === 'ipl' || f.type === 'ipf' ? 'selected' : ''}>IPL</option>
                 <option value="insc_imob_cabedelo" ${f.type === 'insc_imob_cabedelo' ? 'selected' : ''}>Insc. Imob. Cabedelo</option>
-                <option value="hiperlink" ${f.type === 'hiperlink' ? 'selected' : ''}>Link Elegante (Título e URL)</option>
+                <option value="hiperlink" ${f.type === 'hiperlink' ? 'selected' : ''}>Link (Título/Número/URL)</option>
+                <option value="hiperlink_1n" ${f.type === 'hiperlink_1n' ? 'selected' : ''}>Link (Título/Número/URL) (1:N)</option>
               </select>
             </div>
           </div>
-          <div id="options-container-${f.id}" class="${f.type === 'select' ? 'block' : 'hidden'} bg-white dark:bg-slate-800 p-4 border border-slate-200 dark:border-slate-700 rounded-md">
-            <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Opções de Escolha (separadas por vírgula)</label>
-            <input type="text" value="${f.options}" class="field-options w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white dark:bg-slate-900" placeholder="Ex: Residencial, Comercial, Misto, Industrial" />
-            <p class="text-xs text-slate-400 mt-1">O usuário final verá essas opções em um menu para selecionar.</p>
+          <div id="options-container-${f.id}" class="${f.type === 'select' ? 'block' : 'hidden'} bg-slate-50 dark:bg-slate-800/50 p-4 border border-slate-200 dark:border-slate-700 rounded-lg">
+            <label class="block text-xs font-bold text-slate-500 mb-2.5 uppercase tracking-wider">Opções do Menu Suspenso</label>
+            <div class="flex gap-2 mb-4">
+              <input type="text" id="new-option-input-${f.id}" class="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white dark:bg-slate-900 shadow-sm" placeholder="Digite uma nova opção..." onkeydown="if(event.key === 'Enter') { event.preventDefault(); addDropdownOption('${f.id}'); }" />
+              <button type="button" onclick="addDropdownOption('${f.id}')" class="px-4 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 transition-colors flex items-center gap-1 shadow-sm">
+                <span class="material-symbols-outlined text-[18px]">add</span> Adicionar
+              </button>
+            </div>
+            <ul id="options-list-${f.id}" class="space-y-2 mb-3 min-h-[10px] dropdown-options-list empty:hidden">
+              <!-- Options will be rendered here by JS -->
+            </ul>
+            <input type="hidden" value="${f.options || ''}" class="field-options" id="hidden-options-${f.id}" />
+            <div class="flex items-center gap-2 text-xs text-slate-400 mt-2">
+               <span class="material-symbols-outlined text-[16px]">drag_indicator</span>
+               <p>Arraste os itens pelo ícone à esquerda para reordená-los.</p>
+            </div>
           </div>
         </div>
         <button onclick="openFormulaModal('${f.id}')" id="fx-btn-${f.id}" class="p-2 mt-6 ${fxClass} rounded-full transition-colors flex items-center justify-center" title="Configurar Fórmula de Cálculo">
@@ -1941,8 +1973,12 @@
           <span class="material-symbols-outlined">delete</span>
         </button>
       `;
-      
       container.appendChild(div);
+      
+      if (f.type === 'select') {
+         renderDropdownOptionsList(f.id);
+         initSortableForOptions(f.id);
+      }
     }
 
 
@@ -1966,11 +2002,133 @@
       const container = document.getElementById(`options-container-${fieldId}`);
       if (selectEl.value === 'select') {
         container.classList.remove('hidden');
+        renderDropdownOptionsList(fieldId);
+        initSortableForOptions(fieldId);
       } else {
         container.classList.add('hidden');
       }
     }
+    
+    // Dropdown Builder JS Helpers
+    function getDropdownOptionsArray(fieldId) {
+       const hiddenInput = document.getElementById(`hidden-options-${fieldId}`);
+       if (!hiddenInput || !hiddenInput.value) return [];
+       return hiddenInput.value.split(',').map(s => s.trim()).filter(s => s !== '');
+    }
 
+    function addDropdownOption(fieldId) {
+       const input = document.getElementById(`new-option-input-${fieldId}`);
+       const val = input.value.trim();
+       if (!val) return;
+       
+       const options = getDropdownOptionsArray(fieldId);
+       options.push(val);
+       
+       const hiddenInput = document.getElementById(`hidden-options-${fieldId}`);
+       hiddenInput.value = options.join(',');
+       
+       input.value = '';
+       renderDropdownOptionsList(fieldId);
+    }
+    
+    function removeDropdownOption(fieldId, index) {
+       const options = getDropdownOptionsArray(fieldId);
+       options.splice(index, 1);
+       
+       const hiddenInput = document.getElementById(`hidden-options-${fieldId}`);
+       hiddenInput.value = options.join(',');
+       
+       renderDropdownOptionsList(fieldId);
+    }
+    
+    function editDropdownOption(fieldId, index) {
+       const ul = document.getElementById(`options-list-${fieldId}`);
+       const li = ul.children[index];
+       const options = getDropdownOptionsArray(fieldId);
+       const currentVal = options[index];
+       
+       li.innerHTML = `
+          <div class="flex gap-2 w-full">
+             <input type="text" id="edit-option-input-${fieldId}-${index}" class="flex-1 px-2 py-1.5 border border-blue-300 dark:border-blue-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white dark:bg-slate-900" value="${currentVal.replace(/"/g, '&quot;')}" onkeydown="if(event.key === 'Enter') { event.preventDefault(); saveDropdownOption('${fieldId}', ${index}); }" />
+             <button type="button" onclick="saveDropdownOption('${fieldId}', ${index})" class="p-1.5 bg-blue-100 text-blue-600 dark:bg-blue-900/50 dark:text-blue-400 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors tooltip" title="Salvar">
+                <span class="material-symbols-outlined text-[18px]">check</span>
+             </button>
+             <button type="button" onclick="renderDropdownOptionsList('${fieldId}')" class="p-1.5 bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors tooltip" title="Cancelar">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+             </button>
+          </div>
+       `;
+       document.getElementById(`edit-option-input-${fieldId}-${index}`).focus();
+    }
+    
+    function saveDropdownOption(fieldId, index) {
+       const editInput = document.getElementById(`edit-option-input-${fieldId}-${index}`);
+       const newVal = editInput.value.trim();
+       if (!newVal) return removeDropdownOption(fieldId, index);
+       
+       const options = getDropdownOptionsArray(fieldId);
+       options[index] = newVal;
+       
+       const hiddenInput = document.getElementById(`hidden-options-${fieldId}`);
+       hiddenInput.value = options.join(',');
+       
+       renderDropdownOptionsList(fieldId);
+    }
+    
+    function updateHiddenOptionsInput(fieldId) {
+       const ul = document.getElementById(`options-list-${fieldId}`);
+       const newOptions = [];
+       // Loop through li elements and extract the text value
+       Array.from(ul.children).forEach(li => {
+           const span = li.querySelector('.option-text');
+           if (span) {
+               newOptions.push(span.textContent.trim());
+           }
+       });
+       const hiddenInput = document.getElementById(`hidden-options-${fieldId}`);
+       hiddenInput.value = newOptions.join(',');
+    }
+
+    function renderDropdownOptionsList(fieldId) {
+       const ul = document.getElementById(`options-list-${fieldId}`);
+       if (!ul) return;
+       
+       const options = getDropdownOptionsArray(fieldId);
+       ul.innerHTML = '';
+       
+       options.forEach((opt, index) => {
+           const li = document.createElement('li');
+           li.className = "flex items-center gap-2 bg-white dark:bg-slate-800/80 p-2 rounded border border-slate-200 dark:border-slate-700 shadow-sm group";
+           li.innerHTML = `
+               <span class="material-symbols-outlined cursor-grab text-slate-300 hover:text-slate-500 active:cursor-grabbing text-[18px]">drag_indicator</span>
+               <span class="flex-1 text-sm text-slate-700 dark:text-slate-200 truncate option-text" title="${opt.replace(/"/g, '&quot;')}">${opt.replace(/</g, '&lt;')}</span>
+               <button type="button" onclick="editDropdownOption('${fieldId}', ${index})" class="p-1 text-slate-400 hover:text-blue-500 rounded transition-colors tooltip" title="Editar">
+                   <span class="material-symbols-outlined text-[16px]">edit</span>
+               </button>
+               <button type="button" onclick="removeDropdownOption('${fieldId}', ${index})" class="p-1 text-slate-400 hover:text-red-500 rounded transition-colors tooltip" title="Excluir">
+                   <span class="material-symbols-outlined text-[16px]">delete</span>
+               </button>
+           `;
+           ul.appendChild(li);
+       });
+    }
+
+    function initSortableForOptions(fieldId) {
+       const ul = document.getElementById(`options-list-${fieldId}`);
+       if (ul && typeof Sortable !== 'undefined') {
+           // Destroy if already initialized to prevent duplicates
+           if (ul._sortable) ul._sortable.destroy();
+           
+           ul._sortable = Sortable.create(ul, {
+               handle: '.cursor-grab',
+               animation: 150,
+               ghostClass: 'bg-blue-50',
+               onEnd: function (evt) {
+                   updateHiddenOptionsInput(fieldId);
+               }
+           });
+       }
+    }
     function saveForm() {
       const name = document.getElementById('form-name').value.trim();
       if (!name) {
@@ -2822,6 +2980,195 @@
                 checkIcon.classList.add('hidden');
             }
         }
+    };
+
+    // ==========================================
+    // STORAGE UPLOAD LOGIC
+    // ==========================================
+    async function uploadToSupabaseStorage() {
+        if (typeof supabaseClient === 'undefined' || !supabaseClient) {
+            alert('Supabase não conectado.');
+            return;
+        }
+        
+        const folderInput = document.getElementById('storage-folder-name').value.trim();
+        const fileInput = document.getElementById('storage-file-input');
+        const file = fileInput.files[0];
+        
+        if (!file) {
+            alert('Selecione um arquivo para enviar.');
+            return;
+        }
+        if (!folderInput) {
+            alert('Por favor, informe a pasta de destino (Ex: joao_pessoa).');
+            return;
+        }
+        
+        const folder = folderInput.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+        const fileName = file.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
+        const filePath = `${folder}/${fileName}`;
+        
+        const progressContainer = document.getElementById('upload-progress-container');
+        const progressBar = document.getElementById('upload-progress-bar');
+        const percentText = document.getElementById('upload-percent-text');
+        const statusText = document.getElementById('upload-status-text');
+        
+        progressContainer.classList.remove('hidden');
+        progressBar.style.width = '0%';
+        percentText.innerText = '0%';
+        statusText.innerText = 'Enviando...';
+        
+        try {
+            // No SDK v2, progresso real requer o TUS resumable upload, mas o client simples resolve arquivos moderados.
+            // Para arquivos muito grandes (>50MB), é recomendado uma abordagem chunked.
+            const { data, error } = await supabaseClient.storage
+                .from('obras_arquivos')
+                .upload(filePath, file, {
+                    cacheControl: '3600',
+                    upsert: true
+                });
+                
+            if (error) throw error;
+            
+            progressBar.style.width = '100%';
+            percentText.innerText = '100%';
+            statusText.innerText = 'Upload concluído!';
+            statusText.classList.add('text-green-500');
+            
+            setTimeout(() => {
+                progressContainer.classList.add('hidden');
+                statusText.classList.remove('text-green-500');
+                fileInput.value = '';
+                loadSupabaseStorageFiles();
+            }, 3000);
+            
+        } catch (error) {
+            console.error('Erro no upload:', error);
+            statusText.innerText = 'Erro: ' + error.message;
+            statusText.classList.add('text-red-500');
+            progressBar.classList.add('bg-red-500');
+        }
+    }
+
+    async function loadSupabaseStorageFiles() {
+        const listContainer = document.getElementById('storage-files-list');
+        if (!listContainer || typeof supabaseClient === 'undefined' || !supabaseClient) return;
+        
+        listContainer.innerHTML = '<div class="p-8 text-center text-slate-500 text-sm">Carregando arquivos...</div>';
+        
+        try {
+            // Lista todas as "pastas" na raiz (se suportado) ou arquivos com list()
+            // Obs: A API padrão não retorna pastas e subpastas de forma recursiva simples sem prefixo.
+            // Para fins de demonstração, vamos listar a raiz e pegar os itens. Se quiser recursivo completo, precisamos iterar.
+            // Vamos tentar listar os itens de uma pasta específica ou da raiz se houver.
+            
+            const { data: rootItems, error: rootError } = await supabaseClient.storage.from('obras_arquivos').list('', { limit: 100 });
+            if (rootError) throw rootError;
+            
+            let allFiles = [];
+            
+            // Verifica se são pastas ou arquivos
+            for (const item of rootItems) {
+                if (item.id === null) { 
+                    // É uma pasta
+                    const { data: subItems } = await supabaseClient.storage.from('obras_arquivos').list(item.name, { limit: 100 });
+                    if (subItems) {
+                        subItems.forEach(sub => {
+                            if (sub.id) {
+                                allFiles.push({ ...sub, folder: item.name });
+                            }
+                        });
+                    }
+                } else {
+                    // Arquivo na raiz
+                    if (item.id) {
+                        allFiles.push({ ...item, folder: '' });
+                    }
+                }
+            }
+            
+            if (allFiles.length === 0) {
+                listContainer.innerHTML = '<div class="p-8 text-center text-slate-500 text-sm italic">Nenhum arquivo encontrado no bucket.</div>';
+                return;
+            }
+            
+            // Ordenar por data
+            allFiles.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            
+            let html = '';
+            for (const file of allFiles) {
+                const path = file.folder ? `${file.folder}/${file.name}` : file.name;
+                const { data: urlData } = supabaseClient.storage.from('obras_arquivos').getPublicUrl(path);
+                const publicUrl = urlData.publicUrl;
+                
+                // Formatar tamanho
+                const sizeMb = (file.metadata.size / (1024 * 1024)).toFixed(2);
+                
+                html += `
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <div class="mb-2 sm:mb-0 max-w-full sm:max-w-[70%]">
+                        <div class="font-medium text-slate-800 dark:text-slate-200 truncate" title="${file.name}">${file.name}</div>
+                        <div class="text-xs text-slate-500 flex gap-2">
+                            <span><span class="material-symbols-outlined text-[12px] align-middle">folder</span> ${file.folder || '/'}</span>
+                            <span>•</span>
+                            <span>${sizeMb} MB</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="navigator.clipboard.writeText('${publicUrl}').then(() => alert('Link copiado!'))" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-xs transition-colors flex items-center gap-1" title="Copiar Link Público">
+                            <span class="material-symbols-outlined text-[14px]">content_copy</span> URL
+                        </button>
+                        <button onclick="deleteSupabaseFile('${path}')" class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors" title="Excluir Arquivo">
+                            <span class="material-symbols-outlined text-[16px]">delete</span>
+                        </button>
+                    </div>
+                </div>
+                `;
+            }
+            listContainer.innerHTML = html;
+            
+        } catch (error) {
+            console.error(error);
+            listContainer.innerHTML = `<div class="p-8 text-center text-red-500 text-sm">Erro ao listar arquivos: ${error.message}</div>`;
+        }
+    }
+
+    async function deleteSupabaseFile(path) {
+        if (!confirm('Deseja realmente excluir este arquivo? Isso pode quebrar mapas que estejam usando essa URL.')) return;
+        
+        try {
+            const { error } = await supabaseClient.storage.from('obras_arquivos').remove([path]);
+            if (error) throw error;
+            loadSupabaseStorageFiles();
+        } catch (error) {
+            alert('Erro ao excluir: ' + error.message);
+        }
+    }
+
+    // Bind initialization
+    document.addEventListener('DOMContentLoaded', () => {
+        // We can hook into switchTab if needed, or just load on init if it doesn't hurt performance
+        // loadSupabaseStorageFiles(); // Called when opening the tab is better
+    });
+    
+    // Patch switchTab to load files when storage tab is opened
+    const originalSwitchTab = window.switchTab;
+    if (typeof originalSwitchTab === 'function') {
+        window.switchTab = function(tabId, btn) {
+            originalSwitchTab(tabId, btn);
+            if (tabId === 'storage') {
+                loadSupabaseStorageFiles();
+            }
+        };
+    }
+    
+    // Mocks for Form Preview Mode
+    window.saveFeatureData = async function() {
+        alert('Este é apenas um ambiente de pré-visualização. Salve o formulário no construtor para aplicar as mudanças permanentemente.');
+    };
+    
+    window.cancelFeatureEdit = function() {
+        alert('Este é apenas um ambiente de pré-visualização. Clique no botão de fechar para voltar.');
     };
 
   </script>

@@ -185,7 +185,7 @@ function startMeasurementDraw(shape) {
 }
 
 // Listen for draw events
-if (typeof map !== 'undefined' && map) {
+if (typeof map !== 'undefined' && map && typeof map.on === 'function') {
     setupMeasurementEvents();
 } else {
     // If map isn't ready yet, wait for DOMContentLoaded or map init
@@ -195,7 +195,11 @@ if (typeof map !== 'undefined' && map) {
 }
 
 function setupMeasurementEvents() {
-    if (!map) return;
+    if (typeof map === 'undefined' || !map || typeof map.on !== 'function') {
+        // map might be a DOM element (window.map) or not yet initialized by Leaflet
+        setTimeout(setupMeasurementEvents, 500);
+        return;
+    }
     
     map.on('pm:create', (e) => {
         // Check if we are in measurement mode

@@ -184,6 +184,8 @@ function renderMultipleTab(tab, featureData, isEditMode) {
     } catch(e) { records = []; }
     if (!Array.isArray(records)) records = [];
     
+    let isHiperlink = tab.fields && tab.fields.length > 0 && tab.fields[0].type === 'hiperlink';
+    
     let html = `
         <!-- 1:N Table View -->
         <div id="multiple-table-view-${tab.id}">
@@ -199,8 +201,8 @@ function renderMultipleTab(tab, featureData, isEditMode) {
                 <table class="w-full text-left text-xs sm:text-sm">
                     <thead class="bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 uppercase font-semibold">
                         <tr>
-                            <th class="px-4 py-3">Data</th>
-                            <th class="px-4 py-3">Título</th>
+                            <th class="px-4 py-3">${isHiperlink ? 'Título' : 'Data'}</th>
+                            <th class="px-4 py-3">${isHiperlink ? 'Número' : 'Título'}</th>
                             ${isEditMode ? '<th class="px-4 py-3 text-right">Ações</th>' : ''}
                         </tr>
                     </thead>
@@ -211,37 +213,51 @@ function renderMultipleTab(tab, featureData, isEditMode) {
         html += `<tr id="empty-row-${tab.id}"><td colspan="3" class="px-4 py-6 text-center text-slate-500 italic">Nenhum registro encontrado.</td></tr>`;
     } else {
         records.forEach((rec, idx) => {
-            const dateVal = rec['_created_at'] ? new Date(rec['_created_at']).toLocaleDateString('pt-BR') : 'Sem data';
-            let summary = '';
-            // Pega o primeiro campo preenchido pra usar como resumo
-            if (tab.fields && tab.fields.length > 0) {
-                const firstField = tab.fields.find(f => rec[f.id]);
-                if (firstField) {
-                    let val = rec[firstField.id];
-                    try {
-                        if (typeof val === 'string' && (val.startsWith('[') || val.startsWith('{'))) {
-                            let parsed = JSON.parse(val);
-                            if (Array.isArray(parsed) && parsed.length > 0) {
-                                summary = parsed[0].title || parsed[0].name || 'Arquivo Anexado';
-                            } else if (parsed.title || parsed.name) {
-                                summary = parsed.title || parsed.name;
+            let col1 = '';
+            let col2 = '';
+            
+            if (isHiperlink) {
+                let linkData = { title: '', number: '' };
+                try {
+                    let val = rec[tab.fields[0].id];
+                    linkData = typeof val === 'string' && val.startsWith('{') ? JSON.parse(val) : { title: '', number: '' };
+                } catch(e){}
+                col1 = linkData.title || 'Sem título';
+                col2 = linkData.number || '-';
+            } else {
+                col1 = rec['_created_at'] ? new Date(rec['_created_at']).toLocaleDateString('pt-BR') : 'Sem data';
+                let summary = '';
+                // Pega o primeiro campo preenchido pra usar como resumo
+                if (tab.fields && tab.fields.length > 0) {
+                    const firstField = tab.fields.find(f => rec[f.id]);
+                    if (firstField) {
+                        let val = rec[firstField.id];
+                        try {
+                            if (typeof val === 'string' && (val.startsWith('[') || val.startsWith('{'))) {
+                                let parsed = JSON.parse(val);
+                                if (Array.isArray(parsed) && parsed.length > 0) {
+                                    summary = parsed[0].title || parsed[0].name || 'Arquivo Anexado';
+                                } else if (parsed.title || parsed.name) {
+                                    summary = parsed.title || parsed.name;
+                                } else {
+                                    summary = 'Registro Completo';
+                                }
                             } else {
-                                summary = 'Registro Completo';
+                                summary = String(val);
                             }
-                        } else {
+                        } catch(e) {
                             summary = String(val);
                         }
-                    } catch(e) {
-                        summary = String(val);
                     }
                 }
+                if(summary.length > 50) summary = summary.substring(0, 50) + '...';
+                col2 = summary;
             }
-            if(summary.length > 50) summary = summary.substring(0, 50) + '...';
             
             html += `
                 <tr class="bg-white even:bg-slate-50/50 dark:bg-slate-900 dark:even:bg-slate-800/40 hover:!bg-blue-50/80 dark:hover:!bg-blue-900/30 active:!bg-blue-100 dark:active:!bg-blue-900/50 transition-all duration-200 cursor-pointer" onclick="viewMultipleRecord('${tab.id}', ${idx})">
-                    <td class="px-4 py-3 text-slate-900 dark:text-slate-100 font-medium">${dateVal}</td>
-                    <td class="px-4 py-3 text-slate-500">${summary}</td>
+                    <td class="px-4 py-3 text-slate-900 dark:text-slate-100 font-medium">${col1}</td>
+                    <td class="px-4 py-3 text-slate-500">${col2}</td>
                     ${isEditMode ? `
                     <td class="px-4 py-3 text-right" onclick="event.stopPropagation()">
                         <div class="flex items-center justify-end gap-1">

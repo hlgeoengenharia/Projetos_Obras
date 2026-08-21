@@ -1,3 +1,21 @@
+window.changeTheme = function(theme) {
+    localStorage.setItem('constructive_theme', theme);
+    document.documentElement.classList.remove('light', 'dark', 'neon');
+    if (theme === 'Azul neon') {
+        document.documentElement.classList.add('neon', 'dark');
+    } else if (theme === 'Escuro' || (theme === 'Automático' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+    } else {
+        document.documentElement.classList.add('light');
+    }
+};
+
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+    if(localStorage.getItem('constructive_theme') === 'Automático') {
+        window.changeTheme('Automático');
+    }
+});
+
 let allForms = [];
 async function fetchDynamicForm() {
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
@@ -639,13 +657,39 @@ async function syncMapDataToThemes() {
       }).filter(item => item !== null);
       
       if (dbPayloads.length > 0) {
-          const payloads = dbPayloads.map(item => item.payload);
           try {
-              const { data, error } = await supabaseClient.from('feicoes').upsert(payloads).select();
-              if (error) {
-                  console.error("Erro ao sincronizar feições em lote no Supabase:", error);
-              } else if (data && data.length > 0) {
-                  data.forEach(dbRow => {
+              const chunkSize = 200;
+              let allData = [];
+              
+              const newPayloads = dbPayloads.filter(item => !item.payload.id);
+              const existingPayloads = dbPayloads.filter(item => item.payload.id);
+              
+              // Process new features using insert
+              for (let i = 0; i < newPayloads.length; i += chunkSize) {
+                  const dbPayloadsChunk = newPayloads.slice(i, i + chunkSize);
+                  const payloadsChunk = dbPayloadsChunk.map(item => item.payload);
+                  
+                  const { data, error } = await supabaseClient.from('feicoes').insert(payloadsChunk).select();
+                  if (error) {
+                      console.error(`Erro ao inserir novas feições em lote (chunk ${Math.floor(i/chunkSize) + 1}):`, error);
+                  } else if (data && data.length > 0) {
+                      allData.push(...data);
+                  }
+              }
+              
+              // Process existing features using upsert
+              for (let i = 0; i < existingPayloads.length; i += chunkSize) {
+                  const dbPayloadsChunk = existingPayloads.slice(i, i + chunkSize);
+                  const payloadsChunk = dbPayloadsChunk.map(item => item.payload);
+                  
+                  const { data, error } = await supabaseClient.from('feicoes').upsert(payloadsChunk).select();
+                  if (error) {
+                      console.error(`Erro ao atualizar feições em lote (chunk ${Math.floor(i/chunkSize) + 1}):`, error);
+                  }
+              }
+              
+              if (allData.length > 0) {
+                  allData.forEach(dbRow => {
                       const tempId = dbRow.propriedades && dbRow.propriedades._tempId;
                       if (tempId) {
                           const match = dbPayloads.find(item => item.layer.feature.properties._tempId === tempId);
@@ -1982,10 +2026,11 @@ function updateValueMappings() {
     }
     
     // Get all current mappings
-    const selectElements = document.querySelectorAll('.property-rename-select');
+    const selectElements = document.querySelectorAll('.property-rename-select-inverse');
     selectElements.forEach(select => {
-        const originalProp = select.getAttribute('data-original');
-        const targetFieldId = select.value;
+        const targetFieldId = select.getAttribute('data-target-field-id');
+        const originalProp = select.value;
+        if (!originalProp) return;
         
         // Find if targetFieldId is a select field
         const field = formFields.find(f => f.id === targetFieldId);
@@ -2040,7 +2085,8 @@ function updateValueMappings() {
                     // Pre-match options using case-insensitive/fuzzy logic
                     let bestMatchOption = findBestSelectOption(val, opts);
                     
-                    let mappingOptionsHtml = `<option value="">-- Deixar em branco --</option>`;
+                    let mappingOptionsHtml = `<option value="${val}" ${!bestMatchOption ? 'selected' : ''}>-- Manter original (${val}) --</option>`;
+                    mappingOptionsHtml += `<option value="">-- Deixar em branco --</option>`;
                     opts.forEach(opt => {
                         const isSel = (opt === bestMatchOption) ? 'selected' : '';
                         mappingOptionsHtml += `<option value="${opt}" ${isSel}>${opt}</option>`;
@@ -2083,12 +2129,13 @@ function renderImportFieldMapping() {
   const selectedFormId = document.getElementById('global-import-cadastro-type') ? document.getElementById('global-import-cadastro-type').value : '';
   let formFields = [];
   
+  let formSchema = null;
   if (selectedFormId && typeof allForms !== 'undefined') {
     const form = allForms.find(f => f.id === selectedFormId);
     if (form) {
-       const schema = form.schema || form.tabs;
-       if (schema) {
-           schema.forEach(tab => {
+       formSchema = form.schema || form.tabs;
+       if (formSchema) {
+           formSchema.forEach(tab => {
                if (tab.fields) {
                    formFields.push(...tab.fields);
                }
@@ -2100,47 +2147,99 @@ function renderImportFieldMapping() {
   const normalizeStr = (s) => s ? s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "") : "";
 
   let htmlContent = '';
+  const mappedProperties = new Set();
+  const unmappedRows = [];
+
+
+
+  // 1. Mapeamento guiado pelo Formulário (Template)
+  if (formSchema && formFields.length > 0) {
+      formSchema.forEach(tab => {
+          if (tab.fields && tab.fields.length > 0) {
+              htmlContent += `<div class="font-bold text-center text-sm text-slate-700 dark:text-slate-300 mt-4 mb-2 uppercase tracking-wide bg-slate-50 dark:bg-slate-800/50 py-1.5 rounded border border-slate-100 dark:border-slate-800">${tab.title || 'Aba'}</div>`;
+              
+              tab.fields.forEach(f => {
+                  const subFields = [];
+                  if (f.type === 'cep') {
+                      subFields.push({ idSuffix: '__cep', labelSuffix: ' (CEP)', matchKey: 'cep' });
+                      subFields.push({ idSuffix: '__logradouro', labelSuffix: ' (Logradouro)', matchKey: 'logradouro' });
+                      subFields.push({ idSuffix: '__numero', labelSuffix: ' (Número)', matchKey: 'numero' });
+                      subFields.push({ idSuffix: '__complemento', labelSuffix: ' (Complemento)', matchKey: 'complemento' });
+                      subFields.push({ idSuffix: '__bairro', labelSuffix: ' (Bairro)', matchKey: 'bairro' });
+                      subFields.push({ idSuffix: '__cidade', labelSuffix: ' (Cidade)', matchKey: 'cidade' });
+                      subFields.push({ idSuffix: '__uf', labelSuffix: ' (UF)', matchKey: 'uf' });
+                  } else {
+                      subFields.push({ idSuffix: '', labelSuffix: '', matchKey: normalizeStr(f.label) });
+                  }
+                  
+                  subFields.forEach(sub => {
+                      const fullId = f.id + sub.idSuffix;
+                      const fullLabel = f.label + sub.labelSuffix;
+                      const normName = normalizeStr(f.name);
+                      
+                      let matchedProp = null;
+                      
+                      // Auto-match
+                      for (let i = 0; i < detectedProperties.length; i++) {
+                          const prop = detectedProperties[i];
+                          if (mappedProperties.has(prop)) continue;
+                          
+                          const normProp = normalizeStr(prop);
+                          if (sub.matchKey === normProp || (sub.idSuffix === '' && normName === normProp) || (normProp.length > 3 && (sub.matchKey.includes(normProp) || normProp.includes(sub.matchKey)))) {
+                              matchedProp = prop;
+                              mappedProperties.add(prop);
+                              break;
+                          }
+                      }
+                      
+                      let options = `<option value="">-- Não mapeado --</option>`;
+                      detectedProperties.forEach(prop => {
+                          const isSelected = (matchedProp === prop) ? 'selected' : '';
+                          options += `<option value="${prop}" ${isSelected}>${prop}</option>`;
+                      });
+                      
+                      const mappingControl = `<select data-target-field-id="${fullId}" onchange="updateValueMappings()" class="flex-1 px-2 py-1 text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-1 focus:ring-primary dark:text-white property-rename-select-inverse">${options}</select>`;
+                      
+                      let indent = sub.idSuffix ? 'ml-4 border-l-2 border-slate-200 dark:border-slate-700 pl-2' : '';
+                      
+                      htmlContent += `
+                        <div class="flex items-center gap-2 mb-2 ${indent}">
+                          <span class="w-1/3 text-sm text-slate-600 dark:text-slate-400 font-medium truncate" title="${fullLabel}">${fullLabel}</span>
+                          <span class="material-symbols-outlined text-slate-400 text-sm">arrow_forward</span>
+                          ${mappingControl}
+                        </div>
+                      `;
+                  });
+              });
+          }
+      });
+  }
+
+  // 2. Campos Adicionais (Não mapeados)
   detectedProperties.forEach(prop => {
-    let mappingControl = '';
-    
-    // Auto-match
-    if (formFields.length > 0) {
-       const normProp = normalizeStr(prop);
-       const match = formFields.find(f => {
-           const normLabel = normalizeStr(f.label);
-           const normName = normalizeStr(f.name);
-           return normLabel === normProp || normName === normProp || (normProp.length > 3 && (normLabel.includes(normProp) || normProp.includes(normLabel)));
-       });
-       
-       let options = `<option value="${prop}">-- Manter original (${prop}) --</option>`;
-       formFields.forEach(f => {
-           const isSelected = (match && match.id === f.id) ? 'selected' : '';
-           options += `<option value="${f.id}" ${isSelected}>${f.label}</option>`;
-           if (f.type === 'cep') {
-               options += `<option value="${f.id}__cep"> ↳ ${f.label} (CEP)</option>`;
-               options += `<option value="${f.id}__logradouro"> ↳ ${f.label} (Rua/Logradouro)</option>`;
-               options += `<option value="${f.id}__numero"> ↳ ${f.label} (Número)</option>`;
-               options += `<option value="${f.id}__complemento"> ↳ ${f.label} (Complemento)</option>`;
-               options += `<option value="${f.id}__bairro"> ↳ ${f.label} (Bairro)</option>`;
-               options += `<option value="${f.id}__cidade"> ↳ ${f.label} (Cidade)</option>`;
-               options += `<option value="${f.id}__uf"> ↳ ${f.label} (UF)</option>`;
-           }
-       });
-       
-       mappingControl = `<select data-original="${prop}" onchange="updateValueMappings()" class="flex-1 px-2 py-1 text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-1 focus:ring-primary dark:text-white property-rename-select">${options}</select>`;
-    } else {
-        mappingControl = `<input type="text" list="standard-fields-list" data-original="${prop}" value="${prop}" class="flex-1 px-2 py-1 text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-1 focus:ring-primary dark:text-white property-rename-input">`;
-    }
-    
-    htmlContent += `
-      <div class="flex items-center gap-2 mb-2">
-        <input type="checkbox" checked class="property-import-checkbox w-4 h-4 text-primary rounded border-slate-300 dark:border-slate-700 focus:ring-primary" data-original="${prop}">
-        <span class="w-1/3 text-sm text-slate-600 dark:text-slate-400 font-mono truncate" title="${prop}">${prop}</span>
-        <span class="material-symbols-outlined text-slate-400 text-sm">arrow_forward</span>
-        ${mappingControl}
-      </div>
-    `;
+      if (!mappedProperties.has(prop)) {
+          let mappingControl;
+          if (formFields.length > 0) {
+              mappingControl = `<span class="flex-1 text-sm text-slate-500 italic">-- Manter Original --</span><input type="hidden" class="property-rename-input" data-original="${prop}" value="${prop}">`;
+          } else {
+              mappingControl = `<input type="text" list="standard-fields-list" data-original="${prop}" value="${prop}" class="flex-1 px-2 py-1 text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-1 focus:ring-primary dark:text-white property-rename-input">`;
+          }
+          
+          unmappedRows.push(`
+            <div class="flex items-center gap-2 mb-2">
+              <input type="checkbox" checked class="property-import-checkbox w-4 h-4 text-primary rounded border-slate-300 dark:border-slate-700 focus:ring-primary" data-original="${prop}">
+              <span class="w-1/3 text-sm text-slate-600 dark:text-slate-400 font-mono truncate" title="${prop}">${prop}</span>
+              <span class="material-symbols-outlined text-slate-400 text-sm">arrow_forward</span>
+              ${mappingControl}
+            </div>
+          `);
+      }
   });
+
+  if (unmappedRows.length > 0) {
+      htmlContent += `<div class="font-bold text-center text-sm text-slate-700 dark:text-slate-300 mt-4 mb-2 uppercase tracking-wide bg-slate-50 dark:bg-slate-800/50 py-1.5 rounded border border-slate-100 dark:border-slate-800">Campos Adicionais / Não Mapeados</div>`;
+      htmlContent += unmappedRows.join('');
+  }
   
   if (formFields.length === 0) {
       fieldsContainer.innerHTML = `
@@ -2224,6 +2323,14 @@ async function confirmGlobalImport() {
     // If it was mapped to a new name and is hidden, update the hidden list
     if (hiddenFields.includes(original) && original !== newName) {
         hiddenFields[hiddenFields.indexOf(original)] = newName;
+    }
+  });
+
+  document.querySelectorAll('.property-rename-select-inverse').forEach(select => {
+    const targetFieldId = select.getAttribute('data-target-field-id');
+    const geojsonProp = select.value;
+    if (geojsonProp) {
+        mapping[geojsonProp] = targetFieldId;
     }
   });
   
@@ -2353,16 +2460,18 @@ async function confirmGlobalImport() {
   
   const newLayer = L.geoJSON(pendingGlobalGeoJSON);
   geojsonLayer.addData(pendingGlobalGeoJSON);
-  await syncMapDataToThemes();
+  
+  // Fechar o modal imediatamente para dar feedback visual de que o carregamento começou
+  closeGlobalImportModal();
+  document.getElementById('side-drawer').classList.add('-translate-x-[120%]');
+  document.getElementById('drawer-overlay').classList.add('hidden');
   
   const bounds = newLayer.getBounds();
   if (bounds.isValid()) {
       map.fitBounds(bounds);
   }
   
-  closeGlobalImportModal();
-  document.getElementById('side-drawer').classList.add('-translate-x-[120%]');
-  document.getElementById('drawer-overlay').classList.add('hidden');
+  await syncMapDataToThemes();
 }
 
 // --- FEATURE INFO ---
@@ -3970,7 +4079,7 @@ function setupSupabaseRealtime() {
               'postgres_changes',
               { event: '*', schema: 'public', table: 'feicoes' },
               async (payload) => {
-                  console.log("Realtime: feicoes table changed!", payload);
+                  // console.log("Realtime: feicoes table changed!", payload);
                   
                   // Se a feição ativa que está sendo visualizada/editada foi excluída, fecha o modal imediatamente
                   if (payload.eventType === 'DELETE' && activeFeatureLayer) {
