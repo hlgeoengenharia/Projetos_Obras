@@ -135,25 +135,36 @@ async function loadThemes() {
           if (errTemas) console.error("Erro ao carregar temas:", errTemas);
 
           let dbFeicoes = [];
-          let fetchHasMore = true;
-          let fetchStart = 0;
-          let fetchStep = 1000;
           
-          while(fetchHasMore) {
-              const { data: chunk, error: chunkErr } = await supabaseClient.from('feicoes').select('*').range(fetchStart, fetchStart + fetchStep - 1);
-              if (chunkErr) {
-                  console.error("Erro ao carregar feições (chunk):", chunkErr);
-                  break;
+          // 1. Obter o total de feições para paralelizar o download
+          const { count, error: countErr } = await supabaseClient
+              .from('feicoes')
+              .select('*', { count: 'exact', head: true });
+              
+          if (countErr) {
+              console.error("Erro ao obter total de feições:", countErr);
+          } else if (count > 0) {
+              const fetchStep = 1000;
+              const maxConcurrentRequests = 5; // Baixa 5 mil registros por vez
+              
+              // 2. Prepara as chamadas
+              const rangePromises = [];
+              for (let i = 0; i < count; i += fetchStep) {
+                  rangePromises.push(() => supabaseClient.from('feicoes').select('*').range(i, i + fetchStep - 1));
               }
-              if (chunk && chunk.length > 0) {
-                  dbFeicoes.push(...chunk);
-                  if (chunk.length < fetchStep) {
-                      fetchHasMore = false;
-                  } else {
-                      fetchStart += fetchStep;
-                  }
-              } else {
-                  fetchHasMore = false;
+              
+              // 3. Executa as chamadas em lotes concorrentes
+              for (let i = 0; i < rangePromises.length; i += maxConcurrentRequests) {
+                  const currentBatch = rangePromises.slice(i, i + maxConcurrentRequests).map(fn => fn());
+                  const results = await Promise.all(currentBatch);
+                  
+                  results.forEach(result => {
+                      if (result.error) {
+                          console.error("Erro ao carregar lote de feições:", result.error);
+                      } else if (result.data) {
+                          dbFeicoes.push(...result.data);
+                      }
+                  });
               }
           }
 
