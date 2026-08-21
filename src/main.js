@@ -132,10 +132,30 @@ async function loadThemes() {
   if (typeof supabaseClient !== 'undefined' && supabaseClient) {
       try {
           const { data: dbTemas, error: errTemas } = await supabaseClient.from('temas').select('*');
-          const { data: dbFeicoes, error: errFeicoes } = await supabaseClient.from('feicoes').select('*');
-          
           if (errTemas) console.error("Erro ao carregar temas:", errTemas);
-          if (errFeicoes) console.error("Erro ao carregar feições:", errFeicoes);
+
+          let dbFeicoes = [];
+          let fetchHasMore = true;
+          let fetchStart = 0;
+          let fetchStep = 1000;
+          
+          while(fetchHasMore) {
+              const { data: chunk, error: chunkErr } = await supabaseClient.from('feicoes').select('*').range(fetchStart, fetchStart + fetchStep - 1);
+              if (chunkErr) {
+                  console.error("Erro ao carregar feições (chunk):", chunkErr);
+                  break;
+              }
+              if (chunk && chunk.length > 0) {
+                  dbFeicoes.push(...chunk);
+                  if (chunk.length < fetchStep) {
+                      fetchHasMore = false;
+                  } else {
+                      fetchStart += fetchStep;
+                  }
+              } else {
+                  fetchHasMore = false;
+              }
+          }
 
           // Automatic migration check
           const savedLocal = localStorage.getItem('constructive_themes');
@@ -652,6 +672,8 @@ async function syncMapDataToThemes() {
           };
           if (f.properties.id_banco) {
               payload.id = f.properties.id_banco;
+          } else {
+              payload.id = crypto.randomUUID();
           }
           return { layer, payload };
       }).filter(item => item !== null);
