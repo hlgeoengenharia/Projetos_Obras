@@ -144,34 +144,32 @@ async function loadThemes() {
 
           let dbFeicoes = [];
           
-          // Busca sequencial com no máximo 2 requisições paralelas para não sobrecarregar o plano gratuito
+          // Busca 100% sequencial para respeitar o timeout do plano gratuito do Supabase
           const fetchStep = 1000;
           let fetchStart = 0;
           let fetchHasMore = true;
-          const maxConcurrent = 2;
           
           while (fetchHasMore) {
-              const batch = [];
-              for (let b = 0; b < maxConcurrent; b++) {
-                  batch.push(supabaseClient.from('feicoes').select('*').range(fetchStart, fetchStart + fetchStep - 1));
-                  fetchStart += fetchStep;
+              const { data: chunk, error: chunkErr } = await supabaseClient
+                  .from('feicoes')
+                  .select('*')
+                  .range(fetchStart, fetchStart + fetchStep - 1);
+              
+              if (chunkErr) {
+                  console.error("Erro ao carregar lote de feições:", chunkErr);
+                  break; // Para de tentar em caso de erro
               }
-              const results = await Promise.all(batch);
-              let gotAnyData = false;
-              for (const result of results) {
-                  if (result.error) {
-                      console.error("Erro ao carregar lote de feições:", result.error);
-                  } else if (result.data && result.data.length > 0) {
-                      dbFeicoes.push(...result.data);
-                      gotAnyData = true;
-                      if (result.data.length < fetchStep) {
-                          fetchHasMore = false;
-                      }
+              
+              if (chunk && chunk.length > 0) {
+                  dbFeicoes.push(...chunk);
+                  if (chunk.length < fetchStep) {
+                      fetchHasMore = false; // Último lote
                   } else {
-                      fetchHasMore = false;
+                      fetchStart += fetchStep;
                   }
+              } else {
+                  fetchHasMore = false;
               }
-              if (!gotAnyData) fetchHasMore = false;
           }
 
           // Automatic migration check
