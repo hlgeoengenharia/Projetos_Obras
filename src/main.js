@@ -266,7 +266,20 @@ async function loadThemes() {
 }
 
 function saveThemes() {
-  localStorage.setItem('constructive_themes', JSON.stringify(themes));
+  try {
+      localStorage.setItem('constructive_themes', JSON.stringify(themes));
+  } catch (e) {
+      console.warn("Storage quota exceeded. Salvando apenas os metadados dos temas sem as feições para poupar espaço...", e);
+      const strippedThemes = themes.map(t => {
+          const { features, ...rest } = t;
+          return { ...rest, features: [] };
+      });
+      try {
+          localStorage.setItem('constructive_themes', JSON.stringify(strippedThemes));
+      } catch (err) {
+          console.error("Não foi possível salvar temas nem sem as feições:", err);
+      }
+  }
   
   const meta = {};
   themes.forEach(t => {
