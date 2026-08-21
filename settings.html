@@ -876,52 +876,88 @@
   <!-- Tab Content: Storage (Armazenamento) -->
   <div id="storage" class="tab-content">
     <div class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
-      <h2 class="text-lg font-bold mb-2">Gerenciador de Arquivos (Storage)</h2>
-      <p class="text-slate-600 dark:text-slate-400 text-sm mb-6">Envie Ortofotos (COG), GeoJSON, Projetos 3D (.glb) e outros arquivos direto para o Supabase.</p>
-      
-      <!-- Upload Area -->
-      <div class="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-5 border border-slate-200 dark:border-slate-700 mb-8">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                  <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">1. Pasta de Destino (Município/Projeto)</label>
-                  <input type="text" id="storage-folder-name" class="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-sm dark:text-white placeholder-slate-400" placeholder="Ex: joao_pessoa">
-                  <p class="text-[10px] text-slate-500 mt-1">Isso ajuda a isolar os arquivos caso o sistema seja usado por várias prefeituras.</p>
-              </div>
-              <div>
-                  <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">2. Selecione o Arquivo</label>
-                  <input type="file" id="storage-file-input" class="w-full text-sm text-slate-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer">
-              </div>
-          </div>
-          
-          <button onclick="uploadToSupabaseStorage()" class="w-full md:w-auto px-6 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-sky-600 transition-colors flex items-center justify-center gap-2">
-              <span class="material-symbols-outlined text-[20px]">cloud_upload</span> Enviar Arquivo
+      <div class="flex justify-between items-start mb-6">
+        <div>
+          <h2 class="text-lg font-bold">Gerenciador de Arquivos (Storage)</h2>
+          <p class="text-slate-500 dark:text-slate-400 text-sm mt-1">Organize seus arquivos GeoTIFF por município/cliente/projeto.</p>
+        </div>
+        <button onclick="loadStorageFolders()" class="text-xs text-primary hover:text-sky-400 flex items-center gap-1 shrink-0 ml-4" title="Atualizar">
+          <span class="material-symbols-outlined text-[16px]">refresh</span> Atualizar
+        </button>
+      </div>
+
+      <!-- TELA A: Grade de Pastas -->
+      <div id="storage-view-folders">
+        <!-- Header com botão nova pasta -->
+        <div class="flex items-center justify-between mb-4">
+          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Suas Pastas</span>
+          <button onclick="showNewFolderInput()" class="flex items-center gap-1.5 text-sm text-primary hover:text-sky-500 font-medium transition-colors">
+            <span class="material-symbols-outlined text-[18px]">create_new_folder</span> Nova Pasta
           </button>
-          
+        </div>
+
+        <!-- Input de nova pasta (oculto por padrão) -->
+        <div id="new-folder-input-area" class="hidden mb-4 flex gap-2 items-center bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3 border border-dashed border-primary/50">
+          <span class="material-symbols-outlined text-primary text-[20px]">folder_open</span>
+          <input type="text" id="new-folder-name-input" placeholder="Ex: joao_pessoa ou prefeitura_campina"
+            class="flex-1 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary dark:text-white placeholder-slate-400"
+            onkeydown="if(event.key==='Enter') createStorageFolder()">
+          <button onclick="createStorageFolder()" class="px-4 py-1.5 bg-primary text-white rounded-md text-sm font-medium hover:bg-sky-600 transition-colors">Criar</button>
+          <button onclick="hideNewFolderInput()" class="px-3 py-1.5 text-slate-400 hover:text-slate-600 text-sm">Cancelar</button>
+        </div>
+
+        <!-- Grid de pastas -->
+        <div id="storage-folders-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          <div class="col-span-full p-8 text-center text-slate-400 text-sm italic">
+            <span class="material-symbols-outlined text-[40px] block mb-2 opacity-30">folder_open</span>
+            Carregando pastas...
+          </div>
+        </div>
+      </div>
+
+      <!-- TELA B: Conteúdo da Pasta Selecionada -->
+      <div id="storage-view-folder-content" class="hidden">
+        <!-- Cabeçalho da pasta -->
+        <div class="flex items-center gap-3 mb-5">
+          <button onclick="backToFolders()" class="flex items-center gap-1.5 text-sm text-slate-500 hover:text-primary transition-colors font-medium">
+            <span class="material-symbols-outlined text-[20px]">arrow_back</span> Voltar
+          </button>
+          <div class="flex-1 flex items-center gap-2 bg-slate-100 dark:bg-slate-700 rounded-lg px-3 py-2">
+            <span class="material-symbols-outlined text-primary text-[20px]">folder_open</span>
+            <span id="current-folder-name-label" class="font-bold text-slate-700 dark:text-slate-200 text-sm"></span>
+          </div>
+        </div>
+
+        <!-- Área de Upload -->
+        <div class="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-5 border border-slate-200 dark:border-slate-700 mb-5">
+          <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Enviar Arquivo para esta Pasta</label>
+          <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+            <input type="file" id="storage-file-input" class="flex-1 text-sm text-slate-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer">
+            <button onclick="uploadToSupabaseStorage()" class="shrink-0 px-5 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-sky-600 transition-colors flex items-center gap-2">
+              <span class="material-symbols-outlined text-[18px]">cloud_upload</span> Enviar
+            </button>
+          </div>
           <!-- Progress Bar -->
           <div id="upload-progress-container" class="hidden mt-4">
-              <div class="flex justify-between text-xs text-slate-500 mb-1">
-                  <span id="upload-status-text">Enviando...</span>
-                  <span id="upload-percent-text">0%</span>
-              </div>
-              <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
-                  <div id="upload-progress-bar" class="bg-primary h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
-              </div>
+            <div class="flex justify-between text-xs text-slate-500 mb-1">
+              <span id="upload-status-text">Enviando...</span>
+              <span id="upload-percent-text">0%</span>
+            </div>
+            <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
+              <div id="upload-progress-bar" class="bg-primary h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
           </div>
-      </div>
-      
-      <!-- File List -->
-      <div class="flex justify-between items-center mb-4">
-          <h3 class="text-md font-bold text-slate-800 dark:text-slate-200">Arquivos Hospedados</h3>
-          <button onclick="loadSupabaseStorageFiles()" class="text-xs text-primary hover:text-sky-400 flex items-center gap-1">
-              <span class="material-symbols-outlined text-[16px]">refresh</span> Atualizar
-          </button>
-      </div>
-      
-      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+        </div>
+
+        <!-- Lista de Arquivos da Pasta -->
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Arquivos na Pasta</span>
+        </div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
           <div id="storage-files-list" class="divide-y divide-slate-100 dark:divide-slate-800 max-h-[400px] overflow-y-auto">
-              <!-- Files will be listed here -->
-              <div class="p-8 text-center text-slate-500 text-sm">Carregando arquivos...</div>
+            <div class="p-8 text-center text-slate-400 text-sm italic">Selecione uma pasta para ver os arquivos.</div>
           </div>
+        </div>
       </div>
     </div>
   </div>
@@ -2983,181 +3019,213 @@
     };
 
     // ==========================================
-    // STORAGE UPLOAD LOGIC
+    // STORAGE — GERENCIADOR COM PASTAS
     // ==========================================
-    async function uploadToSupabaseStorage() {
-        if (typeof supabaseClient === 'undefined' || !supabaseClient) {
-            alert('Supabase não conectado.');
-            return;
+    let currentStorageFolder = null;
+
+    function showNewFolderInput() {
+        document.getElementById('new-folder-input-area').classList.remove('hidden');
+        document.getElementById('new-folder-name-input').focus();
+    }
+
+    function hideNewFolderInput() {
+        document.getElementById('new-folder-input-area').classList.add('hidden');
+        document.getElementById('new-folder-name-input').value = '';
+    }
+
+    async function createStorageFolder() {
+        if (typeof supabaseClient === 'undefined' || !supabaseClient) { alert('Supabase não conectado.'); return; }
+        const raw = document.getElementById('new-folder-name-input').value.trim();
+        if (!raw) { alert('Digite um nome para a pasta.'); return; }
+        const folderName = raw.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+
+        try {
+            // Cria um arquivo oculto .keep para materializar a pasta no Storage
+            const keepContent = new Blob([''], { type: 'text/plain' });
+            const { error } = await supabaseClient.storage
+                .from('obras_arquivos')
+                .upload(`${folderName}/.keep`, keepContent, { upsert: true });
+            if (error) throw error;
+            hideNewFolderInput();
+            await loadStorageFolders();
+        } catch (e) {
+            alert('Erro ao criar pasta: ' + e.message);
         }
-        
-        const folderInput = document.getElementById('storage-folder-name').value.trim();
+    }
+
+    async function loadStorageFolders() {
+        if (typeof supabaseClient === 'undefined' || !supabaseClient) return;
+        const grid = document.getElementById('storage-folders-grid');
+        grid.innerHTML = `<div class="col-span-full p-8 text-center text-slate-400 text-sm italic"><span class="material-symbols-outlined text-[40px] block mb-2 opacity-30">folder_open</span>Carregando...</div>`;
+
+        try {
+            const { data: rootItems, error } = await supabaseClient.storage.from('obras_arquivos').list('', { limit: 200 });
+            if (error) throw error;
+
+            const folders = (rootItems || []).filter(item => item.id === null);
+
+            if (folders.length === 0) {
+                grid.innerHTML = `<div class="col-span-full p-10 text-center text-slate-400 text-sm italic"><span class="material-symbols-outlined text-[48px] block mb-3 opacity-25">create_new_folder</span>Nenhuma pasta criada ainda.<br>Clique em <strong>+ Nova Pasta</strong> para começar.</div>`;
+                return;
+            }
+
+            grid.innerHTML = folders.map(f => `
+                <button onclick="openStorageFolder('${f.name}')"
+                    class="group flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 hover:border-primary hover:bg-primary/5 dark:hover:bg-primary/10 transition-all text-left">
+                    <span class="material-symbols-outlined text-[40px] text-amber-400 group-hover:text-primary transition-colors">folder</span>
+                    <span class="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate w-full text-center" title="${f.name}">${f.name}</span>
+                </button>
+            `).join('');
+        } catch (e) {
+            grid.innerHTML = `<div class="col-span-full p-6 text-center text-red-500 text-sm">Erro ao carregar pastas: ${e.message}</div>`;
+        }
+    }
+
+    async function openStorageFolder(folderName) {
+        currentStorageFolder = folderName;
+        document.getElementById('current-folder-name-label').textContent = folderName;
+        document.getElementById('storage-view-folders').classList.add('hidden');
+        document.getElementById('storage-view-folder-content').classList.remove('hidden');
+        await loadFolderFiles(folderName);
+    }
+
+    function backToFolders() {
+        currentStorageFolder = null;
+        document.getElementById('storage-view-folder-content').classList.add('hidden');
+        document.getElementById('storage-view-folders').classList.remove('hidden');
+        // Limpa o input de arquivo
+        const fi = document.getElementById('storage-file-input');
+        if (fi) fi.value = '';
+    }
+
+    async function loadFolderFiles(folderName) {
+        const listContainer = document.getElementById('storage-files-list');
+        listContainer.innerHTML = '<div class="p-8 text-center text-slate-400 text-sm italic">Carregando arquivos...</div>';
+
+        try {
+            const { data: items, error } = await supabaseClient.storage.from('obras_arquivos').list(folderName, { limit: 200 });
+            if (error) throw error;
+
+            // Filtra arquivos reais (exclui o .keep)
+            const files = (items || []).filter(item => item.id && item.name !== '.keep');
+
+            if (files.length === 0) {
+                listContainer.innerHTML = '<div class="p-10 text-center text-slate-400 text-sm italic"><span class="material-symbols-outlined text-[40px] block mb-2 opacity-25">cloud_upload</span>Nenhum arquivo nesta pasta.<br>Use o formulário acima para enviar o primeiro arquivo.</div>';
+                return;
+            }
+
+            files.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+            listContainer.innerHTML = files.map(file => {
+                const path = `${folderName}/${file.name}`;
+                const { data: urlData } = supabaseClient.storage.from('obras_arquivos').getPublicUrl(path);
+                const publicUrl = urlData.publicUrl;
+                const sizeMb = file.metadata && file.metadata.size ? (file.metadata.size / (1024 * 1024)).toFixed(2) + ' MB' : '—';
+                const ext = file.name.split('.').pop().toUpperCase();
+                const extColor = ext === 'TIF' || ext === 'TIFF' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                    : ext === 'JSON' || ext === 'GEOJSON' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                    : ext === 'GLB' || ext === '3D' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
+                return `
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors gap-2">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <span class="shrink-0 text-xs font-bold px-2 py-1 rounded ${extColor}">${ext}</span>
+                        <div class="min-w-0">
+                            <div class="font-medium text-slate-800 dark:text-slate-200 truncate text-sm" title="${file.name}">${file.name}</div>
+                            <div class="text-xs text-slate-400">${sizeMb}</div>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 shrink-0">
+                        <button onclick="navigator.clipboard.writeText('${publicUrl}').then(() => showStorageToast('Link copiado!'))" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-xs transition-colors flex items-center gap-1" title="Copiar URL Pública">
+                            <span class="material-symbols-outlined text-[14px]">content_copy</span> URL
+                        </button>
+                        <button onclick="deleteSupabaseFile('${path}', '${folderName}')" class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors" title="Excluir Arquivo">
+                            <span class="material-symbols-outlined text-[16px]">delete</span>
+                        </button>
+                    </div>
+                </div>`;
+            }).join('');
+        } catch (e) {
+            listContainer.innerHTML = `<div class="p-6 text-center text-red-500 text-sm">Erro: ${e.message}</div>`;
+        }
+    }
+
+    async function uploadToSupabaseStorage() {
+        if (typeof supabaseClient === 'undefined' || !supabaseClient) { alert('Supabase não conectado.'); return; }
+        if (!currentStorageFolder) { alert('Selecione uma pasta antes de enviar o arquivo.'); return; }
+
         const fileInput = document.getElementById('storage-file-input');
         const file = fileInput.files[0];
-        
-        if (!file) {
-            alert('Selecione um arquivo para enviar.');
-            return;
-        }
-        if (!folderInput) {
-            alert('Por favor, informe a pasta de destino (Ex: joao_pessoa).');
-            return;
-        }
-        
-        const folder = folderInput.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+        if (!file) { alert('Selecione um arquivo para enviar.'); return; }
+
         const fileName = file.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
-        const filePath = `${folder}/${fileName}`;
-        
+        const filePath = `${currentStorageFolder}/${fileName}`;
+
         const progressContainer = document.getElementById('upload-progress-container');
         const progressBar = document.getElementById('upload-progress-bar');
         const percentText = document.getElementById('upload-percent-text');
         const statusText = document.getElementById('upload-status-text');
-        
+
         progressContainer.classList.remove('hidden');
-        progressBar.style.width = '0%';
-        percentText.innerText = '0%';
+        progressBar.classList.remove('bg-red-500');
+        progressBar.classList.add('bg-primary');
+        progressBar.style.width = '10%';
+        percentText.innerText = '...';
         statusText.innerText = 'Enviando...';
-        
+        statusText.className = 'text-slate-500';
+
         try {
-            // No SDK v2, progresso real requer o TUS resumable upload, mas o client simples resolve arquivos moderados.
-            // Para arquivos muito grandes (>50MB), é recomendado uma abordagem chunked.
-            const { data, error } = await supabaseClient.storage
+            const { error } = await supabaseClient.storage
                 .from('obras_arquivos')
-                .upload(filePath, file, {
-                    cacheControl: '3600',
-                    upsert: true
-                });
-                
+                .upload(filePath, file, { cacheControl: '3600', upsert: true });
             if (error) throw error;
-            
+
             progressBar.style.width = '100%';
             percentText.innerText = '100%';
             statusText.innerText = 'Upload concluído!';
-            statusText.classList.add('text-green-500');
-            
+            statusText.className = 'text-green-500 font-semibold';
+
             setTimeout(() => {
                 progressContainer.classList.add('hidden');
-                statusText.classList.remove('text-green-500');
                 fileInput.value = '';
-                loadSupabaseStorageFiles();
-            }, 3000);
-            
+                loadFolderFiles(currentStorageFolder);
+            }, 2500);
         } catch (error) {
             console.error('Erro no upload:', error);
             statusText.innerText = 'Erro: ' + error.message;
-            statusText.classList.add('text-red-500');
+            statusText.className = 'text-red-500';
+            progressBar.style.width = '100%';
+            progressBar.classList.remove('bg-primary');
             progressBar.classList.add('bg-red-500');
         }
     }
 
-    async function loadSupabaseStorageFiles() {
-        const listContainer = document.getElementById('storage-files-list');
-        if (!listContainer || typeof supabaseClient === 'undefined' || !supabaseClient) return;
-        
-        listContainer.innerHTML = '<div class="p-8 text-center text-slate-500 text-sm">Carregando arquivos...</div>';
-        
-        try {
-            // Lista todas as "pastas" na raiz (se suportado) ou arquivos com list()
-            // Obs: A API padrão não retorna pastas e subpastas de forma recursiva simples sem prefixo.
-            // Para fins de demonstração, vamos listar a raiz e pegar os itens. Se quiser recursivo completo, precisamos iterar.
-            // Vamos tentar listar os itens de uma pasta específica ou da raiz se houver.
-            
-            const { data: rootItems, error: rootError } = await supabaseClient.storage.from('obras_arquivos').list('', { limit: 100 });
-            if (rootError) throw rootError;
-            
-            let allFiles = [];
-            
-            // Verifica se são pastas ou arquivos
-            for (const item of rootItems) {
-                if (item.id === null) { 
-                    // É uma pasta
-                    const { data: subItems } = await supabaseClient.storage.from('obras_arquivos').list(item.name, { limit: 100 });
-                    if (subItems) {
-                        subItems.forEach(sub => {
-                            if (sub.id) {
-                                allFiles.push({ ...sub, folder: item.name });
-                            }
-                        });
-                    }
-                } else {
-                    // Arquivo na raiz
-                    if (item.id) {
-                        allFiles.push({ ...item, folder: '' });
-                    }
-                }
-            }
-            
-            if (allFiles.length === 0) {
-                listContainer.innerHTML = '<div class="p-8 text-center text-slate-500 text-sm italic">Nenhum arquivo encontrado no bucket.</div>';
-                return;
-            }
-            
-            // Ordenar por data
-            allFiles.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-            
-            let html = '';
-            for (const file of allFiles) {
-                const path = file.folder ? `${file.folder}/${file.name}` : file.name;
-                const { data: urlData } = supabaseClient.storage.from('obras_arquivos').getPublicUrl(path);
-                const publicUrl = urlData.publicUrl;
-                
-                // Formatar tamanho
-                const sizeMb = (file.metadata.size / (1024 * 1024)).toFixed(2);
-                
-                html += `
-                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                    <div class="mb-2 sm:mb-0 max-w-full sm:max-w-[70%]">
-                        <div class="font-medium text-slate-800 dark:text-slate-200 truncate" title="${file.name}">${file.name}</div>
-                        <div class="text-xs text-slate-500 flex gap-2">
-                            <span><span class="material-symbols-outlined text-[12px] align-middle">folder</span> ${file.folder || '/'}</span>
-                            <span>•</span>
-                            <span>${sizeMb} MB</span>
-                        </div>
-                    </div>
-                    <div class="flex gap-2">
-                        <button onclick="navigator.clipboard.writeText('${publicUrl}').then(() => alert('Link copiado!'))" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-xs transition-colors flex items-center gap-1" title="Copiar Link Público">
-                            <span class="material-symbols-outlined text-[14px]">content_copy</span> URL
-                        </button>
-                        <button onclick="deleteSupabaseFile('${path}')" class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors" title="Excluir Arquivo">
-                            <span class="material-symbols-outlined text-[16px]">delete</span>
-                        </button>
-                    </div>
-                </div>
-                `;
-            }
-            listContainer.innerHTML = html;
-            
-        } catch (error) {
-            console.error(error);
-            listContainer.innerHTML = `<div class="p-8 text-center text-red-500 text-sm">Erro ao listar arquivos: ${error.message}</div>`;
-        }
-    }
-
-    async function deleteSupabaseFile(path) {
-        if (!confirm('Deseja realmente excluir este arquivo? Isso pode quebrar mapas que estejam usando essa URL.')) return;
-        
+    async function deleteSupabaseFile(path, folderName) {
+        if (!confirm('Deseja realmente excluir este arquivo? Isso pode quebrar camadas que usam essa URL.')) return;
         try {
             const { error } = await supabaseClient.storage.from('obras_arquivos').remove([path]);
             if (error) throw error;
-            loadSupabaseStorageFiles();
-        } catch (error) {
-            alert('Erro ao excluir: ' + error.message);
+            await loadFolderFiles(folderName || currentStorageFolder);
+        } catch (e) {
+            alert('Erro ao excluir: ' + e.message);
         }
     }
 
-    // Bind initialization
-    document.addEventListener('DOMContentLoaded', () => {
-        // We can hook into switchTab if needed, or just load on init if it doesn't hurt performance
-        // loadSupabaseStorageFiles(); // Called when opening the tab is better
-    });
-    
-    // Patch switchTab to load files when storage tab is opened
+    function showStorageToast(msg) {
+        const t = document.createElement('div');
+        t.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-sm px-5 py-3 rounded-xl shadow-xl z-[9999] flex items-center gap-2 transition-all';
+        t.innerHTML = `<span class="material-symbols-outlined text-green-400 text-[18px]">check_circle</span>${msg}`;
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 2500);
+    }
+
+    // Patch switchTab to load folders when storage tab is opened
     const originalSwitchTab = window.switchTab;
     if (typeof originalSwitchTab === 'function') {
         window.switchTab = function(tabId, btn) {
             originalSwitchTab(tabId, btn);
             if (tabId === 'storage') {
-                loadSupabaseStorageFiles();
+                loadStorageFolders();
             }
         };
     }

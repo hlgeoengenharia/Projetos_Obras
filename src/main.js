@@ -1970,6 +1970,7 @@ function downloadGeoJSON(themeId) {
 
 // --- GLOBAL GEOJSON IMPORT ---
 let pendingGlobalGeoJSON = null;
+let pending1nCsvData = {}; // { [tabId]: { tab, csvRows, csvCols, joinKeyGeoJSON, joinKeyCSV, colMapping } }
 
 document.getElementById('global-geojson-upload').addEventListener('change', function(e) {
   const file = e.target.files[0];
@@ -2026,6 +2027,7 @@ document.getElementById('global-geojson-upload').addEventListener('change', func
 function closeGlobalImportModal() {
   document.getElementById('global-import-modal').classList.add('hidden');
   pendingGlobalGeoJSON = null;
+  pending1nCsvData = {};
 }
 
 function findBestSelectOption(val, options) {
@@ -2209,6 +2211,51 @@ function renderImportFieldMapping() {
   if (formSchema && formFields.length > 0) {
       formSchema.forEach(tab => {
           if (tab.fields && tab.fields.length > 0) {
+
+              // ----- ABA 1:N: mostra CSV upload inline -----
+              if (tab.isMultiple) {
+                  const geoPropsOpts = detectedProperties.map(p => `<option value="${p}">${p}</option>`).join('');
+                  htmlContent += `
+                  <div class="mt-4 mb-2 rounded-lg border border-blue-200 dark:border-blue-800 overflow-hidden">
+                    <div class="flex items-center justify-between px-3 py-2 bg-blue-50 dark:bg-blue-900/20">
+                      <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[16px] text-blue-500">table_view</span>
+                        <span class="font-bold text-sm text-blue-700 dark:text-blue-300 uppercase tracking-wide">${tab.title || 'Aba'}</span>
+                        <span class="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-400 px-1.5 py-0.5 rounded font-bold">1:N</span>
+                      </div>
+                      <label class="flex items-center gap-1 cursor-pointer px-2.5 py-1 bg-primary/10 hover:bg-primary/20 text-primary rounded text-xs font-semibold transition-colors">
+                        <span class="material-symbols-outlined text-[14px]">upload_file</span>
+                        Carregar CSV
+                        <input type="file" accept=".csv" class="hidden" onchange="handle1nCsvUpload('${tab.id}', this.files[0])">
+                      </label>
+                    </div>
+                    <div id="1n-config-${tab.id}" class="hidden px-3 py-3 space-y-3 bg-white dark:bg-slate-900">
+                      <div class="grid grid-cols-2 gap-3">
+                        <div>
+                          <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Chave no GeoJSON</label>
+                          <select id="geokey-${tab.id}" onchange="update1nPreview('${tab.id}')" class="w-full px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-1 focus:ring-primary dark:text-white">
+                            <option value="">-- Selecione --</option>
+                            ${geoPropsOpts}
+                          </select>
+                        </div>
+                        <div>
+                          <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Coluna no CSV</label>
+                          <select id="csvkey-${tab.id}" onchange="update1nPreview('${tab.id}')" class="w-full px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-1 focus:ring-primary dark:text-white">
+                            <option value="">-- Selecione --</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Campos da Aba → Coluna do CSV</div>
+                        <div id="1n-col-mapping-${tab.id}" class="flex flex-col gap-1.5"></div>
+                      </div>
+                      <div id="1n-preview-${tab.id}" class="hidden text-xs font-medium px-3 py-2 rounded-md"></div>
+                    </div>
+                  </div>`;
+                  return; // Não renderiza dropdowns de GeoJSON para abas 1:N
+              }
+
+              // ----- ABA 1:1 normal -----
               htmlContent += `<div class="font-bold text-center text-sm text-slate-700 dark:text-slate-300 mt-4 mb-2 uppercase tracking-wide bg-slate-50 dark:bg-slate-800/50 py-1.5 rounded border border-slate-100 dark:border-slate-800">${tab.title || 'Aba'}</div>`;
               
               tab.fields.forEach(f => {
@@ -2314,7 +2361,180 @@ function renderImportFieldMapping() {
   
   // Update value mapping UI on load
   updateValueMappings();
+
+  // Oculta a seção 1:N separada (agora está inline)
+  const section1nContainer = document.getElementById('import-1n-section');
+  if (section1nContainer) section1nContainer.classList.add('hidden');
 }
+
+// --- FUNÇÕES AUXILIARES 1:N IMPORT ---
+
+window.handle1nCsvUpload = function(tabId, file) {
+    if (!file) return;
+
+    // Mostra feedback imediato antes do processamento pesado
+    const configEl = document.getElementById(`1n-config-${tabId}`);
+    const previewEl = document.getElementById(`1n-preview-${tabId}`);
+    if (configEl) configEl.classList.remove('hidden');
+    if (previewEl) {
+        previewEl.className = 'text-xs font-medium px-3 py-2 rounded-md bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
+        previewEl.textContent = '\u23f3 Lendo arquivo...';
+        previewEl.classList.remove('hidden');
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const text = e.target.result;
+
+        // Adia o processamento pesado para n\u00e3o bloquear a UI
+        setTimeout(() => {
+            // Auto-detecta separador (v\u00edrgula ou ponto-e-v\u00edrgula)
+            const firstLine = text.substring(0, text.indexOf('\n') || 500);
+            const sep = firstLine.split(';').length > firstLine.split(',').length ? ';' : ',';
+            const lines = text.split('\n').filter(l => l.trim());
+            if (lines.length < 2) { alert('CSV vazio ou sem dados.'); return; }
+
+            const cols = lines[0].split(sep).map(c => c.trim().replace(/^"|"$/g, ''));
+            const rows = lines.slice(1).map(line => {
+                const vals = line.split(sep).map(v => v.trim().replace(/^"|"$/g, ''));
+                const obj = {};
+                cols.forEach((col, i) => { obj[col] = vals[i] || ''; });
+                return obj;
+            });
+
+            pending1nCsvData[tabId] = { csvRows: rows, csvCols: cols, joinKeyCSV: '', joinKeyGeoJSON: '', colMapping: {} };
+
+            // Atualiza o select de chave do CSV com as colunas encontradas
+            const csvKeySelect = document.getElementById(`csvkey-${tabId}`);
+            if (csvKeySelect) {
+                csvKeySelect.innerHTML = '<option value="">-- Selecione --</option>' + cols.map(c => `<option value="${c}">${c}</option>`).join('');
+
+                // Tenta auto-selecionar a chave geo tamb\u00e9m
+                const geoKeySelect = document.getElementById(`geokey-${tabId}`);
+                const normCols = cols.map(c => c.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,''));
+                if (geoKeySelect) {
+                    const geoProps = Array.from(geoKeySelect.options).slice(1).map(o => o.value);
+                    for (const gp of geoProps) {
+                        const normGp = gp.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+                        const matchIdx = normCols.findIndex(nc => nc === normGp || nc.includes(normGp) || normGp.includes(nc));
+                        if (matchIdx >= 0) {
+                            geoKeySelect.value = gp;
+                            csvKeySelect.value = cols[matchIdx];
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Renderiza mapeamento de colunas e dispara preview (j\u00e1 com debounce)
+            render1nColumnMapping(tabId, cols);
+            update1nPreview(tabId);
+        }, 0);
+    };
+    reader.readAsText(file);
+};
+
+function render1nColumnMapping(tabId, csvCols) {
+    const form = allForms && document.getElementById('global-import-cadastro-type')
+        ? allForms.find(f => f.id === document.getElementById('global-import-cadastro-type').value)
+        : null;
+    if (!form) return;
+    const schema = form.schema || form.tabs;
+    if (!schema) return;
+    const tab = schema.find(t => t.id === tabId);
+    if (!tab || !tab.fields) return;
+
+    const container = document.getElementById(`1n-col-mapping-${tabId}`);
+    if (!container) return;
+
+    const normStr = s => s ? s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'') : '';
+
+    container.innerHTML = tab.fields.map(field => {
+        // Tenta auto-match
+        let bestMatch = '';
+        for (const col of csvCols) {
+            const nc = normStr(col);
+            const nl = normStr(field.label);
+            const ni = normStr(field.id);
+            if (nc === nl || nc === ni || (nc.length > 3 && (nc.includes(nl) || nl.includes(nc)))) {
+                bestMatch = col;
+                break;
+            }
+        }
+
+        const opts = `<option value="">-- Não mapear --</option>` +
+            csvCols.map(c => `<option value="${c}" ${c === bestMatch ? 'selected' : ''}>${c}</option>`).join('');
+
+        return `
+        <div class="flex items-center gap-2">
+          <span class="w-2/5 text-xs text-slate-600 dark:text-slate-400 font-medium truncate" title="${field.label}">${field.label}</span>
+          <span class="material-symbols-outlined text-slate-400 text-[14px]">arrow_forward</span>
+          <select data-field-id="${field.id}" data-tab-id="${tabId}"
+            class="flex-1 px-2 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-1 focus:ring-primary dark:text-white import-1n-col-map">
+            ${opts}
+          </select>
+        </div>`;
+    }).join('');
+}
+
+// Debounce timer para o preview 1:N
+const _preview1nTimers = {};
+
+window.update1nPreview = function(tabId) {
+    const data = pending1nCsvData[tabId];
+    if (!data || !data.csvRows.length) return;
+
+    // Salva as chaves imediatamente (sem delay)
+    const geoKey = document.getElementById(`geokey-${tabId}`)?.value || '';
+    const csvKey = document.getElementById(`csvkey-${tabId}`)?.value || '';
+    data.joinKeyGeoJSON = geoKey;
+    data.joinKeyCSV = csvKey;
+
+    const previewEl = document.getElementById(`1n-preview-${tabId}`);
+    if (!previewEl) return;
+
+    if (!geoKey || !csvKey) {
+        previewEl.className = 'text-xs font-medium px-3 py-2 rounded-md bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400';
+        previewEl.textContent = '⚠ Selecione as chaves de junção para ver o preview.';
+        previewEl.classList.remove('hidden');
+        return;
+    }
+
+    // Mostra "calculando..." imediatamente, sem travar a UI
+    previewEl.className = 'text-xs font-medium px-3 py-2 rounded-md bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
+    previewEl.textContent = '⏳ Calculando cobertura...';
+    previewEl.classList.remove('hidden');
+
+    // Debounce: cancela timer anterior e agenda novo após 400ms
+    clearTimeout(_preview1nTimers[tabId]);
+    _preview1nTimers[tabId] = setTimeout(() => {
+        // Executa fora da thread principal via setTimeout 0 para não bloquear cliques
+        setTimeout(() => {
+            const features = pendingGlobalGeoJSON ? pendingGlobalGeoJSON.features : [];
+            const totalFeatures = features.length;
+            const totalRows = data.csvRows.length;
+
+            // Pre-build Set com os valores do CSV: O(m) uma vez, lookup O(1) por feição
+            const csvKeySet = new Set(
+                data.csvRows.map(row => String(row[csvKey] || '').trim()).filter(Boolean)
+            );
+
+            let coveredFeatures = 0;
+            for (let i = 0; i < features.length; i++) {
+                const fKey = String((features[i].properties || {})[geoKey] || '').trim();
+                if (fKey && csvKeySet.has(fKey)) coveredFeatures++;
+            }
+
+            if (coveredFeatures === 0) {
+                previewEl.className = 'text-xs font-medium px-3 py-2 rounded-md bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400';
+                previewEl.innerHTML = `❌ Nenhuma correspondência encontrada. Verifique as chaves selecionadas.`;
+            } else {
+                previewEl.className = 'text-xs font-medium px-3 py-2 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400';
+                previewEl.innerHTML = `✅ ${totalRows} linhas no CSV · ${coveredFeatures} de ${totalFeatures} feições serão preenchidas`;
+            }
+        }, 0);
+    }, 400);
+};
 
 async function confirmGlobalImport() {
   if (!pendingGlobalGeoJSON) return;
@@ -2504,6 +2724,41 @@ async function confirmGlobalImport() {
     if (hiddenFields.length > 0) {
         newProps['_hiddenFields'] = hiddenFields;
     }
+
+    // --- Processar dados 1:N de CSVs vinculados ---
+    Object.keys(pending1nCsvData).forEach(tabId => {
+        const csvData = pending1nCsvData[tabId];
+        if (!csvData || !csvData.csvRows.length || !csvData.joinKeyGeoJSON || !csvData.joinKeyCSV) return;
+
+        const featureKey = String(newProps[csvData.joinKeyGeoJSON] || f.properties[csvData.joinKeyGeoJSON] || '').trim();
+        if (!featureKey) return;
+
+        // Lê o mapeamento manual de colunas dos selects no DOM
+        const colMapping = {};
+        document.querySelectorAll(`.import-1n-col-map[data-tab-id="${tabId}"]`).forEach(sel => {
+            if (sel.value) colMapping[sel.getAttribute('data-field-id')] = sel.value;
+        });
+
+        // Filtra as linhas do CSV que correspondem a esta feição
+        const matchingRows = csvData.csvRows.filter(row =>
+            String(row[csvData.joinKeyCSV] || '').trim() === featureKey
+        );
+
+        if (matchingRows.length > 0) {
+            const records = matchingRows.map(row => {
+                const record = { _created_at: new Date().toISOString() };
+                // Aplica o mapeamento manual/automático de colunas
+                Object.entries(colMapping).forEach(([fieldId, csvCol]) => {
+                    if (row[csvCol] !== undefined) {
+                        record[fieldId] = row[csvCol];
+                    }
+                });
+                return record;
+            });
+            // Armazena no formato que renderMultipleTab() já entende
+            newProps[tabId] = JSON.stringify(records);
+        }
+    });
     
     f.properties = newProps;
   });
