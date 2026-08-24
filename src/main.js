@@ -2160,19 +2160,59 @@ async function saveEditedTheme() {
 
 async function deleteTheme(themeId) {
   if (!confirm("Tem certeza que deseja excluir esta camada e todos os seus dados?")) return;
-  
+
   if (typeof supabaseClient !== 'undefined' && supabaseClient) {
       try {
-          // Delete associated features first to respect RLS/Foreign Key integrity
-          await supabaseClient.from('feicoes').delete().eq('theme_id', themeId);
+          // Exclui em lotes — uma exclusão única de dezenas de milhares de
+          // linhas de uma vez pode passar do tempo limite do banco. Lotes
+          // menores terminam bem dentro do limite, não importa o tamanho
+          // total da camada.
+          const batchSize = 1000;
+          let hasMore = true;
+          while (hasMore) {
+              const { data: batch, error: fetchErr } = await supabaseClient
+                  .from('feicoes')
+                  .select('id')
+                  .eq('theme_id', themeId)
+                  .limit(batchSize);
+
+              if (fetchErr) {
+                  alert('Erro ao excluir a camada: ' + fetchErr.message);
+                  console.error("Erro ao buscar feições para excluir:", fetchErr);
+                  return;
+              }
+              if (!batch || batch.length === 0) { hasMore = false; break; }
+
+              const { error: delErr } = await supabaseClient
+                  .from('feicoes')
+                  .delete()
+                  .in('id', batch.map(f => f.id));
+
+              if (delErr) {
+                  alert('Erro ao excluir feições da camada: ' + delErr.message);
+                  console.error("Erro ao excluir lote de feições:", delErr);
+                  return;
+              }
+              hasMore = batch.length === batchSize;
+          }
+
           // Delete theme
           const { error } = await supabaseClient.from('temas').delete().eq('id', themeId);
-          if (error) console.error("Erro ao deletar tema no Supabase:", error);
+          if (error) {
+              alert('As feições foram excluídas, mas não foi possível excluir a camada em si: ' + error.message);
+              console.error("Erro ao deletar tema no Supabase:", error);
+              return;
+          }
       } catch(e) {
+          alert('Erro ao excluir a camada: ' + e.message);
           console.error("Erro ao deletar tema no Supabase:", e);
+          return;
       }
   }
 
+  // Só mexe no estado local depois de confirmar que a exclusão no banco deu certo
+  // — antes, o card sumia da tela mesmo quando a exclusão falhava, e voltava
+  // ao atualizar a página.
   themes = themes.filter(t => t.id !== themeId);
   saveThemes();
   loadAllFeaturesToMap();
