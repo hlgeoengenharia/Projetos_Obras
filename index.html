@@ -3,6 +3,7 @@
 <html class="light" lang="pt-BR"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>GeoGestor</title>
 <script>
   (function() {
     try {
@@ -23,9 +24,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- VectorGrid for MVT (Fase 2) -->
+<script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
 <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
-<link rel="icon" href="data:,">
+<link rel="icon" type="image/png" href="assets/logo.png">
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -255,6 +258,9 @@
 <button class="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors rounded-full shrink-0" onclick="document.getElementById('side-drawer').classList.remove('-translate-x-[120%]'); document.getElementById('drawer-overlay').classList.remove('hidden')">
 <span class="material-symbols-outlined text-slate-900 dark:text-slate-50">menu</span>
 </button>
+<button class="hidden md:flex p-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors rounded-full shrink-0 tooltip tooltip-bottom" title="Voltar aos Municípios" onclick="window.location.href='home.html'">
+<span class="material-symbols-outlined text-slate-900 dark:text-slate-50">location_city</span>
+</button>
 <h1 class="text-lg font-bold tracking-tighter text-slate-900 dark:text-slate-50"></h1>
 </div>
 <div class="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 md:gap-2">
@@ -290,8 +296,12 @@
         <span class="text-[9px] font-medium tracking-wide uppercase">Ajustes</span>
     </a>
     <button onclick="document.getElementById('profile-modal').classList.remove('hidden'); document.getElementById('side-drawer').classList.add('-translate-x-[120%]'); document.getElementById('drawer-overlay').classList.add('hidden')" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 group border-l border-slate-200/50 dark:border-slate-800/50" title="Perfil do Usuário">
-        <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuCc0RYeJ85EwHW4BJ4ZRmN9WYDAnOz5EFFNO3bx5XdbDIkNCRYBBysRNyY53k3kzDdU9seuTeFmYvMXtMDCL1UbpKvFNeY23l3z4U9FCZOYErFcRImNItGPpgG_W5bVuwtWn-6WMk8SDB99zq3Dt-MC71VCZyEVd4TqkBE32-OMGnSHpid3s70wq18nEDKvtj8p1j-2l4IrBibDsMAPK8QH6puGnFKJNt-aiAhAmbQzoqrnGeO6vWoOnEZLChi1lnkv29X777poaFA_" alt="Avatar" class="w-[22px] h-[22px] rounded-full border border-slate-300 dark:border-slate-600 group-hover:border-primary dark:group-hover:border-sky-400 transition-colors object-cover">
+        <img src="assets/logo.png" alt="Avatar" class="w-[22px] h-[22px] rounded-full border border-slate-300 dark:border-slate-600 group-hover:border-primary dark:group-hover:border-sky-400 transition-colors object-cover">
         <span class="text-[9px] font-medium tracking-wide uppercase">Perfil</span>
+    </button>
+    <button onclick="window.location.href='home.html'" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 border-l border-slate-200/50 dark:border-slate-800/50" title="Voltar aos Municípios">
+        <span class="material-symbols-outlined text-[22px]">location_city</span>
+        <span class="text-[9px] font-medium tracking-wide uppercase">Município</span>
     </button>
     <button onclick="openImportOptionsModal()" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 border-l border-slate-200/50 dark:border-slate-800/50">
         <span class="material-symbols-outlined text-[22px]">upload_file</span>
@@ -732,7 +742,7 @@
     <div class="px-4 py-3 border-b border-slate-200/50 dark:border-white/10 flex justify-between items-center cursor-move touch-none" id="feature-info-header">
         <div id="feature-actions-container" class="flex items-center rounded-lg overflow-hidden border border-slate-300/50 dark:border-white/10 shadow-sm bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
 
-            <button onclick="editFeatureGeometry()" class="flex items-center justify-center gap-2 px-3 py-1.5 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-800 dark:text-slate-200 font-medium text-sm transition-all tooltip" title="Ajustar no Mapa">
+            <button id="btn-edit-feature-geometry" onclick="editFeatureGeometry()" class="flex items-center justify-center gap-2 px-3 py-1.5 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-800 dark:text-slate-200 font-medium text-sm transition-all tooltip" title="Ajustar no Mapa">
                 <span class="material-symbols-outlined text-[18px]">edit_location_alt</span>
                 Ajustar Mapa
             </button>
@@ -743,7 +753,7 @@
         </div>
         <div class="flex items-center gap-2 ml-2">
             <div class="flex items-center rounded-lg overflow-hidden border border-slate-300/50 dark:border-white/10 shadow-sm bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
-                <button onclick="deleteActiveFeature()" class="p-1.5 px-2 hover:bg-red-50/50 active:bg-red-100/50 dark:hover:bg-red-900/40 dark:active:bg-red-900/60 text-red-500 transition-all tooltip" title="Excluir Feição">
+                <button id="btn-delete-feature" onclick="deleteActiveFeature()" class="p-1.5 px-2 hover:bg-red-50/50 active:bg-red-100/50 dark:hover:bg-red-900/40 dark:active:bg-red-900/60 text-red-500 transition-all tooltip" title="Excluir Feição">
                     <span class="material-symbols-outlined text-[18px]">delete</span>
                 </button>
             </div>
@@ -1090,9 +1100,10 @@
         <!-- Body -->
         <div class="p-6 overflow-y-auto">
             <div class="flex flex-col items-center mb-6">
-                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuCc0RYeJ85EwHW4BJ4ZRmN9WYDAnOz5EFFNO3bx5XdbDIkNCRYBBysRNyY53k3kzDdU9seuTeFmYvMXtMDCL1UbpKvFNeY23l3z4U9FCZOYErFcRImNItGPpgG_W5bVuwtWn-6WMk8SDB99zq3Dt-MC71VCZyEVd4TqkBE32-OMGnSHpid3s70wq18nEDKvtj8p1j-2l4IrBibDsMAPK8QH6puGnFKJNt-aiAhAmbQzoqrnGeO6vWoOnEZLChi1lnkv29X777poaFA_" alt="Avatar" class="w-20 h-20 rounded-full border-4 border-slate-100 dark:border-slate-800 shadow-sm object-cover mb-3">
-                <h4 class="text-base font-bold text-slate-800 dark:text-white">Usuário Logado</h4>
-                <p class="text-sm text-slate-500 dark:text-slate-400">Administrador</p>
+                <img src="assets/logo.png" alt="Avatar" class="w-20 h-20 rounded-full border-4 border-slate-100 dark:border-slate-800 shadow-sm object-cover mb-3">
+                <h4 id="profile-user-name" class="text-base font-bold text-slate-800 dark:text-white">Usuário Logado</h4>
+                <p id="profile-user-role" class="text-sm text-slate-500 dark:text-slate-400">—</p>
+                <p id="profile-user-municipio" class="text-xs text-primary font-semibold mt-0.5"></p>
             </div>
             
             <div class="border-t border-slate-200 dark:border-slate-800 pt-5">
@@ -1116,9 +1127,17 @@
         </div>
         
         <!-- Footer -->
-        <div class="px-5 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 flex justify-end">
-            <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="px-5 py-2 text-sm font-medium bg-primary text-white hover:bg-primary/90 rounded-lg transition-colors shadow-sm w-full">
-                Pronto
+        <div class="px-5 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 flex flex-col gap-2">
+            <div class="flex gap-2">
+                <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="flex-1 px-5 py-2 text-sm font-medium bg-primary text-white hover:bg-primary/90 rounded-lg transition-colors shadow-sm">
+                    Pronto
+                </button>
+                <button onclick="window.handleLogout()" class="px-4 py-2 text-sm font-medium bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[18px]">logout</span> Sair
+                </button>
+            </div>
+            <button onclick="window.location.href='home.html'" class="w-full px-4 py-2 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-primary transition-colors flex items-center justify-center gap-1.5">
+                <span class="material-symbols-outlined text-[16px]">swap_horiz</span> Trocar Município
             </button>
         </div>
     </div>

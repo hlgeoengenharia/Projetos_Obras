@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html class="light" lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>Início — GeoGestor</title>
+<script>
+  (function() {
+    try {
+      var savedTheme = localStorage.getItem('constructive_theme') || 'Claro';
+      document.documentElement.classList.remove('light', 'dark', 'neon');
+      if (savedTheme === 'Azul neon') {
+        document.documentElement.classList.add('neon', 'dark');
+      } else if (savedTheme === 'Escuro' || (savedTheme === 'Automático' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.add('light');
+      }
+    } catch(e) {}
+  })();
+</script>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link rel="icon" type="image/png" href="assets/logo.png">
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: { primary: "#0ea5e9", "on-primary": "#ffffff" },
+        fontFamily: { sans: ["Inter", "sans-serif"] }
+      }
+    }
+  }
+</script>
+<style>
+  body { background-color: #f8fafc; color: #334155; }
+  html.dark body { background-color: #0f172a; color: #e2e8f0; }
+  .card {
+    background-color: #ffffff;
+    box-shadow: 4px 4px 12px rgba(209, 217, 230, 0.4), -4px -4px 12px rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(226, 232, 240, 0.6);
+  }
+  html.dark .card { background-color: #1e293b; border-color: rgba(51, 65, 85, 0.6); box-shadow: none; }
+  .municipio-card { transition: transform .15s ease, box-shadow .15s ease; }
+  .municipio-card:hover { transform: translateY(-2px); }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .tab-btn { transition: all 0.2s ease; border-bottom: 2px solid transparent; }
+  .tab-btn.active {
+    background-color: rgba(14, 165, 233, 0.08);
+    color: #0ea5e9;
+    border-bottom: 2px solid #0ea5e9;
+  }
+  html.dark .tab-btn.active {
+    background-color: rgba(56, 189, 248, 0.08);
+    color: #38bdf8;
+    border-bottom: 2px solid #38bdf8;
+  }
+</style>
+</head>
+<body class="font-sans min-h-screen">
+
+<header class="h-16 bg-white/70 dark:bg-[#070b14]/75 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 shadow-sm flex items-center justify-between px-4 md:px-8">
+  <div class="flex items-center gap-3">
+    <img src="assets/logo.png" alt="GeoGestor" class="w-9 h-9 rounded-lg object-cover">
+    <span class="font-black tracking-widest uppercase text-slate-800 dark:text-slate-100 text-sm">GeoGestor</span>
+  </div>
+  <div class="flex items-center gap-3">
+    <span id="home-user-name" class="text-xs text-slate-500 dark:text-slate-400"></span>
+    <button onclick="window.handleLogout()" class="flex items-center gap-1.5 text-xs font-medium bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 px-3 py-1.5 rounded-lg transition-colors">
+      <span class="material-symbols-outlined text-[16px]">logout</span> Sair
+    </button>
+  </div>
+</header>
+
+<!-- Abas (só aparecem pra quem tem mais de uma coisa pra ver — hoje, super_admin) -->
+<div id="home-tabs" class="hidden bg-white/50 dark:bg-[#070b14]/50 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 items-center justify-center gap-1">
+  <button class="tab-btn active h-16 px-6 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('municipios-section', this)" title="Municípios">
+    <span class="material-symbols-outlined text-[20px]">location_city</span>
+    <span class="text-[9px] font-medium uppercase tracking-wide">Municípios</span>
+  </button>
+  <button id="tab-btn-entidades" class="hidden tab-btn h-16 px-6 flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('entidades-section', this)" title="Entidades Padrão">
+    <span class="material-symbols-outlined text-[20px]">domain</span>
+    <span class="text-[9px] font-medium uppercase tracking-wide">Entidades</span>
+  </button>
+  <button id="tab-btn-pendentes" class="hidden relative tab-btn h-16 px-6 flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('pending-section', this)" title="Solicitações">
+    <span class="material-symbols-outlined text-[20px]">pending_actions</span>
+    <span class="text-[9px] font-medium uppercase tracking-wide">Solicitações</span>
+    <span id="pending-badge" class="hidden absolute top-2 right-3 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center"></span>
+  </button>
+</div>
+
+<main class="max-w-5xl mx-auto px-4 md:px-8 py-8">
+
+  <!-- Solicitações pendentes (só super_admin) -->
+  <section id="pending-section" class="tab-content">
+    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Solicitações Pendentes</h2>
+    <div id="pending-list" class="flex flex-col gap-2"></div>
+  </section>
+
+  <!-- Seletor de município -->
+  <section id="municipios-section" class="tab-content">
+    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Selecione o Município</h2>
+    <div id="municipios-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"></div>
+  </section>
+
+  <!-- Entidades padrão do cadastro (só super_admin) -->
+  <section id="entidades-section" class="tab-content">
+    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Entidades Padrão (lista do cadastro)</h2>
+    <div id="entidades-list" class="flex flex-col gap-2 mb-3"></div>
+    <div class="card rounded-xl p-4 flex flex-col sm:flex-row gap-2">
+      <input id="nova-entidade-nome" type="text" placeholder="Nome completo" class="flex-1 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-2">
+      <input id="nova-entidade-sigla" type="text" placeholder="Sigla (opcional)" class="w-full sm:w-32 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-2">
+      <select id="nova-entidade-tipo" class="text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-2">
+        <option value="municipal">Municipal</option>
+        <option value="externo" selected>Externo</option>
+        <option value="outro">Outro</option>
+      </select>
+      <button onclick="adicionarEntidade()" class="text-xs bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 shrink-0">Adicionar</button>
+    </div>
+  </section>
+
+  <!-- Sem acesso aprovado ainda -->
+  <section id="empty-section" class="hidden text-center py-16">
+    <span class="material-symbols-outlined text-[48px] text-slate-300 dark:text-slate-600">hourglass_empty</span>
+    <p class="mt-3 text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto">Sua solicitação de acesso está em análise. Assim que for aprovada, o município aparecerá aqui.</p>
+  </section>
+
+  <div id="loading-section" class="text-center py-16 text-sm text-slate-400 italic">Carregando...</div>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+<script>
+const PAPEL_LABELS = { admin: 'Administrador', editor: 'Editor', visualizador: 'Visualizador', externo: 'Acesso Externo' };
+let homeUserProfile = null;
+
+function switchHomeTab(sectionId, btn) {
+    document.querySelectorAll('#home-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('main .tab-content').forEach(s => s.classList.remove('active'));
+    document.getElementById(sectionId).classList.add('active');
+    btn.classList.add('active');
+}
+window.switchHomeTab = switchHomeTab;
+
+window.handleLogout = async function() {
+    if (supabaseClient) {
+        try { await supabaseClient.auth.signOut(); } catch (e) {}
+    }
+    window.location.href = 'login.html';
+};
+
+function selectMunicipio(id, nome) {
+    sessionStorage.setItem('municipio_ativo', id);
+    sessionStorage.setItem('municipio_ativo_nome', nome);
+    window.location.href = 'index.html';
+}
+
+async function decidirSolicitacao(membroId, aprovar, papelSelectId) {
+    const papel = aprovar ? document.getElementById(papelSelectId).value : 'visualizador';
+    const { error } = await supabaseClient.from('municipio_membros').update({
+        status: aprovar ? 'aprovado' : 'rejeitado',
+        papel: papel,
+        decidido_em: new Date().toISOString(),
+        decidido_por: (await supabaseClient.auth.getSession()).data.session.user.id
+    }).eq('id', membroId);
+
+    if (error) {
+        alert('Erro ao processar solicitação: ' + error.message);
+        return;
+    }
+    init();
+}
+window.decidirSolicitacao = decidirSolicitacao;
+
+const TIPO_LABELS = { municipal: 'Municipal', externo: 'Externo', outro: 'Outro' };
+
+async function loadEntidadesSection() {
+    const { data, error } = await supabaseClient.from('entidades_padrao').select('*').order('created_at');
+    const list = document.getElementById('entidades-list');
+    if (error) {
+        list.innerHTML = '<div class="text-xs text-red-500">Erro ao carregar entidades.</div>';
+        document.getElementById('entidades-section').classList.remove('hidden');
+        return;
+    }
+    list.innerHTML = (data || []).map(e => {
+        const tipoOptions = ['municipal', 'externo', 'outro'].map(t =>
+            `<option value="${t}" ${e.tipo === t ? 'selected' : ''}>${TIPO_LABELS[t]}</option>`
+        ).join('');
+        return `
+        <div class="card rounded-xl p-3 flex flex-col sm:flex-row sm:items-center gap-2" data-entidade-id="${e.id}">
+            <input class="entidade-nome flex-1 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5" value="${(e.nome || '').replace(/"/g, '&quot;')}">
+            <input class="entidade-sigla w-full sm:w-28 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5" value="${(e.sigla || '').replace(/"/g, '&quot;')}" placeholder="Sigla">
+            <select class="entidade-tipo text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5">${tipoOptions}</select>
+            <label class="flex items-center gap-1 text-xs text-slate-500 shrink-0">
+                <input type="checkbox" class="entidade-ativo" ${e.ativo ? 'checked' : ''}> Ativo
+            </label>
+            <button onclick="salvarEntidade('${e.id}')" class="text-xs bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary/90 shrink-0">Salvar</button>
+        </div>`;
+    }).join('') || '<div class="text-xs text-slate-400 italic py-2">Nenhuma entidade cadastrada ainda.</div>';
+    document.getElementById('entidades-section').classList.remove('hidden');
+}
+
+async function salvarEntidade(id) {
+    const card = document.querySelector(`[data-entidade-id="${id}"]`);
+    if (!card) return;
+    const { error } = await supabaseClient.from('entidades_padrao').update({
+        nome: card.querySelector('.entidade-nome').value.trim(),
+        sigla: card.querySelector('.entidade-sigla').value.trim() || null,
+        tipo: card.querySelector('.entidade-tipo').value,
+        ativo: card.querySelector('.entidade-ativo').checked
+    }).eq('id', id);
+    if (error) {
+        alert('Erro ao salvar entidade: ' + error.message);
+        return;
+    }
+    loadEntidadesSection();
+}
+window.salvarEntidade = salvarEntidade;
+
+async function adicionarEntidade() {
+    const nome = document.getElementById('nova-entidade-nome').value.trim();
+    if (!nome) { alert('Informe o nome da entidade.'); return; }
+    const sigla = document.getElementById('nova-entidade-sigla').value.trim();
+    const tipo = document.getElementById('nova-entidade-tipo').value;
+
+    const { error } = await supabaseClient.from('entidades_padrao').insert({
+        nome, sigla: sigla || null, tipo
+    });
+    if (error) {
+        alert('Erro ao adicionar entidade: ' + error.message);
+        return;
+    }
+    document.getElementById('nova-entidade-nome').value = '';
+    document.getElementById('nova-entidade-sigla').value = '';
+    loadEntidadesSection();
+}
+window.adicionarEntidade = adicionarEntidade;
+
+async function init() {
+    if (!supabaseClient) return;
+
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    if (!sessionData || !sessionData.session) {
+        window.location.href = 'login.html';
+        return;
+    }
+    const userId = sessionData.session.user.id;
+
+    const { data: profile } = await supabaseClient.from('profiles').select('*').eq('id', userId).single();
+    homeUserProfile = profile || { nome: sessionData.session.user.email, super_admin: false };
+    document.getElementById('home-user-name').textContent = homeUserProfile.nome || homeUserProfile.email || '';
+
+    document.getElementById('loading-section').classList.add('hidden');
+    document.getElementById('empty-section').classList.add('hidden');
+
+    // --- Solicitações pendentes + Entidades (só super_admin, viram abas) ---
+    if (homeUserProfile.super_admin) {
+        document.getElementById('home-tabs').classList.remove('hidden');
+        document.getElementById('home-tabs').classList.add('flex');
+        document.getElementById('tab-btn-entidades').classList.remove('hidden');
+        document.getElementById('tab-btn-entidades').classList.add('flex');
+        document.getElementById('tab-btn-pendentes').classList.remove('hidden');
+        document.getElementById('tab-btn-pendentes').classList.add('flex');
+
+        // profiles!user_id desambigua: municipio_membros tem duas FKs pra
+        // profiles (user_id e decidido_por) — sem isso o Supabase recusa a
+        // consulta por ambiguidade (e o erro passava batido antes, sem log).
+        const { data: pendentes, error: pendentesError } = await supabaseClient
+            .from('municipio_membros')
+            .select('id, entidade, cargo, solicitado_em, profiles!user_id(nome, email), municipios(nome)')
+            .eq('status', 'pendente')
+            .order('solicitado_em', { ascending: true });
+        if (pendentesError) console.error('Erro ao buscar solicitações pendentes:', pendentesError);
+
+        const badge = document.getElementById('pending-badge');
+        if (pendentes && pendentes.length > 0) {
+            badge.textContent = pendentes.length;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+
+        const list = document.getElementById('pending-list');
+        list.innerHTML = (pendentes && pendentes.length > 0) ? pendentes.map(p => {
+            const selectId = 'papel-' + p.id;
+            const papelOptions = ['visualizador', 'editor', 'admin', 'externo'].map(v =>
+                `<option value="${v}">${PAPEL_LABELS[v]}</option>`
+            ).join('');
+            return `
+            <div class="card rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                    <div class="text-sm font-bold text-slate-800 dark:text-slate-100">${(p.profiles && p.profiles.nome) || '(sem nome)'}</div>
+                    <div class="text-xs text-slate-500">${(p.profiles && p.profiles.email) || ''} · ${p.entidade || '-'} · ${p.cargo || '-'}</div>
+                    <div class="text-xs text-primary mt-0.5">Município: ${(p.municipios && p.municipios.nome) || '-'}</div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <select id="${selectId}" class="text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5">
+                        ${papelOptions}
+                    </select>
+                    <button onclick="decidirSolicitacao('${p.id}', true, '${selectId}')" class="text-xs bg-emerald-500 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-600">Aprovar</button>
+                    <button onclick="decidirSolicitacao('${p.id}', false, '${selectId}')" class="text-xs bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Rejeitar</button>
+                </div>
+            </div>`;
+        }).join('') : '<div class="text-xs text-slate-400 italic py-2">Nenhuma solicitação pendente.</div>';
+
+        await loadEntidadesSection();
+    }
+
+    // --- Grade de municípios (aba padrão, sempre ativa) ---
+    let municipiosParaMostrar = [];
+    if (homeUserProfile.super_admin) {
+        const { data: todos } = await supabaseClient.from('municipios').select('id, nome, uf').eq('ativo', true).order('nome');
+        municipiosParaMostrar = (todos || []).map(m => ({ id: m.id, nome: m.nome, uf: m.uf, papel: 'admin' }));
+    } else {
+        const { data: aprovados } = await supabaseClient
+            .from('municipio_membros')
+            .select('papel, municipios(id, nome, uf)')
+            .eq('user_id', userId)
+            .eq('status', 'aprovado');
+        municipiosParaMostrar = (aprovados || [])
+            .filter(m => m.municipios)
+            .map(m => ({ id: m.municipios.id, nome: m.municipios.nome, uf: m.municipios.uf, papel: m.papel }));
+    }
+
+    if (municipiosParaMostrar.length > 0) {
+        const grid = document.getElementById('municipios-grid');
+        grid.innerHTML = municipiosParaMostrar.map(m => `
+            <button onclick="selectMunicipio('${m.id}', '${(m.nome || '').replace(/'/g, "\\'")}')" class="municipio-card card rounded-xl p-5 text-left flex flex-col gap-2">
+                <span class="material-symbols-outlined text-primary text-[28px]">location_city</span>
+                <span class="text-sm font-bold text-slate-800 dark:text-slate-100">${m.nome}${m.uf ? ' - ' + m.uf : ''}</span>
+                <span class="text-[10px] uppercase tracking-wider text-slate-400">${PAPEL_LABELS[m.papel] || m.papel}</span>
+            </button>
+        `).join('');
+        document.getElementById('municipios-section').classList.add('active');
+    } else if (homeUserProfile.super_admin) {
+        document.getElementById('municipios-grid').innerHTML = '<div class="text-xs text-slate-400 italic py-2">Nenhum município cadastrado ainda.</div>';
+        document.getElementById('municipios-section').classList.add('active');
+    } else {
+        document.getElementById('empty-section').classList.remove('hidden');
+    }
+}
+
+init();
+</script>
+</body>
+</html>

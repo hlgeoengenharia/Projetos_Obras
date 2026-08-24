@@ -20,7 +20,9 @@ let allForms = [];
 async function fetchDynamicForm() {
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         try {
-            const { data, error } = await supabaseClient.from('forms').select('*').order('created_at', { ascending: false });
+            let formsQuery = supabaseClient.from('forms').select('*').order('created_at', { ascending: false });
+            if (activeMunicipioId) formsQuery = formsQuery.eq('municipio_id', activeMunicipioId);
+            const { data, error } = await formsQuery;
             if (data) {
                 allForms = data.map(row => {
                     let tabs = row.schema;
@@ -68,7 +70,9 @@ function populateFormSelects() {
         }
     });
 }
-fetchDynamicForm();
+// Chamada mais abaixo, dentro do DOMContentLoaded após ensureAuthenticated()
+// — precisa do município ativo (sessionStorage) pra filtrar os formulários
+// certos, e isso só existe depois do login confirmado.
 
 function getFeaturePropertyValue(theme, feature, requestedKey) {
    if (!requestedKey) return undefined;
@@ -129,6 +133,7 @@ let baseLayers = {};
 
 // --- DADOS E LOCALSTORAGE ---
 let isLoadingThemes = false; // Evita recarregamentos simultâneos
+const themesFeaturesLoaded = new Set(); // Controle de lazy loading por camada
 
 async function loadThemes() {
   if (isLoadingThemes) {
@@ -139,38 +144,14 @@ async function loadThemes() {
   try {
   if (typeof supabaseClient !== 'undefined' && supabaseClient) {
       try {
-          const { data: dbTemas, error: errTemas } = await supabaseClient.from('temas').select('*');
+          let temasQuery = supabaseClient.from('temas').select('*');
+          if (activeMunicipioId) temasQuery = temasQuery.eq('municipio_id', activeMunicipioId);
+          const { data: dbTemas, error: errTemas } = await temasQuery;
           if (errTemas) console.error("Erro ao carregar temas:", errTemas);
 
-          let dbFeicoes = [];
-          
-          // Busca 100% sequencial para respeitar o timeout do plano gratuito do Supabase
-          const fetchStep = 1000;
-          let fetchStart = 0;
-          let fetchHasMore = true;
-          
-          while (fetchHasMore) {
-              const { data: chunk, error: chunkErr } = await supabaseClient
-                  .from('feicoes')
-                  .select('*')
-                  .range(fetchStart, fetchStart + fetchStep - 1);
-              
-              if (chunkErr) {
-                  console.error("Erro ao carregar lote de feições:", chunkErr);
-                  break; // Para de tentar em caso de erro
-              }
-              
-              if (chunk && chunk.length > 0) {
-                  dbFeicoes.push(...chunk);
-                  if (chunk.length < fetchStep) {
-                      fetchHasMore = false; // Último lote
-                  } else {
-                      fetchStart += fetchStep;
-                  }
-              } else {
-                  fetchHasMore = false;
-              }
-          }
+          // Geometria e propriedades NÃO são mais buscadas aqui — cada tema
+          // carrega tudo de uma vez (ver loadThemeProperties), sob demanda,
+          // só quando fica visível. Evita baixar temas desligados à toa.
 
           // Automatic migration check
           const savedLocal = localStorage.getItem('constructive_themes');
@@ -186,7 +167,8 @@ async function loadThemes() {
                           cor: t.color || '#051125',
                           icone: t.icon || 'map',
                           tipo_geometria: t.geometryType || 'Polygon',
-                          tipo_cadastro: t.formId || 'padrao'
+                          tipo_cadastro: t.formId || 'padrao',
+                          municipio_id: activeMunicipioId
                       }).select();
                       
                       if (insertTErr) {
@@ -244,18 +226,13 @@ async function loadThemes() {
                       disp1Active: tMeta.disp1Active !== false,
                       disp2Active: tMeta.disp2Active !== false,
                       customIcon: tMeta.customIcon || '',
+                      // Por padrão as camadas começam DESLIGADAS — o usuário liga
+                      // sob demanda (ver toggleThemeVisibility). Se o usuário já
+                      // escolheu um estado antes, respeita o que foi salvo.
+                      visible: tMeta.visible !== undefined ? tMeta.visible : false,
+                      _geometryLoaded: false,
                       features: []
                   };
-                  if (dbFeicoes) {
-                      const fcs = dbFeicoes.filter(f => f.theme_id === t.id);
-                      fcs.forEach(fc => {
-                          theme.features.push({
-                              type: "Feature",
-                              properties: { ...fc.propriedades, themeId: t.id, id_banco: fc.id },
-                              geometry: fc.geometria
-                          });
-                      });
-                  }
                   themes.push(theme);
               });
           }
@@ -283,24 +260,63 @@ async function loadThemes() {
   }
 }
 
+// Acima disso, a própria criação dos objetos Leaflet trava a aba do
+// navegador — o mapa só renderiza até esse tanto de feições por tema de
+// uma vez; passando disso, pede pra aproximar o zoom (ver loadAllFeaturesToMap).
+const MAX_FEATURES_PER_VIEW = 1500;
+
+// Roda uma lista de funções que retornam Promise em lotes (não tudo de uma
+// vez) — o pooler de conexão do plano gratuito do Supabase rejeita com 500
+// quando chegam muitas requisições simultâneas do mesmo cliente. Páginas
+// "profundas" (offset alto) também são mais sujeitas a timeout no Postgres
+// (OFFSET grande custa mais), então cada tarefa tenta de novo antes de desistir.
+const PAGE_FETCH_CONCURRENCY = 4;
+async function runWithRetry(fn, maxRetries) {
+    let last;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        last = await fn();
+        if (!last.error) return last;
+        if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 600 * (attempt + 1)));
+        }
+    }
+    return last; // esgotou as tentativas — devolve o erro da última pra quem chamou decidir
+}
+async function runWithConcurrencyLimit(taskFns, concurrency, maxRetries = 2) {
+    const results = [];
+    for (let i = 0; i < taskFns.length; i += concurrency) {
+        const batch = taskFns.slice(i, i + concurrency).map(fn => runWithRetry(fn, maxRetries));
+        results.push(...await Promise.all(batch));
+    }
+    return results;
+}
+
+// Calcula o bounding box [minLng, minLat, maxLng, maxLat] de uma geometria
+// GeoJSON — usado para decidir, localmente e sem rede, o que está dentro da
+// área visível do mapa ao navegar (ver loadAllFeaturesToMap).
+function computeGeoJSONBbox(geometry) {
+    if (!geometry || !geometry.coordinates) return null;
+    let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+    (function walk(coords) {
+        if (typeof coords[0] === 'number') {
+            const lng = coords[0], lat = coords[1];
+            if (lng < minLng) minLng = lng;
+            if (lng > maxLng) maxLng = lng;
+            if (lat < minLat) minLat = lat;
+            if (lat > maxLat) maxLat = lat;
+        } else {
+            coords.forEach(walk);
+        }
+    })(geometry.coordinates);
+    if (!isFinite(minLng)) return null;
+    return [minLng, minLat, maxLng, maxLat];
+}
+
 function saveThemes() {
-  try {
-      localStorage.setItem('constructive_themes', JSON.stringify(themes));
-  } catch (e) {
-      console.warn("Storage quota exceeded. Salvando apenas os metadados dos temas sem as feições para poupar espaço...", e);
-      const strippedThemes = themes.map(t => {
-          const { features, ...rest } = t;
-          return { ...rest, features: [] };
-      });
-      try {
-          localStorage.setItem('constructive_themes', JSON.stringify(strippedThemes));
-      } catch (err) {
-          console.error("Não foi possível salvar temas nem sem as feições:", err);
-      }
-  }
-  
+  // Salva APENAS metadados dos temas — feições vivem no Supabase, nunca no localStorage
+  // Isso evita o erro de quota (60MB tentando ser salvo no limite de 5MB)
   const meta = {};
-  themes.forEach(t => {
+  const themeMeta = themes.map(t => {
       meta[t.id] = {
           opacity: t.opacity,
           weight: t.weight,
@@ -310,10 +326,29 @@ function saveThemes() {
           mainTitle: t.mainTitle,
           disp1Active: t.disp1Active,
           disp2Active: t.disp2Active,
-          customIcon: t.customIcon
+          customIcon: t.customIcon,
+          visible: t.visible
+      };
+      return {
+          id: t.id,
+          name: t.name,
+          color: t.color,
+          icon: t.icon,
+          geometryType: t.geometryType,
+          cadastroType: t.cadastroType,
+          formId: t.formId,
+          visible: t.visible,
+          features: [] // Nunca salva feicões no localStorage
       };
   });
-  localStorage.setItem('constructive_themes_meta', JSON.stringify(meta));
+
+  try {
+      localStorage.setItem('constructive_themes_meta', JSON.stringify(meta));
+      localStorage.setItem('constructive_themes', JSON.stringify(themeMeta));
+  } catch(e) {
+      // Mesmo sem feicões pode falhar se houver muitos temas — silencia
+      console.warn('[saveThemes] Não foi possível salvar metadados:', e.message);
+  }
 }
 
 function showWarningToast(message) {
@@ -348,7 +383,7 @@ function initMap() {
     zoomControl: false, // We use our custom zoom buttons
     maxZoom: 24,
     preferCanvas: true // Fixes html2canvas vector offset issues
-  }).setView(cabedeloCenter, 13);
+  }).setView(cabedeloCenter, 16);
 
   // Define Base Layers
   baseLayers['Mapa'] = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -508,7 +543,7 @@ function initMap() {
         }
       }
       
-      layer.on('click', function(e) {
+      layer.on('click', async function(e) {
         if (window.isSelectingStreetViewCoordinate) {
             return; // bubble to map click
         }
@@ -524,6 +559,11 @@ function initMap() {
         }
 
         L.DomEvent.stopPropagation(e);
+
+        // Lazy load: busca propriedades completas se ainda não foram carregadas
+        if (!feature.properties._propertiesLoaded && feature.properties.id_banco) {
+            await fetchFeaturePropertiesIfNeeded(layer);
+        }
 
         const fid = feature.properties._tempId;
         highlightFeature(fid);
@@ -580,8 +620,30 @@ function initMap() {
     updateLabelsVisibility();
   });
 
-  loadThemes().then(() => {
-    renderThemes();
+  // Re-renderiza (sem rede — só filtra localmente o que já está em memória)
+  // conforme o usuário navega, pra manter o limite de MAX_FEATURES_PER_VIEW
+  // por tema mesmo em áreas muito densas. Nunca faz isso durante desenho/edição
+  // de geometria: reconstruir geojsonLayer troca os objetos Leaflet por
+  // instâncias novas e derruba o estado de edição do Geoman (vértices somem).
+  map.on('moveend', function() {
+      const drawingToolbar = document.getElementById('drawing-toolbar');
+      const editToolbar = document.getElementById('geometry-edit-toolbar');
+      const isDrawing = drawingToolbar && !drawingToolbar.classList.contains('hidden');
+      const isEditingGeom = editToolbar && !editToolbar.classList.contains('hidden');
+      if (isDrawing || isEditingGeom) return;
+      loadAllFeaturesToMap();
+  });
+
+  loadThemes().then(async () => {
+    renderThemes(); // mostra os cards já — a contagem preenche conforme carrega
+    // Carrega TODOS os temas (não só os visíveis): a contagem de registros e
+    // a lista/filtro precisam funcionar mesmo com a camada desligada no mapa
+    // — só a RENDERIZAÇÃO no mapa respeita a visibilidade (loadAllFeaturesToMap).
+    // Sequencial entre temas (cada um já pagina internamente em paralelo) —
+    // evita somar concorrência demais e estourar o pooler do plano gratuito.
+    for (const t of themes) {
+        await loadThemeProperties(t.id);
+    }
     loadAllFeaturesToMap();
   });
   
@@ -601,32 +663,33 @@ function updateLabelsVisibility() {
         if (tooltipPane) tooltipPane.style.display = '';
     }
 
-    // Dynamic per-polygon logic: hide label if polygon pixel bounding box is too small
+    // Esconde o rótulo se ele não couber dentro do polígono na tela — mede o
+    // tamanho real do elemento (DOM), não uma estimativa por caractere, e
+    // compara largura E altura (antes só checava largura).
     geojsonLayer.eachLayer(layer => {
         if (!layer.getTooltip || !layer.getTooltip()) return;
-        
+
         // Only apply to polygons
-        if (!layer.getBounds) return; 
-        
+        if (!layer.getBounds) return;
+
         const tooltipEl = layer.getTooltip()._container;
         if (!tooltipEl) return;
-        
+
         const bounds = layer.getBounds();
         const nw = map.latLngToLayerPoint(bounds.getNorthWest());
         const se = map.latLngToLayerPoint(bounds.getSouthEast());
-        
+
         const pxWidth = Math.abs(se.x - nw.x);
-        
-        // Rough estimate: ~5.5px per character + some margin
-        // To be safe, we can measure the text length or just assume ~6px per char
-        const text = tooltipEl.innerText || tooltipEl.textContent;
-        const estimatedTextWidth = text.length * 6;
-        
-        if (pxWidth < estimatedTextWidth) {
-            tooltipEl.style.opacity = '0';
-        } else {
-            tooltipEl.style.opacity = '1';
-        }
+        const pxHeight = Math.abs(se.y - nw.y);
+
+        // offsetWidth/Height só reflete o tamanho real com o elemento visível
+        tooltipEl.style.opacity = '1';
+        const labelWidth = tooltipEl.offsetWidth;
+        const labelHeight = tooltipEl.offsetHeight;
+
+        const margin = 4;
+        const fits = (labelWidth + margin) <= pxWidth && (labelHeight + margin) <= pxHeight;
+        tooltipEl.style.opacity = fits ? '1' : '0';
     });
 }
 
@@ -635,21 +698,73 @@ function updateLabelsVisibility() {
 
 
 function loadAllFeaturesToMap() {
+  // fetchDynamicForm() dispara no carregamento do script, antes do mapa
+  // existir — com a verificação de login adicionando esperas assíncronas
+  // antes de initMap(), essa chamada agora pode chegar primeiro.
+  if (!geojsonLayer) return;
+
   // Guardar o ID temporário ou ID do banco da feição selecionada no momento
   const activeTempId = activeFeatureLayer && activeFeatureLayer.feature && activeFeatureLayer.feature.properties && activeFeatureLayer.feature.properties._tempId;
   const activeDbId = activeFeatureLayer && activeFeatureLayer.feature && activeFeatureLayer.feature.properties && activeFeatureLayer.feature.properties.id_banco;
 
   geojsonLayer.clearLayers();
-  
+
+  // Filtro local (sem rede): se um tema tem mais feições do que o razoável
+  // pra desenhar de uma vez, só renderiza as que caem na área visível atual
+  // — e se mesmo assim passar do limite, não desenha nada e avisa pra dar
+  // zoom, em vez de travar o navegador criando milhares de camadas Leaflet.
+  const bounds = map ? map.getBounds() : null;
   const allFeatures = [];
   themes.slice().reverse().forEach(theme => {
     if (theme.visible !== false) {
-      if (theme.features && theme.features.length > 0) {
-        allFeatures.push(...theme.features);
+      const withGeom = (theme.features || []).filter(f => f.geometry);
+      let toRender = withGeom;
+
+      if (theme._activeFilterFids) {
+          // Busca/filtro tem prioridade sobre o limite de densidade — o
+          // usuário precisa conseguir localizar um resultado no mapa mesmo
+          // que ele esteja fora da área "capada" por excesso de feições.
+          toRender = withGeom.filter(f => theme._activeFilterFids.has(f.properties._tempId));
+          if (toRender.length > MAX_FEATURES_PER_VIEW) {
+              const alreadyWarned = theme._tooManyFeaturesInView;
+              theme._tooManyFeaturesInView = toRender.length;
+              if (!alreadyWarned && typeof showWarningToast === 'function') {
+                  showWarningToast(`"${theme.name}": ${toRender.length} resultados — refine o filtro para ver todos no mapa.`);
+              }
+              toRender = toRender.slice(0, MAX_FEATURES_PER_VIEW);
+          } else {
+              theme._tooManyFeaturesInView = null;
+          }
+      } else if (withGeom.length > MAX_FEATURES_PER_VIEW && bounds) {
+          const west = bounds.getWest(), east = bounds.getEast();
+          const south = bounds.getSouth(), north = bounds.getNorth();
+          toRender = withGeom.filter(f => {
+              let bbox = f.properties._bbox;
+              if (!bbox) {
+                  bbox = computeGeoJSONBbox(f.geometry);
+                  f.properties._bbox = bbox;
+              }
+              return bbox && bbox[2] >= west && bbox[0] <= east && bbox[3] >= south && bbox[1] <= north;
+          });
+
+          if (toRender.length > MAX_FEATURES_PER_VIEW) {
+              const alreadyWarned = theme._tooManyFeaturesInView;
+              theme._tooManyFeaturesInView = toRender.length;
+              if (!alreadyWarned && typeof showWarningToast === 'function') {
+                  showWarningToast(`"${theme.name}": ${toRender.length} feições nesta área — aproxime o zoom para visualizá-las.`);
+              }
+              toRender = [];
+          } else {
+              theme._tooManyFeaturesInView = null;
+          }
+      } else {
+          theme._tooManyFeaturesInView = null;
       }
+
+      allFeatures.push(...toRender);
     }
   });
-  
+
   if (allFeatures.length > 0) {
     geojsonLayer.addData(allFeatures);
   }
@@ -671,14 +786,37 @@ function loadAllFeaturesToMap() {
           highlightFeature(activeFeatureLayer.feature.properties._tempId, true);
       }
   }
+
+  // Reavalia quais rótulos cabem dentro do polígono — os layers acabaram de
+  // ser recriados, então os rótulos antigos (já filtrados) não existem mais.
+  if (typeof updateLabelsVisibility === 'function') updateLabelsVisibility();
 }
 
 async function syncMapDataToThemes() {
-  themes.forEach(t => t.features = []);
-  
+  // Com o limite de renderização por densidade (MAX_FEATURES_PER_VIEW), um
+  // tema pode ter milhares de feições carregadas em memória sem estarem
+  // desenhadas no mapa neste momento (fora da área capada). Isso NÃO
+  // significa que foram excluídas — exclusão é tratada explicitamente em
+  // deleteActiveFeature(). Por isso: só atualiza/insere o que está de fato
+  // renderizado agora, preservando o resto tal como estava.
   const layers = geojsonLayer.getLayers();
-  
-  // Build lists of features for local themes
+
+  const renderedKeys = new Set();
+  layers.forEach(layer => {
+      if (!layer.feature) return;
+      const p = layer.feature.properties || {};
+      if (p.id_banco) renderedKeys.add('id:' + p.id_banco);
+      else if (p._tempId) renderedKeys.add('temp:' + p._tempId);
+  });
+
+  themes.forEach(t => {
+      t.features = (t.features || []).filter(f => {
+          const p = f.properties || {};
+          const key = p.id_banco ? ('id:' + p.id_banco) : (p._tempId ? ('temp:' + p._tempId) : null);
+          return !key || !renderedKeys.has(key);
+      });
+  });
+
   layers.forEach(layer => {
     if (layer.feature) {
       const f = layer.feature;
@@ -839,6 +977,10 @@ function toggleThemeListAndSelection(themeId) {
         
         // Make this the active selection
         toggleSelectionTheme(themeId, true);
+
+        // Lazy load: carrega propriedades completas em background ao abrir a lista
+        // para que o filtro avançado funcione com todos os campos
+        loadThemeProperties(themeId);
     } else {
         // Closing this layer
         listEl.classList.add('hidden');
@@ -962,7 +1104,7 @@ function renderThemes() {
             <div class="flex flex-col">
               <h3 class="text-base font-black text-white tracking-widest uppercase drop-shadow-md ${!isVisible ? 'opacity-50' : ''}">${theme.name}</h3>
               <div class="text-[12px] font-bold text-slate-200 mt-0.5">
-                ${featureCount} <span class="text-[10px] text-slate-300 font-normal uppercase tracking-wider">Registros</span>
+                <span id="theme-count-${theme.id}">${featureCount}</span> <span class="text-[10px] text-slate-300 font-normal uppercase tracking-wider">Registros</span>
               </div>
             </div>
           </div>
@@ -1038,64 +1180,238 @@ function renderThemes() {
 
 function toggleThemeVisibility(themeId) {
   const theme = themes.find(t => t.id === themeId);
-  if (theme) {
-    theme.visible = theme.visible === false ? true : false;
-    saveThemes();
-    loadAllFeaturesToMap();
-    renderThemes();
-  }
+  if (!theme) return;
+
+  theme.visible = theme.visible === false ? true : false;
+  saveThemes();
+
+  // Responde imediatamente ao clique (sem bloquear a thread)
+  setTimeout(async () => {
+      // Ativação sob demanda: só carrega o tema na 1ª vez que ele é ligado
+      if (theme.visible !== false && !theme._propertiesFullyLoaded) {
+          await loadThemeProperties(theme.id);
+      }
+      loadAllFeaturesToMap();
+      renderThemes();
+  }, 0);
 }
+
+// Carrega propriedades completas de todas as feições de uma camada
+async function loadThemeProperties(themeId) {
+    if (!supabaseClient) return;
+    const theme = themes.find(t => t.id === themeId);
+    if (!theme || theme._propertiesFullyLoaded) return;
+
+    try {
+        // Carga completa do tema (geometria + propriedades) numa única vez:
+        // 1ª página com contagem total, depois dispara as páginas restantes
+        // em paralelo, em lotes (evita sobrecarregar o pooler do plano
+        // gratuito) — com temas de 20 mil+ feições isso é a diferença entre
+        // ~40s numa fila sequencial e poucos segundos.
+        const fetchStep = 1000;
+        const first = await runWithRetry(() => supabaseClient
+            .from('feicoes')
+            .select('id, propriedades, geometria', { count: 'exact' })
+            .eq('theme_id', themeId)
+            .range(0, fetchStep - 1), 2);
+
+        let hadPageError = !!first.error;
+        if (first.error) console.error(`Erro ao buscar 1ª página de feições de "${themeId}":`, first.error);
+        const allRows = first.error ? [] : (first.data || []);
+        const count = first.count;
+
+        if (!first.error && count && count > fetchStep) {
+            const remainingPages = Math.ceil((count - fetchStep) / fetchStep);
+            const taskFns = [];
+            for (let p = 1; p <= remainingPages; p++) {
+                const from = p * fetchStep;
+                taskFns.push(() => supabaseClient
+                    .from('feicoes')
+                    .select('id, propriedades, geometria')
+                    .eq('theme_id', themeId)
+                    .range(from, from + fetchStep - 1));
+            }
+            const results = await runWithConcurrencyLimit(taskFns, PAGE_FETCH_CONCURRENCY);
+            results.forEach(r => {
+                if (r.error) {
+                    hadPageError = true;
+                    console.error(`Erro ao buscar página de feições de "${themeId}":`, r.error);
+                } else if (r.data) {
+                    allRows.push(...r.data);
+                }
+            });
+        }
+
+        // Mescla nas feições já existentes (ex: a recém-criada via desenho)
+        // e adiciona as que ainda não estavam em memória.
+        const existingByBankId = new Map();
+        theme.features.forEach(f => {
+            if (f.properties && f.properties.id_banco) existingByBankId.set(f.properties.id_banco, f);
+        });
+
+        allRows.forEach(row => {
+            const idBanco = row.id;
+            const props = row.propriedades || {};
+            const existing = existingByBankId.get(idBanco);
+            if (existing) {
+                existing.properties = { ...props, themeId, id_banco: idBanco, _propertiesLoaded: true };
+                if (!existing.geometry) existing.geometry = row.geometria;
+            } else {
+                theme.features.push({
+                    type: "Feature",
+                    properties: { ...props, themeId, id_banco: idBanco, _propertiesLoaded: true },
+                    geometry: row.geometria
+                });
+            }
+        });
+
+        if (hadPageError) {
+            // NÃO marca como completo — uma nova tentativa de ativar a camada
+            // (ou reabrir a lista) vai tentar buscar tudo de novo, incluindo
+            // as feições já carregadas com sucesso (a mescla acima evita duplicar).
+            if (typeof showWarningToast === 'function') {
+                showWarningToast(`"${theme.name}": algumas feições não carregaram (${allRows.length} de ${count || '?'}). Desligue e ligue a camada de novo pra tentar completar.`);
+            }
+            console.warn(`[LazyLoad] Tema "${theme.name}" carregado PARCIALMENTE: ${allRows.length} de ${count} feições`);
+        } else {
+            theme._propertiesFullyLoaded = true;
+            theme._geometryLoaded = true;
+            console.log(`[LazyLoad] Tema "${theme.name}" carregado por completo: ${allRows.length} feições`);
+        }
+
+        // Desenha no mapa o que foi possível carregar até agora
+        loadAllFeaturesToMap();
+
+        // Atualiza só o número do card (não o card inteiro — evitaria fechar
+        // um painel de filtro que o usuário tenha aberto em outro tema)
+        const countEl = document.getElementById('theme-count-' + themeId);
+        if (countEl) countEl.textContent = theme.features.length;
+
+        // Re-renderiza a lista na sidebar se estiver aberta (estava vazia pois props carregam async)
+        const listEl = document.getElementById('list-' + themeId);
+        if (listEl && !listEl.classList.contains('hidden')) {
+            const featureListEl = document.getElementById('feature-list-' + themeId);
+            if (featureListEl) {
+                featureListEl.innerHTML = renderFeatureListItems(theme);
+            }
+            // Atualiza os dropdowns do filtro avançado com os valores reais
+            if (!isRefreshingDropdowns) {
+                isRefreshingDropdowns = true;
+                try { refreshFilterDropdownOptions(themeId); }
+                finally { isRefreshingDropdowns = false; }
+            }
+        }
+    } catch(e) {
+        console.error('[LazyLoad] Erro ao carregar propriedades:', e);
+    }
+}
+
+
+// Busca propriedades de UMA feição específica ao clicar (fallback se não carregadas ainda)
+window.fetchFeaturePropertiesIfNeeded = async function(layer) {
+    const props = layer?.feature?.properties;
+    if (!props || props._propertiesLoaded || !props.id_banco) return;
+    if (!supabaseClient) return;
+
+    try {
+        const { data, error } = await supabaseClient
+            .from('feicoes')
+            .select('propriedades')
+            .eq('id', props.id_banco)
+            .single();
+
+        if (error || !data) return;
+        Object.assign(layer.feature.properties, data.propriedades, { _propertiesLoaded: true });
+
+        // Atualiza também no array de features do tema
+        const theme = themes.find(t => t.id === props.themeId);
+        if (theme) {
+            const feat = theme.features.find(f => f.properties.id_banco === props.id_banco);
+            if (feat) feat.properties = layer.feature.properties;
+        }
+    } catch(e) {
+        console.error('[LazyLoad] Erro ao buscar propriedades da feição:', e);
+    }
+};
+
+// Gera o HTML de um único item da lista de feições
+function _buildFeatureItemHtml(theme, f) {
+  var disp1 = theme.disp1 || 'Lote';
+  var disp2 = theme.disp2 || 'Quadra';
+  var searchData = Object.values(f.properties || {}).join(' ').toLowerCase();
+  if (!f.properties._tempId) f.properties._tempId = 'feat_' + Math.random().toString(36).substr(2, 9);
+  var fid = f.properties._tempId;
+  var titleField = theme.mainTitle ? theme.mainTitle : 'Proprietário';
+  var titleLabel = getThemeFieldLabel(theme, titleField);
+  var disp1Label = getThemeFieldLabel(theme, disp1);
+  var disp2Label = getThemeFieldLabel(theme, disp2);
+  var propName = getFeaturePropertyValue(theme, f, titleField) || getFeaturePropertyValue(theme, f, 'Nome do Proprietário/Possuidor') || (theme.mainTitle ? ('Sem dado para ' + titleLabel) : 'Proprietário não informado');
+  var val1 = getFeaturePropertyValue(theme, f, disp1) || '-';
+  var val2 = getFeaturePropertyValue(theme, f, disp2) || '-';
+  var showDisp1 = theme.disp1Active !== false;
+  var showDisp2 = theme.disp2Active !== false;
+  var subHtml = '';
+  if (showDisp1 && showDisp2) {
+    subHtml = '<span class="font-medium">' + disp1Label + ':</span> ' + val1 + ' <span class="mx-1 opacity-50">&bull;</span> <span class="font-medium">' + disp2Label + ':</span> ' + val2;
+  } else if (showDisp1) {
+    subHtml = '<span class="font-medium">' + disp1Label + ':</span> ' + val1;
+  } else if (showDisp2) {
+    subHtml = '<span class="font-medium">' + disp2Label + ':</span> ' + val2;
+  }
+  return '<div id="sidebar-item-' + fid + '" class="feature-list-item px-4 py-2 border-b border-white/5 hover:bg-white/10 cursor-pointer transition-all duration-300 border-l-4 border-l-transparent" data-search="' + searchData + '" onclick="zoomToFeature(\'' + fid + '\')">'
+    + '<div class="text-xs font-semibold text-slate-100 break-words" title="' + propName + '">' + propName + '</div>'
+    + (subHtml ? '<div class="text-[10px] text-slate-300 break-words mt-0.5">' + subHtml + '</div>' : '')
+    + '</div>';
+}
+
+// Carrega mais itens na lista de feições da sidebar (paginação progressiva)
+window.loadMoreFeatureItems = function(themeId, startIdx) {
+  var theme = themes.find(function(t) { return t.id === themeId; });
+  if (!theme) return;
+  var container = document.getElementById('feature-list-' + themeId);
+  if (!container) return;
+  var btn = document.getElementById('load-more-btn-' + themeId);
+  if (btn) btn.remove();
+  var PAGE = 100;
+  var endIdx = Math.min(startIdx + PAGE, theme.features.length);
+  var html = '';
+  for (var i = startIdx; i < endIdx; i++) {
+    html += _buildFeatureItemHtml(theme, theme.features[i]);
+  }
+  var tempDiv = document.createElement('div');
+  tempDiv.innerHTML = html;
+  while (tempDiv.firstChild) container.appendChild(tempDiv.firstChild);
+  if (endIdx < theme.features.length) {
+    var remaining = theme.features.length - endIdx;
+    var newBtn = document.createElement('button');
+    newBtn.id = 'load-more-btn-' + themeId;
+    newBtn.className = 'w-full py-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors flex items-center justify-center gap-1 border-t border-white/5';
+    newBtn.innerHTML = '<span class="material-symbols-outlined text-[14px]">expand_more</span> Mostrar mais ' + Math.min(PAGE, remaining) + ' de ' + remaining + ' restantes';
+    newBtn.onclick = (function(tid, eidx) { return function() { window.loadMoreFeatureItems(tid, eidx); }; })(themeId, endIdx);
+    container.appendChild(newBtn);
+  }
+};
 
 function renderFeatureListItems(theme) {
   if (!theme.features || theme.features.length === 0) {
-    return `<div class="px-4 py-3 text-xs text-slate-400 italic">Nenhuma feição adicionada.</div>`;
+    return '<div class="px-4 py-3 text-xs text-slate-400 italic">Nenhuma feição adicionada.</div>';
   }
-  
-  const disp1 = theme.disp1 || 'Lote';
-  const disp2 = theme.disp2 || 'Quadra';
-  
-  let html = '';
-  theme.features.forEach((f, idx) => {
-    // Collect all values for search filtering
-    const searchData = Object.values(f.properties || {}).join(' ').toLowerCase();
-    
-    // We need a stable identifier. Since properties might not have an ID, we use index.
-    // Better to assign a temporary ID for clicking if not exists.
-    if (!f.properties._tempId) f.properties._tempId = 'feat_' + Math.random().toString(36).substr(2, 9);
-    const fid = f.properties._tempId;
-    const titleField = theme.mainTitle ? theme.mainTitle : 'Proprietário';
-    
-    const titleLabel = getThemeFieldLabel(theme, titleField);
-    const disp1Label = getThemeFieldLabel(theme, disp1);
-    const disp2Label = getThemeFieldLabel(theme, disp2);
-
-    const propName = getFeaturePropertyValue(theme, f, titleField) || getFeaturePropertyValue(theme, f, 'Nome do Proprietário/Possuidor') || (theme.mainTitle ? `Sem dado para ${titleLabel}` : 'Proprietário não informado');
-    const val1 = getFeaturePropertyValue(theme, f, disp1) || '-';
-    const val2 = getFeaturePropertyValue(theme, f, disp2) || '-';
-    
-    const showDisp1 = theme.disp1Active !== false;
-    const showDisp2 = theme.disp2Active !== false;
-    
-    let subHtml = '';
-    if (showDisp1 && showDisp2) {
-        subHtml = `<span class="font-medium">${disp1Label}:</span> ${val1} <span class="mx-1 opacity-50">&bull;</span> <span class="font-medium">${disp2Label}:</span> ${val2}`;
-    } else if (showDisp1) {
-        subHtml = `<span class="font-medium">${disp1Label}:</span> ${val1}`;
-    } else if (showDisp2) {
-        subHtml = `<span class="font-medium">${disp2Label}:</span> ${val2}`;
-    }
-    
-    html += `
-      <div id="sidebar-item-${fid}" class="feature-list-item px-4 py-2 border-b border-white/5 hover:bg-white/10 cursor-pointer transition-all duration-300 border-l-4 border-l-transparent"
-           data-search="${searchData}"
-           onclick="zoomToFeature('${fid}')">
-         <div class="text-xs font-semibold text-slate-100 break-words" title="${propName}">${propName}</div>
-         ${subHtml ? `<div class="text-[10px] text-slate-300 break-words mt-0.5">${subHtml}</div>` : ''}
-      </div>
-    `;
-  });
+  var PAGE = 100;
+  var total = theme.features.length;
+  var html = '';
+  for (var i = 0; i < Math.min(PAGE, total); i++) {
+    html += _buildFeatureItemHtml(theme, theme.features[i]);
+  }
+  if (total > PAGE) {
+    var remaining = total - PAGE;
+    html += '<button id="load-more-btn-' + theme.id + '" class="w-full py-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors flex items-center justify-center gap-1 border-t border-white/5" onclick="loadMoreFeatureItems(\'' + theme.id + '\', ' + PAGE + ')">'
+      + '<span class="material-symbols-outlined text-[14px]">expand_more</span>'
+      + ' Mostrar mais ' + Math.min(PAGE, remaining) + ' de ' + remaining + ' restantes'
+      + '</button>';
+  }
   return html;
 }
+
 
 function getThemeFieldsOptions(theme) {
     let optionsHtml = '';
@@ -1219,12 +1535,14 @@ function updateFilterValueInput(selectEl, themeId) {
             });
         }
         
-        const optionsHtml = Array.from(uniqueValues).sort().map(v => `<option value="${v}">${v}</option>`).join('');
-        
-        valueContainer.innerHTML = `<select class="filter-value w-full text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-1 py-1 text-slate-700 dark:text-slate-300" onchange="executeSearch('${theme.id}')">
-            <option value="">-- Todos --</option>
-            ${optionsHtml}
-        </select>` + btnHtml;
+        // Campo de texto com autocomplete (datalist) em vez de <select>: com
+        // milhares de valores possíveis, rolar uma lista fixa é inviável —
+        // digitar e ver só os que combinam é bem mais rápido.
+        const datalistId = `filter-values-${theme.id}-${fieldId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const optionsHtml = Array.from(uniqueValues).sort().map(v => `<option value="${String(v).replace(/"/g, '&quot;')}"></option>`).join('');
+
+        valueContainer.innerHTML = `<input type="text" list="${datalistId}" class="filter-value w-full text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300" placeholder="Digite ou selecione..." onkeyup="executeSearch('${theme.id}')" onchange="executeSearch('${theme.id}')">
+            <datalist id="${datalistId}">${optionsHtml}</datalist>` + btnHtml;
     }
     executeSearch(theme.id);
 }
@@ -1298,132 +1616,179 @@ function highlightFeature(fid, dontPan = false) {
   }
 }
 
-function zoomToFeature(fid) {
+async function zoomToFeature(fid) {
   if (!geojsonLayer) return;
-  
-  let targetLayer = null;
-  geojsonLayer.eachLayer(layer => {
-    if (layer.feature && layer.feature.properties._tempId === fid) {
-      targetLayer = layer;
+
+  // Acha a feição em memória, não a camada Leaflet — ela pode não estar
+  // desenhada no momento (tema desligado, ou área "capada" por densidade
+  // por estar zoom afastado). O zoom não depende de já estar renderizada.
+  let ownerTheme = null, targetFeature = null;
+  for (const theme of themes) {
+    const found = (theme.features || []).find(f => f.properties && f.properties._tempId === fid);
+    if (found) { ownerTheme = theme; targetFeature = found; break; }
+  }
+  if (!targetFeature || !ownerTheme) return;
+
+  // Feição ainda é um "stub" (geometria não carregada) — busca sob demanda.
+  if (!targetFeature.geometry && targetFeature.properties.id_banco && supabaseClient) {
+    try {
+      const { data } = await supabaseClient.from('feicoes').select('geometria').eq('id', targetFeature.properties.id_banco).single();
+      if (data && data.geometria) targetFeature.geometry = data.geometria;
+    } catch (e) {
+      console.error('Erro ao buscar geometria da feição:', e);
     }
-  });
-  
-  if (targetLayer) {
-    if (targetLayer.getBounds) {
-      map.fitBounds(targetLayer.getBounds(), { padding: [50, 50], maxZoom: 21 });
-    } else if (targetLayer.getLatLng) {
-      map.setView(targetLayer.getLatLng(), 21);
-    }
-    
-    highlightFeature(fid);
-    
-    // Fechar menu lateral em telas menores
-    if (window.innerWidth < 768) {
-      document.getElementById('side-drawer').classList.add('-translate-x-[120%]');
-      document.getElementById('drawer-overlay').classList.add('hidden');
-    }
+  }
+  if (!targetFeature.geometry) return;
+
+  // Liga o tema se estiver desligado (padrão do sistema) — sem
+  // renderThemes(), que fecharia o painel/lista de onde partiu o clique.
+  if (ownerTheme.visible === false) {
+    ownerTheme.visible = true;
+    saveThemes();
+  }
+
+  // Calcula os limites direto da geometria (GeoJSON), sem precisar que ela
+  // já exista como camada Leaflet desenhada.
+  const targetBounds = L.geoJSON(targetFeature).getBounds();
+  if (targetBounds.isValid()) {
+    map.fitBounds(targetBounds, { padding: [50, 50], maxZoom: 21 });
+  }
+
+  // Dá um instante pro mapa assentar no novo zoom/posição (bem mais próximo
+  // = bem menos feições na área = sai do limite de densidade sozinho) antes
+  // de redesenhar e aplicar o destaque visual na camada de verdade.
+  setTimeout(() => {
+    loadAllFeaturesToMap();
+    highlightFeature(fid, true);
+  }, 300);
+
+  // Fechar menu lateral em telas menores
+  if (window.innerWidth < 768) {
+    document.getElementById('side-drawer').classList.add('-translate-x-[120%]');
+    document.getElementById('drawer-overlay').classList.add('hidden');
   }
 }
 
+// Debounce para o executeSearch (evita rodar a cada tecla com 20k itens)
+const _searchDebounce = {};
+
 function executeSearch(themeId) {
-  const container = document.getElementById('filters-container-' + themeId);
-  if (!container) return;
-  
-  const rules = [];
-  container.querySelectorAll('.filter-row').forEach(row => {
-      const field = row.querySelector('.filter-field').value;
-      const value = row.querySelector('.filter-value').value.toLowerCase().trim();
-      if (value !== '') {
-          rules.push({ field, value });
-      }
+  clearTimeout(_searchDebounce[themeId]);
+  _searchDebounce[themeId] = setTimeout(() => _executeSearchNow(themeId), 150);
+}
+
+async function _executeSearchNow(themeId) {
+  var filterContainer = document.getElementById('filters-container-' + themeId);
+  if (!filterContainer) return;
+
+  var rules = [];
+  filterContainer.querySelectorAll('.filter-row').forEach(function(row) {
+      var field = row.querySelector('.filter-field').value;
+      var value = row.querySelector('.filter-value').value.toLowerCase().trim();
+      if (value !== '') rules.push({ field: field, value: value });
   });
 
-  const theme = themes.find(t => t.id === themeId);
-  if(!theme) return;
+  var theme = themes.find(function(t) { return t.id === themeId; });
+  if (!theme) return;
 
-  const listContainer = document.getElementById('feature-list-' + themeId);
+  var listContainer = document.getElementById('feature-list-' + themeId);
   if (!listContainer) return;
-  
-  const featureItems = listContainer.querySelectorAll('.feature-list-item');
-  const visibleFids = new Set();
-  const hasAnyFilter = rules.length > 0;
-  
-  featureItems.forEach(item => {
-    const fid = item.id.replace('sidebar-item-', '');
-    const feature = theme.features.find(f => f.properties._tempId === fid);
-    
-    let match = true;
-    
-    if (hasAnyFilter) {
-        for (let rule of rules) {
-            if (rule.field === 'ALL') {
-                const searchData = item.getAttribute('data-search') || '';
-                if (!searchData.includes(rule.value)) { match = false; break; }
-            } else {
-                if (feature) {
-                    let val = getFeaturePropertyValue(theme, feature, rule.field) || '';
-                    val = formatFilterValue(theme, rule.field, val);
-                    if (!val.toLowerCase().includes(rule.value)) { match = false; break; }
-                } else {
-                    match = false; break;
-                }
-            }
-        }
-    }
 
-    if (match) {
-      item.style.display = 'block';
-      visibleFids.add(fid);
-    } else {
-      item.style.display = 'none';
-    }
+  var hasAnyFilter = rules.length > 0;
+  var visibleFids = new Set();
+
+  // Buscar implica em querer ver o resultado no mapa — liga a camada se
+  // estiver desligada (padrão do sistema), em vez de filtrar "no vazio".
+  // Não chama renderThemes() aqui de propósito: isso re-renderiza a sidebar
+  // inteira e fecharia o próprio painel de filtro que o usuário está usando
+  // (ele volta a ficar visualmente sincronizado no próximo render natural).
+  if (hasAnyFilter && theme.visible === false) {
+    theme.visible = true;
+    saveThemes();
+  }
+
+  if (!hasAnyFilter) {
+    // Sem filtro: restaura a lista paginada normal e volta pra renderização
+    // normal por viewport (some com a exceção de "sempre mostra os resultados")
+    theme._activeFilterFids = null;
+    listContainer.innerHTML = renderFeatureListItems(theme);
+    loadAllFeaturesToMap();
+    return;
+  }
+
+  // Com filtro: garante _tempId em todas as feições
+  (theme.features || []).forEach(function(f) {
+    if (!f.properties._tempId) f.properties._tempId = 'feat_' + Math.random().toString(36).substr(2, 9);
   });
 
-  // Filter map layer directly
-  let bounds = L.latLngBounds();
-  let hasVisibleFeatures = false;
-
-  if (geojsonLayer) {
-    geojsonLayer.eachLayer(layer => {
-      if (layer.feature && layer.feature.properties.themeId === themeId) {
-        const fid = layer.feature.properties._tempId;
-        if (visibleFids.has(fid)) {
-          if (!map.hasLayer(layer)) {
-             map.addLayer(layer);
-          }
-          if (hasAnyFilter) {
-            if (layer.getBounds) {
-                bounds.extend(layer.getBounds());
-            } else if (layer.getLatLng) {
-                bounds.extend(layer.getLatLng());
-            }
-            hasVisibleFeatures = true;
-          }
-        } else {
-          if (map.hasLayer(layer)) {
-             map.removeLayer(layer);
-          }
-        }
+  // Filtra em TODOS os theme.features (não apenas os 100 no DOM)
+  var matchedFeatures = (theme.features || []).filter(function(f) {
+    for (var ri = 0; ri < rules.length; ri++) {
+      var rule = rules[ri];
+      if (rule.field === 'ALL') {
+        var searchData = Object.values(f.properties || {}).join(' ').toLowerCase();
+        if (!searchData.includes(rule.value)) return false;
+      } else {
+        var val = getFeaturePropertyValue(theme, f, rule.field) || '';
+        val = formatFilterValue(theme, rule.field, val);
+        if (!val.toLowerCase().includes(rule.value)) return false;
       }
-    });
-
-    if (hasAnyFilter && hasVisibleFeatures && bounds.isValid()) {
-        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 21 });
-        
-        // Comportamento removido: O menu lateral não fecha mais automaticamente no celular
-        // para permitir que o usuário aplique múltiplos filtros continuamente.
     }
-  }
+    return true;
+  });
 
-  // Atualizar dinamicamente os valores de outros dropdowns de filtro (cascata)
-  if (!isRefreshingDropdowns) {
-      isRefreshingDropdowns = true;
-      try {
-          refreshFilterDropdownOptions(themeId);
-      } finally {
-          isRefreshingDropdowns = false;
-      }
+  matchedFeatures.forEach(function(f) { visibleFids.add(f.properties._tempId); });
+
+  // Busca (filtro) tem prioridade sobre o limite de densidade de renderização
+  // — ver loadAllFeaturesToMap(). Isso garante que o resultado sempre apareça
+  // no mapa, mesmo que a camada esteja "capada" por excesso de feições na
+  // área visível atual.
+  theme._activeFilterFids = visibleFids;
+  loadAllFeaturesToMap();
+
+  // Re-renderiza a lista com apenas os resultados filtrados
+  var PAGE = 100;
+  var html = '';
+  for (var i = 0; i < Math.min(PAGE, matchedFeatures.length); i++) {
+    html += _buildFeatureItemHtml(theme, matchedFeatures[i]);
   }
+  if (matchedFeatures.length === 0) {
+    html = '<div class="px-4 py-3 text-xs text-slate-400 italic">Nenhum resultado encontrado.</div>';
+  } else if (matchedFeatures.length > PAGE) {
+    html += '<div class="px-3 py-2 text-[10px] text-slate-500 border-t border-white/5">'
+      + matchedFeatures.length + ' resultados — exibindo os primeiros ' + PAGE + '. Refine o filtro para ver mais.'
+      + '</div>';
+  }
+  listContainer.innerHTML = html;
+
+  // loadAllFeaturesToMap() já desenhou exatamente os resultados casados
+  // (via theme._activeFilterFids) — só falta calcular os limites pra dar
+  // fitBounds, de forma diferida pra não bloquear a UI.
+  setTimeout(function() {
+    var bounds = L.latLngBounds();
+    var hasVisibleFeatures = false;
+
+    if (geojsonLayer) {
+      geojsonLayer.eachLayer(function(layer) {
+        if (layer.feature && layer.feature.properties.themeId === themeId) {
+          if (layer.getBounds) bounds.extend(layer.getBounds());
+          else if (layer.getLatLng) bounds.extend(layer.getLatLng());
+          hasVisibleFeatures = true;
+        }
+      });
+
+      if (hasVisibleFeatures && bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 21 });
+      }
+    }
+
+    // Atualizar dinamicamente os valores de outros dropdowns de filtro (cascata)
+    if (!isRefreshingDropdowns) {
+      isRefreshingDropdowns = true;
+      try { refreshFilterDropdownOptions(themeId); }
+      finally { isRefreshingDropdowns = false; }
+    }
+  }, 0);
 }
 
 let isRefreshingDropdowns = false;
@@ -1440,60 +1805,55 @@ function refreshFilterDropdownOptions(themeId) {
     
     rows.forEach((currentRow, currentIndex) => {
         const fieldSelect = currentRow.querySelector('.filter-field');
-        const valueSelect = currentRow.querySelector('.filter-value');
-        
-        if (fieldSelect && valueSelect && valueSelect.tagName === 'SELECT') {
-            const currentFieldId = fieldSelect.value;
-            const currentValue = valueSelect.value;
-            
-            // Coletar regras dos outros filtros (excluindo a linha atual)
-            const otherRules = [];
-            rows.forEach((row, idx) => {
-                if (idx !== currentIndex) {
-                    const fSelect = row.querySelector('.filter-field');
-                    const vInput = row.querySelector('.filter-value');
-                    if (fSelect && vInput && fSelect.value !== 'ALL' && vInput.value !== '') {
-                        otherRules.push({ field: fSelect.value, value: vInput.value.toLowerCase().trim() });
-                    }
+        const valueInput = currentRow.querySelector('.filter-value');
+        if (!fieldSelect || !valueInput) return;
+
+        const currentFieldId = fieldSelect.value;
+        if (currentFieldId === 'ALL') return; // "Qualquer Campo" não tem lista de valores fixa
+
+        // Campo de texto com datalist (autocomplete) — atualiza as sugestões
+        const datalistId = valueInput.getAttribute('list');
+        const datalistEl = datalistId ? document.getElementById(datalistId) : null;
+        if (!datalistEl) return;
+
+        // Coletar regras dos outros filtros (excluindo a linha atual)
+        const otherRules = [];
+        rows.forEach((row, idx) => {
+            if (idx !== currentIndex) {
+                const fSelect = row.querySelector('.filter-field');
+                const vInput = row.querySelector('.filter-value');
+                if (fSelect && vInput && fSelect.value !== 'ALL' && vInput.value !== '') {
+                    otherRules.push({ field: fSelect.value, value: vInput.value.toLowerCase().trim() });
                 }
-            });
-            
-            // Filtrar as feições baseado nas outras regras
-            const filteredFeatures = theme.features.filter(f => {
-                for (let rule of otherRules) {
-                    let val = getFeaturePropertyValue(theme, f, rule.field);
-                    val = formatFilterValue(theme, rule.field, val);
-                    if (val === undefined || val === null || !val.toLowerCase().includes(rule.value)) {
-                        return false;
-                    }
-                }
-                return true;
-            });
-            
-            // Extrair valores únicos
-            const uniqueValues = new Set();
-            filteredFeatures.forEach(f => {
-                let val = getFeaturePropertyValue(theme, f, currentFieldId);
-                if (val !== undefined && val !== null && val !== '') {
-                    val = formatFilterValue(theme, currentFieldId, val);
-                    if (val) uniqueValues.add(val);
-                }
-            });
-            
-            const sortedValues = Array.from(uniqueValues).sort();
-            
-            // Se o valor selecionado não é mais válido devido a outros filtros, reseta para ""
-            let newValue = '';
-            if (sortedValues.includes(currentValue)) {
-                newValue = currentValue;
-            } else if (currentValue !== '') {
-                anyValueReset = true;
             }
-            
-            const optionsHtml = sortedValues.map(v => `<option value="${v}" ${v === newValue ? 'selected' : ''}>${v}</option>`).join('');
-            valueSelect.innerHTML = `<option value="">-- Todos --</option>${optionsHtml}`;
-            valueSelect.value = newValue;
-        }
+        });
+
+        // Filtrar as feições baseado nas outras regras
+        const filteredFeatures = theme.features.filter(f => {
+            for (let rule of otherRules) {
+                let val = getFeaturePropertyValue(theme, f, rule.field);
+                val = formatFilterValue(theme, rule.field, val);
+                if (val === undefined || val === null || !val.toLowerCase().includes(rule.value)) {
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        // Extrair valores únicos
+        const uniqueValues = new Set();
+        filteredFeatures.forEach(f => {
+            let val = getFeaturePropertyValue(theme, f, currentFieldId);
+            if (val !== undefined && val !== null && val !== '') {
+                val = formatFilterValue(theme, currentFieldId, val);
+                if (val) uniqueValues.add(val);
+            }
+        });
+
+        const sortedValues = Array.from(uniqueValues).sort();
+        datalistEl.innerHTML = sortedValues.map(v => `<option value="${String(v).replace(/"/g, '&quot;')}"></option>`).join('');
+        // Texto livre: não força reset do que o usuário digitou — só atualiza
+        // as sugestões disponíveis dado o estado atual dos outros filtros.
     });
     
     // Se algum valor foi limpo por incompatibilidade, re-executa a busca para atualizar o mapa/painel
@@ -1575,7 +1935,8 @@ async function saveNewTheme() {
               cor: color,
               icone: icon || 'map',
               tipo_geometria: geomType || 'Polygon',
-              tipo_cadastro: formId || 'padrao'
+              tipo_cadastro: formId || 'padrao',
+              municipio_id: activeMunicipioId
           };
           if (window.supabaseTemasHasMetadata) {
               insertPayload.metadata = {
@@ -2536,9 +2897,42 @@ window.update1nPreview = function(tabId) {
     }, 400);
 };
 
+// --- Loading overlay para importação ---
+function showImportProgress(msg) {
+    let overlay = document.getElementById('import-progress-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'import-progress-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.65);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;backdrop-filter:blur(4px)';
+        overlay.innerHTML = `
+          <div style="width:52px;height:52px;border:4px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite"></div>
+          <div id="import-progress-msg" style="color:#fff;font-size:15px;font-weight:600;text-align:center;max-width:280px;line-height:1.5"></div>
+          <div style="color:rgba(255,255,255,0.6);font-size:12px">Aguarde, não feche a página...</div>
+          <style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
+        document.body.appendChild(overlay);
+    }
+    document.getElementById('import-progress-msg').textContent = msg || 'Importando...';
+    overlay.style.display = 'flex';
+}
+
+function hideImportProgress() {
+    const overlay = document.getElementById('import-progress-overlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+function updateImportProgress(msg) {
+    const el = document.getElementById('import-progress-msg');
+    if (el) el.textContent = msg;
+}
+
 async function confirmGlobalImport() {
   if (!pendingGlobalGeoJSON) return;
-  
+
+  // Feedback imediato — aparece antes de qualquer processamento pesado
+  showImportProgress('Preparando importação...');
+  // Deixa o browser renderizar o overlay antes de bloquear a thread
+  await new Promise(r => setTimeout(r, 30));
+
   let themeName = document.getElementById('global-import-theme-name').value.trim();
   const formId = document.getElementById('global-import-cadastro-type') ? document.getElementById('global-import-cadastro-type').value : '';
   
@@ -2562,7 +2956,8 @@ async function confirmGlobalImport() {
               cor: themeColor,
               icone: 'map',
               tipo_geometria: 'Polygon',
-              tipo_cadastro: formId || 'padrao'
+              tipo_cadastro: formId || 'padrao',
+              municipio_id: activeMunicipioId
           }).select();
           
           if (error) {
@@ -2765,11 +3160,13 @@ async function confirmGlobalImport() {
   
   if (!themeName) themeName = "Tema Importado";
   themes.push({ id: themeId, name: themeName, color: themeColor, formId: formId, cadastroType: formId, disp1Active: false, disp2Active: false, features: [] });
+
+  updateImportProgress(`Renderizando ${pendingGlobalGeoJSON.features.length.toLocaleString('pt-BR')} feições no mapa...`);
+  await new Promise(r => setTimeout(r, 20));
   
   const newLayer = L.geoJSON(pendingGlobalGeoJSON);
   geojsonLayer.addData(pendingGlobalGeoJSON);
   
-  // Fechar o modal imediatamente para dar feedback visual de que o carregamento começou
   closeGlobalImportModal();
   document.getElementById('side-drawer').classList.add('-translate-x-[120%]');
   document.getElementById('drawer-overlay').classList.add('hidden');
@@ -2778,8 +3175,10 @@ async function confirmGlobalImport() {
   if (bounds.isValid()) {
       map.fitBounds(bounds);
   }
-  
+
+  updateImportProgress('Sincronizando com o banco de dados...');
   await syncMapDataToThemes();
+  hideImportProgress();
 }
 
 // --- FEATURE INFO ---
@@ -2790,9 +3189,24 @@ function showFeatureInfoModal(layer) {
   activeFeatureLayer = layer;
   isFeatureEditMode = false;
   renderFeatureInfo();
-  
+
   document.getElementById('feature-info-modal').classList.remove('hidden');
   document.getElementById('feature-actions-container').classList.remove('hidden');
+
+  // Esconde editar/excluir se o usuário não tem permissão nesta camada
+  // (o RLS/gatilho no banco já recusaria — isto é só pra não oferecer um
+  // botão que vai falhar).
+  const themeId = layer.feature && layer.feature.properties && layer.feature.properties.themeId;
+  const deleteBtn = document.getElementById('btn-delete-feature');
+  if (deleteBtn) {
+      const canDelete = typeof userCanOnTheme !== 'function' || userCanOnTheme(themeId, 'excluir');
+      deleteBtn.style.display = canDelete ? '' : 'none';
+  }
+  const editBtn = document.getElementById('btn-edit-feature-geometry');
+  if (editBtn) {
+      const canEdit = typeof userCanOnTheme !== 'function' || userCanOnTheme(themeId, 'editar');
+      editBtn.style.display = canEdit ? '' : 'none';
+  }
   
   // Força o card a receber cliques (bypass de cache do HTML/Tailwind)
   const card = document.getElementById('feature-info-card');
@@ -3183,18 +3597,44 @@ function stopGeometryEditing() {
 
 async function deleteActiveFeature() {
   if (!activeFeatureLayer) return;
-  
+
   if (!confirm("Tem certeza que deseja excluir esta feição permanentemente?")) return;
-  
+
+  const props = activeFeatureLayer.feature && activeFeatureLayer.feature.properties;
+  const idBanco = props && props.id_banco;
+  const tempId = props && props._tempId;
+  const tId = props && props.themeId;
+
   if (typeof supabaseClient !== 'undefined' && supabaseClient) {
-      const idBanco = activeFeatureLayer.feature && activeFeatureLayer.feature.properties && activeFeatureLayer.feature.properties.id_banco;
       if (idBanco) {
           try {
-              await supabaseClient.from('feicoes').delete().eq('id', idBanco);
+              // Exclusão lógica — nunca DELETE de verdade a partir do cliente.
+              // O banco (supabase_auth_setup.sql) reforça isso via RLS/gatilho;
+              // aqui é o caminho normal de uso, não uma segunda camada de defesa.
+              const { error } = await supabaseClient.from('feicoes').update({ deletado_em: new Date().toISOString() }).eq('id', idBanco);
+              if (error) {
+                  alert('Não foi possível excluir: ' + error.message);
+                  return;
+              }
           } catch(e) {
-              console.error("Erro ao deletar feição no Supabase:", e);
+              console.error("Erro ao excluir feição no Supabase:", e);
+              return;
           }
       }
+  }
+
+  // Remove explicitamente do tema em memória — não dá pra confiar só na
+  // reconstrução via geojsonLayer.getLayers() em syncMapDataToThemes(),
+  // já que temas com muitas feições podem estar parcialmente fora de tela
+  // (limite de renderização) e não devem ser confundidos com "excluído".
+  const theme = themes.find(t => t.id === tId);
+  if (theme) {
+      theme.features = theme.features.filter(f => {
+          const p = f.properties || {};
+          if (idBanco && p.id_banco === idBanco) return false;
+          if (!idBanco && tempId && p._tempId === tempId) return false;
+          return true;
+      });
   }
 
   geojsonLayer.removeLayer(activeFeatureLayer);
@@ -3256,7 +3696,119 @@ function selectIcon(prefix, val, label) {
   document.getElementById(`${prefix}-icon-dropdown`).classList.add('hidden');
 }
 
-window.addEventListener('DOMContentLoaded', () => {
+// --- AUTENTICAÇÃO ---
+// A segurança de verdade é imposta pelo RLS no banco (supabase_auth_setup.sql,
+// Parte 2) — este bloqueio no cliente é só pra não desperdiçar tempo montando
+// o mapa quando não há sessão, e pra guardar o perfil do usuário logado.
+let currentUserProfile = null;
+let activeMunicipioId = null;
+
+async function ensureAuthenticated() {
+    if (!supabaseClient) return true; // sem Supabase configurado, segue o fluxo antigo (dev local)
+
+    const { data } = await supabaseClient.auth.getSession();
+    if (!data || !data.session) {
+        window.location.href = 'login.html';
+        return false;
+    }
+
+    // O mapa é sempre de UM município por vez — quem escolhe é a home.html.
+    // Sem essa escolha na sessão, não tem o que carregar aqui.
+    activeMunicipioId = sessionStorage.getItem('municipio_ativo');
+    if (!activeMunicipioId) {
+        window.location.href = 'home.html';
+        return false;
+    }
+
+    try {
+        const { data: profile } = await supabaseClient
+            .from('profiles')
+            .select('*')
+            .eq('id', data.session.user.id)
+            .single();
+        currentUserProfile = profile || { id: data.session.user.id, nome: data.session.user.email, super_admin: false };
+    } catch (e) {
+        currentUserProfile = { id: data.session.user.id, nome: data.session.user.email, super_admin: false };
+    }
+
+    // Papel do usuário NO MUNICÍPIO ATIVO (não é mais global) — se o vínculo
+    // não existir ou não estiver aprovado (ex: acesso revogado depois que
+    // este município ficou salvo na sessão), volta pra home.html.
+    currentMunicipioPapel = null;
+    if (!currentUserProfile.super_admin) {
+        try {
+            const { data: membro } = await supabaseClient
+                .from('municipio_membros')
+                .select('papel, status')
+                .eq('user_id', data.session.user.id)
+                .eq('municipio_id', activeMunicipioId)
+                .eq('status', 'aprovado')
+                .maybeSingle();
+            if (!membro) {
+                sessionStorage.removeItem('municipio_ativo');
+                window.location.href = 'home.html';
+                return false;
+            }
+            currentMunicipioPapel = membro.papel;
+        } catch (e) {
+            window.location.href = 'home.html';
+            return false;
+        }
+    }
+
+    // Mapa local de permissões por tema — só pra não mostrar botões que o
+    // RLS/gatilho no banco vai recusar de qualquer forma (UX, não segurança).
+    currentUserPermissions = {};
+    try {
+        const { data: perms } = await supabaseClient.from('permissoes_camada').select('*').eq('user_id', data.session.user.id);
+        (perms || []).forEach(p => { currentUserPermissions[p.theme_id] = p; });
+    } catch (e) {}
+
+    if (typeof applyCurrentUserToProfileModal === 'function') applyCurrentUserToProfileModal();
+    return true;
+}
+
+let currentUserPermissions = {};
+let currentMunicipioPapel = null; // papel do usuário NO MUNICÍPIO ATIVO (não é mais global)
+
+// Só reflete o que o RLS/gatilho no banco decide de verdade — usado pra
+// esconder/desabilitar botões, não como a barreira de segurança em si.
+function userCanOnTheme(themeId, acao) {
+    if (currentUserProfile && currentUserProfile.super_admin) return true;
+    if (currentMunicipioPapel === 'admin') return true;
+    if (currentMunicipioPapel === 'externo' && acao !== 'ver') return false;
+    const pc = currentUserPermissions[themeId];
+    if (!pc) return false;
+    if (acao === 'ver') return !!pc.pode_ver;
+    if (acao === 'editar') return !!pc.pode_editar;
+    if (acao === 'excluir') return !!pc.pode_excluir;
+    return false;
+}
+
+const PAPEL_LABELS = { admin: 'Administrador', editor: 'Editor', visualizador: 'Visualizador', externo: 'Acesso Externo' };
+
+function applyCurrentUserToProfileModal() {
+    if (!currentUserProfile) return;
+    const nameEl = document.getElementById('profile-user-name');
+    const roleEl = document.getElementById('profile-user-role');
+    const munEl = document.getElementById('profile-user-municipio');
+    if (munEl) munEl.textContent = sessionStorage.getItem('municipio_ativo_nome') || '';
+    if (nameEl) nameEl.textContent = currentUserProfile.nome || 'Usuário';
+    const papelExibido = currentUserProfile.super_admin ? 'Administrador Geral' : (PAPEL_LABELS[currentMunicipioPapel] || currentMunicipioPapel || '—');
+    if (roleEl) roleEl.textContent = papelExibido;
+}
+
+window.handleLogout = async function() {
+    if (supabaseClient) {
+        try { await supabaseClient.auth.signOut(); } catch (e) {}
+    }
+    window.location.href = 'login.html';
+};
+
+window.addEventListener('DOMContentLoaded', async () => {
+  const authOk = await ensureAuthenticated();
+  if (!authOk) return;
+  fetchDynamicForm();
   initMap();
   setupIconDropdowns();
   setupSupabaseRealtime();
@@ -3516,7 +4068,7 @@ function printReport(visitIndex) {
             </style>
         </head>
         <body onload="setTimeout(() => window.print(), 500)">
-            <div class="header-logo">CONSTRUCTIVE</div>
+            <div class="header-logo">GeoGestor</div>
             <h1>Relatório de Visita Técnica</h1>
             
             <h2>Dados da Visita</h2>
@@ -4371,11 +4923,15 @@ function setupSupabaseRealtime() {
           .channel('temas-realtime')
           .on(
               'postgres_changes',
-              { event: '*', schema: 'public', table: 'temas' },
+              activeMunicipioId
+                ? { event: '*', schema: 'public', table: 'temas', filter: `municipio_id=eq.${activeMunicipioId}` }
+                : { event: '*', schema: 'public', table: 'temas' },
               async (payload) => {
                   console.log("Realtime: temas table changed!", payload);
                   // Para temas, é seguro recarregar (são poucos registros)
-                  const { data: dbTemas } = await supabaseClient.from('temas').select('*');
+                  let temasQuery = supabaseClient.from('temas').select('*');
+                  if (activeMunicipioId) temasQuery = temasQuery.eq('municipio_id', activeMunicipioId);
+                  const { data: dbTemas } = await temasQuery;
                   if (dbTemas) {
                       // Reconstroi somente os temas, preservando features já carregadas
                       dbTemas.forEach(t => {
@@ -4406,7 +4962,9 @@ function setupSupabaseRealtime() {
                   const eventType = payload.eventType;
                   
                   if (eventType === 'DELETE') {
-                      // Remove só a feição excluída do mapa
+                      // Remove a feição excluída do mapa E de theme.features —
+                      // sem isso a contagem/filtro ficam com um registro fantasma
+                      // quando outro usuário exclui algo.
                       const deletedId = payload.old && payload.old.id;
                       if (deletedId) {
                           if (activeFeatureLayer) {
@@ -4422,6 +4980,14 @@ function setupSupabaseRealtime() {
                                   geojsonLayer.removeLayer(l);
                               }
                           });
+                          themes.forEach(t => {
+                              const idx = (t.features || []).findIndex(f => f.properties && String(f.properties.id_banco) === String(deletedId));
+                              if (idx >= 0) {
+                                  t.features.splice(idx, 1);
+                                  const countEl = document.getElementById(`theme-count-${t.id}`);
+                                  if (countEl) countEl.textContent = t.features.length;
+                              }
+                          });
                       }
                       return;
                   }
@@ -4435,33 +5001,25 @@ function setupSupabaseRealtime() {
                           const theme = themes.find(t => String(t.id) === String(record.theme_id));
                           if (!theme) return;
 
-                          const geojsonFeature = {
+                          const newFeature = {
                               type: 'Feature',
                               geometry: record.geometria,
-                              properties: { ...record.propriedades, themeId: record.theme_id, id_banco: record.id }
+                              properties: { ...record.propriedades, themeId: record.theme_id, id_banco: record.id, _propertiesLoaded: true }
                           };
 
-                          if (eventType === 'UPDATE') {
-                              // Remove a versão antiga e adiciona a nova
-                              geojsonLayer.eachLayer(l => {
-                                  if (l.feature && String(l.feature.properties.id_banco) === String(record.id)) {
-                                      geojsonLayer.removeLayer(l);
-                                  }
-                              });
-                          }
+                          // Atualiza theme.features (fonte de verdade da contagem
+                          // e do filtro) — não só o mapa. Sem isso, edições de
+                          // outros usuários deixam a contagem/lista desatualizadas.
+                          const idx = (theme.features || []).findIndex(f => f.properties && String(f.properties.id_banco) === String(record.id));
+                          if (idx >= 0) theme.features[idx] = newFeature;
+                          else theme.features.push(newFeature);
 
-                          // Só adiciona se a camada estiver visível
-                          if (theme.visible !== false) {
-                              geojsonLayer.addData(geojsonFeature);
-                          }
+                          // Redesenha respeitando visibilidade e o limite de
+                          // densidade (evita furar o cap com inserções em tempo real)
+                          loadAllFeaturesToMap();
 
-                          // Atualiza o contador no painel
                           const countEl = document.getElementById(`theme-count-${theme.id}`);
-                          if (countEl) {
-                              const allInTheme = [];
-                              geojsonLayer.eachLayer(l => { if (l.feature && String(l.feature.properties.themeId) === String(theme.id)) allInTheme.push(l); });
-                              countEl.textContent = `${allInTheme.length} REGISTRO${allInTheme.length !== 1 ? 'S' : ''}`;
-                          }
+                          if (countEl) countEl.textContent = theme.features.length;
                       }, 500); // Debounce 500ms para lotes de importação
                       return;
                   }

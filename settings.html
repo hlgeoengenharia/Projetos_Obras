@@ -2,6 +2,8 @@
 <html class="light" lang="pt-BR"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>Ajustes — GeoGestor</title>
+<link rel="icon" type="image/png" href="assets/logo.png">
 <script>
   (function() {
     try {
@@ -627,6 +629,10 @@
           <span class="material-symbols-outlined text-[22px]">cloud_upload</span>
           <span class="text-[9px] font-medium tracking-wide uppercase">Arquivos</span>
       </button>
+      <button onclick="switchTab('usuarios', this)" class="tab-btn h-full px-6 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[80px]" title="Usuários e Permissões">
+          <span class="material-symbols-outlined text-[22px]">group</span>
+          <span class="text-[9px] font-medium tracking-wide uppercase">Usuários</span>
+      </button>
   </div>
   
   <!-- Espaçador no canto direito para balancear o alinhamento central das abas -->
@@ -962,6 +968,28 @@
     </div>
   </div>
 
+  <!-- Tab Content: Usuários e Permissões -->
+  <div id="usuarios" class="tab-content">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+      <div>
+        <h2 class="text-lg font-bold">Usuários e Permissões</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400">Defina o papel de cada usuário e quais camadas cada um pode ver, editar ou excluir.</p>
+      </div>
+      <button onclick="loadUsersPanel()" class="flex items-center gap-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors shrink-0">
+        <span class="material-symbols-outlined text-[18px]">refresh</span> Atualizar
+      </button>
+    </div>
+
+    <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3 mb-5 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+      <span class="material-symbols-outlined text-[16px] mt-0.5">info</span>
+      <span>Novas contas são criadas no painel do Supabase (Authentication → Users → Add user). Assim que a conta existe, ela aparece aqui pra você definir o papel e as permissões por camada.</span>
+    </div>
+
+    <div id="users-list" class="flex flex-col gap-3">
+      <div class="p-6 text-center text-slate-400 text-sm italic">Clique em "Atualizar" para carregar.</div>
+    </div>
+  </div>
+
 </main>
 
   <!-- Simulador A4 Modal -->
@@ -1081,13 +1109,65 @@
   </div>
 
   <script>
-    
-    window.addEventListener('DOMContentLoaded', () => {
+
+    // --- AUTENTICAÇÃO ---
+    // settings.html é o construtor de formulários e o painel de usuários/
+    // permissões de UM município (o escolhido em home.html) — ações
+    // estruturais, restritas ao admin daquele município (ou super_admin).
+    // A segurança de verdade é o RLS no banco; isto é só a guarda no cliente.
+    let currentUserProfile = null;
+    let activeMunicipioId = null;
+
+    async function ensureAdminAccess() {
+      if (typeof supabaseClient === 'undefined' || !supabaseClient) return true; // dev local sem Supabase
+
+      const { data } = await supabaseClient.auth.getSession();
+      if (!data || !data.session) {
+        window.location.href = 'login.html';
+        return false;
+      }
+
+      activeMunicipioId = sessionStorage.getItem('municipio_ativo');
+      if (!activeMunicipioId) {
+        window.location.href = 'home.html';
+        return false;
+      }
+
+      const { data: profile } = await supabaseClient
+        .from('profiles')
+        .select('*')
+        .eq('id', data.session.user.id)
+        .single();
+
+      currentUserProfile = profile || { id: data.session.user.id, nome: data.session.user.email, super_admin: false };
+
+      if (currentUserProfile.super_admin) return true;
+
+      const { data: membro } = await supabaseClient
+        .from('municipio_membros')
+        .select('papel, status')
+        .eq('user_id', data.session.user.id)
+        .eq('municipio_id', activeMunicipioId)
+        .eq('status', 'aprovado')
+        .maybeSingle();
+
+      if (!membro || membro.papel !== 'admin') {
+        alert('Esta área é restrita ao administrador deste município.');
+        window.location.href = 'home.html';
+        return false;
+      }
+      return true;
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      const ok = await ensureAdminAccess();
+      if (!ok) return;
+
       const savedTheme = localStorage.getItem('constructive_theme') || 'Claro';
       const themeSelect = document.getElementById('theme-select');
       if (themeSelect) themeSelect.value = savedTheme;
-      
-      
+
+
       const savedGeminiKey = localStorage.getItem('gemini_api_key');
       if (savedGeminiKey && document.getElementById('gemini-api-key')) {
           document.getElementById('gemini-api-key').value = savedGeminiKey;
@@ -1347,7 +1427,9 @@
     async function loadForms() {
       if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         try {
-          const { data, error } = await supabaseClient.from('forms').select('*').order('created_at', { ascending: false });
+          let formsQuery = supabaseClient.from('forms').select('*').order('created_at', { ascending: false });
+          if (activeMunicipioId) formsQuery = formsQuery.eq('municipio_id', activeMunicipioId);
+          const { data, error } = await formsQuery;
           if (!error && data && data.length > 0) {
             forms = data.map(row => {
                 let tabs = row.schema;
@@ -1422,10 +1504,11 @@
           for (const form of forms) {
             const { error } = await supabaseClient
               .from('forms')
-              .upsert({ 
-                id: form.id, 
-                title: form.name, 
-                schema: { tabs: form.tabs, statsConfig: form.statsConfig } 
+              .upsert({
+                id: form.id,
+                title: form.name,
+                schema: { tabs: form.tabs, statsConfig: form.statsConfig },
+                municipio_id: activeMunicipioId
               });
             if (error) console.error('Erro ao salvar no Supabase:', error);
           }
@@ -3226,9 +3309,137 @@
             originalSwitchTab(tabId, btn);
             if (tabId === 'storage') {
                 loadStorageFolders();
+            } else if (tabId === 'usuarios') {
+                loadUsersPanel();
             }
         };
     }
+
+    // --- USUÁRIOS E PERMISSÕES (escopado ao município ativo) ---
+    const PAPEL_LABELS_PT = { admin: 'Administrador', editor: 'Editor', visualizador: 'Visualizador', externo: 'Acesso Externo' };
+    const STATUS_LABELS_PT = { pendente: 'Pendente', aprovado: 'Aprovado', rejeitado: 'Rejeitado' };
+
+    async function loadUsersPanel() {
+        const container = document.getElementById('users-list');
+        if (!container || typeof supabaseClient === 'undefined' || !supabaseClient || !activeMunicipioId) return;
+        container.innerHTML = '<div class="p-6 text-center text-slate-400 text-sm italic">Carregando...</div>';
+
+        const [membrosRes, temasRes, permsRes] = await Promise.all([
+            supabaseClient.from('municipio_membros').select('*, profiles!user_id(id, nome, email)').eq('municipio_id', activeMunicipioId).order('solicitado_em', { ascending: true }),
+            supabaseClient.from('temas').select('id, nome').eq('municipio_id', activeMunicipioId),
+            supabaseClient.from('permissoes_camada').select('*')
+        ]);
+
+        if (membrosRes.error) {
+            container.innerHTML = '<div class="p-6 text-center text-red-500 text-sm">Erro ao carregar usuários.</div>';
+            console.error(membrosRes.error);
+            return;
+        }
+
+        window._usersPanelTemas = temasRes.data || [];
+        window._usersPanelPerms = permsRes.data || [];
+
+        container.innerHTML = (membrosRes.data || []).map(m => renderMembroCard(m)).join('')
+            || '<div class="p-6 text-center text-slate-400 text-sm italic">Nenhum usuário associado a este município ainda.</div>';
+    }
+
+    function renderMembroCard(membro) {
+        const perfil = membro.profiles || {};
+        const temas = window._usersPanelTemas || [];
+        const permByTheme = {};
+        (window._usersPanelPerms || []).filter(pc => pc.user_id === membro.user_id).forEach(pc => { permByTheme[pc.theme_id] = pc; });
+
+        const papelOptions = ['admin', 'editor', 'visualizador', 'externo'].map(v =>
+            `<option value="${v}" ${membro.papel === v ? 'selected' : ''}>${PAPEL_LABELS_PT[v]}</option>`
+        ).join('');
+        const statusOptions = ['pendente', 'aprovado', 'rejeitado'].map(v =>
+            `<option value="${v}" ${membro.status === v ? 'selected' : ''}>${STATUS_LABELS_PT[v]}</option>`
+        ).join('');
+
+        const gridRows = temas.map(t => {
+            const pc = permByTheme[t.id] || { pode_ver: false, pode_editar: false, pode_excluir: false };
+            return `
+            <div class="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                <span class="text-xs text-slate-600 dark:text-slate-300 truncate">${t.nome}</span>
+                <div class="flex items-center gap-3 text-[10px] font-medium text-slate-500 uppercase">
+                    <label class="flex items-center gap-1"><input type="checkbox" class="perm-ver" data-theme="${t.id}" ${pc.pode_ver ? 'checked' : ''}> Ver</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" class="perm-editar" data-theme="${t.id}" ${pc.pode_editar ? 'checked' : ''}> Editar</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" class="perm-excluir" data-theme="${t.id}" ${pc.pode_excluir ? 'checked' : ''}> Excluir</label>
+                </div>
+            </div>`;
+        }).join('') || '<div class="text-xs text-slate-400 italic py-2">Nenhuma camada cadastrada neste município ainda.</div>';
+
+        return `
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-4" data-membro-id="${membro.id}" data-user-id="${membro.user_id}">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
+                <div>
+                    <div class="text-sm font-bold text-slate-800 dark:text-slate-100">${perfil.nome || '(sem nome)'}</div>
+                    <div class="text-xs text-slate-500">${perfil.email || ''}${membro.entidade ? ' · ' + membro.entidade : ''}${membro.cargo ? ' · ' + membro.cargo : ''}</div>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <select class="membro-status text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5" data-membro="${membro.id}">
+                        ${statusOptions}
+                    </select>
+                    <select class="membro-papel text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5" data-membro="${membro.id}">
+                        ${papelOptions}
+                    </select>
+                    <button onclick="toggleUserPermsPanel('${membro.user_id}')" class="text-xs text-primary hover:underline">Permissões por camada</button>
+                </div>
+            </div>
+            <div id="perms-grid-${membro.user_id}" class="hidden mt-3 border-t border-slate-100 dark:border-slate-800 pt-3">
+                ${gridRows}
+                <button onclick="savePermissions('${membro.user_id}')" class="mt-3 text-xs bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary/90">Salvar permissões</button>
+            </div>
+        </div>`;
+    }
+
+    function toggleUserPermsPanel(userId) {
+        const el = document.getElementById('perms-grid-' + userId);
+        if (el) el.classList.toggle('hidden');
+    }
+
+    async function savePermissions(userId) {
+        const grid = document.getElementById('perms-grid-' + userId);
+        if (!grid) return;
+        const upserts = [];
+        grid.querySelectorAll('.perm-ver').forEach(verCb => {
+            const themeId = verCb.getAttribute('data-theme');
+            const editarCb = grid.querySelector(`.perm-editar[data-theme="${themeId}"]`);
+            const excluirCb = grid.querySelector(`.perm-excluir[data-theme="${themeId}"]`);
+            upserts.push({
+                user_id: userId,
+                theme_id: themeId,
+                pode_ver: verCb.checked,
+                pode_editar: editarCb ? editarCb.checked : false,
+                pode_excluir: excluirCb ? excluirCb.checked : false
+            });
+        });
+
+        const { error } = await supabaseClient.from('permissoes_camada').upsert(upserts, { onConflict: 'user_id,theme_id' });
+        if (error) {
+            alert('Erro ao salvar permissões: ' + error.message);
+            console.error(error);
+            return;
+        }
+        if (typeof showStorageToast === 'function') showStorageToast('Permissões salvas.');
+    }
+
+    document.addEventListener('change', async function(e) {
+        if (e.target.classList.contains('membro-papel') || e.target.classList.contains('membro-status')) {
+            const membroId = e.target.getAttribute('data-membro');
+            const card = e.target.closest('[data-membro-id]');
+            const papel = card.querySelector('.membro-papel').value;
+            const status = card.querySelector('.membro-status').value;
+            const { data: sessionData } = await supabaseClient.auth.getSession();
+            const { error } = await supabaseClient.from('municipio_membros').update({
+                papel,
+                status,
+                decidido_em: new Date().toISOString(),
+                decidido_por: sessionData.session.user.id
+            }).eq('id', membroId);
+            if (error) alert('Erro ao atualizar: ' + error.message);
+        }
+    });
     
     // Mocks for Form Preview Mode
     window.saveFeatureData = async function() {

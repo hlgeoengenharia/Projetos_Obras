@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(timeout 60 node smoke_test.js)",
+      "Bash(timeout 90 npx playwright install chromium)",
+      "Bash(curl -sf http://localhost:8080/index.html)",
+      "Bash(taskkill //PID 10312 //F)",
+      "Bash(taskkill //PID 15716 //F)",
+      "WebSearch",
+      "Bash(node -e ' *)",
+      "Read(//c/Users/WINDOW~1/AppData/Local/Temp/claude/**)",
+      "Bash(xargs -I{} ls -la \"{}\")",
+      "Bash(sort -k6,7)"
+    ]
+  }
+}
