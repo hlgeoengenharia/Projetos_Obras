@@ -2163,38 +2163,24 @@ async function deleteTheme(themeId) {
 
   if (typeof supabaseClient !== 'undefined' && supabaseClient) {
       try {
-          // Exclui em lotes — uma exclusão única de dezenas de milhares de
-          // linhas de uma vez pode passar do tempo limite do banco. Lotes
-          // menores terminam bem dentro do limite, não importa o tamanho
-          // total da camada.
-          const batchSize = 1000;
-          let hasMore = true;
-          while (hasMore) {
-              const { data: batch, error: fetchErr } = await supabaseClient
-                  .from('feicoes')
-                  .select('id')
-                  .eq('theme_id', themeId)
-                  .limit(batchSize);
-
-              if (fetchErr) {
-                  alert('Erro ao excluir a camada: ' + fetchErr.message);
-                  console.error("Erro ao buscar feições para excluir:", fetchErr);
-                  return;
-              }
-              if (!batch || batch.length === 0) { hasMore = false; break; }
-
-              const { error: delErr } = await supabaseClient
-                  .from('feicoes')
-                  .delete()
-                  .in('id', batch.map(f => f.id));
+          // Exclui em lotes DENTRO do banco (RPC) — enviar uma lista de
+          // milhares de IDs pelo .in() vira uma URL enorme e estoura o
+          // limite de tamanho de requisição do servidor. Com a função,
+          // o navegador só manda theme_id + tamanho do lote, sempre curto.
+          let deletedInBatch = 0;
+          do {
+              const { data, error: delErr } = await supabaseClient.rpc('delete_feicoes_batch', {
+                  p_theme_id: themeId,
+                  p_batch_size: 2000
+              });
 
               if (delErr) {
                   alert('Erro ao excluir feições da camada: ' + delErr.message);
                   console.error("Erro ao excluir lote de feições:", delErr);
                   return;
               }
-              hasMore = batch.length === batchSize;
-          }
+              deletedInBatch = data || 0;
+          } while (deletedInBatch > 0);
 
           // Delete theme
           const { error } = await supabaseClient.from('temas').delete().eq('id', themeId);
