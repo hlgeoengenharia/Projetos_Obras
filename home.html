@@ -62,34 +62,90 @@
 </head>
 <body class="font-sans min-h-screen">
 
-<header class="h-16 bg-white/70 dark:bg-[#070b14]/75 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 shadow-sm flex items-center justify-between px-4 md:px-8">
-  <div class="flex items-center gap-3">
+<header class="h-16 bg-white/70 dark:bg-[#070b14]/75 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 shadow-sm flex items-center px-4 md:px-8 gap-4">
+  <div class="flex items-center gap-3 shrink-0">
     <img src="assets/logo.png" alt="GeoGestor" class="w-9 h-9 rounded-lg object-cover">
-    <span class="font-black tracking-widest uppercase text-slate-800 dark:text-slate-100 text-sm">GeoGestor</span>
+    <span class="font-black tracking-widest uppercase text-slate-800 dark:text-slate-100 text-sm hidden sm:inline">GeoGestor</span>
   </div>
-  <div class="flex items-center gap-3">
-    <span id="home-user-name" class="text-xs text-slate-500 dark:text-slate-400"></span>
-    <button onclick="window.handleLogout()" class="flex items-center gap-1.5 text-xs font-medium bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 px-3 py-1.5 rounded-lg transition-colors">
-      <span class="material-symbols-outlined text-[16px]">logout</span> Sair
+
+  <!-- Abas (só aparecem pra quem tem mais de uma coisa pra ver — hoje, super_admin) -->
+  <div id="home-tabs" class="hidden flex-1 items-center justify-center gap-1 h-full">
+    <button class="tab-btn active h-full px-4 md:px-6 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('municipios-section', this)" title="Municípios">
+      <span class="material-symbols-outlined text-[20px]">location_city</span>
+      <span class="text-[9px] font-medium uppercase tracking-wide">Municípios</span>
+    </button>
+    <button id="tab-btn-entidades" class="hidden tab-btn h-full px-4 md:px-6 flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('entidades-section', this)" title="Entidades Padrão">
+      <span class="material-symbols-outlined text-[20px]">domain</span>
+      <span class="text-[9px] font-medium uppercase tracking-wide">Entidades</span>
+    </button>
+    <button id="tab-btn-pendentes" class="hidden relative tab-btn h-full px-4 md:px-6 flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('pending-section', this)" title="Solicitações">
+      <span class="material-symbols-outlined text-[20px]">pending_actions</span>
+      <span class="text-[9px] font-medium uppercase tracking-wide">Solicitações</span>
+      <span id="pending-badge" class="hidden absolute top-2 right-3 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center"></span>
+    </button>
+  </div>
+
+  <!-- Perfil: mesmo modal usado em index.html -->
+  <div class="shrink-0 ml-auto">
+    <button id="profile-btn" onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-9 h-9 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors">
+      <img src="assets/logo.png" alt="Perfil" class="w-full h-full object-cover">
     </button>
   </div>
 </header>
 
-<!-- Abas (só aparecem pra quem tem mais de uma coisa pra ver — hoje, super_admin) -->
-<div id="home-tabs" class="hidden bg-white/50 dark:bg-[#070b14]/50 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 items-center justify-center gap-1">
-  <button class="tab-btn active h-16 px-6 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('municipios-section', this)" title="Municípios">
-    <span class="material-symbols-outlined text-[20px]">location_city</span>
-    <span class="text-[9px] font-medium uppercase tracking-wide">Municípios</span>
-  </button>
-  <button id="tab-btn-entidades" class="hidden tab-btn h-16 px-6 flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('entidades-section', this)" title="Entidades Padrão">
-    <span class="material-symbols-outlined text-[20px]">domain</span>
-    <span class="text-[9px] font-medium uppercase tracking-wide">Entidades</span>
-  </button>
-  <button id="tab-btn-pendentes" class="hidden relative tab-btn h-16 px-6 flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('pending-section', this)" title="Solicitações">
-    <span class="material-symbols-outlined text-[20px]">pending_actions</span>
-    <span class="text-[9px] font-medium uppercase tracking-wide">Solicitações</span>
-    <span id="pending-badge" class="hidden absolute top-2 right-3 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center"></span>
-  </button>
+<!-- Profile Modal (idêntico ao de index.html) -->
+<div id="profile-modal" class="fixed inset-0 bg-black/60 z-[200] hidden flex items-center justify-center backdrop-blur-sm px-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col transform transition-all">
+        <!-- Header -->
+        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/20">
+            <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary">person</span>
+                Perfil do Usuário
+            </h3>
+            <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+
+        <!-- Body -->
+        <div class="p-6 overflow-y-auto">
+            <div class="flex flex-col items-center mb-6">
+                <img src="assets/logo.png" alt="Avatar" class="w-20 h-20 rounded-full border-4 border-slate-100 dark:border-slate-800 shadow-sm object-cover mb-3">
+                <h4 id="profile-user-name" class="text-base font-bold text-slate-800 dark:text-white">Usuário Logado</h4>
+                <p id="profile-user-role" class="text-sm text-slate-500 dark:text-slate-400">—</p>
+                <p id="profile-user-municipio" class="text-xs text-primary font-semibold mt-0.5"></p>
+            </div>
+
+            <div class="border-t border-slate-200 dark:border-slate-800 pt-5">
+                <h4 class="text-sm font-bold text-slate-800 dark:text-white mb-4 uppercase tracking-wider">Configurações Gerais</h4>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Tema do Sistema</label>
+                        <div class="relative">
+                            <select id="profile-theme-select" onchange="window.changeTheme(this.value);" class="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm appearance-none cursor-pointer">
+                                <option value="Claro">Claro</option>
+                                <option value="Escuro">Escuro</option>
+                                <option value="Automático">Automático</option>
+                            </select>
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[20px]">palette</span>
+                            <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[20px]">expand_more</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="px-5 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 flex gap-2">
+            <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="flex-1 px-5 py-2 text-sm font-medium bg-primary text-white hover:bg-primary/90 rounded-lg transition-colors shadow-sm">
+                Pronto
+            </button>
+            <button onclick="window.handleLogout()" class="px-4 py-2 text-sm font-medium bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[18px]">logout</span> Sair
+            </button>
+        </div>
+    </div>
 </div>
 
 <main class="max-w-5xl mx-auto px-4 md:px-8 py-8">
@@ -145,6 +201,31 @@ function switchHomeTab(sectionId, btn) {
     btn.classList.add('active');
 }
 window.switchHomeTab = switchHomeTab;
+
+// Mesmo comportamento de tema usado em index.html/settings.html
+window.changeTheme = function(theme) {
+    localStorage.setItem('constructive_theme', theme);
+    document.documentElement.classList.remove('light', 'dark', 'neon');
+    if (theme === 'Azul neon') {
+        document.documentElement.classList.add('neon', 'dark');
+    } else if (theme === 'Escuro' || (theme === 'Automático' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+    } else {
+        document.documentElement.classList.add('light');
+    }
+};
+
+function applyCurrentUserToProfileModal() {
+    if (!homeUserProfile) return;
+    const nameEl = document.getElementById('profile-user-name');
+    const roleEl = document.getElementById('profile-user-role');
+    const themeSelect = document.getElementById('profile-theme-select');
+    if (nameEl) nameEl.textContent = homeUserProfile.nome || homeUserProfile.email || 'Usuário';
+    if (roleEl) roleEl.textContent = homeUserProfile.super_admin ? 'Administrador Geral' : '—';
+    if (themeSelect) themeSelect.value = localStorage.getItem('constructive_theme') || 'Claro';
+    // profile-user-municipio fica vazio aqui — nesta página o usuário ainda
+    // não escolheu um município (é o índex.html que sabe qual está ativo).
+}
 
 window.handleLogout = async function() {
     if (supabaseClient) {
@@ -252,7 +333,7 @@ async function init() {
 
     const { data: profile } = await supabaseClient.from('profiles').select('*').eq('id', userId).single();
     homeUserProfile = profile || { nome: sessionData.session.user.email, super_admin: false };
-    document.getElementById('home-user-name').textContent = homeUserProfile.nome || homeUserProfile.email || '';
+    applyCurrentUserToProfileModal();
 
     document.getElementById('loading-section').classList.add('hidden');
     document.getElementById('empty-section').classList.add('hidden');
