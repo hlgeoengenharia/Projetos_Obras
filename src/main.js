@@ -620,18 +620,20 @@ function initMap() {
     updateLabelsVisibility();
   });
 
-  // Re-renderiza (sem rede — só filtra localmente o que já está em memória)
-  // conforme o usuário navega, pra manter o limite de MAX_FEATURES_PER_VIEW
-  // por tema mesmo em áreas muito densas. Nunca faz isso durante desenho/edição
-  // de geometria: reconstruir geojsonLayer troca os objetos Leaflet por
-  // instâncias novas e derruba o estado de edição do Geoman (vértices somem).
+  // Re-renderiza com busca espacial rápida (R-Tree) e debounce conforme o usuário navega.
+  // Mantém 60 FPS sem congelamentos na UI.
+  let moveEndTimer = null;
   map.on('moveend', function() {
       const drawingToolbar = document.getElementById('drawing-toolbar');
       const editToolbar = document.getElementById('geometry-edit-toolbar');
       const isDrawing = drawingToolbar && !drawingToolbar.classList.contains('hidden');
       const isEditingGeom = editToolbar && !editToolbar.classList.contains('hidden');
       if (isDrawing || isEditingGeom) return;
-      loadAllFeaturesToMap();
+      
+      clearTimeout(moveEndTimer);
+      moveEndTimer = setTimeout(() => {
+          loadAllFeaturesToMap();
+      }, 70);
   });
 
   loadThemes().then(async () => {
@@ -698,32 +700,20 @@ function updateLabelsVisibility() {
 
 
 function loadAllFeaturesToMap() {
-  // fetchDynamicForm() dispara no carregamento do script, antes do mapa
-  // existir — com a verificação de login adicionando esperas assíncronas
-  // antes de initMap(), essa chamada agora pode chegar primeiro.
   if (!geojsonLayer) return;
 
-  // Guardar o ID temporário ou ID do banco da feição selecionada no momento
   const activeTempId = activeFeatureLayer && activeFeatureLayer.feature && activeFeatureLayer.feature.properties && activeFeatureLayer.feature.properties._tempId;
   const activeDbId = activeFeatureLayer && activeFeatureLayer.feature && activeFeatureLayer.feature.properties && activeFeatureLayer.feature.properties.id_banco;
 
-  geojsonLayer.clearLayers();
-
-  // Filtro local (sem rede): se um tema tem mais feições do que o razoável
-  // pra desenhar de uma vez, só renderiza as que caem na área visível atual
-  // — e se mesmo assim passar do limite, não desenha nada e avisa pra dar
-  // zoom, em vez de travar o navegador criando milhares de camadas Leaflet.
   const bounds = map ? map.getBounds() : null;
   const allFeatures = [];
+
   themes.slice().reverse().forEach(theme => {
     if (theme.visible !== false) {
       const withGeom = (theme.features || []).filter(f => f.geometry);
       let toRender = withGeom;
 
       if (theme._activeFilterFids) {
-          // Busca/filtro tem prioridade sobre o limite de densidade — o
-          // usuário precisa conseguir localizar um resultado no mapa mesmo
-          // que ele esteja fora da área "capada" por excesso de feições.
           toRender = withGeom.filter(f => theme._activeFilterFids.has(f.properties._tempId));
           if (toRender.length > MAX_FEATURES_PER_VIEW) {
               const alreadyWarned = theme._tooManyFeaturesInView;
@@ -736,16 +726,26 @@ function loadAllFeaturesToMap() {
               theme._tooManyFeaturesInView = null;
           }
       } else if (withGeom.length > MAX_FEATURES_PER_VIEW && bounds) {
-          const west = bounds.getWest(), east = bounds.getEast();
-          const south = bounds.getSouth(), north = bounds.getNorth();
-          toRender = withGeom.filter(f => {
-              let bbox = f.properties._bbox;
-              if (!bbox) {
-                  bbox = computeGeoJSONBbox(f.geometry);
-                  f.properties._bbox = bbox;
-              }
-              return bbox && bbox[2] >= west && bbox[0] <= east && bbox[3] >= south && bbox[1] <= north;
-          });
+          // Busca espacial ultrarrápida O(log N) usando R-Tree se disponível
+          let hits = null;
+          if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.queryViewport === 'function') {
+              hits = window.GeoEngineTurbo.queryViewport(theme.id, bounds);
+          }
+
+          if (hits) {
+              toRender = hits;
+          } else {
+              const west = bounds.getWest(), east = bounds.getEast();
+              const south = bounds.getSouth(), north = bounds.getNorth();
+              toRender = withGeom.filter(f => {
+                  let bbox = f.properties._bbox;
+                  if (!bbox) {
+                      bbox = computeGeoJSONBbox(f.geometry);
+                      f.properties._bbox = bbox;
+                  }
+                  return bbox && bbox[2] >= west && bbox[0] <= east && bbox[3] >= south && bbox[1] <= north;
+              });
+          }
 
           if (toRender.length > MAX_FEATURES_PER_VIEW) {
               const alreadyWarned = theme._tooManyFeaturesInView;
@@ -765,31 +765,34 @@ function loadAllFeaturesToMap() {
     }
   });
 
-  if (allFeatures.length > 0) {
-    geojsonLayer.addData(allFeatures);
-  }
-
-  // Re-estabelecer o activeFeatureLayer com o novo objeto correspondente recém-criado
-  if (activeTempId || activeDbId) {
-      let foundLayer = null;
-      geojsonLayer.eachLayer(layer => {
-          if (layer.feature && layer.feature.properties) {
-              const props = layer.feature.properties;
-              if ((activeTempId && props._tempId === activeTempId) || (activeDbId && props.id_banco === activeDbId)) {
-                  foundLayer = layer;
+  const onRenderFinished = () => {
+      if (activeTempId || activeDbId) {
+          let foundLayer = null;
+          geojsonLayer.eachLayer(layer => {
+              if (layer.feature && layer.feature.properties) {
+                  const props = layer.feature.properties;
+                  if ((activeTempId && props._tempId === activeTempId) || (activeDbId && props.id_banco === activeDbId)) {
+                      foundLayer = layer;
+                  }
               }
+          });
+          if (foundLayer) {
+              activeFeatureLayer = foundLayer;
+              highlightFeature(activeFeatureLayer.feature.properties._tempId, true);
           }
-      });
-      if (foundLayer) {
-          activeFeatureLayer = foundLayer;
-          // Reaplica o destaque visual no mapa sem mover/puxar a câmera
-          highlightFeature(activeFeatureLayer.feature.properties._tempId, true);
       }
-  }
+      if (typeof updateLabelsVisibility === 'function') updateLabelsVisibility();
+  };
 
-  // Reavalia quais rótulos cabem dentro do polígono — os layers acabaram de
-  // ser recriados, então os rótulos antigos (já filtrados) não existem mais.
-  if (typeof updateLabelsVisibility === 'function') updateLabelsVisibility();
+  if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.renderFeaturesProgressive === 'function') {
+      window.GeoEngineTurbo.renderFeaturesProgressive(geojsonLayer, allFeatures, onRenderFinished);
+  } else {
+      geojsonLayer.clearLayers();
+      if (allFeatures.length > 0) {
+          geojsonLayer.addData(allFeatures);
+      }
+      onRenderFinished();
+  }
 }
 
 async function syncMapDataToThemes() {
@@ -1186,29 +1189,86 @@ function toggleThemeVisibility(themeId) {
   theme.visible = theme.visible === false ? true : false;
   saveThemes();
 
-  // Responde imediatamente ao clique (sem bloquear a thread)
+  // Resposta visual imediata no card correspondente (sem recriar todo o DOM da sidebar)
+  const isVisible = theme.visible !== false;
+  const listEl = document.getElementById('feature-list-' + themeId);
+  if (listEl) {
+      if (isVisible) listEl.classList.remove('opacity-50');
+      else listEl.classList.add('opacity-50');
+  }
+
+  // Atualização em background (não bloqueia a thread de cliques)
   setTimeout(async () => {
-      // Ativação sob demanda: só carrega o tema na 1ª vez que ele é ligado
-      if (theme.visible !== false && !theme._propertiesFullyLoaded) {
+      if (isVisible && !theme._propertiesFullyLoaded) {
           await loadThemeProperties(theme.id);
+      } else {
+          loadAllFeaturesToMap();
       }
-      loadAllFeaturesToMap();
-      renderThemes();
   }, 0);
 }
 
 // Carrega propriedades completas de todas as feições de uma camada
 async function loadThemeProperties(themeId) {
-    if (!supabaseClient) return;
     const theme = themes.find(t => t.id === themeId);
     if (!theme || theme._propertiesFullyLoaded) return;
 
+    // 1. TENTA RECUPERAR DO CACHE PERSISTENTE INDEXED DB (Zero consumo de rede no Supabase Free Tier)
+    if (window.GeoTurboDB && typeof window.GeoTurboDB.getThemeData === 'function') {
+        try {
+            const cached = await window.GeoTurboDB.getThemeData(themeId);
+            if (cached && cached.features && cached.features.length > 0) {
+                console.log(`[GeoEngineTurbo] Tema "${theme.name}" recuperado INSTANTANEAMENTE do cache IndexedDB: ${cached.features.length} feições`);
+                
+                const existingByBankId = new Map();
+                theme.features.forEach(f => {
+                    if (f.properties && f.properties.id_banco) existingByBankId.set(f.properties.id_banco, f);
+                });
+
+                cached.features.forEach(f => {
+                    const idBanco = f.properties && f.properties.id_banco;
+                    if (idBanco && existingByBankId.has(idBanco)) {
+                        const existing = existingByBankId.get(idBanco);
+                        existing.properties = { ...f.properties, themeId, _propertiesLoaded: true };
+                        if (!existing.geometry) existing.geometry = f.geometry;
+                    } else {
+                        theme.features.push(f);
+                    }
+                });
+
+                theme._propertiesFullyLoaded = true;
+                theme._geometryLoaded = true;
+
+                // Indexa na R-Tree para consultas espaciais instantâneas
+                if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.indexThemeFeatures === 'function') {
+                    window.GeoEngineTurbo.indexThemeFeatures(theme.id, theme.features);
+                }
+
+                loadAllFeaturesToMap();
+
+                const countEl = document.getElementById('theme-count-' + themeId);
+                if (countEl) countEl.textContent = theme.features.length;
+
+                const listEl = document.getElementById('list-' + themeId);
+                if (listEl && !listEl.classList.contains('hidden')) {
+                    const featureListEl = document.getElementById('feature-list-' + themeId);
+                    if (featureListEl) featureListEl.innerHTML = renderFeatureListItems(theme);
+                    if (!isRefreshingDropdowns) {
+                        isRefreshingDropdowns = true;
+                        try { refreshFilterDropdownOptions(themeId); }
+                        finally { isRefreshingDropdowns = false; }
+                    }
+                }
+                return; // Carregamento instantâneo concluído com sucesso!
+            }
+        } catch(eCache) {
+            console.warn('[GeoEngineTurbo] Falha na leitura do cache IndexedDB:', eCache);
+        }
+    }
+
+    if (!supabaseClient) return;
+
     try {
-        // Carga completa do tema (geometria + propriedades) numa única vez:
-        // 1ª página com contagem total, depois dispara as páginas restantes
-        // em paralelo, em lotes (evita sobrecarregar o pooler do plano
-        // gratuito) — com temas de 20 mil+ feições isso é a diferença entre
-        // ~40s numa fila sequencial e poucos segundos.
+        // Carga completa do tema (geometria + propriedades) pela rede:
         const fetchStep = 1000;
         const first = await runWithRetry(() => supabaseClient
             .from('feicoes')
@@ -1243,8 +1303,6 @@ async function loadThemeProperties(themeId) {
             });
         }
 
-        // Mescla nas feições já existentes (ex: a recém-criada via desenho)
-        // e adiciona as que ainda não estavam em memória.
         const existingByBankId = new Map();
         theme.features.forEach(f => {
             if (f.properties && f.properties.id_banco) existingByBankId.set(f.properties.id_banco, f);
@@ -1267,9 +1325,6 @@ async function loadThemeProperties(themeId) {
         });
 
         if (hadPageError) {
-            // NÃO marca como completo — uma nova tentativa de ativar a camada
-            // (ou reabrir a lista) vai tentar buscar tudo de novo, incluindo
-            // as feições já carregadas com sucesso (a mescla acima evita duplicar).
             if (typeof showWarningToast === 'function') {
                 showWarningToast(`"${theme.name}": algumas feições não carregaram (${allRows.length} de ${count || '?'}). Desligue e ligue a camada de novo pra tentar completar.`);
             }
@@ -1278,24 +1333,30 @@ async function loadThemeProperties(themeId) {
             theme._propertiesFullyLoaded = true;
             theme._geometryLoaded = true;
             console.log(`[LazyLoad] Tema "${theme.name}" carregado por completo: ${allRows.length} feições`);
+
+            // Grava no cache persistente IndexedDB para próximos acessos instantâneos
+            if (window.GeoTurboDB && typeof window.GeoTurboDB.saveThemeData === 'function') {
+                window.GeoTurboDB.saveThemeData(themeId, theme.features, theme.features.length);
+            }
         }
 
-        // Desenha no mapa o que foi possível carregar até agora
+        // Indexa na R-Tree
+        if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.indexThemeFeatures === 'function') {
+            window.GeoEngineTurbo.indexThemeFeatures(theme.id, theme.features);
+        }
+
+        // Desenha no mapa
         loadAllFeaturesToMap();
 
-        // Atualiza só o número do card (não o card inteiro — evitaria fechar
-        // um painel de filtro que o usuário tenha aberto em outro tema)
         const countEl = document.getElementById('theme-count-' + themeId);
         if (countEl) countEl.textContent = theme.features.length;
 
-        // Re-renderiza a lista na sidebar se estiver aberta (estava vazia pois props carregam async)
         const listEl = document.getElementById('list-' + themeId);
         if (listEl && !listEl.classList.contains('hidden')) {
             const featureListEl = document.getElementById('feature-list-' + themeId);
             if (featureListEl) {
                 featureListEl.innerHTML = renderFeatureListItems(theme);
             }
-            // Atualiza os dropdowns do filtro avançado com os valores reais
             if (!isRefreshingDropdowns) {
                 isRefreshingDropdowns = true;
                 try { refreshFilterDropdownOptions(themeId); }

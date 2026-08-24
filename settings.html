@@ -651,9 +651,72 @@
       </button>
   </div>
   
-  <!-- Espaçador no canto direito para balancear o alinhamento central das abas -->
-  <div class="min-w-[70px]"></div>
+  <!-- Perfil: mesmo modal usado em index.html/home.html -->
+  <div class="min-w-[70px] flex justify-end">
+    <button id="profile-btn" onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-9 h-9 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors" title="Perfil do Usuário">
+      <img src="assets/logo.png" alt="Perfil" class="w-full h-full object-cover">
+    </button>
+  </div>
 </header>
+
+<div id="profile-modal" class="fixed inset-0 bg-black/60 z-[200] hidden flex items-center justify-center backdrop-blur-sm px-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col transform transition-all">
+        <!-- Header -->
+        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/20">
+            <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary">person</span>
+                Perfil do Usuário
+            </h3>
+            <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+
+        <!-- Body -->
+        <div class="p-6 overflow-y-auto">
+            <div class="flex flex-col items-center mb-6">
+                <img src="assets/logo.png" alt="Avatar" class="w-20 h-20 rounded-full border-4 border-slate-100 dark:border-slate-800 shadow-sm object-cover mb-3">
+                <h4 id="profile-user-name" class="text-base font-bold text-slate-800 dark:text-white">Usuário Logado</h4>
+                <p id="profile-user-role" class="text-sm text-slate-500 dark:text-slate-400">—</p>
+                <p id="profile-user-municipio" class="text-xs text-primary font-semibold mt-0.5"></p>
+            </div>
+
+            <div class="border-t border-slate-200 dark:border-slate-800 pt-5">
+                <h4 class="text-sm font-bold text-slate-800 dark:text-white mb-4 uppercase tracking-wider">Configurações Gerais</h4>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Tema do Sistema</label>
+                        <div class="relative">
+                            <select id="profile-theme-select" onchange="window.changeTheme(this.value);" class="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm appearance-none cursor-pointer">
+                                <option value="Claro">Claro</option>
+                                <option value="Escuro">Escuro</option>
+                                <option value="Automático">Automático</option>
+                            </select>
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[20px]">palette</span>
+                            <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[20px]">expand_more</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="px-5 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 flex flex-col gap-2">
+            <div class="flex gap-2">
+                <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="flex-1 px-5 py-2 text-sm font-medium bg-primary text-white hover:bg-primary/90 rounded-lg transition-colors shadow-sm">
+                    Pronto
+                </button>
+                <button onclick="window.handleLogout()" class="px-4 py-2 text-sm font-medium bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[18px]">logout</span> Sair
+                </button>
+            </div>
+            <button onclick="window.location.href='home.html'" class="w-full px-4 py-2 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-primary transition-colors flex items-center justify-center gap-1.5">
+                <span class="material-symbols-outlined text-[16px]">swap_horiz</span> Trocar Município
+            </button>
+        </div>
+    </div>
+</div>
 
 <main class="pt-24 pb-12 px-4 md:px-8 max-w-6xl mx-auto">
 
@@ -1187,6 +1250,38 @@
       return true;
     }
 
+    // Mesmo modal/comportamento de perfil usado em index.html e home.html —
+    // quem chega até aqui já passou por ensureAdminAccess(), então é sempre
+    // super_admin ou admin do município ativo.
+    function applyCurrentUserToProfileModal() {
+        if (!currentUserProfile) return;
+        const nameEl = document.getElementById('profile-user-name');
+        const roleEl = document.getElementById('profile-user-role');
+        const munEl = document.getElementById('profile-user-municipio');
+        if (munEl) munEl.textContent = sessionStorage.getItem('municipio_ativo_nome') || '';
+        if (nameEl) nameEl.textContent = currentUserProfile.nome || 'Usuário';
+        if (roleEl) roleEl.textContent = currentUserProfile.super_admin ? 'Administrador Geral' : 'Administrador';
+    }
+
+    window.changeTheme = function(theme) {
+        localStorage.setItem('constructive_theme', theme);
+        document.documentElement.classList.remove('light', 'dark', 'neon');
+        if (theme === 'Azul neon') {
+            document.documentElement.classList.add('neon', 'dark');
+        } else if (theme === 'Escuro' || (theme === 'Automático' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.add('light');
+        }
+    };
+
+    window.handleLogout = async function() {
+        if (supabaseClient) {
+            try { await supabaseClient.auth.signOut(); } catch (e) {}
+        }
+        window.location.href = 'login.html';
+    };
+
     window.addEventListener('DOMContentLoaded', async () => {
       const ok = await ensureAdminAccess();
       if (!ok) return;
@@ -1194,7 +1289,9 @@
       const savedTheme = localStorage.getItem('constructive_theme') || 'Claro';
       const themeSelect = document.getElementById('theme-select');
       if (themeSelect) themeSelect.value = savedTheme;
-
+      const profileThemeSelect = document.getElementById('profile-theme-select');
+      if (profileThemeSelect) profileThemeSelect.value = savedTheme;
+      applyCurrentUserToProfileModal();
 
       const savedGeminiKey = localStorage.getItem('gemini_api_key');
       if (savedGeminiKey && document.getElementById('gemini-api-key')) {
