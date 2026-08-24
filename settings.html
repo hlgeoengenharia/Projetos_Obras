@@ -3316,7 +3316,10 @@
     }
 
     // --- USUÁRIOS E PERMISSÕES (escopado ao município ativo) ---
-    const PAPEL_LABELS_PT = { admin: 'Administrador', editor: 'Editor', visualizador: 'Visualizador', externo: 'Acesso Externo' };
+    // Editor e Visualizador sempre se comportaram igual (nenhuma checagem
+    // de permissão distingue os dois) — simplificado pra 3 níveis reais.
+    // 'editor' mapeado só por compatibilidade com linhas antigas.
+    const PAPEL_LABELS_PT = { admin: 'Administrador', editor: 'Usuário', visualizador: 'Usuário', externo: 'Acesso Externo' };
     const STATUS_LABELS_PT = { pendente: 'Pendente', aprovado: 'Aprovado', rejeitado: 'Rejeitado' };
 
     async function loadUsersPanel() {
@@ -3324,10 +3327,11 @@
         if (!container || typeof supabaseClient === 'undefined' || !supabaseClient || !activeMunicipioId) return;
         container.innerHTML = '<div class="p-6 text-center text-slate-400 text-sm italic">Carregando...</div>';
 
-        const [membrosRes, temasRes, permsRes] = await Promise.all([
+        const [membrosRes, temasRes, permsRes, entidadesRes] = await Promise.all([
             supabaseClient.from('municipio_membros').select('*, profiles!user_id(id, nome, email)').eq('municipio_id', activeMunicipioId).order('solicitado_em', { ascending: true }),
-            supabaseClient.from('temas').select('id, nome').eq('municipio_id', activeMunicipioId),
-            supabaseClient.from('permissoes_camada').select('*')
+            supabaseClient.from('temas').select('id, nome, tipo_cadastro').eq('municipio_id', activeMunicipioId),
+            supabaseClient.from('permissoes_camada').select('*'),
+            supabaseClient.from('entidades_padrao').select('nome, tipo')
         ]);
 
         if (membrosRes.error) {
@@ -3336,10 +3340,51 @@
             return;
         }
 
+        // Admin de MUNICÍPIO só gerencia o próprio time (entidade tipo
+        // "municipal", ex: Prefeitura) — MPF/PF/SPU/Outros que também têm
+        // acesso à cidade ficam de fora daqui, pra evitar que a prefeitura
+        // fiscalizada controle o acesso de quem fiscaliza ela. Isso não
+        // vale pro super_admin, que continua vendo todo mundo.
+        let membrosData = membrosRes.data || [];
+        if (!currentUserProfile.super_admin) {
+            const entidadesMunicipais = new Set((entidadesRes.data || []).filter(e => e.tipo === 'municipal').map(e => e.nome));
+            membrosData = membrosData.filter(m => entidadesMunicipais.has(m.entidade));
+        }
+
         window._usersPanelTemas = temasRes.data || [];
         window._usersPanelPerms = permsRes.data || [];
 
-        container.innerHTML = (membrosRes.data || []).map(m => renderMembroCard(m)).join('')
+        // Formulário Ativo (permissão por aba) — mesma UI de home.html em
+        // Solicitações, agora pra ATUALIZAR quem já está aprovado. Quem usa
+        // esta tela é sempre super_admin ou admin do município
+        // (ensureAdminAccess já garante isso) — sem teto na CONCESSÃO em si,
+        // só na LISTA de quem aparece (acima).
+        window._usersPanelForms = {};
+        window._usersPanelFormThemeIds = {};
+        window._usersPanelAbaPerms = {};
+        const temasComForm = (window._usersPanelTemas || []).filter(t => t.tipo_cadastro && t.tipo_cadastro !== 'padrao');
+        const formIds = [...new Set(temasComForm.map(t => t.tipo_cadastro))];
+        if (formIds.length > 0) {
+            const [formsRes, abaPermsRes] = await Promise.all([
+                supabaseClient.from('forms').select('id, title, schema').in('id', formIds),
+                supabaseClient.from('permissoes_aba').select('*').in('form_id', formIds)
+            ]);
+            (formsRes.data || []).forEach(f => {
+                let tabs = f.schema;
+                if (f.schema && !Array.isArray(f.schema) && f.schema.tabs) tabs = f.schema.tabs;
+                window._usersPanelForms[f.id] = { id: f.id, title: f.title, tabs: Array.isArray(tabs) ? tabs : [] };
+            });
+            temasComForm.forEach(t => {
+                if (!window._usersPanelForms[t.tipo_cadastro]) return;
+                if (!window._usersPanelFormThemeIds[t.tipo_cadastro]) window._usersPanelFormThemeIds[t.tipo_cadastro] = [];
+                window._usersPanelFormThemeIds[t.tipo_cadastro].push(t.id);
+            });
+            (abaPermsRes.data || []).forEach(p => {
+                window._usersPanelAbaPerms[p.user_id + ':' + p.form_id + ':' + p.tab_id] = p;
+            });
+        }
+
+        container.innerHTML = membrosData.map(m => renderMembroCard(m)).join('')
             || '<div class="p-6 text-center text-slate-400 text-sm italic">Nenhum usuário associado a este município ainda.</div>';
     }
 
@@ -3349,7 +3394,7 @@
         const permByTheme = {};
         (window._usersPanelPerms || []).filter(pc => pc.user_id === membro.user_id).forEach(pc => { permByTheme[pc.theme_id] = pc; });
 
-        const papelOptions = ['admin', 'editor', 'visualizador', 'externo'].map(v =>
+        const papelOptions = ['admin', 'visualizador', 'externo'].map(v =>
             `<option value="${v}" ${membro.papel === v ? 'selected' : ''}>${PAPEL_LABELS_PT[v]}</option>`
         ).join('');
         const statusOptions = ['pendente', 'aprovado', 'rejeitado'].map(v =>
@@ -3368,6 +3413,23 @@
                 </div>
             </div>`;
         }).join('') || '<div class="text-xs text-slate-400 italic py-2">Nenhuma camada cadastrada neste município ainda.</div>';
+
+        const formsDisponiveis = Object.values(window._usersPanelForms || {});
+        const formOptionsHtml = formsDisponiveis.map(f => `<option value="${f.id}">${f.title}</option>`).join('');
+        const formularioHtml = formsDisponiveis.length > 0 ? `
+            <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <label class="text-[10px] text-slate-400 uppercase tracking-wide block mb-1">Formulário Ativo (permissão por aba)</label>
+                <select class="form-select-permissao text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5 w-full sm:w-auto" onchange="onUserPermsFormChange('${membro.user_id}', this.value)">
+                    <option value="">— Nenhum —</option>
+                    ${formOptionsHtml}
+                </select>
+                <div class="form-tabs-container mt-2 flex flex-col gap-1"></div>
+                <label class="excluir-camada-label flex items-center gap-2 text-xs text-red-600 dark:text-red-400 cursor-pointer mt-2">
+                    <input type="checkbox" class="excluir-camada-checkbox rounded border-slate-300 dark:border-slate-600 text-red-500 focus:ring-red-500">
+                    Pode excluir dados desta camada (remove também a feição do mapa)
+                </label>
+                <button onclick="saveFormAbaPermissions('${membro.user_id}')" class="mt-3 text-xs bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary/90">Salvar permissão por aba</button>
+            </div>` : '';
 
         return `
         <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-4" data-membro-id="${membro.id}" data-user-id="${membro.user_id}">
@@ -3389,6 +3451,7 @@
             <div id="perms-grid-${membro.user_id}" class="hidden mt-3 border-t border-slate-100 dark:border-slate-800 pt-3">
                 ${gridRows}
                 <button onclick="savePermissions('${membro.user_id}')" class="mt-3 text-xs bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary/90">Salvar permissões</button>
+                ${formularioHtml}
             </div>
         </div>`;
     }
@@ -3423,6 +3486,92 @@
         }
         if (typeof showStorageToast === 'function') showStorageToast('Permissões salvas.');
     }
+
+    // Desenha as abas do formulário escolhido pra esse usuário, já
+    // pré-marcadas com o estado atual em permissoes_aba (essa tela edita
+    // quem já está aprovado, diferente de home.html/Solicitações que
+    // concede pela primeira vez). Quem usa esta tela é sempre super_admin
+    // ou admin do município — ambos sem teto, então não há capping aqui.
+    function onUserPermsFormChange(userId, formId) {
+        const card = document.querySelector(`[data-user-id="${userId}"]`);
+        if (!card) return;
+        const container = card.querySelector('.form-tabs-container');
+        if (!container) return;
+        if (!formId) { container.innerHTML = ''; return; }
+        const form = (window._usersPanelForms || {})[formId];
+        if (!form || !form.tabs || form.tabs.length === 0) {
+            container.innerHTML = '<div class="text-[11px] text-slate-400 italic">Este formulário não tem abas configuradas.</div>';
+            return;
+        }
+        const abaPerms = window._usersPanelAbaPerms || {};
+        container.innerHTML = form.tabs.map(tab => {
+            const perm = abaPerms[userId + ':' + formId + ':' + tab.id];
+            return `
+            <div class="flex items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/60 rounded-lg px-2 py-1.5" data-tab-id="${tab.id}">
+                <span class="text-xs text-slate-700 dark:text-slate-200 truncate">${tab.title}</span>
+                <div class="flex items-center gap-3 shrink-0">
+                    <label class="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 cursor-pointer">
+                        <input type="checkbox" class="tab-ver-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" ${perm && perm.pode_ver ? 'checked' : ''}> Ver
+                    </label>
+                    <label class="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 cursor-pointer">
+                        <input type="checkbox" class="tab-editar-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" ${perm && perm.pode_editar ? 'checked' : ''}> Editar
+                    </label>
+                </div>
+            </div>`;
+        }).join('');
+
+        const themeIds = (window._usersPanelFormThemeIds && window._usersPanelFormThemeIds[formId]) || [];
+        const permsCamada = window._usersPanelPerms || [];
+        const jaPodeExcluir = themeIds.some(id => permsCamada.some(pc => pc.user_id === userId && pc.theme_id === id && pc.pode_excluir));
+        const excluirEl = card.querySelector('.excluir-camada-checkbox');
+        if (excluirEl) excluirEl.checked = jaPodeExcluir;
+    }
+    window.onUserPermsFormChange = onUserPermsFormChange;
+
+    async function saveFormAbaPermissions(userId) {
+        const card = document.querySelector(`[data-user-id="${userId}"]`);
+        if (!card) return;
+        const formSelectEl = card.querySelector('.form-select-permissao');
+        const formId = formSelectEl ? formSelectEl.value : '';
+        if (!formId) { alert('Escolha um formulário primeiro.'); return; }
+
+        const tabRows = card.querySelectorAll('.form-tabs-container [data-tab-id]');
+        const abaRows = [];
+        let podeVerAlgumaAba = false;
+        let podeEditarAlgumaAba = false;
+        tabRows.forEach(row => {
+            const tabId = row.getAttribute('data-tab-id');
+            const podeVer = row.querySelector('.tab-ver-checkbox').checked;
+            const podeEditar = row.querySelector('.tab-editar-checkbox').checked;
+            if (podeVer) podeVerAlgumaAba = true;
+            if (podeEditar) podeEditarAlgumaAba = true;
+            abaRows.push({ user_id: userId, form_id: formId, tab_id: tabId, pode_ver: podeVer, pode_editar: podeEditar });
+        });
+
+        if (abaRows.length > 0) {
+            const { error: abaError } = await supabaseClient.from('permissoes_aba').upsert(abaRows, { onConflict: 'user_id,form_id,tab_id' });
+            if (abaError) { alert('Erro ao salvar permissões por aba: ' + abaError.message); return; }
+        }
+
+        const excluirEl = card.querySelector('.excluir-camada-checkbox');
+        const podeExcluir = excluirEl ? excluirEl.checked : false;
+        const themeIds = (window._usersPanelFormThemeIds && window._usersPanelFormThemeIds[formId]) || [];
+        if (themeIds.length > 0) {
+            const camadaRows = themeIds.map(themeId => ({
+                user_id: userId,
+                theme_id: themeId,
+                pode_ver: podeVerAlgumaAba,
+                pode_editar: podeEditarAlgumaAba,
+                pode_excluir: podeExcluir
+            }));
+            const { error: camadaError } = await supabaseClient.from('permissoes_camada').upsert(camadaRows, { onConflict: 'user_id,theme_id' });
+            if (camadaError) { alert('Erro ao liberar a camada: ' + camadaError.message); return; }
+        }
+
+        if (typeof showStorageToast === 'function') showStorageToast('Permissão por aba salva.');
+        loadUsersPanel();
+    }
+    window.saveFormAbaPermissions = saveFormAbaPermissions;
 
     document.addEventListener('change', async function(e) {
         if (e.target.classList.contains('membro-papel') || e.target.classList.contains('membro-status')) {

@@ -62,16 +62,24 @@
     <div class="card rounded-2xl p-6">
       <form id="login-form" class="flex flex-col gap-4">
         <div>
-          <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">E-mail</label>
+          <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Login</label>
           <input id="login-email" type="email" required autocomplete="username"
             class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             placeholder="seu.email@orgao.gov.br">
         </div>
         <div>
-          <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Senha</label>
-          <input id="login-password" type="password" required autocomplete="current-password"
-            class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            placeholder="••••••••">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Senha</label>
+            <a href="forgot-password.html" class="text-[11px] text-primary hover:underline">Esqueceu a senha?</a>
+          </div>
+          <div class="relative mt-1">
+            <input id="login-password" type="password" required autocomplete="current-password"
+              class="w-full rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 pl-3 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="••••••••">
+            <button type="button" id="login-password-toggle" tabindex="-1" class="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors" title="Mostrar/ocultar senha">
+              <span id="login-password-toggle-icon" class="material-symbols-outlined text-[20px]">visibility</span>
+            </button>
+          </div>
         </div>
 
         <div id="login-error" class="hidden text-xs text-red-600 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2"></div>
@@ -98,6 +106,16 @@
   const errorEl = document.getElementById('login-error');
   const submitBtn = document.getElementById('login-submit');
   const submitText = document.getElementById('login-submit-text');
+
+  const passwordToggleBtn = document.getElementById('login-password-toggle');
+  const passwordToggleIcon = document.getElementById('login-password-toggle-icon');
+  if (passwordToggleBtn) {
+    passwordToggleBtn.addEventListener('click', function() {
+      const showing = passwordEl.type === 'text';
+      passwordEl.type = showing ? 'password' : 'text';
+      passwordToggleIcon.textContent = showing ? 'visibility' : 'visibility_off';
+    });
+  }
 
   function showError(msg) {
     errorEl.textContent = msg;

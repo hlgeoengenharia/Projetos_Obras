@@ -258,12 +258,12 @@
 <button class="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors rounded-full shrink-0" onclick="document.getElementById('side-drawer').classList.remove('-translate-x-[120%]'); document.getElementById('drawer-overlay').classList.remove('hidden')">
 <span class="material-symbols-outlined text-slate-900 dark:text-slate-50">menu</span>
 </button>
-<button class="hidden md:flex p-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors rounded-full shrink-0 tooltip tooltip-bottom" title="Voltar aos Municípios" onclick="window.location.href='home.html'">
+<button class="flex p-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors rounded-full shrink-0 tooltip tooltip-bottom" title="Voltar aos Municípios" onclick="window.location.href='home.html'">
 <span class="material-symbols-outlined text-slate-900 dark:text-slate-50">location_city</span>
 </button>
 <h1 class="text-lg font-bold tracking-tighter text-slate-900 dark:text-slate-50"></h1>
 </div>
-<div class="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 md:gap-2">
+<div class="flex-1 flex justify-center items-center gap-1 md:gap-2 min-w-0">
   <button id="btn-toggle-map" class="w-9 h-9 md:w-10 md:h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-blue-600 dark:text-blue-400 tooltip tooltip-bottom" title="Alternar Mapa (Satélite/Padrão)" onclick="toggleMapType()">
     <span class="material-symbols-outlined text-[20px] md:text-[22px]">layers</span>
   </button>
@@ -291,7 +291,7 @@
 <!-- NavigationDrawer -->
 <aside class="fixed top-0 left-0 md:top-[4.5rem] md:left-4 z-[60] flex flex-col h-[100dvh] md:h-[calc(100vh-5.5rem)] w-full md:w-80 lg:w-96 bg-white/50 dark:bg-[#070b14]/50 backdrop-blur-md rounded-none md:rounded-2xl border-0 md:border border-slate-200/50 dark:border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-out -translate-x-[120%] overflow-hidden" id="side-drawer">
 <div class="p-0 border-b border-slate-200 dark:border-slate-800 flex items-center justify-center">
-    <a href="settings.html" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400">
+    <a id="drawer-btn-ajustes" href="settings.html" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400">
         <span class="material-symbols-outlined text-[22px]">settings</span>
         <span class="text-[9px] font-medium tracking-wide uppercase">Ajustes</span>
     </a>
@@ -299,15 +299,11 @@
         <img src="assets/logo.png" alt="Avatar" class="w-[22px] h-[22px] rounded-full border border-slate-300 dark:border-slate-600 group-hover:border-primary dark:group-hover:border-sky-400 transition-colors object-cover">
         <span class="text-[9px] font-medium tracking-wide uppercase">Perfil</span>
     </button>
-    <button onclick="window.location.href='home.html'" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 border-l border-slate-200/50 dark:border-slate-800/50" title="Voltar aos Municípios">
-        <span class="material-symbols-outlined text-[22px]">location_city</span>
-        <span class="text-[9px] font-medium tracking-wide uppercase">Município</span>
-    </button>
-    <button onclick="openImportOptionsModal()" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 border-l border-slate-200/50 dark:border-slate-800/50">
+    <button id="drawer-btn-importar" onclick="openImportOptionsModal()" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 border-l border-slate-200/50 dark:border-slate-800/50">
         <span class="material-symbols-outlined text-[22px]">upload_file</span>
         <span class="text-[9px] font-medium tracking-wide uppercase">Importar</span>
     </button>
-    <button onclick="openNewThemeModal()" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 border-l border-slate-200/50 dark:border-slate-800/50">
+    <button id="drawer-btn-nova" onclick="openNewThemeModal()" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 border-l border-slate-200/50 dark:border-slate-800/50">
         <span class="material-symbols-outlined text-[22px]">add_circle</span>
         <span class="text-[9px] font-medium tracking-wide uppercase">Nova</span>
     </button>
@@ -1084,6 +1080,13 @@
 </div>
 
 <!-- Profile Modal -->
+<div id="loading-overlay" class="fixed inset-0 bg-black/60 z-[250] hidden flex items-center justify-center backdrop-blur-sm px-4">
+    <div class="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-6 flex flex-col items-center gap-3 border border-slate-200 dark:border-slate-800 max-w-xs text-center">
+        <span class="material-symbols-outlined text-4xl text-primary animate-spin">progress_activity</span>
+        <p id="loading-overlay-text" class="text-sm font-medium text-slate-700 dark:text-slate-300">Processando...</p>
+    </div>
+</div>
+
 <div id="profile-modal" class="fixed inset-0 bg-black/60 z-[200] hidden flex items-center justify-center backdrop-blur-sm px-4">
     <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col transform transition-all">
         <!-- Header -->

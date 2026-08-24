@@ -92,11 +92,11 @@
           </div>
         </div>
         <div>
-          <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Município que deseja acessar</label>
-          <select id="signup-municipio" required
-            class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
-            <option value="">Carregando...</option>
-          </select>
+          <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Município(s) que deseja acessar</label>
+          <div id="signup-municipios-list" class="mt-1 max-h-40 overflow-y-auto border border-slate-300 dark:border-slate-600 dark:bg-slate-800 rounded-lg p-2.5 flex flex-col gap-1.5">
+            <div class="text-xs text-slate-400 italic">Carregando...</div>
+          </div>
+          <p class="text-[10px] text-slate-400 mt-1">Pode marcar mais de um, se precisar acessar dados de vários municípios (ex: órgãos de fiscalização).</p>
         </div>
 
         <div id="signup-error" class="hidden text-xs text-red-600 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2"></div>
@@ -125,7 +125,7 @@
   const entidadeEl = document.getElementById('signup-entidade');
   const entidadeOutrosEl = document.getElementById('signup-entidade-outros');
   const cargoEl = document.getElementById('signup-cargo');
-  const municipioEl = document.getElementById('signup-municipio');
+  const municipiosListEl = document.getElementById('signup-municipios-list');
   const errorEl = document.getElementById('signup-error');
   const successEl = document.getElementById('signup-success');
   const submitBtn = document.getElementById('signup-submit');
@@ -141,10 +141,14 @@
     if (!supabaseClient) return;
     const { data, error } = await supabaseClient.from('municipios').select('id, nome, uf').eq('ativo', true).order('nome');
     if (error || !data || data.length === 0) {
-      municipioEl.innerHTML = '<option value="">Nenhum município disponível</option>';
+      municipiosListEl.innerHTML = '<div class="text-xs text-slate-400 italic">Nenhum município disponível</div>';
       return;
     }
-    municipioEl.innerHTML = data.map(m => `<option value="${m.id}">${m.nome}${m.uf ? ' - ' + m.uf : ''}</option>`).join('');
+    municipiosListEl.innerHTML = data.map(m => `
+      <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200 cursor-pointer">
+        <input type="checkbox" class="signup-municipio-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" value="${m.id}">
+        ${m.nome}${m.uf ? ' - ' + m.uf : ''}
+      </label>`).join('');
   }
   loadMunicipios();
 
@@ -180,6 +184,12 @@
       return;
     }
 
+    const municipioIds = Array.from(document.querySelectorAll('.signup-municipio-checkbox:checked')).map(cb => cb.value);
+    if (municipioIds.length === 0) {
+      showError('Selecione ao menos um município.');
+      return;
+    }
+
     submitBtn.disabled = true;
     submitText.textContent = 'Enviando...';
 
@@ -199,7 +209,7 @@
       options: {
         data: {
           nome: nomeEl.value.trim(),
-          municipio_id: municipioEl.value,
+          municipio_ids: municipioIds,
           entidade: entidadeFinal,
           cargo: cargoEl.value.trim()
         }

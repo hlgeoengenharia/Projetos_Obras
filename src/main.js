@@ -992,6 +992,10 @@ function renderThemes() {
   const container = document.getElementById('themes-container');
   container.innerHTML = '';
 
+  // Importar GeoJSON/Exportar/Excluir mexem na base de dados da camada
+  // inteira — só o SuperAdmin vê esses ícones dentro do card.
+  const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && currentUserProfile.super_admin);
+
   let draggedThemeIndex = null;
 
   themes.forEach((theme, index) => {
@@ -1127,19 +1131,16 @@ function renderThemes() {
             <button onclick="openEditThemeModal('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Editar Camada">
               <span class="material-symbols-outlined text-[18px]">settings</span>
             </button>
+            ${isSuperAdmin ? `
             <button onclick="triggerUpload('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Importar GeoJSON">
               <span class="material-symbols-outlined text-[18px]">upload</span>
             </button>
-            <button onclick="triggerTableUpload('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Vincular Tabela (CSV)">
-              <span class="material-symbols-outlined text-[18px]">table_chart</span>
-            </button>
-            <input type="file" id="table-upload-${theme.id}" class="hidden" accept=".csv" onchange="handleTableUpload(event, '${theme.id}')">
             <button onclick="downloadGeoJSON('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Exportar">
               <span class="material-symbols-outlined text-[18px]">download</span>
             </button>
             <button onclick="deleteTheme('${theme.id}')" class="p-1.5 hover:bg-red-500/30 rounded-lg tooltip text-red-500 transition-colors" title="Excluir">
               <span class="material-symbols-outlined text-[18px]">delete</span>
-            </button>
+            </button>` : ''}
         </div>
         ${statsListHtml}
       </div>
@@ -2158,16 +2159,31 @@ async function saveEditedTheme() {
   closeEditThemeModal();
 }
 
+function showLoadingOverlay(message) {
+  const overlay = document.getElementById('loading-overlay');
+  if (!overlay) return;
+  const text = document.getElementById('loading-overlay-text');
+  if (text) text.textContent = message || 'Processando...';
+  overlay.classList.remove('hidden');
+}
+
+function hideLoadingOverlay() {
+  const overlay = document.getElementById('loading-overlay');
+  if (overlay) overlay.classList.add('hidden');
+}
+
 async function deleteTheme(themeId) {
   if (!confirm("Tem certeza que deseja excluir esta camada e todos os seus dados?")) return;
 
   if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+      showLoadingOverlay('Excluindo camada...');
       try {
           // Exclui em lotes DENTRO do banco (RPC) — enviar uma lista de
           // milhares de IDs pelo .in() vira uma URL enorme e estoura o
           // limite de tamanho de requisição do servidor. Com a função,
           // o navegador só manda theme_id + tamanho do lote, sempre curto.
           let deletedInBatch = 0;
+          let totalDeleted = 0;
           do {
               const { data, error: delErr } = await supabaseClient.rpc('delete_feicoes_batch', {
                   p_theme_id: themeId,
@@ -2180,6 +2196,10 @@ async function deleteTheme(themeId) {
                   return;
               }
               deletedInBatch = data || 0;
+              totalDeleted += deletedInBatch;
+              if (deletedInBatch > 0) {
+                  showLoadingOverlay(`Excluindo camada... (${totalDeleted} feições removidas)`);
+              }
           } while (deletedInBatch > 0);
 
           // Delete theme
@@ -2193,6 +2213,8 @@ async function deleteTheme(themeId) {
           alert('Erro ao excluir a camada: ' + e.message);
           console.error("Erro ao deletar tema no Supabase:", e);
           return;
+      } finally {
+          hideLoadingOverlay();
       }
   }
 
@@ -3276,7 +3298,7 @@ function renderFeatureInfo() {
 
   if (dynamicFormSchema && dynamicFormSchema.length > 0) {
       if (typeof window.renderDynamicForm === 'function') {
-          window.renderDynamicForm(dynamicFormSchema, properties, isFeatureEditMode, 'feature-info-content', { activeTabId: window.currentActiveTabId, editTabId: window.activeFeatureEditTabId || null });
+          window.renderDynamicForm(dynamicFormSchema, properties, isFeatureEditMode, 'feature-info-content', { activeTabId: window.currentActiveTabId, editTabId: window.activeFeatureEditTabId || null, formId: theme.formId });
           return;
       }
   }
@@ -3790,8 +3812,43 @@ async function ensureAuthenticated() {
         (perms || []).forEach(p => { currentUserPermissions[p.theme_id] = p; });
     } catch (e) {}
 
+    // Permissão por aba de formulário (ver/editar dentro do card de uma
+    // camada) — usado pelo formRenderer.js pra esconder abas inteiras.
+    window.currentUserAbaPermissions = {};
+    try {
+        const { data: abaPerms } = await supabaseClient.from('permissoes_aba').select('*').eq('user_id', data.session.user.id);
+        (abaPerms || []).forEach(p => { window.currentUserAbaPermissions[p.form_id + ':' + p.tab_id] = p; });
+    } catch (e) {}
+
     if (typeof applyCurrentUserToProfileModal === 'function') applyCurrentUserToProfileModal();
+    applyPermissionUIGating();
     return true;
+}
+
+// Esconde ações globais (não é por tema — é "Ajustes", "Importar", "Nova
+// Camada" no menu lateral) de acordo com o papel do usuário no município
+// ativo. Só UX (esconder o que o RLS já recusaria); a segurança de verdade
+// continua sendo o RLS/gatilhos no banco.
+function applyPermissionUIGating() {
+    const isSuperAdmin = !!(currentUserProfile && currentUserProfile.super_admin);
+    const isAdmin = isSuperAdmin || currentMunicipioPapel === 'admin';
+
+    // style.display em vez da classe "hidden" do Tailwind: esses botões já
+    // têm "flex" nas classes base, e a ordem entre utilities equivalentes no
+    // CSS gerado pelo Tailwind CDN não é garantida — display inline sempre
+    // vence, sem depender de qual regra o Tailwind emitiu por último.
+    const ajustesEl = document.getElementById('drawer-btn-ajustes');
+    if (ajustesEl) ajustesEl.style.display = isAdmin ? '' : 'none';
+
+    // Importar/Nova mexem na base de dados da camada inteira (não é edição
+    // de feição) — só o SuperAdmin vê, nem admin de município.
+    const importarEl = document.getElementById('drawer-btn-importar');
+    if (importarEl) importarEl.style.display = isSuperAdmin ? '' : 'none';
+
+    const novaEl = document.getElementById('drawer-btn-nova');
+    if (novaEl) novaEl.style.display = isSuperAdmin ? '' : 'none';
+
+    if (typeof renderThemes === 'function') renderThemes();
 }
 
 let currentUserPermissions = {};
@@ -3811,7 +3868,35 @@ function userCanOnTheme(themeId, acao) {
     return false;
 }
 
-const PAPEL_LABELS = { admin: 'Administrador', editor: 'Editor', visualizador: 'Visualizador', externo: 'Acesso Externo' };
+// Abas de formulário (dentro de uma camada): super_admin e admin do
+// município sempre veem/editam tudo. Pra qualquer outro papel, negado por
+// padrão — só aparece o que tiver uma linha explícita em permissoes_aba
+// com pode_ver/pode_editar. Isso é de propósito: uma aba nova criada depois
+// (ou um formulário novo associado a uma camada nova) não deve aparecer pra
+// ninguém até alguém autorizar de novo, mesmo que a pessoa já tivesse
+// acesso a outras abas daquele mesmo formulário.
+function canSeeFormTab(formId, tabId) {
+    if (currentUserProfile && currentUserProfile.super_admin) return true;
+    if (currentMunicipioPapel === 'admin') return true;
+    if (!formId || !window.currentUserAbaPermissions) return false;
+    const perm = window.currentUserAbaPermissions[formId + ':' + tabId];
+    return !!(perm && perm.pode_ver);
+}
+window.canSeeFormTab = canSeeFormTab;
+
+function canEditFormTab(formId, tabId) {
+    if (currentUserProfile && currentUserProfile.super_admin) return true;
+    if (currentMunicipioPapel === 'admin') return true;
+    if (!formId || !window.currentUserAbaPermissions) return false;
+    const perm = window.currentUserAbaPermissions[formId + ':' + tabId];
+    return !!(perm && perm.pode_editar);
+}
+window.canEditFormTab = canEditFormTab;
+
+// Editor e Visualizador sempre se comportaram igual (userCanOnTheme não
+// distingue os dois) — simplificado pra 3 níveis reais na interface.
+// 'editor' mapeado só por compatibilidade com linhas antigas.
+const PAPEL_LABELS = { admin: 'Administrador', editor: 'Usuário', visualizador: 'Usuário', externo: 'Acesso Externo' };
 
 function applyCurrentUserToProfileModal() {
     if (!currentUserProfile) return;

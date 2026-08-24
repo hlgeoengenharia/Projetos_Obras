@@ -63,11 +63,6 @@
 <body class="font-sans min-h-screen">
 
 <header class="h-16 bg-white/70 dark:bg-[#070b14]/75 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 shadow-sm flex items-center px-4 md:px-8 gap-4">
-  <div class="flex items-center gap-3 shrink-0">
-    <img src="assets/logo.png" alt="GeoGestor" class="w-9 h-9 rounded-lg object-cover">
-    <span class="font-black tracking-widest uppercase text-slate-800 dark:text-slate-100 text-sm hidden sm:inline">GeoGestor</span>
-  </div>
-
   <!-- Abas (só aparecem pra quem tem mais de uma coisa pra ver — hoje, super_admin) -->
   <div id="home-tabs" class="hidden flex-1 items-center justify-center gap-1 h-full">
     <button class="tab-btn active h-full px-4 md:px-6 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('municipios-section', this)" title="Municípios">
@@ -82,6 +77,10 @@
       <span class="material-symbols-outlined text-[20px]">pending_actions</span>
       <span class="text-[9px] font-medium uppercase tracking-wide">Solicitações</span>
       <span id="pending-badge" class="hidden absolute top-2 right-3 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center"></span>
+    </button>
+    <button id="tab-btn-usuarios" class="hidden tab-btn h-full px-4 md:px-6 flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('usuarios-section', this)" title="Usuários">
+      <span class="material-symbols-outlined text-[20px]">group</span>
+      <span class="text-[9px] font-medium uppercase tracking-wide">Usuários</span>
     </button>
   </div>
 
@@ -134,6 +133,13 @@
                     </div>
                 </div>
             </div>
+
+            <div class="border-t border-slate-200 dark:border-slate-800 pt-5 mt-5">
+                <button onclick="document.getElementById('profile-modal').classList.add('hidden'); openRequestMunicipioModal()" class="w-full flex items-center gap-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:text-primary dark:hover:text-sky-400 transition-colors">
+                    <span class="material-symbols-outlined text-[20px] text-primary">add_location_alt</span>
+                    Solicitar acesso a outro município
+                </button>
+            </div>
         </div>
 
         <!-- Footer -->
@@ -148,6 +154,34 @@
     </div>
 </div>
 
+<!-- Solicitar acesso a outro município (usuário já aprovado em pelo menos um) -->
+<div id="request-municipio-modal" class="fixed inset-0 bg-black/60 z-[200] hidden flex items-center justify-center backdrop-blur-sm px-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
+        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/20">
+            <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary">add_location_alt</span>
+                Solicitar Acesso
+            </h3>
+            <button onclick="closeRequestMunicipioModal()" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+        <div class="p-5">
+            <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">Selecione o(s) município(s) que deseja acessar. O pedido entra na fila de aprovação do administrador.</p>
+            <div id="request-municipio-list" class="max-h-56 overflow-y-auto flex flex-col gap-1.5 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5"></div>
+            <div id="request-municipio-error" class="hidden text-xs text-red-600 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2 mt-3"></div>
+        </div>
+        <div class="px-5 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 flex gap-2">
+            <button onclick="enviarSolicitacoesMunicipio()" class="flex-1 px-5 py-2 text-sm font-medium bg-primary text-white hover:bg-primary/90 rounded-lg transition-colors shadow-sm">
+                Enviar Solicitação
+            </button>
+            <button onclick="closeRequestMunicipioModal()" class="px-4 py-2 text-sm font-medium bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors">
+                Cancelar
+            </button>
+        </div>
+    </div>
+</div>
+
 <main class="max-w-5xl mx-auto px-4 md:px-8 py-8">
 
   <!-- Solicitações pendentes (só super_admin) -->
@@ -156,9 +190,29 @@
     <div id="pending-list" class="flex flex-col gap-2"></div>
   </section>
 
+  <!-- Todos os usuários da plataforma (só super_admin) -->
+  <section id="usuarios-section" class="tab-content">
+    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Usuários</h2>
+    <div class="relative mb-3">
+      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px] pointer-events-none">search</span>
+      <input id="usuarios-search" type="text" placeholder="Buscar por nome, e-mail, entidade ou município..." oninput="filterUsuariosList(this.value)" class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white">
+    </div>
+    <div id="usuarios-list" class="flex flex-col gap-2"></div>
+  </section>
+
   <!-- Seletor de município -->
   <section id="municipios-section" class="tab-content">
-    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Selecione o Município</h2>
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Selecione o Município</h2>
+      <button id="btn-novo-municipio" onclick="document.getElementById('novo-municipio-form').classList.toggle('hidden')" class="hidden text-xs font-semibold text-primary hover:underline items-center gap-1.5">
+        <span class="material-symbols-outlined text-[16px]">add_circle</span> Novo Município
+      </button>
+    </div>
+    <div id="novo-municipio-form" class="hidden card rounded-xl p-4 flex flex-col sm:flex-row gap-2 mb-4">
+      <input id="novo-municipio-nome" type="text" placeholder="Nome do município" class="flex-1 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-2">
+      <input id="novo-municipio-uf" type="text" maxlength="2" placeholder="UF" class="w-full sm:w-20 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-2 uppercase">
+      <button onclick="criarMunicipio()" class="text-xs bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 shrink-0">Criar</button>
+    </div>
     <div id="municipios-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"></div>
   </section>
 
@@ -191,7 +245,15 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js"></script>
 <script>
-const PAPEL_LABELS = { admin: 'Administrador', editor: 'Editor', visualizador: 'Visualizador', externo: 'Acesso Externo' };
+// Editor e Visualizador sempre se comportaram exatamente igual no sistema
+// (nenhuma checagem de permissão distingue os dois — ambos caem na mesma
+// checagem fina de permissoes_camada/permissoes_aba). Simplificado pra só
+// 3 níveis reais: Administrador (bypassa tudo), Usuário (a checagem fina
+// decide o que ele vê/edita) e Acesso Externo (trava dura: nunca edita/
+// exclui, não importa o que for concedido). 'editor' continua mapeado
+// aqui só por compatibilidade com linhas antigas que ainda tenham esse
+// valor salvo — a tela não oferece mais essa opção.
+const PAPEL_LABELS = { admin: 'Administrador', editor: 'Usuário', visualizador: 'Usuário', externo: 'Acesso Externo' };
 let homeUserProfile = null;
 
 function switchHomeTab(sectionId, btn) {
@@ -221,7 +283,9 @@ function applyCurrentUserToProfileModal() {
     const roleEl = document.getElementById('profile-user-role');
     const themeSelect = document.getElementById('profile-theme-select');
     if (nameEl) nameEl.textContent = homeUserProfile.nome || homeUserProfile.email || 'Usuário';
-    if (roleEl) roleEl.textContent = homeUserProfile.super_admin ? 'Administrador Geral' : '—';
+    if (roleEl) roleEl.textContent = homeUserProfile.super_admin
+        ? 'Administrador Geral'
+        : (homeUserProfile.entidade_admin ? `Administrador — ${homeUserProfile.entidade || 'entidade'}` : '—');
     if (themeSelect) themeSelect.value = localStorage.getItem('constructive_theme') || 'Claro';
     // profile-user-municipio fica vazio aqui — nesta página o usuário ainda
     // não escolheu um município (é o índex.html que sabe qual está ativo).
@@ -240,19 +304,205 @@ function selectMunicipio(id, nome) {
     window.location.href = 'index.html';
 }
 
+// Município(s) além do(s) já solicitado(s) — reaproveita a entidade/cargo
+// do pedido mais recente do usuário, já que a rotina é só marcar quais
+// municípios faltam; cada município selecionado vira uma nova linha
+// 'pendente' (a política de INSERT já permite o próprio usuário criar
+// pedidos pendentes pra si mesmo, sem precisar do gatilho do cadastro).
+let usuarioEntidadeCargo = { entidade: '', cargo: '' };
+
+async function openRequestMunicipioModal() {
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    if (!sessionData || !sessionData.session) return;
+    const userId = sessionData.session.user.id;
+
+    const { data: minhas } = await supabaseClient
+        .from('municipio_membros')
+        .select('municipio_id, entidade, cargo, solicitado_em')
+        .eq('user_id', userId)
+        .order('solicitado_em', { ascending: false });
+
+    const jaTem = new Set((minhas || []).map(m => m.municipio_id));
+    if (minhas && minhas.length > 0) {
+        usuarioEntidadeCargo = { entidade: minhas[0].entidade || '', cargo: minhas[0].cargo || '' };
+    }
+
+    const { data: todos } = await supabaseClient.from('municipios').select('id, nome, uf').eq('ativo', true).order('nome');
+    const disponiveis = (todos || []).filter(m => !jaTem.has(m.id));
+
+    const list = document.getElementById('request-municipio-list');
+    document.getElementById('request-municipio-error').classList.add('hidden');
+    list.innerHTML = disponiveis.length > 0
+        ? disponiveis.map(m => `
+            <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200 cursor-pointer">
+                <input type="checkbox" class="request-municipio-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" value="${m.id}">
+                ${m.nome}${m.uf ? ' - ' + m.uf : ''}
+            </label>`).join('')
+        : '<div class="text-xs text-slate-400 italic py-2">Você já solicitou acesso a todos os municípios disponíveis.</div>';
+
+    document.getElementById('request-municipio-modal').classList.remove('hidden');
+}
+window.openRequestMunicipioModal = openRequestMunicipioModal;
+
+function closeRequestMunicipioModal() {
+    document.getElementById('request-municipio-modal').classList.add('hidden');
+}
+window.closeRequestMunicipioModal = closeRequestMunicipioModal;
+
+async function enviarSolicitacoesMunicipio() {
+    const errorEl = document.getElementById('request-municipio-error');
+    errorEl.classList.add('hidden');
+
+    const ids = Array.from(document.querySelectorAll('.request-municipio-checkbox:checked')).map(cb => cb.value);
+    if (ids.length === 0) {
+        errorEl.textContent = 'Selecione ao menos um município.';
+        errorEl.classList.remove('hidden');
+        return;
+    }
+
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    const userId = sessionData.session.user.id;
+
+    const rows = ids.map(municipio_id => ({
+        user_id: userId,
+        municipio_id,
+        status: 'pendente',
+        papel: 'visualizador',
+        entidade: usuarioEntidadeCargo.entidade,
+        cargo: usuarioEntidadeCargo.cargo
+    }));
+
+    const { error } = await supabaseClient.from('municipio_membros').insert(rows);
+    if (error) {
+        errorEl.textContent = 'Erro ao enviar solicitação: ' + error.message;
+        errorEl.classList.remove('hidden');
+        return;
+    }
+
+    closeRequestMunicipioModal();
+    alert('Solicitação enviada! Aguarde a aprovação do administrador.');
+}
+window.enviarSolicitacoesMunicipio = enviarSolicitacoesMunicipio;
+
+// Desenha as abas do formulário escolhido pra esse pedido, cada uma com
+// Ver/Editar. Sem teto: quem chega até essa tela (super_admin ou admin do
+// município do pedido) já tem controle total sobre os dados daquele
+// município, então pode marcar o que quiser.
+function onSolicitacaoFormChange(membroId, formId) {
+    const card = document.querySelector(`[data-membro-card="${membroId}"]`);
+    if (!card) return;
+    const container = card.querySelector('.form-tabs-container');
+    if (!container) return;
+    if (!formId) { container.innerHTML = ''; return; }
+    const form = window.pendingFormsCache ? window.pendingFormsCache[formId] : null;
+    if (!form || !form.tabs || form.tabs.length === 0) {
+        container.innerHTML = '<div class="text-[11px] text-slate-400 italic">Este formulário não tem abas configuradas.</div>';
+        return;
+    }
+
+    container.innerHTML = form.tabs.map(tab => `
+        <div class="flex items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/60 rounded-lg px-2 py-1.5" data-tab-id="${tab.id}">
+            <span class="text-xs text-slate-700 dark:text-slate-200 truncate">${tab.title}</span>
+            <div class="flex items-center gap-3 shrink-0">
+                <label class="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 cursor-pointer">
+                    <input type="checkbox" class="tab-ver-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" checked> Ver
+                </label>
+                <label class="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 cursor-pointer">
+                    <input type="checkbox" class="tab-editar-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"> Editar
+                </label>
+            </div>
+        </div>`).join('');
+}
+window.onSolicitacaoFormChange = onSolicitacaoFormChange;
+
 async function decidirSolicitacao(membroId, aprovar, papelSelectId) {
     const papel = aprovar ? document.getElementById(papelSelectId).value : 'visualizador';
-    const { error } = await supabaseClient.from('municipio_membros').update({
+    const decididoPor = (await supabaseClient.auth.getSession()).data.session.user.id;
+
+    const { data: updatedRow, error } = await supabaseClient.from('municipio_membros').update({
         status: aprovar ? 'aprovado' : 'rejeitado',
         papel: papel,
         decidido_em: new Date().toISOString(),
-        decidido_por: (await supabaseClient.auth.getSession()).data.session.user.id
-    }).eq('id', membroId);
+        decidido_por: decididoPor
+    }).eq('id', membroId).select('user_id, municipio_id, entidade, cargo').single();
 
     if (error) {
         alert('Erro ao processar solicitação: ' + error.message);
         return;
     }
+
+    // Municípios extras marcados no card ("Conceder acesso a outros
+    // municípios também") viram vínculos já aprovados, com o mesmo papel/
+    // entidade/cargo da solicitação original.
+    if (aprovar && updatedRow) {
+        const card = document.querySelector(`[data-membro-card="${membroId}"]`);
+        const extraIds = card ? Array.from(card.querySelectorAll('.extra-municipio-checkbox:checked')).map(cb => cb.value) : [];
+        if (extraIds.length > 0) {
+            const rows = extraIds.map(municipio_id => ({
+                user_id: updatedRow.user_id,
+                municipio_id,
+                status: 'aprovado',
+                papel: papel,
+                entidade: updatedRow.entidade,
+                cargo: updatedRow.cargo,
+                decidido_em: new Date().toISOString(),
+                decidido_por: decididoPor
+            }));
+            const { error: extraError } = await supabaseClient.from('municipio_membros').insert(rows);
+            if (extraError) {
+                alert('Solicitação aprovada, mas houve erro ao conceder os municípios extras: ' + extraError.message);
+            }
+        }
+
+        // Formulário Ativo + abas: cada aba marcada vira uma linha em
+        // permissoes_aba (o formRenderer.js usa isso pra esconder/mostrar
+        // seções do formulário). Além disso, precisa refletir em
+        // permissoes_camada — é ESSA tabela que o RLS/gatilho no banco
+        // realmente consulta pra liberar ver/editar/excluir linhas de
+        // feicoes; permissoes_aba é só um recorte de UI dentro do que já
+        // foi liberado por camada.
+        const formSelectEl = card ? card.querySelector('.form-select-permissao') : null;
+        const selectedFormId = formSelectEl ? formSelectEl.value : '';
+        if (selectedFormId) {
+            const tabRows = card.querySelectorAll('.form-tabs-container [data-tab-id]');
+            const abaRows = [];
+            let podeVerAlgumaAba = false;
+            let podeEditarAlgumaAba = false;
+            tabRows.forEach(row => {
+                const tabId = row.getAttribute('data-tab-id');
+                const podeVer = row.querySelector('.tab-ver-checkbox').checked;
+                const podeEditar = row.querySelector('.tab-editar-checkbox').checked;
+                if (podeVer) podeVerAlgumaAba = true;
+                if (podeEditar) podeEditarAlgumaAba = true;
+                abaRows.push({ user_id: updatedRow.user_id, form_id: selectedFormId, tab_id: tabId, pode_ver: podeVer, pode_editar: podeEditar });
+            });
+
+            if (abaRows.length > 0) {
+                const { error: abaError } = await supabaseClient.from('permissoes_aba').upsert(abaRows, { onConflict: 'user_id,form_id,tab_id' });
+                if (abaError) alert('Solicitação aprovada, mas houve erro ao salvar as permissões por aba: ' + abaError.message);
+            }
+
+            const podeExcluirEl = card.querySelector('.excluir-camada-checkbox');
+            const podeExcluir = podeExcluirEl ? podeExcluirEl.checked : false;
+            const { data: temasDoForm } = await supabaseClient
+                .from('temas')
+                .select('id')
+                .eq('tipo_cadastro', selectedFormId)
+                .eq('municipio_id', updatedRow.municipio_id);
+            if (temasDoForm && temasDoForm.length > 0) {
+                const camadaRows = temasDoForm.map(t => ({
+                    user_id: updatedRow.user_id,
+                    theme_id: t.id,
+                    pode_ver: podeVerAlgumaAba,
+                    pode_editar: podeEditarAlgumaAba,
+                    pode_excluir: podeExcluir
+                }));
+                const { error: camadaError } = await supabaseClient.from('permissoes_camada').upsert(camadaRows, { onConflict: 'user_id,theme_id' });
+                if (camadaError) alert('Solicitação aprovada, mas houve erro ao liberar a camada: ' + camadaError.message);
+            }
+        }
+    }
+
     init();
 }
 window.decidirSolicitacao = decidirSolicitacao;
@@ -321,6 +571,352 @@ async function adicionarEntidade() {
 }
 window.adicionarEntidade = adicionarEntidade;
 
+// --- Aba "Usuários" (só super_admin): todo mundo, de todos os municípios,
+// com perfil + nível de acesso + status + permissões (mesma UI de
+// "Formulário Ativo" de Solicitações/settings.html, agora pra editar quem
+// já existe, com os valores atuais pré-marcados). ---
+async function loadUsuariosSection() {
+    const list = document.getElementById('usuarios-list');
+    if (!list) return;
+    list.innerHTML = '<div class="text-xs text-slate-400 italic py-2">Carregando...</div>';
+
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    const meuUserId = sessionData && sessionData.session ? sessionData.session.user.id : null;
+
+    // Sem filtro explícito de propósito: o RLS de municipio_membros já
+    // resolve sozinho quem cada um enxerga — super_admin vê todo mundo,
+    // admin de ente vê só a própria linha + linhas do mesmo ente (nunca
+    // gente de outro ente). A query é a mesma pros dois casos.
+    const { data: membros, error } = await supabaseClient
+        .from('municipio_membros')
+        .select('id, user_id, municipio_id, papel, status, entidade, cargo, solicitado_em, profiles!user_id(nome, email, entidade_admin), municipios(nome)')
+        .order('solicitado_em', { ascending: false });
+    if (error) {
+        list.innerHTML = '<div class="text-xs text-red-500">Erro ao carregar usuários.</div>';
+        console.error('Erro ao buscar usuários:', error);
+        return;
+    }
+
+    const municipioIds = [...new Set((membros || []).map(m => m.municipio_id).filter(Boolean))];
+    window.usuariosFormsCache = {};
+    window.usuariosFormIdToThemeIds = {};
+    window._usuariosFormsPorMunicipio = {};
+    if (municipioIds.length > 0) {
+        const { data: temasComForm } = await supabaseClient
+            .from('temas')
+            .select('id, municipio_id, tipo_cadastro')
+            .in('municipio_id', municipioIds)
+            .not('tipo_cadastro', 'is', null)
+            .neq('tipo_cadastro', 'padrao');
+        const formIds = [...new Set((temasComForm || []).map(t => t.tipo_cadastro))];
+        if (formIds.length > 0) {
+            const { data: formsRows } = await supabaseClient.from('forms').select('id, title, schema').in('id', formIds);
+            (formsRows || []).forEach(f => {
+                let tabs = f.schema;
+                if (f.schema && !Array.isArray(f.schema) && f.schema.tabs) tabs = f.schema.tabs;
+                window.usuariosFormsCache[f.id] = { id: f.id, title: f.title, tabs: Array.isArray(tabs) ? tabs : [] };
+            });
+            (temasComForm || []).forEach(t => {
+                if (!window.usuariosFormsCache[t.tipo_cadastro]) return;
+                if (!window._usuariosFormsPorMunicipio[t.municipio_id]) window._usuariosFormsPorMunicipio[t.municipio_id] = [];
+                if (!window._usuariosFormsPorMunicipio[t.municipio_id].some(f => f.id === t.tipo_cadastro)) {
+                    window._usuariosFormsPorMunicipio[t.municipio_id].push(window.usuariosFormsCache[t.tipo_cadastro]);
+                }
+                if (!window.usuariosFormIdToThemeIds[t.tipo_cadastro]) window.usuariosFormIdToThemeIds[t.tipo_cadastro] = [];
+                window.usuariosFormIdToThemeIds[t.tipo_cadastro].push(t.id);
+            });
+        }
+    }
+
+    const allFormIds = Object.keys(window.usuariosFormsCache);
+    window._usuariosAbaPerms = {};
+    if (allFormIds.length > 0) {
+        const { data: abaPerms } = await supabaseClient.from('permissoes_aba').select('*').in('form_id', allFormIds);
+        (abaPerms || []).forEach(p => { window._usuariosAbaPerms[p.user_id + ':' + p.form_id + ':' + p.tab_id] = p; });
+    }
+    const { data: camadaPerms } = await supabaseClient.from('permissoes_camada').select('*');
+    window._usuariosCamadaPerms = camadaPerms || [];
+
+    list.innerHTML = (membros && membros.length > 0)
+        ? membros.map(m => renderUsuarioCard(m, meuUserId)).join('')
+        : '<div class="text-xs text-slate-400 italic py-2">Nenhum usuário ainda.</div>';
+}
+window.loadUsuariosSection = loadUsuariosSection;
+
+const STATUS_LABELS_HOME = { pendente: 'Pendente', aprovado: 'Aprovado', rejeitado: 'Rejeitado' };
+
+function renderUsuarioCard(m, meuUserId) {
+    const formsDoMunicipio = (window._usuariosFormsPorMunicipio && window._usuariosFormsPorMunicipio[m.municipio_id]) || [];
+    const formOptionsHtml = formsDoMunicipio.map(f => `<option value="${f.id}">${f.title}</option>`).join('');
+    // Admin de ente também não pode conceder papel de admin de município a
+    // outra pessoa — mesma trava de Solicitações.
+    const papeisPermitidos = homeUserProfile.super_admin ? ['admin', 'visualizador', 'externo'] : ['visualizador', 'externo'];
+    const papelOptions = papeisPermitidos.map(v =>
+        `<option value="${v}" ${m.papel === v ? 'selected' : ''}>${PAPEL_LABELS[v]}</option>`
+    ).join('');
+    const statusOptions = ['pendente', 'aprovado', 'rejeitado'].map(v =>
+        `<option value="${v}" ${m.status === v ? 'selected' : ''}>${STATUS_LABELS_HOME[v]}</option>`
+    ).join('');
+    const jaAdminEnte = m.profiles && m.profiles.entidade_admin;
+    const nome = (m.profiles && m.profiles.nome) || '(sem nome)';
+    const nivelResumo = PAPEL_LABELS[m.papel] || m.papel || '';
+
+    // Texto de busca: nome, e-mail, entidade, cargo, município — tudo que
+    // dá pra filtrar mais pra frente com muitos usuários cadastrados.
+    const searchText = [nome, (m.profiles && m.profiles.email), m.entidade, m.cargo, (m.municipios && m.municipios.nome)]
+        .filter(Boolean).join(' ').toLowerCase().replace(/"/g, '&quot;');
+
+    // A própria linha do admin de ente (nunca a do super_admin, que não
+    // tem linha de permissão nenhuma pra mostrar) vira só visualização —
+    // não faz sentido ele conceder permissão pra si mesmo, e o teto
+    // ("quem vê mais pode ver menos") é justamente calculado a partir do
+    // que está aqui.
+    const isSelf = !homeUserProfile.super_admin && meuUserId && m.user_id === meuUserId;
+    if (isSelf) {
+        const ownAba = window.homeOwnAbaPerms || {};
+        const porForm = {};
+        Object.keys(ownAba).forEach(key => {
+            const perm = ownAba[key];
+            if (!perm.pode_ver && !perm.pode_editar) return;
+            const sep = key.indexOf(':');
+            const formId = key.slice(0, sep);
+            const tabId = key.slice(sep + 1);
+            if (!porForm[formId]) porForm[formId] = [];
+            porForm[formId].push({ tabId, pode_ver: perm.pode_ver, pode_editar: perm.pode_editar });
+        });
+        const minhasPermissoesHtml = Object.keys(porForm).length > 0
+            ? Object.keys(porForm).map(formId => {
+                const form = (window.usuariosFormsCache || {})[formId];
+                const formTitle = form ? form.title : formId;
+                const linhas = porForm[formId].map(p => {
+                    const tab = form && form.tabs ? form.tabs.find(t => t.id === p.tabId) : null;
+                    const tabTitle = tab ? tab.title : p.tabId;
+                    const marcado = [p.pode_ver ? 'Ver' : null, p.pode_editar ? 'Editar' : null].filter(Boolean).join(' · ') || '—';
+                    return `<div class="flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 py-1 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                        <span>${tabTitle}</span>
+                        <span class="text-[10px] text-slate-400 uppercase">${marcado}</span>
+                    </div>`;
+                }).join('');
+                return `<div class="mt-2 first:mt-0"><div class="text-[10px] text-slate-400 uppercase tracking-wide mb-1">${formTitle}</div>${linhas}</div>`;
+            }).join('')
+            : '<div class="text-xs text-slate-400 italic">Nenhuma permissão por aba concedida a você ainda.</div>';
+
+        return `
+        <div class="card rounded-xl overflow-hidden" data-usuario-card="${m.id}" data-search="${searchText}">
+            <button type="button" onclick="toggleUsuarioCard('${m.id}')" class="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                <span class="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">
+                    ${nome} <span class="text-xs font-medium text-primary normal-case">(${nivelResumo} · Você)</span>
+                </span>
+                <span class="usuario-card-chevron material-symbols-outlined text-slate-400 text-[20px] shrink-0">expand_more</span>
+            </button>
+            <div class="usuario-card-body hidden px-4 pb-4 flex flex-col gap-2">
+                <div class="text-xs text-slate-500">${(m.profiles && m.profiles.email) || ''} · ${m.entidade || '-'} · ${m.cargo || '-'}</div>
+                <div class="text-xs text-primary mt-0.5">Município: ${(m.municipios && m.municipios.nome) || '-'}</div>
+                <div class="text-xs text-slate-500 mt-1">Status: ${STATUS_LABELS_HOME[m.status] || m.status} · Nível de Acesso: ${nivelResumo}</div>
+                <div class="border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
+                    <label class="text-[10px] text-slate-400 uppercase tracking-wide block mb-1">Minhas permissões por aba (somente leitura)</label>
+                    ${minhasPermissoesHtml}
+                </div>
+            </div>
+        </div>`;
+    }
+
+    return `
+    <div class="card rounded-xl overflow-hidden" data-usuario-card="${m.id}" data-search="${searchText}">
+        <button type="button" onclick="toggleUsuarioCard('${m.id}')" class="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+            <span class="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">
+                ${nome} <span class="text-xs font-medium text-slate-400 normal-case">(${nivelResumo}${jaAdminEnte ? ' · Admin de Ente' : ''})</span>
+            </span>
+            <span class="usuario-card-chevron material-symbols-outlined text-slate-400 text-[20px] shrink-0">expand_more</span>
+        </button>
+        <div class="usuario-card-body hidden px-4 pb-4 flex flex-col gap-2">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                    <div class="text-xs text-slate-500">${(m.profiles && m.profiles.email) || ''} · ${m.entidade || '-'} · ${m.cargo || '-'}</div>
+                    <div class="text-xs text-primary mt-0.5">Município: ${(m.municipios && m.municipios.nome) || '-'}</div>
+                </div>
+                <div class="flex items-end gap-2 shrink-0 flex-wrap">
+                    <div class="flex flex-col gap-0.5">
+                        <label class="text-[9px] text-slate-400 uppercase tracking-wide">Status</label>
+                        <select class="usuario-status-select text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5">
+                            ${statusOptions}
+                        </select>
+                    </div>
+                    <div class="flex flex-col gap-0.5">
+                        <label class="text-[9px] text-slate-400 uppercase tracking-wide">Nível de Acesso</label>
+                        <select class="usuario-papel-select text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5">
+                            ${papelOptions}
+                        </select>
+                    </div>
+                    <button onclick="salvarUsuario('${m.id}', '${m.user_id}')" class="text-xs bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary/90">Salvar</button>
+                </div>
+            </div>
+            ${formsDoMunicipio.length > 0 ? `
+            <div class="border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
+                <label class="text-[10px] text-slate-400 uppercase tracking-wide block mb-1">Formulário Ativo (permissão por aba)</label>
+                <select class="form-select-permissao text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5 w-full sm:w-auto" onchange="onUsuarioFormChange('${m.id}', '${m.user_id}', this.value)">
+                    <option value="">— Nenhum —</option>
+                    ${formOptionsHtml}
+                </select>
+                <div class="form-tabs-container mt-2 flex flex-col gap-1"></div>
+                <label class="excluir-camada-label flex items-center gap-2 text-xs text-red-600 dark:text-red-400 cursor-pointer mt-2">
+                    <input type="checkbox" class="excluir-camada-checkbox rounded border-slate-300 dark:border-slate-600 text-red-500 focus:ring-red-500">
+                    Pode excluir dados desta camada (remove também a feição do mapa)
+                </label>
+            </div>` : ''}
+        </div>
+    </div>`;
+}
+window.renderUsuarioCard = renderUsuarioCard;
+
+function toggleUsuarioCard(membroId) {
+    const card = document.querySelector(`[data-usuario-card="${membroId}"]`);
+    if (!card) return;
+    const body = card.querySelector('.usuario-card-body');
+    const chevron = card.querySelector('.usuario-card-chevron');
+    if (!body) return;
+    const abrindo = body.classList.contains('hidden');
+    body.classList.toggle('hidden');
+    if (chevron) chevron.textContent = abrindo ? 'expand_less' : 'expand_more';
+}
+window.toggleUsuarioCard = toggleUsuarioCard;
+
+function filterUsuariosList(query) {
+    const q = query.trim().toLowerCase();
+    document.querySelectorAll('#usuarios-list [data-usuario-card]').forEach(card => {
+        const text = card.getAttribute('data-search') || '';
+        card.style.display = (!q || text.includes(q)) ? '' : 'none';
+    });
+}
+window.filterUsuariosList = filterUsuariosList;
+
+function onUsuarioFormChange(membroId, userId, formId) {
+    const card = document.querySelector(`[data-usuario-card="${membroId}"]`);
+    if (!card) return;
+    const container = card.querySelector('.form-tabs-container');
+    if (!container) return;
+    if (!formId) { container.innerHTML = ''; return; }
+    const form = (window.usuariosFormsCache || {})[formId];
+    if (!form || !form.tabs || form.tabs.length === 0) {
+        container.innerHTML = '<div class="text-[11px] text-slate-400 italic">Este formulário não tem abas configuradas.</div>';
+        return;
+    }
+    // Mesmo teto de Solicitações: super_admin concede à vontade; admin de
+    // ente só até o que ele mesmo já tem (window.homeOwnAbaPerms/
+    // homeOwnCamadaPerms, calculados em init()).
+    const semTeto = !!homeUserProfile.super_admin;
+    const ownAba = window.homeOwnAbaPerms || {};
+    const abaPerms = window._usuariosAbaPerms || {};
+    container.innerHTML = form.tabs.map(tab => {
+        const key = formId + ':' + tab.id;
+        const meuVer = semTeto || !!(ownAba[key] && ownAba[key].pode_ver);
+        const meuEditar = semTeto || !!(ownAba[key] && ownAba[key].pode_editar);
+        const perm = abaPerms[userId + ':' + formId + ':' + tab.id];
+        return `
+        <div class="flex items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/60 rounded-lg px-2 py-1.5" data-tab-id="${tab.id}">
+            <span class="text-xs text-slate-700 dark:text-slate-200 truncate">${tab.title}${!meuVer ? ' <span class="text-slate-400 italic">(você não tem acesso)</span>' : ''}</span>
+            <div class="flex items-center gap-3 shrink-0">
+                <label class="flex items-center gap-1 text-[11px] ${meuVer ? 'text-slate-500 dark:text-slate-400 cursor-pointer' : 'text-slate-300 dark:text-slate-600 cursor-not-allowed'}">
+                    <input type="checkbox" class="tab-ver-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" ${!meuVer ? 'disabled' : (perm && perm.pode_ver ? 'checked' : '')}> Ver
+                </label>
+                <label class="flex items-center gap-1 text-[11px] ${meuEditar ? 'text-slate-500 dark:text-slate-400 cursor-pointer' : 'text-slate-300 dark:text-slate-600 cursor-not-allowed'}">
+                    <input type="checkbox" class="tab-editar-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" ${!meuEditar ? 'disabled' : (perm && perm.pode_editar ? 'checked' : '')}> Editar
+                </label>
+            </div>
+        </div>`;
+    }).join('');
+
+    const themeIds = (window.usuariosFormIdToThemeIds && window.usuariosFormIdToThemeIds[formId]) || [];
+    const camadaPerms = window._usuariosCamadaPerms || [];
+    const jaPodeExcluir = themeIds.some(id => camadaPerms.some(pc => pc.user_id === userId && pc.theme_id === id && pc.pode_excluir));
+    const ownCamada = window.homeOwnCamadaPerms || {};
+    const meuExcluir = semTeto || themeIds.some(id => ownCamada[id] && ownCamada[id].pode_excluir);
+    const excluirEl = card.querySelector('.excluir-camada-checkbox');
+    const excluirLabelEl = card.querySelector('.excluir-camada-label');
+    if (excluirEl) {
+        excluirEl.disabled = !meuExcluir;
+        excluirEl.checked = meuExcluir && jaPodeExcluir;
+        if (excluirLabelEl) excluirLabelEl.classList.toggle('opacity-40', !meuExcluir);
+    }
+}
+window.onUsuarioFormChange = onUsuarioFormChange;
+
+async function salvarUsuario(membroId, userId) {
+    const card = document.querySelector(`[data-usuario-card="${membroId}"]`);
+    if (!card) return;
+
+    const papel = card.querySelector('.usuario-papel-select').value;
+    const status = card.querySelector('.usuario-status-select').value;
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    const { error } = await supabaseClient.from('municipio_membros').update({
+        papel,
+        status,
+        decidido_em: new Date().toISOString(),
+        decidido_por: sessionData.session.user.id
+    }).eq('id', membroId);
+    if (error) {
+        alert('Erro ao salvar usuário: ' + error.message);
+        return;
+    }
+
+    const formSelectEl = card.querySelector('.form-select-permissao');
+    const formId = formSelectEl ? formSelectEl.value : '';
+    if (formId) {
+        const tabRows = card.querySelectorAll('.form-tabs-container [data-tab-id]');
+        const abaRows = [];
+        let podeVerAlgumaAba = false;
+        let podeEditarAlgumaAba = false;
+        tabRows.forEach(row => {
+            const tabId = row.getAttribute('data-tab-id');
+            const podeVer = row.querySelector('.tab-ver-checkbox').checked;
+            const podeEditar = row.querySelector('.tab-editar-checkbox').checked;
+            if (podeVer) podeVerAlgumaAba = true;
+            if (podeEditar) podeEditarAlgumaAba = true;
+            abaRows.push({ user_id: userId, form_id: formId, tab_id: tabId, pode_ver: podeVer, pode_editar: podeEditar });
+        });
+        if (abaRows.length > 0) {
+            const { error: abaError } = await supabaseClient.from('permissoes_aba').upsert(abaRows, { onConflict: 'user_id,form_id,tab_id' });
+            if (abaError) { alert('Usuário salvo, mas houve erro ao salvar permissões por aba: ' + abaError.message); return; }
+        }
+
+        const excluirEl = card.querySelector('.excluir-camada-checkbox');
+        const podeExcluir = excluirEl ? excluirEl.checked : false;
+        const themeIds = (window.usuariosFormIdToThemeIds && window.usuariosFormIdToThemeIds[formId]) || [];
+        if (themeIds.length > 0) {
+            const camadaRows = themeIds.map(themeId => ({
+                user_id: userId,
+                theme_id: themeId,
+                pode_ver: podeVerAlgumaAba,
+                pode_editar: podeEditarAlgumaAba,
+                pode_excluir: podeExcluir
+            }));
+            const { error: camadaError } = await supabaseClient.from('permissoes_camada').upsert(camadaRows, { onConflict: 'user_id,theme_id' });
+            if (camadaError) { alert('Usuário salvo, mas houve erro ao liberar a camada: ' + camadaError.message); return; }
+        }
+    }
+
+    alert('Usuário atualizado!');
+    loadUsuariosSection();
+}
+window.salvarUsuario = salvarUsuario;
+
+async function criarMunicipio() {
+    const nome = document.getElementById('novo-municipio-nome').value.trim();
+    const uf = document.getElementById('novo-municipio-uf').value.trim().toUpperCase();
+    if (!nome) { alert('Informe o nome do município.'); return; }
+
+    const { error } = await supabaseClient.from('municipios').insert({ nome, uf: uf || null });
+    if (error) {
+        alert('Erro ao criar município: ' + error.message);
+        return;
+    }
+    document.getElementById('novo-municipio-nome').value = '';
+    document.getElementById('novo-municipio-uf').value = '';
+    document.getElementById('novo-municipio-form').classList.add('hidden');
+    init();
+}
+window.criarMunicipio = criarMunicipio;
+
 async function init() {
     if (!supabaseClient) return;
 
@@ -338,21 +934,61 @@ async function init() {
     document.getElementById('loading-section').classList.add('hidden');
     document.getElementById('empty-section').classList.add('hidden');
 
-    // --- Solicitações pendentes + Entidades (só super_admin, viram abas) ---
-    if (homeUserProfile.super_admin) {
+    // Quem decide solicitações de um município é quem tem Nível de Acesso
+    // "Administrador" aprovado NAQUELE município — não depende de entidade
+    // nenhuma. O RLS (is_municipio_admin) já garante que a consulta de
+    // pendentes abaixo só retorna, pra essa pessoa, pedidos dos municípios
+    // em que ela é administradora (mais os do super_admin, que vê tudo).
+    const { data: meusMunicipiosAdmin } = await supabaseClient
+        .from('municipio_membros')
+        .select('municipio_id')
+        .eq('user_id', userId)
+        .eq('papel', 'admin')
+        .eq('status', 'aprovado');
+    const souMunicipioAdmin = !!(meusMunicipiosAdmin && meusMunicipiosAdmin.length > 0);
+
+    // --- Solicitações pendentes (super_admin vê todas; admin de município
+    // só as do(s) município(s) em que é administrador). Entidades Padrão e
+    // Novo Município continuam exclusivos do super_admin.
+    if (homeUserProfile.super_admin || souMunicipioAdmin) {
         document.getElementById('home-tabs').classList.remove('hidden');
         document.getElementById('home-tabs').classList.add('flex');
-        document.getElementById('tab-btn-entidades').classList.remove('hidden');
-        document.getElementById('tab-btn-entidades').classList.add('flex');
         document.getElementById('tab-btn-pendentes').classList.remove('hidden');
         document.getElementById('tab-btn-pendentes').classList.add('flex');
+
+        if (homeUserProfile.super_admin) {
+            document.getElementById('tab-btn-entidades').classList.remove('hidden');
+            document.getElementById('tab-btn-entidades').classList.add('flex');
+            document.getElementById('btn-novo-municipio').classList.remove('hidden');
+            document.getElementById('btn-novo-municipio').classList.add('flex');
+            document.getElementById('tab-btn-usuarios').classList.remove('hidden');
+            document.getElementById('tab-btn-usuarios').classList.add('flex');
+        }
+
+        // Quem mais enxerga cada solicitação: nada aqui é uma ação de "enviar
+        // pra alguém" — é só mostrar pro super_admin o resultado do filtro
+        // automático (RLS por município) que já decide quem mais vê essa
+        // linha em Solicitações.
+        let municipioAdminsPorMunicipio = {};
+        if (homeUserProfile.super_admin) {
+            const { data: admMunicipios } = await supabaseClient
+                .from('municipio_membros')
+                .select('municipio_id, profiles!user_id(nome)')
+                .eq('papel', 'admin')
+                .eq('status', 'aprovado');
+            (admMunicipios || []).forEach(a => {
+                if (!a.municipio_id) return;
+                if (!municipioAdminsPorMunicipio[a.municipio_id]) municipioAdminsPorMunicipio[a.municipio_id] = [];
+                municipioAdminsPorMunicipio[a.municipio_id].push((a.profiles && a.profiles.nome) || 'sem nome');
+            });
+        }
 
         // profiles!user_id desambigua: municipio_membros tem duas FKs pra
         // profiles (user_id e decidido_por) — sem isso o Supabase recusa a
         // consulta por ambiguidade (e o erro passava batido antes, sem log).
         const { data: pendentes, error: pendentesError } = await supabaseClient
             .from('municipio_membros')
-            .select('id, entidade, cargo, solicitado_em, profiles!user_id(nome, email), municipios(nome)')
+            .select('id, user_id, municipio_id, entidade, cargo, solicitado_em, profiles!user_id(nome, email), municipios(nome)')
             .eq('status', 'pendente')
             .order('solicitado_em', { ascending: true });
         if (pendentesError) console.error('Erro ao buscar solicitações pendentes:', pendentesError);
@@ -365,30 +1001,139 @@ async function init() {
             badge.classList.add('hidden');
         }
 
+        // Pra cada solicitação, o admin também pode conceder de uma vez outros
+        // municípios cadastrados que esse usuário ainda não tem nenhum vínculo
+        // (nem pendente, nem aprovado, nem rejeitado) — evita ele ter que voltar
+        // aqui depois se já sabe que o mesmo órgão vai precisar de mais de um.
+        const { data: todosMunicipios } = await supabaseClient.from('municipios').select('id, nome, uf').eq('ativo', true).order('nome');
+        const userIds = [...new Set((pendentes || []).map(p => p.user_id))];
+        let vinculosPorUsuario = {};
+        if (userIds.length > 0) {
+            const { data: vinculos } = await supabaseClient.from('municipio_membros').select('user_id, municipio_id').in('user_id', userIds);
+            (vinculos || []).forEach(v => {
+                if (!vinculosPorUsuario[v.user_id]) vinculosPorUsuario[v.user_id] = new Set();
+                vinculosPorUsuario[v.user_id].add(v.municipio_id);
+            });
+        }
+
+        // Formulário Ativo + abas: super_admin e admin de município concedem
+        // essa permissão fina, sem teto — quem chega até aqui já é
+        // administrador pleno daquele município (o RLS só deixa ele ver
+        // pedidos de municípios que ele mesmo administra). Só entram na
+        // lista formulários que ESTÃO associados a uma camada de verdade
+        // (tipo_cadastro aponta pra um tema existente) — um formulário
+        // criado no builder mas nunca vinculado a nenhuma camada
+        // importada/criada não serve pra nada aqui ainda.
+        let formsPorMunicipio = {};
+        window.pendingFormsCache = {};
+        window.formIdToThemeIds = {};
+        if (homeUserProfile.super_admin || souMunicipioAdmin) {
+            const municipioIdsDosPedidos = [...new Set((pendentes || []).map(p => p.municipio_id).filter(Boolean))];
+            if (municipioIdsDosPedidos.length > 0) {
+                const { data: temasComForm } = await supabaseClient
+                    .from('temas')
+                    .select('id, municipio_id, tipo_cadastro')
+                    .in('municipio_id', municipioIdsDosPedidos)
+                    .not('tipo_cadastro', 'is', null)
+                    .neq('tipo_cadastro', 'padrao');
+                const formIds = [...new Set((temasComForm || []).map(t => t.tipo_cadastro))];
+                if (formIds.length > 0) {
+                    const { data: formsRows } = await supabaseClient.from('forms').select('id, title, schema').in('id', formIds);
+                    (formsRows || []).forEach(f => {
+                        let tabs = f.schema;
+                        if (f.schema && !Array.isArray(f.schema) && f.schema.tabs) tabs = f.schema.tabs;
+                        window.pendingFormsCache[f.id] = { id: f.id, title: f.title, tabs: Array.isArray(tabs) ? tabs : [] };
+                    });
+                    (temasComForm || []).forEach(t => {
+                        if (!window.pendingFormsCache[t.tipo_cadastro]) return;
+                        if (!formsPorMunicipio[t.municipio_id]) formsPorMunicipio[t.municipio_id] = [];
+                        if (!formsPorMunicipio[t.municipio_id].some(f => f.id === t.tipo_cadastro)) {
+                            formsPorMunicipio[t.municipio_id].push(window.pendingFormsCache[t.tipo_cadastro]);
+                        }
+                        if (!window.formIdToThemeIds[t.tipo_cadastro]) window.formIdToThemeIds[t.tipo_cadastro] = [];
+                        window.formIdToThemeIds[t.tipo_cadastro].push(t.id);
+                    });
+                }
+            }
+        }
+
         const list = document.getElementById('pending-list');
         list.innerHTML = (pendentes && pendentes.length > 0) ? pendentes.map(p => {
             const selectId = 'papel-' + p.id;
-            const papelOptions = ['visualizador', 'editor', 'admin', 'externo'].map(v =>
+            // Quem chega até aqui (super_admin ou admin do município do
+            // pedido) já pode conceder qualquer Nível de Acesso, inclusive
+            // Administrador — sem restrição, sem teto.
+            const papelOptions = ['admin', 'visualizador', 'externo'].map(v =>
                 `<option value="${v}">${PAPEL_LABELS[v]}</option>`
             ).join('');
-            return `
-            <div class="card rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                    <div class="text-sm font-bold text-slate-800 dark:text-slate-100">${(p.profiles && p.profiles.nome) || '(sem nome)'}</div>
-                    <div class="text-xs text-slate-500">${(p.profiles && p.profiles.email) || ''} · ${p.entidade || '-'} · ${p.cargo || '-'}</div>
-                    <div class="text-xs text-primary mt-0.5">Município: ${(p.municipios && p.municipios.nome) || '-'}</div>
-                </div>
-                <div class="flex items-center gap-2 shrink-0">
-                    <select id="${selectId}" class="text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5">
-                        ${papelOptions}
+            const jaTem = vinculosPorUsuario[p.user_id] || new Set();
+            const extras = (todosMunicipios || []).filter(m => !jaTem.has(m.id));
+            const extrasHtml = extras.length > 0 ? `
+                <div class="border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
+                    <button type="button" onclick="this.nextElementSibling.classList.toggle('hidden')" class="text-xs text-primary hover:underline flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[14px]">add_circle</span> Conceder acesso a outros municípios também
+                    </button>
+                    <div class="hidden mt-2 flex flex-col gap-1 max-h-32 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg p-2">
+                        ${extras.map(m => `
+                            <label class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
+                                <input type="checkbox" class="extra-municipio-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" value="${m.id}">
+                                ${m.nome}${m.uf ? ' - ' + m.uf : ''}
+                            </label>`).join('')}
+                    </div>
+                </div>` : '';
+            // Formulário Ativo (associado a uma camada de verdade) + abas
+            // com Ver/Editar, e um único "Excluir" pra camada toda (excluir
+            // remove a feição do mapa também, não é por aba).
+            const formsDoMunicipio = formsPorMunicipio[p.municipio_id] || [];
+            const formOptionsHtml = formsDoMunicipio.map(f => `<option value="${f.id}">${f.title}</option>`).join('');
+            const formularioHtml = (homeUserProfile.super_admin || souMunicipioAdmin) ? `
+                <div class="border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
+                    <label class="text-[10px] text-slate-400 uppercase tracking-wide block mb-1">Formulário Ativo (permissão por aba)</label>
+                    ${formsDoMunicipio.length > 0 ? `
+                    <select class="form-select-permissao text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5 w-full sm:w-auto" onchange="onSolicitacaoFormChange('${p.id}', this.value)">
+                        <option value="">— Nenhum —</option>
+                        ${formOptionsHtml}
                     </select>
-                    <button onclick="decidirSolicitacao('${p.id}', true, '${selectId}')" class="text-xs bg-emerald-500 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-600">Aprovar</button>
-                    <button onclick="decidirSolicitacao('${p.id}', false, '${selectId}')" class="text-xs bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Rejeitar</button>
+                    <div class="form-tabs-container mt-2 flex flex-col gap-1"></div>
+                    <label class="excluir-camada-label flex items-center gap-2 text-xs text-red-600 dark:text-red-400 cursor-pointer mt-2">
+                        <input type="checkbox" class="excluir-camada-checkbox rounded border-slate-300 dark:border-slate-600 text-red-500 focus:ring-red-500">
+                        Pode excluir dados desta camada (remove também a feição do mapa)
+                    </label>` : '<div class="text-[11px] text-slate-400 italic">Nenhum formulário associado a uma camada existente neste município ainda.</div>'}
+                </div>` : '';
+            return `
+            <div class="card rounded-xl p-4 flex flex-col gap-1" data-membro-card="${p.id}">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                        <div class="text-sm font-bold text-slate-800 dark:text-slate-100">${(p.profiles && p.profiles.nome) || '(sem nome)'}</div>
+                        <div class="text-xs text-slate-500">${(p.profiles && p.profiles.email) || ''} · ${p.entidade || '-'} · ${p.cargo || '-'}</div>
+                        <div class="text-xs text-primary mt-0.5">Município: ${(p.municipios && p.municipios.nome) || '-'}</div>
+                        ${homeUserProfile.super_admin ? `
+                        <div class="text-[11px] text-slate-400 mt-0.5">
+                            ${(municipioAdminsPorMunicipio[p.municipio_id] || []).length > 0
+                                ? `Também visto por: ${municipioAdminsPorMunicipio[p.municipio_id].join(', ')} (admin de ${(p.municipios && p.municipios.nome) || 'município'})`
+                                : `Nenhum admin designado para "${(p.municipios && p.municipios.nome) || '-'}" ainda — só você vê este pedido`}
+                        </div>` : ''}
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <div class="flex flex-col gap-0.5">
+                            <label for="${selectId}" class="text-[9px] text-slate-400 uppercase tracking-wide">Nível de Acesso</label>
+                            <select id="${selectId}" class="text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5">
+                                ${papelOptions}
+                            </select>
+                        </div>
+                        <button onclick="decidirSolicitacao('${p.id}', true, '${selectId}')" class="text-xs bg-emerald-500 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-600">Aprovar</button>
+                        <button onclick="decidirSolicitacao('${p.id}', false, '${selectId}')" class="text-xs bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Rejeitar</button>
+                    </div>
                 </div>
+                ${extrasHtml}
+                ${formularioHtml}
             </div>`;
         }).join('') : '<div class="text-xs text-slate-400 italic py-2">Nenhuma solicitação pendente.</div>';
 
-        await loadEntidadesSection();
+        if (homeUserProfile.super_admin) {
+            await loadEntidadesSection();
+            await loadUsuariosSection();
+        }
     }
 
     // --- Grade de municípios (aba padrão, sempre ativa) ---
@@ -405,6 +1150,13 @@ async function init() {
         municipiosParaMostrar = (aprovados || [])
             .filter(m => m.municipios)
             .map(m => ({ id: m.municipios.id, nome: m.municipios.nome, uf: m.municipios.uf, papel: m.papel }));
+    }
+
+    // Usuário comum (não admin de nada) com um único município aprovado não
+    // precisa escolher — entra direto na base dele.
+    if (!homeUserProfile.super_admin && !homeUserProfile.entidade_admin && municipiosParaMostrar.length === 1) {
+        selectMunicipio(municipiosParaMostrar[0].id, municipiosParaMostrar[0].nome);
+        return;
     }
 
     if (municipiosParaMostrar.length > 0) {

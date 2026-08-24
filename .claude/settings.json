@@ -10,7 +10,8 @@
       "Bash(node -e ' *)",
       "Read(//c/Users/WINDOW~1/AppData/Local/Temp/claude/**)",
       "Bash(xargs -I{} ls -la \"{}\")",
-      "Bash(sort -k6,7)"
+      "Bash(sort -k6,7)",
+      "Bash(node --check src/formRenderer.js)"
     ]
   }
 }

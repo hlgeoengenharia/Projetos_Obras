@@ -24,13 +24,27 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
     window.currentFormIsEditMode = isEditMode;
     window.currentFormIsPreview = options.isPreview || false;
     window.currentFormEditTabId = options.editTabId || null;
-    
+
+    // Permissão por aba (permissoes_aba): só se aplica a dados reais (não
+    // ao preview do form builder em settings.html) e só restringe quando
+    // existe mesmo uma linha pra essa aba — quem nunca recebeu restrição
+    // continua vendo tudo, como sempre viu.
+    const formId = options.formId || null;
+    const visibleTabs = (options.isPreview || typeof window.canSeeFormTab !== 'function')
+        ? formConfig
+        : formConfig.filter(tab => window.canSeeFormTab(formId, tab.id));
+
+    if (visibleTabs.length === 0) {
+        container.innerHTML = '<div class="p-4 text-xs text-slate-400 italic text-center">Você não tem permissão para ver nenhuma aba deste formulário.</div>';
+        return;
+    }
+
     let html = '<div class="flex flex-col border-t border-slate-200 dark:border-slate-700">';
-    
-    let primaryTabId = options.activeTabId || formConfig.find(t => t.isPrimary)?.id;
-    if (!primaryTabId && formConfig.length > 0) primaryTabId = formConfig[0].id;
-    
-    formConfig.forEach((tab) => {
+
+    let primaryTabId = options.activeTabId || visibleTabs.find(t => t.isPrimary)?.id;
+    if (!primaryTabId && visibleTabs.length > 0) primaryTabId = visibleTabs[0].id;
+
+    visibleTabs.forEach((tab) => {
         let isPrimary = tab.id === primaryTabId;
         
         let recordCountHtml = '';
@@ -60,17 +74,23 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
                 <div id="acc-content-${tab.id}" class="accordion-content transition-all duration-300 ${isPrimary ? 'block p-4 sm:p-5 border-t border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-950' : 'hidden'}">
         `;
         
+        const canEditThisTab = (options.isPreview || typeof window.canEditFormTab !== 'function') || window.canEditFormTab(formId, tab.id);
+
         let isTabEditMode = false;
         if (isEditMode) {
             if (window.currentFormEditTabId) {
-                isTabEditMode = (tab.id === window.currentFormEditTabId);
+                isTabEditMode = (tab.id === window.currentFormEditTabId) && canEditThisTab;
             } else {
-                isTabEditMode = true;
+                isTabEditMode = canEditThisTab;
             }
         }
-        
+
         // Render Edit button inside the tab if we are NOT in edit mode
-        if (!isEditMode) {
+        // (e só se essa aba específica também não estiver restrita a
+        // visualização — sem isso alguém com só "Ver" numa aba conseguiria
+        // abrir o formulário de edição mesmo assim, e o banco recusaria o
+        // salvamento sem nenhuma explicação na tela).
+        if (!isEditMode && canEditThisTab) {
             html += `
             <div class="flex justify-center mb-4">
                 <button type="button" onclick="toggleFeatureEditMode('${tab.id}')" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto text-sm">
