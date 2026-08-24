@@ -62,23 +62,23 @@
 </head>
 <body class="font-sans min-h-screen">
 
-<header class="h-16 bg-white/70 dark:bg-[#070b14]/75 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 shadow-sm flex items-center px-4 md:px-8 gap-4">
+<header class="h-16 bg-white/70 dark:bg-[#070b14]/75 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 shadow-sm flex items-center px-2 md:px-8 gap-2 md:gap-4">
   <!-- Abas (só aparecem pra quem tem mais de uma coisa pra ver — hoje, super_admin) -->
-  <div id="home-tabs" class="hidden flex-1 items-center justify-center gap-1 h-full">
-    <button class="tab-btn active h-full px-4 md:px-6 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('municipios-section', this)" title="Municípios">
+  <div id="home-tabs" class="hidden flex-1 min-w-0 items-center justify-center gap-0.5 sm:gap-1 h-full overflow-x-auto">
+    <button class="tab-btn active h-full px-2 sm:px-3 md:px-6 shrink-0 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('municipios-section', this)" title="Municípios">
       <span class="material-symbols-outlined text-[20px]">location_city</span>
       <span class="text-[9px] font-medium uppercase tracking-wide">Municípios</span>
     </button>
-    <button id="tab-btn-entidades" class="hidden tab-btn h-full px-4 md:px-6 flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('entidades-section', this)" title="Entidades Padrão">
+    <button id="tab-btn-entidades" class="hidden tab-btn h-full px-2 sm:px-3 md:px-6 shrink-0 flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('entidades-section', this)" title="Entidades Padrão">
       <span class="material-symbols-outlined text-[20px]">domain</span>
       <span class="text-[9px] font-medium uppercase tracking-wide">Entidades</span>
     </button>
-    <button id="tab-btn-pendentes" class="hidden relative tab-btn h-full px-4 md:px-6 flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('pending-section', this)" title="Solicitações">
+    <button id="tab-btn-pendentes" class="hidden relative tab-btn h-full px-2 sm:px-3 md:px-6 shrink-0 flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('pending-section', this)" title="Solicitações">
       <span class="material-symbols-outlined text-[20px]">pending_actions</span>
       <span class="text-[9px] font-medium uppercase tracking-wide">Solicitações</span>
       <span id="pending-badge" class="hidden absolute top-2 right-3 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center"></span>
     </button>
-    <button id="tab-btn-usuarios" class="hidden tab-btn h-full px-4 md:px-6 flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('usuarios-section', this)" title="Usuários">
+    <button id="tab-btn-usuarios" class="hidden tab-btn h-full px-2 sm:px-3 md:px-6 shrink-0 flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('usuarios-section', this)" title="Usuários">
       <span class="material-symbols-outlined text-[20px]">group</span>
       <span class="text-[9px] font-medium uppercase tracking-wide">Usuários</span>
     </button>
@@ -580,13 +580,8 @@ async function loadUsuariosSection() {
     if (!list) return;
     list.innerHTML = '<div class="text-xs text-slate-400 italic py-2">Carregando...</div>';
 
-    const { data: sessionData } = await supabaseClient.auth.getSession();
-    const meuUserId = sessionData && sessionData.session ? sessionData.session.user.id : null;
-
-    // Sem filtro explícito de propósito: o RLS de municipio_membros já
-    // resolve sozinho quem cada um enxerga — super_admin vê todo mundo,
-    // admin de ente vê só a própria linha + linhas do mesmo ente (nunca
-    // gente de outro ente). A query é a mesma pros dois casos.
+    // Esta aba é exclusiva do super_admin (ensureAdminAccess/tab gating já
+    // garante isso), que enxerga todo mundo sem filtro nenhum.
     const { data: membros, error } = await supabaseClient
         .from('municipio_membros')
         .select('id, user_id, municipio_id, papel, status, entidade, cargo, solicitado_em, profiles!user_id(nome, email, entidade_admin), municipios(nome)')
@@ -638,20 +633,17 @@ async function loadUsuariosSection() {
     window._usuariosCamadaPerms = camadaPerms || [];
 
     list.innerHTML = (membros && membros.length > 0)
-        ? membros.map(m => renderUsuarioCard(m, meuUserId)).join('')
+        ? membros.map(m => renderUsuarioCard(m)).join('')
         : '<div class="text-xs text-slate-400 italic py-2">Nenhum usuário ainda.</div>';
 }
 window.loadUsuariosSection = loadUsuariosSection;
 
 const STATUS_LABELS_HOME = { pendente: 'Pendente', aprovado: 'Aprovado', rejeitado: 'Rejeitado' };
 
-function renderUsuarioCard(m, meuUserId) {
+function renderUsuarioCard(m) {
     const formsDoMunicipio = (window._usuariosFormsPorMunicipio && window._usuariosFormsPorMunicipio[m.municipio_id]) || [];
     const formOptionsHtml = formsDoMunicipio.map(f => `<option value="${f.id}">${f.title}</option>`).join('');
-    // Admin de ente também não pode conceder papel de admin de município a
-    // outra pessoa — mesma trava de Solicitações.
-    const papeisPermitidos = homeUserProfile.super_admin ? ['admin', 'visualizador', 'externo'] : ['visualizador', 'externo'];
-    const papelOptions = papeisPermitidos.map(v =>
+    const papelOptions = ['admin', 'visualizador', 'externo'].map(v =>
         `<option value="${v}" ${m.papel === v ? 'selected' : ''}>${PAPEL_LABELS[v]}</option>`
     ).join('');
     const statusOptions = ['pendente', 'aprovado', 'rejeitado'].map(v =>
@@ -666,60 +658,7 @@ function renderUsuarioCard(m, meuUserId) {
     const searchText = [nome, (m.profiles && m.profiles.email), m.entidade, m.cargo, (m.municipios && m.municipios.nome)]
         .filter(Boolean).join(' ').toLowerCase().replace(/"/g, '&quot;');
 
-    // A própria linha do admin de ente (nunca a do super_admin, que não
-    // tem linha de permissão nenhuma pra mostrar) vira só visualização —
-    // não faz sentido ele conceder permissão pra si mesmo, e o teto
-    // ("quem vê mais pode ver menos") é justamente calculado a partir do
-    // que está aqui.
-    const isSelf = !homeUserProfile.super_admin && meuUserId && m.user_id === meuUserId;
-    if (isSelf) {
-        const ownAba = window.homeOwnAbaPerms || {};
-        const porForm = {};
-        Object.keys(ownAba).forEach(key => {
-            const perm = ownAba[key];
-            if (!perm.pode_ver && !perm.pode_editar) return;
-            const sep = key.indexOf(':');
-            const formId = key.slice(0, sep);
-            const tabId = key.slice(sep + 1);
-            if (!porForm[formId]) porForm[formId] = [];
-            porForm[formId].push({ tabId, pode_ver: perm.pode_ver, pode_editar: perm.pode_editar });
-        });
-        const minhasPermissoesHtml = Object.keys(porForm).length > 0
-            ? Object.keys(porForm).map(formId => {
-                const form = (window.usuariosFormsCache || {})[formId];
-                const formTitle = form ? form.title : formId;
-                const linhas = porForm[formId].map(p => {
-                    const tab = form && form.tabs ? form.tabs.find(t => t.id === p.tabId) : null;
-                    const tabTitle = tab ? tab.title : p.tabId;
-                    const marcado = [p.pode_ver ? 'Ver' : null, p.pode_editar ? 'Editar' : null].filter(Boolean).join(' · ') || '—';
-                    return `<div class="flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 py-1 border-b border-slate-100 dark:border-slate-800 last:border-0">
-                        <span>${tabTitle}</span>
-                        <span class="text-[10px] text-slate-400 uppercase">${marcado}</span>
-                    </div>`;
-                }).join('');
-                return `<div class="mt-2 first:mt-0"><div class="text-[10px] text-slate-400 uppercase tracking-wide mb-1">${formTitle}</div>${linhas}</div>`;
-            }).join('')
-            : '<div class="text-xs text-slate-400 italic">Nenhuma permissão por aba concedida a você ainda.</div>';
-
-        return `
-        <div class="card rounded-xl overflow-hidden" data-usuario-card="${m.id}" data-search="${searchText}">
-            <button type="button" onclick="toggleUsuarioCard('${m.id}')" class="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                <span class="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">
-                    ${nome} <span class="text-xs font-medium text-primary normal-case">(${nivelResumo} · Você)</span>
-                </span>
-                <span class="usuario-card-chevron material-symbols-outlined text-slate-400 text-[20px] shrink-0">expand_more</span>
-            </button>
-            <div class="usuario-card-body hidden px-4 pb-4 flex flex-col gap-2">
-                <div class="text-xs text-slate-500">${(m.profiles && m.profiles.email) || ''} · ${m.entidade || '-'} · ${m.cargo || '-'}</div>
-                <div class="text-xs text-primary mt-0.5">Município: ${(m.municipios && m.municipios.nome) || '-'}</div>
-                <div class="text-xs text-slate-500 mt-1">Status: ${STATUS_LABELS_HOME[m.status] || m.status} · Nível de Acesso: ${nivelResumo}</div>
-                <div class="border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
-                    <label class="text-[10px] text-slate-400 uppercase tracking-wide block mb-1">Minhas permissões por aba (somente leitura)</label>
-                    ${minhasPermissoesHtml}
-                </div>
-            </div>
-        </div>`;
-    }
+    const statusResumo = STATUS_LABELS_HOME[m.status] || m.status || '';
 
     return `
     <div class="card rounded-xl overflow-hidden" data-usuario-card="${m.id}" data-search="${searchText}">
@@ -730,44 +669,103 @@ function renderUsuarioCard(m, meuUserId) {
             <span class="usuario-card-chevron material-symbols-outlined text-slate-400 text-[20px] shrink-0">expand_more</span>
         </button>
         <div class="usuario-card-body hidden px-4 pb-4 flex flex-col gap-2">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                    <div class="text-xs text-slate-500">${(m.profiles && m.profiles.email) || ''} · ${m.entidade || '-'} · ${m.cargo || '-'}</div>
-                    <div class="text-xs text-primary mt-0.5">Município: ${(m.municipios && m.municipios.nome) || '-'}</div>
+            <div class="text-xs text-slate-500">${(m.profiles && m.profiles.email) || ''} · ${m.entidade || '-'} · ${m.cargo || '-'}</div>
+            <div class="text-xs text-primary mt-0.5">Município: ${(m.municipios && m.municipios.nome) || '-'}</div>
+
+            <!-- Visualização: mostra o que já está configurado, sem deixar mexer -->
+            <div class="usuario-view-mode flex items-center justify-between gap-3 mt-1">
+                <div class="flex items-center gap-4">
+                    <div class="text-xs">
+                        <span class="text-slate-400 uppercase text-[9px] block">Status</span>
+                        <span class="font-semibold text-slate-700 dark:text-slate-200">${statusResumo}</span>
+                    </div>
+                    <div class="text-xs">
+                        <span class="text-slate-400 uppercase text-[9px] block">Nível de Acesso</span>
+                        <span class="font-semibold text-slate-700 dark:text-slate-200">${nivelResumo}</span>
+                    </div>
                 </div>
-                <div class="flex items-end gap-2 shrink-0 flex-wrap">
-                    <div class="flex flex-col gap-0.5">
-                        <label class="text-[9px] text-slate-400 uppercase tracking-wide">Status</label>
-                        <select class="usuario-status-select text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5">
-                            ${statusOptions}
-                        </select>
+                <button type="button" onclick="enterUsuarioEditMode('${m.id}')" class="text-xs bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 flex items-center gap-1 shrink-0">
+                    <span class="material-symbols-outlined text-[16px]">edit</span> Editar
+                </button>
+            </div>
+
+            <!-- Edição: só aparece depois de clicar em Editar; é aqui que mora o Excluir -->
+            <div class="usuario-edit-mode hidden flex flex-col gap-2 mt-1">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div class="flex items-end gap-2 flex-wrap">
+                        <div class="flex flex-col gap-0.5">
+                            <label class="text-[9px] text-slate-400 uppercase tracking-wide">Status</label>
+                            <select class="usuario-status-select text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5">
+                                ${statusOptions}
+                            </select>
+                        </div>
+                        <div class="flex flex-col gap-0.5">
+                            <label class="text-[9px] text-slate-400 uppercase tracking-wide">Nível de Acesso</label>
+                            <select class="usuario-papel-select text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5">
+                                ${papelOptions}
+                            </select>
+                        </div>
                     </div>
-                    <div class="flex flex-col gap-0.5">
-                        <label class="text-[9px] text-slate-400 uppercase tracking-wide">Nível de Acesso</label>
-                        <select class="usuario-papel-select text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5">
-                            ${papelOptions}
-                        </select>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button onclick="salvarUsuario('${m.id}', '${m.user_id}')" class="text-xs bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary/90">Salvar</button>
+                        <button onclick="cancelarEdicaoUsuario('${m.id}')" class="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700">Cancelar</button>
                     </div>
-                    <button onclick="salvarUsuario('${m.id}', '${m.user_id}')" class="text-xs bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary/90">Salvar</button>
+                </div>
+                ${formsDoMunicipio.length > 0 ? `
+                <div class="border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
+                    <label class="text-[10px] text-slate-400 uppercase tracking-wide block mb-1">Formulário Ativo (permissão por aba)</label>
+                    <select class="form-select-permissao text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5 w-full sm:w-auto" onchange="onUsuarioFormChange('${m.id}', '${m.user_id}', this.value)">
+                        <option value="">— Nenhum —</option>
+                        ${formOptionsHtml}
+                    </select>
+                    <div class="form-tabs-container mt-2 flex flex-col gap-1"></div>
+                    <label class="excluir-camada-label flex items-center gap-2 text-xs text-red-600 dark:text-red-400 cursor-pointer mt-2">
+                        <input type="checkbox" class="excluir-camada-checkbox rounded border-slate-300 dark:border-slate-600 text-red-500 focus:ring-red-500">
+                        Pode excluir dados desta camada (remove também a feição do mapa)
+                    </label>
+                </div>` : ''}
+                <div class="border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
+                    <button type="button" onclick="excluirUsuarioMembro('${m.id}', '${nome.replace(/'/g, "\\'")}')" class="text-xs text-red-600 dark:text-red-400 hover:underline flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[16px]">delete</span> Excluir acesso deste usuário a este município
+                    </button>
                 </div>
             </div>
-            ${formsDoMunicipio.length > 0 ? `
-            <div class="border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
-                <label class="text-[10px] text-slate-400 uppercase tracking-wide block mb-1">Formulário Ativo (permissão por aba)</label>
-                <select class="form-select-permissao text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5 w-full sm:w-auto" onchange="onUsuarioFormChange('${m.id}', '${m.user_id}', this.value)">
-                    <option value="">— Nenhum —</option>
-                    ${formOptionsHtml}
-                </select>
-                <div class="form-tabs-container mt-2 flex flex-col gap-1"></div>
-                <label class="excluir-camada-label flex items-center gap-2 text-xs text-red-600 dark:text-red-400 cursor-pointer mt-2">
-                    <input type="checkbox" class="excluir-camada-checkbox rounded border-slate-300 dark:border-slate-600 text-red-500 focus:ring-red-500">
-                    Pode excluir dados desta camada (remove também a feição do mapa)
-                </label>
-            </div>` : ''}
         </div>
     </div>`;
 }
 window.renderUsuarioCard = renderUsuarioCard;
+
+function enterUsuarioEditMode(membroId) {
+    const card = document.querySelector(`[data-usuario-card="${membroId}"]`);
+    if (!card) return;
+    const viewMode = card.querySelector('.usuario-view-mode');
+    const editMode = card.querySelector('.usuario-edit-mode');
+    if (viewMode) viewMode.classList.add('hidden');
+    if (editMode) editMode.classList.remove('hidden');
+}
+window.enterUsuarioEditMode = enterUsuarioEditMode;
+
+function cancelarEdicaoUsuario(membroId) {
+    const card = document.querySelector(`[data-usuario-card="${membroId}"]`);
+    if (!card) return;
+    const viewMode = card.querySelector('.usuario-view-mode');
+    const editMode = card.querySelector('.usuario-edit-mode');
+    if (editMode) editMode.classList.add('hidden');
+    if (viewMode) viewMode.classList.remove('hidden');
+}
+window.cancelarEdicaoUsuario = cancelarEdicaoUsuario;
+
+async function excluirUsuarioMembro(membroId, nome) {
+    if (!confirm(`Tem certeza que deseja excluir o acesso de "${nome}" a este município? Essa ação não pode ser desfeita.`)) return;
+    const { error } = await supabaseClient.from('municipio_membros').delete().eq('id', membroId);
+    if (error) {
+        alert('Erro ao excluir: ' + error.message);
+        return;
+    }
+    alert('Acesso excluído.');
+    loadUsuariosSection();
+}
+window.excluirUsuarioMembro = excluirUsuarioMembro;
 
 function toggleUsuarioCard(membroId) {
     const card = document.querySelector(`[data-usuario-card="${membroId}"]`);
@@ -776,6 +774,22 @@ function toggleUsuarioCard(membroId) {
     const chevron = card.querySelector('.usuario-card-chevron');
     if (!body) return;
     const abrindo = body.classList.contains('hidden');
+
+    if (abrindo) {
+        // Acordeão: abrir um card fecha qualquer outro que estivesse aberto
+        // (e desfaz a edição dele, se estivesse em edição).
+        document.querySelectorAll('#usuarios-list [data-usuario-card]').forEach(function(otherCard) {
+            if (otherCard === card) return;
+            const otherBody = otherCard.querySelector('.usuario-card-body');
+            const otherChevron = otherCard.querySelector('.usuario-card-chevron');
+            if (otherBody && !otherBody.classList.contains('hidden')) {
+                otherBody.classList.add('hidden');
+                if (otherChevron) otherChevron.textContent = 'expand_more';
+                cancelarEdicaoUsuario(otherCard.getAttribute('data-usuario-card'));
+            }
+        });
+    }
+
     body.classList.toggle('hidden');
     if (chevron) chevron.textContent = abrindo ? 'expand_less' : 'expand_more';
 }
@@ -801,26 +815,20 @@ function onUsuarioFormChange(membroId, userId, formId) {
         container.innerHTML = '<div class="text-[11px] text-slate-400 italic">Este formulário não tem abas configuradas.</div>';
         return;
     }
-    // Mesmo teto de Solicitações: super_admin concede à vontade; admin de
-    // ente só até o que ele mesmo já tem (window.homeOwnAbaPerms/
-    // homeOwnCamadaPerms, calculados em init()).
-    const semTeto = !!homeUserProfile.super_admin;
-    const ownAba = window.homeOwnAbaPerms || {};
+    // Esta aba é exclusiva do super_admin, sem teto — pré-marca com o que
+    // já está salvo (window._usuariosAbaPerms).
     const abaPerms = window._usuariosAbaPerms || {};
     container.innerHTML = form.tabs.map(tab => {
-        const key = formId + ':' + tab.id;
-        const meuVer = semTeto || !!(ownAba[key] && ownAba[key].pode_ver);
-        const meuEditar = semTeto || !!(ownAba[key] && ownAba[key].pode_editar);
         const perm = abaPerms[userId + ':' + formId + ':' + tab.id];
         return `
         <div class="flex items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/60 rounded-lg px-2 py-1.5" data-tab-id="${tab.id}">
-            <span class="text-xs text-slate-700 dark:text-slate-200 truncate">${tab.title}${!meuVer ? ' <span class="text-slate-400 italic">(você não tem acesso)</span>' : ''}</span>
+            <span class="text-xs text-slate-700 dark:text-slate-200 truncate">${tab.title}</span>
             <div class="flex items-center gap-3 shrink-0">
-                <label class="flex items-center gap-1 text-[11px] ${meuVer ? 'text-slate-500 dark:text-slate-400 cursor-pointer' : 'text-slate-300 dark:text-slate-600 cursor-not-allowed'}">
-                    <input type="checkbox" class="tab-ver-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" ${!meuVer ? 'disabled' : (perm && perm.pode_ver ? 'checked' : '')}> Ver
+                <label class="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 cursor-pointer">
+                    <input type="checkbox" class="tab-ver-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" ${perm && perm.pode_ver ? 'checked' : ''}> Ver
                 </label>
-                <label class="flex items-center gap-1 text-[11px] ${meuEditar ? 'text-slate-500 dark:text-slate-400 cursor-pointer' : 'text-slate-300 dark:text-slate-600 cursor-not-allowed'}">
-                    <input type="checkbox" class="tab-editar-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" ${!meuEditar ? 'disabled' : (perm && perm.pode_editar ? 'checked' : '')}> Editar
+                <label class="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 cursor-pointer">
+                    <input type="checkbox" class="tab-editar-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" ${perm && perm.pode_editar ? 'checked' : ''}> Editar
                 </label>
             </div>
         </div>`;
@@ -829,15 +837,8 @@ function onUsuarioFormChange(membroId, userId, formId) {
     const themeIds = (window.usuariosFormIdToThemeIds && window.usuariosFormIdToThemeIds[formId]) || [];
     const camadaPerms = window._usuariosCamadaPerms || [];
     const jaPodeExcluir = themeIds.some(id => camadaPerms.some(pc => pc.user_id === userId && pc.theme_id === id && pc.pode_excluir));
-    const ownCamada = window.homeOwnCamadaPerms || {};
-    const meuExcluir = semTeto || themeIds.some(id => ownCamada[id] && ownCamada[id].pode_excluir);
     const excluirEl = card.querySelector('.excluir-camada-checkbox');
-    const excluirLabelEl = card.querySelector('.excluir-camada-label');
-    if (excluirEl) {
-        excluirEl.disabled = !meuExcluir;
-        excluirEl.checked = meuExcluir && jaPodeExcluir;
-        if (excluirLabelEl) excluirLabelEl.classList.toggle('opacity-40', !meuExcluir);
-    }
+    if (excluirEl) excluirEl.checked = jaPodeExcluir;
 }
 window.onUsuarioFormChange = onUsuarioFormChange;
 

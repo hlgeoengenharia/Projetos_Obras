@@ -5185,7 +5185,8 @@ async function getProj4Def(epsgCode) {
 async function loadRasterLayers() {
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         try {
-            const { data, error } = await supabaseClient.from('imagens_raster').select('*').order('created_at', { ascending: true });
+            if (!activeMunicipioId) return;
+            const { data, error } = await supabaseClient.from('imagens_raster').select('*').eq('municipio_id', activeMunicipioId).order('created_at', { ascending: true });
             if (error) {
                 if (error.code === 'PGRST116' || error.message.includes('does not exist')) {
                     return;
@@ -5225,12 +5226,17 @@ async function loadRasterLayers() {
 function renderRasterLayersList() {
     const container = document.getElementById('rasters-container');
     if (!container) return;
-    
+
     if (rasterLayers.length === 0) {
         container.innerHTML = `<div class="text-xs text-slate-400 dark:text-slate-500 italic p-2 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-center">Nenhuma imagem importada.</div>`;
         return;
     }
-    
+
+    // Editar/excluir imagem de fundo é ação de admin (mesma régua do resto
+    // do app) — quem só tem acesso de leitura ainda vê/liga a camada, só
+    // não mexe nela.
+    const isAdmin = !!((typeof currentUserProfile !== 'undefined' && currentUserProfile && currentUserProfile.super_admin) || (typeof currentMunicipioPapel !== 'undefined' && currentMunicipioPapel === 'admin'));
+
     container.innerHTML = '';
     rasterLayers.forEach(raster => {
         const item = document.createElement('div');
@@ -5258,6 +5264,7 @@ function renderRasterLayersList() {
                     </label>
                 </div>
                 
+                ${isAdmin ? `
                 <!-- Footer: Actions -->
                 <div class="flex justify-start items-center border-t border-white/20 dark:border-white/10 pt-3 gap-2 w-full">
                     <button onclick="openEditRasterModal('${raster.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Configurações da Imagem">
@@ -5266,7 +5273,7 @@ function renderRasterLayersList() {
                     <button onclick="deleteRasterLayer('${raster.id}')" class="p-1.5 hover:bg-red-500/30 rounded-lg tooltip text-red-500 transition-colors" title="Excluir Imagem">
                         <span class="material-symbols-outlined text-[18px]">delete</span>
                     </button>
-                </div>
+                </div>` : ''}
             </div>
         `;
         container.appendChild(item);
@@ -5335,9 +5342,13 @@ window.deleteRasterLayer = async function(rasterId) {
         try {
             const raster = rasterLayers.find(r => r.id === rasterId);
             if (raster) {
-                const parts = raster.url_imagem.split('/');
-                const fileName = parts[parts.length - 1];
-                await supabaseClient.storage.from('rasters').remove([fileName]);
+                // O caminho real no bucket inclui a pasta do município
+                // (municipio_id/arquivo.webp) — pegar só o último trecho da
+                // URL perderia essa pasta e o remove() não acharia o objeto.
+                const marker = '/rasters/';
+                const idx = raster.url_imagem.indexOf(marker);
+                const filePath = idx !== -1 ? raster.url_imagem.slice(idx + marker.length) : raster.url_imagem.split('/').pop();
+                await supabaseClient.storage.from('rasters').remove([filePath]);
             }
             await supabaseClient.from('imagens_raster').delete().eq('id', rasterId);
         } catch(e) {
@@ -5524,10 +5535,19 @@ async function processGeoTIFF(arrayBuffer, fileName) {
         }
         
         if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            if (!activeMunicipioId) {
+                hideLoadingOverlay();
+                alert("Nenhum município ativo — volte pra home.html e escolha um município antes de importar.");
+                return;
+            }
+
             const fileExt = 'webp';
             const cleanFileName = fileName.replace(/\.[^/.]+$/, "");
-            const uniqueFileName = `${cleanFileName}_${Date.now()}.${fileExt}`;
-            
+            // Prefixado pelo município: evita colisão de nome entre
+            // municípios diferentes no mesmo bucket, e deixa o Storage já
+            // organizado por pasta caso precise inspecionar manualmente.
+            const uniqueFileName = `${activeMunicipioId}/${cleanFileName}_${Date.now()}.${fileExt}`;
+
             const { data: storageData, error: storageError } = await supabaseClient.storage
                 .from('rasters')
                 .upload(uniqueFileName, blob, {
@@ -5535,29 +5555,31 @@ async function processGeoTIFF(arrayBuffer, fileName) {
                     cacheControl: '3600',
                     upsert: false
                 });
-                
+
             if (storageError) {
                 console.error("Erro ao subir arquivo para o Storage:", storageError);
                 hideLoadingOverlay();
                 alert("Erro ao salvar arquivo no Supabase Storage. Verifique se o bucket 'rasters' foi criado e está público. Detalhe: " + storageError.message);
                 return;
             }
-            
+
             // Obter URL pública
             const { data: urlData } = supabaseClient.storage
                 .from('rasters')
                 .getPublicUrl(uniqueFileName);
             const imageUrl = urlData.publicUrl;
-            
+
             // Gravar metadados no banco
             const { data: dbData, error: dbError } = await supabaseClient
                 .from('imagens_raster')
                 .insert({
+                    municipio_id: activeMunicipioId,
                     nome: cleanFileName,
                     url_imagem: imageUrl,
                     bbox: latLngBounds,
                     opacidade: 0.8,
-                    visivel: true
+                    visivel: true,
+                    created_by: (typeof currentUserProfile !== 'undefined' && currentUserProfile) ? currentUserProfile.id : null
                 })
                 .select();
                 
