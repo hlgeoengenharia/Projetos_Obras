@@ -3276,13 +3276,26 @@
         grid.innerHTML = `<div class="col-span-full p-8 text-center text-slate-400 text-sm italic"><span class="material-symbols-outlined text-[40px] block mb-2 opacity-30">folder_open</span>Carregando...</div>`;
 
         try {
-            const { data: rootItems, error } = await supabaseClient.storage.from('obras_arquivos').list('', { limit: 200 });
-            if (error) throw error;
+            // Busca as pastas a partir dos municípios cadastrados no banco (100% livre de rate limit 429)
+            const { data: munList, error: munErr } = await supabaseClient.from('municipios').select('nome, uf').order('nome');
+            
+            let folders = [];
+            if (!munErr && munList && munList.length > 0) {
+                folders = munList.map(m => ({ name: slugifyMunicipioFolder(m.nome, m.uf), label: `${m.nome} - ${m.uf}` }));
+            }
 
-            const folders = (rootItems || []).filter(item => item.id === null);
+            // Se não encontrou municípios, tenta do storage com fallback silencioso
+            if (folders.length === 0) {
+                try {
+                    const { data: rootItems } = await supabaseClient.storage.from('obras_arquivos').list('', { limit: 100 });
+                    if (rootItems) {
+                        folders = rootItems.filter(item => item.id === null).map(f => ({ name: f.name, label: f.name }));
+                    }
+                } catch(eStorage) {}
+            }
 
             if (folders.length === 0) {
-                grid.innerHTML = `<div class="col-span-full p-10 text-center text-slate-400 text-sm italic"><span class="material-symbols-outlined text-[48px] block mb-3 opacity-25">create_new_folder</span>Nenhuma pasta criada ainda.<br>Clique em <strong>+ Nova Pasta</strong> para começar.</div>`;
+                grid.innerHTML = `<div class="col-span-full p-10 text-center text-slate-400 text-sm italic"><span class="material-symbols-outlined text-[48px] block mb-3 opacity-25">create_new_folder</span>Nenhuma pasta criada ainda.<br>Cadastre um município para começar.</div>`;
                 return;
             }
 
@@ -3290,7 +3303,7 @@
                 <button onclick="openStorageFolder('${f.name}')"
                     class="group flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 hover:border-primary hover:bg-primary/5 dark:hover:bg-primary/10 hover:shadow-md hover:-translate-y-0.5 transition-all text-left">
                     <span class="material-symbols-outlined text-[40px] text-amber-400 group-hover:text-primary transition-colors">folder</span>
-                    <span class="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate w-full text-center" title="${f.name}">${f.name}</span>
+                    <span class="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate w-full text-center" title="${f.label || f.name}">${f.label || f.name}</span>
                 </button>
             `).join('');
         } catch (e) {
@@ -3322,8 +3335,7 @@
     // Ponto de entrada da aba Armazenamento: SuperAdmin continua vendo a
     // grade com todas as pastas (gerencia vários municípios). Admin de
     // município nunca precisa navegar — entra direto na pasta do próprio
-    // município (cria se ainda não existir) e fica travado nela, sem ver
-    // pastas de outras cidades.
+    // município e fica travado nela, sem ver pastas de outras cidades.
     async function loadStorageForActiveMunicipio() {
         if (typeof supabaseClient === 'undefined' || !supabaseClient || !activeMunicipioId) return;
 
@@ -3339,33 +3351,21 @@
             return;
         }
 
-        // Admin de município: sem grade, sem botão de voltar — só a pasta dele.
+        // Admin de município: entra direto na pasta dele com slug determinístico (zero chamadas de list desnecessárias)
         if (backBtn) backBtn.classList.add('hidden');
 
-        const { data: municipio } = await supabaseClient.from('municipios').select('nome, uf').eq('id', activeMunicipioId).single();
-        const nome = municipio ? municipio.nome : '';
-        const uf = municipio ? municipio.uf : '';
-        if (subtitle) subtitle.textContent = nome ? `Arquivos de ${nome}${uf ? ' - ' + uf : ''}.` : 'Seus arquivos.';
-
-        const slug = slugifyMunicipioFolder(nome, uf);
-        const alvo = normalizeForMatch(nome);
-        let folderName = slug;
-
+        let nome = '';
+        let uf = '';
         try {
-            const { data: rootItems } = await supabaseClient.storage.from('obras_arquivos').list('', { limit: 200 });
-            const folders = (rootItems || []).filter(item => item.id === null);
-            const match = alvo ? folders.find(f => normalizeForMatch(f.name).includes(alvo)) : null;
-            if (match) {
-                folderName = match.name;
-            } else {
-                // Ainda não existe pasta pra esse município — cria na hora,
-                // igual ao "Nova Pasta" manual, só que automático.
-                const keepContent = new Blob([''], { type: 'text/plain' });
-                await supabaseClient.storage.from('obras_arquivos').upload(`${slug}/.keep`, keepContent, { upsert: true });
+            const { data: municipio } = await supabaseClient.from('municipios').select('nome, uf').eq('id', activeMunicipioId).single();
+            if (municipio) {
+                nome = municipio.nome;
+                uf = municipio.uf;
             }
-        } catch (e) {
-            console.error('Erro ao localizar/criar a pasta do município:', e);
-        }
+        } catch(eMun) {}
+
+        if (subtitle) subtitle.textContent = nome ? `Arquivos de ${nome}${uf ? ' - ' + uf : ''}.` : 'Seus arquivos.';
+        const folderName = slugifyMunicipioFolder(nome, uf) || 'cabedelo_pb';
 
         await openStorageFolder(folderName);
     }
@@ -3392,7 +3392,7 @@
         listContainer.innerHTML = '<div class="p-8 text-center text-slate-400 text-sm italic"><span class="material-symbols-outlined text-[32px] block mb-2 opacity-40 animate-spin">refresh</span>Carregando pastas e arquivos...</div>';
 
         try {
-            // 1. Busca do Banco (imagens_raster)
+            // 1. Busca do Banco (imagens_raster) - 100% imune a erros de Storage
             let dbRasters = [];
             if (activeMunicipioId) {
                 const { data: rData } = await supabaseClient
@@ -3403,13 +3403,19 @@
                 if (rData) dbRasters = rData;
             }
 
-            // 2. Busca do Storage (obras_arquivos)
-            const { data: items, error } = await supabaseClient.storage.from('obras_arquivos').list(folderName, { limit: 300 });
+            // 2. Busca do Storage de forma protegida
+            let items = [];
+            try {
+                const { data: sItems, error: sErr } = await supabaseClient.storage.from('obras_arquivos').list(folderName, { limit: 100 });
+                if (!sErr && sItems) items = sItems;
+            } catch(eStorage) {
+                console.warn('Storage list temporariamente pausado por rate limit:', eStorage);
+            }
             
             // Subpastas no storage
             const subFolders = (items || []).filter(item => !item.id && item.name !== '.keep');
             // Arquivos reais avulsos
-            const individualFiles = (items || []).filter(item => item.id && item.name !== '.keep' && !item.name.endsWith('.png'));
+            const individualFiles = (items || []).filter(item => item.id && item.name !== '.keep' && !item.name.endsWith('.png') && !item.name.endsWith('.webp'));
 
             let html = '';
 
