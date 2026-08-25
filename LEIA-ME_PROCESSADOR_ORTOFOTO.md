@@ -1,38 +1,30 @@
 # 🛰️ Processador Turbo de Ortofotos (XYZ Tiles Multi-Core)
 
-Ferramenta autônoma e ultra-rápida para fatiamento e otimização de imagens aéreas e ortofotos GeoTIFF gigantes (500 MB a 5 GB) para uso no sistema WebGIS **GeoGestor**.
+Ferramenta de alta performance para fatiamento de imagens aéreas e ortofotos GeoTIFF de drones (500 MB a 5 GB) para uso no sistema WebGIS.
 
 ---
 
 ## 📋 Pré-requisitos
 Para rodar em qualquer computador com Windows:
-- **Ter o [QGIS](https://qgis.org) instalado** (qualquer versão 3.x).
-  *(O QGIS já inclui todo o motor nativo GDAL e Python com aceleração multi-core necessária).*
+- **Ter o [QGIS](https://qgis.org) instalado** (versão 3.x de 64 bits).
+  *(O QGIS já inclui nativamente todo o motor GDAL de satélites e aceleração multi-core necessária).*
 
 ---
 
 ## 🚀 Como Usar em 1 Clique
 
-### Opção 1: Arrastar e Soltar (Mais Fácil)
-1. Pegue seu arquivo `.tif` da ortofoto.
-2. **Arraste e solte o arquivo `.tif` em cima do ícone `processar_ortofoto.bat`**.
-3. A tela preta abrirá, detectará todos os núcleos do processador e fará o fatiamento em segundos.
-
-### Opção 2: Dois Cliques
 1. Dê dois cliques em **`processar_ortofoto.bat`**.
-2. Arraste o arquivo `.tif` para dentro da janela e aperte **ENTER**.
+2. Clique em **"📂 Buscar Arquivo..."** e selecione o seu arquivo `.tif`.
+3. As configurações ideais já vêm selecionadas por padrão:
+   - **Zoom Mínimo:** `16`
+   - **Zoom Máximo:** `21` *(Alta Resolução - Qualidade Original de Drone)*
+   - **Formato:** `WebP 90%` com algoritmo `Lanczos` *(80% mais leve e sem perda visual)*
+4. Clique no botão verde **"🚀 INICIAR PROCESSAMENTO TURBO"**.
 
 ---
 
-## 📁 Resultado Gerado
-Ao finalizar, será criada uma pasta com o nome `tiles_NomeDoArquivo/` contendo:
-- Subpastas com os níveis de zoom (`14`, `15`, `16`, `17`, `18`, `19`...).
-- Arquivo `metadados_camada.json` com os limites geográficos calibrados.
-
----
-
-## 🌐 Como carregar no GeoGestor:
-1. Abra o mapa no navegador.
-2. Clique no menu de **Importações** > **"Ortofoto Fatiada (XYZ Tiles - Turbo 60 FPS)"**.
-3. Informe o nome e o caminho/URL da pasta gerada (ex: `assets/tiles_cabedelo/{z}/{x}/{y}.png`).
-4. A ortofoto carregará **instantaneamente a 60 FPS** com máxima resolução!
+## 📁 Como Enviar para o Mapa:
+1. Acesse o sistema e abra a aba **Configurações > ARQUIVOS**.
+2. No campo **SELECIONAR PASTA DE TILES**, clique em **Escolher arquivos** e selecione a pasta fatiada.
+3. Clique em **"Enviar Pasta Completa"**.
+4. O sistema enviará os arquivos com controle de fluxo inteligente e cadastrará a ortofoto no mapa automaticamente!

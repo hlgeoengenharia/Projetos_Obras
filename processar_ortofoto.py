@@ -213,9 +213,12 @@ try:
             title_lbl = QLabel("🛰️ PROCESSADOR TURBO DE ORTOFOTOS")
             title_lbl.setStyleSheet("font-size: 16px; font-weight: 900; color: #10b981; margin-bottom: 2px;")
             desc_lbl = QLabel("Fatie ortofotos GeoTIFF de 500 MB a 2 GB em poucos segundos com aceleração multi-core.")
-            desc_lbl.setStyleSheet("font-size: 11px; color: #94a3b8; font-weight: normal; margin-bottom: 8px;")
+            desc_lbl.setStyleSheet("font-size: 11px; color: #94a3b8; font-weight: normal; margin-bottom: 2px;")
+            qgis_lbl = QLabel("📌 Pré-requisito: QGIS (3.x 64-bits) instalado para os módulos de aceleração GDAL.")
+            qgis_lbl.setStyleSheet("font-size: 10px; color: #38bdf8; font-weight: 600; margin-bottom: 8px;")
             layout.addWidget(title_lbl)
             layout.addWidget(desc_lbl)
+            layout.addWidget(qgis_lbl)
 
             # 1. Seleção de Arquivo GeoTIFF
             layout.addWidget(QLabel("1. ARQUIVO GEOTIFF (.TIF / .TIFF):"))
@@ -247,7 +250,7 @@ try:
             zoom_layout = QHBoxLayout()
             
             zmin_box = QVBoxLayout()
-            zmin_box.addWidget(QLabel("Zoom Mínimo (Ideal 16):"))
+            zmin_box.addWidget(QLabel("Zoom Mínimo (Padrão 16):"))
             self.spin_zoom_min = QSpinBox()
             self.spin_zoom_min.setRange(10, 24)
             self.spin_zoom_min.setValue(16)
@@ -255,10 +258,10 @@ try:
             zoom_layout.addLayout(zmin_box)
 
             zmax_box = QVBoxLayout()
-            zmax_box.addWidget(QLabel("Zoom Máximo (Ideal 19 ou 20):"))
+            zmax_box.addWidget(QLabel("Zoom Máximo (Padrão 21 - Alta Resolução):"))
             self.spin_zoom_max = QSpinBox()
             self.spin_zoom_max.setRange(10, 24)
-            self.spin_zoom_max.setValue(20)
+            self.spin_zoom_max.setValue(21)
             zmax_box.addWidget(self.spin_zoom_max)
             zoom_layout.addLayout(zmax_box)
 

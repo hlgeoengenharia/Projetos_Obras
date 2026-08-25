@@ -2,6 +2,12 @@
 setlocal enabledelayedexpansion
 title Processador Turbo de Ortofotos (Multi-Core)
 
+echo =========================================================================
+echo   🛰️ PROCESSADOR TURBO DE ORTOFOTOS (XYZ TILES MULTI-CORE)
+echo   Pre-requisito: QGIS 3.x (64-bits) instalado para os modulos GDAL
+echo =========================================================================
+echo.
+
 REM Detecta qualquer instalacao do QGIS / OSGeo4W no Windows
 set "QGIS_ENV="
 for /d %%G in ("C:\Program Files\QGIS*") do (
@@ -16,10 +22,11 @@ if not defined QGIS_ENV if exist "C:\OSGeo4W\bin\o4w_env.bat" set "QGIS_ENV=C:\O
 if not defined QGIS_ENV if exist "C:\OSGeo4W64\bin\o4w_env.bat" set "QGIS_ENV=C:\OSGeo4W64\bin\o4w_env.bat"
 
 if not defined QGIS_ENV (
-    echo [-] Erro: QGIS / OSGeo4W nao foi encontrado neste computador.
+    echo [-] ERRO: QGIS / OSGeo4W nao foi encontrado neste computador!
     echo.
-    echo Para que este processador funcione, o computador precisa ter o QGIS instalado.
-    echo Baixe gratuitamente em: https://qgis.org
+    echo 📌 PRE-REQUISITO OBRIGATORIO:
+    echo Para que o fatiamento turbo funcione, este computador precisa ter o QGIS instalado.
+    echo Download gratuito em: https://qgis.org
     echo.
     pause
     exit /b 1
