@@ -56,10 +56,11 @@ def run_gdal_tiling(tif_path, output_dir, zoom_min, zoom_max, log_callback=None,
 
             temp_vrt_path = str(output_path / "_temp_geocalibrado.vrt")
             
-            # Cria VRT virtual atribuindo projeção + Canal Alfa para tornar bordas pretas e brancas transparentes
+            # Cria VRT virtual atribuindo projeção + Canal Alfa para máxima nitidez (Lanczos)
             warp_options = {
                 'format': 'VRT',
                 'dstSRS': 'EPSG:3857',
+                'resampleAlg': 'lanczos',
                 'dstAlpha': True
             }
             if srs_in:
@@ -68,7 +69,7 @@ def run_gdal_tiling(tif_path, output_dir, zoom_min, zoom_max, log_callback=None,
             gdal.Warp(temp_vrt_path, ds, **warp_options)
             input_to_tile = temp_vrt_path
             if log_callback:
-                log_callback("[+] Canal Alfa ativado: Bordas pretas e brancas serão 100% transparentes.")
+                log_callback("[+] Canal Alfa ativado + Interpolação Lanczos (Máxima Nitidez de Drone).")
     except Exception as e_vrt:
         if log_callback: log_callback(f"[!] Info VRT: {e_vrt}")
 
@@ -77,10 +78,10 @@ def run_gdal_tiling(tif_path, output_dir, zoom_min, zoom_max, log_callback=None,
         f"--processes={cores}",
         f"-z", f"{zoom_min}-{zoom_max}",
         "-w", "leaflet",
-        "-r", "average",
+        "-r", "lanczos",
         "-a", "0,0,0",
         "--tiledriver=WEBP",
-        "--webp-quality=80",
+        "--webp-quality=90",
         "-x",
         "--xyz",
         input_to_tile,

@@ -5270,10 +5270,10 @@ async function loadRasterLayers() {
                     let overlay = null;
 
                     if (isXYZ) {
-                        const nativeMax = 18;
+                        const nativeMax = raster.zoom_max || 22;
                         overlay = L.tileLayer(raster.url_imagem, {
                             minZoom: 1,
-                            minNativeZoom: raster.zoom_min || 13,
+                            minNativeZoom: raster.zoom_min || 14,
                             maxNativeZoom: nativeMax,
                             maxZoom: 24,
                             keepBuffer: 16,
@@ -5390,10 +5390,10 @@ window.toggleRasterVisibility = async function(rasterId, checkbox) {
                 const isXYZ = (raster.tipo === 'xyz_tiles') || (raster.url_imagem && raster.url_imagem.includes('{z}'));
                 let newOverlay;
                 if (isXYZ) {
-                    const nativeMax = 18;
+                    const nativeMax = raster.zoom_max || 22;
                     newOverlay = L.tileLayer(raster.url_imagem, {
                         minZoom: 1,
-                        minNativeZoom: raster.zoom_min || 13,
+                        minNativeZoom: raster.zoom_min || 14,
                         maxNativeZoom: nativeMax,
                         maxZoom: 24,
                         keepBuffer: 16,
@@ -5538,10 +5538,10 @@ window.activateRasterFromModal = async function(rasterId) {
                 const isXYZ = (raster.tipo === 'xyz_tiles') || (raster.url_imagem && raster.url_imagem.includes('{z}'));
                 let tileLayer;
                 if (isXYZ) {
-                    const nativeMax = 18;
+                    const nativeMax = raster.zoom_max || 22;
                     tileLayer = L.tileLayer(raster.url_imagem, {
                         minZoom: 1,
-                        minNativeZoom: raster.zoom_min || 13,
+                        minNativeZoom: raster.zoom_min || 14,
                         maxNativeZoom: nativeMax,
                         maxZoom: 24,
                         keepBuffer: 16,
