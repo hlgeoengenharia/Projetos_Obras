@@ -23,7 +23,10 @@ CREATE TABLE IF NOT EXISTS public.imagens_raster (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   nome text NOT NULL,
   url_imagem text NOT NULL,
-  bbox jsonb NOT NULL,
+  bbox jsonb DEFAULT '[]'::jsonb,
+  tipo text DEFAULT 'xyz_tiles',
+  zoom_min integer DEFAULT 12,
+  zoom_max integer DEFAULT 24,
   opacidade numeric NOT NULL DEFAULT 0.8,
   visivel boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now()
@@ -31,6 +34,11 @@ CREATE TABLE IF NOT EXISTS public.imagens_raster (
 
 ALTER TABLE public.imagens_raster ADD COLUMN IF NOT EXISTS municipio_id uuid REFERENCES public.municipios(id) ON DELETE CASCADE;
 ALTER TABLE public.imagens_raster ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES public.profiles(id);
+ALTER TABLE public.imagens_raster ADD COLUMN IF NOT EXISTS tipo text DEFAULT 'xyz_tiles';
+ALTER TABLE public.imagens_raster ADD COLUMN IF NOT EXISTS zoom_min integer DEFAULT 12;
+ALTER TABLE public.imagens_raster ADD COLUMN IF NOT EXISTS zoom_max integer DEFAULT 24;
+ALTER TABLE public.imagens_raster ALTER COLUMN bbox DROP NOT NULL;
+ALTER TABLE public.imagens_raster ALTER COLUMN bbox SET DEFAULT '[]'::jsonb;
 
 -- Só força município obrigatório se não sobrar nenhuma linha antiga sem
 -- município (senão o ALTER falharia) — como a importação nunca funcionou

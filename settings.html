@@ -1018,25 +1018,34 @@
           </div>
         </div>
 
-        <!-- Área de Upload -->
+        <!-- Área de Upload Direto da Pasta de Tiles -->
         <div class="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-5 border border-dashed border-slate-300 dark:border-slate-700 mb-5">
-          <label class="flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
-            <span class="material-symbols-outlined text-[16px]">upload_file</span> Enviar Arquivo para esta Pasta
+          <label class="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-2">
+            <span class="material-symbols-outlined text-[18px] text-emerald-500">folder_zip</span>
+            Selecionar Pasta de Tiles (Ortofoto Fatiada)
           </label>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">
+            Selecione a pasta gerada pelo <b>processar_ortofoto.bat</b>. Todas as imagens de zoom serão enviadas e a camada será registrada automaticamente no mapa.
+          </p>
+
           <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-            <input type="file" id="storage-file-input" class="flex-1 text-sm text-slate-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer">
-            <button onclick="uploadToSupabaseStorage()" class="shrink-0 px-5 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-sky-600 transition-colors flex items-center gap-2 shadow-sm">
-              <span class="material-symbols-outlined text-[18px]">cloud_upload</span> Enviar
+            <input type="file" id="storage-folder-input" webkitdirectory directory multiple class="flex-1 text-sm text-slate-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-500/10 file:text-emerald-600 hover:file:bg-emerald-500/20 cursor-pointer">
+            <button onclick="uploadTileFolderToSupabase()" class="shrink-0 px-6 py-2.5 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-500 transition-all flex items-center gap-2 shadow-md shadow-emerald-500/20">
+              <span class="material-symbols-outlined text-[18px]">cloud_upload</span> Enviar Pasta Completa
             </button>
           </div>
-          <!-- Progress Bar -->
-          <div id="upload-progress-container" class="hidden mt-4">
-            <div class="flex justify-between text-xs text-slate-500 mb-1">
-              <span id="upload-status-text">Enviando...</span>
-              <span id="upload-percent-text">0%</span>
+
+          <!-- Progress Bar Dinâmica -->
+          <div id="upload-progress-container" class="hidden mt-4 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <div class="flex justify-between items-center text-xs text-slate-600 dark:text-slate-300 font-medium mb-1.5">
+              <span id="upload-status-text" class="flex items-center gap-1.5">
+                <span class="w-3 h-3 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin inline-block"></span>
+                Iniciando envio...
+              </span>
+              <span id="upload-percent-text" class="font-bold text-emerald-600 dark:text-emerald-400">0%</span>
             </div>
-            <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
-              <div id="upload-progress-bar" class="bg-primary h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+            <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden shadow-inner">
+              <div id="upload-progress-bar" class="bg-gradient-to-r from-emerald-500 to-teal-400 h-3 rounded-full transition-all duration-200" style="width: 0%"></div>
             </div>
           </div>
         </div>
@@ -3380,59 +3389,129 @@
 
     async function loadFolderFiles(folderName) {
         const listContainer = document.getElementById('storage-files-list');
-        listContainer.innerHTML = '<div class="p-8 text-center text-slate-400 text-sm italic">Carregando arquivos...</div>';
+        listContainer.innerHTML = '<div class="p-8 text-center text-slate-400 text-sm italic"><span class="material-symbols-outlined text-[32px] block mb-2 opacity-40 animate-spin">refresh</span>Carregando pastas e arquivos...</div>';
 
         try {
-            const { data: items, error } = await supabaseClient.storage.from('obras_arquivos').list(folderName, { limit: 200 });
-            if (error) throw error;
-
-            // Filtra arquivos reais (exclui o .keep)
-            const files = (items || []).filter(item => item.id && item.name !== '.keep');
-
-            if (files.length === 0) {
-                listContainer.innerHTML = '<div class="p-10 text-center text-slate-400 text-sm italic"><span class="material-symbols-outlined text-[40px] block mb-2 opacity-25">cloud_upload</span>Nenhum arquivo nesta pasta.<br>Use o formulário acima para enviar o primeiro arquivo.</div>';
-                return;
+            // 1. Busca do Banco (imagens_raster)
+            let dbRasters = [];
+            if (activeMunicipioId) {
+                const { data: rData } = await supabaseClient
+                    .from('imagens_raster')
+                    .select('*')
+                    .eq('municipio_id', activeMunicipioId)
+                    .order('created_at', { ascending: false });
+                if (rData) dbRasters = rData;
             }
 
-            files.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            // 2. Busca do Storage (obras_arquivos)
+            const { data: items, error } = await supabaseClient.storage.from('obras_arquivos').list(folderName, { limit: 300 });
+            
+            // Subpastas no storage
+            const subFolders = (items || []).filter(item => !item.id && item.name !== '.keep');
+            // Arquivos reais avulsos
+            const individualFiles = (items || []).filter(item => item.id && item.name !== '.keep' && !item.name.endsWith('.png'));
 
-            listContainer.innerHTML = files.map(file => {
-                const path = `${folderName}/${file.name}`;
-                const { data: urlData } = supabaseClient.storage.from('obras_arquivos').getPublicUrl(path);
-                const publicUrl = urlData.publicUrl;
-                const sizeMb = file.metadata && file.metadata.size ? (file.metadata.size / (1024 * 1024)).toFixed(2) + ' MB' : '—';
-                const ext = file.name.split('.').pop().toUpperCase();
-                const isGeo = ext === 'TIF' || ext === 'TIFF' || ext === 'GEOTIFF';
-                const isData = ext === 'JSON' || ext === 'GEOJSON';
-                const is3d = ext === 'GLB' || ext === '3D';
-                const extColor = isGeo ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'
-                    : isData ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
-                    : is3d ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400'
-                    : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300';
-                const extIcon = isGeo ? 'terrain' : isData ? 'data_object' : is3d ? 'view_in_ar' : 'description';
-                return `
-                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors gap-2">
-                    <div class="flex items-center gap-3 min-w-0">
-                        <div class="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${extColor}">
-                            <span class="material-symbols-outlined text-[18px]">${extIcon}</span>
-                        </div>
-                        <div class="min-w-0">
-                            <div class="font-medium text-slate-800 dark:text-slate-200 truncate text-sm" title="${file.name}">${file.name}</div>
-                            <div class="text-xs text-slate-400">${ext} · ${sizeMb}</div>
-                        </div>
-                    </div>
-                    <div class="flex gap-2 shrink-0">
-                        <button onclick="navigator.clipboard.writeText('${publicUrl}').then(() => showStorageToast('Link copiado!'))" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs transition-colors flex items-center gap-1" title="Copiar URL Pública">
-                            <span class="material-symbols-outlined text-[14px]">content_copy</span> URL
-                        </button>
-                        <button onclick="deleteSupabaseFile('${path}', '${folderName}')" class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Excluir Arquivo">
-                            <span class="material-symbols-outlined text-[16px]">delete</span>
-                        </button>
-                    </div>
+            let html = '';
+
+            // Renderiza Ortofotos Cadastradas (XYZ Tiles / Rasters)
+            if (dbRasters.length > 0) {
+                html += `
+                <div class="p-3 bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
+                    <span class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[16px]">satellite_alt</span>
+                        Ortofotos e Pastas de Tiles (${dbRasters.length})
+                    </span>
                 </div>`;
-            }).join('');
+
+                html += dbRasters.map(r => {
+                    return `
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors gap-3 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                        <div class="flex items-center gap-3.5 min-w-0">
+                            <div class="shrink-0 w-11 h-11 rounded-xl flex items-center justify-center bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shadow-sm">
+                                <span class="material-symbols-outlined text-[22px]">satellite_alt</span>
+                            </div>
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-slate-800 dark:text-slate-100 truncate text-sm" title="${r.nome}">${r.nome}</span>
+                                    <span class="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] rounded-full border border-emerald-300/40">XYZ TILES</span>
+                                </div>
+                                <div class="text-xs text-slate-400 mt-0.5 truncate font-mono text-[11px]" title="${r.url_imagem}">
+                                    ${r.url_imagem}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                            <button onclick="navigator.clipboard.writeText('${r.url_imagem}').then(() => showStorageToast('Link dos Tiles copiado!'))" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1" title="Copiar URL">
+                                <span class="material-symbols-outlined text-[15px]">content_copy</span> Copiar Link
+                            </button>
+                            <button onclick="deleteRasterLayer('${r.id}', '${folderName}')" class="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Excluir Ortofoto">
+                                <span class="material-symbols-outlined text-[18px]">delete</span>
+                            </button>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+
+            // Renderiza Arquivos Individuais
+            if (individualFiles.length > 0) {
+                html += `
+                <div class="p-3 bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
+                    <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[16px]">description</span>
+                        Arquivos Avulsos (${individualFiles.length})
+                    </span>
+                </div>`;
+
+                html += individualFiles.map(file => {
+                    const path = `${folderName}/${file.name}`;
+                    const { data: urlData } = supabaseClient.storage.from('obras_arquivos').getPublicUrl(path);
+                    const publicUrl = urlData ? urlData.publicUrl : '';
+                    const sizeMb = file.metadata && file.metadata.size ? (file.metadata.size / (1024 * 1024)).toFixed(2) + ' MB' : '—';
+                    const ext = file.name.split('.').pop().toUpperCase();
+                    return `
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors gap-2 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <div class="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                                <span class="material-symbols-outlined text-[18px]">description</span>
+                            </div>
+                            <div class="min-w-0">
+                                <div class="font-medium text-slate-800 dark:text-slate-200 truncate text-sm" title="${file.name}">${file.name}</div>
+                                <div class="text-xs text-slate-400">${ext} · ${sizeMb}</div>
+                            </div>
+                        </div>
+                        <div class="flex gap-2 shrink-0">
+                            <button onclick="navigator.clipboard.writeText('${publicUrl}').then(() => showStorageToast('Link copiado!'))" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs transition-colors flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[14px]">content_copy</span> URL
+                            </button>
+                            <button onclick="deleteSupabaseFile('${path}', '${folderName}')" class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Excluir Arquivo">
+                                <span class="material-symbols-outlined text-[16px]">delete</span>
+                            </button>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+
+            if (!html) {
+                listContainer.innerHTML = '<div class="p-10 text-center text-slate-400 text-sm italic"><span class="material-symbols-outlined text-[40px] block mb-2 opacity-25">cloud_upload</span>Nenhuma pasta ou arquivo encontrado.<br>Use o formulário acima para enviar a pasta de tiles.</div>';
+            } else {
+                listContainer.innerHTML = html;
+            }
+
         } catch (e) {
-            listContainer.innerHTML = `<div class="p-6 text-center text-red-500 text-sm">Erro: ${e.message}</div>`;
+            console.error(e);
+            listContainer.innerHTML = `<div class="p-6 text-center text-red-500 text-sm">Erro ao carregar: ${e.message}</div>`;
+        }
+    }
+
+    async function deleteRasterLayer(rasterId, folderName) {
+        if (!confirm('Deseja realmente excluir esta ortofoto? Ela será removida das camadas do mapa.')) return;
+        try {
+            const { error } = await supabaseClient.from('imagens_raster').delete().eq('id', rasterId);
+            if (error) throw error;
+            showStorageToast('Ortofoto excluída com sucesso!');
+            await loadFolderFiles(folderName || currentStorageFolder);
+        } catch (e) {
+            alert('Erro ao excluir ortofoto: ' + e.message);
         }
     }
 
@@ -3484,6 +3563,146 @@
             progressBar.classList.remove('bg-primary');
             progressBar.classList.add('bg-red-500');
         }
+    }
+
+    function toggleUploadType(type) {
+        const singleBox = document.getElementById('upload-single-file-box');
+        const folderBox = document.getElementById('upload-folder-box');
+        if (type === 'folder') {
+            singleBox.classList.add('hidden');
+            singleBox.classList.remove('flex');
+            folderBox.classList.remove('hidden');
+            folderBox.classList.add('flex');
+        } else {
+            folderBox.classList.add('hidden');
+            folderBox.classList.remove('flex');
+            singleBox.classList.remove('hidden');
+            singleBox.classList.add('flex');
+        }
+    }
+
+    async function uploadTileFolderToSupabase() {
+        if (typeof supabaseClient === 'undefined' || !supabaseClient) { alert('Supabase não conectado.'); return; }
+        if (!currentStorageFolder) { alert('Selecione uma pasta antes de enviar.'); return; }
+
+        const folderInput = document.getElementById('storage-folder-input');
+        const files = folderInput.files;
+        if (!files || files.length === 0) { alert('Selecione a pasta de tiles para enviar.'); return; }
+
+        // Extrai o nome da pasta de tiles raiz
+        const firstRelativePath = files[0].webkitRelativePath || files[0].name;
+        const rootFolderName = firstRelativePath.split('/')[0] || 'tiles_ortofoto';
+        const cleanLayerName = rootFolderName.replace(/^tiles_/, '').replace(/_/g, ' ');
+
+        const progressContainer = document.getElementById('upload-progress-container');
+        const progressBar = document.getElementById('upload-progress-bar');
+        const percentText = document.getElementById('upload-percent-text');
+        const statusText = document.getElementById('upload-status-text');
+
+        progressContainer.classList.remove('hidden');
+        progressBar.classList.remove('bg-red-500');
+        progressBar.classList.add('bg-emerald-500');
+        progressBar.style.width = '0%';
+
+        const totalFiles = files.length;
+        let completed = 0;
+        let hasErrors = false;
+
+        statusText.innerText = `Preparando envio de ${totalFiles} arquivos...`;
+        statusText.className = 'text-slate-500';
+
+        // Upload concorrente em lotes de 8 arquivos simultâneos
+        const CONCURRENCY = 8;
+        const fileList = Array.from(files);
+
+        async function uploadFileWorker(file) {
+            const relPath = file.webkitRelativePath || `${rootFolderName}/${file.name}`;
+            const targetStoragePath = `${currentStorageFolder}/${relPath}`;
+
+            const { error } = await supabaseClient.storage
+                .from('obras_arquivos')
+                .upload(targetStoragePath, file, { cacheControl: '86400', upsert: true });
+
+            if (error) {
+                console.warn(`Erro no arquivo ${relPath}:`, error);
+                hasErrors = true;
+            }
+
+            completed++;
+            const pct = Math.round((completed / totalFiles) * 100);
+            progressBar.style.width = `${pct}%`;
+            percentText.innerText = `${pct}% (${completed}/${totalFiles})`;
+            statusText.innerText = `Enviando ${completed} de ${totalFiles} imagens...`;
+        }
+
+        // Fila de concorrência
+        const executing = [];
+        for (const file of fileList) {
+            const p = uploadFileWorker(file).then(() => {
+                executing.splice(executing.indexOf(p), 1);
+            });
+            executing.push(p);
+            if (executing.length >= CONCURRENCY) {
+                await Promise.race(executing);
+            }
+        }
+        await Promise.all(executing);
+
+        if (hasErrors) {
+            statusText.innerText = 'Upload concluído com alguns avisos (verifique permissões do Storage).';
+            statusText.className = 'text-amber-500 font-semibold';
+        } else {
+            statusText.innerText = 'Upload da pasta de tiles concluído com sucesso!';
+            statusText.className = 'text-green-500 font-semibold';
+        }
+
+        // Obtém a URL base pública e cadastra na tabela imagens_raster
+        const { data: urlData } = supabaseClient.storage
+            .from('obras_arquivos')
+            .getPublicUrl(`${currentStorageFolder}/${rootFolderName}`);
+
+        const baseUrl = urlData ? urlData.publicUrl : '';
+        const tileTemplateUrl = `${baseUrl}/{z}/{x}/{y}.png`;
+
+        if (activeMunicipioId) {
+            try {
+                // Tenta insert com campos novos
+                const { error: insError } = await supabaseClient.from('imagens_raster').insert({
+                    municipio_id: activeMunicipioId,
+                    nome: cleanLayerName,
+                    url_imagem: tileTemplateUrl,
+                    bbox: [],
+                    tipo: 'xyz_tiles',
+                    zoom_min: 14,
+                    zoom_max: 19,
+                    opacidade: 0.9,
+                    visivel: true
+                });
+
+                if (insError) {
+                    console.warn('Tentando insert no schema básico:', insError);
+                    // Fallback para tabela com apenas as colunas originais
+                    const { error: fbError } = await supabaseClient.from('imagens_raster').insert({
+                        municipio_id: activeMunicipioId,
+                        nome: cleanLayerName,
+                        url_imagem: tileTemplateUrl,
+                        bbox: [],
+                        opacidade: 0.9,
+                        visivel: true
+                    });
+                    if (fbError) console.error('Erro no fallback:', fbError);
+                }
+                showStorageToast(`Ortofoto "${cleanLayerName}" cadastrada no mapa com sucesso!`);
+            } catch (eDb) {
+                console.warn('Erro ao registrar na tabela imagens_raster:', eDb);
+            }
+        }
+
+        setTimeout(() => {
+            progressContainer.classList.add('hidden');
+            folderInput.value = '';
+            loadFolderFiles(currentStorageFolder);
+        }, 3000);
     }
 
     async function deleteSupabaseFile(path, folderName) {

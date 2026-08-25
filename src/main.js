@@ -5263,16 +5263,34 @@ async function loadRasterLayers() {
             leafletRasterOverlays = {};
             rasterLayers = data || [];
             
-            // Adicionar novos overlays
+            // Adicionar novos overlays (suporte a XYZ Tiles e ImageOverlay)
             rasterLayers.forEach(raster => {
                 if (raster.visivel && map) {
-                    const bounds = raster.bbox;
-                    const overlay = L.imageOverlay(raster.url_imagem, bounds, {
-                        opacity: raster.opacidade !== undefined ? raster.opacidade : 0.8,
-                        interactive: false
-                    });
-                    overlay.addTo(map);
-                    leafletRasterOverlays[raster.id] = overlay;
+                    const isXYZ = (raster.tipo === 'xyz_tiles') || (raster.url_imagem && raster.url_imagem.includes('{z}'));
+                    let overlay = null;
+
+                    if (isXYZ) {
+                        const nativeMax = 18;
+                        overlay = L.tileLayer(raster.url_imagem, {
+                            minZoom: 1,
+                            minNativeZoom: raster.zoom_min || 13,
+                            maxNativeZoom: nativeMax,
+                            maxZoom: 24,
+                            keepBuffer: 16,
+                            opacity: raster.opacidade !== undefined ? raster.opacidade : 0.9,
+                            attribution: raster.nome || 'Ortofoto'
+                        });
+                    } else if (raster.bbox && Array.isArray(raster.bbox) && raster.bbox.length === 2 && raster.bbox[0] && raster.bbox[0].length === 2) {
+                        overlay = L.imageOverlay(raster.url_imagem, raster.bbox, {
+                            opacity: raster.opacidade !== undefined ? raster.opacidade : 0.8,
+                            interactive: false
+                        });
+                    }
+
+                    if (overlay) {
+                        overlay.addTo(map);
+                        leafletRasterOverlays[raster.id] = overlay;
+                    }
                 }
             });
             
@@ -5357,7 +5375,7 @@ window.changeRasterOpacity = async function(rasterId, opacity) {
     }
 };
 
-// Alternar visibilidade do raster
+// Alternar visibilidade do raster (suporta ImageOverlay e TileLayer XYZ)
 window.toggleRasterVisibility = async function(rasterId, checkbox) {
     const isVisible = checkbox.checked;
     const raster = rasterLayers.find(r => r.id === rasterId);
@@ -5369,11 +5387,26 @@ window.toggleRasterVisibility = async function(rasterId, checkbox) {
             if (overlay && map) {
                 overlay.addTo(map);
             } else if (map) {
-                const bounds = raster.bbox;
-                const newOverlay = L.imageOverlay(raster.url_imagem, bounds, {
-                    opacity: raster.opacidade !== undefined ? raster.opacidade : 0.8,
-                    interactive: false
-                });
+                const isXYZ = (raster.tipo === 'xyz_tiles') || (raster.url_imagem && raster.url_imagem.includes('{z}'));
+                let newOverlay;
+                if (isXYZ) {
+                    const nativeMax = 18;
+                    newOverlay = L.tileLayer(raster.url_imagem, {
+                        minZoom: 1,
+                        minNativeZoom: raster.zoom_min || 13,
+                        maxNativeZoom: nativeMax,
+                        maxZoom: 24,
+                        keepBuffer: 16,
+                        opacity: raster.opacidade !== undefined ? raster.opacidade : 0.9,
+                        attribution: raster.nome || 'Ortofoto'
+                    });
+                } else {
+                    const bounds = raster.bbox;
+                    newOverlay = L.imageOverlay(raster.url_imagem, bounds, {
+                        opacity: raster.opacidade !== undefined ? raster.opacidade : 0.8,
+                        interactive: false
+                    });
+                }
                 newOverlay.addTo(map);
                 leafletRasterOverlays[rasterId] = newOverlay;
             }
@@ -5386,6 +5419,154 @@ window.toggleRasterVisibility = async function(rasterId, checkbox) {
                 await supabaseClient.from('imagens_raster').update({ visivel: isVisible }).eq('id', rasterId);
             } catch(e) {}
         }
+    }
+};
+
+// --- MODAIS E HANDLERS DE ORTOFOTO XYZ TILES TURBO ---
+window.openSelectRasterModal = async function() {
+    closeImportOptionsModal();
+    const modal = document.getElementById('select-raster-modal');
+    const container = document.getElementById('available-rasters-list');
+    if (!modal || !container) return;
+
+    modal.classList.remove('hidden');
+    setTimeout(() => modal.classList.remove('scale-95'), 10);
+
+    container.innerHTML = `
+        <div class="p-8 text-center text-slate-400 text-xs italic">
+            <span class="material-symbols-outlined text-[32px] block mb-2 opacity-40 animate-spin">refresh</span>
+            Carregando ortofotos do município...
+        </div>
+    `;
+
+    try {
+        let rasters = [];
+        if (typeof supabaseClient !== 'undefined' && supabaseClient && activeMunicipioId) {
+            const { data, error } = await supabaseClient
+                .from('imagens_raster')
+                .select('*')
+                .eq('municipio_id', activeMunicipioId)
+                .order('created_at', { ascending: false });
+
+            if (!error && data) {
+                rasters = data;
+            }
+        }
+
+        // Se não encontrou no banco, usa as em memória
+        if (rasters.length === 0) {
+            rasters = rasterLayers || [];
+        }
+
+        if (rasters.length === 0) {
+            container.innerHTML = `
+                <div class="p-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center gap-2">
+                    <span class="material-symbols-outlined text-[40px] text-slate-400 opacity-40">satellite</span>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Nenhuma ortofoto enviada ainda para este município.</p>
+                    <button onclick="window.location.href='settings.html#storage'" class="mt-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow">
+                        <span class="material-symbols-outlined text-[16px]">cloud_upload</span> Abrir Gerenciador de Arquivos
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = '';
+        rasters.forEach(r => {
+            const isAlreadyActive = rasterLayers.some(active => active.id === r.id);
+            const card = document.createElement('div');
+            card.className = 'flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700/60 rounded-xl transition-all';
+            
+            card.innerHTML = `
+                <div class="flex items-center gap-3 overflow-hidden">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                        <span class="material-symbols-outlined text-[22px]">satellite</span>
+                    </div>
+                    <div class="flex flex-col overflow-hidden">
+                        <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate" title="${r.nome}">${r.nome}</span>
+                        <span class="text-[10px] text-slate-400 mt-0.5">${r.tipo === 'xyz_tiles' ? 'Ortofoto Fatiada (XYZ Tiles)' : 'Imagem GeoTIFF'}</span>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 shrink-0">
+                    ${isAlreadyActive ? `
+                        <span class="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-lg flex items-center gap-1">
+                            <span class="material-symbols-outlined text-[16px]">check_circle</span> No Mapa
+                        </span>
+                    ` : `
+                        <button onclick="activateRasterFromModal('${r.id}')" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center gap-1">
+                            <span class="material-symbols-outlined text-[16px]">add</span> Ativar
+                        </button>
+                    `}
+                </div>
+            `;
+            container.appendChild(card);
+        });
+
+    } catch (e) {
+        console.error('Erro ao listar ortofotos:', e);
+        container.innerHTML = `<div class="p-6 text-center text-red-500 text-xs">Erro ao carregar: ${e.message}</div>`;
+    }
+};
+
+window.closeSelectRasterModal = function() {
+    const modal = document.getElementById('select-raster-modal');
+    if (modal) {
+        modal.classList.add('scale-95');
+        setTimeout(() => modal.classList.add('hidden'), 150);
+    }
+};
+
+window.activateRasterFromModal = async function(rasterId) {
+    if (typeof supabaseClient === 'undefined' || !supabaseClient) return;
+
+    try {
+        const { data: raster, error } = await supabaseClient
+            .from('imagens_raster')
+            .select('*')
+            .eq('id', rasterId)
+            .single();
+
+        if (error || !raster) throw (error || new Error('Ortofoto não encontrada'));
+
+        if (!rasterLayers.some(r => r.id === raster.id)) {
+            raster.visivel = true;
+            rasterLayers.push(raster);
+
+            // Adiciona ao mapa
+            if (map) {
+                const isXYZ = (raster.tipo === 'xyz_tiles') || (raster.url_imagem && raster.url_imagem.includes('{z}'));
+                let tileLayer;
+                if (isXYZ) {
+                    const nativeMax = 18;
+                    tileLayer = L.tileLayer(raster.url_imagem, {
+                        minZoom: 1,
+                        minNativeZoom: raster.zoom_min || 13,
+                        maxNativeZoom: nativeMax,
+                        maxZoom: 24,
+                        keepBuffer: 16,
+                        opacity: raster.opacidade !== undefined ? raster.opacidade : 0.9,
+                        attribution: raster.nome
+                    });
+                } else {
+                    tileLayer = L.imageOverlay(raster.url_imagem, raster.bbox, {
+                        opacity: raster.opacidade !== undefined ? raster.opacidade : 0.8,
+                        interactive: false
+                    });
+                }
+                tileLayer.addTo(map);
+                leafletRasterOverlays[raster.id] = tileLayer;
+            }
+
+            renderRasterLayersList();
+            if (typeof showWarningToast === 'function') {
+                showWarningToast(`Ortofoto "${raster.nome}" ativada no mapa!`);
+            }
+        }
+
+        closeSelectRasterModal();
+    } catch (e) {
+        alert('Erro ao ativar ortofoto: ' + e.message);
     }
 };
 

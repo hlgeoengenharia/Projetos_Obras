@@ -617,15 +617,56 @@
         </div>
       </button>
       
-      <!-- Option 2: GeoTIFF -->
-      <button onclick="triggerGeoTIFFImport()" class="flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-primary dark:hover:border-sky-500 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-left transition-all duration-300">
-        <div class="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-          <span class="material-symbols-outlined text-[24px]">satellite</span>
+      <!-- Option 2: Ortofoto Fatiada (XYZ Tiles Turbo) -->
+      <button onclick="openSelectRasterModal()" class="flex items-start gap-4 p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500 hover:bg-emerald-500/10 text-left transition-all duration-300">
+        <div class="w-10 h-10 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+          <span class="material-symbols-outlined text-[24px]">satellite_alt</span>
         </div>
         <div class="flex-1">
-          <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">Imagem Georreferenciada (GeoTIFF)</h4>
-          <p class="text-xs text-slate-500 mt-1">Importar mapas de drone, ortofotos e imagens aéreas com posicionamento automático no mapa.</p>
+          <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+            Ortofoto de Alta Precisão (Tiles XYZ)
+            <span class="text-[9px] bg-emerald-500 text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">60 FPS</span>
+          </h4>
+          <p class="text-xs text-slate-500 mt-1">Selecione uma ortofoto já enviada no Gerenciador de Arquivos para ativar na barra de camadas do mapa.</p>
         </div>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Selecionar Ortofoto do Banco / Storage -->
+<div id="select-raster-modal" class="fixed inset-0 z-[100] bg-black/50 hidden flex items-center justify-center">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 w-full max-w-lg border border-slate-200 dark:border-slate-800 flex flex-col max-h-[85vh] transition-all duration-300 transform scale-95">
+    <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-500">
+          <span class="material-symbols-outlined text-[22px]">satellite_alt</span>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-slate-900 dark:text-white">Ortofotos Disponíveis</h3>
+          <p class="text-xs text-slate-400">Selecione quais imagens de drone ativar nas camadas</p>
+        </div>
+      </div>
+      <button onclick="closeSelectRasterModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
+        <span class="material-symbols-outlined text-[20px]">close</span>
+      </button>
+    </div>
+
+    <!-- Lista Dinâmica de Ortofotos -->
+    <div id="available-rasters-list" class="flex-1 overflow-y-auto flex flex-col gap-2.5 pr-1 py-1">
+      <div class="p-8 text-center text-slate-400 text-xs italic">
+        <span class="material-symbols-outlined text-[32px] block mb-2 opacity-40 animate-spin">refresh</span>
+        Carregando ortofotos do município...
+      </div>
+    </div>
+
+    <!-- Rodapé: Atalho para Gerenciador de Arquivos -->
+    <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center shrink-0">
+      <button onclick="window.location.href='settings.html#storage'" class="text-xs text-primary hover:text-sky-400 font-bold flex items-center gap-1.5 transition-colors">
+        <span class="material-symbols-outlined text-[16px]">cloud_upload</span> Enviar Nova Pasta de Tiles
+      </button>
+      <button onclick="closeSelectRasterModal()" class="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+        Fechar
       </button>
     </div>
   </div>
