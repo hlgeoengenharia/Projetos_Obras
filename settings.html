@@ -3698,6 +3698,8 @@
             .from('obras_arquivos')
             .getPublicUrl(`${currentStorageFolder}/${rootFolderName}`);
 
+        const baseUrl = urlData ? urlData.publicUrl : '';
+
         // Detecta extensão real das imagens fatiadas (webp ou png)
         const sampleFile = fileList.find(f => f.name.endsWith('.webp') || f.name.endsWith('.png'));
         const fileExt = sampleFile && sampleFile.name.endsWith('.webp') ? 'webp' : 'png';
