@@ -54,9 +54,27 @@ def run_gdal_tiling(tif_path, output_dir, zoom_min, zoom_max, log_callback=None,
                 log_callback("[!] Aviso: O arquivo não tem tag de projeção explícita no cabeçalho.")
                 log_callback("[+] Autocalibrando para SIRGAS 2000 / UTM zone 25S (EPSG:31985 - Cabedelo/PB)...")
 
+            temp_nearblack_vrt = str(output_path / "_temp_clean_alpha.vrt")
             temp_vrt_path = str(output_path / "_temp_geocalibrado.vrt")
-            
-            # Cria VRT virtual atribuindo projeção + Canal Alfa para máxima nitidez (Lanczos)
+
+            if log_callback:
+                log_callback("[+] Detectando bordas com algoritmo Floodfill (Removendo preto e branco com tolerância)...")
+
+            # Aplica Nearblack com floodfill para eliminar ruído JPEG das bordas
+            try:
+                gdal.Nearblack(
+                    temp_nearblack_vrt,
+                    ds,
+                    options=gdal.NearblackOptions(
+                        options=['-setalpha', '-white', '-color', '0,0,0', '-near', '30', '-alg', 'floodfill', '-of', 'VRT']
+                    )
+                )
+                source_for_warp = temp_nearblack_vrt
+            except Exception as e_nb:
+                if log_callback: log_callback(f"[!] Info Nearblack: {e_nb}")
+                source_for_warp = ds
+
+            # Cria VRT virtual com reprojeção e interpolação Lanczos
             warp_options = {
                 'format': 'VRT',
                 'dstSRS': 'EPSG:3857',
@@ -66,10 +84,10 @@ def run_gdal_tiling(tif_path, output_dir, zoom_min, zoom_max, log_callback=None,
             if srs_in:
                 warp_options['srcSRS'] = srs_in
 
-            gdal.Warp(temp_vrt_path, ds, **warp_options)
+            gdal.Warp(temp_vrt_path, source_for_warp, **warp_options)
             input_to_tile = temp_vrt_path
             if log_callback:
-                log_callback("[+] Canal Alfa ativado + Interpolação Lanczos (Máxima Nitidez de Drone).")
+                log_callback("[+] Bordas brancas e pretas convertidas em 100% de transparência.")
     except Exception as e_vrt:
         if log_callback: log_callback(f"[!] Info VRT: {e_vrt}")
 
@@ -104,10 +122,11 @@ def run_gdal_tiling(tif_path, output_dir, zoom_min, zoom_max, log_callback=None,
             if log_callback: log_callback(f"[-] Erro no fatiamento: {sub_e}")
             return False
 
-    # Limpeza do VRT temporário se criado
-    if temp_vrt_path and os.path.exists(temp_vrt_path):
-        try: os.remove(temp_vrt_path)
-        except Exception: pass
+    # Limpeza dos VRTs temporários se criados
+    for tmp in [temp_vrt_path, str(output_path / "_temp_clean_alpha.vrt")]:
+        if tmp and os.path.exists(tmp):
+            try: os.remove(tmp)
+            except Exception: pass
 
     elapsed = time.time() - start_time
     if log_callback: log_callback(f"\n[OK] Fatiamento concluído com sucesso em {elapsed:.2f} segundos!")
