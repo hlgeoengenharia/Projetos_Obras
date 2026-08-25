@@ -3627,8 +3627,8 @@
             }
         }
 
-        // Upload inteligente com Concorrência 3, Cadência Suave e Auto-Retry contra 429
-        const CONCURRENCY = 3;
+        // Upload inteligente com Concorrência 2 e Cadência Suave contra Rate Limit 429
+        const CONCURRENCY = 2;
         const fileList = Array.from(files);
 
         async function uploadWithRetry(targetPath, file, maxRetries = 5) {
@@ -3648,14 +3648,14 @@
                 );
                 
                 if (isRateLimit && attempt < maxRetries) {
-                    const waitMs = attempt * 2000; // 2s, 4s, 6s, 8s
-                    statusText.innerText = `Aguardando servidor (${attempt}/${maxRetries})...`;
+                    const waitMs = attempt * 2500; // 2.5s, 5.0s, 7.5s
+                    statusText.innerText = `Aguardando liberação do servidor (${attempt}/${maxRetries})...`;
                     await new Promise(r => setTimeout(r, waitMs));
                 } else if (attempt === maxRetries) {
                     console.warn(`Falha após ${maxRetries} tentativas no arquivo ${targetPath}:`, error);
                     return false;
                 } else {
-                    await new Promise(r => setTimeout(r, 500));
+                    await new Promise(r => setTimeout(r, 600));
                 }
             }
             return false;
@@ -3674,8 +3674,8 @@
             percentText.innerText = `${pct}% (${completed}/${totalFiles})`;
             statusText.innerText = `Enviando ${completed} de ${totalFiles} imagens...`;
 
-            // Pausa suave para respeitar a cota do Supabase
-            await new Promise(r => setTimeout(r, 45));
+            // Pausa cadenciada para não saturar a cota por minuto do Supabase
+            await new Promise(r => setTimeout(r, 75));
         }
 
         // Fila de concorrência com controle de fluxo
