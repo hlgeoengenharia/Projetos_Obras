@@ -3723,7 +3723,7 @@
                     zoom_min: 14,
                     zoom_max: detectedMaxZoom,
                     opacidade: 0.9,
-                    visivel: true
+                    visivel: false
                 });
 
                 if (insError) {
@@ -3735,7 +3735,7 @@
                         url_imagem: tileTemplateUrl,
                         bbox: [],
                         opacidade: 0.9,
-                        visivel: true
+                        visivel: false
                     });
                     if (fbError) console.error('Erro no fallback:', fbError);
                 }

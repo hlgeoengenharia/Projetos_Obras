@@ -225,11 +225,8 @@ async function loadThemes() {
                       mainTitle: tMeta.mainTitle || '',
                       disp1Active: tMeta.disp1Active !== false,
                       disp2Active: tMeta.disp2Active !== false,
-                      customIcon: tMeta.customIcon || '',
-                      // Por padrão as camadas começam DESLIGADAS — o usuário liga
-                      // sob demanda (ver toggleThemeVisibility). Se o usuário já
-                      // escolheu um estado antes, respeita o que foi salvo.
-                      visible: tMeta.visible !== undefined ? tMeta.visible : false,
+                      // Por padrão TODAS as camadas começam DESLIGADAS — o usuário ativa no switch sob demanda
+                      visible: false,
                       _geometryLoaded: false,
                       features: []
                   };
@@ -1118,8 +1115,8 @@ function renderThemes() {
           
           <!-- iOS-style Neon Toggle -->
           <label class="relative inline-flex items-center cursor-pointer" title="${isVisible ? 'Ocultar' : 'Mostrar'} Camada">
-            <input type="checkbox" class="sr-only peer" ${isVisible ? 'checked' : ''} onchange="toggleThemeVisibility('${theme.id}')">
-            <div class="w-11 h-6 bg-slate-300 dark:bg-slate-700/50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all" style="${isVisible ? `background-color: ${theme.color}; box-shadow: 0 0 12px ${theme.color}90; border-color: ${theme.color}` : ''}"></div>
+            <input type="checkbox" id="theme-toggle-${theme.id}" class="sr-only peer" ${isVisible ? 'checked' : ''} onchange="toggleThemeVisibility('${theme.id}', this)">
+            <div id="theme-toggle-bg-${theme.id}" class="w-11 h-6 bg-slate-700/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all" style="${isVisible ? `background-color: ${theme.color}; box-shadow: 0 0 12px ${theme.color}90;` : ''}"></div>
           </label>
         </div>
         
@@ -1182,24 +1179,35 @@ function renderThemes() {
   });
 }
 
-function toggleThemeVisibility(themeId) {
+function toggleThemeVisibility(themeId, inputEl) {
   const theme = themes.find(t => t.id === themeId);
   if (!theme) return;
 
-  theme.visible = theme.visible === false ? true : false;
+  const isChecked = inputEl ? inputEl.checked : (theme.visible === false);
+  theme.visible = isChecked;
   saveThemes();
 
-  // Resposta visual imediata no card correspondente (sem recriar todo o DOM da sidebar)
-  const isVisible = theme.visible !== false;
+  // Resposta visual imediata no background do switch (muda de cor na hora para a cor do tema)
+  const bgEl = document.getElementById('theme-toggle-bg-' + themeId);
+  if (bgEl) {
+      if (isChecked) {
+          bgEl.style.backgroundColor = theme.color;
+          bgEl.style.boxShadow = `0 0 12px ${theme.color}90`;
+      } else {
+          bgEl.style.backgroundColor = '';
+          bgEl.style.boxShadow = '';
+      }
+  }
+
   const listEl = document.getElementById('feature-list-' + themeId);
   if (listEl) {
-      if (isVisible) listEl.classList.remove('opacity-50');
+      if (isChecked) listEl.classList.remove('opacity-50');
       else listEl.classList.add('opacity-50');
   }
 
   // Atualização em background (não bloqueia a thread de cliques)
   setTimeout(async () => {
-      if (isVisible && !theme._propertiesFullyLoaded) {
+      if (isChecked && !theme._propertiesFullyLoaded) {
           await loadThemeProperties(theme.id);
       } else {
           loadAllFeaturesToMap();
@@ -5260,8 +5268,8 @@ async function loadRasterLayers() {
             Object.values(leafletRasterOverlays).forEach(overlay => {
                 if (map) map.removeLayer(overlay);
             });
-            leafletRasterOverlays = {};
-            rasterLayers = data || [];
+            // Por padrão as ortofotos iniciam DESLIGADAS — o usuário ativa no switch quando quiser ver
+            rasterLayers = (data || []).map(r => ({ ...r, visivel: false }));
             
             // Adicionar novos overlays (suporte a XYZ Tiles e ImageOverlay)
             rasterLayers.forEach(raster => {
