@@ -227,18 +227,18 @@ try:
             zoom_layout = QHBoxLayout()
             
             zmin_box = QVBoxLayout()
-            zmin_box.addWidget(QLabel("Zoom Mínimo (Padrão 14):"))
+            zmin_box.addWidget(QLabel("Zoom Mínimo (Ideal 16):"))
             self.spin_zoom_min = QSpinBox()
             self.spin_zoom_min.setRange(10, 24)
-            self.spin_zoom_min.setValue(14)
+            self.spin_zoom_min.setValue(16)
             zmin_box.addWidget(self.spin_zoom_min)
             zoom_layout.addLayout(zmin_box)
 
             zmax_box = QVBoxLayout()
-            zmax_box.addWidget(QLabel("Zoom Máximo (Recomendado 19 ou 20):"))
+            zmax_box.addWidget(QLabel("Zoom Máximo (Ideal 19 ou 20):"))
             self.spin_zoom_max = QSpinBox()
             self.spin_zoom_max.setRange(10, 24)
-            self.spin_zoom_max.setValue(19)
+            self.spin_zoom_max.setValue(20)
             zmax_box.addWidget(self.spin_zoom_max)
             zoom_layout.addLayout(zmax_box)
 
