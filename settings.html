@@ -3689,8 +3689,10 @@
             .from('obras_arquivos')
             .getPublicUrl(`${currentStorageFolder}/${rootFolderName}`);
 
-        const baseUrl = urlData ? urlData.publicUrl : '';
-        const tileTemplateUrl = `${baseUrl}/{z}/{x}/{y}.png`;
+        // Detecta extensão real das imagens fatiadas (webp ou png)
+        const sampleFile = fileList.find(f => f.name.endsWith('.webp') || f.name.endsWith('.png'));
+        const fileExt = sampleFile && sampleFile.name.endsWith('.webp') ? 'webp' : 'png';
+        const tileTemplateUrl = `${baseUrl}/{z}/{x}/{y}.${fileExt}`;
 
         if (activeMunicipioId) {
             try {
@@ -3702,7 +3704,7 @@
                     bbox: [],
                     tipo: 'xyz_tiles',
                     zoom_min: 14,
-                    zoom_max: 19,
+                    zoom_max: detectedMaxZoom,
                     opacidade: 0.9,
                     visivel: true
                 });
