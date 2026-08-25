@@ -3611,31 +3611,59 @@
         statusText.innerText = `Preparando envio de ${totalFiles} arquivos...`;
         statusText.className = 'text-slate-500';
 
-        // Upload concorrente em lotes de 8 arquivos simultâneos
-        const CONCURRENCY = 8;
+        // Detecta dinamicamente o maior zoom presente nos arquivos
+        let detectedMaxZoom = 19;
+        for (const f of files) {
+            const pathParts = (f.webkitRelativePath || f.name).split('/');
+            if (pathParts.length >= 2) {
+                const zNum = parseInt(pathParts[1]);
+                if (!isNaN(zNum) && zNum > detectedMaxZoom) detectedMaxZoom = zNum;
+            }
+        }
+
+        // Upload inteligente com Concorrência 4 e Auto-Retry contra 429
+        const CONCURRENCY = 4;
         const fileList = Array.from(files);
+
+        async function uploadWithRetry(targetPath, file, maxRetries = 3) {
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                const { error } = await supabaseClient.storage
+                    .from('obras_arquivos')
+                    .upload(targetPath, file, { cacheControl: '86400', upsert: true });
+
+                if (!error) return true;
+
+                // Se tomou 429 (Rate Limit / Too Many Connections), aguarda e tenta de novo
+                const isRateLimit = error.message && (error.message.includes('429') || error.message.includes('Too many connections') || error.statusCode === 429);
+                if (isRateLimit && attempt < maxRetries) {
+                    const waitMs = attempt * 1200; // 1.2s, 2.4s
+                    await new Promise(r => setTimeout(r, waitMs));
+                } else if (attempt === maxRetries) {
+                    console.warn(`Falha após ${maxRetries} tentativas no arquivo ${targetPath}:`, error);
+                    return false;
+                }
+            }
+            return false;
+        }
 
         async function uploadFileWorker(file) {
             const relPath = file.webkitRelativePath || `${rootFolderName}/${file.name}`;
             const targetStoragePath = `${currentStorageFolder}/${relPath}`;
 
-            const { error } = await supabaseClient.storage
-                .from('obras_arquivos')
-                .upload(targetStoragePath, file, { cacheControl: '86400', upsert: true });
-
-            if (error) {
-                console.warn(`Erro no arquivo ${relPath}:`, error);
-                hasErrors = true;
-            }
+            const ok = await uploadWithRetry(targetStoragePath, file);
+            if (!ok) hasErrors = true;
 
             completed++;
             const pct = Math.round((completed / totalFiles) * 100);
             progressBar.style.width = `${pct}%`;
             percentText.innerText = `${pct}% (${completed}/${totalFiles})`;
             statusText.innerText = `Enviando ${completed} de ${totalFiles} imagens...`;
+
+            // Micro pausa para dar respiro ao pooler de conexões
+            await new Promise(r => setTimeout(r, 20));
         }
 
-        // Fila de concorrência
+        // Fila de concorrência com controle de fluxo
         const executing = [];
         for (const file of fileList) {
             const p = uploadFileWorker(file).then(() => {
@@ -3649,10 +3677,10 @@
         await Promise.all(executing);
 
         if (hasErrors) {
-            statusText.innerText = 'Upload concluído com alguns avisos (verifique permissões do Storage).';
+            statusText.innerText = 'Upload concluído com avisos em alguns arquivos.';
             statusText.className = 'text-amber-500 font-semibold';
         } else {
-            statusText.innerText = 'Upload da pasta de tiles concluído com sucesso!';
+            statusText.innerText = 'Upload da pasta de tiles concluído com 100% de sucesso!';
             statusText.className = 'text-green-500 font-semibold';
         }
 
