@@ -5507,8 +5507,9 @@ function renderRasterLayersList() {
         item.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.1) 0%, rgba(15,23,42,0.8) 100%)';
         
         let dateFormatted = '';
-        if (raster.data_imagem) {
-            dateFormatted = raster.data_imagem.split('-').reverse().join('/');
+        const effDate = raster.data_imagem || localStorage.getItem(`raster_date_${raster.id}`);
+        if (effDate) {
+            dateFormatted = effDate.split('-').reverse().join('/');
         } else if (raster.nome) {
             const matchDate = raster.nome.match(/(\d{2})[-/](\d{2})[-/](\d{4})/);
             const matchYear = raster.nome.match(/(20\d{2})/);

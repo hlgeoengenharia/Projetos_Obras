@@ -197,7 +197,10 @@
         }
 
         // Filtra apenas as ortofotos que estão marcadas para o Comparador Temporal
-        const swipeRasters = rasters.filter(r => r.usar_no_swipe !== false);
+        const swipeRasters = rasters.filter(r => {
+            const cachedSwipe = localStorage.getItem(`raster_swipe_${r.id}`);
+            return cachedSwipe !== null ? (cachedSwipe === 'true') : (r.usar_no_swipe !== false);
+        });
 
         if (swipeRasters.length < 2) {
             if (formContainer) formContainer.classList.add('hidden');
@@ -212,17 +215,20 @@
         if (emptyContainer) emptyContainer.classList.add('hidden');
         if (formContainer) formContainer.classList.remove('hidden');
 
+        function getEffectiveDate(r) {
+            return r.data_imagem || localStorage.getItem(`raster_date_${r.id}`) || (r.nome && r.nome.match(/(\d{4})/)?.[1] + '-01-01') || '1970-01-01';
+        }
+
         // Ordena da mais antiga para a mais recente para a linha do tempo
         const sortedChronological = [...swipeRasters].sort((a, b) => {
-            const dateA = a.data_imagem || (a.nome && a.nome.match(/(\d{4})/)?.[1] + '-01-01') || '1970-01-01';
-            const dateB = b.data_imagem || (b.nome && b.nome.match(/(\d{4})/)?.[1] + '-01-01') || '1970-01-01';
-            return dateA.localeCompare(dateB);
+            return getEffectiveDate(a).localeCompare(getEffectiveDate(b));
         });
 
         function formatRasterLabel(r) {
             let d = '';
-            if (r.data_imagem) {
-                d = r.data_imagem.split('-').reverse().join('/');
+            const effDate = r.data_imagem || localStorage.getItem(`raster_date_${r.id}`);
+            if (effDate) {
+                d = effDate.split('-').reverse().join('/');
             } else if (r.nome) {
                 const matchDate = r.nome.match(/(\d{2})[-/](\d{2})[-/](\d{4})/);
                 const matchYear = r.nome.match(/(20\d{2})/);

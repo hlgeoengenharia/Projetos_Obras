@@ -3445,10 +3445,11 @@
 
                 html += dbRasters.map(r => {
                     const isEditing = _editingRasterIds.has(r.id);
-                    const usarNoSwipe = (r.usar_no_swipe !== false); // Padrão: true
+                    const cachedSwipe = localStorage.getItem(`raster_swipe_${r.id}`);
+                    const usarNoSwipe = cachedSwipe !== null ? (cachedSwipe === 'true') : (r.usar_no_swipe !== false);
 
-                    // Extrai data existente ou tenta inferir do nome
-                    let dateVal = r.data_imagem || '';
+                    // Extrai data existente ou tenta inferir do localStorage / nome
+                    let dateVal = r.data_imagem || localStorage.getItem(`raster_date_${r.id}`) || '';
                     if (!dateVal && r.nome) {
                         const matchDate = r.nome.match(/(\d{2})[-/](\d{2})[-/](\d{4})/);
                         const matchYear = r.nome.match(/(20\d{2})/);
@@ -3599,20 +3600,36 @@
         const usarNoSwipe = swipeCheckbox ? swipeCheckbox.checked : true;
         const nomeVal = nameInput ? nameInput.value.trim() : null;
 
+        // Persistência local imediata como garantia
+        if (dateVal) {
+            localStorage.setItem(`raster_date_${rasterId}`, dateVal);
+        } else {
+            localStorage.removeItem(`raster_date_${rasterId}`);
+        }
+        localStorage.setItem(`raster_swipe_${rasterId}`, String(usarNoSwipe));
+
         try {
+            // Tenta update completo (caso as colunas existam no Supabase)
             const updatePayload = {
                 data_imagem: dateVal || null,
                 usar_no_swipe: usarNoSwipe
             };
             if (nomeVal) updatePayload.nome = nomeVal;
 
-            const { error } = await supabaseClient
+            let { error } = await supabaseClient
                 .from('imagens_raster')
                 .update(updatePayload)
                 .eq('id', rasterId);
 
-            if (error) {
-                console.warn('Tentando update de campos:', error);
+            // Fallback: Se as colunas não existirem no Postgres (PGRST204), atualiza apenas o nome
+            if (error && (error.code === 'PGRST204' || error.message?.includes('schema cache'))) {
+                console.info('Colunas adicionais não encontradas no Supabase. Salvando localmente e atualizando nome...');
+                if (nomeVal) {
+                    await supabaseClient
+                        .from('imagens_raster')
+                        .update({ nome: nomeVal })
+                        .eq('id', rasterId);
+                }
             }
 
             _editingRasterIds.delete(rasterId);
@@ -3620,18 +3637,22 @@
             await loadFolderFiles(folderName || currentStorageFolder);
         } catch(e) {
             console.error('Erro ao salvar edição da ortofoto:', e);
-            alert('Erro ao salvar alterações: ' + e.message);
+            _editingRasterIds.delete(rasterId);
+            await loadFolderFiles(folderName || currentStorageFolder);
         }
     };
 
-    // Salvar Data de Levantamento da Ortofoto
+    // Salvar Data de Levantamento da Ortofoto (Fallback)
     window.saveRasterDate = async function(rasterId, dateVal) {
-        if (!rasterId || typeof supabaseClient === 'undefined' || !supabaseClient) return;
-        try {
-            const { error } = await supabaseClient
-                .from('imagens_raster')
-                .update({ data_imagem: dateVal || null })
-                .eq('id', rasterId);
+        if (!rasterId) return;
+        localStorage.setItem(`raster_date_${rasterId}`, dateVal || '');
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            try {
+                await supabaseClient.from('imagens_raster').update({ data_imagem: dateVal || null }).eq('id', rasterId);
+            } catch(e) {}
+        }
+        showStorageToast('📅 Data salva com sucesso!');
+    };
 
             if (error) {
                 console.warn('Tentando update de data:', error);
