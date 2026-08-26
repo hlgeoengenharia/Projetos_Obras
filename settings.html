@@ -1029,10 +1029,16 @@
           </p>
 
           <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-            <input type="file" id="storage-folder-input" webkitdirectory directory multiple class="flex-1 text-sm text-slate-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-500/10 file:text-emerald-600 hover:file:bg-emerald-500/20 cursor-pointer">
+            <input type="file" id="storage-folder-input" webkitdirectory directory multiple class="flex-1 text-sm text-slate-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-500/10 file:text-emerald-600 hover:file:bg-emerald-500/20 cursor-pointer" onchange="handleFolderSelectionChange(this)">
             <button onclick="uploadTileFolderToSupabase()" class="shrink-0 px-6 py-2.5 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-500 transition-all flex items-center gap-2 shadow-md shadow-emerald-500/20">
               <span class="material-symbols-outlined text-[18px]">cloud_upload</span> Enviar Pasta Completa
             </button>
+          </div>
+
+          <!-- Indicador de Indexação de Pasta -->
+          <div id="folder-indexing-indicator" class="hidden mt-3 p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+            <span class="w-4 h-4 rounded-full border-2 border-emerald-600 border-t-transparent animate-spin inline-block shrink-0"></span>
+            <span id="folder-indexing-text">Indexando arquivos da pasta... aguarde alguns instantes.</span>
           </div>
 
           <!-- Progress Bar Dinâmica -->
@@ -3584,6 +3590,24 @@
             folderBox.classList.remove('flex');
             singleBox.classList.remove('hidden');
             singleBox.classList.add('flex');
+        }
+    }
+
+    function handleFolderSelectionChange(input) {
+        const indicator = document.getElementById('folder-indexing-indicator');
+        const textEl = document.getElementById('folder-indexing-text');
+        if (!indicator || !textEl) return;
+
+        if (input.files && input.files.length > 0) {
+            const count = input.files.length;
+            indicator.classList.remove('hidden');
+            if (count > 20000) {
+                textEl.innerHTML = `<b>${count.toLocaleString('pt-BR')} arquivos indexados!</b> <span class="text-amber-700 dark:text-amber-300">Atenção: pastas com mais de 20.000 tiles podem demorar muito para enviar via navegador. Para otimizar a velocidade, use Zoom Máximo até 19 no fatiamento.</span>`;
+            } else {
+                textEl.innerHTML = `<b>${count.toLocaleString('pt-BR')} arquivos prontos para envio.</b> Clique no botão "Enviar Pasta Completa" para iniciar o envio.`;
+            }
+        } else {
+            indicator.classList.add('hidden');
         }
     }
 
