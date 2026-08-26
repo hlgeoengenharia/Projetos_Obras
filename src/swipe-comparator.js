@@ -176,16 +176,20 @@
 
         modal.classList.remove('hidden');
 
-        let rasters = window.rasterLayers || [];
+        const activeMunId = window.activeMunicipioId || 
+                            sessionStorage.getItem('municipio_ativo') || 
+                            (typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : null);
+
+        let rasters = (window.rasterLayers && window.rasterLayers.length > 0) ? window.rasterLayers : [];
 
         // Busca dados mais recentes no Supabase para garantir sincronia
-        if (typeof supabaseClient !== 'undefined' && supabaseClient && window.activeMunicipioId) {
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
             try {
-                const { data } = await supabaseClient
-                    .from('imagens_raster')
-                    .select('*')
-                    .eq('municipio_id', window.activeMunicipioId)
-                    .order('created_at', { ascending: false });
+                let query = supabaseClient.from('imagens_raster').select('*').order('created_at', { ascending: false });
+                if (activeMunId) {
+                    query = query.eq('municipio_id', activeMunId);
+                }
+                const { data } = await query;
 
                 if (data && data.length > 0) {
                     rasters = data;

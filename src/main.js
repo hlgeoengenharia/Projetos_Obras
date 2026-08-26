@@ -5439,6 +5439,8 @@ async function loadRasterLayers() {
             });
             // Por padrão as ortofotos iniciam DESLIGADAS — o usuário ativa no switch quando quiser ver
             rasterLayers = (data || []).map(r => ({ ...r, visivel: false }));
+            window.rasterLayers = rasterLayers;
+            window.activeMunicipioId = activeMunicipioId;
             
             // Adicionar novos overlays (suporte a XYZ Tiles e ImageOverlay)
             rasterLayers.forEach(raster => {
