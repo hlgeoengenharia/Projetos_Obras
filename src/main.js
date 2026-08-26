@@ -3613,7 +3613,9 @@ async function saveFeatureData() {
 
   inputs.forEach(input => {
     const key = input.getAttribute('data-key');
-    activeFeatureLayer.feature.properties[key] = input.value;
+    if (key) {
+        activeFeatureLayer.feature.properties[key] = input.value;
+    }
   });
   
   const photoInput = document.getElementById('feature-photos-upload');
@@ -3624,13 +3626,81 @@ async function saveFeatureData() {
           activeFeatureLayer.feature.properties.photos.push(base64);
       }
   }
-  
+
+  const currentProps = activeFeatureLayer.feature.properties || {};
+  const idBanco = currentProps.id_banco;
+  const themeId = currentProps.themeId;
+
+  // 1. Persiste DIRETAMENTE no banco de dados Supabase
+  if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+      try {
+          if (idBanco) {
+              const { error: updErr } = await supabaseClient
+                  .from('feicoes')
+                  .update({
+                      propriedades: currentProps,
+                      geometria: activeFeatureLayer.feature.geometry
+                  })
+                  .eq('id', idBanco);
+
+              if (updErr) {
+                  console.error('Erro ao salvar feição no Supabase:', updErr);
+                  alert('Aviso ao salvar no servidor: ' + updErr.message);
+              } else {
+                  console.log(`[Supabase] Feição "${idBanco}" salva com sucesso!`);
+              }
+          } else {
+              const { data: insData, error: insErr } = await supabaseClient
+                  .from('feicoes')
+                  .insert({
+                      theme_id: themeId,
+                      propriedades: currentProps,
+                      geometria: activeFeatureLayer.feature.geometry
+                  })
+                  .select();
+
+              if (!insErr && insData && insData.length > 0) {
+                  activeFeatureLayer.feature.properties.id_banco = insData[0].id;
+              }
+          }
+      } catch (eDb) {
+          console.error('Erro de conexão ao salvar feição:', eDb);
+      }
+  }
+
+  // 2. Atualiza a feição correspondente no tema em memória
+  if (themeId) {
+      const theme = themes.find(t => t.id === themeId);
+      if (theme && theme.features) {
+          const idx = theme.features.findIndex(f => (f.properties && f.properties.id_banco === idBanco) || f === activeFeatureLayer.feature);
+          if (idx !== -1) {
+              theme.features[idx] = activeFeatureLayer.feature;
+          } else {
+              theme.features.push(activeFeatureLayer.feature);
+          }
+
+          // 3. Atualiza o cache local do IndexedDB (GeoTurboDB) para o F5 vir 100% atualizado
+          if (window.GeoTurboDB && typeof window.GeoTurboDB.saveThemeData === 'function') {
+              try {
+                  await window.GeoTurboDB.saveThemeData(themeId, theme.features, theme.features.length);
+                  console.log(`[GeoEngineTurbo] Cache IndexedDB atualizado para o tema "${themeId}"`);
+              } catch(eCache) {
+                  console.warn('Falha ao atualizar cache IndexedDB:', eCache);
+              }
+          }
+      }
+  }
+
   syncMapDataToThemes(); 
   
   isFeatureEditMode = false;
   window.activeFeatureEditTabId = null;
   renderFeatureInfo();
   document.getElementById('feature-actions-container').classList.remove('hidden');
+
+  if (typeof showWarningToast === 'function') {
+      showWarningToast('Dados salvos com sucesso!');
+  }
 }
 
 function closeFeatureInfoModal(keepLayer = false) {
@@ -3693,6 +3763,27 @@ function stopGeometryEditing() {
         activeFeatureLayer.feature.properties['Extensão (m)'] = length.toFixed(2);
     }
     
+    // Salva a geometria atualizada no Supabase e no IndexedDB
+    const props = activeFeatureLayer.feature.properties || {};
+    const idBanco = props.id_banco;
+    const themeId = props.themeId;
+
+    if (idBanco && typeof supabaseClient !== 'undefined' && supabaseClient) {
+        supabaseClient.from('feicoes').update({
+            geometria: activeFeatureLayer.feature.geometry,
+            propriedades: props
+        }).eq('id', idBanco).then(() => {
+            console.log(`[Supabase] Geometria da feição "${idBanco}" atualizada.`);
+        });
+    }
+
+    if (themeId) {
+        const theme = themes.find(t => t.id === themeId);
+        if (theme && theme.features && window.GeoTurboDB) {
+            window.GeoTurboDB.saveThemeData(themeId, theme.features, theme.features.length);
+        }
+    }
+
     syncMapDataToThemes();
   }
 
@@ -3725,9 +3816,6 @@ async function deleteActiveFeature() {
   if (typeof supabaseClient !== 'undefined' && supabaseClient) {
       if (idBanco) {
           try {
-              // Exclusão lógica — nunca DELETE de verdade a partir do cliente.
-              // O banco (supabase_auth_setup.sql) reforça isso via RLS/gatilho;
-              // aqui é o caminho normal de uso, não uma segunda camada de defesa.
               const { error } = await supabaseClient.from('feicoes').update({ deletado_em: new Date().toISOString() }).eq('id', idBanco);
               if (error) {
                   alert('Não foi possível excluir: ' + error.message);
@@ -3740,10 +3828,6 @@ async function deleteActiveFeature() {
       }
   }
 
-  // Remove explicitamente do tema em memória — não dá pra confiar só na
-  // reconstrução via geojsonLayer.getLayers() em syncMapDataToThemes(),
-  // já que temas com muitas feições podem estar parcialmente fora de tela
-  // (limite de renderização) e não devem ser confundidos com "excluído".
   const theme = themes.find(t => t.id === tId);
   if (theme) {
       theme.features = theme.features.filter(f => {
@@ -3752,6 +3836,10 @@ async function deleteActiveFeature() {
           if (!idBanco && tempId && p._tempId === tempId) return false;
           return true;
       });
+
+      if (window.GeoTurboDB && typeof window.GeoTurboDB.saveThemeData === 'function') {
+          await window.GeoTurboDB.saveThemeData(tId, theme.features, theme.features.length);
+      }
   }
 
   geojsonLayer.removeLayer(activeFeatureLayer);
