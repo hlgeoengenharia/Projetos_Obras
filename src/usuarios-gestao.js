@@ -202,6 +202,13 @@
             return;
         }
 
+        // 2. Ordenação em ordem alfabética pelo nome do usuário
+        filtered.sort((a, b) => {
+            const nomeA = (a.profiles?.nome || '').trim();
+            const nomeB = (b.profiles?.nome || '').trim();
+            return nomeA.localeCompare(nomeB, 'pt-BR', { sensitivity: 'base' });
+        });
+
         container.innerHTML = filtered.map(m => renderUserCard(m)).join('');
     }
 
@@ -394,6 +401,8 @@
                         <div class="space-y-3 max-h-96 overflow-y-auto pr-1">
                             ${camadasHtml || '<div class="text-xs text-slate-400 italic py-2">Nenhuma camada cadastrada neste município.</div>'}
                         </div>
+                    </div>
+
                     <!-- Botão de Excluir Vínculo (só quando em edição) -->
                     ${isEditing ? `
                     <div class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">
