@@ -1,16 +1,20 @@
 """
 Upload Turbo de Ortofotos (XYZ Tiles) para o WebGIS / Supabase Storage
-Interface Gráfica Nativa (PyQt5 / Tkinter) amigável para envio de pirâmides de imagens.
+Interface Gráfica Nativa Universal (Tkinter / Multi-threading) com zero dependências externas.
 """
 
 import os
 import sys
 import json
 import time
+import threading
 import urllib.request
 import urllib.error
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
 
 SUPABASE_URL = "https://iqejynikmeroiqyigsjo.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlxZWp5bmlrbWVyb2lxeWlnc2pvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMzNjU2MDgsImV4cCI6MjA5ODk0MTYwOH0.aT91yVtQDYTluMUkx8HKoYrNhlniVC8Rd0iv2-LnASQ"
@@ -99,7 +103,7 @@ def registrar_camada_raster(municipio_id, nome_camada, tile_url, zoom_min, zoom_
             "zoom_min": zoom_min,
             "zoom_max": zoom_max,
             "opacidade": 0.9,
-            "visivel": false
+            "visivel": False
         }).encode('utf-8')
 
         req = urllib.request.Request(
@@ -122,266 +126,239 @@ def registrar_camada_raster(municipio_id, nome_camada, tile_url, zoom_min, zoom_
 
 
 # =========================================================================
-# INTERFACE GRÁFICA NATIVA COM PYQT5 (OU TKINTER COMO FALLBACK)
+# INTERFACE GRÁFICA UNIVERSAL COM TKINTER (100% NATIVA NO WINDOWS)
 # =========================================================================
 
-def run_pyqt5_gui(initial_folder=None):
-    from PyQt5.QtWidgets import (
-        QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-        QLabel, QLineEdit, QPushButton, QComboBox, QProgressBar, QTextEdit,
-        QFileDialog, QMessageBox
-    )
-    from PyQt5.QtCore import Qt, QThread, pyqtSignal
+class UploadApp:
+    def __init__(self, root, initial_folder=None):
+        self.root = root
+        self.root.title("🚀 Upload Turbo de Ortofotos (WebGIS)")
+        self.root.geometry("680x620")
+        self.root.minsize(600, 520)
+        self.root.configure(bg="#0f172a")
 
-    class UploadWorkerThread(QThread):
-        log_signal = pyqtSignal(str)
-        progress_signal = pyqtSignal(int, str, str) # pct, vel_str, time_str
-        finished_signal = pyqtSignal(bool, str)
+        self.municipios = []
+        self.is_uploading = False
 
-        def __init__(self, folder_path, municipio_obj, nome_camada):
-            super().__init__()
-            self.folder_path = Path(folder_path)
-            self.municipio_obj = municipio_obj
-            self.nome_camada = nome_camada
+        self.setup_ui(initial_folder)
+        self.carregar_municipios()
 
-        def run(self):
-            pasta = self.folder_path
-            self.log_signal.emit(f"[+] Indexando arquivos da pasta: {pasta.name}...")
-            todos_arquivos = [p for p in pasta.rglob("*") if p.is_file() and not p.name.startswith('.')]
-            total = len(todos_arquivos)
+    def setup_ui(self, initial_folder):
+        style = ttk.Style()
+        style.theme_use('clam')
+        style.configure("TProgressbar", thickness=18, troughcolor="#1e293b", background="#0ea5e9")
 
-            if total == 0:
-                self.finished_signal.emit(False, "Nenhum arquivo de imagem encontrado na pasta.")
-                return
+        # Container principal com padding
+        main_frame = tk.Frame(self.root, bg="#0f172a", padx=20, pady=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
 
-            # Detecta zoom min e max
-            zooms = []
-            sample_ext = "webp"
-            for arq in todos_arquivos:
-                parts = arq.relative_to(pasta).parts
-                if len(parts) >= 2 and parts[0].isdigit():
-                    zooms.append(int(parts[0]))
-                if arq.suffix:
-                    sample_ext = arq.suffix.lstrip('.')
+        # Cabeçalho
+        lbl_title = tk.Label(main_frame, text="🚀 UPLOAD TURBO DE ORTOFOTOS", font=("Segoe UI", 14, "bold"), fg="#38bdf8", bg="#0f172a")
+        lbl_title.pack(anchor="w")
 
-            z_min = min(zooms) if zooms else 14
-            z_max = max(zooms) if zooms else 21
+        lbl_desc = tk.Label(main_frame, text="Envie milhares de imagens de zoom (16 ao 21) diretamente para a nuvem em minutos.", font=("Segoe UI", 9), fg="#94a3b8", bg="#0f172a")
+        lbl_desc.pack(anchor="w", pady=(2, 14))
 
-            nome_slug = self.municipio_obj.get('nome', '').lower().replace(' ', '_')
-            uf_slug = self.municipio_obj.get('uf', '').lower()
-            municipio_pasta = f"{nome_slug}_{uf_slug}" if uf_slug else nome_slug
+        # 1. Seleção de Pasta
+        lbl_pasta = tk.Label(main_frame, text="1. SELECIONE A PASTA DE TILES GERADA:", font=("Segoe UI", 9, "bold"), fg="#f8fafc", bg="#0f172a")
+        lbl_pasta.pack(anchor="w")
 
-            self.log_signal.emit(f"[+] Total de imagens: {total:,} arquivos")
-            self.log_signal.emit(f"[+] Níveis de Zoom: {z_min} ao {z_max} (Formato .{sample_ext})")
-            self.log_signal.emit(f"[+] Destino: {municipio_pasta}/{pasta.name}")
-            self.log_signal.emit(f"[+] Enviando com 16 conexões simultâneas...")
+        pasta_frame = tk.Frame(main_frame, bg="#0f172a")
+        pasta_frame.pack(fill=tk.X, pady=(4, 12))
 
-            WORKERS = 16
-            start_time = time.time()
-            enviados = 0
-            falhas = 0
+        self.entry_pasta = tk.Entry(pasta_frame, font=("Segoe UI", 10), bg="#1e293b", fg="#f8fafc", insertbackground="white", relief=tk.FLAT, bd=6)
+        self.entry_pasta.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
+        if initial_folder:
+            self.entry_pasta.insert(0, initial_folder)
 
-            with ThreadPoolExecutor(max_workers=WORKERS) as executor:
-                futures = {}
-                for arq in todos_arquivos:
-                    rel_path = arq.relative_to(pasta).as_posix()
-                    storage_path = f"{municipio_pasta}/{pasta.name}/{rel_path}"
-                    f = executor.submit(upload_single_tile, arq, storage_path)
-                    futures[f] = storage_path
+        btn_buscar = tk.Button(pasta_frame, text="📁 Buscar Pasta...", font=("Segoe UI", 9, "bold"), bg="#334155", fg="white", activebackground="#475569", activeforeground="white", relief=tk.FLAT, padx=12, pady=4, cursor="hand2", command=self.buscar_pasta)
+        btn_buscar.pack(side=tk.RIGHT)
 
-                for future in as_completed(futures):
-                    enviados += 1
-                    if not future.result():
-                        falhas += 1
+        # 2. Seleção de Município
+        lbl_mun = tk.Label(main_frame, text="2. SELECIONE O MUNICÍPIO DA BASE:", font=("Segoe UI", 9, "bold"), fg="#f8fafc", bg="#0f172a")
+        lbl_mun.pack(anchor="w")
 
-                    if enviados % 50 == 0 or enviados == total:
-                        pct = int((enviados / total) * 100)
-                        tempo_decorrido = time.time() - start_time
-                        velocidade = enviados / max(1, tempo_decorrido)
-                        restante_segundos = (total - enviados) / max(0.1, velocidade)
-                        minutos_rest = int(restante_segundos // 60)
-                        segundos_rest = int(restante_segundos % 60)
-                        
-                        vel_str = f"{velocidade:.1f} arq/s"
-                        time_str = f"Restante: {minutos_rest:02d}m{segundos_rest:02d}s"
-                        self.progress_signal.emit(pct, vel_str, time_str)
+        self.combo_mun_var = tk.StringVar()
+        self.combo_mun = ttk.Combobox(main_frame, textvariable=self.combo_mun_var, font=("Segoe UI", 10), state="readonly")
+        self.combo_mun.pack(fill=tk.X, pady=(4, 12))
 
-            total_min = (time.time() - start_time) / 60
-            self.log_signal.emit(f"\n[✓] Upload finalizado em {total_min:.2f} minutos!")
+        # 3. Nome da Camada
+        lbl_nome = tk.Label(main_frame, text="3. NOME DA CAMADA NO MAPA:", font=("Segoe UI", 9, "bold"), fg="#f8fafc", bg="#0f172a")
+        lbl_nome.pack(anchor="w")
 
-            # Registra no banco
-            tile_template_url = f"{SUPABASE_URL}/storage/v1/object/public/{BUCKET_NAME}/{municipio_pasta}/{pasta.name}/{{z}}/{{x}}/{{y}}.{sample_ext}"
-            self.log_signal.emit(f"[+] Registrando camada '{self.nome_camada}' no banco...")
+        self.entry_nome = tk.Entry(main_frame, font=("Segoe UI", 10), bg="#1e293b", fg="#f8fafc", insertbackground="white", relief=tk.FLAT, bd=6)
+        self.entry_nome.pack(fill=tk.X, pady=(4, 14))
+        if initial_folder:
+            self.auto_fill_name(initial_folder)
 
-            ok_db = registrar_camada_raster(self.municipio_obj.get('id'), self.nome_camada, tile_template_url, z_min, z_max)
-            if ok_db:
-                self.log_signal.emit("[✓] Camada registrada com sucesso no banco de dados!")
-                self.finished_signal.emit(True, f"Upload concluído com 100% de sucesso!\nA ortofoto já está disponível no mapa para {self.municipio_obj.get('nome')}.")
-            else:
-                self.finished_signal.emit(True, "Upload de arquivos concluído!\n(Aviso: vincule a pasta no Gerenciador de Arquivos se não aparecer automaticamente).")
+        # 4. Barra de Progresso
+        lbl_prog = tk.Label(main_frame, text="PROGRESSO DO ENVIO:", font=("Segoe UI", 9, "bold"), fg="#f8fafc", bg="#0f172a")
+        lbl_prog.pack(anchor="w")
 
+        self.progress_bar = ttk.Progressbar(main_frame, style="TProgressbar", mode="determinate")
+        self.progress_bar.pack(fill=tk.X, pady=(4, 4))
 
-    class MainWindow(QMainWindow):
-        def __init__(self, initial_folder=None):
-            super().__init__()
-            self.setWindowTitle("🚀 Upload Turbo de Ortofotos (WebGIS)")
-            self.setMinimumSize(700, 560)
-            self.municipios = []
-            self.worker = None
-            self.init_ui(initial_folder)
+        status_frame = tk.Frame(main_frame, bg="#0f172a")
+        status_frame.pack(fill=tk.X, pady=(0, 10))
 
-        def init_ui(self, initial_folder):
-            central = QWidget()
-            self.setCentralWidget(central)
-            layout = QVBoxLayout(central)
-            layout.setSpacing(12)
-            layout.setContentsMargins(20, 20, 20, 20)
+        self.lbl_velocidade = tk.Label(status_frame, text="Velocidade: -- arq/s", font=("Segoe UI", 8), fg="#94a3b8", bg="#0f172a")
+        self.lbl_velocidade.pack(side=tk.LEFT)
 
-            self.setStyleSheet("""
-                QMainWindow { background-color: #0f172a; }
-                QLabel { color: #e2e8f0; font-size: 12px; font-weight: bold; }
-                QLineEdit, QComboBox { background-color: #1e293b; color: #f8fafc; border: 1px solid #334155; border-radius: 8px; padding: 8px; font-size: 12px; }
-                QLineEdit:focus, QComboBox:focus { border: 1px solid #0ea5e9; }
-                QPushButton { background-color: #334155; color: #ffffff; border-radius: 8px; padding: 9px 16px; font-weight: bold; font-size: 12px; }
-                QPushButton:hover { background-color: #475569; }
-                QTextEdit { background-color: #090d16; color: #38bdf8; border: 1px solid #1e293b; border-radius: 8px; font-family: Consolas, monospace; font-size: 11px; padding: 8px; }
-                QProgressBar { border: 1px solid #334155; border-radius: 6px; text-align: center; color: white; font-weight: bold; background-color: #1e293b; height: 22px; }
-                QProgressBar::chunk { background-color: #0ea5e9; border-radius: 5px; }
-            """)
+        self.lbl_tempo = tk.Label(status_frame, text="Tempo restante: --", font=("Segoe UI", 8), fg="#94a3b8", bg="#0f172a")
+        self.lbl_tempo.pack(side=tk.RIGHT)
 
-            # Título
-            title = QLabel("🚀 UPLOAD TURBO DE ORTOFOTOS")
-            title.setStyleSheet("font-size: 16px; font-weight: 900; color: #38bdf8;")
-            desc = QLabel("Envie milhares de tiles (Zoom 16 ao 21) diretamente para a nuvem sem travar o navegador.")
-            desc.setStyleSheet("font-size: 11px; color: #94a3b8; font-weight: normal; margin-bottom: 6px;")
-            layout.addWidget(title)
-            layout.addWidget(desc)
+        # 5. Log de Status
+        self.log_text = tk.Text(main_frame, height=7, font=("Consolas", 9), bg="#090d16", fg="#38bdf8", relief=tk.FLAT, bd=6)
+        self.log_text.pack(fill=tk.BOTH, expand=True, pady=(0, 12))
 
-            # 1. Pasta de Tiles
-            layout.addWidget(QLabel("1. SELECIONE A PASTA DE TILES GERADA:"))
-            pasta_box = QHBoxLayout()
-            self.input_pasta = QLineEdit()
-            self.input_pasta.setPlaceholderText("Clique em 'Buscar Pasta' ou arraste a pasta aqui...")
-            if initial_folder:
-                self.input_pasta.setText(initial_folder)
-            self.btn_buscar = QPushButton("📁 Buscar Pasta...")
-            self.btn_buscar.clicked.connect(self.buscar_pasta)
-            pasta_box.addWidget(self.input_pasta)
-            pasta_box.addWidget(self.btn_buscar)
-            layout.addLayout(pasta_box)
+        # 6. Botão Iniciar Envio
+        self.btn_iniciar = tk.Button(main_frame, text="🚀 INICIAR UPLOAD TURBO (MULTI-THREAD)", font=("Segoe UI", 11, "bold"), bg="#0284c7", fg="white", activebackground="#0369a1", activeforeground="white", relief=tk.FLAT, pady=10, cursor="hand2", command=self.iniciar_upload_thread)
+        self.btn_iniciar.pack(fill=tk.X)
 
-            # 2. Município
-            layout.addWidget(QLabel("2. SELECIONE O MUNICÍPIO DA BASE:"))
-            self.combo_municipios = QComboBox()
-            layout.addWidget(self.combo_municipios)
+    def log(self, msg):
+        self.log_text.insert(tk.END, msg + "\n")
+        self.log_text.see(tk.END)
 
-            # 3. Nome da Camada
-            layout.addWidget(QLabel("3. NOME DA CAMADA NO MAPA:"))
-            self.input_nome = QLineEdit()
-            self.input_nome.setPlaceholderText("Ex: Ortofoto Orla Cabedelo 2026")
-            if initial_folder:
-                self.auto_fill_name(initial_folder)
-            layout.addWidget(self.input_nome)
-
-            # 4. Barra de Progresso
-            layout.addWidget(QLabel("PROGRESSO DO ENVIO:"))
-            self.progress_bar = QProgressBar()
-            self.progress_bar.setValue(0)
-            layout.addWidget(self.progress_bar)
-
-            # Status labels
-            status_box = QHBoxLayout()
-            self.lbl_velocidade = QLabel("Velocidade: -- arq/s")
-            self.lbl_velocidade.setStyleSheet("font-size: 11px; color: #94a3b8; font-weight: normal;")
-            self.lbl_tempo = QLabel("Tempo restante: --")
-            self.lbl_tempo.setStyleSheet("font-size: 11px; color: #94a3b8; font-weight: normal;")
-            status_box.addWidget(self.lbl_velocidade)
-            status_box.addStretch()
-            status_box.addWidget(self.lbl_tempo)
-            layout.addLayout(status_box)
-
-            # 5. Log de Envio
-            self.log_text = QTextEdit()
-            self.log_text.setReadOnly(True)
-            layout.addWidget(self.log_text)
-
-            # 6. Botão de Ação
-            self.btn_enviar = QPushButton("🚀 INICIAR UPLOAD TURBO (MULTI-THREAD)")
-            self.btn_enviar.setStyleSheet("background-color: #0284c7; color: white; padding: 12px; font-size: 14px; font-weight: 900; border-radius: 10px;")
-            self.btn_enviar.clicked.connect(self.iniciar_upload)
-            layout.addWidget(self.btn_enviar)
-
-            # Carrega municípios em segundo plano
-            self.carregar_municipios()
-
-        def carregar_municipios(self):
+    def carregar_municipios(self):
+        def _fetch():
             self.municipios = get_municipios()
-            self.combo_municipios.clear()
             if self.municipios:
-                for m in self.municipios:
-                    self.combo_municipios.addItem(f"{m.get('nome')} - {m.get('uf')}", m)
-                self.log_text.append(f"[+] Conectado ao Supabase. {len(self.municipios)} municípios encontrados.")
+                nomes = [f"{m.get('nome')} - {m.get('uf')}" for m in self.municipios]
+                self.combo_mun['values'] = nomes
+                self.combo_mun.current(0)
+                self.log(f"[+] Conectado ao Supabase. {len(self.municipios)} municípios disponíveis.")
             else:
-                self.combo_municipios.addItem("Cabedelo - PB", {"id": "ef6bfd13-9e40-4bb4-81d3-e2c839ff500d", "nome": "Cabedelo", "uf": "PB"})
-                self.log_text.append("[!] Usando município padrão (Cabedelo - PB).")
+                self.combo_mun['values'] = ["Cabedelo - PB"]
+                self.combo_mun.current(0)
+                self.municipios = [{"id": "ef6bfd13-9e40-4bb4-81d3-e2c839ff500d", "nome": "Cabedelo", "uf": "PB"}]
+                self.log("[!] Usando município padrão: Cabedelo - PB")
+        threading.Thread(target=_fetch, daemon=True).start()
 
-        def buscar_pasta(self):
-            folder = QFileDialog.getExistingDirectory(self, "Selecione a Pasta de Tiles")
-            if folder:
-                self.input_pasta.setText(folder)
-                self.auto_fill_name(folder)
+    def buscar_pasta(self):
+        pasta = filedialog.askdirectory(title="Selecione a Pasta de Tiles")
+        if pasta:
+            self.entry_pasta.delete(0, tk.END)
+            self.entry_pasta.insert(0, pasta)
+            self.auto_fill_name(pasta)
 
-        def auto_fill_name(self, folder_path):
-            folder_name = Path(folder_path).name
-            clean_name = folder_name.replace('tiles_', '').replace('Ortotofo_', 'Ortofoto_').replace('_', ' ')
-            if not self.input_nome.text() or self.input_nome.text().startswith("Ortofoto"):
-                self.input_nome.setText(clean_name)
+    def auto_fill_name(self, folder_path):
+        folder_name = Path(folder_path).name
+        clean_name = folder_name.replace('tiles_', '').replace('Ortotofo_', 'Ortofoto_').replace('_', ' ')
+        current = self.entry_nome.get().strip()
+        if not current or current.startswith("Ortofoto"):
+            self.entry_nome.delete(0, tk.END)
+            self.entry_nome.insert(0, clean_name)
 
-        def iniciar_upload(self):
-            folder = self.input_pasta.text().strip()
-            if not folder or not Path(folder).exists():
-                QMessageBox.warning(self, "Aviso", "Por favor, selecione uma pasta de tiles válida.")
-                return
+    def iniciar_upload_thread(self):
+        if self.is_uploading:
+            return
 
-            nome_camada = self.input_nome.text().strip()
-            if not nome_camada:
-                nome_camada = Path(folder).name
+        pasta_str = self.entry_pasta.get().strip()
+        if not pasta_str or not Path(pasta_str).exists():
+            messagebox.showwarning("Aviso", "Por favor, selecione uma pasta de tiles válida.")
+            return
 
-            municipio_obj = self.combo_municipios.currentData()
-            if not municipio_obj:
-                QMessageBox.warning(self, "Aviso", "Selecione um município.")
-                return
+        idx = self.combo_mun.current()
+        if idx < 0 or idx >= len(self.municipios):
+            messagebox.showwarning("Aviso", "Selecione um município na lista.")
+            return
 
-            self.btn_enviar.setEnabled(False)
-            self.btn_buscar.setEnabled(False)
-            self.btn_enviar.setText("⏳ ENVIANDO TILES EM PARALELO...")
-            self.progress_bar.setValue(0)
-            self.log_text.clear()
+        municipio_obj = self.municipios[idx]
+        nome_camada = self.entry_nome.get().strip() or Path(pasta_str).name
 
-            self.worker = UploadWorkerThread(folder, municipio_obj, nome_camada)
-            self.worker.log_signal.connect(self.log_text.append)
-            self.worker.progress_signal.connect(self.atualizar_progresso)
-            self.worker.finished_signal.connect(self.upload_concluido)
-            self.worker.start()
+        self.is_uploading = True
+        self.btn_iniciar.config(state=tk.DISABLED, bg="#475569", text="⏳ ENVIANDO TILES EM PARALELO...")
+        self.progress_bar['value'] = 0
+        self.log_text.delete("1.0", tk.END)
 
-        def atualizar_progresso(self, pct, vel, tempo):
-            self.progress_bar.setValue(pct)
-            self.lbl_velocidade.setText(f"Velocidade: {vel}")
-            self.lbl_tempo.setText(tempo)
+        threading.Thread(target=self.executar_upload, args=(Path(pasta_str), municipio_obj, nome_camada), daemon=True).start()
 
-        def upload_concluido(self, sucesso, msg):
-            self.btn_enviar.setEnabled(True)
-            self.btn_buscar.setEnabled(True)
-            self.btn_enviar.setText("🚀 INICIAR UPLOAD TURBO (MULTI-THREAD)")
+    def executar_upload(self, pasta, municipio_obj, nome_camada):
+        self.log(f"[+] Indexando arquivos na pasta: {pasta.name}...")
+        todos_arquivos = [p for p in pasta.rglob("*") if p.is_file() and not p.name.startswith('.')]
+        total = len(todos_arquivos)
+
+        if total == 0:
+            self.log("[-] Nenhum arquivo de imagem encontrado na pasta.")
+            self.finalizar_upload(False, "Nenhum arquivo encontrado na pasta selecionada.")
+            return
+
+        zooms = []
+        sample_ext = "webp"
+        for arq in todos_arquivos:
+            parts = arq.relative_to(pasta).parts
+            if len(parts) >= 2 and parts[0].isdigit():
+                zooms.append(int(parts[0]))
+            if arq.suffix:
+                sample_ext = arq.suffix.lstrip('.')
+
+        z_min = min(zooms) if zooms else 14
+        z_max = max(zooms) if zooms else 21
+
+        nome_slug = municipio_obj.get('nome', '').lower().replace(' ', '_')
+        uf_slug = municipio_obj.get('uf', '').lower()
+        municipio_pasta = f"{nome_slug}_{uf_slug}" if uf_slug else nome_slug
+
+        self.log(f"[+] Total de imagens: {total:,} arquivos")
+        self.log(f"[+] Níveis de Zoom: {z_min} ao {z_max} (Formato .{sample_ext})")
+        self.log(f"[+] Destino no Storage: {municipio_pasta}/{pasta.name}")
+        self.log(f"[+] Iniciando envio paralelo com 16 conexões simultâneas...")
+
+        WORKERS = 16
+        start_time = time.time()
+        enviados = 0
+        falhas = 0
+
+        with ThreadPoolExecutor(max_workers=WORKERS) as executor:
+            futures = {}
+            for arq in todos_arquivos:
+                rel_path = arq.relative_to(pasta).as_posix()
+                storage_path = f"{municipio_pasta}/{pasta.name}/{rel_path}"
+                f = executor.submit(upload_single_tile, arq, storage_path)
+                futures[f] = storage_path
+
+            for future in as_completed(futures):
+                enviados += 1
+                if not future.result():
+                    falhas += 1
+
+                if enviados % 50 == 0 or enviados == total:
+                    pct = int((enviados / total) * 100)
+                    tempo_decorrido = time.time() - start_time
+                    velocidade = enviados / max(1, tempo_decorrido)
+                    restante_segundos = (total - enviados) / max(0.1, velocidade)
+                    minutos_rest = int(restante_segundos // 60)
+                    segundos_rest = int(restante_segundos % 60)
+
+                    self.root.after(0, self.atualizar_ui_progresso, pct, f"Velocidade: {velocidade:.1f} arq/s", f"Tempo restante: {minutos_rest:02d}m{segundos_rest:02d}s")
+
+        total_min = (time.time() - start_time) / 60
+        self.log(f"\n[✓] Upload finalizado em {total_min:.2f} minutos!")
+
+        tile_template_url = f"{SUPABASE_URL}/storage/v1/object/public/{BUCKET_NAME}/{municipio_pasta}/{pasta.name}/{{z}}/{{x}}/{{y}}.{sample_ext}"
+        self.log(f"[+] Registrando camada '{nome_camada}' no banco...")
+
+        ok_db = registrar_camada_raster(municipio_obj.get('id'), nome_camada, tile_template_url, z_min, z_max)
+        if ok_db:
+            self.log("[✓] Camada registrada com sucesso no banco de dados!")
+            self.finalizar_upload(True, f"Upload concluído com 100% de sucesso!\nA ortofoto já está disponível no mapa para {municipio_obj.get('nome')}.")
+        else:
+            self.finalizar_upload(True, "Upload de arquivos concluído!\n(Aviso: vincule a pasta no Gerenciador de Arquivos se não aparecer automaticamente).")
+
+    def atualizar_ui_progresso(self, pct, vel_str, tempo_str):
+        self.progress_bar['value'] = pct
+        self.lbl_velocidade.config(text=vel_str)
+        self.lbl_tempo.config(text=tempo_str)
+
+    def finalizar_upload(self, sucesso, msg):
+        def _finish():
+            self.is_uploading = False
+            self.btn_iniciar.config(state=tk.NORMAL, bg="#0284c7", text="🚀 INICIAR UPLOAD TURBO (MULTI-THREAD)")
             if sucesso:
-                QMessageBox.information(self, "Sucesso", msg)
+                messagebox.showinfo("Sucesso", msg)
             else:
-                QMessageBox.critical(self, "Erro", msg)
-
-    app = QApplication(sys.argv)
-    window = MainWindow(initial_folder)
-    window.show()
-    sys.exit(app.exec_())
+                messagebox.showerror("Erro", msg)
+        self.root.after(0, _finish)
 
 
 def main():
@@ -389,13 +366,9 @@ def main():
     if len(sys.argv) > 1:
         initial_folder = sys.argv[1].strip().strip('"')
 
-    try:
-        run_pyqt5_gui(initial_folder)
-    except ImportError:
-        print("[!] PyQt5 não encontrado no ambiente atual. Iniciando fallback gráfico nativo...")
-        # Fallback simples de terminal caso PyQt5 não esteja instalado
-        pasta_input = initial_folder or input("Digite o caminho da pasta de tiles: ").strip().strip('"')
-        print(f"[+] Pasta: {pasta_input}")
+    root = tk.Tk()
+    app = UploadApp(root, initial_folder)
+    root.mainloop()
 
 if __name__ == "__main__":
     main()
