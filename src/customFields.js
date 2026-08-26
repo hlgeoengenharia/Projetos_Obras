@@ -527,20 +527,23 @@ async function handleSupabaseUpload(event, fieldId, isPhoto) {
 
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         try {
-            const fileExt = file.name.split('.').pop();
+            const folderPrefix = (typeof activeMunicipioId !== 'undefined' && activeMunicipioId) ? `anexos_${activeMunicipioId}` : 'anexos';
             const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-            filePath = fileName; // Base path inside bucket
+            filePath = `${folderPrefix}/${fileName}`;
 
-            const { data, error } = await supabaseClient.storage.from('arquivos-obras').upload(filePath, file);
+            const { data, error } = await supabaseClient.storage.from('obras_arquivos').upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: true
+            });
 
             if (error) {
                 console.error('Upload Error:', error);
-                alert('Erro ao enviar! Detalhe: ' + error.message);
+                alert('Erro ao enviar! Detalhes: ' + error.message);
                 btnText.innerText = originalText;
                 return;
             }
 
-            const { data: { publicUrl: url } } = supabaseClient.storage.from('arquivos-obras').getPublicUrl(filePath);
+            const { data: { publicUrl: url } } = supabaseClient.storage.from('obras_arquivos').getPublicUrl(filePath);
             publicUrl = url;
         } catch (err) {
             console.error(err);
