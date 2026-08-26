@@ -381,6 +381,7 @@ function initMap() {
     maxZoom: 24,
     preferCanvas: true // Fixes html2canvas vector offset issues
   }).setView(cabedeloCenter, 16);
+  window.map = map;
 
   // Define Base Layers
   baseLayers['Mapa'] = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {

@@ -271,9 +271,17 @@
         if (modal) modal.classList.add('hidden');
     }
 
+    function getMap() {
+        return window.map || (typeof map !== 'undefined' ? map : null);
+    }
+
     // Inicia o Swipe entre duas ortofotos
     function start(leftId, rightId) {
-        if (!window.map) return;
+        const mapInstance = getMap();
+        if (!mapInstance) {
+            alert('Aguarde o carregamento do mapa.');
+            return;
+        }
         closeModal();
         initSwipeUI();
 
@@ -289,7 +297,7 @@
         // Desativa quaisquer overlays anteriores do mapa
         if (window.leafletRasterOverlays) {
             Object.values(window.leafletRasterOverlays).forEach(ov => {
-                if (window.map) window.map.removeLayer(ov);
+                if (mapInstance) mapInstance.removeLayer(ov);
             });
         }
 
@@ -302,14 +310,15 @@
             return;
         }
 
-        _leftLayer.addTo(window.map);
-        _rightLayer.addTo(window.map);
+        _leftLayer.addTo(mapInstance);
+        _rightLayer.addTo(mapInstance);
 
         _active = true;
         _dividerX = 0.5;
 
         function getDateLabel(r) {
-            if (r.data_imagem) return r.data_imagem.split('-').reverse().join('/');
+            const effDate = r.data_imagem || localStorage.getItem(`raster_date_${r.id}`);
+            if (effDate) return effDate.split('-').reverse().join('/');
             const matchDate = r.nome.match(/(\d{2})[-/](\d{2})[-/](\d{4})/);
             const matchYear = r.nome.match(/(20\d{2})/);
             if (matchDate) return `${matchDate[1]}/${matchDate[2]}/${matchDate[3]}`;
@@ -331,40 +340,40 @@
 
         if (_containerEl) _containerEl.classList.remove('hidden');
 
-        // Adiciona listeners ao mapa para re-aplicar o clip no pan/zoom
-        window.map.on('move', updateClip);
-        window.map.on('zoom', updateClip);
-        window.map.on('resize', updateClip);
+        // Garante que o clip-path seja aplicado imediatamente e ao mover/zoomar o mapa
+        mapInstance.off('move zoom moveend zoomend', updateClip);
+        mapInstance.on('move zoom moveend zoomend', updateClip);
 
-        setTimeout(updateClip, 100);
-        setTimeout(updateClip, 400);
+        setTimeout(() => {
+            updateClip();
+        }, 50);
 
         if (typeof showStorageToast === 'function') {
             showStorageToast(`Comparador ativado: Arraste a linha central para comparar.`);
         }
     }
 
-    // Encerra o Swipe
+    // Encerra a comparação temporal e remove os layers da cortina
     function stop() {
-        if (!_active) return;
         _active = false;
-
-        if (window.map) {
-            if (_leftLayer) window.map.removeLayer(_leftLayer);
-            if (_rightLayer) window.map.removeLayer(_rightLayer);
-            window.map.off('move', updateClip);
-            window.map.off('zoom', updateClip);
-            window.map.off('resize', updateClip);
+        const mapInstance = getMap();
+        if (_leftLayer && mapInstance) {
+            mapInstance.removeLayer(_leftLayer);
+            _leftLayer = null;
         }
-
-        _leftLayer = null;
-        _rightLayer = null;
+        if (_rightLayer && mapInstance) {
+            mapInstance.removeLayer(_rightLayer);
+            _rightLayer = null;
+        }
+        if (mapInstance) {
+            mapInstance.off('move zoom moveend zoomend', updateClip);
+        }
         _leftRasterObj = null;
         _rightRasterObj = null;
 
         if (_containerEl) _containerEl.classList.add('hidden');
 
-        // Restaura a camada que estava ligada anteriormente, se houver
+        // Restaura as camadas no mapa
         if (typeof loadRasterLayers === 'function') {
             loadRasterLayers();
         }
