@@ -429,13 +429,22 @@
         `;
     }
 
-    // Alterna a expansão do card de usuário
+    // Alterna a expansão do card de usuário (Acordeão exclusivo: fecha os outros)
     function toggleUserCard(membroId) {
         const body = document.getElementById(`user-card-body-${membroId}`);
         const chevron = document.getElementById(`user-chevron-${membroId}`);
         if (!body) return;
 
         const isHidden = body.classList.contains('hidden');
+
+        // Fecha todos os outros cards de usuários
+        document.querySelectorAll('.user-card-body').forEach(el => {
+            if (el.id !== `user-card-body-${membroId}`) el.classList.add('hidden');
+        });
+        document.querySelectorAll('[id^="user-chevron-"]').forEach(ch => {
+            if (ch.id !== `user-chevron-${membroId}`) ch.classList.remove('rotate-180');
+        });
+
         if (isHidden) {
             body.classList.remove('hidden');
             if (chevron) chevron.classList.add('rotate-180');
@@ -463,6 +472,7 @@
 
     // Ativa o modo de edição para o card
     function iniciarEdicao(membroId) {
+        _editingCardIds.clear(); // Apenas 1 usuário em edição por vez
         _editingCardIds.add(membroId);
         const card = document.querySelector(`[data-user-card="${membroId}"]`);
         const container = card ? card.parentElement : null;
