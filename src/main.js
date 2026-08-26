@@ -5552,50 +5552,70 @@ window.changeRasterOpacity = async function(rasterId, opacity) {
     }
 };
 
-// Alternar visibilidade do raster (suporta ImageOverlay e TileLayer XYZ)
+// Alternar visibilidade do raster (suporta ImageOverlay e TileLayer XYZ com exclusividade de ativação)
 window.toggleRasterVisibility = async function(rasterId, checkbox) {
     const isVisible = checkbox.checked;
     const raster = rasterLayers.find(r => r.id === rasterId);
-    if (raster) {
-        raster.visivel = isVisible;
-        const overlay = leafletRasterOverlays[rasterId];
-        
-        if (isVisible) {
-            if (overlay && map) {
-                overlay.addTo(map);
-            } else if (map) {
-                const isXYZ = (raster.tipo === 'xyz_tiles') || (raster.url_imagem && raster.url_imagem.includes('{z}'));
-                let newOverlay;
-                if (isXYZ) {
-                    const nativeMax = raster.zoom_max || 22;
-                    newOverlay = L.tileLayer(raster.url_imagem, {
-                        minZoom: 1,
-                        minNativeZoom: raster.zoom_min || 14,
-                        maxNativeZoom: nativeMax,
-                        maxZoom: 24,
-                        keepBuffer: 16,
-                        opacity: raster.opacidade !== undefined ? raster.opacidade : 0.9,
-                        attribution: raster.nome || 'Ortofoto'
-                    });
-                } else {
-                    const bounds = raster.bbox;
-                    newOverlay = L.imageOverlay(raster.url_imagem, bounds, {
-                        opacity: raster.opacidade !== undefined ? raster.opacidade : 0.8,
-                        interactive: false
-                    });
+    if (!raster) return;
+
+    if (isVisible) {
+        // 1. Desativa todas as outras ortofotos que estiverem ligadas
+        rasterLayers.forEach(otherRaster => {
+            if (otherRaster.id !== rasterId && otherRaster.visivel) {
+                otherRaster.visivel = false;
+                const otherOverlay = leafletRasterOverlays[otherRaster.id];
+                if (otherOverlay && map) {
+                    map.removeLayer(otherOverlay);
                 }
-                newOverlay.addTo(map);
-                leafletRasterOverlays[rasterId] = newOverlay;
             }
-        } else {
-            if (overlay && map) map.removeLayer(overlay);
+        });
+
+        // 2. Desmarca visualmente os switches das outras ortofotos na interface
+        document.querySelectorAll('input[onchange*="toggleRasterVisibility"]').forEach(input => {
+            if (input !== checkbox) {
+                input.checked = false;
+            }
+        });
+    }
+
+    raster.visivel = isVisible;
+    const overlay = leafletRasterOverlays[rasterId];
+    
+    if (isVisible) {
+        if (overlay && map) {
+            overlay.addTo(map);
+        } else if (map) {
+            const isXYZ = (raster.tipo === 'xyz_tiles') || (raster.url_imagem && raster.url_imagem.includes('{z}'));
+            let newOverlay;
+            if (isXYZ) {
+                const nativeMax = raster.zoom_max || 22;
+                newOverlay = L.tileLayer(raster.url_imagem, {
+                    minZoom: 1,
+                    minNativeZoom: raster.zoom_min || 14,
+                    maxNativeZoom: nativeMax,
+                    maxZoom: 24,
+                    keepBuffer: 16,
+                    opacity: raster.opacidade !== undefined ? raster.opacidade : 0.9,
+                    attribution: raster.nome || 'Ortofoto'
+                });
+            } else {
+                const bounds = raster.bbox;
+                newOverlay = L.imageOverlay(raster.url_imagem, bounds, {
+                    opacity: raster.opacidade !== undefined ? raster.opacidade : 0.8,
+                    interactive: false
+                });
+            }
+            newOverlay.addTo(map);
+            leafletRasterOverlays[rasterId] = newOverlay;
         }
-        
-        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
-            try {
-                await supabaseClient.from('imagens_raster').update({ visivel: isVisible }).eq('id', rasterId);
-            } catch(e) {}
-        }
+    } else {
+        if (overlay && map) map.removeLayer(overlay);
+    }
+    
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        try {
+            await supabaseClient.from('imagens_raster').update({ visivel: isVisible }).eq('id', rasterId);
+        } catch(e) {}
     }
 };
 
