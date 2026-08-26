@@ -3645,7 +3645,12 @@ async function saveFeatureData() {
 
               if (updErr) {
                   console.error('Erro ao salvar feição no Supabase:', updErr);
-                  alert('Aviso ao salvar no servidor: ' + updErr.message);
+                  if (updErr.message && updErr.message.includes('Sem permissão para editar')) {
+                      alert('Aviso de Permissão: Seu usuário não possui autorização de edição para esta camada.\n\nPeça ao Administrador do município para liberar a permissão de edição na aba: Configurações > Usuários.');
+                  } else {
+                      alert('Aviso ao salvar no servidor: ' + updErr.message);
+                  }
+                  return;
               } else {
                   console.log(`[Supabase] Feição "${idBanco}" salva com sucesso!`);
               }
