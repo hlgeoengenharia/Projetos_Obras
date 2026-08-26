@@ -3317,6 +3317,9 @@
         }
     }
 
+    let currentStorageFolder = '';
+    let _editingRasterIds = new Set();
+
     // Remove acentos/pontuação pra comparar nomes de forma tolerante
     // (ex: "Cabedelo - PB" e "cabedelo_pb" devem "bater").
     function normalizeForMatch(s) {
