@@ -1,6 +1,7 @@
 /**
- * Módulo de Comparador Temporal de Camadas / Cortina com Carrossel 3D (Cover Flow)
- * Ativação direta, seleção interativa de ortofotos em carrossel 3D e botão discreto de fechar.
+ * Módulo de Comparador Temporal de Ortofotos (Swipe)
+ * Carrossel 3D Minimalista em Marca d'Água na parte inferior central,
+ * com luminescência neon, perspectiva Coverflow e arraste com mouse/touch.
  */
 
 (function() {
@@ -11,13 +12,18 @@
     let _rightRasterObj = null;
     let _availableRasters = [];
     let _dividerX = 0.5; // 0.0 a 1.0
-    let _isDragging = false;
-    let _carouselIndex = 0;
+    let _isDraggingDivider = false;
+
+    // Arraste do carrossel 3D
+    let _carouselScrollLeft = 0;
+    let _isDraggingCarousel = false;
+    let _carouselStartX = 0;
+    let _carouselStartScroll = 0;
 
     // Elementos DOM
     let _containerEl = null;
     let _dividerLineEl = null;
-    let _carouselEl = null;
+    let _carouselTrackEl = null;
 
     function getMap() {
         return window.map || (typeof map !== 'undefined' ? map : null);
@@ -31,7 +37,11 @@
         const matchYear = r.nome?.match(/(20\d{2})/);
         if (matchDate) return `${matchDate[1]}/${matchDate[2]}/${matchDate[3]}`;
         if (matchYear) return matchYear[1] || '';
-        return '';
+        return r.nome || '';
+    }
+
+    function getEffectiveDate(r) {
+        return r.data_imagem || localStorage.getItem(`raster_date_${r.id}`) || (r.nome && r.nome.match(/(\d{4})/)?.[1] + '-01-01') || '1970-01-01';
     }
 
     function initSwipeUI() {
@@ -43,87 +53,67 @@
 
         _containerEl.innerHTML = `
             <style>
-                .swipe-3d-perspective {
-                    perspective: 1200px;
+                .swipe-perspective-wrap {
+                    perspective: 900px;
                     perspective-origin: 50% 50%;
                 }
-                .swipe-card-3d {
-                    transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.3s ease, box-shadow 0.3s ease;
+                .swipe-pill-3d {
+                    transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
                     transform-style: preserve-3d;
+                    will-change: transform, opacity;
                 }
-                .swipe-card-left-active {
+                .swipe-pill-left-active {
                     border-color: #10b981 !important;
-                    box-shadow: 0 0 20px rgba(16, 185, 129, 0.45) !important;
-                    transform: scale(1.04) translateZ(20px) !important;
+                    background: rgba(16, 185, 129, 0.22) !important;
+                    box-shadow: 0 0 16px rgba(16, 185, 129, 0.7), inset 0 0 10px rgba(16, 185, 129, 0.3) !important;
+                    transform: scale(1.06) translateZ(25px) !important;
+                    opacity: 1 !important;
                 }
-                .swipe-card-right-active {
+                .swipe-pill-right-active {
                     border-color: #0ea5e9 !important;
-                    box-shadow: 0 0 20px rgba(14, 165, 233, 0.45) !important;
-                    transform: scale(1.04) translateZ(20px) !important;
+                    background: rgba(14, 165, 233, 0.22) !important;
+                    box-shadow: 0 0 16px rgba(14, 165, 233, 0.7), inset 0 0 10px rgba(14, 165, 233, 0.3) !important;
+                    transform: scale(1.06) translateZ(25px) !important;
+                    opacity: 1 !important;
                 }
-                .swipe-card-both-active {
+                .swipe-pill-both-active {
                     border-color: #a855f7 !important;
-                    box-shadow: 0 0 20px rgba(168, 85, 247, 0.45) !important;
-                    transform: scale(1.06) translateZ(30px) !important;
+                    background: rgba(168, 85, 247, 0.25) !important;
+                    box-shadow: 0 0 18px rgba(168, 85, 247, 0.75) !important;
+                    transform: scale(1.08) translateZ(30px) !important;
+                    opacity: 1 !important;
+                }
+                .swipe-pill-hidden-left {
+                    transform: scale(0.82) rotateY(-28deg) translateZ(-15px);
+                    opacity: 0.45;
+                }
+                .swipe-pill-hidden-right {
+                    transform: scale(0.82) rotateY(28deg) translateZ(-15px);
+                    opacity: 0.45;
                 }
             </style>
 
             <!-- Linha Divisora Vertical -->
-            <div id="swipe-divider-line" class="absolute top-0 bottom-0 w-[3px] bg-white shadow-[0_0_15px_rgba(0,0,0,0.9)] pointer-events-auto cursor-ew-resize transition-none flex items-center justify-center" style="left: 50%;">
-                <div id="swipe-divider-handle" class="w-9 h-9 -ml-[1px] bg-slate-900/95 text-white rounded-full border-2 border-white shadow-2xl flex items-center justify-center cursor-ew-resize hover:scale-110 active:scale-95 transition-transform backdrop-blur-md">
-                    <span class="material-symbols-outlined text-[18px] text-sky-400">compare_arrows</span>
+            <div id="swipe-divider-line" class="absolute top-0 bottom-0 w-[2.5px] bg-white shadow-[0_0_15px_rgba(0,0,0,0.95)] pointer-events-auto cursor-ew-resize transition-none flex items-center justify-center" style="left: 50%;">
+                <div id="swipe-divider-handle" class="w-8 h-8 -ml-[1px] bg-slate-950/90 text-white rounded-full border-2 border-white/90 shadow-2xl flex items-center justify-center cursor-ew-resize hover:scale-110 active:scale-95 transition-transform backdrop-blur-md">
+                    <span class="material-symbols-outlined text-[16px] text-sky-400">compare_arrows</span>
                 </div>
             </div>
 
-            <!-- Carrossel 3D Flutuante no Topo com Botão Discreto de Fechar -->
-            <div class="absolute top-16 md:top-20 left-1/2 -translate-x-1/2 pointer-events-auto z-20 max-w-[94vw] md:max-w-2xl w-full px-2">
-                <div class="relative bg-slate-900/85 backdrop-blur-xl border border-white/20 rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.6)] p-3 flex flex-col gap-2">
-                    
-                    <!-- Botão Fechar Discreto (Apenas o X) no Canto do Carrossel -->
-                    <button onclick="window.SwipeComparator.stop()" title="Fechar Comparador" class="absolute -top-2.5 -right-2.5 w-7 h-7 bg-slate-800 hover:bg-rose-600 text-white rounded-full border border-white/30 shadow-xl flex items-center justify-center transition-all hover:scale-110 active:scale-90 cursor-pointer">
-                        <span class="material-symbols-outlined text-[16px]">close</span>
-                    </button>
-
-                    <!-- Header do Carrossel: Indicadores Lado Esquerdo / Direito -->
-                    <div class="flex items-center justify-between px-1 text-[11px] font-bold text-slate-300">
-                        <div class="flex items-center gap-1.5 text-emerald-400">
-                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]"></span>
-                            <span>ESQUERDA:</span>
-                            <span id="swipe-current-left-name" class="text-white font-extrabold truncate max-w-[120px] md:max-w-[180px]">—</span>
-                        </div>
-                        <div class="text-[10px] text-slate-400 uppercase tracking-widest hidden sm:block">
-                            Linha do Tempo 3D
-                        </div>
-                        <div class="flex items-center gap-1.5 text-sky-400">
-                            <span>DIREITA:</span>
-                            <span id="swipe-current-right-name" class="text-white font-extrabold truncate max-w-[120px] md:max-w-[180px]">—</span>
-                            <span class="w-2.5 h-2.5 rounded-full bg-sky-500 shadow-[0_0_8px_#0ea5e9]"></span>
-                        </div>
-                    </div>
-
-                    <!-- Container do Carrossel 3D -->
-                    <div class="relative w-full overflow-hidden py-2 swipe-3d-perspective">
-                        <!-- Botão Anterior -->
-                        <button onclick="window.SwipeComparator.prevCard()" class="absolute left-1 top-1/2 -translate-y-1/2 z-10 w-7 h-7 bg-black/60 hover:bg-black/90 text-white rounded-full flex items-center justify-center backdrop-blur-md border border-white/20 transition-all hover:scale-110 active:scale-90">
-                            <span class="material-symbols-outlined text-[18px]">chevron_left</span>
-                        </button>
-
-                        <!-- Cards 3D Container -->
-                        <div id="swipe-carousel-track" class="flex items-center justify-center gap-3 md:gap-4 px-8 overflow-x-auto no-scrollbar scroll-smooth">
-                            <!-- Injetado dinamicamente via renderCarousel() -->
-                        </div>
-
-                        <!-- Botão Próximo -->
-                        <button onclick="window.SwipeComparator.nextCard()" class="absolute right-1 top-1/2 -translate-y-1/2 z-10 w-7 h-7 bg-black/60 hover:bg-black/90 text-white rounded-full flex items-center justify-center backdrop-blur-md border border-white/20 transition-all hover:scale-110 active:scale-90">
-                            <span class="material-symbols-outlined text-[18px]">chevron_right</span>
-                        </button>
-                    </div>
-
-                    <!-- Dica rápida -->
-                    <div class="text-[10px] text-center text-slate-400 flex items-center justify-center gap-2">
-                        <span>💡 Clique em um card para alternar entre <b>Lado Esquerdo</b> ou <b>Lado Direito</b></span>
+            <!-- Carrossel 3D Minimalista em Marca d'Água na Parte Inferior Central -->
+            <div class="absolute bottom-5 left-1/2 -translate-x-1/2 pointer-events-auto z-20 flex items-center gap-2 max-w-[96vw]">
+                
+                <!-- Trilho do Carrossel 3D -->
+                <div class="swipe-perspective-wrap bg-slate-950/40 backdrop-blur-md border border-white/15 rounded-full p-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.5)] flex items-center overflow-hidden">
+                    <div id="swipe-carousel-pills" class="flex items-center gap-2 px-1 overflow-x-auto no-scrollbar cursor-grab active:cursor-grabbing select-none" style="scroll-behavior: smooth;">
+                        <!-- Pílulas de datas injetadas via renderPills() -->
                     </div>
                 </div>
+
+                <!-- Botão Discreto Fechar (Apenas o X) -->
+                <button onclick="window.SwipeComparator.stop()" title="Fechar Comparador" class="w-8 h-8 rounded-full bg-slate-950/50 hover:bg-rose-600/90 text-white/80 hover:text-white border border-white/20 shadow-lg backdrop-blur-md flex items-center justify-center transition-all hover:scale-110 active:scale-90 shrink-0 cursor-pointer">
+                    <span class="material-symbols-outlined text-[16px]">close</span>
+                </button>
             </div>
         `;
 
@@ -135,46 +125,70 @@
         }
 
         _dividerLineEl = document.getElementById('swipe-divider-line');
-        _carouselEl = document.getElementById('swipe-carousel-track');
+        _carouselTrackEl = document.getElementById('swipe-carousel-pills');
 
-        setupDragEvents();
+        setupEvents();
     }
 
-    function setupDragEvents() {
+    function setupEvents() {
         if (!_dividerLineEl) return;
 
-        function startDrag(e) {
-            _isDragging = true;
+        // 1. Arraste da linha divisora
+        function startDividerDrag(e) {
+            _isDraggingDivider = true;
             e.preventDefault();
             document.body.style.cursor = 'ew-resize';
         }
 
         function onMove(e) {
-            if (!_isDragging || !_active) return;
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const mapEl = document.getElementById('map');
-            if (!mapEl) return;
+            if (_isDraggingDivider && _active) {
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const mapEl = document.getElementById('map');
+                if (!mapEl) return;
 
-            const rect = mapEl.getBoundingClientRect();
-            let x = (clientX - rect.left) / rect.width;
-            x = Math.max(0.02, Math.min(0.98, x));
-            _dividerX = x;
-            updateClip();
-        }
+                const rect = mapEl.getBoundingClientRect();
+                let x = (clientX - rect.left) / rect.width;
+                x = Math.max(0.02, Math.min(0.98, x));
+                _dividerX = x;
+                updateClip();
+            }
 
-        function endDrag() {
-            if (_isDragging) {
-                _isDragging = false;
-                document.body.style.cursor = '';
+            if (_isDraggingCarousel && _carouselTrackEl) {
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const walk = (clientX - _carouselStartX) * 1.3;
+                _carouselTrackEl.scrollLeft = _carouselStartScroll - walk;
             }
         }
 
-        _dividerLineEl.addEventListener('mousedown', startDrag);
-        _dividerLineEl.addEventListener('touchstart', startDrag, { passive: false });
+        function endDrag() {
+            if (_isDraggingDivider) {
+                _isDraggingDivider = false;
+                document.body.style.cursor = '';
+            }
+            if (_isDraggingCarousel) {
+                _isDraggingCarousel = false;
+            }
+        }
+
+        _dividerLineEl.addEventListener('mousedown', startDividerDrag);
+        _dividerLineEl.addEventListener('touchstart', startDividerDrag, { passive: false });
+
+        // 2. Arraste por mouse / touch no carrossel de pílulas
+        if (_carouselTrackEl) {
+            _carouselTrackEl.addEventListener('mousedown', (e) => {
+                _isDraggingCarousel = true;
+                _carouselStartX = e.clientX;
+                _carouselStartScroll = _carouselTrackEl.scrollLeft;
+            });
+            _carouselTrackEl.addEventListener('touchstart', (e) => {
+                _isDraggingCarousel = true;
+                _carouselStartX = e.touches[0].clientX;
+                _carouselStartScroll = _carouselTrackEl.scrollLeft;
+            }, { passive: true });
+        }
 
         window.addEventListener('mousemove', onMove);
         window.addEventListener('touchmove', onMove, { passive: false });
-
         window.addEventListener('mouseup', endDrag);
         window.addEventListener('touchend', endDrag);
     }
@@ -244,127 +258,90 @@
         return null;
     }
 
-    // Renderiza os Cards 3D no Carrossel
-    function renderCarousel() {
-        if (!_carouselEl || _availableRasters.length === 0) return;
+    // Renderiza os Cards/Pílulas no Carrossel 3D Minimalista
+    function renderPills() {
+        if (!_carouselTrackEl || _availableRasters.length === 0) return;
 
-        const leftNameEl = document.getElementById('swipe-current-left-name');
-        const rightNameEl = document.getElementById('swipe-current-right-name');
+        const leftIdx = _availableRasters.findIndex(r => _leftRasterObj && r.id === _leftRasterObj.id);
+        const rightIdx = _availableRasters.findIndex(r => _rightRasterObj && r.id === _rightRasterObj.id);
 
-        if (leftNameEl && _leftRasterObj) {
-            const dL = getDateFormatted(_leftRasterObj);
-            leftNameEl.textContent = dL ? `${_leftRasterObj.nome} (${dL})` : _leftRasterObj.nome;
-        }
-        if (rightNameEl && _rightRasterObj) {
-            const dR = getDateFormatted(_rightRasterObj);
-            rightNameEl.textContent = dR ? `${_rightRasterObj.nome} (${dR})` : _rightRasterObj.nome;
-        }
-
-        _carouselEl.innerHTML = _availableRasters.map((r, idx) => {
-            const isLeft = (_leftRasterObj && _leftRasterObj.id === r.id);
-            const isRight = (_rightRasterObj && _rightRasterObj.id === r.id);
+        _carouselTrackEl.innerHTML = _availableRasters.map((r, idx) => {
+            const isLeft = (idx === leftIdx);
+            const isRight = (idx === rightIdx);
             const dateStr = getDateFormatted(r);
 
-            let statusClass = 'border-white/10 opacity-75 hover:opacity-100 hover:scale-100 scale-95';
-            let badgeHtml = '';
+            let styleClass = '';
+            let luminescenciaDot = '';
 
             if (isLeft && isRight) {
-                statusClass = 'swipe-card-both-active opacity-100';
-                badgeHtml = `<span class="px-2 py-0.5 rounded-md bg-purple-500 text-white font-extrabold text-[9px] shadow-sm flex items-center gap-1"><span class="material-symbols-outlined text-[11px]">compare</span> AMBOS</span>`;
+                styleClass = 'swipe-pill-both-active';
+                luminescenciaDot = '<span class="w-2 h-2 rounded-full bg-purple-400 shadow-[0_0_8px_#c084fc]"></span>';
             } else if (isLeft) {
-                statusClass = 'swipe-card-left-active opacity-100';
-                badgeHtml = `<span class="px-2 py-0.5 rounded-md bg-emerald-500 text-white font-extrabold text-[9px] shadow-sm flex items-center gap-1"><span class="material-symbols-outlined text-[11px]">arrow_back</span> ESQUERDA</span>`;
+                styleClass = 'swipe-pill-left-active';
+                luminescenciaDot = '<span class="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]"></span>';
             } else if (isRight) {
-                statusClass = 'swipe-card-right-active opacity-100';
-                badgeHtml = `<span class="px-2 py-0.5 rounded-md bg-sky-500 text-white font-extrabold text-[9px] shadow-sm flex items-center gap-1">DIREITA <span class="material-symbols-outlined text-[11px]">arrow_forward</span></span>`;
+                styleClass = 'swipe-pill-right-active';
+                luminescenciaDot = '<span class="w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]"></span>';
             } else {
-                badgeHtml = `<span class="px-2 py-0.5 rounded-md bg-slate-800/80 text-slate-400 font-bold text-[9px] border border-white/10">CLIQUE P/ ATIVAR</span>`;
+                // Cards não selecionados: efeito 3D se escondendo nas laterais
+                const minActiveIdx = Math.min(leftIdx >= 0 ? leftIdx : 0, rightIdx >= 0 ? rightIdx : 0);
+                if (idx < minActiveIdx) {
+                    styleClass = 'swipe-pill-hidden-left hover:opacity-90 hover:scale-95';
+                } else {
+                    styleClass = 'swipe-pill-hidden-right hover:opacity-90 hover:scale-95';
+                }
+                luminescenciaDot = '<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>';
             }
 
             return `
-                <div onclick="window.SwipeComparator.selectCard('${r.id}')"
-                     class="swipe-card-3d shrink-0 w-44 md:w-52 p-2.5 rounded-xl bg-gradient-to-b from-slate-800/90 to-slate-950/95 border backdrop-blur-md cursor-pointer transition-all shadow-xl select-none ${statusClass}">
-                    
-                    <div class="flex items-center justify-between gap-1 mb-1.5">
-                        <div class="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-                            <span class="material-symbols-outlined text-[15px]">satellite_alt</span>
-                        </div>
-                        ${badgeHtml}
-                    </div>
-
-                    <div class="font-black text-white text-xs truncate" title="${r.nome}">
-                        ${r.nome}
-                    </div>
-
-                    <div class="flex items-center justify-between text-[10px] text-slate-400 mt-1">
-                        <span class="flex items-center gap-1 text-slate-300 font-mono">
-                            <span class="material-symbols-outlined text-[12px] text-indigo-400">calendar_today</span>
-                            ${dateStr || 'S/ Data'}
-                        </span>
-                        <span class="text-[9px] font-bold text-slate-500 uppercase">XYZ</span>
-                    </div>
-
-                    <!-- Botões de Troca Rápida de Lado -->
-                    <div class="flex gap-1.5 mt-2 pt-1.5 border-t border-white/10" onclick="event.stopPropagation()">
-                        <button onclick="window.SwipeComparator.setLayerSide('${r.id}', 'left')" class="flex-1 py-1 px-1 rounded-md text-[9px] font-bold transition-all flex items-center justify-center gap-0.5 ${isLeft ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-800 hover:bg-emerald-600/30 text-slate-300 hover:text-white'}">
-                            ⬅️ Esquerda
-                        </button>
-                        <button onclick="window.SwipeComparator.setLayerSide('${r.id}', 'right')" class="flex-1 py-1 px-1 rounded-md text-[9px] font-bold transition-all flex items-center justify-center gap-0.5 ${isRight ? 'bg-sky-600 text-white shadow-sm' : 'bg-slate-800 hover:bg-sky-600/30 text-slate-300 hover:text-white'}">
-                            Direita ➡️
-                        </button>
-                    </div>
+                <div onclick="window.SwipeComparator.handlePillClick('${r.id}')"
+                     title="${r.nome} - Clique para alternar no comparador"
+                     class="swipe-pill-3d shrink-0 h-9 px-3.5 rounded-full border border-white/20 backdrop-blur-md flex items-center gap-2 cursor-pointer transition-all duration-300 ${styleClass}">
+                    ${luminescenciaDot}
+                    <span class="text-xs font-bold text-white tracking-wide whitespace-nowrap font-mono">
+                        ${dateStr}
+                    </span>
                 </div>
             `;
         }).join('');
     }
 
-    function prevCard() {
-        if (_carouselEl) _carouselEl.scrollBy({ left: -220, behavior: 'smooth' });
-    }
-
-    function nextCard() {
-        if (_carouselEl) _carouselEl.scrollBy({ left: 220, behavior: 'smooth' });
-    }
-
-    // Alterna o card ao clicar nele: se já for o esquerdo, vira o direito; se for nenhum, substitui o direito
-    function selectCard(rasterId) {
+    // Clique na pílula: alterna entre esquerda e direita de forma fluida
+    function handlePillClick(rasterId) {
         if (!_leftRasterObj || !_rightRasterObj) return;
 
         if (_leftRasterObj.id === rasterId) {
-            // Já é o esquerdo, não faz nada
+            // Já é o esquerdo
             return;
         } else if (_rightRasterObj.id === rasterId) {
-            // Já é o direito, não faz nada
+            // Já é o direito
             return;
-        } else {
-            // Substitui o direito
-            setLayerSide(rasterId, 'right');
         }
-    }
-
-    // Define explicitamente se o raster vai para a esquerda ou direita
-    function setLayerSide(rasterId, side) {
-        const targetObj = _availableRasters.find(r => r.id === rasterId);
-        if (!targetObj) return;
 
         const mapInstance = getMap();
         if (!mapInstance) return;
 
-        if (side === 'left') {
-            if (_leftRasterObj && _leftRasterObj.id === rasterId) return;
+        const targetObj = _availableRasters.find(r => r.id === rasterId);
+        if (!targetObj) return;
+
+        const targetDate = getEffectiveDate(targetObj);
+        const leftDate = getEffectiveDate(_leftRasterObj);
+        const rightDate = getEffectiveDate(_rightRasterObj);
+
+        // Se a data for anterior à da esquerda, substitui o lado esquerdo; senão, substitui o direito
+        if (targetDate < leftDate) {
             if (_leftLayer) mapInstance.removeLayer(_leftLayer);
             _leftRasterObj = targetObj;
             _leftLayer = createLeafletRasterLayer(_leftRasterObj);
             if (_leftLayer) _leftLayer.addTo(mapInstance);
         } else {
-            if (_rightRasterObj && _rightRasterObj.id === rasterId) return;
             if (_rightLayer) mapInstance.removeLayer(_rightLayer);
             _rightRasterObj = targetObj;
             _rightLayer = createLeafletRasterLayer(_rightRasterObj);
             if (_rightLayer) _rightLayer.addTo(mapInstance);
         }
 
-        renderCarousel();
+        renderPills();
         updateClip();
     }
 
@@ -412,10 +389,6 @@
             return;
         }
 
-        function getEffectiveDate(r) {
-            return r.data_imagem || localStorage.getItem(`raster_date_${r.id}`) || (r.nome && r.nome.match(/(\d{4})/)?.[1] + '-01-01') || '1970-01-01';
-        }
-
         // Ordena cronologicamente: 1ª = mais antiga (esquerda), última = mais recente (direita)
         _availableRasters.sort((a, b) => getEffectiveDate(a).localeCompare(getEffectiveDate(b)));
 
@@ -454,15 +427,11 @@
         mapInstance.off('move zoom moveend zoomend', updateClip);
         mapInstance.on('move zoom moveend zoomend', updateClip);
 
-        renderCarousel();
+        renderPills();
 
         setTimeout(() => {
             updateClip();
         }, 50);
-
-        if (typeof showStorageToast === 'function') {
-            showStorageToast(`Comparador 3D ativado. Arraste a linha central para comparar.`);
-        }
     }
 
     // Encerra o comparador temporal e remove a cortina
@@ -507,10 +476,7 @@
         start: startDirect,
         stop: stop,
         toggle: toggle,
-        prevCard: prevCard,
-        nextCard: nextCard,
-        selectCard: selectCard,
-        setLayerSide: setLayerSide,
+        handlePillClick: handlePillClick,
         isActive: () => _active
     };
 
