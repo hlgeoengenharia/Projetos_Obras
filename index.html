@@ -304,6 +304,9 @@
   <button id="btn-toggle-map" class="w-9 h-9 md:w-10 md:h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-blue-600 dark:text-blue-400 tooltip tooltip-bottom" title="Alternar Mapa (Satélite/Padrão)" onclick="toggleMapType()">
     <span class="material-symbols-outlined text-[20px] md:text-[22px]">layers</span>
   </button>
+  <button id="btn-swipe-map" class="w-9 h-9 md:w-10 md:h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-indigo-600 dark:text-indigo-400 tooltip tooltip-bottom" title="Comparador de Ortofotos (Swipe / Cortina)" onclick="openSwipeComparatorModal()">
+    <span class="material-symbols-outlined text-[20px] md:text-[22px]">compare</span>
+  </button>
   <button class="w-9 h-9 md:w-10 md:h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-emerald-600 dark:text-emerald-400 tooltip tooltip-bottom" title="Ferramenta de Medição" onclick="toggleMeasurementPanel()">
     <span class="material-symbols-outlined text-[20px] md:text-[22px]">square_foot</span>
   </button>
@@ -901,6 +904,59 @@
     </div>
 </div>
 
+<!-- Swipe / Cortina Comparator Selection Modal -->
+<div id="swipe-modal" class="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-slate-200 dark:border-slate-800 flex flex-col gap-4 animate-in fade-in zoom-in duration-200">
+        <!-- Header -->
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+            <h3 class="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <span class="material-symbols-outlined text-indigo-500 text-[24px]">compare</span>
+                Comparador Temporal (Cortina / Swipe)
+            </h3>
+            <button onclick="window.SwipeComparator.closeModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                <span class="material-symbols-outlined text-[20px]">close</span>
+            </button>
+        </div>
+
+        <p class="text-xs text-slate-600 dark:text-slate-400">
+            Selecione duas ortofotos para comparar lado a lado com a cortina interativa:
+        </p>
+
+        <!-- Seleção de Ortofoto Esquerda (Antes) -->
+        <div>
+            <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                1. Lado Esquerdo (Ex: Imagem Mais Antiga)
+            </label>
+            <select id="swipe-left-select" class="w-full text-xs font-semibold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-indigo-500">
+                <!-- Preenchido via JS -->
+            </select>
+        </div>
+
+        <!-- Seleção de Ortofoto Direita (Depois) -->
+        <div>
+            <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-sky-500"></span>
+                2. Lado Direito (Ex: Imagem Recente)
+            </label>
+            <select id="swipe-right-select" class="w-full text-xs font-semibold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-indigo-500">
+                <!-- Preenchido via JS -->
+            </select>
+        </div>
+
+        <!-- Ações -->
+        <div class="flex gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+            <button onclick="window.SwipeComparator.closeModal()" class="flex-1 py-2.5 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-colors">
+                Cancelar
+            </button>
+            <button onclick="window.SwipeComparator.start(document.getElementById('swipe-left-select').value, document.getElementById('swipe-right-select').value)" class="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-indigo-500/20 flex items-center justify-center gap-1.5">
+                <span class="material-symbols-outlined text-[18px]">play_arrow</span>
+                Ativar Cortina
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Cesium 3D Analysis Modal (Floating & Resizable) -->
 <div id="cesium-modal" class="fixed z-[130] bg-slate-900/95 backdrop-blur-xl border border-white/20 shadow-2xl rounded-xl hidden flex-col overflow-hidden" style="top: 50px; left: 50px; width: 600px; height: 500px; min-width: 400px; min-height: 300px;">
     <!-- Modal Header (Draggable) -->
@@ -1247,5 +1303,6 @@
 <script src="src/main.js"></script>
 <script src="src/measurement.js"></script>
 <script src="src/cesium-integration.js"></script>
+<script src="src/swipe-comparator.js"></script>
 </body>
 </html>
