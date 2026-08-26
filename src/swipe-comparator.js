@@ -1,7 +1,7 @@
 /**
  * Módulo de Comparador Temporal de Ortofotos (Swipe)
- * Carrossel 3D Minimalista em Marca d'Água na parte inferior central,
- * com luminescência neon, perspectiva Coverflow e arraste com mouse/touch.
+ * Carrossel 3D Coverflow estilo Netflix / Marca d'água cinematográfica na parte inferior central,
+ * expansível pelas laterais, sem caixas externas, com luminescência neon e arraste por mouse/touch.
  */
 
 (function() {
@@ -14,8 +14,7 @@
     let _dividerX = 0.5; // 0.0 a 1.0
     let _isDraggingDivider = false;
 
-    // Arraste do carrossel 3D
-    let _carouselScrollLeft = 0;
+    // Arraste da esteira 3D
     let _isDraggingCarousel = false;
     let _carouselStartX = 0;
     let _carouselStartScroll = 0;
@@ -53,43 +52,55 @@
 
         _containerEl.innerHTML = `
             <style>
-                .swipe-perspective-wrap {
-                    perspective: 900px;
-                    perspective-origin: 50% 50%;
+                .swipe-netflix-perspective {
+                    perspective: 1100px;
+                    perspective-origin: 50% 60%;
                 }
-                .swipe-pill-3d {
-                    transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+                .swipe-card-netflix {
+                    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease;
                     transform-style: preserve-3d;
                     will-change: transform, opacity;
+                    background: linear-gradient(180deg, rgba(20, 26, 40, 0.72) 0%, rgba(10, 14, 24, 0.85) 100%);
                 }
-                .swipe-pill-left-active {
+                .swipe-card-left-active {
                     border-color: #10b981 !important;
-                    background: rgba(16, 185, 129, 0.22) !important;
-                    box-shadow: 0 0 16px rgba(16, 185, 129, 0.7), inset 0 0 10px rgba(16, 185, 129, 0.3) !important;
-                    transform: scale(1.06) translateZ(25px) !important;
+                    background: linear-gradient(180deg, rgba(16, 185, 129, 0.28) 0%, rgba(5, 40, 30, 0.85) 100%) !important;
+                    box-shadow: 0 0 25px rgba(16, 185, 129, 0.8), inset 0 0 15px rgba(16, 185, 129, 0.3) !important;
+                    transform: scale(1.08) translateZ(35px) !important;
                     opacity: 1 !important;
+                    z-index: 30;
                 }
-                .swipe-pill-right-active {
+                .swipe-card-right-active {
                     border-color: #0ea5e9 !important;
-                    background: rgba(14, 165, 233, 0.22) !important;
-                    box-shadow: 0 0 16px rgba(14, 165, 233, 0.7), inset 0 0 10px rgba(14, 165, 233, 0.3) !important;
-                    transform: scale(1.06) translateZ(25px) !important;
+                    background: linear-gradient(180deg, rgba(14, 165, 233, 0.28) 0%, rgba(5, 30, 50, 0.85) 100%) !important;
+                    box-shadow: 0 0 25px rgba(14, 165, 233, 0.8), inset 0 0 15px rgba(14, 165, 233, 0.3) !important;
+                    transform: scale(1.08) translateZ(35px) !important;
                     opacity: 1 !important;
+                    z-index: 30;
                 }
-                .swipe-pill-both-active {
+                .swipe-card-both-active {
                     border-color: #a855f7 !important;
-                    background: rgba(168, 85, 247, 0.25) !important;
-                    box-shadow: 0 0 18px rgba(168, 85, 247, 0.75) !important;
-                    transform: scale(1.08) translateZ(30px) !important;
+                    background: linear-gradient(180deg, rgba(168, 85, 247, 0.3) 0%, rgba(35, 10, 50, 0.85) 100%) !important;
+                    box-shadow: 0 0 28px rgba(168, 85, 247, 0.85), inset 0 0 15px rgba(168, 85, 247, 0.35) !important;
+                    transform: scale(1.10) translateZ(40px) !important;
                     opacity: 1 !important;
+                    z-index: 35;
                 }
-                .swipe-pill-hidden-left {
-                    transform: scale(0.82) rotateY(-28deg) translateZ(-15px);
+                .swipe-card-side-left {
+                    transform: scale(0.85) rotateY(-22deg) translateZ(-20px);
                     opacity: 0.45;
                 }
-                .swipe-pill-hidden-right {
-                    transform: scale(0.82) rotateY(28deg) translateZ(-15px);
+                .swipe-card-side-left:hover {
+                    opacity: 0.85;
+                    transform: scale(0.92) rotateY(-10deg) translateZ(0px);
+                }
+                .swipe-card-side-right {
+                    transform: scale(0.85) rotateY(22deg) translateZ(-20px);
                     opacity: 0.45;
+                }
+                .swipe-card-side-right:hover {
+                    opacity: 0.85;
+                    transform: scale(0.92) rotateY(10deg) translateZ(0px);
                 }
             </style>
 
@@ -100,20 +111,22 @@
                 </div>
             </div>
 
-            <!-- Carrossel 3D Minimalista em Marca d'Água na Parte Inferior Central -->
-            <div class="absolute bottom-5 left-1/2 -translate-x-1/2 pointer-events-auto z-20 flex items-center gap-2 max-w-[96vw]">
-                
-                <!-- Trilho do Carrossel 3D -->
-                <div class="swipe-perspective-wrap bg-slate-950/40 backdrop-blur-md border border-white/15 rounded-full p-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.5)] flex items-center overflow-hidden">
-                    <div id="swipe-carousel-pills" class="flex items-center gap-2 px-1 overflow-x-auto no-scrollbar cursor-grab active:cursor-grabbing select-none" style="scroll-behavior: smooth;">
-                        <!-- Pílulas de datas injetadas via renderPills() -->
+            <!-- Botão Discreto Fechar (Apenas o X no canto superior direito) -->
+            <div class="absolute top-4 right-4 pointer-events-auto z-30">
+                <button onclick="window.SwipeComparator.stop()" title="Fechar Comparador" class="w-9 h-9 rounded-full bg-black/60 hover:bg-rose-600/90 text-white/80 hover:text-white border border-white/20 shadow-2xl backdrop-blur-md flex items-center justify-center transition-all hover:scale-110 active:scale-90 cursor-pointer">
+                    <span class="material-symbols-outlined text-[18px]">close</span>
+                </button>
+            </div>
+
+            <!-- Carrossel 3D Coverflow Estilo Netflix (Expansível de ponta a ponta na parte inferior) -->
+            <div class="absolute bottom-5 left-0 right-0 pointer-events-auto z-20 flex justify-center items-center overflow-visible px-4">
+                <div class="swipe-netflix-perspective w-full max-w-6xl flex justify-center items-center">
+                    <div id="swipe-carousel-pills"
+                         class="flex items-center justify-center gap-3 md:gap-4 py-3 px-6 overflow-x-auto no-scrollbar cursor-grab active:cursor-grabbing select-none w-full"
+                         style="scroll-behavior: smooth;">
+                        <!-- Cards injetados via renderPills() -->
                     </div>
                 </div>
-
-                <!-- Botão Discreto Fechar (Apenas o X) -->
-                <button onclick="window.SwipeComparator.stop()" title="Fechar Comparador" class="w-8 h-8 rounded-full bg-slate-950/50 hover:bg-rose-600/90 text-white/80 hover:text-white border border-white/20 shadow-lg backdrop-blur-md flex items-center justify-center transition-all hover:scale-110 active:scale-90 shrink-0 cursor-pointer">
-                    <span class="material-symbols-outlined text-[16px]">close</span>
-                </button>
             </div>
         `;
 
@@ -155,7 +168,7 @@
 
             if (_isDraggingCarousel && _carouselTrackEl) {
                 const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                const walk = (clientX - _carouselStartX) * 1.3;
+                const walk = (clientX - _carouselStartX) * 1.4;
                 _carouselTrackEl.scrollLeft = _carouselStartScroll - walk;
             }
         }
@@ -173,7 +186,7 @@
         _dividerLineEl.addEventListener('mousedown', startDividerDrag);
         _dividerLineEl.addEventListener('touchstart', startDividerDrag, { passive: false });
 
-        // 2. Arraste por mouse / touch no carrossel de pílulas
+        // 2. Arraste por mouse / touch no carrossel Netflix
         if (_carouselTrackEl) {
             _carouselTrackEl.addEventListener('mousedown', (e) => {
                 _isDraggingCarousel = true;
@@ -258,7 +271,7 @@
         return null;
     }
 
-    // Renderiza os Cards/Pílulas no Carrossel 3D Minimalista
+    // Renderiza os Cards 3D estilo Netflix (Sem container ao redor, sem pontos, apenas a data limpa)
     function renderPills() {
         if (!_carouselTrackEl || _availableRasters.length === 0) return;
 
@@ -271,34 +284,28 @@
             const dateStr = getDateFormatted(r);
 
             let styleClass = '';
-            let luminescenciaDot = '';
 
             if (isLeft && isRight) {
-                styleClass = 'swipe-pill-both-active';
-                luminescenciaDot = '<span class="w-2 h-2 rounded-full bg-purple-400 shadow-[0_0_8px_#c084fc]"></span>';
+                styleClass = 'swipe-card-both-active';
             } else if (isLeft) {
-                styleClass = 'swipe-pill-left-active';
-                luminescenciaDot = '<span class="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]"></span>';
+                styleClass = 'swipe-card-left-active';
             } else if (isRight) {
-                styleClass = 'swipe-pill-right-active';
-                luminescenciaDot = '<span class="w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]"></span>';
+                styleClass = 'swipe-card-right-active';
             } else {
-                // Cards não selecionados: efeito 3D se escondendo nas laterais
+                // Efeito 3D se escondendo nas laterais
                 const minActiveIdx = Math.min(leftIdx >= 0 ? leftIdx : 0, rightIdx >= 0 ? rightIdx : 0);
                 if (idx < minActiveIdx) {
-                    styleClass = 'swipe-pill-hidden-left hover:opacity-90 hover:scale-95';
+                    styleClass = 'swipe-card-side-left';
                 } else {
-                    styleClass = 'swipe-pill-hidden-right hover:opacity-90 hover:scale-95';
+                    styleClass = 'swipe-card-side-right';
                 }
-                luminescenciaDot = '<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>';
             }
 
             return `
                 <div onclick="window.SwipeComparator.handlePillClick('${r.id}')"
-                     title="${r.nome} - Clique para alternar no comparador"
-                     class="swipe-pill-3d shrink-0 h-9 px-3.5 rounded-full border border-white/20 backdrop-blur-md flex items-center gap-2 cursor-pointer transition-all duration-300 ${styleClass}">
-                    ${luminescenciaDot}
-                    <span class="text-xs font-bold text-white tracking-wide whitespace-nowrap font-mono">
+                     title="${r.nome}"
+                     class="swipe-card-netflix shrink-0 h-11 md:h-12 min-w-[125px] md:min-w-[145px] px-4 rounded-xl md:rounded-2xl border border-white/20 backdrop-blur-lg flex items-center justify-center cursor-pointer transition-all duration-300 ${styleClass}">
+                    <span class="text-xs md:text-sm font-extrabold text-white tracking-wider whitespace-nowrap font-mono">
                         ${dateStr}
                     </span>
                 </div>
@@ -306,7 +313,7 @@
         }).join('');
     }
 
-    // Clique na pílula: alterna entre esquerda e direita de forma fluida
+    // Clique no card: alterna entre esquerda e direita com inteligência cronológica
     function handlePillClick(rasterId) {
         if (!_leftRasterObj || !_rightRasterObj) return;
 
