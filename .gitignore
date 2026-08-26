@@ -27,3 +27,15 @@ dist-ssr
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Ortofotos e Pastas de Tiles pesadas (armazenadas no Supabase Storage, não no Git)
+*.tif
+*.tiff
+*.vrt
+tiles_*
+tiles/
+Ortofoto_*
+Ortotofo_*
+ortofoto_*
+*.webp
+*.mbtiles
