@@ -111,21 +111,19 @@
                 </div>
             </div>
 
-            <!-- Botão Discreto Fechar (Apenas o X no canto superior direito) -->
-            <div class="absolute top-4 right-4 pointer-events-auto z-30">
-                <button onclick="window.SwipeComparator.stop()" title="Fechar Comparador" class="w-9 h-9 rounded-full bg-black/60 hover:bg-rose-600/90 text-white/80 hover:text-white border border-white/20 shadow-2xl backdrop-blur-md flex items-center justify-center transition-all hover:scale-110 active:scale-90 cursor-pointer">
-                    <span class="material-symbols-outlined text-[18px]">close</span>
-                </button>
-            </div>
-
-            <!-- Carrossel 3D Coverflow Estilo Netflix (Expansível de ponta a ponta na parte inferior) -->
+            <!-- Carrossel 3D Coverflow Estilo Netflix (Parte inferior com botão X ao lado direito) -->
             <div class="absolute bottom-5 left-0 right-0 pointer-events-auto z-20 flex justify-center items-center overflow-visible px-4">
-                <div class="swipe-netflix-perspective w-full max-w-6xl flex justify-center items-center">
+                <div class="swipe-netflix-perspective flex justify-center items-center gap-2.5 md:gap-3.5 max-w-full">
                     <div id="swipe-carousel-pills"
-                         class="flex items-center justify-center gap-3 md:gap-4 py-3 px-6 overflow-x-auto no-scrollbar cursor-grab active:cursor-grabbing select-none w-full"
+                         class="flex items-center justify-center gap-3 md:gap-4 py-3 px-2 overflow-x-auto no-scrollbar cursor-grab active:cursor-grabbing select-none"
                          style="scroll-behavior: smooth;">
                         <!-- Cards injetados via renderPills() -->
                     </div>
+
+                    <!-- Botão Discreto Fechar (Apenas o X ao lado direito dos cards) -->
+                    <button onclick="window.SwipeComparator.stop()" title="Fechar Comparador" class="w-10 h-10 md:w-11 md:h-11 rounded-full bg-black/70 hover:bg-rose-600/90 text-white/90 hover:text-white border border-white/25 shadow-[0_4px_20px_rgba(0,0,0,0.6)] backdrop-blur-md flex items-center justify-center transition-all hover:scale-110 active:scale-90 shrink-0 cursor-pointer">
+                        <span class="material-symbols-outlined text-[20px]">close</span>
+                    </button>
                 </div>
             </div>
         `;
