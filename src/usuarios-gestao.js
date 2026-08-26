@@ -462,7 +462,7 @@
     // Alterna visualmente as sub-abas ao marcar/desmarcar a camada
     function toggleCamadaSubAbas(camadaCheckbox, membroId, themeId) {
         const isChecked = camadaCheckbox.checked;
-        const subContainer = document.getElementById(`camada-sub-abas-${membroId}-${temaId}`);
+        const subContainer = document.getElementById(`camada-sub-abas-${membroId}-${themeId}`);
         if (subContainer) {
             subContainer.style.opacity = isChecked ? '1' : '0.4';
             subContainer.style.pointerEvents = isChecked ? 'auto' : 'none';
