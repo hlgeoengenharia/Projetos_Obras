@@ -5494,11 +5494,28 @@ function renderRasterLayersList() {
     const isAdmin = !!((typeof currentUserProfile !== 'undefined' && currentUserProfile && currentUserProfile.super_admin) || (typeof currentMunicipioPapel !== 'undefined' && currentMunicipioPapel === 'admin'));
 
     container.innerHTML = '';
-    rasterLayers.forEach(raster => {
+    // Ordena da data mais recente para a mais antiga
+    const sortedRasters = [...rasterLayers].sort((a, b) => {
+        const dateA = a.data_imagem || (a.nome && a.nome.match(/(\d{4})/)?.[1] + '-01-01') || '1970-01-01';
+        const dateB = b.data_imagem || (b.nome && b.nome.match(/(\d{4})/)?.[1] + '-01-01') || '1970-01-01';
+        return dateB.localeCompare(dateA);
+    });
+
+    sortedRasters.forEach(raster => {
         const item = document.createElement('div');
         item.className = 'flex flex-col rounded-xl overflow-hidden shadow-lg border border-white/10 transition-all duration-300';
         item.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.1) 0%, rgba(15,23,42,0.8) 100%)';
         
+        let dateFormatted = '';
+        if (raster.data_imagem) {
+            dateFormatted = raster.data_imagem.split('-').reverse().join('/');
+        } else if (raster.nome) {
+            const matchDate = raster.nome.match(/(\d{2})[-/](\d{2})[-/](\d{4})/);
+            const matchYear = raster.nome.match(/(20\d{2})/);
+            if (matchDate) dateFormatted = `${matchDate[1]}/${matchDate[2]}/${matchDate[3]}`;
+            else if (matchYear) dateFormatted = matchYear[1];
+        }
+
         item.innerHTML = `
             <div class="p-3 flex flex-col backdrop-blur-md">
                 <!-- Header: Icon, Title, and Toggle -->
@@ -5508,8 +5525,11 @@ function renderRasterLayersList() {
                             <span class="material-symbols-outlined text-[18px] text-emerald-400">satellite</span>
                         </div>
                         <div class="flex flex-col overflow-hidden">
-                            <span class="text-xs font-bold text-white truncate w-36 sm:w-44" title="${raster.nome}">${raster.nome}</span>
-                            <span class="text-[9px] text-slate-400 font-normal uppercase tracking-wider mt-0.5">GeoTIFF • Imagem</span>
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="text-xs font-bold text-white truncate max-w-[150px]" title="${raster.nome}">${raster.nome}</span>
+                                ${dateFormatted ? `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/30 text-indigo-200 border border-indigo-500/40 flex items-center gap-0.5"><span class="material-symbols-outlined text-[10px]">calendar_today</span>${dateFormatted}</span>` : ''}
+                            </div>
+                            <span class="text-[9px] text-slate-400 font-normal uppercase tracking-wider mt-0.5">${raster.tipo === 'xyz_tiles' ? 'Ortofoto • XYZ Tiles' : 'GeoTIFF • Imagem'}</span>
                         </div>
                     </div>
                     

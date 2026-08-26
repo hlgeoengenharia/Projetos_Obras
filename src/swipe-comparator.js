@@ -209,25 +209,47 @@
         if (emptyContainer) emptyContainer.classList.add('hidden');
         if (formContainer) formContainer.classList.remove('hidden');
 
+        // Ordena da mais antiga para a mais recente para a linha do tempo
+        const sortedChronological = [...rasters].sort((a, b) => {
+            const dateA = a.data_imagem || (a.nome && a.nome.match(/(\d{4})/)?.[1] + '-01-01') || '1970-01-01';
+            const dateB = b.data_imagem || (b.nome && b.nome.match(/(\d{4})/)?.[1] + '-01-01') || '1970-01-01';
+            return dateA.localeCompare(dateB);
+        });
+
+        function formatRasterLabel(r) {
+            let d = '';
+            if (r.data_imagem) {
+                d = r.data_imagem.split('-').reverse().join('/');
+            } else if (r.nome) {
+                const matchDate = r.nome.match(/(\d{2})[-/](\d{2})[-/](\d{4})/);
+                const matchYear = r.nome.match(/(20\d{2})/);
+                if (matchDate) d = `${matchDate[1]}/${matchDate[2]}/${matchDate[3]}`;
+                else if (matchYear) d = matchYear[1];
+            }
+            return d ? `${r.nome} (📅 ${d})` : r.nome;
+        }
+
         if (selectLeft && selectRight) {
             selectLeft.innerHTML = '';
             selectRight.innerHTML = '';
 
-            rasters.forEach((r, idx) => {
+            sortedChronological.forEach((r) => {
+                const label = formatRasterLabel(r);
+
                 const optL = document.createElement('option');
                 optL.value = r.id;
-                optL.textContent = r.nome || `Ortofoto ${idx + 1}`;
+                optL.textContent = label;
                 selectLeft.appendChild(optL);
 
                 const optR = document.createElement('option');
                 optR.value = r.id;
-                optR.textContent = r.nome || `Ortofoto ${idx + 1}`;
+                optR.textContent = label;
                 selectRight.appendChild(optR);
             });
 
-            // Pré-seleciona a 1ª e a 2ª
+            // Lado Esquerdo = Mais antiga (primeira) / Lado Direito = Mais recente (última)
             selectLeft.selectedIndex = 0;
-            selectRight.selectedIndex = 1;
+            selectRight.selectedIndex = sortedChronological.length - 1;
         }
     }
 
@@ -273,14 +295,25 @@
         _active = true;
         _dividerX = 0.5;
 
-        // Atualiza textos das etiquetas
+        function getDateLabel(r) {
+            if (r.data_imagem) return r.data_imagem.split('-').reverse().join('/');
+            const matchDate = r.nome.match(/(\d{2})[-/](\d{2})[-/](\d{4})/);
+            const matchYear = r.nome.match(/(20\d{2})/);
+            if (matchDate) return `${matchDate[1]}/${matchDate[2]}/${matchDate[3]}`;
+            if (matchYear) return matchYear[1];
+            return '';
+        }
+
+        // Atualiza textos das etiquetas com Nome + Data
         if (_labelLeftEl) {
             const span = _labelLeftEl.querySelector('.text-name');
-            if (span) span.textContent = _leftRasterObj.nome;
+            const dL = getDateLabel(_leftRasterObj);
+            if (span) span.textContent = dL ? `${_leftRasterObj.nome} (${dL})` : _leftRasterObj.nome;
         }
         if (_labelRightEl) {
             const span = _labelRightEl.querySelector('.text-name');
-            if (span) span.textContent = _rightRasterObj.nome;
+            const dR = getDateLabel(_rightRasterObj);
+            if (span) span.textContent = dR ? `${_rightRasterObj.nome} (${dR})` : _rightRasterObj.nome;
         }
 
         if (_containerEl) _containerEl.classList.remove('hidden');
