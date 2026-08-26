@@ -251,6 +251,44 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
 </head>
 <body class="bg-surface text-on-surface overflow-hidden">
+<!-- Splash Screen / Loading Overlay de Inicialização -->
+<div id="app-splash-screen" class="fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-slate-950/95 backdrop-blur-xl transition-all duration-500 select-none">
+  <!-- Fundo com Glow Neon -->
+  <div class="absolute w-96 h-96 bg-sky-500/10 rounded-full blur-3xl pointer-events-none animate-pulse"></div>
+  <div class="absolute w-64 h-64 bg-blue-600/10 rounded-full blur-2xl pointer-events-none"></div>
+
+  <div class="relative z-10 flex flex-col items-center max-w-sm w-[90%] p-6 text-center">
+    <!-- Logo e Ícone -->
+    <div class="relative mb-5">
+      <div class="w-20 h-20 rounded-2xl bg-gradient-to-tr from-sky-500/20 to-blue-600/30 border border-sky-400/30 flex items-center justify-center shadow-[0_0_30px_rgba(14,165,233,0.3)] backdrop-blur-md">
+        <img src="assets/logo.png" alt="GeoGestor" class="w-12 h-12 object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.5)]" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+        <span class="material-symbols-outlined text-[36px] text-sky-400 hidden">map</span>
+      </div>
+      <!-- Spinner Circular em Volta da Logo -->
+      <div class="absolute -inset-2 border-2 border-sky-400/20 border-t-sky-400 rounded-3xl animate-spin pointer-events-none"></div>
+    </div>
+
+    <!-- Título do Sistema -->
+    <h2 class="text-2xl font-black tracking-tight text-white mb-1 flex items-center gap-2">
+      GeoGestor
+      <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-400 border border-sky-500/30 tracking-widest uppercase">WebGIS</span>
+    </h2>
+    
+    <p id="splash-subtitle" class="text-xs text-slate-400 mb-6 font-medium">Carregando ambiente de trabalho...</p>
+
+    <!-- Barra de Progresso Futurista -->
+    <div class="w-full bg-slate-800/80 rounded-full h-2 p-0.5 border border-slate-700/60 overflow-hidden shadow-inner mb-3">
+      <div id="splash-progress-bar" class="bg-gradient-to-r from-sky-400 to-blue-500 h-full rounded-full transition-all duration-300 ease-out shadow-[0_0_12px_rgba(56,189,248,0.6)]" style="width: 15%;"></div>
+    </div>
+
+    <!-- Status Atual de Carregamento -->
+    <div class="flex items-center justify-between w-full text-[11px] text-slate-400 font-mono">
+      <span id="splash-status-text" class="truncate max-w-[220px] text-left text-sky-300">Inicializando sistema...</span>
+      <span id="splash-percentage" class="font-bold text-slate-300 ml-2">15%</span>
+    </div>
+  </div>
+</div>
+
 <!-- TopAppBar -->
 <header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-2 md:px-4 h-14 md:h-16 bg-white/50 dark:bg-[#070b14]/50 backdrop-blur-md border-b border-white/20 dark:border-white/10 shadow-sm font-sans antialiased tracking-tight">
 <div class="flex items-center gap-2 md:gap-4">

@@ -635,15 +635,32 @@ function initMap() {
 
   loadThemes().then(async () => {
     renderThemes(); // mostra os cards já — a contagem preenche conforme carrega
-    // Carrega TODOS os temas (não só os visíveis): a contagem de registros e
-    // a lista/filtro precisam funcionar mesmo com a camada desligada no mapa
-    // — só a RENDERIZAÇÃO no mapa respeita a visibilidade (loadAllFeaturesToMap).
-    // Sequencial entre temas (cada um já pagina internamente em paralelo) —
-    // evita somar concorrência demais e estourar o pooler do plano gratuito.
+    
+    const totalThemes = themes.length;
+    let loadedCount = 0;
+    
     for (const t of themes) {
+        if (typeof updateSplashProgress === 'function') {
+            const pct = 50 + Math.round((loadedCount / Math.max(1, totalThemes)) * 40);
+            updateSplashProgress(`🗺️ Carregando camada "${t.name}"...`, pct);
+        }
         await loadThemeProperties(t.id);
+        loadedCount++;
     }
+    
+    if (typeof updateSplashProgress === 'function') {
+        updateSplashProgress('🛰️ Carregando ortofotos e imagens...', 92);
+    }
+    
+    if (typeof loadRasterLayers === 'function') {
+        try { await loadRasterLayers(); } catch(eRaster) {}
+    }
+    
     loadAllFeaturesToMap();
+    
+    if (typeof hideSplashScreen === 'function') {
+        hideSplashScreen();
+    }
   });
   
   // Call it once after everything is loaded
@@ -4091,10 +4108,50 @@ window.handleLogout = async function() {
     window.location.href = 'login.html';
 };
 
+// --- CONTROLE DE SPLASH SCREEN DE CARREGAMENTO ---
+function updateSplashProgress(text, percent) {
+    const textEl = document.getElementById('splash-status-text');
+    const barEl = document.getElementById('splash-progress-bar');
+    const pctEl = document.getElementById('splash-percentage');
+    const subEl = document.getElementById('splash-subtitle');
+    
+    if (textEl && text) textEl.textContent = text;
+    if (barEl && typeof percent === 'number') barEl.style.width = `${Math.min(100, Math.max(0, percent))}%`;
+    if (pctEl && typeof percent === 'number') pctEl.textContent = `${Math.round(percent)}%`;
+
+    const munNome = sessionStorage.getItem('municipio_ativo_nome');
+    if (subEl && munNome) {
+        subEl.textContent = `Carregando município: ${munNome}`;
+    }
+}
+
+function hideSplashScreen() {
+    const splash = document.getElementById('app-splash-screen');
+    if (!splash) return;
+    updateSplashProgress('✨ Tudo pronto! Bem-vindo.', 100);
+    
+    setTimeout(() => {
+        splash.style.opacity = '0';
+        splash.style.pointerEvents = 'none';
+        splash.style.transform = 'scale(1.02)';
+        setTimeout(() => {
+            splash.remove();
+        }, 500);
+    }, 450);
+}
+
+window.updateSplashProgress = updateSplashProgress;
+window.hideSplashScreen = hideSplashScreen;
+
 window.addEventListener('DOMContentLoaded', async () => {
+  updateSplashProgress('🔐 Validando credenciais de acesso...', 15);
   const authOk = await ensureAuthenticated();
   if (!authOk) return;
-  fetchDynamicForm();
+
+  updateSplashProgress('⚙️ Carregando formulários dinâmicos...', 35);
+  try { await fetchDynamicForm(); } catch(eForm) {}
+
+  updateSplashProgress('🗺️ Inicializando motor cartográfico...', 50);
   initMap();
   setupIconDropdowns();
   setupSupabaseRealtime();
