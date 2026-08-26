@@ -3785,11 +3785,12 @@
     }
 
     async function loadUsersPanel() {
+        const munId = activeMunicipioId || sessionStorage.getItem('municipio_ativo');
         if (window.UsuariosManager) {
             window.UsuariosManager.init({
                 containerId: 'users-list',
                 searchInputId: 'users-search',
-                municipioId: activeMunicipioId,
+                municipioId: munId,
                 currentUserProfile: currentUserProfile
             });
         }

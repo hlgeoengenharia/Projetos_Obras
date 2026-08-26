@@ -52,6 +52,18 @@
         _currentUserProfile = currentUserProfile;
 
         try {
+            // Garante que o perfil do usuário logado está preenchido
+            if (!_currentUserProfile || !_currentUserProfile.id) {
+                const { data: sessData } = await supabaseClient.auth.getSession();
+                if (sessData && sessData.session && sessData.session.user) {
+                    const sessUserId = sessData.session.user.id;
+                    const { data: prof } = await supabaseClient.from('profiles').select('*').eq('id', sessUserId).maybeSingle();
+                    _currentUserProfile = prof || { id: sessUserId, email: sessData.session.user.email, super_admin: false };
+                }
+            }
+
+            const currentUserId = _currentUserProfile ? _currentUserProfile.id : null;
+
             // 1. Carrega dados básicos em paralelo
             const [membrosRes, temasRes, formsRes, permsCamadaRes, permsAbaRes, entidadesRes, minhasRes] = await Promise.all([
                 supabaseClient
@@ -63,7 +75,7 @@
                 supabaseClient.from('permissoes_camada').select('*'),
                 supabaseClient.from('permissoes_aba').select('*'),
                 supabaseClient.from('entidades_padrao').select('nome, tipo'),
-                supabaseClient.from('municipio_membros').select('*').eq('user_id', currentUserProfile ? currentUserProfile.id : '')
+                currentUserId ? supabaseClient.from('municipio_membros').select('*').eq('user_id', currentUserId) : Promise.resolve({ data: [] })
             ]);
 
             if (membrosRes.error) throw membrosRes.error;
