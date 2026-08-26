@@ -3654,15 +3654,6 @@
         showStorageToast('📅 Data salva com sucesso!');
     };
 
-            if (error) {
-                console.warn('Tentando update de data:', error);
-            }
-            showStorageToast('📅 Data do voo salva com sucesso!');
-        } catch(e) {
-            console.error('Erro ao salvar data:', e);
-        }
-    };
-
     async function deleteRasterLayer(rasterId, folderName) {
         if (!confirm('Deseja realmente excluir esta ortofoto? Ela será removida das camadas do mapa.')) return;
         try {
