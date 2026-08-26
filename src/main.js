@@ -3631,8 +3631,21 @@ async function saveFeatureData() {
   const idBanco = currentProps.id_banco;
   const themeId = currentProps.themeId;
 
-  // 1. Persiste DIRETAMENTE no banco de dados Supabase
+  // 1. Validação de Conexão e Sessão Ativa: Redireciona para o login se a sessão tiver expirado
   if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+      try {
+          const { data: sessCheck } = await supabaseClient.auth.getSession();
+          if (!sessCheck || !sessCheck.session) {
+              alert('Sua sessão expirou por inatividade ou perda de conexão.\n\nVocê será redirecionado para a tela de login para reconectar com segurança.');
+              sessionStorage.removeItem('municipio_ativo');
+              window.location.href = 'login.html';
+              return;
+          }
+      } catch(eAuth) {
+          window.location.href = 'login.html';
+          return;
+      }
+
       try {
           if (idBanco) {
               const { error: updErr } = await supabaseClient
