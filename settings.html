@@ -3421,8 +3421,15 @@
                 dbRasters = rastersData || [];
             }
 
-            // Separa arquivos normais de tiles
-            const individualFiles = (storageFiles || []).filter(f => !f.name.startsWith('.') && !f.name.endsWith('.webp') && !f.name.endsWith('.png'));
+            // Separa arquivos normais avulsos (PDF, DWG, TIF, etc.) ignorando pastas de tiles e imagens internas
+            const individualFiles = (storageFiles || []).filter(f => {
+                if (!f.name || f.name.startsWith('.')) return false;
+                // Ignora pastas ou prefixos de ortofoto
+                if (f.name.toLowerCase().startsWith('ortofoto_') || f.name.toLowerCase().startsWith('tiles_') || f.id === null) return false;
+                // Ignora tiles avulsos
+                if (f.name.endsWith('.webp') || f.name.endsWith('.png') || f.name.endsWith('.jpg')) return false;
+                return true;
+            });
 
             let html = '';
 
