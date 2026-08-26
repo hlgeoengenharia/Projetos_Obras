@@ -1009,13 +1009,19 @@ function renderThemes() {
   const container = document.getElementById('themes-container');
   container.innerHTML = '';
 
-  // Importar GeoJSON/Exportar/Excluir mexem na base de dados da camada
-  // inteira — só o SuperAdmin vê esses ícones dentro do card.
   const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && currentUserProfile.super_admin);
+  const isAdmin = isSuperAdmin || (typeof currentMunicipioPapel !== 'undefined' && currentMunicipioPapel === 'admin');
 
   let draggedThemeIndex = null;
 
   themes.forEach((theme, index) => {
+    // Filtro de Permissão: se o usuário não for admin e não tiver permissão para ver a camada, não exibe
+    if (!isAdmin && typeof currentUserPermissions !== 'undefined' && currentUserPermissions[theme.id]) {
+        if (currentUserPermissions[theme.id].pode_ver === false) {
+            return;
+        }
+    }
+
     const featureCount = theme.features ? theme.features.length : 0;
     const isVisible = theme.visible !== false;
     const isActiveSelection = window.activeSelectionThemeId === String(theme.id);

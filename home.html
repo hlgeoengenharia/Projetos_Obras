@@ -1133,7 +1133,15 @@ async function init() {
 
         if (homeUserProfile.super_admin) {
             await loadEntidadesSection();
-            await loadUsuariosSection();
+        }
+        if (homeUserProfile.super_admin || souMunicipioAdmin) {
+            if (window.UsuariosManager) {
+                window.UsuariosManager.init({
+                    containerId: 'usuarios-list',
+                    searchInputId: 'usuarios-search',
+                    currentUserProfile: homeUserProfile
+                });
+            }
         }
     }
 
@@ -1180,5 +1188,6 @@ async function init() {
 
 init();
 </script>
+<script src="src/usuarios-gestao.js"></script>
 </body>
 </html>

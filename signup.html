@@ -96,7 +96,7 @@
           <div id="signup-municipios-list" class="mt-1 max-h-40 overflow-y-auto border border-slate-300 dark:border-slate-600 dark:bg-slate-800 rounded-lg p-2.5 flex flex-col gap-1.5">
             <div class="text-xs text-slate-400 italic">Carregando...</div>
           </div>
-          <p class="text-[10px] text-slate-400 mt-1">Pode marcar mais de um, se precisar acessar dados de vários municípios (ex: órgãos de fiscalização).</p>
+          <p id="signup-municipios-info" class="text-[10px] text-slate-400 mt-1">Pode marcar mais de um, se precisar acessar dados de vários municípios (ex: órgãos de fiscalização).</p>
         </div>
 
         <div id="signup-error" class="hidden text-xs text-red-600 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2"></div>
@@ -146,11 +146,11 @@
     }
     municipiosListEl.innerHTML = data.map(m => `
       <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200 cursor-pointer">
-        <input type="checkbox" class="signup-municipio-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" value="${m.id}">
+        <input type="checkbox" class="signup-municipio-input rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" value="${m.id}">
         ${m.nome}${m.uf ? ' - ' + m.uf : ''}
       </label>`).join('');
+    updateMunicipioSelectionMode();
   }
-  loadMunicipios();
 
   async function loadEntidades() {
     if (!supabaseClient) return;
@@ -162,9 +162,45 @@
     entidadeEl.innerHTML = data.map(e =>
       `<option value="${e.nome}" data-tipo="${e.tipo}">${e.sigla ? e.nome + ' (' + e.sigla + ')' : e.nome}</option>`
     ).join('');
-    toggleEntidadeOutros();
+    handleEntidadeChange();
   }
-  loadEntidades();
+
+  loadMunicipios().then(() => loadEntidades());
+
+  function handleEntidadeChange() {
+    toggleEntidadeOutros();
+    updateMunicipioSelectionMode();
+  }
+
+  function updateMunicipioSelectionMode() {
+    const selected = entidadeEl.options[entidadeEl.selectedIndex];
+    const tipo = selected ? selected.getAttribute('data-tipo') : 'municipal';
+    const isMunicipal = (tipo === 'municipal');
+    
+    const infoTextEl = document.getElementById('signup-municipios-info');
+    if (infoTextEl) {
+      infoTextEl.textContent = isMunicipal
+        ? 'Entidades municipais têm acesso restrito a um único município.'
+        : 'Pode marcar mais de um município (ex: órgãos de fiscalização estadual/federal).';
+      infoTextEl.className = isMunicipal 
+        ? 'text-[10px] text-amber-600 dark:text-amber-400 font-medium mt-1 flex items-center gap-1'
+        : 'text-[10px] text-slate-400 mt-1';
+    }
+
+    const inputs = document.querySelectorAll('.signup-municipio-input');
+    let firstChecked = false;
+    inputs.forEach(inp => {
+      inp.type = isMunicipal ? 'radio' : 'checkbox';
+      inp.name = isMunicipal ? 'signup_municipio_radio' : 'signup_municipio_check';
+      
+      if (isMunicipal) {
+        if (inp.checked) {
+          if (firstChecked) inp.checked = false;
+          else firstChecked = true;
+        }
+      }
+    });
+  }
 
   function toggleEntidadeOutros() {
     const selected = entidadeEl.options[entidadeEl.selectedIndex];
@@ -172,7 +208,7 @@
     entidadeOutrosEl.classList.toggle('hidden', !isOutros);
     entidadeOutrosEl.required = isOutros;
   }
-  entidadeEl.addEventListener('change', toggleEntidadeOutros);
+  entidadeEl.addEventListener('change', handleEntidadeChange);
 
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
