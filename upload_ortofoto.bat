@@ -1,18 +1,29 @@
 @echo off
 setlocal enabledelayedexpansion
-title Upload Turbo de Ortofotos (Multi-Thread)
+title Upload Turbo de Ortofotos (WebGIS)
 
-echo =========================================================================
-echo   🚀 UPLOAD TURBO DE ORTOFOTOS PARA O SUPABASE STORAGE (MULTI-THREAD)
-echo =========================================================================
-echo.
-
-REM Detecta instalacao do Python do QGIS ou Python Global
-set "PYTHON_EXE=python"
+REM Detecta instalacao do QGIS / OSGeo4W no Windows para carregar o ambiente Python completo
+set "QGIS_ENV="
 for /d %%G in ("C:\Program Files\QGIS*") do (
-    if exist "%%G\bin\python.exe" set "PYTHON_EXE=%%G\bin\python.exe"
+    if exist "%%G\bin\o4w_env.bat" set "QGIS_ENV=%%G\bin\o4w_env.bat"
+)
+if not defined QGIS_ENV (
+    for /d %%G in ("C:\Program Files (x86)\QGIS*") do (
+        if exist "%%G\bin\o4w_env.bat" set "QGIS_ENV=%%G\bin\o4w_env.bat"
+    )
+)
+if not defined QGIS_ENV if exist "C:\OSGeo4W\bin\o4w_env.bat" set "QGIS_ENV=C:\OSGeo4W\bin\o4w_env.bat"
+if not defined QGIS_ENV if exist "C:\OSGeo4W64\bin\o4w_env.bat" set "QGIS_ENV=C:\OSGeo4W64\bin\o4w_env.bat"
+
+if defined QGIS_ENV (
+    call "%QGIS_ENV%" >nul 2>&1
+    python "%~dp0upload_ortofoto_turbo.py" %*
+) else (
+    python "%~dp0upload_ortofoto_turbo.py" %*
 )
 
-"%PYTHON_EXE%" "%~dp0upload_ortofoto_turbo.py" %*
-
-pause
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo [-] Ocorreu uma interrupcao no programa.
+    pause
+)
