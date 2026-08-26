@@ -2,10 +2,11 @@
  * GeoGestor — Gestão Unificada de Usuários, Entidades e Permissões Hierárquicas
  * Compartilhado entre home.html e settings.html (Espelho Total)
  * 
- * Regra de Ouro: "Quem pode mais, pode menos; quem pode menos, não pode mais."
- * - SuperAdmin: controle total sobre todas as entidades, municípios e delegação de Admins.
- * - Admin de Entidade: gerencia apenas membros da sua própria entidade e só pode delegar
- *   permissões de camadas/abas que ele próprio possui.
+ * Recursos:
+ * - Cards de Usuários expansíveis (Accordion).
+ * - Camadas expansíveis (Accordion de Camada com lista de abas).
+ * - Modo Visualização vs Modo Edição (Botão "Editar" alterna para "Salvar" e "Cancelar").
+ * - Regra de Ouro: "Quem pode mais, pode menos; quem pode menos, não pode mais."
  */
 
 (function(window) {
@@ -24,7 +25,7 @@
         rejeitado: 'Rejeitado'
     };
 
-    // Estado do painel
+    // Estado interno do painel
     let _allMembros = [];
     let _allTemas = [];
     let _allForms = {};
@@ -34,6 +35,7 @@
     let _currentUserMembros = [];
     let _entidadesTipos = {}; // nome_entidade -> 'municipal' | 'externo' | 'outro'
     let _targetMunicipioId = null; // Se preenchido (ex: settings.html), filtra pelo município
+    let _editingCardIds = new Set(); // IDs dos cards em modo edição
 
     async function initUsuariosManager({ containerId, searchInputId, municipioId = null, currentUserProfile }) {
         const container = document.getElementById(containerId);
@@ -209,6 +211,7 @@
         const entidadeNome = (m.entidade || 'Não informada').trim();
         const tipoEntidade = _entidadesTipos[entidadeNome] || (entidadeNome.toLowerCase().includes('prefeitura') ? 'municipal' : 'externo');
         const isMunicipal = (tipoEntidade === 'municipal');
+        const isEditing = _editingCardIds.has(m.id);
 
         const temasDoMunicipio = _allTemas.filter(t => t.municipio_id === m.municipio_id);
 
@@ -234,7 +237,7 @@
             ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' 
             : (m.status === 'pendente' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20');
 
-        // Renderiza a Árvore de Permissões (Camadas ➔ Abas)
+        // Renderiza a Árvore de Permissões (Camadas ➔ Abas Expansíveis)
         const camadasHtml = temasDoMunicipio.map(tema => {
             const userCamadaPerm = _allCamadaPerms[`${m.user_id}:${tema.id}`] || { pode_ver: false, pode_editar: false, pode_excluir: false };
             const adminCeiling = getAdminCeiling(tema.id);
@@ -243,28 +246,29 @@
             const podeExcluirCamada = !!userCamadaPerm.pode_excluir;
 
             const formVinculado = (tema.tipo_cadastro && tema.tipo_cadastro !== 'padrao') ? _allForms[tema.tipo_cadastro] : null;
+            const numAbas = (formVinculado && formVinculado.tabs) ? formVinculado.tabs.length : 0;
 
-            // Renderiza abas se houver formulário
+            // Renderiza abas expansíveis se houver formulário
             let abasHtml = '';
-            if (formVinculado && formVinculado.tabs && formVinculado.tabs.length > 0) {
+            if (numAbas > 0) {
                 abasHtml = `
-                    <div class="ml-6 pl-3 border-l-2 border-slate-200 dark:border-slate-700/60 mt-2 space-y-1.5 sub-abas-container" data-theme-id="${tema.id}">
+                    <div id="camada-sub-abas-${m.id}-${tema.id}" class="camada-sub-abas hidden ml-4 pl-3 border-l-2 border-slate-200 dark:border-slate-700/60 mt-2 space-y-1.5 sub-abas-container transition-all" data-theme-id="${tema.id}">
                         <div class="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1">Abas do Formulário: ${formVinculado.title || ''}</div>
                         ${formVinculado.tabs.map(tab => {
                             const userAbaPerm = _allAbaPerms[`${m.user_id}:${formVinculado.id}:${tab.id}`] || { pode_ver: podeVerCamada, pode_editar: userCamadaPerm.pode_editar };
                             const abaCeiling = getAdminCeiling(tema.id, formVinculado.id, tab.id);
 
-                            const verDisabled = !abaCeiling.podeVer ? 'disabled title="Você não tem permissão para conceder visualização nesta aba"' : '';
-                            const editDisabled = !abaCeiling.podeEditar ? 'disabled title="Você não tem permissão para conceder edição nesta aba"' : '';
+                            const verDisabled = (!isEditing || !abaCeiling.podeVer) ? 'disabled' : '';
+                            const editDisabled = (!isEditing || !abaCeiling.podeEditar) ? 'disabled' : '';
 
                             return `
-                                <div class="flex items-center justify-between gap-2 bg-slate-50/60 dark:bg-slate-800/40 rounded-md px-2.5 py-1 text-xs" data-form-id="${formVinculado.id}" data-tab-id="${tab.id}">
+                                <div class="flex items-center justify-between gap-2 bg-slate-50/70 dark:bg-slate-800/40 rounded-lg px-3 py-1.5 text-xs" data-form-id="${formVinculado.id}" data-tab-id="${tab.id}">
                                     <span class="text-slate-700 dark:text-slate-300 font-medium truncate">${tab.title}</span>
                                     <div class="flex items-center gap-3 shrink-0">
-                                        <label class="flex items-center gap-1 cursor-pointer text-[11px] text-slate-600 dark:text-slate-400">
+                                        <label class="flex items-center gap-1.5 ${isEditing ? 'cursor-pointer' : 'cursor-default'} text-[11px] text-slate-600 dark:text-slate-400">
                                             <input type="checkbox" class="aba-ver-check rounded border-slate-300 dark:border-slate-600 text-sky-500 focus:ring-sky-400" ${userAbaPerm.pode_ver ? 'checked' : ''} ${verDisabled}> Ver
                                         </label>
-                                        <label class="flex items-center gap-1 cursor-pointer text-[11px] text-slate-600 dark:text-slate-400">
+                                        <label class="flex items-center gap-1.5 ${isEditing ? 'cursor-pointer' : 'cursor-default'} text-[11px] text-slate-600 dark:text-slate-400">
                                             <input type="checkbox" class="aba-editar-check rounded border-slate-300 dark:border-slate-600 text-sky-500 focus:ring-sky-400" ${userAbaPerm.pode_editar ? 'checked' : ''} ${editDisabled}> Editar
                                         </label>
                                     </div>
@@ -275,22 +279,31 @@
                 `;
             }
 
-            const camadaVerDisabled = !adminCeiling.podeVer ? 'disabled title="Você não possui permissão para ver esta camada"' : '';
-            const camadaExcluirDisabled = !adminCeiling.podeExcluir ? 'disabled title="Você não possui permissão para excluir nesta camada"' : '';
+            const camadaVerDisabled = (!isEditing || !adminCeiling.podeVer) ? 'disabled' : '';
+            const camadaExcluirDisabled = (!isEditing || !adminCeiling.podeExcluir) ? 'disabled' : '';
 
             return `
-                <div class="p-3 bg-white dark:bg-slate-900/90 rounded-xl border border-slate-200/80 dark:border-slate-700/60 shadow-sm" data-camada-id="${tema.id}">
+                <div class="p-3 bg-white dark:bg-slate-900/90 rounded-xl border border-slate-200/80 dark:border-slate-700/60 shadow-sm transition-all" data-camada-id="${tema.id}">
                     <div class="flex items-center justify-between gap-2 flex-wrap">
-                        <div class="flex items-center gap-2 min-w-0">
+                        <!-- Título e Gatilho do Accordion da Camada -->
+                        <div class="flex items-center gap-2 min-w-0 cursor-pointer select-none" onclick="window.UsuariosManager.toggleCamadaAccordion('${m.id}', '${tema.id}')">
                             <span class="w-3 h-3 rounded-full shrink-0 shadow-sm" style="background-color: ${tema.cor || '#0ea5e9'}"></span>
-                            <span class="font-semibold text-xs text-slate-800 dark:text-slate-100 truncate">${tema.nome}</span>
+                            <span class="font-semibold text-xs text-slate-800 dark:text-slate-100 truncate hover:text-sky-600 transition-colors">${tema.nome}</span>
+                            ${numAbas > 0 ? `
+                                <span class="text-[10px] text-slate-400 flex items-center gap-0.5">
+                                    (${numAbas} abas)
+                                    <span id="camada-chevron-${m.id}-${tema.id}" class="material-symbols-outlined text-[16px] transition-transform duration-200">expand_more</span>
+                                </span>
+                            ` : ''}
                         </div>
+
+                        <!-- Checkboxes da Camada -->
                         <div class="flex items-center gap-4 shrink-0">
-                            <label class="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
-                                <input type="checkbox" class="camada-ver-check rounded border-slate-300 dark:border-slate-600 text-sky-500 focus:ring-sky-400" ${podeVerCamada ? 'checked' : ''} ${camadaVerDisabled} onchange="window.UsuariosManager.toggleCamadaSubAbas(this, '${tema.id}')">
+                            <label class="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 ${isEditing ? 'cursor-pointer' : 'cursor-default'}">
+                                <input type="checkbox" class="camada-ver-check rounded border-slate-300 dark:border-slate-600 text-sky-500 focus:ring-sky-400" ${podeVerCamada ? 'checked' : ''} ${camadaVerDisabled} onchange="window.UsuariosManager.toggleCamadaSubAbas(this, '${m.id}', '${tema.id}')">
                                 Ver Camada
                             </label>
-                            <label class="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 cursor-pointer">
+                            <label class="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 ${isEditing ? 'cursor-pointer' : 'cursor-default'}">
                                 <input type="checkbox" class="camada-excluir-check rounded border-slate-300 dark:border-slate-600 text-rose-500 focus:ring-rose-400" ${podeExcluirCamada ? 'checked' : ''} ${camadaExcluirDisabled}>
                                 Pode Excluir
                             </label>
@@ -301,82 +314,155 @@
             `;
         }).join('');
 
+        // Botões de Ação no topo: Editar vs (Salvar + Cancelar)
+        const botoesAcaoHtml = isEditing ? `
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="window.UsuariosManager.cancelarEdicao('${m.id}')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[15px]">close</span> Cancelar
+                </button>
+                <button type="button" onclick="window.UsuariosManager.salvarUsuario('${m.id}')" class="px-4 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[15px]">save</span> Salvar
+                </button>
+            </div>
+        ` : `
+            <button type="button" onclick="window.UsuariosManager.iniciarEdicao('${m.id}')" class="px-3.5 py-1.5 bg-slate-100 hover:bg-sky-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 hover:text-sky-600 dark:text-slate-200 dark:hover:text-sky-400 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[15px]">edit</span> Editar
+            </button>
+        `;
+
         return `
             <div class="card rounded-2xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 mb-4 transition-all" data-user-card="${m.id}" data-user-id="${m.user_id}" data-municipio-id="${m.municipio_id}">
-                <!-- Cabeçalho do Card -->
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800/80">
-                    <div>
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <h4 class="font-bold text-sm text-slate-900 dark:text-white">${perfil.nome || '(Sem nome)'}</h4>
-                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeColor} uppercase tracking-wider">${STATUS_LABELS[m.status] || m.status}</span>
-                            <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">${PAPEL_LABELS[m.papel] || m.papel}</span>
-                        </div>
-                        <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
-                            <span>${perfil.email || ''}</span>
-                            <span>•</span>
-                            <span class="font-medium text-slate-700 dark:text-slate-300">${entidadeNome}</span>
-                            ${m.cargo ? `<span>(${m.cargo})</span>` : ''}
-                            <span>•</span>
-                            <span class="text-sky-600 dark:text-sky-400 font-semibold">${municipio.nome || 'Município'}${municipio.uf ? ' - ' + municipio.uf : ''}</span>
+                <!-- Cabeçalho do Card (Expansível ao Clicar) -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 select-none">
+                    <div class="flex items-center gap-2 cursor-pointer min-w-0 flex-1" onclick="window.UsuariosManager.toggleUserCard('${m.id}')">
+                        <span id="user-chevron-${m.id}" class="material-symbols-outlined text-[22px] text-slate-400 transition-transform duration-200 shrink-0 ${isEditing ? 'rotate-180' : ''}">expand_more</span>
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <h4 class="font-bold text-sm text-slate-900 dark:text-white hover:text-sky-600 transition-colors truncate">${perfil.nome || '(Sem nome)'}</h4>
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeColor} uppercase tracking-wider">${STATUS_LABELS[m.status] || m.status}</span>
+                                <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">${PAPEL_LABELS[m.papel] || m.papel}</span>
+                            </div>
+                            <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
+                                <span>${perfil.email || ''}</span>
+                                <span>•</span>
+                                <span class="font-medium text-slate-700 dark:text-slate-300">${entidadeNome}</span>
+                                ${m.cargo ? `<span>(${m.cargo})</span>` : ''}
+                                <span>•</span>
+                                <span class="text-sky-600 dark:text-sky-400 font-semibold">${municipio.nome || 'Município'}${municipio.uf ? ' - ' + municipio.uf : ''}</span>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="flex items-center gap-2 shrink-0">
-                        <button onclick="window.UsuariosManager.salvarUsuario('${m.id}')" class="px-4 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors flex items-center gap-1.5">
-                            <span class="material-symbols-outlined text-[16px]">save</span> Salvar
+                    <div class="shrink-0 self-end sm:self-auto">
+                        ${botoesAcaoHtml}
+                    </div>
+                </div>
+
+                <!-- Corpo Expansível do Card -->
+                <div id="user-card-body-${m.id}" class="user-card-body ${isEditing ? '' : 'hidden'} mt-4 pt-4 border-t border-slate-100 dark:border-slate-800/80 transition-all">
+                    <!-- Controles de Nível de Acesso e Status -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Nível de Acesso</label>
+                            <select class="user-papel-select w-full text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-2 focus:ring-2 focus:ring-sky-500 ${!isEditing ? 'opacity-70 pointer-events-none' : ''}" ${!isEditing ? 'disabled' : ''}>
+                                ${papelOptionsHtml}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Status da Solicitação</label>
+                            <select class="user-status-select w-full text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-2 focus:ring-2 focus:ring-sky-500 ${!isEditing ? 'opacity-70 pointer-events-none' : ''}" ${!isEditing ? 'disabled' : ''}>
+                                ${statusOptionsHtml}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Gestão Granular de Camadas e Abas -->
+                    <div class="mt-3">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                                <span class="material-symbols-outlined text-[16px] text-sky-500">layers</span>
+                                Permissões de Camadas e Abas
+                            </span>
+                            <span class="text-[10px] text-slate-400">Clique na camada para expandir as abas</span>
+                        </div>
+
+                        <div class="space-y-2 max-h-80 overflow-y-auto pr-1">
+                            ${camadasHtml || '<div class="text-xs text-slate-400 italic py-2">Nenhuma camada cadastrada neste município.</div>'}
+                        </div>
+                    </div>
+
+                    <!-- Botão de Excluir Vínculo (só quando em edição) -->
+                    ${isEditing ? `
+                    <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex justify-end">
+                        <button type="button" onclick="window.UsuariosManager.removerAcesso('${m.id}')" class="text-xs text-rose-500 hover:text-rose-700 hover:underline flex items-center gap-1">
+                            <span class="material-symbols-outlined text-[14px]">delete</span>
+                            Revogar acesso deste usuário neste município
                         </button>
                     </div>
-                </div>
-
-                <!-- Controles de Nível de Acesso e Status -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 mb-4">
-                    <div>
-                        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Nível de Acesso</label>
-                        <select class="user-papel-select w-full text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-sky-500">
-                            ${papelOptionsHtml}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Status da Solicitação</label>
-                        <select class="user-status-select w-full text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-sky-500">
-                            ${statusOptionsHtml}
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Gestão Granular de Camadas e Abas -->
-                <div class="mt-3">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                            <span class="material-symbols-outlined text-[16px] text-sky-500">layers</span>
-                            Permissões de Camadas e Abas
-                        </span>
-                        <span class="text-[10px] text-slate-400">Marque as camadas e formulários que este usuário pode acessar</span>
-                    </div>
-
-                    <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
-                        ${camadasHtml || '<div class="text-xs text-slate-400 italic py-2">Nenhuma camada cadastrada neste município.</div>'}
-                    </div>
-                </div>
-
-                <!-- Botão de Excluir Vínculo -->
-                <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex justify-end">
-                    <button onclick="window.UsuariosManager.removerAcesso('${m.id}')" class="text-xs text-rose-500 hover:text-rose-700 hover:underline flex items-center gap-1">
-                        <span class="material-symbols-outlined text-[14px]">delete</span>
-                        Revogar acesso deste usuário neste município
-                    </button>
+                    ` : ''}
                 </div>
             </div>
         `;
     }
 
-    // Alterna visualmente as sub-abas ao marcar/desmarcar a camada
-    function toggleCamadaSubAbas(camadaCheckbox, themeId) {
-        const isChecked = camadaCheckbox.checked;
-        const card = camadaCheckbox.closest('[data-user-card]');
-        if (!card) return;
+    // Alterna a expansão do card de usuário
+    function toggleUserCard(membroId) {
+        const body = document.getElementById(`user-card-body-${membroId}`);
+        const chevron = document.getElementById(`user-chevron-${membroId}`);
+        if (!body) return;
 
-        const subContainer = card.querySelector(`.sub-abas-container[data-theme-id="${themeId}"]`);
+        const isHidden = body.classList.contains('hidden');
+        if (isHidden) {
+            body.classList.remove('hidden');
+            if (chevron) chevron.classList.add('rotate-180');
+        } else {
+            body.classList.add('hidden');
+            if (chevron) chevron.classList.remove('rotate-180');
+        }
+    }
+
+    // Alterna a expansão das sub-abas de uma camada
+    function toggleCamadaAccordion(membroId, temaId) {
+        const subAbas = document.getElementById(`camada-sub-abas-${membroId}-${temaId}`);
+        const chevron = document.getElementById(`camada-chevron-${membroId}-${temaId}`);
+        if (!subAbas) return;
+
+        const isHidden = subAbas.classList.contains('hidden');
+        if (isHidden) {
+            subAbas.classList.remove('hidden');
+            if (chevron) chevron.classList.add('rotate-180');
+        } else {
+            subAbas.classList.add('hidden');
+            if (chevron) chevron.classList.remove('rotate-180');
+        }
+    }
+
+    // Ativa o modo de edição para o card
+    function iniciarEdicao(membroId) {
+        _editingCardIds.add(membroId);
+        const card = document.querySelector(`[data-user-card="${membroId}"]`);
+        const container = card ? card.parentElement : null;
+        if (container) {
+            const searchInput = document.getElementById('usuarios-search') || document.getElementById('users-search');
+            renderUsersList(container.id, searchInput ? searchInput.value : '');
+        }
+    }
+
+    // Cancela o modo de edição
+    function cancelarEdicao(membroId) {
+        _editingCardIds.delete(membroId);
+        const card = document.querySelector(`[data-user-card="${membroId}"]`);
+        const container = card ? card.parentElement : null;
+        if (container) {
+            const searchInput = document.getElementById('usuarios-search') || document.getElementById('users-search');
+            renderUsersList(container.id, searchInput ? searchInput.value : '');
+        }
+    }
+
+    // Alterna visualmente as sub-abas ao marcar/desmarcar a camada
+    function toggleCamadaSubAbas(camadaCheckbox, membroId, themeId) {
+        const isChecked = camadaCheckbox.checked;
+        const subContainer = document.getElementById(`camada-sub-abas-${membroId}-${temaId}`);
         if (subContainer) {
             subContainer.style.opacity = isChecked ? '1' : '0.4';
             subContainer.style.pointerEvents = isChecked ? 'auto' : 'none';
@@ -392,14 +478,15 @@
         if (!card) return;
 
         const userId = card.getAttribute('data-user-id');
-        const municipioId = card.getAttribute('data-municipio-id');
         const papel = card.querySelector('.user-papel-select').value;
         const status = card.querySelector('.user-status-select').value;
 
         const saveBtn = card.querySelector('button[onclick*="salvarUsuario"]');
-        const originalText = saveBtn.innerHTML;
-        saveBtn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span> Salvando...';
-        saveBtn.disabled = true;
+        const originalText = saveBtn ? saveBtn.innerHTML : '';
+        if (saveBtn) {
+            saveBtn.innerHTML = '<span class="material-symbols-outlined text-[15px] animate-spin">refresh</span> Salvando...';
+            saveBtn.disabled = true;
+        }
 
         try {
             // 1. Atualiza município_membros
@@ -466,14 +553,37 @@
                 if (aErr) console.warn('Erro ao atualizar permissoes_aba:', aErr);
             }
 
+            // Atualiza cache em memória
+            const membroObj = _allMembros.find(m => m.id === membroId);
+            if (membroObj) {
+                membroObj.papel = papel;
+                membroObj.status = status;
+            }
+            camadaRows.forEach(cr => {
+                _allCamadaPerms[`${cr.user_id}:${cr.theme_id}`] = cr;
+            });
+            abaRows.forEach(ar => {
+                _allAbaPerms[`${ar.user_id}:${ar.form_id}:${ar.tab_id}`] = ar;
+            });
+
+            _editingCardIds.delete(membroId);
+
+            const container = card.parentElement;
+            if (container) {
+                const searchInput = document.getElementById('usuarios-search') || document.getElementById('users-search');
+                renderUsersList(container.id, searchInput ? searchInput.value : '');
+            }
+
             alert('✓ Permissões e dados do usuário atualizados com sucesso!');
 
         } catch (err) {
             console.error('Erro ao salvar usuário:', err);
             alert('Erro ao salvar: ' + (err.message || err));
         } finally {
-            saveBtn.innerHTML = originalText;
-            saveBtn.disabled = false;
+            if (saveBtn) {
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+            }
         }
     }
 
@@ -485,6 +595,8 @@
             if (error) throw error;
 
             alert('Acesso revogado com sucesso!');
+            _editingCardIds.delete(membroId);
+            _allMembros = _allMembros.filter(m => m.id !== membroId);
             const card = document.querySelector(`[data-user-card="${membroId}"]`);
             if (card) card.remove();
         } catch (err) {
@@ -495,6 +607,10 @@
     // Expõe a API no escopo global
     window.UsuariosManager = {
         init: initUsuariosManager,
+        toggleUserCard,
+        toggleCamadaAccordion,
+        iniciarEdicao,
+        cancelarEdicao,
         salvarUsuario,
         removerAcesso,
         toggleCamadaSubAbas
