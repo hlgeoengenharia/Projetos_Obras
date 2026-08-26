@@ -196,12 +196,15 @@
             }
         }
 
-        if (rasters.length < 2) {
+        // Filtra apenas as ortofotos que estão marcadas para o Comparador Temporal
+        const swipeRasters = rasters.filter(r => r.usar_no_swipe !== false);
+
+        if (swipeRasters.length < 2) {
             if (formContainer) formContainer.classList.add('hidden');
             if (emptyContainer) {
                 emptyContainer.classList.remove('hidden');
                 const countSpan = document.getElementById('swipe-rasters-count');
-                if (countSpan) countSpan.textContent = rasters.length;
+                if (countSpan) countSpan.textContent = swipeRasters.length;
             }
             return;
         }
@@ -210,7 +213,7 @@
         if (formContainer) formContainer.classList.remove('hidden');
 
         // Ordena da mais antiga para a mais recente para a linha do tempo
-        const sortedChronological = [...rasters].sort((a, b) => {
+        const sortedChronological = [...swipeRasters].sort((a, b) => {
             const dateA = a.data_imagem || (a.nome && a.nome.match(/(\d{4})/)?.[1] + '-01-01') || '1970-01-01';
             const dateB = b.data_imagem || (b.nome && b.nome.match(/(\d{4})/)?.[1] + '-01-01') || '1970-01-01';
             return dateA.localeCompare(dateB);

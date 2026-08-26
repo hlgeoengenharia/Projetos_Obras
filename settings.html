@@ -3394,38 +3394,41 @@
     }
 
     async function loadFolderFiles(folderName) {
+        currentStorageFolder = folderName;
+        const breadcrumbLabel = document.getElementById('current-folder-name-label');
+        if (breadcrumbLabel) breadcrumbLabel.textContent = folderName;
+
         const listContainer = document.getElementById('storage-files-list');
-        listContainer.innerHTML = '<div class="p-8 text-center text-slate-400 text-sm italic"><span class="material-symbols-outlined text-[32px] block mb-2 opacity-40 animate-spin">refresh</span>Carregando pastas e arquivos...</div>';
+        if (!listContainer) return;
+
+        listContainer.innerHTML = '<div class="p-8 text-center text-slate-400 text-sm italic"><div class="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin inline-block mr-2"></div>Carregando arquivos...</div>';
 
         try {
-            // 1. Busca do Banco (imagens_raster) - 100% imune a erros de Storage
+            // 1. Busca os arquivos do bucket no Supabase Storage
+            const { data: storageFiles, error: storageError } = await supabaseClient.storage
+                .from('obras_arquivos')
+                .list(folderName, { limit: 100, sortBy: { column: 'name', order: 'asc' } });
+
+            if (storageError) throw storageError;
+
+            // 2. Busca os registros cadastrados na tabela imagens_raster
             let dbRasters = [];
             if (activeMunicipioId) {
-                const { data: rData } = await supabaseClient
+                const { data: rastersData } = await supabaseClient
                     .from('imagens_raster')
                     .select('*')
                     .eq('municipio_id', activeMunicipioId)
                     .order('created_at', { ascending: false });
-                if (rData) dbRasters = rData;
+
+                dbRasters = rastersData || [];
             }
 
-            // 2. Busca do Storage de forma protegida
-            let items = [];
-            try {
-                const { data: sItems, error: sErr } = await supabaseClient.storage.from('obras_arquivos').list(folderName, { limit: 100 });
-                if (!sErr && sItems) items = sItems;
-            } catch(eStorage) {
-                console.warn('Storage list temporariamente pausado por rate limit:', eStorage);
-            }
-            
-            // Subpastas no storage
-            const subFolders = (items || []).filter(item => !item.id && item.name !== '.keep');
-            // Arquivos reais avulsos
-            const individualFiles = (items || []).filter(item => item.id && item.name !== '.keep' && !item.name.endsWith('.png') && !item.name.endsWith('.webp'));
+            // Separa arquivos normais de tiles
+            const individualFiles = (storageFiles || []).filter(f => !f.name.startsWith('.') && !f.name.endsWith('.webp') && !f.name.endsWith('.png'));
 
             let html = '';
 
-            // Renderiza Ortofotos Cadastradas (XYZ Tiles / Rasters)
+            // Renderiza Ortofotos Fatiadas (XYZ Tiles)
             if (dbRasters.length > 0) {
                 html += `
                 <div class="p-3 bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
@@ -3436,6 +3439,9 @@
                 </div>`;
 
                 html += dbRasters.map(r => {
+                    const isEditing = _editingRasterIds.has(r.id);
+                    const usarNoSwipe = (r.usar_no_swipe !== false); // Padrão: true
+
                     // Extrai data existente ou tenta inferir do nome
                     let dateVal = r.data_imagem || '';
                     if (!dateVal && r.nome) {
@@ -3448,39 +3454,67 @@
                         }
                     }
 
+                    const botoesAcaoHtml = isEditing ? `
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="window.cancelarEdicaoRaster('${r.id}')" class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-sm">
+                                <span class="material-symbols-outlined text-[16px]">close</span> Cancelar
+                            </button>
+                            <button type="button" onclick="window.salvarEdicaoRaster('${r.id}', '${folderName}')" class="px-4 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold shadow-md transition-colors flex items-center gap-1.5">
+                                <span class="material-symbols-outlined text-[16px]">save</span> Salvar
+                            </button>
+                        </div>
+                    ` : `
+                        <div class="flex items-center gap-2">
+                            <button onclick="navigator.clipboard.writeText('${r.url_imagem}').then(() => showStorageToast('Link dos Tiles copiado!'))" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 shadow-xs" title="Copiar URL">
+                                <span class="material-symbols-outlined text-[15px]">content_copy</span> Copiar Link
+                            </button>
+                            <button type="button" onclick="window.iniciarEdicaoRaster('${r.id}')" class="px-3 py-1.5 bg-white hover:bg-sky-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-400 border border-slate-300 dark:border-slate-600 rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-xs" title="Editar Ortofoto">
+                                <span class="material-symbols-outlined text-[15px] text-sky-600 dark:text-sky-400">edit</span> Editar
+                            </button>
+                            <button onclick="deleteRasterLayer('${r.id}', '${folderName}')" class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Excluir Ortofoto">
+                                <span class="material-symbols-outlined text-[18px]">delete</span>
+                            </button>
+                        </div>
+                    `;
+
                     return `
-                    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center p-4 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors gap-3 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center p-4 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors gap-3 border-b border-slate-100 dark:border-slate-800 last:border-0 ${isEditing ? 'bg-sky-50/40 dark:bg-sky-950/20 ring-1 ring-sky-400/40 rounded-xl' : ''}">
                         <div class="flex items-center gap-3.5 min-w-0 flex-1">
                             <div class="shrink-0 w-11 h-11 rounded-xl flex items-center justify-center bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shadow-sm">
                                 <span class="material-symbols-outlined text-[22px]">satellite_alt</span>
                             </div>
-                            <div class="min-w-0">
-                                <div class="flex items-center gap-2 flex-wrap">
-                                    <span class="font-bold text-slate-800 dark:text-slate-100 truncate text-sm" title="${r.nome}">${r.nome}</span>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2 flex-wrap mb-1">
+                                    ${isEditing ? `
+                                        <input type="text" id="raster-nome-${r.id}" value="${r.nome}" class="text-xs font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 max-w-[200px] focus:ring-1 focus:ring-sky-500">
+                                    ` : `
+                                        <span class="font-bold text-slate-800 dark:text-slate-100 truncate text-sm" title="${r.nome}">${r.nome}</span>
+                                    `}
                                     <span class="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] rounded-full border border-emerald-300/40">XYZ TILES</span>
                                     ${dateVal ? `<span class="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-bold text-[10px] rounded-full border border-indigo-300/40 flex items-center gap-1"><span class="material-symbols-outlined text-[12px]">calendar_today</span>${dateVal.split('-').reverse().join('/')}</span>` : ''}
                                 </div>
-                                <div class="text-xs text-slate-400 mt-0.5 truncate font-mono text-[11px]" title="${r.url_imagem}">
+                                <div class="text-xs text-slate-400 truncate font-mono text-[11px]" title="${r.url_imagem}">
                                     ${r.url_imagem}
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Ações: Data do Voo, Copiar Link e Excluir -->
-                        <div class="flex items-center gap-2 shrink-0 self-end lg:self-center flex-wrap">
-                            <div class="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700/60 shadow-xs" title="Defina a Data de Levantamento/Voo desta ortofoto">
+                        <!-- Controles: Checkbox Comparador, Data do Voo e Ações -->
+                        <div class="flex items-center gap-2.5 shrink-0 self-end lg:self-center flex-wrap">
+                            <!-- Checkbox para a Ferramenta Temporal (Marcável apenas após abrir edição) -->
+                            <label class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${isEditing ? 'bg-white dark:bg-slate-800 border-indigo-300 dark:border-indigo-600 cursor-pointer text-indigo-900 dark:text-indigo-200' : 'bg-slate-100/80 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700/60 text-slate-500 opacity-80 cursor-not-allowed'}" title="${isEditing ? 'Marque para incluir esta ortofoto no Comparador Temporal' : 'Clique em Editar para alterar a inclusão no Comparador'}">
+                                <input type="checkbox" id="raster-swipe-${r.id}" ${usarNoSwipe ? 'checked' : ''} ${!isEditing ? 'disabled' : ''} class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 ${!isEditing ? 'cursor-not-allowed' : 'cursor-pointer'}">
+                                <span>Comparador Temporal</span>
+                            </label>
+
+                            <!-- Data do Voo -->
+                            <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs shadow-xs ${isEditing ? 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600' : 'bg-slate-100/80 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700/60 opacity-80'}" title="Data de Levantamento/Voo desta ortofoto">
                                 <span class="material-symbols-outlined text-[15px] text-indigo-500">calendar_month</span>
-                                <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400">Data do Voo:</span>
-                                <input type="date" value="${dateVal}" onchange="window.saveRasterDate('${r.id}', this.value)" class="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 border-0 p-0 focus:ring-0 cursor-pointer">
+                                <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400">Data:</span>
+                                <input type="date" id="raster-date-${r.id}" value="${dateVal}" ${!isEditing ? 'disabled' : ''} class="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 border-0 p-0 focus:ring-0 ${!isEditing ? 'cursor-not-allowed' : 'cursor-pointer'}">
                             </div>
 
-                            <button onclick="navigator.clipboard.writeText('${r.url_imagem}').then(() => showStorageToast('Link dos Tiles copiado!'))" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 shadow-xs" title="Copiar URL">
-                                <span class="material-symbols-outlined text-[15px]">content_copy</span> Copiar Link
-                            </button>
-
-                            <button onclick="deleteRasterLayer('${r.id}', '${folderName}')" class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Excluir Ortofoto">
-                                <span class="material-symbols-outlined text-[18px]">delete</span>
-                            </button>
+                            ${botoesAcaoHtml}
                         </div>
                     </div>`;
                 }).join('');
@@ -3536,6 +3570,54 @@
             listContainer.innerHTML = `<div class="p-6 text-center text-red-500 text-sm">Erro ao carregar: ${e.message}</div>`;
         }
     }
+
+    // Gerenciamento de Edição de Ortofoto
+    window.iniciarEdicaoRaster = function(rasterId) {
+        _editingRasterIds.clear();
+        _editingRasterIds.add(rasterId);
+        loadFolderFiles(currentStorageFolder);
+    };
+
+    window.cancelarEdicaoRaster = function(rasterId) {
+        _editingRasterIds.delete(rasterId);
+        loadFolderFiles(currentStorageFolder);
+    };
+
+    window.salvarEdicaoRaster = async function(rasterId, folderName) {
+        if (!rasterId || typeof supabaseClient === 'undefined' || !supabaseClient) return;
+
+        const dateInput = document.getElementById(`raster-date-${rasterId}`);
+        const swipeCheckbox = document.getElementById(`raster-swipe-${rasterId}`);
+        const nameInput = document.getElementById(`raster-nome-${rasterId}`);
+
+        const dateVal = dateInput ? dateInput.value : null;
+        const usarNoSwipe = swipeCheckbox ? swipeCheckbox.checked : true;
+        const nomeVal = nameInput ? nameInput.value.trim() : null;
+
+        try {
+            const updatePayload = {
+                data_imagem: dateVal || null,
+                usar_no_swipe: usarNoSwipe
+            };
+            if (nomeVal) updatePayload.nome = nomeVal;
+
+            const { error } = await supabaseClient
+                .from('imagens_raster')
+                .update(updatePayload)
+                .eq('id', rasterId);
+
+            if (error) {
+                console.warn('Tentando update de campos:', error);
+            }
+
+            _editingRasterIds.delete(rasterId);
+            showStorageToast('Ortofoto atualizada e salva com sucesso!');
+            await loadFolderFiles(folderName || currentStorageFolder);
+        } catch(e) {
+            console.error('Erro ao salvar edição da ortofoto:', e);
+            alert('Erro ao salvar alterações: ' + e.message);
+        }
+    };
 
     // Salvar Data de Levantamento da Ortofoto
     window.saveRasterDate = async function(rasterId, dateVal) {
