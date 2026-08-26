@@ -527,6 +527,7 @@ async function handleSupabaseUpload(event, fieldId, isPhoto) {
 
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         try {
+            const fileExt = file.name.split('.').pop() || 'bin';
             const folderPrefix = (typeof activeMunicipioId !== 'undefined' && activeMunicipioId) ? `anexos_${activeMunicipioId}` : 'anexos';
             const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
             filePath = `${folderPrefix}/${fileName}`;
