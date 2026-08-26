@@ -166,40 +166,69 @@
     }
 
     // Abre o Modal de Seleção de Ortofotos
-    function openModal() {
+    async function openModal() {
         const modal = document.getElementById('swipe-modal');
         const selectLeft = document.getElementById('swipe-left-select');
         const selectRight = document.getElementById('swipe-right-select');
-        if (!modal || !selectLeft || !selectRight) return;
+        const formContainer = document.getElementById('swipe-modal-form');
+        const emptyContainer = document.getElementById('swipe-modal-empty');
+        if (!modal) return;
 
-        const rasters = window.rasterLayers || [];
+        modal.classList.remove('hidden');
+
+        let rasters = window.rasterLayers || [];
+
+        // Busca dados mais recentes no Supabase para garantir sincronia
+        if (typeof supabaseClient !== 'undefined' && supabaseClient && window.activeMunicipioId) {
+            try {
+                const { data } = await supabaseClient
+                    .from('imagens_raster')
+                    .select('*')
+                    .eq('municipio_id', window.activeMunicipioId)
+                    .order('created_at', { ascending: false });
+
+                if (data && data.length > 0) {
+                    rasters = data;
+                    window.rasterLayers = data;
+                }
+            } catch (e) {
+                console.warn('Erro ao atualizar rasters para swipe:', e);
+            }
+        }
+
         if (rasters.length < 2) {
-            alert('São necessárias pelo menos 2 ortofotos cadastradas neste município para usar a comparação temporal.');
+            if (formContainer) formContainer.classList.add('hidden');
+            if (emptyContainer) {
+                emptyContainer.classList.remove('hidden');
+                const countSpan = document.getElementById('swipe-rasters-count');
+                if (countSpan) countSpan.textContent = rasters.length;
+            }
             return;
         }
 
-        selectLeft.innerHTML = '';
-        selectRight.innerHTML = '';
+        if (emptyContainer) emptyContainer.classList.add('hidden');
+        if (formContainer) formContainer.classList.remove('hidden');
 
-        rasters.forEach((r, idx) => {
-            const optL = document.createElement('option');
-            optL.value = r.id;
-            optL.textContent = r.nome || `Ortofoto ${idx + 1}`;
-            selectLeft.appendChild(optL);
+        if (selectLeft && selectRight) {
+            selectLeft.innerHTML = '';
+            selectRight.innerHTML = '';
 
-            const optR = document.createElement('option');
-            optR.value = r.id;
-            optR.textContent = r.nome || `Ortofoto ${idx + 1}`;
-            selectRight.appendChild(optR);
-        });
+            rasters.forEach((r, idx) => {
+                const optL = document.createElement('option');
+                optL.value = r.id;
+                optL.textContent = r.nome || `Ortofoto ${idx + 1}`;
+                selectLeft.appendChild(optL);
 
-        // Pré-seleciona a 1ª e 2ª
-        if (rasters.length >= 2) {
+                const optR = document.createElement('option');
+                optR.value = r.id;
+                optR.textContent = r.nome || `Ortofoto ${idx + 1}`;
+                selectRight.appendChild(optR);
+            });
+
+            // Pré-seleciona a 1ª e a 2ª
             selectLeft.selectedIndex = 0;
             selectRight.selectedIndex = 1;
         }
-
-        modal.classList.remove('hidden');
     }
 
     function closeModal() {
