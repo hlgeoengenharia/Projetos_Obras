@@ -116,30 +116,37 @@
 
     function updateClip() {
         if (!_active || !_leftLayer || !_rightLayer) return;
+        const mapInstance = getMap();
+        if (!mapInstance) return;
 
-        const mapEl = document.getElementById('map');
-        if (!mapEl) return;
+        const mapSize = mapInstance.getSize();
+        if (!mapSize || mapSize.x === 0 || mapSize.y === 0) return;
 
-        const width = mapEl.offsetWidth;
-        const clipX = width * _dividerX;
+        const clipPixelX = mapSize.x * _dividerX;
 
         // Atualiza posição do divisor visual
         if (_dividerLineEl) {
             _dividerLineEl.style.left = `${_dividerX * 100}%`;
         }
 
-        // Aplica clip-path na camada da esquerda (visível de 0 até clipX)
+        // Converte os pontos da tela para o sistema de coordenadas do contêiner de camadas do Leaflet
+        const nw = mapInstance.containerPointToLayerPoint([0, 0]);
+        const se = mapInstance.containerPointToLayerPoint(mapSize);
+        const clipPoint = mapInstance.containerPointToLayerPoint([clipPixelX, 0]);
+
         const leftContainer = _leftLayer.getContainer ? _leftLayer.getContainer() : (_leftLayer._image || null);
+        const rightContainer = _rightLayer.getContainer ? _rightLayer.getContainer() : (_rightLayer._image || null);
+
         if (leftContainer) {
-            leftContainer.style.clipPath = `polygon(0 0, ${clipX}px 0, ${clipX}px 100%, 0 100%)`;
-            leftContainer.style.webkitClipPath = `polygon(0 0, ${clipX}px 0, ${clipX}px 100%, 0 100%)`;
+            leftContainer.style.clip = `rect(${nw.y}px, ${clipPoint.x}px, ${se.y}px, ${nw.x}px)`;
+            leftContainer.style.clipPath = `polygon(${nw.x}px ${nw.y}px, ${clipPoint.x}px ${nw.y}px, ${clipPoint.x}px ${se.y}px, ${nw.x}px ${se.y}px)`;
+            leftContainer.style.webkitClipPath = `polygon(${nw.x}px ${nw.y}px, ${clipPoint.x}px ${nw.y}px, ${clipPoint.x}px ${se.y}px, ${nw.x}px ${se.y}px)`;
         }
 
-        // Aplica clip-path na camada da direita (visível de clipX até 100%)
-        const rightContainer = _rightLayer.getContainer ? _rightLayer.getContainer() : (_rightLayer._image || null);
         if (rightContainer) {
-            rightContainer.style.clipPath = `polygon(${clipX}px 0, 100% 0, 100% 100%, ${clipX}px 100%)`;
-            rightContainer.style.webkitClipPath = `polygon(${clipX}px 0, 100% 0, 100% 100%, ${clipX}px 100%)`;
+            rightContainer.style.clip = `rect(${nw.y}px, ${se.x}px, ${se.y}px, ${clipPoint.x}px)`;
+            rightContainer.style.clipPath = `polygon(${clipPoint.x}px ${nw.y}px, ${se.x}px ${nw.y}px, ${se.x}px ${se.y}px, ${clipPoint.x}px ${se.y}px)`;
+            rightContainer.style.webkitClipPath = `polygon(${clipPoint.x}px ${nw.y}px, ${se.x}px ${nw.y}px, ${se.x}px ${se.y}px, ${clipPoint.x}px ${se.y}px)`;
         }
     }
 
@@ -147,20 +154,27 @@
         const isXYZ = (raster.tipo === 'xyz_tiles') || (raster.url_imagem && raster.url_imagem.includes('{z}'));
         if (isXYZ) {
             const nativeMax = raster.zoom_max || 22;
-            return L.tileLayer(raster.url_imagem, {
+            const lyr = L.tileLayer(raster.url_imagem, {
                 minZoom: 1,
                 minNativeZoom: raster.zoom_min || 14,
                 maxNativeZoom: nativeMax,
                 maxZoom: 24,
                 keepBuffer: 16,
                 opacity: 1.0,
+                zIndex: 300,
                 attribution: raster.nome || 'Ortofoto'
             });
+            lyr.on('tileload', updateClip);
+            lyr.on('load', updateClip);
+            return lyr;
         } else if (raster.bbox && Array.isArray(raster.bbox) && raster.bbox.length === 2) {
-            return L.imageOverlay(raster.url_imagem, raster.bbox, {
+            const lyr = L.imageOverlay(raster.url_imagem, raster.bbox, {
                 opacity: 1.0,
+                zIndex: 300,
                 interactive: false
             });
+            lyr.on('load', updateClip);
+            return lyr;
         }
         return null;
     }
