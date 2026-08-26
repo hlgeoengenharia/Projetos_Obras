@@ -3241,10 +3241,8 @@
         }
     };
 
-    // ==========================================
-    // STORAGE — GERENCIADOR COM PASTAS
-    // ==========================================
     let currentStorageFolder = null;
+    let _editingRasterIds = new Set();
 
     function showNewFolderInput() {
         document.getElementById('new-folder-input-area').classList.remove('hidden');
@@ -3316,9 +3314,6 @@
             grid.innerHTML = `<div class="col-span-full p-6 text-center text-red-500 text-sm">Erro ao carregar pastas: ${e.message}</div>`;
         }
     }
-
-    let currentStorageFolder = '';
-    let _editingRasterIds = new Set();
 
     // Remove acentos/pontuação pra comparar nomes de forma tolerante
     // (ex: "Cabedelo - PB" e "cabedelo_pb" devem "bater").
