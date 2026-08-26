@@ -283,22 +283,23 @@
             const camadaExcluirDisabled = (!isEditing || !adminCeiling.podeExcluir) ? 'disabled' : '';
 
             return `
-                <div class="p-3 bg-white dark:bg-slate-900/90 rounded-xl border border-slate-200/80 dark:border-slate-700/60 shadow-sm transition-all" data-camada-id="${tema.id}">
-                    <div class="flex items-center justify-between gap-2 flex-wrap">
-                        <!-- Título e Gatilho do Accordion da Camada -->
-                        <div class="flex items-center gap-2 min-w-0 cursor-pointer select-none" onclick="window.UsuariosManager.toggleCamadaAccordion('${m.id}', '${tema.id}')">
+                <div class="bg-white dark:bg-slate-900/90 rounded-xl border border-slate-200/80 dark:border-slate-700/60 shadow-sm transition-all overflow-hidden" data-camada-id="${tema.id}">
+                    <!-- Cabeçalho Completo Clicável da Camada -->
+                    <div class="p-3 flex items-center justify-between gap-2 flex-wrap cursor-pointer select-none hover:bg-slate-50/80 dark:hover:bg-slate-800/60 transition-colors" onclick="window.UsuariosManager.toggleCamadaAccordion('${m.id}', '${tema.id}')">
+                        <!-- Título, Cor e Quantidade de Abas -->
+                        <div class="flex items-center gap-2 min-w-0 flex-1">
                             <span class="w-3 h-3 rounded-full shrink-0 shadow-sm" style="background-color: ${tema.cor || '#0ea5e9'}"></span>
-                            <span class="font-semibold text-xs text-slate-800 dark:text-slate-100 truncate hover:text-sky-600 transition-colors">${tema.nome}</span>
+                            <span class="font-semibold text-xs text-slate-800 dark:text-slate-100 truncate">${tema.nome}</span>
                             ${numAbas > 0 ? `
-                                <span class="text-[10px] text-slate-400 flex items-center gap-0.5">
-                                    (${numAbas} abas)
+                                <span class="text-[10px] text-slate-400 font-medium flex items-center gap-0.5">
+                                    (${numAbas} ${numAbas === 1 ? 'aba' : 'abas'})
                                     <span id="camada-chevron-${m.id}-${tema.id}" class="material-symbols-outlined text-[16px] transition-transform duration-200">expand_more</span>
                                 </span>
                             ` : ''}
                         </div>
 
-                        <!-- Checkboxes da Camada -->
-                        <div class="flex items-center gap-4 shrink-0">
+                        <!-- Checkboxes da Camada (com stopPropagation para não conflitar com o clique do card) -->
+                        <div class="flex items-center gap-4 shrink-0" onclick="event.stopPropagation()">
                             <label class="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 ${isEditing ? 'cursor-pointer' : 'cursor-default'}">
                                 <input type="checkbox" class="camada-ver-check rounded border-slate-300 dark:border-slate-600 text-sky-500 focus:ring-sky-400" ${podeVerCamada ? 'checked' : ''} ${camadaVerDisabled} onchange="window.UsuariosManager.toggleCamadaSubAbas(this, '${m.id}', '${tema.id}')">
                                 Ver Camada
@@ -309,7 +310,9 @@
                             </label>
                         </div>
                     </div>
-                    ${abasHtml}
+                    <div class="px-3 pb-3">
+                        ${abasHtml}
+                    </div>
                 </div>
             `;
         }).join('');
