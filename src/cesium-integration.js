@@ -972,9 +972,18 @@ async function processPointCloudImport(file, crs, zOffset) {
 
             let lon = x, lat = y;
             if (crs !== 'EPSG:4326') {
-                const geo = proj4(crs, 'EPSG:4326', [x, y]);
-                lon = geo[0];
-                lat = geo[1];
+                try {
+                    const geo = proj4(crs, 'EPSG:4326', [x, y]);
+                    lon = geo[0];
+                    lat = geo[1];
+                } catch(err) {
+                    continue;
+                }
+            }
+
+            // Filtro Estrito: descarta pontos corrompidos ou fora do território
+            if (isNaN(lon) || isNaN(lat) || isNaN(z) || lon < -75 || lon > -30 || lat < -35 || lat > 5 || z > 5000 || z < -500) {
+                continue;
             }
 
             let ptColor = Cesium.Color.fromCssColorString('#38bdf8');
@@ -996,11 +1005,14 @@ async function processPointCloudImport(file, crs, zOffset) {
             });
         }
 
-        uploadedPointCloud = cesiumViewer.scene.primitives.add(pointPrimitives);
-        if (pointPrimitives._pointPrimitives && pointPrimitives._pointPrimitives.length > 0) {
-            cesiumViewer.camera.flyTo({ destination: pointPrimitives._pointPrimitives[0].position });
+        if (!pointPrimitives._pointPrimitives || pointPrimitives._pointPrimitives.length === 0) {
+            alert('Aviso: Nenhum ponto válido pôde ser lido. Arquivos .laz com compressão LASzip necessitam ser exportados do Metashape no formato .las (descompactado) ou .xyz.');
+            return;
         }
-        console.log(`Nuvem Metashape renderizada com sucesso (${totalPoints} pontos).`);
+
+        uploadedPointCloud = cesiumViewer.scene.primitives.add(pointPrimitives);
+        cesiumViewer.camera.flyTo({ destination: pointPrimitives._pointPrimitives[0].position });
+        console.log(`Nuvem Metashape renderizada com sucesso (${pointPrimitives._pointPrimitives.length} pontos válidos).`);
     } catch(e) {
         console.error("Erro na nuvem:", e);
         alert("Erro ao processar arquivo de nuvem de pontos.");
