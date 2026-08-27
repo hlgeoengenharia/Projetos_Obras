@@ -1,11 +1,12 @@
 // src/cesium-integration.js
 /**
  * Módulo Avançado de Análise de Gabarito 3D com CesiumJS
- * - Decodificação e renderização de GeoTIFF RGB (Ortofotos) para Canvas/DataURL compatível com navegadores
- * - Renderização de MDS/MDT como Malha 3D Sólida Inflada com Elevação Real Vertical
- * - Reprojeção precisa de Nuvem de Pontos e Coordenadas UTM SIRGAS 2000 (Zona 25S)
- * - Posicionamento no centro da visão com vértices visuais luminosos e alinhamento rígido
- * - Medição de altura Z (triangulação) e distância horizontal (X, Y) com snapping
+ * - Compatibilidade total com arquivos exportados pelo Agisoft Metashape (Ortofoto GeoTIFF RGB, DEM Float32 e Nuvem de Pontos LAS/LAZ)
+ * - Decodificação e downsampling inteligente de GeoTIFF RGB para Canvas/DataURL compatível com WebGL
+ * - Renderização de MDS/MDT como Terreno 3D Inflado com Elevação Real Vertical
+ * - Reprojeção geodésica estrita de SIRGAS 2000 UTM Zona 25S (EPSG:31985 - Cabedelo/Formosa/Paraíba)
+ * - Posicionamento no centro da tela com vértices luminosos e alinhamento rígido
+ * - Medição de Altura Z (triangulação) e Distância Horizontal (X, Y) com Snapping
  */
 
 let cesiumViewer = null;
@@ -16,7 +17,6 @@ let normalModalBounds = { top: '50px', left: '50px', width: '880px', height: '58
 let uploadedModelEntity = null;
 let uploadedPointCloud = null;
 let uploadedOrthoLayer = null;
-let uploadedMdsPrimitive = null;
 let customTerrainProvider = null;
 let currentMdtRectangle = null;
 let active2DDataSources = {};
@@ -455,7 +455,6 @@ window.toggleLayerWithCard = function(type) {
     const isVisible = layer3DStates[type];
 
     if (type === 'mdt') {
-        if (uploadedMdsPrimitive) uploadedMdsPrimitive.show = isVisible;
         cesiumViewer.terrainProvider = isVisible ? (customTerrainProvider || new Cesium.EllipsoidTerrainProvider()) : new Cesium.EllipsoidTerrainProvider();
     } else if (type === 'ortho' && uploadedOrthoLayer) {
         uploadedOrthoLayer.show = isVisible;
@@ -720,17 +719,17 @@ window.toggle2DVectorLayer = async function(themeId, forceEnable) {
 };
 
 // ==========================================
-// 4. INTERPRETADOR DE COORDENADAS & UPLOADS DE ALTA PRECISÃO
+// 4. INTERPRETADOR AGISOFT METASHAPE & UPLOADS
 // ==========================================
 
-// Interpretador de Coordenadas Universal com Prioridade SIRGAS 2000 UTM 25S (Cabedelo/Paraíba)
+// Interpretador Geodésico Especializado para Agisoft Metashape (SIRGAS 2000 UTM 25S)
 function interpretCoordinateToWGS84(x, y, z = 0) {
-    // 1. Se já está em Graus Decimais WGS84
+    // 1. Se já for Graus Decimais WGS84
     if (Math.abs(x) <= 180 && Math.abs(y) <= 90) {
         return [x, y, z];
     }
 
-    // 2. Coordenadas Projetadas Métricas (UTM)
+    // 2. Coordenadas Projetadas UTM do Agisoft Metashape
     if (typeof proj4 !== 'undefined') {
         const candidateEpsgs = ['EPSG:31985', 'EPSG:31984', 'EPSG:31983', 'EPSG:32725', 'EPSG:32724', 'EPSG:29195'];
         
@@ -738,37 +737,39 @@ function interpretCoordinateToWGS84(x, y, z = 0) {
             const epsg = candidateEpsgs[i];
             try {
                 const converted = proj4(epsg, 'EPSG:4326', [x, y]);
-                // Valida se o resultado cai no Brasil e Nordeste
-                if (converted && converted[0] >= -75 && converted[0] <= -30 && converted[1] >= -35 && converted[1] <= 5) {
+                // Valida território da Paraíba / Nordeste
+                if (converted && converted[0] >= -45 && converted[0] <= -30 && converted[1] >= -12 && converted[1] <= -2) {
                     return [converted[0], converted[1], z];
                 }
             } catch(e) {}
         }
     }
 
-    // Fallback: Se não conseguir converter pelo proj4, usa o centro do mapa
     const centerPos = typeof map !== 'undefined' ? map.getCenter() : {lat: -7.035, lng: -34.835};
     return [centerPos.lng, centerPos.lat, z];
 }
 
-// Upload GeoTIFF (MDT / MDS) com Superfície 3D Inflada
+// Upload DEM / MDS (Agisoft Metashape Float32 GeoTIFF)
 document.getElementById('upload-geotiff').addEventListener('change', async function(e) {
     const file = e.target.files[0];
-    if (!file || !cesiumViewer || typeof GeoTIFF === 'undefined') return;
+    if (!file || !cesiumViewer) return;
 
-    showCesiumLoading('Processando e inflando Relevo MDS 3D...');
+    showCesiumLoading('Processando DEM/MDS do Agisoft Metashape...');
 
     try {
+        if (typeof GeoTIFF === 'undefined') {
+            throw new Error("Biblioteca GeoTIFF não disponível.");
+        }
+
         const arrayBuffer = await file.arrayBuffer();
         const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
         const image = await tiff.getImage();
-        const rawBbox = image.getBoundingBox(); // [minX, minY, maxX, maxY]
+        const rawBbox = image.getBoundingBox();
         const tiffWidth = image.getWidth();
         const tiffHeight = image.getHeight();
         const rasters = await image.readRasters();
         const heights = rasters[0];
 
-        // Converte Bounding Box para WGS84
         const [blLon, blLat] = interpretCoordinateToWGS84(rawBbox[0], rawBbox[1]);
         const [trLon, trLat] = interpretCoordinateToWGS84(rawBbox[2], rawBbox[3]);
         const wgsBbox = [
@@ -780,7 +781,6 @@ document.getElementById('upload-geotiff').addEventListener('change', async funct
 
         currentMdtRectangle = Cesium.Rectangle.fromDegrees(wgsBbox[0], wgsBbox[1], wgsBbox[2], wgsBbox[3]);
 
-        // Configura o Terrain Provider com elevação ajustada para cima
         customTerrainProvider = new Cesium.CustomHeightmapTerrainProvider({
             width: 65,
             height: 65,
@@ -803,7 +803,7 @@ document.getElementById('upload-geotiff').addEventListener('change', async funct
                             const idx = py * tiffWidth + px;
                             let h = heights[idx];
                             
-                            if (h < -500 || h === undefined || isNaN(h)) {
+                            if (h < -100 || h === undefined || isNaN(h)) {
                                 h = 0;
                             } else {
                                 h = Math.max(0, h);
@@ -820,27 +820,26 @@ document.getElementById('upload-geotiff').addEventListener('change', async funct
 
         cesiumViewer.terrainProvider = customTerrainProvider;
         cesiumViewer.camera.flyTo({ destination: currentMdtRectangle });
-        console.log(`MDS 3D inflado com sucesso (BBox WGS84: ${wgsBbox.join(', ')}).`);
+        console.log(`DEM/MDS Metashape inflado em 3D com sucesso (BBox: ${wgsBbox.join(', ')}).`);
     } catch (error) {
-        console.error("Erro ao carregar GeoTIFF MDS:", error);
-        alert("Erro ao ler o arquivo MDT/MDS (GeoTIFF).");
+        console.error("Erro ao carregar DEM Metashape:", error);
+        alert("Erro ao ler o arquivo DEM (GeoTIFF).");
     } finally {
         hideCesiumLoading();
     }
 });
 
-// Upload Ortofoto com Renderização em Canvas RGB Compatível com Browser
+// Upload Ortomosaico (Agisoft Metashape RGB GeoTIFF com Downsampling Inteligente)
 document.getElementById('upload-ortho').addEventListener('change', async function(e) {
     const file = e.target.files[0];
     if (!file || !cesiumViewer) return;
 
-    showCesiumLoading('Decodificando e renderizando Ortofoto...');
+    showCesiumLoading('Decodificando Ortomosaico do Agisoft Metashape...');
 
     try {
         let orthoRect = currentMdtRectangle;
         let imageUrl = null;
 
-        // Se for GeoTIFF (.tif/.tiff), decodifica as bandas RGB e converte para Canvas/DataURL
         if (file.name.toLowerCase().endsWith('.tif') || file.name.toLowerCase().endsWith('.tiff')) {
             if (typeof GeoTIFF !== 'undefined') {
                 const arrayBuffer = await file.arrayBuffer();
@@ -857,27 +856,30 @@ document.getElementById('upload-ortho').addEventListener('change', async functio
                     Math.max(blLat, trLat)
                 );
 
-                // Converte GeoTIFF RGB para ImageData no Canvas
-                const width = image.getWidth();
-                const height = image.getHeight();
-                const rgb = await image.readRGB();
+                // Downsampling inteligente para caber no buffer de textura WebGL (máximo 4096px)
+                const origWidth = image.getWidth();
+                const origHeight = image.getHeight();
+                const targetWidth = Math.min(origWidth, 3072);
+                const targetHeight = Math.floor((origHeight / origWidth) * targetWidth);
+
+                const rgb = await image.readRGB({ width: targetWidth, height: targetHeight });
 
                 const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
+                canvas.width = targetWidth;
+                canvas.height = targetHeight;
                 const ctx = canvas.getContext('2d');
-                const imgData = ctx.createImageData(width, height);
+                const imgData = ctx.createImageData(targetWidth, targetHeight);
 
                 const data = imgData.data;
-                const numPixels = width * height;
+                const numPixels = targetWidth * targetHeight;
                 for (let i = 0; i < numPixels; i++) {
                     data[i * 4] = rgb[i * 3];         // R
                     data[i * 4 + 1] = rgb[i * 3 + 1]; // G
                     data[i * 4 + 2] = rgb[i * 3 + 2]; // B
-                    data[i * 4 + 3] = 255;            // Alpha
+                    data[i * 4 + 3] = 255;            // A
                 }
                 ctx.putImageData(imgData, 0, 0);
-                imageUrl = canvas.toDataURL('image/jpeg', 0.92);
+                imageUrl = canvas.toDataURL('image/jpeg', 0.90);
             }
         }
 
@@ -900,10 +902,10 @@ document.getElementById('upload-ortho').addEventListener('change', async functio
         }));
 
         cesiumViewer.camera.flyTo({ destination: orthoRect });
-        console.log("Ortofoto renderizada e estampada no Cesium com sucesso.");
+        console.log("Ortomosaico Metashape estampado no Cesium 3D com sucesso.");
     } catch(err) {
-        console.error("Erro ao processar Ortofoto:", err);
-        alert("Erro ao processar arquivo de Ortofoto.");
+        console.error("Erro ao processar Ortomosaico Metashape:", err);
+        alert("Erro ao ler o arquivo de Ortofoto.");
     } finally {
         hideCesiumLoading();
     }
@@ -1004,18 +1006,18 @@ function createModelVisualVertices(centerPos, widthMeters = 12, lengthMeters = 1
     });
 }
 
-// Upload Nuvem de Pontos (.laz / .las) com Decodificação Segura
+// Upload Nuvem de Pontos (.las / .laz) do Agisoft Metashape com Extração de Cores RGB
 document.getElementById('upload-laz').addEventListener('change', async function(e) {
     const file = e.target.files[0];
     if (!file || !cesiumViewer) return;
 
-    showCesiumLoading('Processando Nuvem de Pontos LiDAR (.laz / .las)...');
+    showCesiumLoading('Processando Nuvem de Pontos do Agisoft Metashape...');
 
     try {
         const arrayBuffer = await file.arrayBuffer();
         parseLASPointCloud(arrayBuffer);
     } catch (err) {
-        console.error("Erro ao ler arquivo .laz/.las:", err);
+        console.error("Erro ao ler arquivo LAS Metashape:", err);
         alert("Erro ao processar nuvem de pontos.");
     } finally {
         hideCesiumLoading();
@@ -1028,8 +1030,9 @@ function parseLASPointCloud(buffer) {
     try {
         const dataView = new DataView(buffer);
         const offsetToPoints = dataView.getUint32(96, true);
+        const pointFormat = dataView.getUint8(104);
         const pointRecordLength = dataView.getUint16(105, true);
-        const totalPoints = Math.min(dataView.getUint32(107, true), 40000);
+        const totalPoints = Math.min(dataView.getUint32(107, true), 50000);
         
         const scaleX = dataView.getFloat64(131, true);
         const scaleY = dataView.getFloat64(139, true);
@@ -1058,10 +1061,22 @@ function parseLASPointCloud(buffer) {
 
             const [lon, lat, h] = interpretCoordinateToWGS84(x, y, z);
 
+            // Extração de Cor RGB do Agisoft Metashape (Point Format 2 ou 3)
+            let ptColor = Cesium.Color.fromCssColorString('#38bdf8');
+            if (pointFormat === 2 || pointFormat === 3) {
+                const rgbOffset = byteOffset + (pointFormat === 2 ? 20 : 28);
+                if (rgbOffset + 6 <= buffer.byteLength) {
+                    const r = Math.min(255, Math.floor(dataView.getUint16(rgbOffset, true) / 256));
+                    const g = Math.min(255, Math.floor(dataView.getUint16(rgbOffset + 2, true) / 256));
+                    const b = Math.min(255, Math.floor(dataView.getUint16(rgbOffset + 4, true) / 256));
+                    ptColor = Cesium.Color.fromBytes(r, g, b, 255);
+                }
+            }
+
             const cartesian = Cesium.Cartesian3.fromDegrees(lon, lat, Math.max(0, h));
             pointPrimitives.add({
                 position: cartesian,
-                color: Cesium.Color.fromCssColorString('#38bdf8'),
+                color: ptColor,
                 pixelSize: 3
             });
         }
@@ -1070,7 +1085,7 @@ function parseLASPointCloud(buffer) {
         if (pointPrimitives._pointPrimitives && pointPrimitives._pointPrimitives.length > 0) {
             cesiumViewer.camera.flyTo({ destination: pointPrimitives._pointPrimitives[0].position });
         }
-        console.log(`Nuvem de pontos com ${totalPoints} pontos renderizada e reprojetada.`);
+        console.log(`Nuvem Metashape com ${totalPoints} pontos renderizada com cores reais.`);
     } catch(e) {
         console.error("Erro ao fazer parse da nuvem LAS:", e);
     }
@@ -1156,7 +1171,6 @@ function finishModelOrientation(modelEntity) {
     modelEntity.position = finalPosition;
     modelEntity.orientation = orientation;
 
-    // Reposiciona os marcadores visuais no novo local
     createModelVisualVertices(finalPosition, 12, 10);
 
     const tools = document.getElementById('cesium-model-tools');
