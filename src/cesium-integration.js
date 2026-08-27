@@ -933,76 +933,121 @@ async function processPointCloudImport(file, crs, zOffset) {
     showCesiumLoading('Processando Nuvem de Pontos...');
 
     try {
-        const isCompressed = file.name.toLowerCase().endsWith('.laz');
-        if (isCompressed) {
-            alert('Aviso: Arquivos .laz são comprimidos. Para visualização com cores e densidade máxima no navegador, recomendamos exportar do Metashape no formato .las (descompactado) ou .xyz.');
-        }
-
-        const buffer = await file.arrayBuffer();
-        const dataView = new DataView(buffer);
-        const offsetToPoints = dataView.getUint32(96, true);
-        const pointFormat = dataView.getUint8(104);
-        const pointRecordLength = dataView.getUint16(105, true);
-        const totalPoints = Math.min(dataView.getUint32(107, true), 50000);
+        const fileNameLower = file.name.toLowerCase();
         
-        const scaleX = dataView.getFloat64(131, true);
-        const scaleY = dataView.getFloat64(139, true);
-        const scaleZ = dataView.getFloat64(147, true);
-        const offsetX = dataView.getFloat64(155, true);
-        const offsetY = dataView.getFloat64(163, true);
-        const offsetZ = dataView.getFloat64(171, true);
-
-        if (uploadedPointCloud) {
-            cesiumViewer.scene.primitives.remove(uploadedPointCloud);
+        // Alerta educativo se for .laz comprimido
+        if (fileNameLower.endsWith('.laz')) {
+            alert('⚠️ O arquivo "' + file.name + '" está compactado no formato LASzip (.laz).\n\nPara que o Cesium renderize os 2,4 milhões de pontos com cores reais exatamente sobre a Praia Formosa, exporte do Metashape no formato:\n👉 ASPRS LAS (*.las)\n👉 ou Cesium 3D Tiles (*.zip)\n👉 ou XYZ Point Cloud (*.txt)');
+            hideCesiumLoading();
+            return;
         }
 
         const pointPrimitives = new Cesium.PointPrimitiveCollection();
 
-        for (let i = 0; i < totalPoints; i++) {
-            const byteOffset = offsetToPoints + (i * pointRecordLength);
-            if (byteOffset + 12 > buffer.byteLength) break;
+        // 1. Se for arquivo de Texto XYZ (.txt / .pts / .csv)
+        if (fileNameLower.endsWith('.txt') || fileNameLower.endsWith('.pts') || fileNameLower.endsWith('.xyz') || fileNameLower.endsWith('.csv')) {
+            const textContent = await file.text();
+            const lines = textContent.split(/\r?\n/);
+            const maxPoints = Math.min(lines.length, 60000);
+            const step = Math.max(1, Math.floor(lines.length / maxPoints));
 
-            const rawX = dataView.getInt32(byteOffset, true);
-            const rawY = dataView.getInt32(byteOffset + 4, true);
-            const rawZ = dataView.getInt32(byteOffset + 8, true);
+            for (let i = 0; i < lines.length && pointPrimitives.length < maxPoints; i += step) {
+                const line = lines[i].trim();
+                if (!line || line.startsWith('#') || line.startsWith('//')) continue;
+                const parts = line.split(/[\s,;]+/);
+                if (parts.length < 3) continue;
 
-            const x = (rawX * scaleX) + offsetX;
-            const y = (rawY * scaleY) + offsetY;
-            const z = (rawZ * scaleZ) + offsetZ + zOffset;
+                const rawX = parseFloat(parts[0]);
+                const rawY = parseFloat(parts[1]);
+                const rawZ = parseFloat(parts[2]);
+                if (isNaN(rawX) || isNaN(rawY) || isNaN(rawZ)) continue;
 
-            let lon = x, lat = y;
-            if (crs !== 'EPSG:4326') {
-                try {
-                    const geo = proj4(crs, 'EPSG:4326', [x, y]);
-                    lon = geo[0];
-                    lat = geo[1];
-                } catch(err) {
-                    continue;
+                let lon = rawX, lat = rawY;
+                if (crs !== 'EPSG:4326') {
+                    try {
+                        const geo = proj4(crs, 'EPSG:4326', [rawX, rawY]);
+                        lon = geo[0];
+                        lat = geo[1];
+                    } catch(e) { continue; }
                 }
-            }
 
-            // Filtro Estrito: descarta pontos corrompidos ou fora do território
-            if (isNaN(lon) || isNaN(lat) || isNaN(z) || lon < -75 || lon > -30 || lat < -35 || lat > 5 || z > 5000 || z < -500) {
-                continue;
-            }
-
-            let ptColor = Cesium.Color.fromCssColorString('#38bdf8');
-            if (pointFormat === 2 || pointFormat === 3) {
-                const rgbOffset = byteOffset + (pointFormat === 2 ? 20 : 28);
-                if (rgbOffset + 6 <= buffer.byteLength) {
-                    const r = Math.min(255, Math.floor(dataView.getUint16(rgbOffset, true) / 256));
-                    const g = Math.min(255, Math.floor(dataView.getUint16(rgbOffset + 2, true) / 256));
-                    const b = Math.min(255, Math.floor(dataView.getUint16(rgbOffset + 4, true) / 256));
+                let ptColor = Cesium.Color.fromCssColorString('#38bdf8');
+                if (parts.length >= 6) {
+                    const r = parseInt(parts[3]) || 200;
+                    const g = parseInt(parts[4]) || 200;
+                    const b = parseInt(parts[5]) || 200;
                     ptColor = Cesium.Color.fromBytes(r, g, b, 255);
                 }
-            }
 
-            const cartesian = Cesium.Cartesian3.fromDegrees(lon, lat, Math.max(0, z));
-            pointPrimitives.add({
-                position: cartesian,
-                color: ptColor,
-                pixelSize: 3
-            });
+                pointPrimitives.add({
+                    position: Cesium.Cartesian3.fromDegrees(lon, lat, Math.max(0, rawZ + zOffset)),
+                    color: ptColor,
+                    pixelSize: 3
+                });
+            }
+        } 
+        // 2. Se for arquivo Binário ASPRS LAS (.las)
+        else {
+            const buffer = await file.arrayBuffer();
+            const dataView = new DataView(buffer);
+            const offsetToPoints = dataView.getUint32(96, true);
+            const pointFormat = dataView.getUint8(104);
+            const pointRecordLength = dataView.getUint16(105, true);
+            const totalPointsInFile = dataView.getUint32(107, true);
+            
+            const maxTargetPoints = 250000;
+            const step = Math.max(1, Math.floor(totalPointsInFile / maxTargetPoints));
+            
+            const scaleX = dataView.getFloat64(131, true);
+            const scaleY = dataView.getFloat64(139, true);
+            const scaleZ = dataView.getFloat64(147, true);
+            const offsetX = dataView.getFloat64(155, true);
+            const offsetY = dataView.getFloat64(163, true);
+            const offsetZ = dataView.getFloat64(171, true);
+
+            for (let i = 0; i < totalPointsInFile; i += step) {
+                const byteOffset = offsetToPoints + (i * pointRecordLength);
+                if (byteOffset + 12 > buffer.byteLength) break;
+
+                const rawX = dataView.getInt32(byteOffset, true);
+                const rawY = dataView.getInt32(byteOffset + 4, true);
+                const rawZ = dataView.getInt32(byteOffset + 8, true);
+
+                const x = (rawX * scaleX) + offsetX;
+                const y = (rawY * scaleY) + offsetY;
+                const z = (rawZ * scaleZ) + offsetZ + zOffset;
+
+                let lon = x, lat = y;
+                if (crs !== 'EPSG:4326') {
+                    try {
+                        const geo = proj4(crs, 'EPSG:4326', [x, y]);
+                        lon = geo[0];
+                        lat = geo[1];
+                    } catch(err) {
+                        continue;
+                    }
+                }
+
+                // Filtro Estrito: descarta se não for válido
+                if (isNaN(lon) || isNaN(lat) || isNaN(z)) continue;
+
+                let ptColor = Cesium.Color.fromCssColorString('#38bdf8');
+                if (pointFormat === 2 || pointFormat === 3) {
+                    const rgbOffset = byteOffset + (pointFormat === 2 ? 20 : 28);
+                    if (rgbOffset + 6 <= buffer.byteLength) {
+                        const r = Math.min(255, Math.floor(dataView.getUint16(rgbOffset, true) / 256));
+                        const g = Math.min(255, Math.floor(dataView.getUint16(rgbOffset + 2, true) / 256));
+                        const b = Math.min(255, Math.floor(dataView.getUint16(rgbOffset + 4, true) / 256));
+                        ptColor = Cesium.Color.fromBytes(r, g, b, 255);
+                    }
+                }
+
+                pointPrimitives.add({
+                    position: Cesium.Cartesian3.fromDegrees(lon, lat, Math.max(0, z)),
+                    color: ptColor,
+                    pixelSize: 3
+                });
+            }
         }
 
         if (!pointPrimitives._pointPrimitives || pointPrimitives._pointPrimitives.length === 0) {
@@ -1534,4 +1579,95 @@ window.exportCesiumPDF = async function() {
     } catch(e) {
         console.error("Erro ao gerar PDF:", e);
     }
+};
+
+// ==========================================
+// 8. LIMPAR / RESETAR O ANALISADOR 3D PARA NOVA ANÁLISE
+// ==========================================
+window.resetCesiumAnalysis = function() {
+    if (!cesiumViewer) return;
+
+    // 1. Cancela qualquer operação interativa e fecha diálogos
+    cancelCesiumGuidedStep();
+    closeCesiumCrsDialog();
+
+    // 2. Remove Modelo 3D importado e vértices
+    if (uploadedModelEntity) {
+        cesiumViewer.entities.remove(uploadedModelEntity);
+        uploadedModelEntity = null;
+    }
+    modelVertexEntities.forEach(v => cesiumViewer.entities.remove(v));
+    modelVertexEntities = [];
+
+    // 3. Remove Nuvem de Pontos
+    if (uploadedPointCloud) {
+        cesiumViewer.scene.primitives.remove(uploadedPointCloud);
+        uploadedPointCloud = null;
+    }
+
+    // 4. Remove Ortofoto importada
+    if (uploadedOrthoLayer) {
+        cesiumViewer.imageryLayers.remove(uploadedOrthoLayer);
+        uploadedOrthoLayer = null;
+    }
+
+    // 5. Reseta Relevo / MDT para o elipsoide padrão
+    customTerrainProvider = null;
+    currentMdtRectangle = null;
+    cesiumViewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+
+    // 6. Remove medições de Altura Z (triângulos e rótulos cotados)
+    triangleEntities.forEach(e => cesiumViewer.entities.remove(e));
+    triangleEntities = [];
+    measurePoints = [];
+
+    // 7. Remove medições de Distância XY
+    distanceEntities.forEach(e => cesiumViewer.entities.remove(e));
+    distanceEntities = [];
+    distPoints = [];
+
+    // 8. Oculta cards de ferramentas e auditoria
+    const statusContainer = document.getElementById('measurement-status-container');
+    if (statusContainer) {
+        statusContainer.style.display = 'none';
+        statusContainer.classList.add('hidden');
+    }
+    const tools = document.getElementById('cesium-model-tools');
+    if (tools) {
+        tools.classList.add('hidden');
+        tools.classList.remove('flex');
+    }
+
+    // 9. Reseta inputs de arquivo
+    const fileInputs = ['upload-glb', 'upload-geotiff', 'upload-ortho', 'upload-laz'];
+    fileInputs.forEach(id => {
+        const input = document.getElementById(id);
+        if (input) input.value = '';
+    });
+
+    // 10. Reseta estado dos cards de camadas 3D
+    layer3DStates = { mdt: true, ortho: true, model: true, pointcloud: true };
+    ['mdt', 'ortho', 'model', 'pointcloud'].forEach(type => {
+        const card = document.getElementById(`card-layer-${type}`);
+        const badge = document.getElementById(`badge-layer-${type}`);
+        const colorMap = { mdt: 'blue', ortho: 'emerald', model: 'purple', pointcloud: 'cyan' };
+        const c = colorMap[type] || 'cyan';
+        if (card && badge) {
+            card.className = `flex items-center justify-between p-2 rounded-xl border border-${c}-500/40 bg-${c}-500/15 hover:bg-${c}-500/25 cursor-pointer transition-all select-none`;
+            badge.className = `w-2.5 h-2.5 rounded-full bg-${c}-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]`;
+        }
+    });
+
+    // 11. Recentraliza a visualização
+    const mapCenter = typeof map !== 'undefined' ? map.getCenter() : {lat: -7.035, lng: -34.835};
+    cesiumViewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(mapCenter.lng, mapCenter.lat, 1800.0),
+        orientation: {
+            heading: Cesium.Math.toRadians(0.0),
+            pitch: Cesium.Math.toRadians(-45.0),
+            roll: 0.0
+        }
+    });
+
+    console.log("Analisador de Gabarito 3D resetado com sucesso.");
 };

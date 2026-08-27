@@ -119,15 +119,63 @@
 
   function showError(msg) {
     errorEl.textContent = msg;
+    errorEl.className = 'text-xs text-red-600 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2';
     errorEl.classList.remove('hidden');
   }
 
-  // Já logado? Não precisa passar pela tela de novo.
+  function showInactivityNotice() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('reason') === 'inactivity') {
+      errorEl.innerHTML = '<span class="flex items-center gap-1.5 font-semibold text-amber-700 dark:text-amber-300"><span class="material-symbols-outlined text-[18px]">lock_clock</span> Sessão encerrada por inatividade (15 min). Faça login novamente para continuar.</span>';
+      errorEl.className = 'text-xs bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded-lg px-3 py-2.5 shadow-sm';
+      errorEl.classList.remove('hidden');
+    }
+  }
+  showInactivityNotice();
+
+  async function handlePostLoginRouting(userId) {
+    try {
+      const { data: profile } = await supabaseClient.from('profiles').select('super_admin, entidade_admin').eq('id', userId).single();
+      
+      if (profile && profile.super_admin) {
+        window.location.href = 'home.html';
+        return;
+      }
+
+      const { data: membros } = await supabaseClient
+        .from('municipio_membros')
+        .select('papel, municipios(id, nome, uf)')
+        .eq('user_id', userId)
+        .eq('status', 'aprovado');
+
+      const municipiosAtribuidos = (membros || [])
+        .filter(m => m.municipios)
+        .map(m => ({ id: m.municipios.id, nome: m.municipios.nome, uf: m.municipios.uf, papel: m.papel }));
+
+      // Usuário Municipal com apenas 1 município: entra direto no mapa (index.html)
+      if (municipiosAtribuidos.length === 1 && !profile?.entidade_admin) {
+        const mun = municipiosAtribuidos[0];
+        sessionStorage.setItem('municipio_ativo', mun.id);
+        sessionStorage.setItem('municipio_ativo_nome', mun.nome);
+        window.location.href = 'index.html';
+        return;
+      }
+
+      // Diferente de municipal (múltiplos municípios): entra na Home
+      window.location.href = 'home.html';
+    } catch(err) {
+      window.location.href = 'home.html';
+    }
+  }
+
+  // Já logado?
   (async function redirectIfLoggedIn() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('reason') === 'inactivity') return;
     if (!supabaseClient) return;
     const { data } = await supabaseClient.auth.getSession();
     if (data && data.session) {
-      window.location.href = 'home.html';
+      await handlePostLoginRouting(data.session.user.id);
     }
   })();
 
@@ -143,7 +191,7 @@
     submitBtn.disabled = true;
     submitText.textContent = 'Entrando...';
 
-    const { error } = await supabaseClient.auth.signInWithPassword({
+    const { data: authData, error } = await supabaseClient.auth.signInWithPassword({
       email: emailEl.value.trim(),
       password: passwordEl.value
     });
@@ -156,7 +204,11 @@
       return;
     }
 
-    window.location.href = 'home.html';
+    if (authData && authData.user) {
+      await handlePostLoginRouting(authData.user.id);
+    } else {
+      window.location.href = 'home.html';
+    }
   });
 })();
 </script>

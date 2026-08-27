@@ -31,6 +31,7 @@
     let _allForms = {};
     let _allCamadaPerms = {};
     let _allAbaPerms = {};
+    let _allMunicipios = [];
     let _currentUserProfile = null;
     let _currentUserMembros = [];
     let _entidadesTipos = {}; // nome_entidade -> 'municipal' | 'externo' | 'outro'
@@ -65,7 +66,7 @@
             const currentUserId = _currentUserProfile ? _currentUserProfile.id : null;
 
             // 1. Carrega dados básicos em paralelo
-            const [membrosRes, temasRes, formsRes, permsCamadaRes, permsAbaRes, entidadesRes, minhasRes] = await Promise.all([
+            const [membrosRes, temasRes, formsRes, permsCamadaRes, permsAbaRes, entidadesRes, minhasRes, munRes] = await Promise.all([
                 supabaseClient
                     .from('municipio_membros')
                     .select('id, user_id, municipio_id, papel, status, entidade, cargo, solicitado_em, profiles!user_id(id, nome, email, super_admin), municipios(id, nome, uf)')
@@ -75,7 +76,8 @@
                 supabaseClient.from('permissoes_camada').select('*'),
                 supabaseClient.from('permissoes_aba').select('*'),
                 supabaseClient.from('entidades_padrao').select('nome, tipo'),
-                currentUserId ? supabaseClient.from('municipio_membros').select('*').eq('user_id', currentUserId) : Promise.resolve({ data: [] })
+                currentUserId ? supabaseClient.from('municipio_membros').select('*').eq('user_id', currentUserId) : Promise.resolve({ data: [] }),
+                supabaseClient.from('municipios').select('id, nome, uf').eq('ativo', true).order('nome')
             ]);
 
             if (membrosRes.error) throw membrosRes.error;
@@ -83,6 +85,7 @@
             _allMembros = membrosRes.data || [];
             _allTemas = temasRes.data || [];
             _currentUserMembros = minhasRes.data || [];
+            _allMunicipios = munRes.data || [];
 
             // Mapeia tipos de entidades
             _entidadesTipos = {};
@@ -276,7 +279,7 @@
                             <span class="material-symbols-outlined text-[14px]">article</span> Abas do Formulário: ${formVinculado.title || ''}
                         </div>
                         ${formVinculado.tabs.map(tab => {
-                            const userAbaPerm = _allAbaPerms[`${m.user_id}:${formVinculado.id}:${tab.id}`] || { pode_ver: podeVerCamada, pode_editar: userCamadaPerm.pode_editar };
+                            const userAbaPerm = _allAbaPerms[`${m.user_id}:${formVinculado.id}:${tab.id}`] || { pode_ver: false, pode_editar: false };
                             const abaCeiling = getAdminCeiling(tema.id, formVinculado.id, tab.id);
 
                             const verDisabled = (!isEditing || !abaCeiling.podeVer) ? 'disabled' : '';
@@ -337,6 +340,37 @@
                 </div>
             `;
         }).join('');
+
+        // Seção de Atribuição de Múltiplos Municípios (para usuários não-municipais ou SuperAdmin)
+        let atribuicaoMunicipiosHtml = '';
+        if (!isMunicipal || (_currentUserProfile && _currentUserProfile.super_admin)) {
+            const userMembros = _allMembros.filter(mb => mb.user_id === m.user_id && mb.status === 'aprovado');
+            const munIdsDoUser = new Set(userMembros.map(mb => mb.municipio_id));
+
+            atribuicaoMunicipiosHtml = `
+                <div class="mt-4 pt-3.5 border-t border-slate-200 dark:border-slate-800">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-[17px] text-sky-600 dark:text-sky-400">domain_add</span>
+                            Municípios Atribuídos a este Usuário (${entidadeNome})
+                        </span>
+                        <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Selecione as bases liberadas</span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 mt-2">
+                        ${_allMunicipios.map(mun => {
+                            const isChecked = munIdsDoUser.has(mun.id);
+                            const munDisabled = !isEditing ? 'disabled' : '';
+                            return `
+                                <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 ${isEditing ? 'cursor-pointer hover:border-sky-500' : 'cursor-default'} text-xs font-semibold text-slate-800 dark:text-slate-200 transition-all select-none">
+                                    <input type="checkbox" class="user-mun-check rounded border-slate-400 text-sky-600 focus:ring-sky-500 w-4 h-4" value="${mun.id}" ${isChecked ? 'checked' : ''} ${munDisabled}>
+                                    <span class="truncate">${mun.nome}${mun.uf ? ' - ' + mun.uf : ''}</span>
+                                </label>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+        }
 
         // Botões de Ação no topo: Editar vs (Salvar + Cancelar)
         const botoesAcaoHtml = isEditing ? `
@@ -399,6 +433,8 @@
                             </select>
                         </div>
                     </div>
+
+                    ${atribuicaoMunicipiosHtml}
 
                     <!-- Gestão Granular de Camadas e Abas -->
                     <div class="mt-4">
@@ -587,8 +623,50 @@
                 if (aErr) console.warn('Erro ao atualizar permissoes_aba:', aErr);
             }
 
-            // Atualiza cache em memória
+            // 5. Sincroniza Municípios Atribuídos para Usuários Externos / Multi-Municipais
+            const munChecks = card.querySelectorAll('.user-mun-check');
             const membroObj = _allMembros.find(m => m.id === membroId);
+
+            if (munChecks.length > 0 && membroObj) {
+                const selectedMunIds = Array.from(munChecks).filter(cb => cb.checked).map(cb => cb.value);
+                const unselectedMunIds = Array.from(munChecks).filter(cb => !cb.checked).map(cb => cb.value);
+
+                // Garante municípios marcados com status 'aprovado'
+                for (const munId of selectedMunIds) {
+                    const existing = _allMembros.find(mb => mb.user_id === userId && mb.municipio_id === munId);
+                    if (existing) {
+                        if (existing.status !== 'aprovado' || existing.papel !== papel) {
+                            await supabaseClient.from('municipio_membros').update({ status: 'aprovado', papel: papel }).eq('id', existing.id);
+                            existing.status = 'aprovado';
+                            existing.papel = papel;
+                        }
+                    } else {
+                        const { data: newMb, error: insErr } = await supabaseClient.from('municipio_membros').insert({
+                            user_id: userId,
+                            municipio_id: munId,
+                            papel: papel,
+                            status: 'aprovado',
+                            entidade: membroObj.entidade || null,
+                            cargo: membroObj.cargo || null
+                        }).select('id, user_id, municipio_id, papel, status, entidade, cargo, solicitado_em, profiles!user_id(id, nome, email, super_admin), municipios(id, nome, uf)').single();
+
+                        if (!insErr && newMb) {
+                            _allMembros.push(newMb);
+                        }
+                    }
+                }
+
+                // Revoga/remove municípios desmarcados (exceto o próprio card ativo se for único)
+                for (const unMunId of unselectedMunIds) {
+                    const existing = _allMembros.find(mb => mb.user_id === userId && mb.municipio_id === unMunId);
+                    if (existing && existing.id !== membroId) {
+                        await supabaseClient.from('municipio_membros').delete().eq('id', existing.id);
+                        _allMembros = _allMembros.filter(mb => mb.id !== existing.id);
+                    }
+                }
+            }
+
+            // Atualiza cache em memória
             if (membroObj) {
                 membroObj.papel = papel;
                 membroObj.status = status;

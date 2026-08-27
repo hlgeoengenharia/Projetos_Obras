@@ -246,6 +246,20 @@
       .leaflet-custom-label::after {
         display: none !important; /* Hide tooltip arrows */
       }
+
+      /* Forcar fundo escuro e texto branco no dialogo de CRS Cesium */
+      #cesium-crs-select,
+      #cesium-crs-zoffset {
+        background-color: #030712 !important;
+        background: #030712 !important;
+        color: #ffffff !important;
+        border: 2px solid #06b6d4 !important;
+        box-shadow: 0 0 15px rgba(6, 182, 212, 0.25) !important;
+      }
+      #cesium-crs-select option {
+        background-color: #030712 !important;
+        color: #ffffff !important;
+      }
     </style>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
@@ -993,6 +1007,9 @@
             <button onclick="exportCesiumPDF()" class="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white py-1 px-2.5 rounded-lg transition-all text-xs font-bold shadow-sm" title="Gerar Laudo em PDF">
                 <span class="material-symbols-outlined text-[15px]">picture_as_pdf</span> Laudo
             </button>
+            <button onclick="resetCesiumAnalysis()" class="flex items-center gap-1 bg-rose-600/80 hover:bg-rose-600 text-white py-1 px-2.5 rounded-lg transition-all text-xs font-bold shadow-sm border border-rose-400/30" title="Limpar/Resetar Análise e Arquivos Carregados">
+                <span class="material-symbols-outlined text-[15px]">restart_alt</span> Limpar
+            </button>
         </div>
 
         <!-- Bloco 3: Controles de Janela (Maximizar & Fechar) -->
@@ -1036,42 +1053,42 @@
     <div id="cesiumContainer" class="flex-1 w-full relative bg-black">
         
         <!-- Dialog de Confirmação Geodésica de Importação (CRS & Fuso) -->
-        <div id="cesium-crs-dialog" class="absolute inset-0 bg-slate-950/85 backdrop-blur-md z-50 hidden flex-col items-center justify-center p-4 select-none">
-            <div class="bg-slate-900 border border-cyan-500/40 rounded-2xl p-5 max-w-sm w-full shadow-2xl flex flex-col gap-4 text-white">
-                <div class="flex items-center justify-between border-b border-white/10 pb-3">
+        <div id="cesium-crs-dialog" style="background-color: rgba(0, 0, 0, 0.85) !important;" class="absolute inset-0 backdrop-blur-md z-50 hidden flex-col items-center justify-center p-4 select-none">
+            <div style="background-color: #030712 !important; border: 2px solid #06b6d4 !important;" class="rounded-2xl p-5 max-w-sm w-full shadow-[0_0_40px_rgba(6,182,212,0.3)] flex flex-col gap-4 text-white">
+                <div class="flex items-center justify-between border-b border-cyan-950 pb-3">
                     <div class="flex items-center gap-2">
                         <span class="material-symbols-outlined text-cyan-400">public</span>
-                        <span class="font-bold text-sm text-white">Georreferenciamento</span>
+                        <span class="font-bold text-sm text-white tracking-wide">Georreferenciamento</span>
                     </div>
                     <button onclick="closeCesiumCrsDialog()" class="text-white/60 hover:text-white"><span class="material-symbols-outlined text-[18px]">close</span></button>
                 </div>
-                <div class="space-y-3 text-xs">
+                <div class="space-y-3.5 text-xs">
                     <div>
-                        <span class="text-slate-400 block mb-1">Arquivo Selecionado:</span>
-                        <div id="cesium-crs-filename" class="font-mono text-cyan-300 font-bold bg-slate-950 p-2.5 rounded-lg truncate border border-white/15">arquivo.tif</div>
+                        <span class="text-cyan-200/80 font-bold block mb-1">Arquivo Selecionado:</span>
+                        <div id="cesium-crs-filename" style="background-color: #000000 !important; color: #38bdf8 !important; border: 1px solid #083344 !important;" class="font-mono font-black p-2.5 rounded-lg truncate text-xs shadow-inner">arquivo.tif</div>
                     </div>
                     <div>
-                        <span class="text-slate-200 font-semibold block mb-1">Sistema de Coordenadas (CRS):</span>
-                        <select id="cesium-crs-select" class="w-full bg-slate-950 border border-cyan-400/60 rounded-lg px-2.5 py-2 text-white font-bold focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400">
-                            <option value="EPSG:31985" selected class="bg-slate-900 text-white font-medium">SIRGAS 2000 / UTM Zone 25S (Paraíba / PE / RN)</option>
-                            <option value="EPSG:31984" class="bg-slate-900 text-white font-medium">SIRGAS 2000 / UTM Zone 24S (Ceará / Bahia)</option>
-                            <option value="EPSG:32725" class="bg-slate-900 text-white font-medium">WGS 84 / UTM Zone 25S (EPSG: 32725)</option>
-                            <option value="EPSG:4326" class="bg-slate-900 text-white font-medium">WGS 84 Geográfico (Graus Decimais Lat/Lon)</option>
-                            <option value="EPSG:29195" class="bg-slate-900 text-white font-medium">SAD69 / UTM Zone 25S (EPSG: 29195)</option>
+                        <span class="text-white font-black block mb-1 text-xs">Sistema de Coordenadas (CRS):</span>
+                        <select id="cesium-crs-select" style="background-color: #000000 !important; color: #ffffff !important; color-scheme: dark !important; border: 2px solid #06b6d4 !important;" class="w-full rounded-lg px-3 py-2.5 text-white font-black text-xs focus:outline-none shadow-md cursor-pointer">
+                            <option value="EPSG:31985" selected style="background-color: #000000 !important; color: #ffffff !important; font-weight: bold;">SIRGAS 2000 / UTM Zone 25S (Paraíba / PE / RN)</option>
+                            <option value="EPSG:31984" style="background-color: #000000 !important; color: #ffffff !important; font-weight: bold;">SIRGAS 2000 / UTM Zone 24S (Ceará / Bahia)</option>
+                            <option value="EPSG:32725" style="background-color: #000000 !important; color: #ffffff !important; font-weight: bold;">WGS 84 / UTM Zone 25S (EPSG: 32725)</option>
+                            <option value="EPSG:4326" style="background-color: #000000 !important; color: #ffffff !important; font-weight: bold;">WGS 84 Geográfico (Graus Decimais Lat/Lon)</option>
+                            <option value="EPSG:29195" style="background-color: #000000 !important; color: #ffffff !important; font-weight: bold;">SAD69 / UTM Zone 25S (EPSG: 29195)</option>
                         </select>
                     </div>
                     <div>
-                        <span class="text-slate-200 font-semibold block mb-1">Ajuste de Cota Vertical Z (Offset):</span>
+                        <span class="text-white font-black block mb-1 text-xs">Ajuste de Cota Vertical Z (Offset):</span>
                         <div class="flex items-center gap-2">
-                            <input type="number" id="cesium-crs-zoffset" value="0" class="w-24 bg-slate-950 border border-cyan-400/60 text-cyan-300 font-mono font-bold rounded-lg px-2.5 py-2 text-center focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400" step="0.5">
-                            <span class="text-slate-300 text-xs font-semibold">metros</span>
+                            <input type="number" id="cesium-crs-zoffset" value="0" style="background-color: #000000 !important; color: #38bdf8 !important; color-scheme: dark !important; border: 2px solid #06b6d4 !important;" class="w-28 font-mono font-black text-sm rounded-lg px-3 py-2 text-center focus:outline-none shadow-md" step="0.5">
+                            <span class="text-cyan-300 text-xs font-black">metros</span>
                         </div>
                     </div>
                 </div>
-                <div class="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
-                    <button onclick="closeCesiumCrsDialog()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white/80 transition-colors">Cancelar</button>
-                    <button id="btn-cesium-crs-confirm" onclick="confirmCesiumImportWithCRS()" class="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-xs font-bold text-white shadow-lg transition-all">
-                        <span class="material-symbols-outlined text-[15px]">check_circle</span> Importar no Terreno
+                <div class="flex items-center justify-end gap-2 pt-3 border-t border-cyan-950">
+                    <button onclick="closeCesiumCrsDialog()" style="background-color: #0b1329 !important;" class="px-4 py-2 rounded-lg hover:bg-slate-800 text-xs font-bold text-slate-300 transition-colors border border-white/10">Cancelar</button>
+                    <button id="btn-cesium-crs-confirm" onclick="confirmCesiumImportWithCRS()" class="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-xs font-black text-white shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-all">
+                        <span class="material-symbols-outlined text-[16px]">check_circle</span> Importar no Terreno
                     </button>
                 </div>
             </div>
@@ -1379,6 +1396,7 @@
 <script src="src/main.js"></script>
 <script src="src/measurement.js"></script>
 <script src="src/cesium-integration.js"></script>
+<script src="src/session-security.js"></script>
 <script src="src/swipe-comparator.js"></script>
 </body>
 </html>
