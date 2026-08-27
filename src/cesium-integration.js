@@ -328,27 +328,55 @@ window.toggle2DRasterLayer = function(rasterId, enable) {
         const isXYZ = (raster.tipo === 'xyz_tiles') || (raster.url_imagem && raster.url_imagem.includes('{z}'));
         let provider = null;
 
+        // Determina a extensão (Rectangle) da ortofoto
+        let orthoRectangle = null;
+        if (raster.bbox && Array.isArray(raster.bbox) && raster.bbox.length === 2) {
+            // Leaflet LatLngBounds: [[south, west], [north, east]]
+            orthoRectangle = Cesium.Rectangle.fromDegrees(raster.bbox[0][1], raster.bbox[0][0], raster.bbox[1][1], raster.bbox[1][0]);
+        } else if (raster.bbox && Array.isArray(raster.bbox) && raster.bbox.length === 4) {
+            // [west, south, east, north]
+            orthoRectangle = Cesium.Rectangle.fromDegrees(raster.bbox[0], raster.bbox[1], raster.bbox[2], raster.bbox[3]);
+        } else if (currentMdtRectangle) {
+            orthoRectangle = currentMdtRectangle;
+        }
+
         if (isXYZ) {
-            provider = new Cesium.UrlTemplateImageryProvider({
+            const providerOptions = {
                 url: raster.url_imagem,
+                tilingScheme: new Cesium.WebMercatorTilingScheme(),
                 maximumLevel: raster.zoom_max || 22,
-                minimumLevel: raster.zoom_min || 12
-            });
+                enablePickFeatures: false
+            };
+            if (orthoRectangle) {
+                providerOptions.rectangle = orthoRectangle;
+            }
+
+            provider = new Cesium.UrlTemplateImageryProvider(providerOptions);
         } else if (raster.url_imagem) {
             provider = new Cesium.SingleTileImageryProvider({
                 url: raster.url_imagem,
-                rectangle: currentMdtRectangle || Cesium.Rectangle.MAX_VALUE
+                rectangle: orthoRectangle || Cesium.Rectangle.MAX_VALUE
             });
         }
 
         if (provider) {
-            const layer = cesiumViewer.imageryLayers.addImageryProvider(provider);
-            layer.alpha = 0.95;
-            active2DImageryLayers[rasterId] = layer;
+            try {
+                const layer = cesiumViewer.imageryLayers.addImageryProvider(provider);
+                layer.alpha = 0.95;
+                active2DImageryLayers[rasterId] = layer;
+                
+                if (orthoRectangle) {
+                    cesiumViewer.camera.flyTo({ destination: orthoRectangle });
+                }
+            } catch(e) {
+                console.error("Erro ao adicionar camada raster no Cesium:", e);
+            }
         }
     } else {
         if (active2DImageryLayers[rasterId]) {
-            cesiumViewer.imageryLayers.remove(active2DImageryLayers[rasterId]);
+            try {
+                cesiumViewer.imageryLayers.remove(active2DImageryLayers[rasterId]);
+            } catch(e) {}
             delete active2DImageryLayers[rasterId];
         }
     }
