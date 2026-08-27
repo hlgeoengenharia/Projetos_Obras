@@ -277,10 +277,10 @@ window.sync2DLayersIntoCesium = function() {
         rasters.forEach(r => {
             const isChecked = active2DImageryLayers[r.id] ? 'checked' : '';
             itemsHtml += `
-                <label class="flex items-center justify-between p-1 rounded hover:bg-white/10 cursor-pointer">
-                    <span class="flex items-center gap-1.5 truncate max-w-[140px]" title="${r.nome}">
-                        <input type="checkbox" class="rounded bg-slate-800 border-slate-600 text-emerald-500 focus:ring-0" ${isChecked} onchange="toggle2DRasterLayer('${r.id}', this.checked)">
-                        <span class="truncate">${r.nome}</span>
+                <label class="flex items-center justify-between p-1.5 rounded-lg hover:bg-white/10 cursor-pointer transition-colors ${isChecked ? 'bg-white/10' : ''}">
+                    <span class="flex items-center gap-2 truncate max-w-[140px]" title="${r.nome}">
+                        <input type="checkbox" class="w-4 h-4 rounded bg-slate-800 border border-slate-400 accent-emerald-500 text-emerald-500 cursor-pointer" ${isChecked} onchange="toggle2DRasterLayer('${r.id}', this.checked)">
+                        <span class="truncate text-xs text-slate-200">${r.nome}</span>
                     </span>
                     <span class="text-[9px] text-slate-400 font-mono">Tiles</span>
                 </label>
@@ -296,11 +296,11 @@ window.sync2DLayersIntoCesium = function() {
             const isChecked = active2DDataSources[theme.id] ? 'checked' : '';
             const themeColor = theme.color || '#0ea5e9';
             itemsHtml += `
-                <label class="flex items-center justify-between p-1 rounded hover:bg-white/10 cursor-pointer">
-                    <span class="flex items-center gap-1.5 truncate max-w-[140px]" title="${theme.name}">
-                        <input type="checkbox" class="rounded bg-slate-800 border-slate-600 text-cyan-500 focus:ring-0" ${isChecked} onchange="toggle2DVectorLayer('${theme.id}', this.checked)">
-                        <span class="w-2 h-2 rounded-full shrink-0" style="background-color: ${themeColor}"></span>
-                        <span class="truncate">${theme.name}</span>
+                <label class="flex items-center justify-between p-1.5 rounded-lg hover:bg-white/10 cursor-pointer transition-colors ${isChecked ? 'bg-white/10' : ''}">
+                    <span class="flex items-center gap-2 truncate max-w-[140px]" title="${theme.name}">
+                        <input type="checkbox" class="w-4 h-4 rounded bg-slate-800 border border-slate-400 accent-cyan-500 text-cyan-500 cursor-pointer" ${isChecked} onchange="toggle2DVectorLayer('${theme.id}', this.checked)">
+                        <span class="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm" style="background-color: ${themeColor}"></span>
+                        <span class="truncate text-xs text-slate-200">${theme.name}</span>
                     </span>
                     <span class="text-[9px] text-slate-400 font-mono">Vetorial</span>
                 </label>
@@ -341,7 +341,6 @@ window.toggle2DRasterLayer = function(rasterId, enable) {
         }
 
         if (isXYZ) {
-            // Cria um Resource customizado com tratamento de erro silencioso para tiles fora de cobertura (400/404)
             const providerOptions = {
                 url: raster.url_imagem,
                 tilingScheme: new Cesium.WebMercatorTilingScheme(),
@@ -357,7 +356,6 @@ window.toggle2DRasterLayer = function(rasterId, enable) {
             
             // Silencia erros de tiles fora da mancha de cobertura
             provider.errorEvent.addEventListener(function(error) {
-                // Suprime propagação de erro para tiles ausentes
                 if (error && error.timesRetried !== undefined) {
                     error.retry = false;
                 }
@@ -390,9 +388,10 @@ window.toggle2DRasterLayer = function(rasterId, enable) {
             delete active2DImageryLayers[rasterId];
         }
     }
+    sync2DLayersIntoCesium();
 };
 
-// Alternar Camada Vetorial 2D no Cesium (Estampada no Relevo)
+// Alternar Camada Vetorial 2D no Cesium (Estampada no Relevo com Arestas Contrastantes)
 window.toggle2DVectorLayer = async function(themeId, enable) {
     if (!cesiumViewer) return;
 
@@ -425,30 +424,56 @@ window.toggle2DVectorLayer = async function(themeId, enable) {
             };
 
             try {
-                const strokeColor = Cesium.Color.fromCssColorString(theme.color || '#0ea5e9');
-                const fillColor = strokeColor.withAlpha(0.35);
+                // Cor do preenchimento baseada no tema
+                const themeHex = theme.color || '#0ea5e9';
+                const fillColor = Cesium.Color.fromCssColorString(themeHex).withAlpha(0.35);
+
+                // Cor da aresta/borda (alto contraste: amarelo/dourado para tons frios, ciano para quentes)
+                let edgeColorHex = '#fbbf24'; // Dourado / Amarelo neon contrastante padrão
+                if (themeHex.toLowerCase().includes('yellow') || themeHex.toLowerCase().includes('facc') || themeHex.toLowerCase().includes('fbbf')) {
+                    edgeColorHex = '#38bdf8'; // Ciano neon se o tema for amarelo
+                }
+                const edgeColor = Cesium.Color.fromCssColorString(edgeColorHex);
 
                 const dataSource = await Cesium.GeoJsonDataSource.load(geojson, {
                     clampToGround: true,
-                    stroke: strokeColor,
+                    stroke: edgeColor,
                     fill: fillColor,
                     strokeWidth: 3
                 });
 
-                // Desativa outlines nos polígonos no terreno para evitar warnings do Cesium
+                // Cria linhas de contorno (arestas) nítidas para cada polígono estampado
                 const entities = dataSource.entities.values;
+                const edgeEntitiesToAdd = [];
+
                 for (let i = 0; i < entities.length; i++) {
                     const entity = entities[i];
                     if (entity.polygon) {
                         entity.polygon.outline = false;
-                        entity.polygon.heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
+                        entity.polygon.classificationType = Cesium.ClassificationType.TERRAIN;
                         entity.polygon.material = fillColor;
+
+                        // Adiciona polilinha nas arestas do polígono com cor destacada
+                        const hierarchy = entity.polygon.hierarchy.getValue(Cesium.JulianDate.now());
+                        if (hierarchy && hierarchy.positions && hierarchy.positions.length > 2) {
+                            const closedPositions = [...hierarchy.positions, hierarchy.positions[0]];
+                            edgeEntitiesToAdd.push({
+                                polyline: {
+                                    positions: closedPositions,
+                                    width: 3.0,
+                                    material: edgeColor,
+                                    clampToGround: true
+                                }
+                            });
+                        }
                     }
                 }
 
+                edgeEntitiesToAdd.forEach(edgeObj => dataSource.entities.add(edgeObj));
+
                 cesiumViewer.dataSources.add(dataSource);
                 active2DDataSources[themeId] = dataSource;
-                console.log(`Tema "${theme.name}" estampado no Cesium 3D com ${geojson.features.length} feições.`);
+                console.log(`Tema "${theme.name}" estampado no Cesium 3D com ${geojson.features.length} feições e arestas contrastantes.`);
             } catch (e) {
                 console.error("Erro ao estampar GeoJSON no Cesium:", e);
             }
@@ -461,6 +486,7 @@ window.toggle2DVectorLayer = async function(themeId, enable) {
             delete active2DDataSources[themeId];
         }
     }
+    sync2DLayersIntoCesium();
 };
 
 // Controle de Visibilidade e Foco em Camadas 3D (X-Ray)
