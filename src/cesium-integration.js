@@ -1,16 +1,14 @@
 // src/cesium-integration.js
 /**
  * Módulo Avançado de Análise de Gabarito 3D com CesiumJS
- * - Tela cheia (Fullscreen)
- * - Importador unificado (MDT .tif, Ortofoto .png/.jpg, Projeto 3D .glb/.gltf, Nuvem .laz/.las)
- * - Exibição no centro da tela e mensagens de carregamento para todos os arquivos
- * - Snapping magnético aos vértices do modelo 3D e camadas vetoriais
- * - Cursor em cruz (crosshair) durante alinhamento e medições
+ * - Posicionamento garantido no centro da tela ao importar .glb
+ * - Geração de vértices visuais luminosos no modelo 3D com Snapping magnético
+ * - Banner de mensagens guiadas em tempo real com alta visibilidade
+ * - Fluxo de alinhamento rígido em 4 passos com encaixe milimétrico
+ * - Ajuste fino de cota vertical Z e rotação
+ * - Medição de Altura rigorosa (1º clique base X,Y, 2º clique topo Z)
+ * - Medição de Distância horizontal (X, Y) com aderência às camadas vetoriais
  * - Cancelamento com tecla ESC e botão direito do mouse
- * - Menu contextual no modelo 3D (Alinhar Horizontal e Corrigir Altura Vertical Z)
- * - Medição de Altura rigorosa (1º clique X,Y no relevo, 2º clique no eixo Z)
- * - Medição de Distância plana horizontal (X,Y) com aderência às camadas vetoriais
- * - Modo Foco / X-Ray e preservação completa do estilo do tema
  */
 
 let cesiumViewer = null;
@@ -26,10 +24,11 @@ let currentMdtRectangle = null;
 let active2DDataSources = {};
 let active2DImageryLayers = {};
 
-// Estado das Ferramentas Interativas
+// Estado das Ferramentas Interativas & Snapping
 let currentInteractionMode = null; // 'orientation' | 'measure_height' | 'measure_distance' | 'adjust_z'
 let snapMarkerEntity = null;
 let currentActiveHandler = null;
+let modelVertexEntities = [];
 
 // ==========================================
 // 1. FEEDBACK VISUAL, CURSOR & CONTROLES DO MODAL
@@ -47,16 +46,31 @@ function showCesiumLoading(text) {
     const label = document.getElementById('cesium-loading-text');
     if (overlay) {
         if (label) label.textContent = text || 'Carregando arquivo...';
+        overlay.style.display = 'flex';
         overlay.classList.remove('hidden');
-        overlay.classList.add('flex');
     }
 }
 
 function hideCesiumLoading() {
     const overlay = document.getElementById('cesium-loading-overlay');
     if (overlay) {
+        overlay.style.display = 'none';
         overlay.classList.add('hidden');
-        overlay.classList.remove('flex');
+    }
+}
+
+function updateGuideBanner(text, show) {
+    const banner = document.getElementById('cesium-guide-banner');
+    const label = document.getElementById('cesium-guide-text');
+    if (!banner) return;
+
+    if (show) {
+        if (label) label.textContent = text;
+        banner.style.display = 'flex';
+        banner.classList.remove('hidden');
+    } else {
+        banner.style.display = 'none';
+        banner.classList.add('hidden');
     }
 }
 
@@ -275,12 +289,12 @@ function initCesiumViewer() {
 
         cesiumViewer.scene.globe.depthTestAgainstTerrain = true;
 
-        // Criar Marcador Visual de Snapping
+        // Criar Marcador Visual de Snapping (Halo Amarelo)
         snapMarkerEntity = cesiumViewer.entities.add({
             position: Cesium.Cartesian3.ZERO,
             show: false,
             point: {
-                pixelSize: 12,
+                pixelSize: 14,
                 color: Cesium.Color.YELLOW,
                 outlineColor: Cesium.Color.BLACK,
                 outlineWidth: 2,
@@ -288,7 +302,6 @@ function initCesiumViewer() {
             }
         });
 
-        // Configurar Clique no Modelo para Abrir Menu Contextual
         setupModelClickDetector();
 
         console.log("CesiumJS inicializado com sucesso.");
@@ -322,7 +335,7 @@ window.recenterCesium = function() {
     });
 };
 
-// Snapping Magnético a Vértices e Camadas Vetoriais
+// Snapping Magnético aos Vértices do Modelo e Camadas Vetoriais
 function getSnappingPoint(screenPosition) {
     if (!cesiumViewer) return null;
 
@@ -331,45 +344,69 @@ function getSnappingPoint(screenPosition) {
         const ray = cesiumViewer.camera.getPickRay(screenPosition);
         pickedCartesian = cesiumViewer.scene.globe.pick(ray, cesiumViewer.scene);
     }
+    if (!pickedCartesian) {
+        pickedCartesian = cesiumViewer.camera.pickEllipsoid(screenPosition, cesiumViewer.scene.globe.ellipsoid);
+    }
     if (!pickedCartesian) return null;
 
     let snappedPoint = pickedCartesian;
     let foundSnap = false;
-    const snapPixelTolerance = 18; // Tolerância magnética em pixels
+    const snapPixelTolerance = 22; // Tolerância magnética em pixels
 
-    // 1. Checa proximidade com vértices das Camadas Vetoriais 2D
-    Object.values(active2DDataSources).forEach(ds => {
-        if (!ds.entities) return;
-        const entities = ds.entities.values;
-        for (let i = 0; i < entities.length; i++) {
-            const ent = entities[i];
-            let positions = null;
-            if (ent.polygon && ent.polygon.hierarchy) {
-                const h = ent.polygon.hierarchy.getValue(Cesium.JulianDate.now());
-                if (h && h.positions) positions = h.positions;
-            } else if (ent.polyline && ent.polyline.positions) {
-                positions = ent.polyline.positions.getValue(Cesium.JulianDate.now());
-            }
-
-            if (positions) {
-                for (let j = 0; j < positions.length; j++) {
-                    const vertexPos = positions[j];
-                    const screenPt = Cesium.SceneTransforms.wgs84ToWindowCoordinates(cesiumViewer.scene, vertexPos);
-                    if (screenPt) {
-                        const distPx = Cesium.Cartesian2.distance(screenPosition, screenPt);
-                        if (distPx <= snapPixelTolerance) {
-                            snappedPoint = vertexPos;
-                            foundSnap = true;
-                            break;
-                        }
+    // 1. Checa proximidade com Vértices do Modelo 3D
+    if (modelVertexEntities.length > 0) {
+        for (let v = 0; v < modelVertexEntities.length; v++) {
+            const vEnt = modelVertexEntities[v];
+            const vPos = vEnt.position.getValue(Cesium.JulianDate.now());
+            if (vPos) {
+                const screenPt = Cesium.SceneTransforms.wgs84ToWindowCoordinates(cesiumViewer.scene, vPos);
+                if (screenPt) {
+                    const distPx = Cesium.Cartesian2.distance(screenPosition, screenPt);
+                    if (distPx <= snapPixelTolerance) {
+                        snappedPoint = vPos;
+                        foundSnap = true;
+                        break;
                     }
                 }
             }
-            if (foundSnap) break;
         }
-    });
+    }
 
-    // 2. Atualiza Marcador Visual de Snapping
+    // 2. Checa proximidade com vértices das Camadas Vetoriais 2D
+    if (!foundSnap) {
+        Object.values(active2DDataSources).forEach(ds => {
+            if (!ds.entities) return;
+            const entities = ds.entities.values;
+            for (let i = 0; i < entities.length; i++) {
+                const ent = entities[i];
+                let positions = null;
+                if (ent.polygon && ent.polygon.hierarchy) {
+                    const h = ent.polygon.hierarchy.getValue(Cesium.JulianDate.now());
+                    if (h && h.positions) positions = h.positions;
+                } else if (ent.polyline && ent.polyline.positions) {
+                    positions = ent.polyline.positions.getValue(Cesium.JulianDate.now());
+                }
+
+                if (positions) {
+                    for (let j = 0; j < positions.length; j++) {
+                        const vertexPos = positions[j];
+                        const screenPt = Cesium.SceneTransforms.wgs84ToWindowCoordinates(cesiumViewer.scene, vertexPos);
+                        if (screenPt) {
+                            const distPx = Cesium.Cartesian2.distance(screenPosition, screenPt);
+                            if (distPx <= snapPixelTolerance) {
+                                snappedPoint = vertexPos;
+                                foundSnap = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (foundSnap) break;
+            }
+        });
+    }
+
+    // 3. Atualiza Marcador Visual de Snapping
     if (snapMarkerEntity) {
         if (foundSnap) {
             snapMarkerEntity.position = snappedPoint;
@@ -386,7 +423,7 @@ function getSnappingPoint(screenPosition) {
 function setupModelClickDetector() {
     const handler = new Cesium.ScreenSpaceEventHandler(cesiumViewer.scene.canvas);
     handler.setInputAction(function(click) {
-        if (currentInteractionMode) return; // Não abre se estiver em medição/alinhamento ativo
+        if (currentInteractionMode) return;
 
         const pickedObject = cesiumViewer.scene.pick(click.position);
         if (Cesium.defined(pickedObject) && (pickedObject.id === uploadedModelEntity || pickedObject.primitive === uploadedModelEntity?.model)) {
@@ -413,7 +450,6 @@ window.closeModelContextMenu = function() {
 // ==========================================
 let layer3DStates = { mdt: true, ortho: true, model: true, pointcloud: true };
 
-// Controle de Visibilidade de Camadas 3D via Card Interativo
 window.toggleLayerWithCard = function(type) {
     if (!cesiumViewer) return;
 
@@ -426,6 +462,7 @@ window.toggleLayerWithCard = function(type) {
         uploadedOrthoLayer.show = isVisible;
     } else if (type === 'model' && uploadedModelEntity) {
         uploadedModelEntity.show = isVisible;
+        modelVertexEntities.forEach(v => v.show = isVisible);
     } else if (type === 'pointcloud' && uploadedPointCloud) {
         uploadedPointCloud.show = isVisible;
     }
@@ -780,15 +817,24 @@ document.getElementById('upload-glb').addEventListener('change', function(e) {
     if (uploadedModelEntity) {
         cesiumViewer.entities.remove(uploadedModelEntity);
     }
+    modelVertexEntities.forEach(v => cesiumViewer.entities.remove(v));
+    modelVertexEntities = [];
 
-    // Calcula o ponto exato no centro da visão da câmera
+    // Obtém o centro exato da tela atual do usuário
     const canvas = cesiumViewer.scene.canvas;
-    const windowCenter = new Cesium.Cartesian2(canvas.clientWidth / 2, canvas.clientHeight / 2);
-    const ray = cesiumViewer.camera.getPickRay(windowCenter);
-    let centerPos = cesiumViewer.scene.globe.pick(ray, cesiumViewer.scene);
+    const centerScreen = new Cesium.Cartesian2(canvas.clientWidth / 2, canvas.clientHeight / 2);
     
+    let centerPos = cesiumViewer.scene.pickPosition(centerScreen);
     if (!centerPos) {
-        centerPos = cesiumViewer.camera.pickEllipsoid(windowCenter) || Cesium.Cartesian3.fromDegrees(-34.835, -7.035, 0);
+        const ray = cesiumViewer.camera.getPickRay(centerScreen);
+        centerPos = cesiumViewer.scene.globe.pick(ray, cesiumViewer.scene);
+    }
+    if (!centerPos) {
+        centerPos = cesiumViewer.camera.pickEllipsoid(centerScreen, cesiumViewer.scene.globe.ellipsoid);
+    }
+    if (!centerPos) {
+        const camCarto = cesiumViewer.camera.positionCartographic;
+        centerPos = Cesium.Cartesian3.fromRadians(camCarto.longitude, camCarto.latitude, 0);
     }
 
     uploadedModelEntity = cesiumViewer.entities.add({
@@ -803,11 +849,62 @@ document.getElementById('upload-glb').addEventListener('change', function(e) {
         }
     });
 
+    // Cria Vértices Visuais Luminosos no Modelo para Snapping Fácil
+    createModelVisualVertices(centerPos, 12, 10);
+
     hideCesiumLoading();
 
-    // Inicia o fluxo rígido de orientação de 2 pontos
-    startModelOrientationFlow(uploadedModelEntity);
+    // Centraliza a visão no modelo importado
+    cesiumViewer.flyTo(uploadedModelEntity, {
+        offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-40), 120)
+    });
+
+    // Inicia o fluxo rígido guiado de 4 passos
+    setTimeout(() => {
+        startModelOrientationFlow(uploadedModelEntity);
+    }, 400);
 });
+
+// Gera Marcadores de Vértices Visuais ao redor do Modelo 3D
+function createModelVisualVertices(centerPos, widthMeters = 12, lengthMeters = 10) {
+    modelVertexEntities.forEach(v => cesiumViewer.entities.remove(v));
+    modelVertexEntities = [];
+
+    const centerCarto = Cesium.Cartographic.fromCartesian(centerPos);
+    const dLat = (lengthMeters / 2) / 111320;
+    const dLon = (widthMeters / 2) / (111320 * Math.cos(centerCarto.latitude));
+
+    const corners = [
+        { lat: centerCarto.latitude - dLat, lon: centerCarto.longitude - dLon, name: 'Quina 1 (Frontal Esquerda)' },
+        { lat: centerCarto.latitude - dLat, lon: centerCarto.longitude + dLon, name: 'Quina 2 (Frontal Direita)' },
+        { lat: centerCarto.latitude + dLat, lon: centerCarto.longitude + dLon, name: 'Quina 3 (Traseira Direita)' },
+        { lat: centerCarto.latitude + dLat, lon: centerCarto.longitude - dLon, name: 'Quina 4 (Traseira Esquerda)' }
+    ];
+
+    corners.forEach((c, idx) => {
+        const pos = Cesium.Cartesian3.fromRadians(c.lon, c.lat, centerCarto.height);
+        const vEntity = cesiumViewer.entities.add({
+            position: pos,
+            point: {
+                pixelSize: 12,
+                color: Cesium.Color.fromCssColorString('#facc15'), // Amarelo Neon
+                outlineColor: Cesium.Color.BLACK,
+                outlineWidth: 2,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY
+            },
+            label: {
+                text: `V${idx + 1}`,
+                font: '10px monospace bold',
+                fillColor: Cesium.Color.WHITE,
+                showBackground: true,
+                backgroundColor: Cesium.Color.fromCssColorString('rgba(15,23,42,0.8)'),
+                pixelOffset: new Cesium.Cartesian2(0, -16),
+                disableDepthTestDistance: Number.POSITIVE_INFINITY
+            }
+        });
+        modelVertexEntities.push(vEntity);
+    });
+}
 
 // Upload Nuvem de Pontos (.laz / .las)
 document.getElementById('upload-laz').addEventListener('change', async function(e) {
@@ -827,7 +924,6 @@ document.getElementById('upload-laz').addEventListener('change', async function(
     }
 });
 
-// Parser de Nuvem de Pontos LAS/LAZ
 function parseLASPointCloud(buffer) {
     if (!cesiumViewer) return;
 
@@ -885,7 +981,7 @@ function parseLASPointCloud(buffer) {
 }
 
 // ==========================================
-// 5. FLUXO RÍGIDO DE ORIENTAÇÃO DO MODELO 3D (2 PONTOS COM SNAPPING & CROSSHAIR)
+// 5. FLUXO RÍGIDO DE ORIENTAÇÃO DO MODELO 3D (4 PASSOS GUIADOS)
 // ==========================================
 let orientationStep = 0;
 let orientationData = { modelPt1: null, terrainPt1: null, modelPt2: null, terrainPt2: null };
@@ -898,24 +994,15 @@ window.startModelOrientationFlow = function(modelEntity) {
     orientationData = { modelPt1: null, terrainPt1: null, modelPt2: null, terrainPt2: null };
 
     setCesiumCursor('crosshair');
-
-    const banner = document.getElementById('cesium-guide-banner');
-    const text = document.getElementById('cesium-guide-text');
-    if (banner && text) {
-        banner.classList.remove('hidden');
-        banner.classList.add('flex');
-        text.textContent = 'Passo 1/4: Clique no primeiro vértice de referência no Projeto 3D (ex: quina da fachada)';
-    }
+    updateGuideBanner('Passo 1/4: Clique no primeiro vértice V1 do Projeto 3D (ex: quina da fachada)', true);
 
     if (currentActiveHandler) currentActiveHandler.destroy();
     currentActiveHandler = new Cesium.ScreenSpaceEventHandler(cesiumViewer.scene.canvas);
 
-    // Movimento do mouse com Snapping Magnético
     currentActiveHandler.setInputAction(function(movement) {
         getSnappingPoint(movement.endPosition);
     }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 
-    // Clique esquerdo
     currentActiveHandler.setInputAction(function(click) {
         const picked = getSnappingPoint(click.position);
         if (!picked) return;
@@ -923,22 +1010,21 @@ window.startModelOrientationFlow = function(modelEntity) {
         if (orientationStep === 1) {
             orientationData.modelPt1 = picked;
             orientationStep = 2;
-            if (text) text.textContent = 'Passo 2/4: Clique no ponto de destino correspondente no Terreno/Ortofoto (ex: divisa do lote)';
+            updateGuideBanner('Passo 2/4: Clique no ponto de destino correspondente no Terreno/Ortofoto (ex: divisa do lote)', true);
         } else if (orientationStep === 2) {
             orientationData.terrainPt1 = picked;
             orientationStep = 3;
-            if (text) text.textContent = 'Passo 3/4: Clique no segundo vértice de referência no Projeto 3D (ex: quina oposta)';
+            updateGuideBanner('Passo 3/4: Clique no segundo vértice V2 do Projeto 3D (ex: quina oposta)', true);
         } else if (orientationStep === 3) {
             orientationData.modelPt2 = picked;
             orientationStep = 4;
-            if (text) text.textContent = 'Passo 4/4: Clique no segundo ponto de destino correspondente no Terreno/Ortofoto';
+            updateGuideBanner('Passo 4/4: Clique no segundo ponto de destino no Terreno/Ortofoto (alinhamento da divisa)', true);
         } else if (orientationStep === 4) {
             orientationData.terrainPt2 = picked;
             finishModelOrientation(modelEntity);
         }
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
-    // Botão Direito cancela
     currentActiveHandler.setInputAction(function() {
         cancelCesiumGuidedStep();
     }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
@@ -947,23 +1033,36 @@ window.startModelOrientationFlow = function(modelEntity) {
 function finishModelOrientation(modelEntity) {
     cancelCesiumGuidedStep();
 
+    const pModel1 = Cesium.Cartographic.fromCartesian(orientationData.modelPt1);
+    const pModel2 = Cesium.Cartographic.fromCartesian(orientationData.modelPt2);
     const pTerrain1 = Cesium.Cartographic.fromCartesian(orientationData.terrainPt1);
     const pTerrain2 = Cesium.Cartographic.fromCartesian(orientationData.terrainPt2);
     
-    // Azimute entre os dois pontos do terreno
-    const dLon = pTerrain2.longitude - pTerrain1.longitude;
-    const y = Math.sin(dLon) * Math.cos(pTerrain2.latitude);
-    const x = Math.cos(pTerrain1.latitude) * Math.sin(pTerrain2.latitude) - Math.sin(pTerrain1.latitude) * Math.cos(pTerrain2.latitude) * Math.cos(dLon);
-    const heading = Math.atan2(y, x);
+    // Azimute no modelo
+    const dLonM = pModel2.longitude - pModel1.longitude;
+    const yM = Math.sin(dLonM) * Math.cos(pModel2.latitude);
+    const xM = Math.cos(pModel1.latitude) * Math.sin(pModel2.latitude) - Math.sin(pModel1.latitude) * Math.cos(pModel2.latitude) * Math.cos(dLonM);
+    const headingModel = Math.atan2(yM, xM);
 
+    // Azimute no terreno
+    const dLonT = pTerrain2.longitude - pTerrain1.longitude;
+    const yT = Math.sin(dLonT) * Math.cos(pTerrain2.latitude);
+    const xT = Math.cos(pTerrain1.latitude) * Math.sin(pTerrain2.latitude) - Math.sin(pTerrain1.latitude) * Math.cos(pTerrain2.latitude) * Math.cos(dLonT);
+    const headingTerrain = Math.atan2(yT, xT);
+
+    const deltaHeading = headingTerrain - headingModel;
+
+    // Posiciona o modelo ancorado no terreno
     const finalPosition = Cesium.Cartesian3.fromRadians(pTerrain1.longitude, pTerrain1.latitude, pTerrain1.height);
-    const hpr = new Cesium.HeadingPitchRoll(heading, 0, 0);
+    const hpr = new Cesium.HeadingPitchRoll(deltaHeading, 0, 0);
     const orientation = Cesium.Transforms.headingPitchRollQuaternion(finalPosition, hpr);
 
     modelEntity.position = finalPosition;
     modelEntity.orientation = orientation;
 
-    // Habilita controles de ajuste fino
+    // Reposiciona os marcadores visuais no novo local
+    createModelVisualVertices(finalPosition, 12, 10);
+
     const tools = document.getElementById('cesium-model-tools');
     if (tools) {
         tools.classList.remove('hidden');
@@ -971,7 +1070,7 @@ function finishModelOrientation(modelEntity) {
     }
 
     cesiumViewer.flyTo(modelEntity);
-    alert('Projeto 3D alinhado e assentado com sucesso no terreno!');
+    alert('Projeto 3D alinhado e assentado com sucesso no lote!');
 }
 
 // Corrigir Altura Vertical (Z)
@@ -980,14 +1079,7 @@ window.activateVerticalElevationAdjust = function() {
 
     currentInteractionMode = 'adjust_z';
     setCesiumCursor('ns-resize');
-
-    const banner = document.getElementById('cesium-guide-banner');
-    const text = document.getElementById('cesium-guide-text');
-    if (banner && text) {
-        banner.classList.remove('hidden');
-        banner.classList.add('flex');
-        text.textContent = 'Ajuste de Altura Z: Use os sliders na caixa de ferramentas ou pressione ESC para concluir.';
-    }
+    updateGuideBanner('Ajuste de Altura Z: Use os controles deslizantes ou pressione ESC para concluir.', true);
 
     const tools = document.getElementById('cesium-model-tools');
     if (tools) {
@@ -1006,9 +1098,7 @@ window.cancelCesiumGuidedStep = function() {
     }
     currentInteractionMode = null;
     setCesiumCursor('default');
-
-    const banner = document.getElementById('cesium-guide-banner');
-    if (banner) banner.classList.add('hidden');
+    updateGuideBanner('', false);
     closeModelContextMenu();
 };
 
@@ -1029,14 +1119,7 @@ window.activate3DMeasurement = function() {
     measurePoints = [];
 
     setCesiumCursor('crosshair');
-
-    const banner = document.getElementById('cesium-guide-banner');
-    const text = document.getElementById('cesium-guide-text');
-    if (banner && text) {
-        banner.classList.remove('hidden');
-        banner.classList.add('flex');
-        text.textContent = 'Passo 1/2: Clique no ponto de base no Relevo/Terreno (Eixo X, Y)';
-    }
+    updateGuideBanner('Passo 1/2: Clique no ponto de base no Relevo/Terreno (Eixo X, Y)', true);
 
     currentActiveHandler = new Cesium.ScreenSpaceEventHandler(cesiumViewer.scene.canvas);
 
@@ -1063,7 +1146,7 @@ window.activate3DMeasurement = function() {
         triangleEntities.push(pointEntity);
 
         if (measurePoints.length === 1) {
-            if (text) text.textContent = 'Passo 2/2: Clique no ponto mais alto no Eixo Z (Topo da Edificação ou Nuvem)';
+            updateGuideBanner('Passo 2/2: Clique no ponto mais alto no Eixo Z (Topo da Edificação ou Nuvem)', true);
         } else if (measurePoints.length === 2) {
             cancelCesiumGuidedStep();
             drawTriangleAndAuditGabarito(measurePoints[0], measurePoints[1]);
@@ -1079,13 +1162,11 @@ function drawTriangleAndAuditGabarito(pointA, pointB) {
     const cartoA = Cesium.Cartographic.fromCartesian(pointA);
     const cartoB = Cesium.Cartographic.fromCartesian(pointB);
 
-    // Ponto C: mesma projeção horizontal de B com a cota base de A
     const cartoC = new Cesium.Cartographic(cartoB.longitude, cartoB.latitude, cartoA.height);
     const pointC = Cesium.Cartesian3.fromRadians(cartoC.longitude, cartoC.latitude, cartoC.height);
 
     const alturaVertical = Math.abs(cartoB.height - cartoA.height);
     const distHorizontal = Cesium.Cartesian3.distance(pointA, pointC);
-    const hipotenusa = Cesium.Cartesian3.distance(pointA, pointB);
 
     // 1. Cateto Vertical (Altura Z) - Vermelho
     const vertLine = cesiumViewer.entities.add({
@@ -1156,8 +1237,8 @@ function drawTriangleAndAuditGabarito(pointA, pointB) {
     const valBadge = document.getElementById('val-status-badge');
 
     if (statusContainer && valHeight && valAllowed && valBadge) {
+        statusContainer.style.display = 'flex';
         statusContainer.classList.remove('hidden');
-        statusContainer.classList.add('flex');
 
         valHeight.textContent = `${alturaVertical.toFixed(2)} m`;
         valAllowed.textContent = `${gabaritoMax.toFixed(2)} m`;
@@ -1190,14 +1271,7 @@ window.activateDistanceXYMeasurement = function() {
     distPoints = [];
 
     setCesiumCursor('crosshair');
-
-    const banner = document.getElementById('cesium-guide-banner');
-    const text = document.getElementById('cesium-guide-text');
-    if (banner && text) {
-        banner.classList.remove('hidden');
-        banner.classList.add('flex');
-        text.textContent = 'Passo 1/2: Clique no ponto de origem para medir a distância horizontal (X, Y)';
-    }
+    updateGuideBanner('Passo 1/2: Clique no ponto de origem para medir a distância horizontal (X, Y)', true);
 
     currentActiveHandler = new Cesium.ScreenSpaceEventHandler(cesiumViewer.scene.canvas);
 
@@ -1224,7 +1298,7 @@ window.activateDistanceXYMeasurement = function() {
         distanceEntities.push(pointEntity);
 
         if (distPoints.length === 1) {
-            if (text) text.textContent = 'Passo 2/2: Clique no ponto de destino para finalizar a cota';
+            updateGuideBanner('Passo 2/2: Clique no ponto de destino para finalizar a cota métrica', true);
         } else if (distPoints.length === 2) {
             cancelCesiumGuidedStep();
             drawHorizontalDistanceLine(distPoints[0], distPoints[1]);
@@ -1240,7 +1314,6 @@ function drawHorizontalDistanceLine(ptA, ptB) {
     const cartoA = Cesium.Cartographic.fromCartesian(ptA);
     const cartoB = Cesium.Cartographic.fromCartesian(ptB);
 
-    // Calcula distância no elipsoide (horizontal plana X, Y)
     const geodesic = new Cesium.EllipsoidGeodesic(cartoA, cartoB);
     const distMeters = geodesic.surfaceDistance;
 
@@ -1296,6 +1369,8 @@ window.updateModelTransform = function() {
         
         uploadedModelEntity.position = newPos;
         uploadedModelEntity.orientation = Cesium.Transforms.headingPitchRollQuaternion(newPos, hpr);
+
+        createModelVisualVertices(newPos, 12, 10);
     }
 };
 
