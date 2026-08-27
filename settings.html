@@ -1719,9 +1719,12 @@
     }
     
     function deleteBuilderTab(tabId) {
-       if(!confirm("Tem certeza que deseja remover esta aba e todos os seus campos?")) return;
+       const tab = builderTabs.find(t => t.id === tabId);
+       const tabName = tab ? tab.title : 'esta aba';
+       const msg = `⚠️ ATENÇÃO: A exclusão da aba "${tabName}" e de todos os seus campos pode causar PERDA PERMANENTE de todas as informações cadastradas nos registros existentes.\n\nDeseja realmente excluir permanentemente?`;
+       if (!confirm(msg)) return;
        builderTabs = builderTabs.filter(t => t.id !== tabId);
-       if(builderTabs.length > 0 && activeBuilderTabId === tabId) {
+       if (builderTabs.length > 0 && activeBuilderTabId === tabId) {
           activeBuilderTabId = builderTabs[0].id;
        } else if (builderTabs.length === 0) {
           activeBuilderTabId = null;
@@ -2066,7 +2069,10 @@
     }
 
     function deleteForm(id) {
-      if(confirm('Tem certeza que deseja excluir este formulário? As camadas que o utilizam poderão perder as definições de campos.')) {
+      const form = forms.find(f => f.id === id);
+      const formName = form ? form.title : 'este formulário';
+      const msg = `⚠️ ATENÇÃO: A exclusão do formulário "${formName}" pode causar PERDA PERMANENTE de todas as abas, campos e dados vinculados às camadas.\n\nDeseja realmente excluir permanentemente?`;
+      if(confirm(msg)) {
         forms = forms.filter(f => f.id !== id);
         saveFormsToStorage();
         if (typeof supabaseClient !== 'undefined' && supabaseClient) {
@@ -2078,6 +2084,22 @@
         }
       }
     }
+
+    function deleteBuilderField(btn) {
+       const fieldItem = btn.closest('.field-item');
+       if (!fieldItem) return;
+       const labelInput = fieldItem.querySelector('.field-label');
+       const fieldName = labelInput ? labelInput.value.trim() : '';
+       const fieldDisplay = fieldName ? `o campo "${fieldName}"` : 'este campo';
+       
+       const msg = `⚠️ ATENÇÃO: A exclusão d${fieldDisplay} pode causar PERDA PERMANENTE de todas as informações cadastradas neste campo em registros e feições existentes.\n\nDeseja realmente excluir permanentemente?`;
+       
+       if (confirm(msg)) {
+          fieldItem.remove();
+          syncActiveTabFields();
+       }
+    }
+    window.deleteBuilderField = deleteBuilderField;
 
     // Builder Logic for Fields
     function addField() {
@@ -2228,7 +2250,7 @@
         <button onclick="openFormulaModal('${f.id}')" id="fx-btn-${f.id}" class="p-2 mt-6 ${fxClass} rounded-full transition-colors flex items-center justify-center" title="Configurar Fórmula de Cálculo">
           <span class="material-symbols-outlined text-[20px]">functions</span>
         </button>
-        <button onclick="this.closest('.field-item').remove()" class="p-2 mt-6 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-slate-800 rounded-full transition-colors" title="Remover Campo">
+        <button type="button" onclick="deleteBuilderField(this)" class="p-2 mt-6 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-slate-800 rounded-full transition-colors" title="Excluir Campo">
           <span class="material-symbols-outlined">delete</span>
         </button>
       `;

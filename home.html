@@ -522,18 +522,56 @@ async function loadEntidadesSection() {
             `<option value="${t}" ${e.tipo === t ? 'selected' : ''}>${TIPO_LABELS[t]}</option>`
         ).join('');
         return `
-        <div class="card rounded-xl p-3 flex flex-col sm:flex-row sm:items-center gap-2" data-entidade-id="${e.id}">
-            <input class="entidade-nome flex-1 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5" value="${(e.nome || '').replace(/"/g, '&quot;')}">
-            <input class="entidade-sigla w-full sm:w-28 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5" value="${(e.sigla || '').replace(/"/g, '&quot;')}" placeholder="Sigla">
-            <select class="entidade-tipo text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5">${tipoOptions}</select>
-            <label class="flex items-center gap-1 text-xs text-slate-500 shrink-0">
-                <input type="checkbox" class="entidade-ativo" ${e.ativo ? 'checked' : ''}> Ativo
+        <div class="card rounded-xl p-3 flex flex-col sm:flex-row sm:items-center gap-2 transition-all" data-entidade-id="${e.id}" data-orig-nome="${(e.nome || '').replace(/"/g, '&quot;')}" data-orig-sigla="${(e.sigla || '').replace(/"/g, '&quot;')}" data-orig-tipo="${e.tipo}" data-orig-ativo="${e.ativo ? '1' : '0'}">
+            <input class="entidade-nome flex-1 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 disabled:opacity-80 disabled:cursor-not-allowed rounded-lg px-2 py-1.5" value="${(e.nome || '').replace(/"/g, '&quot;')}" disabled>
+            <input class="entidade-sigla w-full sm:w-28 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 disabled:opacity-80 disabled:cursor-not-allowed rounded-lg px-2 py-1.5" value="${(e.sigla || '').replace(/"/g, '&quot;')}" placeholder="Sigla" disabled>
+            <select class="entidade-tipo text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 disabled:opacity-80 disabled:cursor-not-allowed rounded-lg px-2 py-1.5" disabled>${tipoOptions}</select>
+            <label class="flex items-center gap-1 text-xs text-slate-500 shrink-0 select-none">
+                <input type="checkbox" class="entidade-ativo disabled:cursor-not-allowed" ${e.ativo ? 'checked' : ''} disabled> Ativo
             </label>
-            <button onclick="salvarEntidade('${e.id}')" class="text-xs bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary/90 shrink-0">Salvar</button>
+            <div class="flex items-center gap-1.5 shrink-0">
+                <button type="button" onclick="editarEntidade('${e.id}')" class="btn-entidade-edit text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-1 font-semibold transition-all">
+                    <span class="material-symbols-outlined text-[15px]">edit</span> Editar
+                </button>
+                <button type="button" onclick="salvarEntidade('${e.id}')" class="btn-entidade-save hidden text-xs bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary/90 font-semibold shadow-sm items-center gap-1">
+                    <span class="material-symbols-outlined text-[15px]">save</span> Salvar
+                </button>
+                <button type="button" onclick="cancelarEdicaoEntidade('${e.id}')" class="btn-entidade-cancel hidden text-xs bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-2.5 py-1.5 rounded-lg font-semibold items-center gap-1">
+                    <span class="material-symbols-outlined text-[15px]">close</span> Cancelar
+                </button>
+            </div>
         </div>`;
     }).join('') || '<div class="text-xs text-slate-400 italic py-2">Nenhuma entidade cadastrada ainda.</div>';
     document.getElementById('entidades-section').classList.remove('hidden');
 }
+
+function editarEntidade(id) {
+    const card = document.querySelector(`[data-entidade-id="${id}"]`);
+    if (!card) return;
+    card.querySelectorAll('input, select').forEach(el => el.disabled = false);
+    card.querySelector('.btn-entidade-edit').classList.add('hidden');
+    card.querySelector('.btn-entidade-save').classList.remove('hidden');
+    card.querySelector('.btn-entidade-save').classList.add('flex');
+    card.querySelector('.btn-entidade-cancel').classList.remove('hidden');
+    card.querySelector('.btn-entidade-cancel').classList.add('flex');
+}
+window.editarEntidade = editarEntidade;
+
+function cancelarEdicaoEntidade(id) {
+    const card = document.querySelector(`[data-entidade-id="${id}"]`);
+    if (!card) return;
+    card.querySelector('.entidade-nome').value = card.getAttribute('data-orig-nome') || '';
+    card.querySelector('.entidade-sigla').value = card.getAttribute('data-orig-sigla') || '';
+    card.querySelector('.entidade-tipo').value = card.getAttribute('data-orig-tipo') || 'externo';
+    card.querySelector('.entidade-ativo').checked = (card.getAttribute('data-orig-ativo') === '1');
+    card.querySelectorAll('input, select').forEach(el => el.disabled = true);
+    card.querySelector('.btn-entidade-edit').classList.remove('hidden');
+    card.querySelector('.btn-entidade-save').classList.add('hidden');
+    card.querySelector('.btn-entidade-save').classList.remove('flex');
+    card.querySelector('.btn-entidade-cancel').classList.add('hidden');
+    card.querySelector('.btn-entidade-cancel').classList.remove('flex');
+}
+window.cancelarEdicaoEntidade = cancelarEdicaoEntidade;
 
 async function salvarEntidade(id) {
     const card = document.querySelector(`[data-entidade-id="${id}"]`);
