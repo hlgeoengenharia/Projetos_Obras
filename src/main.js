@@ -5390,16 +5390,22 @@ let leafletRasterOverlays = {};
 // Registrar projeções mais comuns do Brasil no Proj4
 if (typeof proj4 !== 'undefined') {
     proj4.defs([
+        ["EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs"],
         ["EPSG:31981", "+proj=utm +zone=21 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"],
         ["EPSG:31982", "+proj=utm +zone=22 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"],
         ["EPSG:31983", "+proj=utm +zone=23 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"],
         ["EPSG:31984", "+proj=utm +zone=24 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"],
-        ["EPSG:29192", "+proj=utm +zone=22 +south +ellps=aust_SA +units=m +no_defs"],
-        ["EPSG:29193", "+proj=utm +zone=23 +south +ellps=aust_SA +units=m +no_defs"],
+        ["EPSG:31985", "+proj=utm +zone=25 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"],
+        ["EPSG:29191", "+proj=utm +zone=21 +south +ellps=aust_SA +towgs84=-67.35,3.88,-38.22,0,0,0,0 +units=m +no_defs"],
+        ["EPSG:29192", "+proj=utm +zone=22 +south +ellps=aust_SA +towgs84=-67.35,3.88,-38.22,0,0,0,0 +units=m +no_defs"],
+        ["EPSG:29193", "+proj=utm +zone=23 +south +ellps=aust_SA +towgs84=-67.35,3.88,-38.22,0,0,0,0 +units=m +no_defs"],
+        ["EPSG:29194", "+proj=utm +zone=24 +south +ellps=aust_SA +towgs84=-67.35,3.88,-38.22,0,0,0,0 +units=m +no_defs"],
+        ["EPSG:29195", "+proj=utm +zone=25 +south +ellps=aust_SA +towgs84=-67.35,3.88,-38.22,0,0,0,0 +units=m +no_defs"],
         ["EPSG:32721", "+proj=utm +zone=21 +south +datum=WGS84 +units=m +no_defs"],
         ["EPSG:32722", "+proj=utm +zone=22 +south +datum=WGS84 +units=m +no_defs"],
         ["EPSG:32723", "+proj=utm +zone=23 +south +datum=WGS84 +units=m +no_defs"],
-        ["EPSG:32724", "+proj=utm +zone=24 +south +datum=WGS84 +units=m +no_defs"]
+        ["EPSG:32724", "+proj=utm +zone=24 +south +datum=WGS84 +units=m +no_defs"],
+        ["EPSG:32725", "+proj=utm +zone=25 +south +datum=WGS84 +units=m +no_defs"]
     ]);
 }
 
