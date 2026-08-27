@@ -262,6 +262,54 @@ window.recenterCesium = function() {
 // ==========================================
 // 3. ESTAMPAGEM E CONTROLE DE CAMADAS 2D DO MAPA
 // ==========================================
+let layer3DStates = { mdt: true, ortho: true, model: true, pointcloud: true };
+
+// Controle de Visibilidade de Camadas 3D via Card Interativo
+window.toggleLayerWithCard = function(type) {
+    if (!cesiumViewer) return;
+
+    layer3DStates[type] = !layer3DStates[type];
+    const isVisible = layer3DStates[type];
+
+    if (type === 'mdt') {
+        cesiumViewer.terrainProvider = isVisible ? (customTerrainProvider || new Cesium.EllipsoidTerrainProvider()) : new Cesium.EllipsoidTerrainProvider();
+    } else if (type === 'ortho' && uploadedOrthoLayer) {
+        uploadedOrthoLayer.show = isVisible;
+    } else if (type === 'model' && uploadedModelEntity) {
+        uploadedModelEntity.show = isVisible;
+    } else if (type === 'pointcloud' && uploadedPointCloud) {
+        uploadedPointCloud.show = isVisible;
+    }
+
+    // Atualiza visual do Card 3D
+    const card = document.getElementById(`card-layer-${type}`);
+    const badge = document.getElementById(`badge-layer-${type}`);
+    const colorMap = { mdt: 'blue', ortho: 'emerald', model: 'purple', pointcloud: 'cyan' };
+    const c = colorMap[type] || 'cyan';
+
+    if (card && badge) {
+        if (isVisible) {
+            card.className = `flex items-center justify-between p-2 rounded-xl border border-${c}-500/40 bg-${c}-500/15 hover:bg-${c}-500/25 cursor-pointer transition-all select-none`;
+            badge.className = `w-2.5 h-2.5 rounded-full bg-${c}-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]`;
+        } else {
+            card.className = `flex items-center justify-between p-2 rounded-xl border border-white/5 bg-transparent opacity-40 hover:opacity-70 cursor-pointer transition-all select-none`;
+            badge.className = `w-2.5 h-2.5 rounded-full bg-slate-700`;
+        }
+    }
+};
+
+window.setLayerFocus3D = function(focusType) {
+    if (uploadedModelEntity && uploadedModelEntity.model) {
+        uploadedModelEntity.model.color = (focusType === 'model') ? Cesium.Color.WHITE : Cesium.Color.WHITE.withAlpha(0.4);
+    }
+    if (uploadedOrthoLayer) {
+        uploadedOrthoLayer.alpha = (focusType === 'ortho') ? 1.0 : 0.45;
+    }
+};
+
+// ==========================================
+// 3. ESTAMPAGEM E CONTROLE DE CAMADAS 2D DO MAPA
+// ==========================================
 window.sync2DLayersIntoCesium = function() {
     if (!cesiumViewer) return;
 
@@ -273,56 +321,57 @@ window.sync2DLayersIntoCesium = function() {
     // 1. Camadas de Ortofotos Cadastradas (XYZ Tiles)
     const rasters = window.rasterLayers || [];
     if (rasters.length > 0) {
-        itemsHtml += `<div class="text-[9px] text-emerald-400 font-bold uppercase tracking-wider mt-1">Ortofotos do Sistema</div>`;
+        itemsHtml += `<div class="text-[9px] text-emerald-400 font-bold uppercase tracking-wider mt-1 px-1">Ortofotos do Sistema</div>`;
         rasters.forEach(r => {
-            const isChecked = active2DImageryLayers[r.id] ? 'checked' : '';
+            const isChecked = !!active2DImageryLayers[r.id];
             itemsHtml += `
-                <label class="flex items-center justify-between p-1.5 rounded-lg hover:bg-white/10 cursor-pointer transition-colors ${isChecked ? 'bg-white/10' : ''}">
-                    <span class="flex items-center gap-2 truncate max-w-[140px]" title="${r.nome}">
-                        <input type="checkbox" class="w-4 h-4 rounded bg-slate-800 border border-slate-400 accent-emerald-500 text-emerald-500 cursor-pointer" ${isChecked} onchange="toggle2DRasterLayer('${r.id}', this.checked)">
-                        <span class="truncate text-xs text-slate-200">${r.nome}</span>
+                <div onclick="toggle2DRasterLayer('${r.id}')" class="flex items-center justify-between p-2 rounded-xl border transition-all cursor-pointer select-none ${isChecked ? 'border-emerald-500/40 bg-emerald-500/15 text-white shadow-sm' : 'border-white/5 bg-transparent opacity-50 hover:opacity-90 text-slate-300'}">
+                    <span class="flex items-center gap-2 truncate max-w-[150px]" title="${r.nome}">
+                        <span class="material-symbols-outlined text-[16px] text-emerald-400">satellite_alt</span>
+                        <span class="truncate text-xs font-semibold">${r.nome}</span>
                     </span>
-                    <span class="text-[9px] text-slate-400 font-mono">Tiles</span>
-                </label>
+                    <span class="w-2.5 h-2.5 rounded-full shrink-0 ${isChecked ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-slate-700'}"></span>
+                </div>
             `;
         });
     }
 
-    // 2. Camadas Vetoriais dos Temas Cadastrais (Imóveis, Lotes, Obras)
+    // 2. Camadas Vetoriais dos Temas Cadastrais (Preservando Estilo de Editar Camada)
     const themesList = window.themes || (typeof themes !== 'undefined' ? themes : []) || [];
     if (themesList.length > 0) {
-        itemsHtml += `<div class="text-[9px] text-cyan-400 font-bold uppercase tracking-wider mt-2">Temas Vetoriais (Lotes/Imóveis)</div>`;
+        itemsHtml += `<div class="text-[9px] text-cyan-400 font-bold uppercase tracking-wider mt-2 px-1">Temas Vetoriais (Lotes/Imóveis)</div>`;
         themesList.forEach(theme => {
-            const isChecked = active2DDataSources[theme.id] ? 'checked' : '';
+            const isChecked = !!active2DDataSources[theme.id];
             const themeColor = theme.color || '#0ea5e9';
             itemsHtml += `
-                <label class="flex items-center justify-between p-1.5 rounded-lg hover:bg-white/10 cursor-pointer transition-colors ${isChecked ? 'bg-white/10' : ''}">
-                    <span class="flex items-center gap-2 truncate max-w-[140px]" title="${theme.name}">
-                        <input type="checkbox" class="w-4 h-4 rounded bg-slate-800 border border-slate-400 accent-cyan-500 text-cyan-500 cursor-pointer" ${isChecked} onchange="toggle2DVectorLayer('${theme.id}', this.checked)">
+                <div onclick="toggle2DVectorLayer('${theme.id}')" class="flex items-center justify-between p-2 rounded-xl border transition-all cursor-pointer select-none ${isChecked ? 'border-cyan-500/40 bg-cyan-500/15 text-white shadow-sm' : 'border-white/5 bg-transparent opacity-50 hover:opacity-90 text-slate-300'}">
+                    <span class="flex items-center gap-2 truncate max-w-[150px]" title="${theme.name}">
                         <span class="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm" style="background-color: ${themeColor}"></span>
-                        <span class="truncate text-xs text-slate-200">${theme.name}</span>
+                        <span class="truncate text-xs font-semibold">${theme.name}</span>
                     </span>
-                    <span class="text-[9px] text-slate-400 font-mono">Vetorial</span>
-                </label>
+                    <span class="w-2.5 h-2.5 rounded-full shrink-0 ${isChecked ? 'bg-cyan-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]' : 'bg-slate-700'}"></span>
+                </div>
             `;
         });
     }
 
     if (!itemsHtml) {
-        itemsHtml = `<div class="text-white/40 text-[10px] italic py-1">Nenhuma camada 2D disponível no momento.</div>`;
+        itemsHtml = `<div class="text-white/40 text-[10px] italic py-2 px-1 text-center">Nenhuma camada 2D disponível no momento.</div>`;
     }
 
     listContainer.innerHTML = itemsHtml;
 };
 
 // Alternar Ortofoto 2D no Cesium
-window.toggle2DRasterLayer = function(rasterId, enable) {
+window.toggle2DRasterLayer = function(rasterId, forceEnable) {
     if (!cesiumViewer) return;
 
     const raster = (window.rasterLayers || []).find(r => r.id === rasterId);
     if (!raster) return;
 
-    if (enable) {
+    const shouldEnable = typeof forceEnable === 'boolean' ? forceEnable : !active2DImageryLayers[rasterId];
+
+    if (shouldEnable) {
         if (active2DImageryLayers[rasterId]) return;
 
         const isXYZ = (raster.tipo === 'xyz_tiles') || (raster.url_imagem && raster.url_imagem.includes('{z}'));
@@ -331,10 +380,8 @@ window.toggle2DRasterLayer = function(rasterId, enable) {
         // Determina a extensão (Rectangle) da ortofoto
         let orthoRectangle = null;
         if (raster.bbox && Array.isArray(raster.bbox) && raster.bbox.length === 2) {
-            // Leaflet LatLngBounds: [[south, west], [north, east]]
             orthoRectangle = Cesium.Rectangle.fromDegrees(raster.bbox[0][1], raster.bbox[0][0], raster.bbox[1][1], raster.bbox[1][0]);
         } else if (raster.bbox && Array.isArray(raster.bbox) && raster.bbox.length === 4) {
-            // [west, south, east, north]
             orthoRectangle = Cesium.Rectangle.fromDegrees(raster.bbox[0], raster.bbox[1], raster.bbox[2], raster.bbox[3]);
         } else if (currentMdtRectangle) {
             orthoRectangle = currentMdtRectangle;
@@ -354,7 +401,6 @@ window.toggle2DRasterLayer = function(rasterId, enable) {
 
             provider = new Cesium.UrlTemplateImageryProvider(providerOptions);
             
-            // Silencia erros de tiles fora da mancha de cobertura
             provider.errorEvent.addEventListener(function(error) {
                 if (error && error.timesRetried !== undefined) {
                     error.retry = false;
@@ -391,11 +437,13 @@ window.toggle2DRasterLayer = function(rasterId, enable) {
     sync2DLayersIntoCesium();
 };
 
-// Alternar Camada Vetorial 2D no Cesium (Estampada no Relevo com Arestas Contrastantes)
-window.toggle2DVectorLayer = async function(themeId, enable) {
+// Alternar Camada Vetorial 2D no Cesium (Preservando Estilo de Editar Camada)
+window.toggle2DVectorLayer = async function(themeId, forceEnable) {
     if (!cesiumViewer) return;
 
-    if (enable) {
+    const shouldEnable = typeof forceEnable === 'boolean' ? forceEnable : !active2DDataSources[themeId];
+
+    if (shouldEnable) {
         if (active2DDataSources[themeId]) return;
 
         const themesList = window.themes || (typeof themes !== 'undefined' ? themes : []) || [];
@@ -409,7 +457,7 @@ window.toggle2DVectorLayer = async function(themeId, enable) {
 
         let features = theme.features || [];
 
-        // Fallback: se ainda estiver vazio, tenta do IndexedDB
+        // Fallback: tenta recuperar do cache IndexedDB
         if (features.length === 0 && window.GeoTurboDB && typeof window.GeoTurboDB.getThemeData === 'function') {
             try {
                 const cached = await window.GeoTurboDB.getThemeData(theme.id);
@@ -424,25 +472,23 @@ window.toggle2DVectorLayer = async function(themeId, enable) {
             };
 
             try {
-                // Cor do preenchimento baseada no tema
+                // Recupera configurações completas do tema definidas em "Editar Camada"
                 const themeHex = theme.color || '#0ea5e9';
-                const fillColor = Cesium.Color.fromCssColorString(themeHex).withAlpha(0.35);
+                const opacityVal = theme.opacity !== undefined ? parseFloat(theme.opacity) : 0.4;
+                const weightVal = theme.weight !== undefined ? Math.max(1.5, parseFloat(theme.weight)) : 2.5;
+                const isDashed = !!theme.dashed;
 
-                // Cor da aresta/borda (alto contraste: amarelo/dourado para tons frios, ciano para quentes)
-                let edgeColorHex = '#fbbf24'; // Dourado / Amarelo neon contrastante padrão
-                if (themeHex.toLowerCase().includes('yellow') || themeHex.toLowerCase().includes('facc') || themeHex.toLowerCase().includes('fbbf')) {
-                    edgeColorHex = '#38bdf8'; // Ciano neon se o tema for amarelo
-                }
-                const edgeColor = Cesium.Color.fromCssColorString(edgeColorHex);
+                const fillColor = Cesium.Color.fromCssColorString(themeHex).withAlpha(Math.min(0.8, opacityVal));
+                const edgeColor = Cesium.Color.fromCssColorString(themeHex);
 
                 const dataSource = await Cesium.GeoJsonDataSource.load(geojson, {
                     clampToGround: true,
                     stroke: edgeColor,
                     fill: fillColor,
-                    strokeWidth: 3
+                    strokeWidth: weightVal
                 });
 
-                // Cria linhas de contorno (arestas) nítidas para cada polígono estampado
+                // Renderiza polígonos no terreno e arestas com espessura e estilo do tema
                 const entities = dataSource.entities.values;
                 const edgeEntitiesToAdd = [];
 
@@ -453,18 +499,28 @@ window.toggle2DVectorLayer = async function(themeId, enable) {
                         entity.polygon.classificationType = Cesium.ClassificationType.TERRAIN;
                         entity.polygon.material = fillColor;
 
-                        // Adiciona polilinha nas arestas do polígono com cor destacada
+                        // Adiciona as arestas respeitando a espessura e tracejado do tema
                         const hierarchy = entity.polygon.hierarchy.getValue(Cesium.JulianDate.now());
                         if (hierarchy && hierarchy.positions && hierarchy.positions.length > 2) {
                             const closedPositions = [...hierarchy.positions, hierarchy.positions[0]];
+                            const polylineMaterial = isDashed 
+                                ? new Cesium.PolylineDashMaterialProperty({ color: edgeColor, dashLength: 16.0 })
+                                : edgeColor;
+
                             edgeEntitiesToAdd.push({
                                 polyline: {
                                     positions: closedPositions,
-                                    width: 3.0,
-                                    material: edgeColor,
+                                    width: weightVal + 1.0,
+                                    material: polylineMaterial,
                                     clampToGround: true
                                 }
                             });
+                        }
+                    } else if (entity.polyline) {
+                        entity.polyline.clampToGround = true;
+                        entity.polyline.width = weightVal + 1.0;
+                        if (isDashed) {
+                            entity.polyline.material = new Cesium.PolylineDashMaterialProperty({ color: edgeColor, dashLength: 16.0 });
                         }
                     }
                 }
@@ -473,7 +529,7 @@ window.toggle2DVectorLayer = async function(themeId, enable) {
 
                 cesiumViewer.dataSources.add(dataSource);
                 active2DDataSources[themeId] = dataSource;
-                console.log(`Tema "${theme.name}" estampado no Cesium 3D com ${geojson.features.length} feições e arestas contrastantes.`);
+                console.log(`Tema "${theme.name}" estampado no Cesium 3D preservando estilo (Cor: ${themeHex}, Opacidade: ${opacityVal}, Espessura: ${weightVal}).`);
             } catch (e) {
                 console.error("Erro ao estampar GeoJSON no Cesium:", e);
             }
@@ -487,21 +543,6 @@ window.toggle2DVectorLayer = async function(themeId, enable) {
         }
     }
     sync2DLayersIntoCesium();
-};
-
-// Controle de Visibilidade e Foco em Camadas 3D (X-Ray)
-window.toggleLayer = function(type, visible) {
-    if (!cesiumViewer) return;
-
-    if (type === 'mdt') {
-        cesiumViewer.terrainProvider = visible ? (customTerrainProvider || new Cesium.EllipsoidTerrainProvider()) : new Cesium.EllipsoidTerrainProvider();
-    } else if (type === 'ortho' && uploadedOrthoLayer) {
-        uploadedOrthoLayer.show = visible;
-    } else if (type === 'model' && uploadedModelEntity) {
-        uploadedModelEntity.show = visible;
-    } else if (type === 'pointcloud' && uploadedPointCloud) {
-        uploadedPointCloud.show = visible;
-    }
 };
 
 window.setLayerFocus3D = function(focusType) {

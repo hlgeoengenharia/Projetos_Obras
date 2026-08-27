@@ -906,14 +906,14 @@
 
 <!-- Cesium 3D Analysis Modal (Floating & Resizable with Fullscreen Mode) -->
 <div id="cesium-modal" class="fixed z-[130] bg-slate-900/95 backdrop-blur-2xl border border-white/20 shadow-2xl rounded-2xl hidden flex-col overflow-hidden transition-all duration-300" style="top: 50px; left: 50px; width: 880px; height: 580px; min-width: 500px; min-height: 340px;">
-    <!-- Modal Header Unificado (Título + Todas as Ferramentas na Mesma Linha) -->
-    <div id="cesium-modal-header" class="flex flex-wrap items-center justify-between gap-2 bg-slate-800/90 px-3.5 py-2 border-b border-white/10 cursor-move shrink-0 select-none">
+    <!-- Modal Header Unificado (Ícone + Todas as Ferramentas na Mesma Linha) -->
+    <div id="cesium-modal-header" class="flex flex-wrap items-center justify-between gap-2 bg-slate-800/90 px-3 py-1.5 border-b border-white/10 cursor-move shrink-0 select-none">
         
-        <!-- Bloco 1: Título -->
-        <div class="flex items-center gap-2">
-            <h2 class="text-white font-black flex items-center gap-1.5 text-xs md:text-sm uppercase tracking-wider whitespace-nowrap">
-                <span class="material-symbols-outlined text-cyan-400 text-[20px]">3d_rotation</span> Análise de Gabarito 3D
-            </h2>
+        <!-- Bloco 1: Apenas Ícone 3D -->
+        <div class="flex items-center">
+            <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-900 border border-white/20 shadow-inner text-cyan-400" title="Análise de Gabarito 3D">
+                <span class="material-symbols-outlined text-[20px]">3d_rotation</span>
+            </div>
         </div>
 
         <!-- Bloco 2: Todas as Ferramentas na Mesma Linha -->
@@ -966,17 +966,17 @@
                 </div>
             </div>
 
-            <!-- Input Gabarito -->
-            <div class="flex items-center gap-1 bg-slate-900 border border-white/20 rounded-lg px-2 py-1">
-                <span class="text-white/70 font-semibold text-[10px]">Gabarito:</span>
-                <input type="number" id="gabarito-limit" value="12" class="w-12 bg-transparent text-cyan-400 font-bold text-xs focus:outline-none text-right font-mono" step="0.5">
-                <span class="text-white/50 text-[10px]">m</span>
+            <!-- Input Gabarito Visível e Nítido -->
+            <div class="flex items-center gap-1.5 bg-slate-900/90 border border-white/20 rounded-lg px-2.5 py-1 shadow-inner">
+                <span class="text-white/80 font-bold text-[11px] whitespace-nowrap">Gabarito:</span>
+                <input type="number" id="gabarito-limit" value="12" class="w-12 bg-slate-950/90 border border-white/15 text-cyan-400 font-black text-xs rounded px-1 py-0.5 focus:outline-none focus:border-cyan-400 text-center font-mono" step="0.5">
+                <span class="text-white/60 text-[11px] font-semibold">m</span>
             </div>
 
             <div class="w-[1px] h-5 bg-white/20 mx-0.5"></div>
 
             <!-- Ferramentas de Análise -->
-            <button onclick="activate3DMeasurement()" id="btn-measure-3d" class="flex items-center gap-1 bg-cyan-600/90 hover:bg-cyan-500 text-white py-1 px-2 rounded-lg transition-all text-xs font-bold shadow-sm" title="Medir Altura com Triangulação">
+            <button onclick="activate3DMeasurement()" id="btn-measure-3d" class="flex items-center gap-1 bg-cyan-600/90 hover:bg-cyan-500 text-white py-1 px-2.5 rounded-lg transition-all text-xs font-bold shadow-sm" title="Medir Altura com Triangulação">
                 <span class="material-symbols-outlined text-[15px]">straighten</span> Altura
             </button>
             <button onclick="activatePathMeasurement()" id="btn-measure-path" class="flex items-center justify-center w-7 h-7 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-all border border-white/10" title="Medir Distância">
@@ -1030,46 +1030,46 @@
     <!-- Cesium Viewer Container -->
     <div id="cesiumContainer" class="flex-1 w-full relative bg-black">
         
-        <!-- Layer Manager (Camadas 3D & 2D) -->
-        <div id="cesium-layer-manager" class="absolute top-3 left-3 z-20 bg-slate-950/85 backdrop-blur-xl border border-white/20 rounded-xl p-3 flex flex-col gap-2 w-56 text-white text-xs shadow-2xl">
-            <div class="font-bold border-b border-white/10 pb-1.5 flex items-center justify-between">
+        <!-- Layer Manager (Camadas 3D & 2D) Expansível até embaixo sem faixa branca de rolagem -->
+        <div id="cesium-layer-manager" class="absolute top-3 left-3 bottom-3 z-20 bg-slate-950/90 backdrop-blur-xl border border-white/20 rounded-2xl p-3 flex flex-col gap-2.5 w-60 text-white text-xs shadow-2xl overflow-hidden">
+            <div class="font-bold border-b border-white/10 pb-1.5 flex items-center justify-between shrink-0">
                 <span class="flex items-center gap-1.5 text-cyan-400 font-black tracking-wider text-[11px] uppercase">
                     <span class="material-symbols-outlined text-[15px]">layers</span> Camadas 3D
                 </span>
                 <span class="text-[9px] text-slate-400">Foco/X-Ray</span>
             </div>
             
-            <div class="flex flex-col gap-1.5">
-                <label class="flex items-center justify-between p-1.5 rounded-lg hover:bg-white/10 cursor-pointer transition-colors" onclick="setLayerFocus3D('mdt')">
-                    <span class="flex items-center gap-2 font-medium text-xs">
-                        <input type="checkbox" id="toggle-layer-mdt" class="w-4 h-4 rounded bg-slate-800 border border-slate-400 accent-blue-500 text-blue-500 cursor-pointer" checked onchange="toggleLayer('mdt', this.checked)">
-                        <span class="material-symbols-outlined text-[16px] text-blue-400">terrain</span> Relevo MDT
+            <div class="flex flex-col gap-1.5 shrink-0">
+                <div id="card-layer-mdt" onclick="toggleLayerWithCard('mdt')" class="flex items-center justify-between p-2 rounded-xl border border-blue-500/40 bg-blue-500/15 hover:bg-blue-500/25 cursor-pointer transition-all select-none">
+                    <span class="flex items-center gap-2 font-semibold text-xs text-white">
+                        <span class="material-symbols-outlined text-[17px] text-blue-400">terrain</span> Relevo MDT
                     </span>
-                </label>
+                    <span id="badge-layer-mdt" class="w-2.5 h-2.5 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.8)]"></span>
+                </div>
                 
-                <label class="flex items-center justify-between p-1.5 rounded-lg hover:bg-white/10 cursor-pointer transition-colors" onclick="setLayerFocus3D('ortho')">
-                    <span class="flex items-center gap-2 font-medium text-xs">
-                        <input type="checkbox" id="toggle-layer-ortho" class="w-4 h-4 rounded bg-slate-800 border border-slate-400 accent-emerald-500 text-emerald-500 cursor-pointer" checked onchange="toggleLayer('ortho', this.checked)">
-                        <span class="material-symbols-outlined text-[16px] text-emerald-400">satellite_alt</span> Ortofoto 3D
+                <div id="card-layer-ortho" onclick="toggleLayerWithCard('ortho')" class="flex items-center justify-between p-2 rounded-xl border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 cursor-pointer transition-all select-none">
+                    <span class="flex items-center gap-2 font-semibold text-xs text-white">
+                        <span class="material-symbols-outlined text-[17px] text-emerald-400">satellite_alt</span> Ortofoto 3D
                     </span>
-                </label>
+                    <span id="badge-layer-ortho" class="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
+                </div>
 
-                <label class="flex items-center justify-between p-1.5 rounded-lg hover:bg-white/10 cursor-pointer transition-colors" onclick="setLayerFocus3D('model')">
-                    <span class="flex items-center gap-2 font-medium text-xs">
-                        <input type="checkbox" id="toggle-layer-model" class="w-4 h-4 rounded bg-slate-800 border border-slate-400 accent-purple-500 text-purple-500 cursor-pointer" checked onchange="toggleLayer('model', this.checked)">
-                        <span class="material-symbols-outlined text-[16px] text-purple-400">domain</span> Projeto 3D (.glb)
+                <div id="card-layer-model" onclick="toggleLayerWithCard('model')" class="flex items-center justify-between p-2 rounded-xl border border-purple-500/40 bg-purple-500/15 hover:bg-purple-500/25 cursor-pointer transition-all select-none">
+                    <span class="flex items-center gap-2 font-semibold text-xs text-white">
+                        <span class="material-symbols-outlined text-[17px] text-purple-400">domain</span> Projeto 3D (.glb)
                     </span>
-                </label>
+                    <span id="badge-layer-model" class="w-2.5 h-2.5 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.8)]"></span>
+                </div>
 
-                <label class="flex items-center justify-between p-1.5 rounded-lg hover:bg-white/10 cursor-pointer transition-colors" onclick="setLayerFocus3D('pointcloud')">
-                    <span class="flex items-center gap-2 font-medium text-xs">
-                        <input type="checkbox" id="toggle-layer-pointcloud" class="w-4 h-4 rounded bg-slate-800 border border-slate-400 accent-cyan-500 text-cyan-500 cursor-pointer" checked onchange="toggleLayer('pointcloud', this.checked)">
-                        <span class="material-symbols-outlined text-[16px] text-cyan-400">grain</span> Nuvem (.laz)
+                <div id="card-layer-pointcloud" onclick="toggleLayerWithCard('pointcloud')" class="flex items-center justify-between p-2 rounded-xl border border-cyan-500/40 bg-cyan-500/15 hover:bg-cyan-500/25 cursor-pointer transition-all select-none">
+                    <span class="flex items-center gap-2 font-semibold text-xs text-white">
+                        <span class="material-symbols-outlined text-[17px] text-cyan-400">grain</span> Nuvem (.laz)
                     </span>
-                </label>
+                    <span id="badge-layer-pointcloud" class="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]"></span>
+                </div>
             </div>
             
-            <div class="font-bold border-b border-white/10 pb-1.5 mt-2 flex justify-between items-center">
+            <div class="font-bold border-b border-white/10 pb-1.5 mt-1 flex justify-between items-center shrink-0">
                 <span class="flex items-center gap-1.5 text-emerald-400 font-black tracking-wider text-[11px] uppercase">
                     <span class="material-symbols-outlined text-[15px]">map</span> Camadas 2D (Mapa)
                 </span>
@@ -1077,7 +1077,9 @@
                     <span class="material-symbols-outlined text-[15px]">sync</span>
                 </button>
             </div>
-            <div id="cesium-2d-layers-list" class="flex flex-col gap-1 max-h-36 overflow-y-auto pr-1">
+            
+            <!-- Lista 2D com scroll customizado ultra fino e escuro -->
+            <div id="cesium-2d-layers-list" class="flex-1 flex flex-col gap-1.5 overflow-y-auto pr-1 select-none scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
                 <div class="text-white/40 text-[10px] italic py-1">Sincronizando feições e ortofotos do mapa...</div>
             </div>
         </div>
