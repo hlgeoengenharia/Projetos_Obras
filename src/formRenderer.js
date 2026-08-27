@@ -308,7 +308,7 @@ function renderMultipleTab(tab, featureData, isEditMode) {
     
     if (tab.fields && tab.fields.length > 0) {
         tab.fields.forEach(f => {
-            html += `<div class="${['textarea', 'attachment', 'photo', 'geolocation', 'cep', 'hiperlink'].includes(f.type) ? 'md:col-span-2' : ''}">
+            html += `<div class="${['textarea', 'attachment', 'photo', 'geolocation', 'cep', 'hiperlink', 'hiperlink_1n', 'table_join'].includes(f.type) ? 'md:col-span-2' : ''}">
                 <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">${f.label}</label>
                 ${window.generateFeatureInputHtml ? window.generateFeatureInputHtml(f, '', true, true) : ''}
             </div>`;
@@ -381,7 +381,7 @@ window.toggleMultipleForm = function(tabId, showForm) {
             const subformContainer = formView.querySelector('#multiple-form-inputs-' + tabId);
             if (subformContainer) {
                 subformContainer.innerHTML = tab.fields.map(f => {
-                    return `<div class="${['textarea', 'attachment', 'photo', 'geolocation', 'cep', 'hiperlink'].includes(f.type) ? 'md:col-span-2' : ''}">
+                    return `<div class="${['textarea', 'attachment', 'photo', 'geolocation', 'cep', 'hiperlink', 'hiperlink_1n', 'table_join'].includes(f.type) ? 'md:col-span-2' : ''}">
                         <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">${f.label}</label>
                         ${typeof generateFeatureInputHtml !== 'undefined' ? generateFeatureInputHtml(f, '', true, true) : ''}
                     </div>`;
@@ -420,7 +420,7 @@ window.editMultipleRecord = function(tabId, idx, readonly = false) {
         const subformContainer = formView.querySelector('#multiple-form-inputs-' + tabId);
         if (subformContainer) {
             subformContainer.innerHTML = tab.fields.map(f => {
-                return `<div class="${['textarea', 'attachment', 'photo', 'geolocation', 'cep', 'hiperlink'].includes(f.type) ? 'md:col-span-2' : ''}">
+                return `<div class="${['textarea', 'attachment', 'photo', 'geolocation', 'cep', 'hiperlink', 'hiperlink_1n', 'table_join'].includes(f.type) ? 'md:col-span-2' : ''}">
                     <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">${f.label}</label>
                     ${typeof generateFeatureInputHtml !== 'undefined' ? generateFeatureInputHtml(f, record[f.id] || '', !readonly, true) : ''}
                 </div>`;
