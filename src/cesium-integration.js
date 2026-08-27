@@ -341,10 +341,12 @@ window.toggle2DRasterLayer = function(rasterId, enable) {
         }
 
         if (isXYZ) {
+            // Cria um Resource customizado com tratamento de erro silencioso para tiles fora de cobertura (400/404)
             const providerOptions = {
                 url: raster.url_imagem,
                 tilingScheme: new Cesium.WebMercatorTilingScheme(),
                 maximumLevel: raster.zoom_max || 22,
+                hasAlphaChannel: true,
                 enablePickFeatures: false
             };
             if (orthoRectangle) {
@@ -352,6 +354,14 @@ window.toggle2DRasterLayer = function(rasterId, enable) {
             }
 
             provider = new Cesium.UrlTemplateImageryProvider(providerOptions);
+            
+            // Silencia erros de tiles fora da mancha de cobertura
+            provider.errorEvent.addEventListener(function(error) {
+                // Suprime propagação de erro para tiles ausentes
+                if (error && error.timesRetried !== undefined) {
+                    error.retry = false;
+                }
+            });
         } else if (raster.url_imagem) {
             provider = new Cesium.SingleTileImageryProvider({
                 url: raster.url_imagem,
@@ -424,6 +434,17 @@ window.toggle2DVectorLayer = async function(themeId, enable) {
                     fill: fillColor,
                     strokeWidth: 3
                 });
+
+                // Desativa outlines nos polígonos no terreno para evitar warnings do Cesium
+                const entities = dataSource.entities.values;
+                for (let i = 0; i < entities.length; i++) {
+                    const entity = entities[i];
+                    if (entity.polygon) {
+                        entity.polygon.outline = false;
+                        entity.polygon.heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
+                        entity.polygon.material = fillColor;
+                    }
+                }
 
                 cesiumViewer.dataSources.add(dataSource);
                 active2DDataSources[themeId] = dataSource;
