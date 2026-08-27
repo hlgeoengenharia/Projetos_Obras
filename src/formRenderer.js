@@ -204,8 +204,44 @@ function renderMultipleTab(tab, featureData, isEditMode) {
     } catch(e) { records = []; }
     if (!Array.isArray(records)) records = [];
     
-    let isHiperlink = tab.fields && tab.fields.length > 0 && tab.fields[0].type === 'hiperlink';
+    // Identifica os campos que devem aparecer no resumo da tabela
+    let summaryFields = (tab.fields || []).filter(f => f.showInSummary);
+    if (summaryFields.length === 0 && tab.fields && tab.fields.length > 0) {
+        summaryFields = tab.fields.slice(0, 2);
+    }
     
+    const totalCols = summaryFields.length + (isEditMode ? 1 : 0);
+
+    // Formata o valor exibido na célula da tabela de resumo
+    function formatSummaryCellValue(field, rawVal) {
+        if (rawVal === undefined || rawVal === null || rawVal === '') return '<span class="text-slate-400 opacity-60">---</span>';
+        
+        try {
+            if (field.type === 'photo' || field.type === 'attachment') {
+                const arr = Array.isArray(rawVal) ? rawVal : (typeof rawVal === 'string' && rawVal.startsWith('[') ? JSON.parse(rawVal) : (rawVal ? [rawVal] : []));
+                if (arr.length === 0) return '<span class="text-slate-400 opacity-60">0 anexos</span>';
+                return `<span class="inline-flex items-center gap-1 text-sky-600 dark:text-sky-400 font-medium"><span class="material-symbols-outlined text-[14px]">${field.type === 'photo' ? 'photo_camera' : 'attach_file'}</span> ${arr.length} ${arr.length === 1 ? 'item' : 'itens'}</span>`;
+            }
+            if (field.type === 'hiperlink' || field.type === 'hiperlink_1n') {
+                let linkObj = typeof rawVal === 'string' && rawVal.startsWith('{') ? JSON.parse(rawVal) : { title: rawVal };
+                return linkObj.title || linkObj.number || String(rawVal);
+            }
+            if (field.type === 'date' && typeof rawVal === 'string' && rawVal.includes('-')) {
+                const parts = rawVal.split('-');
+                if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+            }
+            if (typeof rawVal === 'string' && (rawVal.startsWith('[') || rawVal.startsWith('{'))) {
+                let parsed = JSON.parse(rawVal);
+                if (Array.isArray(parsed) && parsed.length > 0) return parsed[0].title || parsed[0].name || 'Anexo';
+                if (parsed.title || parsed.name) return parsed.title || parsed.name;
+            }
+        } catch(e) {}
+
+        let str = String(rawVal);
+        if (str.length > 40) str = str.substring(0, 40) + '...';
+        return str;
+    }
+
     let html = `
         <!-- 1:N Table View -->
         <div id="multiple-table-view-${tab.id}">
@@ -217,12 +253,11 @@ function renderMultipleTab(tab, featureData, isEditMode) {
                 </button>` : ''}
             </div>
             
-            <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden">
+            <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm overflow-x-auto">
                 <table class="w-full text-left text-xs sm:text-sm">
                     <thead class="bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 uppercase font-semibold">
                         <tr>
-                            <th class="px-4 py-3">${isHiperlink ? 'Título' : 'Data'}</th>
-                            <th class="px-4 py-3">${isHiperlink ? 'Número' : 'Título'}</th>
+                            ${summaryFields.map(f => `<th class="px-4 py-3">${f.label || f.name || 'Campo'}</th>`).join('')}
                             ${isEditMode ? '<th class="px-4 py-3 text-right">Ações</th>' : ''}
                         </tr>
                     </thead>
@@ -230,56 +265,18 @@ function renderMultipleTab(tab, featureData, isEditMode) {
     `;
     
     if (records.length === 0) {
-        html += `<tr id="empty-row-${tab.id}"><td colspan="3" class="px-4 py-6 text-center text-slate-500 italic">Nenhum registro encontrado.</td></tr>`;
+        html += `<tr id="empty-row-${tab.id}"><td colspan="${totalCols}" class="px-4 py-6 text-center text-slate-500 italic">Nenhum registro encontrado.</td></tr>`;
     } else {
         records.forEach((rec, idx) => {
-            let col1 = '';
-            let col2 = '';
-            
-            if (isHiperlink) {
-                let linkData = { title: '', number: '' };
-                try {
-                    let val = rec[tab.fields[0].id];
-                    linkData = typeof val === 'string' && val.startsWith('{') ? JSON.parse(val) : { title: '', number: '' };
-                } catch(e){}
-                col1 = linkData.title || 'Sem título';
-                col2 = linkData.number || '-';
-            } else {
-                col1 = rec['_created_at'] ? new Date(rec['_created_at']).toLocaleDateString('pt-BR') : 'Sem data';
-                let summary = '';
-                // Pega o primeiro campo preenchido pra usar como resumo
-                if (tab.fields && tab.fields.length > 0) {
-                    const firstField = tab.fields.find(f => rec[f.id]);
-                    if (firstField) {
-                        let val = rec[firstField.id];
-                        try {
-                            if (typeof val === 'string' && (val.startsWith('[') || val.startsWith('{'))) {
-                                let parsed = JSON.parse(val);
-                                if (Array.isArray(parsed) && parsed.length > 0) {
-                                    summary = parsed[0].title || parsed[0].name || 'Arquivo Anexado';
-                                } else if (parsed.title || parsed.name) {
-                                    summary = parsed.title || parsed.name;
-                                } else {
-                                    summary = 'Registro Completo';
-                                }
-                            } else {
-                                summary = String(val);
-                            }
-                        } catch(e) {
-                            summary = String(val);
-                        }
-                    }
-                }
-                if(summary.length > 50) summary = summary.substring(0, 50) + '...';
-                col2 = summary;
-            }
-            
             html += `
                 <tr class="bg-white even:bg-slate-50/50 dark:bg-slate-900 dark:even:bg-slate-800/40 hover:!bg-blue-50/80 dark:hover:!bg-blue-900/30 active:!bg-blue-100 dark:active:!bg-blue-900/50 transition-all duration-200 cursor-pointer" onclick="viewMultipleRecord('${tab.id}', ${idx})">
-                    <td class="px-4 py-3 text-slate-900 dark:text-slate-100 font-medium">${col1}</td>
-                    <td class="px-4 py-3 text-slate-500">${col2}</td>
+                    ${summaryFields.map((f, fIdx) => {
+                        const cellVal = formatSummaryCellValue(f, rec[f.id] !== undefined ? rec[f.id] : rec[f.name]);
+                        const isFirst = (fIdx === 0);
+                        return `<td class="px-4 py-3 ${isFirst ? 'text-slate-900 dark:text-slate-100 font-medium' : 'text-slate-700 dark:text-slate-300'}">${cellVal}</td>`;
+                    }).join('')}
                     ${isEditMode ? `
-                    <td class="px-4 py-3 text-right" onclick="event.stopPropagation()">
+                    <td class="px-4 py-3 text-right whitespace-nowrap" onclick="event.stopPropagation()">
                         <div class="flex items-center justify-end gap-1">
                             <button type="button" onclick="editMultipleRecord('${tab.id}', ${idx})" class="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-900/20 rounded transition-colors" title="Editar"><span class="material-symbols-outlined text-[18px]">edit</span></button>
                             <button type="button" onclick="deleteMultipleRecord('${tab.id}', ${idx})" class="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors" title="Excluir"><span class="material-symbols-outlined text-[18px]">delete</span></button>

@@ -1995,6 +1995,7 @@
          const label = el.querySelector('.field-label').value;
          const type = el.querySelector('.field-type').value;
          const options = el.querySelector('.field-options').value;
+         const showInSummary = el.querySelector('.field-show-in-summary') ? el.querySelector('.field-show-in-summary').checked : false;
          
          const existingField = activeTab.fields.find(f => f.id === id);
          const formulaConfig = existingField ? existingField.formulaConfig : null;
@@ -2005,7 +2006,8 @@
             label: label.trim(),
             type: type,
             options: type === 'select' ? options : '',
-            formulaConfig: formulaConfig
+            formulaConfig: formulaConfig,
+            showInSummary: showInSummary
          });
        });
        activeTab.fields = fields;
@@ -2228,6 +2230,12 @@
                 <option value="hiperlink_1n" ${f.type === 'hiperlink_1n' ? 'selected' : ''}>Link (Título/Número/URL) (1:N)</option>
               </select>
             </div>
+          </div>
+          <div class="flex items-center gap-2 pt-1">
+            <label class="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 font-semibold cursor-pointer select-none" title="Exibir este campo como coluna na tabela de resumo da aba 1:N">
+              <input type="checkbox" class="field-show-in-summary rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 w-4 h-4" ${f.showInSummary ? 'checked' : ''}>
+              <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px] text-blue-500">view_column</span> Exibir na Tabela Resumo</span>
+            </label>
           </div>
           <div id="options-container-${f.id}" class="${f.type === 'select' ? 'block' : 'hidden'} bg-slate-50 dark:bg-slate-800/50 p-4 border border-slate-200 dark:border-slate-700 rounded-lg">
             <label class="block text-xs font-bold text-slate-500 mb-2.5 uppercase tracking-wider">Opções do Menu Suspenso</label>
