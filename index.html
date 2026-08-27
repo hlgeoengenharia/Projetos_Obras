@@ -905,35 +905,25 @@
 </div>
 
 <!-- Cesium 3D Analysis Modal (Floating & Resizable with Fullscreen Mode) -->
-<div id="cesium-modal" class="fixed z-[130] bg-slate-900/95 backdrop-blur-2xl border border-white/20 shadow-2xl rounded-2xl hidden flex-col overflow-hidden transition-all duration-300" style="top: 50px; left: 50px; width: 750px; height: 550px; min-width: 420px; min-height: 320px;">
-    <!-- Modal Header (Draggable) -->
-    <div id="cesium-modal-header" class="flex justify-between items-center bg-slate-800/90 px-4 py-2.5 border-b border-white/10 cursor-move shrink-0 select-none">
-        <h2 class="text-white font-black flex items-center gap-2 text-xs md:text-sm uppercase tracking-wider">
-            <span class="material-symbols-outlined text-cyan-400 text-[20px]">3d_rotation</span> Análise de Gabarito 3D
-        </h2>
-        <div class="flex items-center gap-1.5">
-            <!-- Botão Expandir / Tela Cheia -->
-            <button id="btn-cesium-maximize" onclick="toggleCesiumFullscreen()" class="text-white/60 hover:text-white hover:bg-white/10 rounded-lg p-1.5 transition-all tooltip" title="Expandir para Tela Cheia">
-                <span class="material-symbols-outlined text-[18px]">fullscreen</span>
-            </button>
-            <!-- Botão Fechar -->
-            <button onclick="closeCesiumModal()" class="text-white/60 hover:text-rose-400 hover:bg-rose-500/20 rounded-lg p-1.5 transition-all tooltip" title="Fechar">
-                <span class="material-symbols-outlined text-[18px]">close</span>
-            </button>
-        </div>
-    </div>
-    
-    <!-- Modal Controls & Toolbar Unificada -->
-    <div class="flex flex-wrap gap-2 px-3 py-2 bg-slate-950/60 border-b border-white/10 shrink-0 text-xs items-center justify-between">
+<div id="cesium-modal" class="fixed z-[130] bg-slate-900/95 backdrop-blur-2xl border border-white/20 shadow-2xl rounded-2xl hidden flex-col overflow-hidden transition-all duration-300" style="top: 50px; left: 50px; width: 880px; height: 580px; min-width: 500px; min-height: 340px;">
+    <!-- Modal Header Unificado (Título + Todas as Ferramentas na Mesma Linha) -->
+    <div id="cesium-modal-header" class="flex flex-wrap items-center justify-between gap-2 bg-slate-800/90 px-3.5 py-2 border-b border-white/10 cursor-move shrink-0 select-none">
         
-        <!-- Bloco 1: Botão Unificado de Importação + Gabarito -->
+        <!-- Bloco 1: Título -->
         <div class="flex items-center gap-2">
+            <h2 class="text-white font-black flex items-center gap-1.5 text-xs md:text-sm uppercase tracking-wider whitespace-nowrap">
+                <span class="material-symbols-outlined text-cyan-400 text-[20px]">3d_rotation</span> Análise de Gabarito 3D
+            </h2>
+        </div>
+
+        <!-- Bloco 2: Todas as Ferramentas na Mesma Linha -->
+        <div class="flex items-center gap-1.5 flex-wrap">
             <!-- Botão Único de Importar com Menu Dropdown -->
             <div class="relative inline-block text-left">
-                <button id="btn-cesium-import-menu" onclick="toggleCesiumImportMenu()" class="flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-1.5 px-3 rounded-lg shadow-md transition-all">
-                    <span class="material-symbols-outlined text-[16px]">file_upload</span>
+                <button id="btn-cesium-import-menu" onclick="toggleCesiumImportMenu()" class="flex items-center gap-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-1 px-2.5 rounded-lg shadow-sm transition-all text-xs">
+                    <span class="material-symbols-outlined text-[15px]">file_upload</span>
                     <span>Importar</span>
-                    <span class="material-symbols-outlined text-[14px]">expand_more</span>
+                    <span class="material-symbols-outlined text-[13px]">expand_more</span>
                 </button>
                 
                 <!-- Menu Dropdown de Importação -->
@@ -977,50 +967,61 @@
             </div>
 
             <!-- Input Gabarito -->
-            <div class="flex items-center gap-1.5 bg-slate-900 border border-white/20 rounded-lg px-2.5 py-1">
-                <span class="text-white/70 font-semibold text-[11px]">Gabarito:</span>
-                <input type="number" id="gabarito-limit" value="12" class="w-14 bg-transparent text-cyan-400 font-bold text-xs focus:outline-none text-right font-mono" step="0.5">
-                <span class="text-white/50 text-[11px]">m</span>
+            <div class="flex items-center gap-1 bg-slate-900 border border-white/20 rounded-lg px-2 py-1">
+                <span class="text-white/70 font-semibold text-[10px]">Gabarito:</span>
+                <input type="number" id="gabarito-limit" value="12" class="w-12 bg-transparent text-cyan-400 font-bold text-xs focus:outline-none text-right font-mono" step="0.5">
+                <span class="text-white/50 text-[10px]">m</span>
             </div>
+
+            <div class="w-[1px] h-5 bg-white/20 mx-0.5"></div>
+
+            <!-- Ferramentas de Análise -->
+            <button onclick="activate3DMeasurement()" id="btn-measure-3d" class="flex items-center gap-1 bg-cyan-600/90 hover:bg-cyan-500 text-white py-1 px-2 rounded-lg transition-all text-xs font-bold shadow-sm" title="Medir Altura com Triangulação">
+                <span class="material-symbols-outlined text-[15px]">straighten</span> Altura
+            </button>
+            <button onclick="activatePathMeasurement()" id="btn-measure-path" class="flex items-center justify-center w-7 h-7 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-all border border-white/10" title="Medir Distância">
+                <span class="material-symbols-outlined text-[15px]">timeline</span>
+            </button>
+            <button onclick="activateAreaMeasurement()" id="btn-measure-area" class="flex items-center justify-center w-7 h-7 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-all border border-white/10" title="Medir Área">
+                <span class="material-symbols-outlined text-[15px]">polyline</span>
+            </button>
+            <button onclick="recenterCesium()" class="flex items-center justify-center w-7 h-7 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-all border border-white/10" title="Centralizar Câmera">
+                <span class="material-symbols-outlined text-[15px]">my_location</span>
+            </button>
+            <button onclick="exportCesiumPDF()" class="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white py-1 px-2.5 rounded-lg transition-all text-xs font-bold shadow-sm" title="Gerar Laudo em PDF">
+                <span class="material-symbols-outlined text-[15px]">picture_as_pdf</span> Laudo
+            </button>
         </div>
 
-        <!-- Bloco 2: Ferramentas de Análise -->
+        <!-- Bloco 3: Controles de Janela (Maximizar & Fechar) -->
         <div class="flex items-center gap-1">
-            <button onclick="activate3DMeasurement()" id="btn-measure-3d" class="flex items-center gap-1 bg-cyan-600/90 hover:bg-cyan-500 text-white py-1.5 px-2.5 rounded-lg transition-all text-xs font-bold shadow-sm" title="Medir Altura com Triangulação">
-                <span class="material-symbols-outlined text-[16px]">straighten</span> Altura
+            <button id="btn-cesium-maximize" onclick="toggleCesiumFullscreen()" class="text-white/60 hover:text-white hover:bg-white/10 rounded-lg p-1 transition-all tooltip" title="Expandir para Tela Cheia">
+                <span class="material-symbols-outlined text-[18px]">fullscreen</span>
             </button>
-            <button onclick="activatePathMeasurement()" id="btn-measure-path" class="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-white py-1.5 px-2.5 rounded-lg transition-all text-xs border border-white/10" title="Medir Distância">
-                <span class="material-symbols-outlined text-[16px]">timeline</span>
-            </button>
-            <button onclick="activateAreaMeasurement()" id="btn-measure-area" class="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-white py-1.5 px-2.5 rounded-lg transition-all text-xs border border-white/10" title="Medir Área">
-                <span class="material-symbols-outlined text-[16px]">polyline</span>
-            </button>
-            <button onclick="recenterCesium()" class="flex items-center justify-center w-8 h-8 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-all border border-white/10" title="Centralizar Câmera">
-                <span class="material-symbols-outlined text-[16px]">my_location</span>
-            </button>
-            <button onclick="exportCesiumPDF()" class="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white py-1.5 px-3 rounded-lg transition-all text-xs font-bold shadow-md" title="Gerar Laudo em PDF">
-                <span class="material-symbols-outlined text-[16px]">picture_as_pdf</span> Laudo
+            <button onclick="closeCesiumModal()" class="text-white/60 hover:text-rose-400 hover:bg-rose-500/20 rounded-lg p-1 transition-all tooltip" title="Fechar">
+                <span class="material-symbols-outlined text-[18px]">close</span>
             </button>
         </div>
-
-        <!-- Banner de Orientação Guiada / Status de Passos -->
-        <div id="cesium-guide-banner" class="w-full bg-indigo-950/90 border border-indigo-500/40 rounded-lg p-2 hidden items-center justify-between mt-1 text-xs shadow-md">
+    </div>
+    
+    <!-- Banner de Orientação Guiada & Status de Auditoria Flutuante -->
+    <div class="relative w-full">
+        <!-- Banner de Orientação Guiada -->
+        <div id="cesium-guide-banner" class="w-full bg-indigo-950/90 border-b border-indigo-500/40 px-3 py-1.5 hidden items-center justify-between text-xs shadow-md z-30">
             <div class="flex items-center gap-2 text-indigo-200">
-                <span class="material-symbols-outlined text-indigo-400 text-[18px] animate-pulse">touch_app</span>
+                <span class="material-symbols-outlined text-indigo-400 text-[17px] animate-pulse">touch_app</span>
                 <span id="cesium-guide-text" class="font-bold">Passo 1/4: Clique no Ponto 1 de referência no Projeto 3D</span>
             </div>
             <button onclick="cancelCesiumGuidedStep()" class="text-white/60 hover:text-white text-[11px] underline">Cancelar</button>
         </div>
 
         <!-- Status de Auditoria do Gabarito -->
-        <div id="measurement-status-container" class="w-full bg-slate-900/90 border border-white/20 rounded-lg p-2.5 hidden items-center justify-between mt-1 shadow-lg">
-            <div class="flex gap-4 items-center">
-                <div class="text-white text-xs space-y-0.5">
-                    <div>Altura Medida: <strong id="val-measured-height" class="text-cyan-400 font-mono text-sm">-</strong></div>
-                    <div class="text-slate-400 text-[11px]">Limite Permitido: <strong id="val-allowed-height" class="text-white font-mono">-</strong></div>
-                </div>
+        <div id="measurement-status-container" class="absolute top-2 right-3 z-30 bg-slate-900/90 border border-white/20 rounded-xl px-3 py-1.5 hidden items-center gap-3 shadow-2xl backdrop-blur-md">
+            <div class="text-white text-xs space-y-0.5">
+                <div>Altura: <strong id="val-measured-height" class="text-cyan-400 font-mono font-bold">-</strong></div>
+                <div class="text-slate-400 text-[10px]">Limite: <strong id="val-allowed-height" class="text-white font-mono">-</strong></div>
             </div>
-            <div id="val-status-badge" class="px-3.5 py-1.5 text-xs font-black uppercase rounded-lg bg-green-500/20 text-green-400 border border-green-500/50 shadow-[0_0_12px_rgba(34,197,94,0.4)]">
+            <div id="val-status-badge" class="px-2.5 py-1 text-[10px] font-black uppercase rounded-lg bg-green-500/20 text-green-400 border border-green-500/50 shadow-[0_0_10px_rgba(34,197,94,0.4)]">
                 APROVADO
             </div>
         </div>

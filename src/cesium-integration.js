@@ -288,17 +288,19 @@ window.sync2DLayersIntoCesium = function() {
         });
     }
 
-    // 2. Camadas Vetoriais dos Formulários (GeoJSON)
-    const forms = window.allForms || [];
-    if (forms.length > 0) {
-        itemsHtml += `<div class="text-[9px] text-cyan-400 font-bold uppercase tracking-wider mt-2">Feições Vetoriais (Lotes/Obras)</div>`;
-        forms.forEach(form => {
-            const isChecked = active2DDataSources[form.id] ? 'checked' : '';
+    // 2. Camadas Vetoriais dos Temas Cadastrais (Imóveis, Lotes, Obras)
+    const themesList = window.themes || (typeof themes !== 'undefined' ? themes : []) || [];
+    if (themesList.length > 0) {
+        itemsHtml += `<div class="text-[9px] text-cyan-400 font-bold uppercase tracking-wider mt-2">Temas Vetoriais (Lotes/Imóveis)</div>`;
+        themesList.forEach(theme => {
+            const isChecked = active2DDataSources[theme.id] ? 'checked' : '';
+            const themeColor = theme.color || '#0ea5e9';
             itemsHtml += `
                 <label class="flex items-center justify-between p-1 rounded hover:bg-white/10 cursor-pointer">
-                    <span class="flex items-center gap-1.5 truncate max-w-[140px]" title="${form.title}">
-                        <input type="checkbox" class="rounded bg-slate-800 border-slate-600 text-cyan-500 focus:ring-0" ${isChecked} onchange="toggle2DVectorLayer('${form.id}', this.checked)">
-                        <span class="truncate">${form.title}</span>
+                    <span class="flex items-center gap-1.5 truncate max-w-[140px]" title="${theme.name}">
+                        <input type="checkbox" class="rounded bg-slate-800 border-slate-600 text-cyan-500 focus:ring-0" ${isChecked} onchange="toggle2DVectorLayer('${theme.id}', this.checked)">
+                        <span class="w-2 h-2 rounded-full shrink-0" style="background-color: ${themeColor}"></span>
+                        <span class="truncate">${theme.name}</span>
                     </span>
                     <span class="text-[9px] text-slate-400 font-mono">Vetorial</span>
                 </label>
@@ -307,7 +309,7 @@ window.sync2DLayersIntoCesium = function() {
     }
 
     if (!itemsHtml) {
-        itemsHtml = `<div class="text-white/40 text-[10px] italic py-1">Nenhuma camada 2D ativa no momento.</div>`;
+        itemsHtml = `<div class="text-white/40 text-[10px] italic py-1">Nenhuma camada 2D disponível no momento.</div>`;
     }
 
     listContainer.innerHTML = itemsHtml;
@@ -353,42 +355,61 @@ window.toggle2DRasterLayer = function(rasterId, enable) {
 };
 
 // Alternar Camada Vetorial 2D no Cesium (Estampada no Relevo)
-window.toggle2DVectorLayer = async function(formId, enable) {
+window.toggle2DVectorLayer = async function(themeId, enable) {
     if (!cesiumViewer) return;
 
     if (enable) {
-        if (active2DDataSources[formId]) return;
+        if (active2DDataSources[themeId]) return;
 
-        // Recupera as feições do GeoEngineTurbo ou da camada Leaflet
-        let geojson = null;
-        if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.exportGeoJSON === 'function') {
-            geojson = window.GeoEngineTurbo.exportGeoJSON(formId);
-        } else if (typeof allFeatures !== 'undefined' && allFeatures[formId]) {
-            geojson = {
-                type: "FeatureCollection",
-                features: allFeatures[formId]
-            };
+        const themesList = window.themes || (typeof themes !== 'undefined' ? themes : []) || [];
+        const theme = themesList.find(t => String(t.id) === String(themeId));
+        if (!theme) return;
+
+        // Se as propriedades e geometrias ainda não foram carregadas, carrega sob demanda
+        if ((!theme.features || theme.features.length === 0) && typeof window.loadThemeProperties === 'function') {
+            await window.loadThemeProperties(theme.id);
         }
 
-        if (geojson && geojson.features && geojson.features.length > 0) {
+        let features = theme.features || [];
+
+        // Fallback: se ainda estiver vazio, tenta do IndexedDB
+        if (features.length === 0 && window.GeoTurboDB && typeof window.GeoTurboDB.getThemeData === 'function') {
             try {
+                const cached = await window.GeoTurboDB.getThemeData(theme.id);
+                if (cached && cached.features) features = cached.features;
+            } catch(e) {}
+        }
+
+        if (features.length > 0) {
+            const geojson = {
+                type: "FeatureCollection",
+                features: features.filter(f => f && f.geometry)
+            };
+
+            try {
+                const strokeColor = Cesium.Color.fromCssColorString(theme.color || '#0ea5e9');
+                const fillColor = strokeColor.withAlpha(0.35);
+
                 const dataSource = await Cesium.GeoJsonDataSource.load(geojson, {
                     clampToGround: true,
-                    stroke: Cesium.Color.fromCssColorString('#0ea5e9'),
-                    fill: Cesium.Color.fromCssColorString('rgba(14, 165, 233, 0.25)'),
+                    stroke: strokeColor,
+                    fill: fillColor,
                     strokeWidth: 3
                 });
 
                 cesiumViewer.dataSources.add(dataSource);
-                active2DDataSources[formId] = dataSource;
+                active2DDataSources[themeId] = dataSource;
+                console.log(`Tema "${theme.name}" estampado no Cesium 3D com ${geojson.features.length} feições.`);
             } catch (e) {
                 console.error("Erro ao estampar GeoJSON no Cesium:", e);
             }
+        } else {
+            console.warn(`Tema "${theme.name}" não possui feições vetoriais carregadas.`);
         }
     } else {
-        if (active2DDataSources[formId]) {
-            cesiumViewer.dataSources.remove(active2DDataSources[formId]);
-            delete active2DDataSources[formId];
+        if (active2DDataSources[themeId]) {
+            cesiumViewer.dataSources.remove(active2DDataSources[themeId]);
+            delete active2DDataSources[themeId];
         }
     }
 };

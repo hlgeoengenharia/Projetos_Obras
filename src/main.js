@@ -42,6 +42,7 @@ async function fetchDynamicForm() {
                     };
                 });
                 console.log("All Forms loaded from Supabase:", allForms);
+                window.allForms = allForms;
                 populateFormSelects();
                 if (typeof renderThemes === 'function') renderThemes();
                 if (typeof loadAllFeaturesToMap === 'function') loadAllFeaturesToMap();
@@ -51,6 +52,7 @@ async function fetchDynamicForm() {
         const saved = localStorage.getItem('constructive_forms');
         if (saved) {
             allForms = JSON.parse(saved);
+            window.allForms = allForms;
             populateFormSelects();
             if (typeof renderThemes === 'function') renderThemes();
             if (typeof loadAllFeaturesToMap === 'function') loadAllFeaturesToMap();
@@ -252,6 +254,8 @@ async function loadThemes() {
         saveThemes();
       }
   }
+  window.themes = themes;
+  window.loadThemeProperties = loadThemeProperties;
   } finally {
       isLoadingThemes = false;
   }
