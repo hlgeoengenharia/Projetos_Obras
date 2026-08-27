@@ -733,14 +733,14 @@ function interpretCoordinateToWGS84(x, y, z = 0) {
 
     // 2. Coordenadas Projetadas Métricas (UTM)
     if (typeof proj4 !== 'undefined') {
-        // Tenta sequencialmente as projeções mais comuns (SIRGAS 2000 UTM 25S, 24S, 23S, WGS84, SAD69)
+        // Zonas UTM do Nordeste e Brasil (SIRGAS 2000 Zona 25S é a padrão da Paraíba/Cabedelo)
         const candidateEpsgs = ['EPSG:31985', 'EPSG:31984', 'EPSG:31983', 'EPSG:32725', 'EPSG:32724', 'EPSG:29195'];
         
         for (let i = 0; i < candidateEpsgs.length; i++) {
             const epsg = candidateEpsgs[i];
             try {
                 const converted = proj4(epsg, 'EPSG:4326', [x, y]);
-                // Valida se o resultado cai no território brasileiro (Longitude entre -74 e -30, Latitude entre -35 e +6)
+                // Valida se o resultado cai no Brasil e adjacências (Longitude entre -74 e -30, Latitude entre -35 e +6)
                 if (converted && converted[0] >= -75 && converted[0] <= -25 && converted[1] >= -36 && converted[1] <= 6) {
                     return [converted[0], converted[1], z];
                 }
@@ -755,12 +755,12 @@ function interpretCoordinateToWGS84(x, y, z = 0) {
     return [approxLon, approxLat, z];
 }
 
-// Upload GeoTIFF (MDT / MDS) com Interpretação de Coordenadas
+// Upload GeoTIFF (MDT / MDS) com Ajuste da Base do Globo para Cima
 document.getElementById('upload-geotiff').addEventListener('change', async function(e) {
     const file = e.target.files[0];
     if (!file || !cesiumViewer || typeof GeoTIFF === 'undefined') return;
 
-    showCesiumLoading('Carregando e interpretando Relevo MDT (.tif)...');
+    showCesiumLoading('Carregando e interpretando Relevo MDT/MDS (.tif)...');
 
     try {
         const arrayBuffer = await file.arrayBuffer();
@@ -772,7 +772,7 @@ document.getElementById('upload-geotiff').addEventListener('change', async funct
         const rasters = await image.readRasters();
         const heights = rasters[0];
 
-        // Converte Bounding Box para WGS84 se estiver em UTM
+        // Converte Bounding Box para WGS84
         const [blLon, blLat] = interpretCoordinateToWGS84(rawBbox[0], rawBbox[1]);
         const [trLon, trLat] = interpretCoordinateToWGS84(rawBbox[2], rawBbox[3]);
         const wgsBbox = [
@@ -781,6 +781,19 @@ document.getElementById('upload-geotiff').addEventListener('change', async funct
             Math.max(blLon, trLon),
             Math.max(blLat, trLat)
         ];
+
+        // Encontra a cota mínima válida para garantir que o MDS fique sempre colado para cima do globo
+        let minValidHeight = Infinity;
+        let maxValidHeight = -Infinity;
+        for (let i = 0; i < heights.length; i++) {
+            const val = heights[i];
+            if (val > -500 && val < 9000) {
+                if (val < minValidHeight) minValidHeight = val;
+                if (val > maxValidHeight) maxValidHeight = val;
+            }
+        }
+        if (minValidHeight === Infinity) minValidHeight = 0;
+        const baseElevation = Math.max(0, minValidHeight);
 
         customTerrainProvider = new Cesium.CustomHeightmapTerrainProvider({
             width: 65,
@@ -803,8 +816,14 @@ document.getElementById('upload-geotiff').addEventListener('change', async funct
                             const py = Math.floor(((wgsBbox[3] - latDeg) / (wgsBbox[3] - wgsBbox[1])) * (tiffHeight - 1));
                             const idx = py * tiffWidth + px;
                             let h = heights[idx];
-                            if (h < -1000) h = 0;
-                            heightsArray[row * size + col] = h || 0;
+                            
+                            // Garante que a cota nunca afunde para dentro do globo
+                            if (h < -500 || h === undefined || isNaN(h)) {
+                                h = baseElevation;
+                            } else {
+                                h = Math.max(0, h);
+                            }
+                            heightsArray[row * size + col] = h;
                         } else {
                             heightsArray[row * size + col] = 0;
                         }
@@ -818,7 +837,7 @@ document.getElementById('upload-geotiff').addEventListener('change', async funct
         currentMdtRectangle = Cesium.Rectangle.fromDegrees(wgsBbox[0], wgsBbox[1], wgsBbox[2], wgsBbox[3]);
         
         cesiumViewer.camera.flyTo({ destination: currentMdtRectangle });
-        console.log(`MDT Relevo carregado com sucesso (BBox WGS84: ${wgsBbox.join(', ')}).`);
+        console.log(`MDS/MDT carregado com base ajustada para cima (BBox: ${wgsBbox.join(', ')}).`);
     } catch (error) {
         console.error("Erro ao carregar GeoTIFF:", error);
         alert("Erro ao ler o arquivo MDT (GeoTIFF).");
@@ -827,24 +846,57 @@ document.getElementById('upload-geotiff').addEventListener('change', async funct
     }
 });
 
-// Upload Ortofoto
-document.getElementById('upload-ortho').addEventListener('change', function(e) {
+// Upload Ortofoto com Suporte a GeoTIFF e Imagens RGB
+document.getElementById('upload-ortho').addEventListener('change', async function(e) {
     const file = e.target.files[0];
     if (!file || !cesiumViewer) return;
 
-    showCesiumLoading('Carregando Ortofoto...');
+    showCesiumLoading('Carregando e posicionando Ortofoto...');
 
-    const url = URL.createObjectURL(file);
-    if (uploadedOrthoLayer) {
-        cesiumViewer.imageryLayers.remove(uploadedOrthoLayer);
+    try {
+        let orthoRect = currentMdtRectangle;
+
+        // Se for arquivo GeoTIFF (.tif/.tiff), extrai o BBox com georreferenciamento exato
+        if (file.name.toLowerCase().endsWith('.tif') || file.name.toLowerCase().endsWith('.tiff')) {
+            if (typeof GeoTIFF !== 'undefined') {
+                const arrayBuffer = await file.arrayBuffer();
+                const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
+                const image = await tiff.getImage();
+                const rawBbox = image.getBoundingBox();
+                
+                const [blLon, blLat] = interpretCoordinateToWGS84(rawBbox[0], rawBbox[1]);
+                const [trLon, trLat] = interpretCoordinateToWGS84(rawBbox[2], rawBbox[3]);
+                orthoRect = Cesium.Rectangle.fromDegrees(
+                    Math.min(blLon, trLon),
+                    Math.min(blLat, trLat),
+                    Math.max(blLon, trLon),
+                    Math.max(blLat, trLat)
+                );
+            }
+        }
+
+        if (!orthoRect) {
+            const mapCenter = typeof map !== 'undefined' ? map.getCenter() : {lat: -7.035, lng: -34.835};
+            orthoRect = Cesium.Rectangle.fromDegrees(mapCenter.lng - 0.015, mapCenter.lat - 0.015, mapCenter.lng + 0.015, mapCenter.lat + 0.015);
+        }
+
+        const url = URL.createObjectURL(file);
+        if (uploadedOrthoLayer) {
+            cesiumViewer.imageryLayers.remove(uploadedOrthoLayer);
+        }
+
+        uploadedOrthoLayer = cesiumViewer.imageryLayers.addImageryProvider(new Cesium.SingleTileImageryProvider({
+            url: url,
+            rectangle: orthoRect
+        }));
+
+        cesiumViewer.camera.flyTo({ destination: orthoRect });
+        console.log("Ortofoto posicionada com sucesso.");
+    } catch(err) {
+        console.error("Erro ao carregar Ortofoto:", err);
+    } finally {
+        hideCesiumLoading();
     }
-
-    uploadedOrthoLayer = cesiumViewer.imageryLayers.addImageryProvider(new Cesium.SingleTileImageryProvider({
-        url: url,
-        rectangle: currentMdtRectangle || Cesium.Rectangle.MAX_VALUE
-    }));
-
-    setTimeout(() => hideCesiumLoading(), 600);
 });
 
 // Upload Projeto 3D (.glb / .gltf) no Centro da Tela
