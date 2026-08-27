@@ -3,15 +3,19 @@
  * Módulo Avançado de Análise de Gabarito 3D com CesiumJS
  * - Tela cheia (Fullscreen)
  * - Importador unificado (MDT .tif, Ortofoto .png/.jpg, Projeto 3D .glb/.gltf, Nuvem .laz/.las)
- * - Estampagem e controle individual de camadas 2D/3D existentes
- * - Fluxo rígido de orientação de modelos 3D por 2 pontos de referência
- * - Triangulação geométrica completa de altura com auditoria de gabarito (Aprovado/Reprovado)
- * - Modo Foco / X-Ray de camadas 3D
+ * - Exibição no centro da tela e mensagens de carregamento para todos os arquivos
+ * - Snapping magnético aos vértices do modelo 3D e camadas vetoriais
+ * - Cursor em cruz (crosshair) durante alinhamento e medições
+ * - Cancelamento com tecla ESC e botão direito do mouse
+ * - Menu contextual no modelo 3D (Alinhar Horizontal e Corrigir Altura Vertical Z)
+ * - Medição de Altura rigorosa (1º clique X,Y no relevo, 2º clique no eixo Z)
+ * - Medição de Distância plana horizontal (X,Y) com aderência às camadas vetoriais
+ * - Modo Foco / X-Ray e preservação completa do estilo do tema
  */
 
 let cesiumViewer = null;
 let isCesiumFullscreen = false;
-let normalModalBounds = { top: '50px', left: '50px', width: '750px', height: '550px' };
+let normalModalBounds = { top: '50px', left: '50px', width: '880px', height: '580px' };
 
 // Entidades e camadas 3D gerenciadas
 let uploadedModelEntity = null;
@@ -22,8 +26,13 @@ let currentMdtRectangle = null;
 let active2DDataSources = {};
 let active2DImageryLayers = {};
 
+// Estado das Ferramentas Interativas
+let currentInteractionMode = null; // 'orientation' | 'measure_height' | 'measure_distance' | 'adjust_z'
+let snapMarkerEntity = null;
+let currentActiveHandler = null;
+
 // ==========================================
-// 1. CONTROLES DO MODAL (Drag, Resize & Fullscreen)
+// 1. FEEDBACK VISUAL, CURSOR & CONTROLES DO MODAL
 // ==========================================
 const cesiumModal = document.getElementById('cesium-modal');
 const cesiumHeader = document.getElementById('cesium-modal-header');
@@ -32,6 +41,31 @@ const cesiumResizeHandle = document.getElementById('cesium-resize-handle');
 let isDragging = false;
 let isResizing = false;
 let startX, startY, startWidth, startHeight, startTop, startLeft;
+
+function showCesiumLoading(text) {
+    const overlay = document.getElementById('cesium-loading-overlay');
+    const label = document.getElementById('cesium-loading-text');
+    if (overlay) {
+        if (label) label.textContent = text || 'Carregando arquivo...';
+        overlay.classList.remove('hidden');
+        overlay.classList.add('flex');
+    }
+}
+
+function hideCesiumLoading() {
+    const overlay = document.getElementById('cesium-loading-overlay');
+    if (overlay) {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+    }
+}
+
+function setCesiumCursor(style) {
+    const container = document.getElementById('cesiumContainer');
+    if (container) {
+        container.style.cursor = style || 'default';
+    }
+}
 
 window.openCesiumModal = function() {
     cesiumModal.classList.remove('hidden');
@@ -50,6 +84,7 @@ window.openCesiumModal = function() {
 };
 
 window.closeCesiumModal = function() {
+    cancelCesiumGuidedStep();
     cesiumModal.classList.add('hidden');
     cesiumModal.style.display = 'none';
 };
@@ -60,12 +95,11 @@ window.toggleCesiumFullscreen = function() {
     const btn = document.getElementById('btn-cesium-maximize');
 
     if (isCesiumFullscreen) {
-        // Salva posições anteriores
         normalModalBounds = {
             top: cesiumModal.style.top || '50px',
             left: cesiumModal.style.left || '50px',
-            width: cesiumModal.style.width || '750px',
-            height: cesiumModal.style.height || '550px'
+            width: cesiumModal.style.width || '880px',
+            height: cesiumModal.style.height || '580px'
         };
 
         cesiumModal.classList.add('!top-0', '!left-0', '!w-full', '!h-full', '!rounded-none', '!z-[150]');
@@ -105,12 +139,27 @@ document.addEventListener('click', (e) => {
             dropdown.classList.add('hidden');
         }
     }
+    
+    // Fechar menu contextual do modelo
+    const ctxMenu = document.getElementById('cesium-model-context-menu');
+    if (ctxMenu && !ctxMenu.classList.contains('hidden')) {
+        if (!ctxMenu.contains(e.target)) {
+            ctxMenu.classList.add('hidden');
+        }
+    }
+});
+
+// Tecla ESC para cancelar qualquer operação ativa
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        cancelCesiumGuidedStep();
+    }
 });
 
 // Dragging Logic
 if (cesiumHeader) {
     cesiumHeader.addEventListener('mousedown', function(e) {
-        if (isCesiumFullscreen || e.target.closest('button')) return;
+        if (isCesiumFullscreen || e.target.closest('button') || e.target.closest('input')) return;
         isDragging = true;
         startX = e.clientX;
         startY = e.clientY;
@@ -163,8 +212,8 @@ function resizeModal(e) {
     const dx = e.clientX - startX;
     const dy = e.clientY - startY;
     
-    const newWidth = Math.max(420, startWidth + dx);
-    const newHeight = Math.max(320, startHeight + dy);
+    const newWidth = Math.max(480, startWidth + dx);
+    const newHeight = Math.max(340, startHeight + dy);
     
     cesiumModal.style.width = `${newWidth}px`;
     cesiumModal.style.height = `${newHeight}px`;
@@ -181,7 +230,7 @@ function stopResizeModal() {
 }
 
 // ==========================================
-// 2. INICIALIZAÇÃO DO CESIUM VIEWER
+// 2. INICIALIZAÇÃO DO CESIUM VIEWER & SNAPPING
 // ==========================================
 function initCesiumViewer() {
     try {
@@ -203,7 +252,6 @@ function initCesiumViewer() {
             selectionIndicator: false
         });
 
-        // Configura Terreno Base e Satélite ArcGIS
         cesiumViewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
         cesiumViewer.imageryLayers.removeAll();
         
@@ -215,7 +263,6 @@ function initCesiumViewer() {
             console.error("Erro ao carregar Satélite ArcGIS no Cesium:", error);
         });
 
-        // Câmera centrada no município ativo ou Cabedelo
         const currentMapCenter = typeof map !== 'undefined' ? map.getCenter() : {lat: -7.035, lng: -34.835};
         cesiumViewer.camera.flyTo({
             destination: Cesium.Cartesian3.fromDegrees(currentMapCenter.lng, currentMapCenter.lat, 1800.0),
@@ -227,6 +274,22 @@ function initCesiumViewer() {
         });
 
         cesiumViewer.scene.globe.depthTestAgainstTerrain = true;
+
+        // Criar Marcador Visual de Snapping
+        snapMarkerEntity = cesiumViewer.entities.add({
+            position: Cesium.Cartesian3.ZERO,
+            show: false,
+            point: {
+                pixelSize: 12,
+                color: Cesium.Color.YELLOW,
+                outlineColor: Cesium.Color.BLACK,
+                outlineWidth: 2,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY
+            }
+        });
+
+        // Configurar Clique no Modelo para Abrir Menu Contextual
+        setupModelClickDetector();
 
         console.log("CesiumJS inicializado com sucesso.");
         sync2DLayersIntoCesium();
@@ -259,6 +322,92 @@ window.recenterCesium = function() {
     });
 };
 
+// Snapping Magnético a Vértices e Camadas Vetoriais
+function getSnappingPoint(screenPosition) {
+    if (!cesiumViewer) return null;
+
+    let pickedCartesian = cesiumViewer.scene.pickPosition(screenPosition);
+    if (!pickedCartesian) {
+        const ray = cesiumViewer.camera.getPickRay(screenPosition);
+        pickedCartesian = cesiumViewer.scene.globe.pick(ray, cesiumViewer.scene);
+    }
+    if (!pickedCartesian) return null;
+
+    let snappedPoint = pickedCartesian;
+    let foundSnap = false;
+    const snapPixelTolerance = 18; // Tolerância magnética em pixels
+
+    // 1. Checa proximidade com vértices das Camadas Vetoriais 2D
+    Object.values(active2DDataSources).forEach(ds => {
+        if (!ds.entities) return;
+        const entities = ds.entities.values;
+        for (let i = 0; i < entities.length; i++) {
+            const ent = entities[i];
+            let positions = null;
+            if (ent.polygon && ent.polygon.hierarchy) {
+                const h = ent.polygon.hierarchy.getValue(Cesium.JulianDate.now());
+                if (h && h.positions) positions = h.positions;
+            } else if (ent.polyline && ent.polyline.positions) {
+                positions = ent.polyline.positions.getValue(Cesium.JulianDate.now());
+            }
+
+            if (positions) {
+                for (let j = 0; j < positions.length; j++) {
+                    const vertexPos = positions[j];
+                    const screenPt = Cesium.SceneTransforms.wgs84ToWindowCoordinates(cesiumViewer.scene, vertexPos);
+                    if (screenPt) {
+                        const distPx = Cesium.Cartesian2.distance(screenPosition, screenPt);
+                        if (distPx <= snapPixelTolerance) {
+                            snappedPoint = vertexPos;
+                            foundSnap = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (foundSnap) break;
+        }
+    });
+
+    // 2. Atualiza Marcador Visual de Snapping
+    if (snapMarkerEntity) {
+        if (foundSnap) {
+            snapMarkerEntity.position = snappedPoint;
+            snapMarkerEntity.show = true;
+        } else {
+            snapMarkerEntity.show = false;
+        }
+    }
+
+    return snappedPoint;
+}
+
+// Detector de Clique no Modelo 3D para Abrir Menu Contextual
+function setupModelClickDetector() {
+    const handler = new Cesium.ScreenSpaceEventHandler(cesiumViewer.scene.canvas);
+    handler.setInputAction(function(click) {
+        if (currentInteractionMode) return; // Não abre se estiver em medição/alinhamento ativo
+
+        const pickedObject = cesiumViewer.scene.pick(click.position);
+        if (Cesium.defined(pickedObject) && (pickedObject.id === uploadedModelEntity || pickedObject.primitive === uploadedModelEntity?.model)) {
+            const menu = document.getElementById('cesium-model-context-menu');
+            if (menu) {
+                menu.style.left = `${click.position.x + 10}px`;
+                menu.style.top = `${click.position.y + 10}px`;
+                menu.classList.remove('hidden');
+                menu.classList.add('flex');
+            }
+        } else {
+            closeModelContextMenu();
+        }
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+}
+
+window.closeModelContextMenu = function() {
+    const menu = document.getElementById('cesium-model-context-menu');
+    if (menu) menu.classList.add('hidden');
+};
+
 // ==========================================
 // 3. ESTAMPAGEM E CONTROLE DE CAMADAS 2D DO MAPA
 // ==========================================
@@ -281,7 +430,6 @@ window.toggleLayerWithCard = function(type) {
         uploadedPointCloud.show = isVisible;
     }
 
-    // Atualiza visual do Card 3D
     const card = document.getElementById(`card-layer-${type}`);
     const badge = document.getElementById(`badge-layer-${type}`);
     const colorMap = { mdt: 'blue', ortho: 'emerald', model: 'purple', pointcloud: 'cyan' };
@@ -307,9 +455,6 @@ window.setLayerFocus3D = function(focusType) {
     }
 };
 
-// ==========================================
-// 3. ESTAMPAGEM E CONTROLE DE CAMADAS 2D DO MAPA
-// ==========================================
 window.sync2DLayersIntoCesium = function() {
     if (!cesiumViewer) return;
 
@@ -318,7 +463,7 @@ window.sync2DLayersIntoCesium = function() {
 
     let itemsHtml = '';
 
-    // 1. Camadas de Ortofotos Cadastradas (XYZ Tiles)
+    // 1. Ortofotos Cadastradas (XYZ Tiles)
     const rasters = window.rasterLayers || [];
     if (rasters.length > 0) {
         itemsHtml += `<div class="text-[9px] text-emerald-400 font-bold uppercase tracking-wider mt-1 px-1">Ortofotos do Sistema</div>`;
@@ -336,7 +481,7 @@ window.sync2DLayersIntoCesium = function() {
         });
     }
 
-    // 2. Camadas Vetoriais dos Temas Cadastrais (Preservando Estilo de Editar Camada)
+    // 2. Temas Vetoriais (Preservando Estilo de Editar Camada)
     const themesList = window.themes || (typeof themes !== 'undefined' ? themes : []) || [];
     if (themesList.length > 0) {
         itemsHtml += `<div class="text-[9px] text-cyan-400 font-bold uppercase tracking-wider mt-2 px-1">Temas Vetoriais (Lotes/Imóveis)</div>`;
@@ -377,7 +522,6 @@ window.toggle2DRasterLayer = function(rasterId, forceEnable) {
         const isXYZ = (raster.tipo === 'xyz_tiles') || (raster.url_imagem && raster.url_imagem.includes('{z}'));
         let provider = null;
 
-        // Determina a extensão (Rectangle) da ortofoto
         let orthoRectangle = null;
         if (raster.bbox && Array.isArray(raster.bbox) && raster.bbox.length === 2) {
             orthoRectangle = Cesium.Rectangle.fromDegrees(raster.bbox[0][1], raster.bbox[0][0], raster.bbox[1][1], raster.bbox[1][0]);
@@ -400,7 +544,6 @@ window.toggle2DRasterLayer = function(rasterId, forceEnable) {
             }
 
             provider = new Cesium.UrlTemplateImageryProvider(providerOptions);
-            
             provider.errorEvent.addEventListener(function(error) {
                 if (error && error.timesRetried !== undefined) {
                     error.retry = false;
@@ -437,7 +580,7 @@ window.toggle2DRasterLayer = function(rasterId, forceEnable) {
     sync2DLayersIntoCesium();
 };
 
-// Alternar Camada Vetorial 2D no Cesium (Preservando Estilo de Editar Camada)
+// Alternar Camada Vetorial 2D no Cesium
 window.toggle2DVectorLayer = async function(themeId, forceEnable) {
     if (!cesiumViewer) return;
 
@@ -450,14 +593,12 @@ window.toggle2DVectorLayer = async function(themeId, forceEnable) {
         const theme = themesList.find(t => String(t.id) === String(themeId));
         if (!theme) return;
 
-        // Se as propriedades e geometrias ainda não foram carregadas, carrega sob demanda
         if ((!theme.features || theme.features.length === 0) && typeof window.loadThemeProperties === 'function') {
             await window.loadThemeProperties(theme.id);
         }
 
         let features = theme.features || [];
 
-        // Fallback: tenta recuperar do cache IndexedDB
         if (features.length === 0 && window.GeoTurboDB && typeof window.GeoTurboDB.getThemeData === 'function') {
             try {
                 const cached = await window.GeoTurboDB.getThemeData(theme.id);
@@ -472,7 +613,6 @@ window.toggle2DVectorLayer = async function(themeId, forceEnable) {
             };
 
             try {
-                // Recupera configurações completas do tema definidas em "Editar Camada"
                 const themeHex = theme.color || '#0ea5e9';
                 const opacityVal = theme.opacity !== undefined ? parseFloat(theme.opacity) : 0.4;
                 const weightVal = theme.weight !== undefined ? Math.max(1.5, parseFloat(theme.weight)) : 2.5;
@@ -488,7 +628,6 @@ window.toggle2DVectorLayer = async function(themeId, forceEnable) {
                     strokeWidth: weightVal
                 });
 
-                // Renderiza polígonos no terreno e arestas com espessura e estilo do tema
                 const entities = dataSource.entities.values;
                 const edgeEntitiesToAdd = [];
 
@@ -499,7 +638,6 @@ window.toggle2DVectorLayer = async function(themeId, forceEnable) {
                         entity.polygon.classificationType = Cesium.ClassificationType.TERRAIN;
                         entity.polygon.material = fillColor;
 
-                        // Adiciona as arestas respeitando a espessura e tracejado do tema
                         const hierarchy = entity.polygon.hierarchy.getValue(Cesium.JulianDate.now());
                         if (hierarchy && hierarchy.positions && hierarchy.positions.length > 2) {
                             const closedPositions = [...hierarchy.positions, hierarchy.positions[0]];
@@ -529,7 +667,7 @@ window.toggle2DVectorLayer = async function(themeId, forceEnable) {
 
                 cesiumViewer.dataSources.add(dataSource);
                 active2DDataSources[themeId] = dataSource;
-                console.log(`Tema "${theme.name}" estampado no Cesium 3D preservando estilo (Cor: ${themeHex}, Opacidade: ${opacityVal}, Espessura: ${weightVal}).`);
+                console.log(`Tema "${theme.name}" estampado no Cesium 3D com estilo original.`);
             } catch (e) {
                 console.error("Erro ao estampar GeoJSON no Cesium:", e);
             }
@@ -545,18 +683,8 @@ window.toggle2DVectorLayer = async function(themeId, forceEnable) {
     sync2DLayersIntoCesium();
 };
 
-window.setLayerFocus3D = function(focusType) {
-    // Efeito X-Ray: Camada focada fica 100% nítida, outras recebem leve transparência
-    if (uploadedModelEntity && uploadedModelEntity.model) {
-        uploadedModelEntity.model.color = (focusType === 'model') ? Cesium.Color.WHITE : Cesium.Color.WHITE.withAlpha(0.4);
-    }
-    if (uploadedOrthoLayer) {
-        uploadedOrthoLayer.alpha = (focusType === 'ortho') ? 1.0 : 0.45;
-    }
-};
-
 // ==========================================
-// 4. UPLOAD DE ARQUIVOS (MDT, Ortofoto, GLB, LAZ)
+// 4. UPLOAD DE ARQUIVOS COM CARREGAMENTO NO CENTRO DA TELA
 // ==========================================
 
 // Upload GeoTIFF (MDT)
@@ -564,11 +692,13 @@ document.getElementById('upload-geotiff').addEventListener('change', async funct
     const file = e.target.files[0];
     if (!file || !cesiumViewer || typeof GeoTIFF === 'undefined') return;
 
+    showCesiumLoading('Carregando e processando Relevo MDT (.tif)...');
+
     try {
         const arrayBuffer = await file.arrayBuffer();
         const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
         const image = await tiff.getImage();
-        const bbox = image.getBoundingBox(); // [minX, minY, maxX, maxY]
+        const bbox = image.getBoundingBox();
         const tiffWidth = image.getWidth();
         const tiffHeight = image.getHeight();
         const rasters = await image.readRasters();
@@ -614,6 +744,8 @@ document.getElementById('upload-geotiff').addEventListener('change', async funct
     } catch (error) {
         console.error("Erro ao carregar GeoTIFF:", error);
         alert("Erro ao ler o arquivo MDT (GeoTIFF).");
+    } finally {
+        hideCesiumLoading();
     }
 });
 
@@ -621,6 +753,8 @@ document.getElementById('upload-geotiff').addEventListener('change', async funct
 document.getElementById('upload-ortho').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file || !cesiumViewer) return;
+
+    showCesiumLoading('Carregando Ortofoto...');
 
     const url = URL.createObjectURL(file);
     if (uploadedOrthoLayer) {
@@ -631,23 +765,34 @@ document.getElementById('upload-ortho').addEventListener('change', function(e) {
         url: url,
         rectangle: currentMdtRectangle || Cesium.Rectangle.MAX_VALUE
     }));
+
+    setTimeout(() => hideCesiumLoading(), 600);
 });
 
-// Upload Projeto 3D (.glb / .gltf) com Fluxo Rígido de Orientação
+// Upload Projeto 3D (.glb / .gltf) no Centro da Tela
 document.getElementById('upload-glb').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file || !cesiumViewer) return;
+
+    showCesiumLoading('Importando Projeto 3D (.glb)...');
 
     const url = URL.createObjectURL(file);
     if (uploadedModelEntity) {
         cesiumViewer.entities.remove(uploadedModelEntity);
     }
 
-    const cameraPos = cesiumViewer.camera.positionCartographic;
-    const position = Cesium.Cartesian3.fromRadians(cameraPos.longitude, cameraPos.latitude, 0);
+    // Calcula o ponto exato no centro da visão da câmera
+    const canvas = cesiumViewer.scene.canvas;
+    const windowCenter = new Cesium.Cartesian2(canvas.clientWidth / 2, canvas.clientHeight / 2);
+    const ray = cesiumViewer.camera.getPickRay(windowCenter);
+    let centerPos = cesiumViewer.scene.globe.pick(ray, cesiumViewer.scene);
     
+    if (!centerPos) {
+        centerPos = cesiumViewer.camera.pickEllipsoid(windowCenter) || Cesium.Cartesian3.fromDegrees(-34.835, -7.035, 0);
+    }
+
     uploadedModelEntity = cesiumViewer.entities.add({
-        position: position,
+        position: centerPos,
         model: {
             uri: url,
             minimumPixelSize: 128,
@@ -658,6 +803,8 @@ document.getElementById('upload-glb').addEventListener('change', function(e) {
         }
     });
 
+    hideCesiumLoading();
+
     // Inicia o fluxo rígido de orientação de 2 pontos
     startModelOrientationFlow(uploadedModelEntity);
 });
@@ -667,12 +814,16 @@ document.getElementById('upload-laz').addEventListener('change', async function(
     const file = e.target.files[0];
     if (!file || !cesiumViewer) return;
 
+    showCesiumLoading('Processando Nuvem de Pontos LiDAR (.laz)...');
+
     try {
         const arrayBuffer = await file.arrayBuffer();
         parseLASPointCloud(arrayBuffer);
     } catch (err) {
         console.error("Erro ao ler arquivo .laz/.las:", err);
         alert("Erro ao processar nuvem de pontos.");
+    } finally {
+        hideCesiumLoading();
     }
 });
 
@@ -682,10 +833,9 @@ function parseLASPointCloud(buffer) {
 
     try {
         const dataView = new DataView(buffer);
-        // Header LAS simples (offsets e scale factors)
         const offsetToPoints = dataView.getUint32(96, true);
         const pointRecordLength = dataView.getUint16(105, true);
-        const totalPoints = Math.min(dataView.getUint32(107, true), 30000); // Limite de 30k pontos p/ performance no browser
+        const totalPoints = Math.min(dataView.getUint32(107, true), 30000);
         
         const scaleX = dataView.getFloat64(131, true);
         const scaleY = dataView.getFloat64(139, true);
@@ -699,7 +849,6 @@ function parseLASPointCloud(buffer) {
         }
 
         const pointPrimitives = new Cesium.PointPrimitiveCollection();
-        
         const centerPos = typeof map !== 'undefined' ? map.getCenter() : {lat: -7.035, lng: -34.835};
 
         for (let i = 0; i < totalPoints; i++) {
@@ -712,11 +861,9 @@ function parseLASPointCloud(buffer) {
             const y = (rawY * scaleY) + offsetY;
             const z = (rawZ * scaleZ) + offsetZ;
 
-            // Converte UTM ou Coordenadas para WGS84 aproximado
             let lon = x;
             let lat = y;
             if (Math.abs(x) > 180 || Math.abs(y) > 90) {
-                // UTM aproximado em relação ao centro do mapa
                 lon = centerPos.lng + ((x % 1000) * 0.00001);
                 lat = centerPos.lat + ((y % 1000) * 0.00001);
             }
@@ -738,62 +885,67 @@ function parseLASPointCloud(buffer) {
 }
 
 // ==========================================
-// 5. FLUXO RÍGIDO DE ORIENTAÇÃO DO MODELO 3D (2 PONTOS)
+// 5. FLUXO RÍGIDO DE ORIENTAÇÃO DO MODELO 3D (2 PONTOS COM SNAPPING & CROSSHAIR)
 // ==========================================
-let orientationHandler = null;
 let orientationStep = 0;
 let orientationData = { modelPt1: null, terrainPt1: null, modelPt2: null, terrainPt2: null };
 
-function startModelOrientationFlow(modelEntity) {
+window.startModelOrientationFlow = function(modelEntity) {
     if (!cesiumViewer || !modelEntity) return;
 
+    currentInteractionMode = 'orientation';
     orientationStep = 1;
     orientationData = { modelPt1: null, terrainPt1: null, modelPt2: null, terrainPt2: null };
+
+    setCesiumCursor('crosshair');
 
     const banner = document.getElementById('cesium-guide-banner');
     const text = document.getElementById('cesium-guide-text');
     if (banner && text) {
         banner.classList.remove('hidden');
         banner.classList.add('flex');
-        text.textContent = 'Passo 1/4: Clique no Ponto 1 no Projeto 3D';
+        text.textContent = 'Passo 1/4: Clique no primeiro vértice de referência no Projeto 3D (ex: quina da fachada)';
     }
 
-    if (orientationHandler) orientationHandler.destroy();
-    orientationHandler = new Cesium.ScreenSpaceEventHandler(cesiumViewer.scene.canvas);
+    if (currentActiveHandler) currentActiveHandler.destroy();
+    currentActiveHandler = new Cesium.ScreenSpaceEventHandler(cesiumViewer.scene.canvas);
 
-    orientationHandler.setInputAction(function(click) {
-        const picked = cesiumViewer.scene.pickPosition(click.position);
+    // Movimento do mouse com Snapping Magnético
+    currentActiveHandler.setInputAction(function(movement) {
+        getSnappingPoint(movement.endPosition);
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+    // Clique esquerdo
+    currentActiveHandler.setInputAction(function(click) {
+        const picked = getSnappingPoint(click.position);
         if (!picked) return;
 
         if (orientationStep === 1) {
             orientationData.modelPt1 = picked;
             orientationStep = 2;
-            if (text) text.textContent = 'Passo 2/4: Clique no Ponto 1 correspondente no Relevo / Terreno';
+            if (text) text.textContent = 'Passo 2/4: Clique no ponto de destino correspondente no Terreno/Ortofoto (ex: divisa do lote)';
         } else if (orientationStep === 2) {
             orientationData.terrainPt1 = picked;
             orientationStep = 3;
-            if (text) text.textContent = 'Passo 3/4: Clique no Ponto 2 no Projeto 3D';
+            if (text) text.textContent = 'Passo 3/4: Clique no segundo vértice de referência no Projeto 3D (ex: quina oposta)';
         } else if (orientationStep === 3) {
             orientationData.modelPt2 = picked;
             orientationStep = 4;
-            if (text) text.textContent = 'Passo 4/4: Clique no Ponto 2 correspondente no Relevo / Terreno';
+            if (text) text.textContent = 'Passo 4/4: Clique no segundo ponto de destino correspondente no Terreno/Ortofoto';
         } else if (orientationStep === 4) {
             orientationData.terrainPt2 = picked;
-            
-            // Finaliza orientação calculando rotação e assentamento
             finishModelOrientation(modelEntity);
         }
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
-}
+
+    // Botão Direito cancela
+    currentActiveHandler.setInputAction(function() {
+        cancelCesiumGuidedStep();
+    }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+};
 
 function finishModelOrientation(modelEntity) {
-    if (orientationHandler) {
-        orientationHandler.destroy();
-        orientationHandler = null;
-    }
-
-    const banner = document.getElementById('cesium-guide-banner');
-    if (banner) banner.classList.add('hidden');
+    cancelCesiumGuidedStep();
 
     const pTerrain1 = Cesium.Cartographic.fromCartesian(orientationData.terrainPt1);
     const pTerrain2 = Cesium.Cartographic.fromCartesian(orientationData.terrainPt2);
@@ -804,7 +956,6 @@ function finishModelOrientation(modelEntity) {
     const x = Math.cos(pTerrain1.latitude) * Math.sin(pTerrain2.latitude) - Math.sin(pTerrain1.latitude) * Math.cos(pTerrain2.latitude) * Math.cos(dLon);
     const heading = Math.atan2(y, x);
 
-    // Posiciona o modelo ancorado no terreno
     const finalPosition = Cesium.Cartesian3.fromRadians(pTerrain1.longitude, pTerrain1.latitude, pTerrain1.height);
     const hpr = new Cesium.HeadingPitchRoll(heading, 0, 0);
     const orientation = Cesium.Transforms.headingPitchRollQuaternion(finalPosition, hpr);
@@ -820,56 +971,87 @@ function finishModelOrientation(modelEntity) {
     }
 
     cesiumViewer.flyTo(modelEntity);
-    alert('Projeto 3D orientado e assentado no relevo com sucesso!');
+    alert('Projeto 3D alinhado e assentado com sucesso no terreno!');
 }
 
-window.cancelCesiumGuidedStep = function() {
-    if (orientationHandler) {
-        orientationHandler.destroy();
-        orientationHandler = null;
-    }
-    if (measurementHandler) {
-        measurementHandler.destroy();
-        measurementHandler = null;
-    }
-    const banner = document.getElementById('cesium-guide-banner');
-    if (banner) banner.classList.add('hidden');
-};
+// Corrigir Altura Vertical (Z)
+window.activateVerticalElevationAdjust = function() {
+    if (!uploadedModelEntity) return;
 
-// ==========================================
-// 6. TRIANGULAÇÃO DE ALTURA E AUDITORIA DE GABARITO
-// ==========================================
-let measurementHandler = null;
-let measurePoints = [];
-let triangleEntities = [];
-
-window.activate3DMeasurement = function() {
-    if (!cesiumViewer) return;
-
-    if (measurementHandler) measurementHandler.destroy();
-    triangleEntities.forEach(e => cesiumViewer.entities.remove(e));
-    triangleEntities = [];
-    measurePoints = [];
+    currentInteractionMode = 'adjust_z';
+    setCesiumCursor('ns-resize');
 
     const banner = document.getElementById('cesium-guide-banner');
     const text = document.getElementById('cesium-guide-text');
     if (banner && text) {
         banner.classList.remove('hidden');
         banner.classList.add('flex');
-        text.textContent = 'Passo 1/2: Clique no Ponto Referencial (Base no Relevo)';
+        text.textContent = 'Ajuste de Altura Z: Use os sliders na caixa de ferramentas ou pressione ESC para concluir.';
     }
 
-    measurementHandler = new Cesium.ScreenSpaceEventHandler(cesiumViewer.scene.canvas);
+    const tools = document.getElementById('cesium-model-tools');
+    if (tools) {
+        tools.classList.remove('hidden');
+        tools.classList.add('flex');
+    }
+};
 
-    measurementHandler.setInputAction(function(click) {
-        const cartesian = cesiumViewer.scene.pickPosition(click.position);
-        if (!cartesian) return;
+window.cancelCesiumGuidedStep = function() {
+    if (currentActiveHandler) {
+        currentActiveHandler.destroy();
+        currentActiveHandler = null;
+    }
+    if (snapMarkerEntity) {
+        snapMarkerEntity.show = false;
+    }
+    currentInteractionMode = null;
+    setCesiumCursor('default');
 
-        measurePoints.push(cartesian);
+    const banner = document.getElementById('cesium-guide-banner');
+    if (banner) banner.classList.add('hidden');
+    closeModelContextMenu();
+};
 
-        // Marcador no ponto clicado
+// ==========================================
+// 6. MEDIÇÃO DE ALTURA (TRIANGULAÇÃO NO EIXO Z)
+// ==========================================
+let measurePoints = [];
+let triangleEntities = [];
+
+window.activate3DMeasurement = function() {
+    if (!cesiumViewer) return;
+
+    cancelCesiumGuidedStep();
+    currentInteractionMode = 'measure_height';
+
+    triangleEntities.forEach(e => cesiumViewer.entities.remove(e));
+    triangleEntities = [];
+    measurePoints = [];
+
+    setCesiumCursor('crosshair');
+
+    const banner = document.getElementById('cesium-guide-banner');
+    const text = document.getElementById('cesium-guide-text');
+    if (banner && text) {
+        banner.classList.remove('hidden');
+        banner.classList.add('flex');
+        text.textContent = 'Passo 1/2: Clique no ponto de base no Relevo/Terreno (Eixo X, Y)';
+    }
+
+    currentActiveHandler = new Cesium.ScreenSpaceEventHandler(cesiumViewer.scene.canvas);
+
+    currentActiveHandler.setInputAction(function(movement) {
+        getSnappingPoint(movement.endPosition);
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+    currentActiveHandler.setInputAction(function(click) {
+        const picked = getSnappingPoint(click.position);
+        if (!picked) return;
+
+        measurePoints.push(picked);
+
         const pointEntity = cesiumViewer.entities.add({
-            position: cartesian,
+            position: picked,
             point: {
                 pixelSize: 10,
                 color: measurePoints.length === 1 ? Cesium.Color.fromCssColorString('#10b981') : Cesium.Color.fromCssColorString('#ef4444'),
@@ -881,22 +1063,23 @@ window.activate3DMeasurement = function() {
         triangleEntities.push(pointEntity);
 
         if (measurePoints.length === 1) {
-            if (text) text.textContent = 'Passo 2/2: Clique no Ponto Mais Alto (Topo da Edificação ou Nuvem)';
+            if (text) text.textContent = 'Passo 2/2: Clique no ponto mais alto no Eixo Z (Topo da Edificação ou Nuvem)';
         } else if (measurePoints.length === 2) {
-            measurementHandler.destroy();
-            measurementHandler = null;
-            if (banner) banner.classList.add('hidden');
-
+            cancelCesiumGuidedStep();
             drawTriangleAndAuditGabarito(measurePoints[0], measurePoints[1]);
         }
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+    currentActiveHandler.setInputAction(function() {
+        cancelCesiumGuidedStep();
+    }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
 };
 
 function drawTriangleAndAuditGabarito(pointA, pointB) {
     const cartoA = Cesium.Cartographic.fromCartesian(pointA);
     const cartoB = Cesium.Cartographic.fromCartesian(pointB);
 
-    // Ponto C: mesma lon/lat de B, com altura de A (forma o ângulo de 90°)
+    // Ponto C: mesma projeção horizontal de B com a cota base de A
     const cartoC = new Cesium.Cartographic(cartoB.longitude, cartoB.latitude, cartoA.height);
     const pointC = Cesium.Cartesian3.fromRadians(cartoC.longitude, cartoC.latitude, cartoC.height);
 
@@ -904,7 +1087,7 @@ function drawTriangleAndAuditGabarito(pointA, pointB) {
     const distHorizontal = Cesium.Cartesian3.distance(pointA, pointC);
     const hipotenusa = Cesium.Cartesian3.distance(pointA, pointB);
 
-    // 1. Cateto Vertical (Altura H) - Vermelho
+    // 1. Cateto Vertical (Altura Z) - Vermelho
     const vertLine = cesiumViewer.entities.add({
         polyline: {
             positions: [pointB, pointC],
@@ -934,11 +1117,11 @@ function drawTriangleAndAuditGabarito(pointA, pointB) {
     });
     triangleEntities.push(hypLine);
 
-    // Rótulos 3D cotados nas 3 arestas
+    // Rótulos 3D cotados
     const labelH = cesiumViewer.entities.add({
         position: Cesium.Cartesian3.midpoint(pointB, pointC, new Cesium.Cartesian3()),
         label: {
-            text: `Altura: ${alturaVertical.toFixed(2)}m`,
+            text: `Altura Z: ${alturaVertical.toFixed(2)}m`,
             font: '13px monospace',
             fillColor: Cesium.Color.WHITE,
             showBackground: true,
@@ -990,11 +1173,102 @@ function drawTriangleAndAuditGabarito(pointA, pointB) {
     }
 }
 
-// Medição de Distância de Caminho
-window.activatePathMeasurement = function() {
+// ==========================================
+// 7. MEDIÇÃO DE DISTÂNCIA PLANA HORIZONTAL (X, Y) COM ADERÊNCIA
+// ==========================================
+let distanceEntities = [];
+let distPoints = [];
+
+window.activateDistanceXYMeasurement = function() {
     if (!cesiumViewer) return;
-    alert('Clique nos pontos no mapa para medir o caminho e dê duplo clique para finalizar.');
+
+    cancelCesiumGuidedStep();
+    currentInteractionMode = 'measure_distance';
+
+    distanceEntities.forEach(e => cesiumViewer.entities.remove(e));
+    distanceEntities = [];
+    distPoints = [];
+
+    setCesiumCursor('crosshair');
+
+    const banner = document.getElementById('cesium-guide-banner');
+    const text = document.getElementById('cesium-guide-text');
+    if (banner && text) {
+        banner.classList.remove('hidden');
+        banner.classList.add('flex');
+        text.textContent = 'Passo 1/2: Clique no ponto de origem para medir a distância horizontal (X, Y)';
+    }
+
+    currentActiveHandler = new Cesium.ScreenSpaceEventHandler(cesiumViewer.scene.canvas);
+
+    currentActiveHandler.setInputAction(function(movement) {
+        getSnappingPoint(movement.endPosition);
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+    currentActiveHandler.setInputAction(function(click) {
+        const picked = getSnappingPoint(click.position);
+        if (!picked) return;
+
+        distPoints.push(picked);
+
+        const pointEntity = cesiumViewer.entities.add({
+            position: picked,
+            point: {
+                pixelSize: 10,
+                color: Cesium.Color.fromCssColorString('#6366f1'),
+                outlineColor: Cesium.Color.WHITE,
+                outlineWidth: 2,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY
+            }
+        });
+        distanceEntities.push(pointEntity);
+
+        if (distPoints.length === 1) {
+            if (text) text.textContent = 'Passo 2/2: Clique no ponto de destino para finalizar a cota';
+        } else if (distPoints.length === 2) {
+            cancelCesiumGuidedStep();
+            drawHorizontalDistanceLine(distPoints[0], distPoints[1]);
+        }
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+    currentActiveHandler.setInputAction(function() {
+        cancelCesiumGuidedStep();
+    }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
 };
+
+function drawHorizontalDistanceLine(ptA, ptB) {
+    const cartoA = Cesium.Cartographic.fromCartesian(ptA);
+    const cartoB = Cesium.Cartographic.fromCartesian(ptB);
+
+    // Calcula distância no elipsoide (horizontal plana X, Y)
+    const geodesic = new Cesium.EllipsoidGeodesic(cartoA, cartoB);
+    const distMeters = geodesic.surfaceDistance;
+
+    const lineEntity = cesiumViewer.entities.add({
+        polyline: {
+            positions: [ptA, ptB],
+            width: 4,
+            material: new Cesium.PolylineDashMaterialProperty({ color: Cesium.Color.fromCssColorString('#6366f1'), dashLength: 14.0 }),
+            clampToGround: true
+        }
+    });
+    distanceEntities.push(lineEntity);
+
+    const midPt = Cesium.Cartesian3.midpoint(ptA, ptB, new Cesium.Cartesian3());
+    const labelEntity = cesiumViewer.entities.add({
+        position: midPt,
+        label: {
+            text: `Distância (X,Y): ${distMeters.toFixed(2)} m`,
+            font: '13px monospace',
+            fillColor: Cesium.Color.WHITE,
+            showBackground: true,
+            backgroundColor: Cesium.Color.fromCssColorString('rgba(15,23,42,0.9)'),
+            backgroundPadding: new Cesium.Cartesian2(8, 4),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
+        }
+    });
+    distanceEntities.push(labelEntity);
+}
 
 // Medição de Área
 window.activateAreaMeasurement = function() {

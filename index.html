@@ -976,11 +976,11 @@
             <div class="w-[1px] h-5 bg-white/20 mx-0.5"></div>
 
             <!-- Ferramentas de Análise -->
-            <button onclick="activate3DMeasurement()" id="btn-measure-3d" class="flex items-center gap-1 bg-cyan-600/90 hover:bg-cyan-500 text-white py-1 px-2.5 rounded-lg transition-all text-xs font-bold shadow-sm" title="Medir Altura com Triangulação">
+            <button onclick="activate3DMeasurement()" id="btn-measure-3d" class="flex items-center gap-1 bg-cyan-600/90 hover:bg-cyan-500 text-white py-1 px-2.5 rounded-lg transition-all text-xs font-bold shadow-sm" title="Medir Altura com Triangulação (1º Clique X,Y no Relevo, 2º Clique no Eixo Z)">
                 <span class="material-symbols-outlined text-[15px]">straighten</span> Altura
             </button>
-            <button onclick="activatePathMeasurement()" id="btn-measure-path" class="flex items-center justify-center w-7 h-7 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-all border border-white/10" title="Medir Distância">
-                <span class="material-symbols-outlined text-[15px]">timeline</span>
+            <button onclick="activateDistanceXYMeasurement()" id="btn-measure-distance" class="flex items-center gap-1 bg-indigo-600/90 hover:bg-indigo-500 text-white py-1 px-2.5 rounded-lg transition-all text-xs font-bold shadow-sm" title="Medir Distância Plana (X, Y) com Aderência aos Vértices e Camadas">
+                <span class="material-symbols-outlined text-[15px]">square_foot</span> Distância
             </button>
             <button onclick="activateAreaMeasurement()" id="btn-measure-area" class="flex items-center justify-center w-7 h-7 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-all border border-white/10" title="Medir Área">
                 <span class="material-symbols-outlined text-[15px]">polyline</span>
@@ -1012,7 +1012,10 @@
                 <span class="material-symbols-outlined text-indigo-400 text-[17px] animate-pulse">touch_app</span>
                 <span id="cesium-guide-text" class="font-bold">Passo 1/4: Clique no Ponto 1 de referência no Projeto 3D</span>
             </div>
-            <button onclick="cancelCesiumGuidedStep()" class="text-white/60 hover:text-white text-[11px] underline">Cancelar</button>
+            <div class="flex items-center gap-2">
+                <span class="text-[10px] text-indigo-300/70">[ESC / Botão Direito: Cancelar]</span>
+                <button onclick="cancelCesiumGuidedStep()" class="text-white/60 hover:text-white text-[11px] underline">Cancelar</button>
+            </div>
         </div>
 
         <!-- Status de Auditoria do Gabarito -->
@@ -1029,6 +1032,26 @@
     
     <!-- Cesium Viewer Container -->
     <div id="cesiumContainer" class="flex-1 w-full relative bg-black">
+        
+        <!-- Overlay Global de Carregamento com Mensagem de Status -->
+        <div id="cesium-loading-overlay" class="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-40 hidden flex-col items-center justify-center gap-3 select-none text-white">
+            <div class="w-10 h-10 border-4 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin"></div>
+            <div id="cesium-loading-text" class="text-xs font-bold tracking-wider text-cyan-300">Carregando arquivo...</div>
+        </div>
+
+        <!-- Menu Contextual ao Clicar no Objeto 3D -->
+        <div id="cesium-model-context-menu" class="absolute z-40 bg-slate-950/95 backdrop-blur-xl border border-white/20 rounded-xl p-1.5 shadow-2xl hidden flex-col gap-1 min-w-[200px] text-xs text-white">
+            <div class="text-[10px] font-bold text-slate-400 uppercase px-2 py-0.5 border-b border-white/10 flex items-center justify-between">
+                <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[13px] text-purple-400">domain</span> Projeto 3D</span>
+                <button onclick="closeModelContextMenu()" class="hover:text-white"><span class="material-symbols-outlined text-[13px]">close</span></button>
+            </div>
+            <button onclick="startModelOrientationFlow(uploadedModelEntity); closeModelContextMenu();" class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-blue-600/30 hover:text-blue-300 transition-colors text-left font-medium">
+                <span class="material-symbols-outlined text-[16px] text-blue-400">rotate_right</span> Alinhar Horizontal
+            </button>
+            <button onclick="activateVerticalElevationAdjust(); closeModelContextMenu();" class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-purple-600/30 hover:text-purple-300 transition-colors text-left font-medium">
+                <span class="material-symbols-outlined text-[16px] text-purple-400">height</span> Corrigir Altura Vertical (Z)
+            </button>
+        </div>
         
         <!-- Layer Manager (Camadas 3D & 2D) Expansível até embaixo sem faixa branca de rolagem -->
         <div id="cesium-layer-manager" class="absolute top-3 left-3 bottom-3 z-20 bg-slate-950/90 backdrop-blur-xl border border-white/20 rounded-2xl p-3 flex flex-col gap-2.5 w-60 text-white text-xs shadow-2xl overflow-hidden">
