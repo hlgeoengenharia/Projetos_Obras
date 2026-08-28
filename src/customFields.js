@@ -4,7 +4,12 @@
 function generateFeatureInputHtml(f, value, isFeatureEditMode) {
     if (!value) value = '';
     
-    const hasFormula = f.formulaConfig && ((f.formulaConfig.rules && f.formulaConfig.rules.length > 0) || (f.formulaConfig.fallbackFormula && f.formulaConfig.fallbackFormula.trim() !== ''));
+    const hasFormula = f.formulaConfig && (
+        (f.formulaConfig.mode === 'latest_1n' && f.formulaConfig.latest1nConfig && f.formulaConfig.latest1nConfig.sourceFieldId) ||
+        (f.formulaConfig.mode === 'custom_script' && f.formulaConfig.customScript) ||
+        (f.formulaConfig.rules && f.formulaConfig.rules.length > 0) ||
+        (f.formulaConfig.fallbackFormula && f.formulaConfig.fallbackFormula.trim() !== '')
+    );
     const calcReadonly = hasFormula ? 'readonly' : '';
     const calcDisabled = hasFormula ? 'disabled' : '';
     const calcBgClass = hasFormula ? 'bg-slate-200 dark:bg-slate-800 text-slate-500 cursor-not-allowed font-medium' : 'bg-slate-50 dark:bg-slate-900 dark:text-white';
@@ -1245,6 +1250,163 @@ function checkCondition(cond, valuesMap) {
     }
 }
 
+function parseDateToTimestamp(val) {
+    if (!val) return -Infinity;
+    const s = String(val).trim();
+    if (!s) return -Infinity;
+    
+    // Test DD/MM/YYYY or DD-MM-YYYY
+    const brMatch = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(.*)$/);
+    if (brMatch) {
+        const day = parseInt(brMatch[1], 10);
+        const month = parseInt(brMatch[2], 10) - 1;
+        const year = parseInt(brMatch[3], 10);
+        return new Date(year, month, day).getTime();
+    }
+    
+    const t = Date.parse(s);
+    return isNaN(t) ? -Infinity : t;
+}
+
+function getLatestRecordAcrossTabs(targetTabs, dateFieldId, sourceFieldId, featureData, sourceFieldLabel) {
+    const fData = featureData || window.currentFormFeatureData || {};
+    const allForms = window.currentFormFeatures || [];
+    
+    let collectedEntries = [];
+    
+    let tabIdentifiers = [];
+    if (Array.isArray(targetTabs) && targetTabs.length > 0) {
+        tabIdentifiers = targetTabs;
+    } else {
+        allForms.forEach(tab => {
+            if (tab.isMultiple) tabIdentifiers.push(tab.id);
+        });
+    }
+
+    // Identifica o label de busca
+    let targetLabel = sourceFieldLabel ? sourceFieldLabel.toLowerCase().trim() : '';
+    if (!targetLabel && allForms.length > 0 && sourceFieldId) {
+        for (const tab of allForms) {
+            const f = (tab.fields || []).find(fld => fld.id === sourceFieldId);
+            if (f && f.label) {
+                targetLabel = f.label.toLowerCase().trim();
+                break;
+            }
+        }
+    }
+
+    tabIdentifiers.forEach(tabIdOrName => {
+        let records = [];
+        let tabObj = null;
+        
+        if (fData[tabIdOrName]) {
+            try {
+                records = typeof fData[tabIdOrName] === 'string' ? JSON.parse(fData[tabIdOrName]) : fData[tabIdOrName];
+            } catch(e) { records = []; }
+        }
+        
+        if (allForms.length > 0) {
+            tabObj = allForms.find(t => t.id === tabIdOrName || t.title.toLowerCase().trim() === String(tabIdOrName).toLowerCase().trim());
+            if ((!records || records.length === 0) && tabObj && fData[tabObj.id]) {
+                try {
+                    records = typeof fData[tabObj.id] === 'string' ? JSON.parse(fData[tabObj.id]) : fData[tabObj.id];
+                } catch(e) { records = []; }
+            }
+        }
+        
+        if (!Array.isArray(records)) records = [];
+        
+        // Identifica qual é a chave do campo alvo nesta aba específica
+        let fieldKeyForThisTab = sourceFieldId;
+        if (tabObj && tabObj.fields && targetLabel) {
+            const matchingFieldInTab = tabObj.fields.find(fld => fld.label && fld.label.toLowerCase().trim() === targetLabel);
+            if (matchingFieldInTab) {
+                fieldKeyForThisTab = matchingFieldInTab.id;
+            }
+        }
+
+        records.forEach(rec => {
+            if (!rec || typeof rec !== 'object') return;
+            
+            let recordDate = null;
+            if (dateFieldId && dateFieldId !== 'auto' && rec[dateFieldId] !== undefined) {
+                recordDate = rec[dateFieldId];
+            } else {
+                for (const k of Object.keys(rec)) {
+                    if (k.toLowerCase().includes('data') || k.toLowerCase().includes('date')) {
+                        recordDate = rec[k];
+                        break;
+                    }
+                }
+                if (!recordDate) {
+                    for (const k of Object.keys(rec)) {
+                        const valStr = String(rec[k]).trim();
+                        if (/^\d{4}-\d{2}-\d{2}/.test(valStr) || /^\d{2}[\/\-]\d{2}[\/\-]\d{4}/.test(valStr)) {
+                            recordDate = rec[k];
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            const timestamp = parseDateToTimestamp(recordDate);
+            
+            let val = undefined;
+            if (fieldKeyForThisTab && rec[fieldKeyForThisTab] !== undefined) {
+                val = rec[fieldKeyForThisTab];
+            } else if (sourceFieldId && rec[sourceFieldId] !== undefined) {
+                val = rec[sourceFieldId];
+            } else {
+                for (const k of Object.keys(rec)) {
+                    if (targetLabel && (k.toLowerCase() === targetLabel || k.replace(/[^a-z0-9]/gi, '') === targetLabel.replace(/[^a-z0-9]/gi, ''))) {
+                        val = rec[k];
+                        break;
+                    }
+                }
+            }
+            
+            if (val !== undefined && val !== null && String(val).trim() !== '') {
+                collectedEntries.push({
+                    timestamp: timestamp,
+                    value: val,
+                    record: rec
+                });
+            }
+        });
+    });
+
+    if (collectedEntries.length === 0) return null;
+
+    // Ordena decrescente pelo timestamp da data mais recente
+    collectedEntries.sort((a, b) => b.timestamp - a.timestamp);
+
+    return collectedEntries[0].value;
+}
+
+function getSumAcrossTabs(targetTabs, sourceFieldId, featureData) {
+    const fData = featureData || window.currentFormFeatureData || {};
+    let total = 0;
+    
+    let tabIdentifiers = Array.isArray(targetTabs) ? targetTabs : [targetTabs];
+    tabIdentifiers.forEach(tabId => {
+        let records = [];
+        if (fData[tabId]) {
+            try { records = typeof fData[tabId] === 'string' ? JSON.parse(fData[tabId]) : fData[tabId]; } catch(e) {}
+        }
+        if (Array.isArray(records)) {
+            records.forEach(rec => {
+                if (rec && rec[sourceFieldId] !== undefined) {
+                    total += getNumericValue(rec[sourceFieldId]);
+                }
+            });
+        }
+    });
+    return total;
+}
+
+window.getLatestRecordAcrossTabs = getLatestRecordAcrossTabs;
+window.getSumAcrossTabs = getSumAcrossTabs;
+
 let isEvaluatingCalculations = false;
 function evaluateFormCalculations(container) {
     if (!container) return;
@@ -1277,39 +1439,59 @@ function evaluateFormCalculations(container) {
             let calculatedValue = null;
             let matched = false;
             
-            if (formulaConfig.rules && formulaConfig.rules.length > 0) {
-                for (const rule of formulaConfig.rules) {
-                    let rulePassed = true;
-                    if (rule.conditions && rule.conditions.length > 0) {
-                        rulePassed = rule.conditions.every(cond => checkCondition(cond, valuesMap));
-                    }
-                    
-                    if (rulePassed) {
-                        if (rule.action) {
-                            calculatedValue = evaluateAction(rule.action, valuesMap);
-                        } else if (rule.formula) {
-                            calculatedValue = evaluateMathExpression(rule.formula, valuesMap);
+            // MODO 1: MAIS RECENTE DE 1:N (CROSS-TABS)
+            if (formulaConfig.mode === 'latest_1n' && formulaConfig.latest1nConfig) {
+                const cfg = formulaConfig.latest1nConfig;
+                const val = getLatestRecordAcrossTabs(cfg.targetTabIds, cfg.dateFieldId, cfg.sourceFieldId, window.currentFormFeatureData, cfg.sourceFieldLabel);
+                calculatedValue = (val !== null && val !== undefined && String(val).trim() !== '') ? val : (cfg.fallbackValue || '');
+                matched = true;
+            }
+            // MODO 2: SCRIPT LIVRE / CÓDIGO CUSTOMIZADO
+            else if (formulaConfig.mode === 'custom_script' && formulaConfig.customScript) {
+                try {
+                    const fn = new Function('featureData', 'valuesMap', 'getLatestRecordAcrossTabs', 'getSumAcrossTabs', formulaConfig.customScript);
+                    calculatedValue = fn(window.currentFormFeatureData || {}, valuesMap, getLatestRecordAcrossTabs, getSumAcrossTabs);
+                    matched = true;
+                } catch(eScript) {
+                    console.warn("Erro ao avaliar script customizado da formula:", eScript);
+                }
+            }
+            // MODO 3: REGRAS CONDICIONAIS & MATEMÁTICA
+            else {
+                if (formulaConfig.rules && formulaConfig.rules.length > 0) {
+                    for (const rule of formulaConfig.rules) {
+                        let rulePassed = true;
+                        if (rule.conditions && rule.conditions.length > 0) {
+                            rulePassed = rule.conditions.every(cond => checkCondition(cond, valuesMap));
                         }
+                        
+                        if (rulePassed) {
+                            if (rule.action) {
+                                calculatedValue = evaluateAction(rule.action, valuesMap);
+                            } else if (rule.formula) {
+                                calculatedValue = evaluateMathExpression(rule.formula, valuesMap);
+                            }
+                            matched = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (!matched) {
+                    if (formulaConfig.fallbackAction) {
+                        calculatedValue = evaluateAction(formulaConfig.fallbackAction, valuesMap);
                         matched = true;
-                        break;
+                    } else if (formulaConfig.fallbackFormula && formulaConfig.fallbackFormula.includes('[')) {
+                        calculatedValue = evaluateMathExpression(formulaConfig.fallbackFormula, valuesMap);
+                        matched = true;
                     }
                 }
             }
             
-            if (!matched) {
-                if (formulaConfig.fallbackAction) {
-                    calculatedValue = evaluateAction(formulaConfig.fallbackAction, valuesMap);
-                    matched = true;
-                } else if (formulaConfig.fallbackFormula) {
-                    calculatedValue = evaluateMathExpression(formulaConfig.fallbackFormula, valuesMap);
-                    matched = true;
-                }
-            }
-            
-            if (matched && calculatedValue !== null) {
+            if (matched && calculatedValue !== null && calculatedValue !== undefined) {
                 const fieldType = el.dataset.type;
                 let displayVal = "";
-                if (fieldType === 'currency' || fieldType === 'area_m2' || fieldType === 'length_m' || fieldType === 'volume_m3') {
+                if (typeof calculatedValue === 'number' && (fieldType === 'currency' || fieldType === 'area_m2' || fieldType === 'length_m' || fieldType === 'volume_m3')) {
                     displayVal = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(calculatedValue);
                 } else {
                     displayVal = String(calculatedValue);

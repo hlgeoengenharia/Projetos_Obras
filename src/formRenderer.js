@@ -85,12 +85,14 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
             }
         }
 
-        // Render Edit button inside the tab if we are NOT in edit mode
-        // (e só se essa aba específica também não estiver restrita a
-        // visualização — sem isso alguém com só "Ver" numa aba conseguiria
-        // abrir o formulário de edição mesmo assim, e o banco recusaria o
-        // salvamento sem nenhuma explicação na tela).
-        if (!isEditMode && canEditThisTab) {
+        const isConsolidated = tab.tabType === 'consolidated' || tab.tabType === 'cross_tabs' || tab.isConsolidated || 
+                               tab.title.toUpperCase().includes('HISTÓRICO DE OCUPAÇÃO') || 
+                               tab.title.toUpperCase().includes('HISTORICO DE OCUPACAO') || 
+                               tab.title.toUpperCase().includes('HISTÓRICO CONSOLIDADO') ||
+                               tab.title.toUpperCase().includes('HISTORICO CONSOLIDADO');
+
+        // Render Edit button inside the tab if we are NOT in edit mode (não renderizar em abas de Histórico Consolidado)
+        if (!isEditMode && canEditThisTab && !isConsolidated) {
             html += `
             <div class="flex justify-center mb-4">
                 <button type="button" onclick="toggleFeatureEditMode('${tab.id}')" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto text-sm">
@@ -100,7 +102,9 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
             </div>`;
         }
 
-        if (tab.isMultiple) {
+        if (isConsolidated) {
+            html += renderConsolidatedHistoryTab(tab, featureData, visibleTabs, isTabEditMode);
+        } else if (tab.isMultiple) {
             html += renderMultipleTab(tab, featureData, isTabEditMode);
         } else {
             html += `<div class="flex flex-col gap-2">`;
@@ -194,6 +198,809 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
     if (typeof window.evaluateFormCalculations === 'function') {
         window.evaluateFormCalculations(container);
     }
+};
+
+// --- DASHBOARD DE HISTÓRICO CONSOLIDADO (SINTÉTICO + ANALÍTICO) ---
+window.toggleConsolidatedDetailRow = function(detailId) {
+    const el = document.getElementById(detailId);
+    const icon = document.getElementById('icon_' + detailId);
+    if (!el) return;
+    
+    if (el.classList.contains('hidden')) {
+        el.classList.remove('hidden');
+        if (icon) {
+            icon.textContent = 'expand_less';
+            icon.classList.add('text-blue-600', 'rotate-180');
+        }
+    } else {
+        el.classList.add('hidden');
+        if (icon) {
+            icon.textContent = 'expand_more';
+            icon.classList.remove('text-blue-600', 'rotate-180');
+        }
+    }
+};
+
+function extractConsolidatedHistoryRecords(tab, featureData, allTabs) {
+    const fData = featureData || window.currentFormFeatureData || {};
+    const tabsList = allTabs || window.currentFormFeatures || [];
+    
+    let targetTabs = [];
+    if (tab.targetTabIds && Array.isArray(tab.targetTabIds) && tab.targetTabIds.length > 0) {
+        targetTabs = tabsList.filter(t => tab.targetTabIds.includes(t.id));
+    } else {
+        targetTabs = tabsList.filter(t => t.isMultiple && t.id !== tab.id);
+    }
+
+    const compiledRecords = [];
+
+    targetTabs.forEach(sourceTab => {
+        let records = [];
+        if (fData[sourceTab.id]) {
+            try {
+                records = typeof fData[sourceTab.id] === 'string' ? JSON.parse(fData[sourceTab.id]) : fData[sourceTab.id];
+            } catch(e) { records = []; }
+        }
+        if (!Array.isArray(records)) records = [];
+
+        records.forEach((rec) => {
+            if (!rec || typeof rec !== 'object') return;
+
+            let rawDate = '';
+            for (const f of (sourceTab.fields || [])) {
+                if (f.type === 'date' || f.id.includes('data') || f.label.toLowerCase().includes('data')) {
+                    if (rec[f.id]) { rawDate = rec[f.id]; break; }
+                }
+            }
+            if (!rawDate) {
+                for (const k of Object.keys(rec)) {
+                    if (k.toLowerCase().includes('data') || k.toLowerCase().includes('date')) {
+                        rawDate = rec[k]; break;
+                    }
+                }
+            }
+
+            let formattedDate = rawDate || '---';
+            let timestamp = -Infinity;
+            if (rawDate) {
+                if (typeof window.parseDateToTimestamp === 'function') {
+                    timestamp = window.parseDateToTimestamp(rawDate);
+                } else {
+                    timestamp = Date.parse(rawDate) || 0;
+                }
+                if (rawDate.includes('-')) {
+                    const p = rawDate.split('-');
+                    if (p.length === 3) formattedDate = `${p[2]}/${p[1]}/${p[0]}`;
+                }
+            }
+
+            let situacaoOcupacao = '---';
+            for (const f of (sourceTab.fields || [])) {
+                if (f.label.toLowerCase().includes('situação da ocupação') || f.label.toLowerCase().includes('situacao da ocupacao') || f.label.toLowerCase().includes('ocupação') || f.label.toLowerCase().includes('ocupacao')) {
+                    if (rec[f.id] !== undefined && String(rec[f.id]).trim() !== '') {
+                        situacaoOcupacao = String(rec[f.id]).trim();
+                        break;
+                    }
+                }
+            }
+
+            let situacaoRecuo = '---';
+            for (const f of (sourceTab.fields || [])) {
+                if (f.label.toLowerCase().includes('recuo')) {
+                    if (rec[f.id] !== undefined && String(rec[f.id]).trim() !== '') {
+                        situacaoRecuo = String(rec[f.id]).trim();
+                        break;
+                    }
+                }
+            }
+
+            let areaInvadida = 0;
+            let hasArea = false;
+            for (const f of (sourceTab.fields || [])) {
+                if (f.label.toLowerCase().includes('área invadida') || f.label.toLowerCase().includes('area invadida') || (f.label.toLowerCase().includes('área') && f.type === 'area_m2')) {
+                    if (rec[f.id] !== undefined && rec[f.id] !== '') {
+                        areaInvadida = typeof window.getNumericValue === 'function' ? window.getNumericValue(rec[f.id]) : parseFloat(rec[f.id]) || 0;
+                        hasArea = true;
+                        break;
+                    }
+                }
+            }
+
+            let observacao = '';
+            for (const f of (sourceTab.fields || [])) {
+                if (f.type === 'textarea' || f.label.toLowerCase().includes('observa') || f.label.toLowerCase().includes('parecer') || f.label.toLowerCase().includes('relato')) {
+                    if (rec[f.id]) { observacao = String(rec[f.id]); break; }
+                }
+            }
+
+            let links = [];
+            for (const f of (sourceTab.fields || [])) {
+                if (f.type === 'hiperlink' || f.type === 'hiperlink_1n' || f.label.toLowerCase().includes('link')) {
+                    const rawL = rec[f.id];
+                    if (rawL) {
+                        if (Array.isArray(rawL)) {
+                            links.push(...rawL);
+                        } else if (typeof rawL === 'string' && rawL.startsWith('[')) {
+                            try { links.push(...JSON.parse(rawL)); } catch(e) {}
+                        } else if (typeof rawL === 'string' && rawL.startsWith('{')) {
+                            try { links.push(JSON.parse(rawL)); } catch(e) {}
+                        } else if (typeof rawL === 'object') {
+                            links.push(rawL);
+                        } else if (typeof rawL === 'string' && rawL.trim() !== '') {
+                            links.push({ title: f.label, number: '', url: rawL });
+                        }
+                    }
+                }
+            }
+
+            compiledRecords.push({
+                org: sourceTab.title,
+                orgTabId: sourceTab.id,
+                rawDate: rawDate,
+                formattedDate: formattedDate,
+                timestamp: timestamp,
+                situacaoOcupacao: situacaoOcupacao,
+                situacaoRecuo: situacaoRecuo,
+                areaInvadida: areaInvadida,
+                hasArea: hasArea,
+                observacao: observacao,
+                links: links,
+                rawRecord: rec
+            });
+        });
+    });
+
+    compiledRecords.sort((a, b) => b.timestamp - a.timestamp);
+    return compiledRecords;
+}
+
+function getOrgBadgeHtml(org) {
+    const o = String(org || '').toUpperCase();
+    if (o.includes('PF') || o.includes('POLÍCIA') || o.includes('POLICIA')) {
+        return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200 border border-blue-300 dark:border-blue-700 shadow-sm"><span class="material-symbols-outlined text-[13px]">local_police</span> ${org}</span>`;
+    }
+    if (o.includes('SPU') || o.includes('PATRIMÔNIO') || o.includes('PATRIMONIO') || o.includes('FEDERAL')) {
+        return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700 shadow-sm"><span class="material-symbols-outlined text-[13px]">account_balance</span> ${org}</span>`;
+    }
+    if (o.includes('MUNIC') || o.includes('PREFEITURA')) {
+        return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-300 dark:border-amber-700 shadow-sm"><span class="material-symbols-outlined text-[13px]">domain</span> ${org}</span>`;
+    }
+    return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-900/60 dark:text-purple-200 border border-purple-300 dark:border-purple-700 shadow-sm"><span class="material-symbols-outlined text-[13px]">corporate_fare</span> ${org}</span>`;
+}
+
+function getStatusBadgeHtml(status) {
+    const s = String(status || '').toLowerCase().trim();
+    if (!s || s === '---') return '<span class="text-slate-400 opacity-60">---</span>';
+    if (s.includes('irregular') || s.includes('invasão') || s.includes('invadido') || s.includes('não conforme')) {
+        return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 border border-red-200 dark:border-red-800/60"><span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span> ${status}</span>`;
+    }
+    if (s.includes('regular') || s.includes('conforme') || s.includes('legal')) {
+        return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> ${status}</span>`;
+    }
+    return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">${status}</span>`;
+}
+
+function getRecuoBadgeHtml(recuo) {
+    const r = String(recuo || '').toLowerCase().trim();
+    if (!r || r === '---') return '<span class="text-slate-400 opacity-60">---</span>';
+    if (r.includes('já recuou') || r.includes('ja recuou') || r.includes('recuado') || r.includes('sim')) {
+        return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60"><span class="material-symbols-outlined text-[12px]">check_circle</span> ${recuo}</span>`;
+    }
+    if (r.includes('não') || r.includes('nao') || r.includes('pendente')) {
+        return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60"><span class="material-symbols-outlined text-[12px]">warning</span> ${recuo}</span>`;
+    }
+    return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">${recuo}</span>`;
+}
+
+function renderConsolidatedHistoryTab(tab, featureData, allTabs, isEditMode) {
+    const records = extractConsolidatedHistoryRecords(tab, featureData, allTabs);
+    const tpl = tab.reportTemplate || {
+        title: 'RELATÓRIO CONSOLIDADO DE VISTORIAS & OCUPAÇÃO',
+        systemName: 'Sistema de Gestão Territorial',
+        showSec1: true,
+        sec1Title: '1. Visão Sintética (Quadro Cronológico)',
+        sec1Columns: [
+            { label: 'Data', fieldKey: 'data' },
+            { label: 'Entidade / Órgão', fieldKey: 'org' },
+            { label: 'Situação da Ocupação', fieldKey: 'situacao_ocupacao' },
+            { label: 'Situação do Recuo', fieldKey: 'situacao_recuo' },
+            { label: 'Área Invadida (m²)', fieldKey: 'area_invadida' }
+        ],
+        showSec2: true,
+        sec2Title: '2. Visão Analítica (Linha do Tempo com Observações & Hiperlinks)',
+        sec2Fields: ['situacao_ocupacao', 'situacao_recuo', 'area_invadida', 'observacao', 'links'],
+        footerText: 'Documento gerado automaticamente pelo Sistema de Gestão e Fiscalização de Obras e Imóveis.'
+    };
+
+    const sec1Cols = (tpl.sec1Columns && tpl.sec1Columns.length > 0) ? tpl.sec1Columns : [
+        { label: 'Data', fieldKey: 'data' },
+        { label: 'Entidade / Órgão', fieldKey: 'org' },
+        { label: 'Situação da Ocupação', fieldKey: 'situacao_ocupacao' },
+        { label: 'Situação do Recuo', fieldKey: 'situacao_recuo' },
+        { label: 'Área Invadida (m²)', fieldKey: 'area_invadida' }
+    ];
+    const sec2Fields = tpl.sec2Fields || ['situacao_ocupacao', 'situacao_recuo', 'area_invadida', 'observacao', 'links'];
+
+    let html = `
+        <div class="flex flex-col gap-6 py-2">
+    `;
+
+    if (records.length === 0) {
+        html += `
+            <div class="text-center py-10 bg-white dark:bg-slate-900 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-6">
+                <span class="material-symbols-outlined text-slate-400 text-[48px] mb-2 block">folder_off</span>
+                <p class="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Nenhum Registro Cadastrado</p>
+                <p class="text-[11px] text-slate-400 mt-1 max-w-md mx-auto">Cadastre vistorias nas abas (PF, SPU, Município) para que o histórico seja compilado automaticamente aqui.</p>
+            </div>
+        </div>`;
+        return html;
+    }
+
+    // 1. VISÃO SINTÉTICA (Tabela Cronológica Expansível com Detalhes Analíticos)
+    if (tpl.showSec1 !== false) {
+        let thsHtml = '';
+        sec1Cols.forEach((col, cIdx) => {
+            const align = col.fieldKey === 'area_invadida' ? 'text-right' : 'text-left';
+            thsHtml += `<th class="py-2 px-2 text-[10px] sm:text-[11px] font-bold leading-tight break-words ${align}">${col.label || 'Coluna'}</th>`;
+        });
+        // Coluna extra para o indicador chevron de expansão
+        thsHtml += `<th class="w-6 py-2 px-1 text-center"></th>`;
+
+        let rowsHtml = '';
+        records.forEach((r, idx) => {
+            const areaFmt = r.areaInvadida > 0 ? `${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(r.areaInvadida)} m²` : (r.hasArea ? '0,00 m²' : '---');
+            const detailRowId = `cons_detail_${tab.id}_${idx}`;
+            
+            // Linha Sintética Principal (Clicável para expandir)
+            rowsHtml += `
+                <tr onclick="toggleConsolidatedDetailRow('${detailRowId}')" class="cursor-pointer hover:bg-blue-50/80 dark:hover:bg-slate-800/80 transition-colors select-none group border-b border-slate-100 dark:border-slate-800">
+            `;
+            sec1Cols.forEach(col => {
+                if (col.fieldKey === 'data') {
+                    rowsHtml += `<td class="py-2 px-2 font-semibold text-slate-900 dark:text-white text-[10px] sm:text-[11px] leading-tight break-words"><span class="inline-flex items-center gap-1"><span class="material-symbols-outlined text-slate-400 text-[13px]">calendar_month</span> ${r.formattedDate}</span></td>`;
+                } else if (col.fieldKey === 'org') {
+                    rowsHtml += `<td class="py-2 px-2 text-[10px] sm:text-[11px] leading-tight">${getOrgBadgeHtml(r.org)}</td>`;
+                } else if (col.fieldKey === 'situacao_ocupacao') {
+                    rowsHtml += `<td class="py-2 px-2 text-[10px] sm:text-[11px] leading-tight">${getStatusBadgeHtml(r.situacaoOcupacao)}</td>`;
+                } else if (col.fieldKey === 'situacao_recuo') {
+                    rowsHtml += `<td class="py-2 px-2 text-[10px] sm:text-[11px] leading-tight">${getRecuoBadgeHtml(r.situacaoRecuo)}</td>`;
+                } else if (col.fieldKey === 'area_invadida') {
+                    rowsHtml += `<td class="py-2 px-2 text-right font-mono font-bold text-slate-800 dark:text-slate-200 text-[10px] sm:text-[11px] leading-tight whitespace-nowrap">${areaFmt}</td>`;
+                } else {
+                    const customVal = (r.rawRecord && r.rawRecord[col.fieldKey] !== undefined) ? r.rawRecord[col.fieldKey] : '---';
+                    rowsHtml += `<td class="py-2 px-2 text-slate-700 dark:text-slate-300 text-[10px] sm:text-[11px] leading-tight break-words">${customVal}</td>`;
+                }
+            });
+            rowsHtml += `
+                <td class="py-2 px-1 text-center">
+                    <span id="icon_${detailRowId}" class="material-symbols-outlined text-[16px] text-slate-400 group-hover:text-blue-600 transition-transform duration-200">expand_more</span>
+                </td>
+            </tr>`;
+
+            // Linha Expansível com o Detalhamento Analítico Completo
+            let linksHtml = '';
+            if (sec2Fields.includes('links') && r.links && r.links.length > 0) {
+                let linkItemsHtml = '';
+                r.links.forEach(link => {
+                    const lTitle = link.title || link.name || 'Documento';
+                    const lNum = link.number ? link.number : '';
+                    const lUrl = link.url || '#';
+                    linkItemsHtml += `
+                        <div class="p-2 rounded-lg bg-sky-50/70 dark:bg-sky-950/40 border border-sky-200/80 dark:border-sky-800/60 text-xs space-y-0.5 min-w-[200px]">
+                            <div class="font-bold text-sky-800 dark:text-sky-200 flex items-center gap-1.5">
+                                <span class="material-symbols-outlined text-[13px] text-sky-600">article</span>
+                                <span>${lTitle}</span>
+                            </div>
+                            ${lNum ? `<div class="text-[11px] font-bold text-slate-700 dark:text-slate-300 ml-5">nº ${lNum}</div>` : ''}
+                            ${lUrl && lUrl !== '#' ? `
+                                <div class="ml-5">
+                                    <a href="${lUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-[11px] text-sky-600 dark:text-sky-400 hover:underline font-bold">
+                                        <span class="material-symbols-outlined text-[12px]">open_in_new</span> hiperlink
+                                    </a>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+
+                linksHtml += `
+                    <div class="mt-2.5 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5 flex items-center gap-1">
+                            <span class="material-symbols-outlined text-[13px]">attachment</span> Documentos & Hiperlinks:
+                        </span>
+                        <div class="flex flex-col gap-2">
+                            ${linkItemsHtml}
+                        </div>
+                    </div>
+                `;
+            }
+
+            rowsHtml += `
+                <tr id="${detailRowId}" class="hidden bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-700">
+                    <td colspan="${sec1Cols.length + 1}" class="p-3">
+                        <div class="bg-white dark:bg-slate-800/90 rounded-lg p-3 border border-slate-200 dark:border-slate-700 shadow-inner space-y-2">
+                            <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-1.5">
+                                <span class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                    <span class="material-symbols-outlined text-indigo-500 text-[15px]">timeline</span> Detalhes da Vistoria (${r.formattedDate} - ${r.org})
+                                </span>
+                                <span class="text-[10px] font-mono text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded">Área: ${areaFmt}</span>
+                            </div>
+                            
+                            ${sec2Fields.includes('observacao') ? `
+                            <div class="text-[11px] leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-line bg-slate-50 dark:bg-slate-900/40 p-2 rounded border border-slate-100 dark:border-slate-800">
+                                <strong class="text-slate-900 dark:text-white block mb-0.5">Relato Técnico / Observações:</strong>
+                                ${r.observacao ? r.observacao : '<span class="italic text-slate-400">Nenhuma observação técnica registrada nesta vistoria.</span>'}
+                            </div>` : ''}
+
+                            ${linksHtml}
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+
+        html += `
+            <div>
+                <div class="flex items-center justify-between mb-2 px-1">
+                    <div class="flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sky-600 dark:text-sky-400 text-[18px]">table_rows</span>
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">${tpl.sec1Title || '1. Visão Sintética (Quadro Cronológico)'}</h4>
+                    </div>
+                    <span class="text-[10px] text-slate-400 italic">💡 Clique em uma linha para ver os detalhes</span>
+                </div>
+                
+                <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+                    <table class="w-full text-left border-collapse table-auto">
+                        <thead class="bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
+                            <tr>
+                                ${thsHtml}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    html += `
+        <!-- Botão Gerar Relatório ao Final -->
+        <div class="pt-2 flex justify-center pb-2">
+            <button type="button" onclick="exportFeatureHistoryToWord('${tab.id}')" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2.5 w-full sm:w-auto">
+                <span class="material-symbols-outlined text-[20px]">description</span>
+                Gerar Relatório
+            </button>
+        </div>
+    </div>`;
+
+    return html;
+}
+
+// EXPORTAÇÃO PARA MICROSOFT WORD / GOOGLE DOCS (.DOC / .DOCX FORMATADO)
+window.exportFeatureHistoryToWord = function(tabId) {
+    const tab = (window.currentFormFeatures || []).find(t => t.id === tabId) || { title: 'Histórico de Ocupação' };
+    const featureData = window.currentFormFeatureData || {};
+    const records = extractConsolidatedHistoryRecords(tab, featureData, window.currentFormFeatures || []);
+    const tpl = tab.reportTemplate || {
+        title: 'Relatório Consolidado de Vistorias & Ocupação',
+        systemName: 'SISTEMA DE GESTÃO TERRITORIAL',
+        showSec1: true,
+        sec1Title: '1. QUADRO SINTÉTICO (HISTÓRICO DE OCORRÊNCIAS)',
+        sec1Columns: [
+            { label: 'DATA', fieldKey: 'data' },
+            { label: 'ENTIDADE / ÓRGÃO', fieldKey: 'org' },
+            { label: 'SITUAÇÃO OCUPAÇÃO', fieldKey: 'situacao_ocupacao' },
+            { label: 'SITUAÇÃO RECUO', fieldKey: 'situacao_recuo' },
+            { label: 'ÁREA INVADIDA', fieldKey: 'area_invadida' }
+        ],
+        showSec2: true,
+        sec2Title: '2. RELATÓRIO ANALÍTICO DETALHADO',
+        sec2Fields: ['situacao_ocupacao', 'situacao_recuo', 'area_invadida', 'observacao', 'links'],
+        footerText: 'Documento gerado automaticamente pelo Sistema de Gestão e Fiscalização de Obras e Imóveis'
+    };
+
+    const sec1Cols = (tpl.sec1Columns && tpl.sec1Columns.length > 0) ? tpl.sec1Columns : [
+        { label: 'DATA', fieldKey: 'data' },
+        { label: 'ENTIDADE / ÓRGÃO', fieldKey: 'org' },
+        { label: 'SITUAÇÃO OCUPAÇÃO', fieldKey: 'situacao_ocupacao' },
+        { label: 'SITUAÇÃO RECUO', fieldKey: 'situacao_recuo' },
+        { label: 'ÁREA INVADIDA', fieldKey: 'area_invadida' }
+    ];
+    const sec2Fields = tpl.sec2Fields || ['situacao_ocupacao', 'situacao_recuo', 'area_invadida', 'observacao', 'links'];
+
+    // Formatador universal de valores para o relatório
+    function formatAnyFieldValueForReport(val) {
+        if (val === undefined || val === null) return 'Não informado';
+        if (typeof val === 'object') {
+            if (val.logradouro || val.cep || val.bairro || val.cidade) {
+                let parts = [];
+                let log = val.logradouro || '';
+                if (val.numero && String(val.numero).toLowerCase() !== 'null' && String(val.numero).trim() !== '') log += ', nº ' + val.numero;
+                if (val.complemento && String(val.complemento).toLowerCase() !== 'null' && String(val.complemento).trim() !== '') log += ' (' + val.complemento + ')';
+                if (log) parts.push(log);
+                if (val.bairro && String(val.bairro).toLowerCase() !== 'null' && String(val.bairro).trim() !== '') parts.push(val.bairro);
+                if (val.cidade && String(val.cidade).toLowerCase() !== 'null' && String(val.cidade).trim() !== '') parts.push(val.cidade);
+                if (parts.length > 0) return parts.join(' - ');
+            }
+            return JSON.stringify(val);
+        }
+        
+        let strVal = String(val).trim();
+        if (strVal === '' || strVal === 'null' || strVal === 'undefined' || strVal === '---') return 'Não informado';
+        
+        // Decodificar JSON de Endereço/CEP se for string serializada
+        if (strVal.startsWith('{') && strVal.endsWith('}')) {
+            try {
+                const parsed = JSON.parse(strVal);
+                if (parsed.logradouro || parsed.cep || parsed.bairro || parsed.cidade) {
+                    let parts = [];
+                    let log = parsed.logradouro || '';
+                    if (parsed.numero && String(parsed.numero).toLowerCase() !== 'null' && String(parsed.numero).trim() !== '') log += ', nº ' + parsed.numero;
+                    if (parsed.complemento && String(parsed.complemento).toLowerCase() !== 'null' && String(parsed.complemento).trim() !== '') log += ' (' + parsed.complemento + ')';
+                    if (log) parts.push(log);
+                    if (parsed.bairro && String(parsed.bairro).toLowerCase() !== 'null' && String(parsed.bairro).trim() !== '') parts.push(parsed.bairro);
+                    if (parsed.cidade && String(parsed.cidade).toLowerCase() !== 'null' && String(parsed.cidade).trim() !== '') parts.push(parsed.cidade);
+                    if (parts.length > 0) return parts.join(' - ');
+                }
+            } catch(e) {}
+        }
+        
+        let cleanDigits = strVal.replace(/\D/g, '');
+        if (cleanDigits.length === 20) {
+            return cleanDigits.replace(/(\d{7})(\d{2})(\d{4})(\d{1})(\d{2})(\d{4})/, "$1-$2.$3.$4.$5.$6");
+        }
+        
+        return strVal;
+    }
+
+    // Extrator inteligente e profundo de valores do imóvel
+    function getCleanFeatureVal(fieldId, label) {
+        if (fieldId && featureData[fieldId] !== undefined && String(featureData[fieldId]).trim() !== '' && String(featureData[fieldId]) !== 'null') {
+            return formatAnyFieldValueForReport(featureData[fieldId]);
+        }
+        
+        if (fieldId) {
+            for (const [k, v] of Object.entries(featureData)) {
+                if (v && (k.toLowerCase() === fieldId.toLowerCase() || k.replace(/\W/g,'').toLowerCase() === fieldId.replace(/\W/g,'').toLowerCase())) {
+                    return formatAnyFieldValueForReport(v);
+                }
+            }
+        }
+
+        const keyLower = String(label || '').toLowerCase();
+        
+        if (keyLower.includes('ipl') || keyLower.includes('ipf') || keyLower.includes('inscri') || keyLower.includes('identifica')) {
+            for (const [k, v] of Object.entries(featureData)) {
+                if (!v) continue;
+                const kL = k.toLowerCase();
+                if ((kL.includes('ipl') || kL.includes('ipf') || kL.includes('inscri') || kL.includes('codigo') || kL.includes('identifica')) && String(v).trim() !== '') {
+                    return formatAnyFieldValueForReport(v);
+                }
+            }
+            for (const tab of (window.currentFormFeatures || [])) {
+                for (const f of (tab.fields || [])) {
+                    if (f.type === 'ipl' || f.type === 'ipf' || f.id.toLowerCase().includes('ipl') || f.label.toLowerCase().includes('ipl')) {
+                        if (featureData[f.id]) return formatAnyFieldValueForReport(featureData[f.id]);
+                    }
+                }
+            }
+        }
+        
+        if (keyLower.includes('endereço') || keyLower.includes('endereco') || keyLower.includes('logradouro') || keyLower.includes('rua') || keyLower.includes('localiza')) {
+            for (const [k, v] of Object.entries(featureData)) {
+                if (!v) continue;
+                const kL = k.toLowerCase();
+                if (kL.includes('endereco') || kL.includes('endereço') || kL.includes('cep') || kL.includes('logradouro') || kL.includes('localizacao')) {
+                    const formatted = formatAnyFieldValueForReport(v);
+                    if (formatted !== 'Não informado') return formatted;
+                }
+            }
+        }
+        
+        if (keyLower.includes('propriet') || keyLower.includes('possuidor') || keyLower.includes('respons') || keyLower.includes('nome')) {
+            for (const [k, v] of Object.entries(featureData)) {
+                if (!v) continue;
+                const kL = k.toLowerCase();
+                if ((kL.includes('propriet') || kL.includes('possuidor') || kL.includes('respons') || kL.includes('titular') || kL.includes('nome')) && !kL.includes('arquivo') && !kL.includes('sistema')) {
+                    return formatAnyFieldValueForReport(v);
+                }
+            }
+        }
+
+        if (keyLower.includes('bairro') || keyLower.includes('municip') || keyLower.includes('cidade')) {
+            const b = featureData.bairro || '';
+            const m = featureData.municipio || featureData.cidade || '';
+            if (b && m) return `${b}, ${m}`;
+            return b || m || 'Não informado';
+        }
+
+        const cleanLabel = keyLower.replace(/[^a-z0-9]/g, '');
+        for (const [k, v] of Object.entries(featureData)) {
+            if (!v) continue;
+            const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (cleanK && (cleanLabel.includes(cleanK) || cleanK.includes(cleanLabel))) {
+                return formatAnyFieldValueForReport(v);
+            }
+        }
+
+        return 'Não informado';
+    }
+
+    // Badges coloridos idênticos ao PDF
+    function getDocBadge(val, type) {
+        if (!val || val === 'Não informado' || val === '---') return '<span style="color:#64748b; font-size:9pt;">Não informado</span>';
+        const str = String(val).trim();
+        const strL = str.toLowerCase();
+        
+        if (type === 'org') {
+            if (strL.includes('spu')) return `<span style="background-color:#e0f2fe; color:#0369a1; padding:2px 8px; border-radius:4px; font-weight:bold; font-size:8.5pt;">${str}</span>`;
+            if (strL.includes('pf')) return `<span style="background-color:#e0f2fe; color:#0284c7; padding:2px 8px; border-radius:4px; font-weight:bold; font-size:8.5pt;">${str}</span>`;
+            return `<span style="background-color:#f1f5f9; color:#334155; padding:2px 8px; border-radius:4px; font-weight:bold; font-size:8.5pt;">${str}</span>`;
+        }
+        
+        if (type === 'ocupacao') {
+            if (strL.includes('irregular')) return `<span style="background-color:#fee2e2; color:#b91c1c; padding:2px 8px; border-radius:4px; font-weight:500; font-size:8.5pt;">${str}</span>`;
+            if (strL.includes('regular')) return `<span style="background-color:#dcfce7; color:#15803d; padding:2px 8px; border-radius:4px; font-weight:500; font-size:8.5pt;">${str}</span>`;
+            return `<span style="background-color:#f1f5f9; color:#475569; padding:2px 8px; border-radius:4px; font-size:8.5pt;">${str}</span>`;
+        }
+        
+        if (type === 'recuo') {
+            if (strL.includes('não') || strL.includes('nao')) return `<span style="background-color:#fef3c7; color:#b45309; padding:2px 8px; border-radius:4px; font-weight:500; font-size:8.5pt;">${str}</span>`;
+            if (strL.includes('já') || strL.includes('ja') || strL.includes('recuou')) return `<span style="background-color:#dcfce7; color:#15803d; padding:2px 8px; border-radius:4px; font-weight:500; font-size:8.5pt;">${str}</span>`;
+            return `<span style="background-color:#f1f5f9; color:#475569; padding:2px 8px; border-radius:4px; font-size:8.5pt;">${str}</span>`;
+        }
+        
+        return str;
+    }
+
+    // Montar o bloco de identificação do imóvel (Caixa com rótulo em negrito e valor ao lado)
+    const mappings = tpl.fieldMappings && tpl.fieldMappings.length > 0 ? tpl.fieldMappings : [
+        { label: 'Identificação do Imóvel (IPL):', fieldId: 'ipl' },
+        { label: 'Endereço:', fieldId: 'logradouro' },
+        { label: 'Proprietário / Responsável:', fieldId: 'proprietario' }
+    ];
+
+    let metaBoxHtml = '';
+    mappings.forEach((m, mIdx) => {
+        const val = getCleanFeatureVal(m.fieldId, m.label);
+        const isLast = mIdx === mappings.length - 1;
+        let labelFmt = String(m.label || '').trim();
+        if (!labelFmt.endsWith(':')) labelFmt += ':';
+        metaBoxHtml += `<p style="margin: 0 0 ${isLast ? '0' : '5px'} 0; font-size: 10pt; color: #0f172a;"><strong>${labelFmt}</strong> ${val}</p>`;
+    });
+
+    const dataEmissao = new Date().toLocaleDateString('pt-BR');
+
+    // Seção 1 (Word - Tabela Sintética idêntica ao PDF)
+    let secao1DocHtml = '';
+    if (tpl.showSec1 !== false) {
+        let thsHtml = '';
+        sec1Cols.forEach(col => {
+            const align = col.fieldKey === 'area_invadida' ? 'text-align: right;' : 'text-align: left;';
+            const colLabel = String(col.label || '').toUpperCase();
+            thsHtml += `<th style="padding: 7px 10px; background-color: #0b1120; color: #ffffff; font-weight: bold; font-size: 8pt; letter-spacing: 0.5px; border: 1px solid #0b1120; ${align}">${colLabel}</th>`;
+        });
+
+        let rowsSintetica = '';
+        records.forEach((r, idx) => {
+            const areaFmt = r.areaInvadida > 0 ? `${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(r.areaInvadida)} m²` : (r.hasArea ? '0,00 m²' : '---');
+            const rowBg = idx % 2 === 1 ? '#f8fafc' : '#ffffff';
+            rowsSintetica += `<tr style="background-color: ${rowBg};">`;
+            sec1Cols.forEach(col => {
+                if (col.fieldKey === 'data') {
+                    rowsSintetica += `<td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 9pt; font-weight: bold; color: #0f172a;">${r.formattedDate}</td>`;
+                } else if (col.fieldKey === 'org') {
+                    rowsSintetica += `<td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0;">${getDocBadge(r.org, 'org')}</td>`;
+                } else if (col.fieldKey === 'situacao_ocupacao') {
+                    rowsSintetica += `<td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0;">${getDocBadge(r.situacaoOcupacao, 'ocupacao')}</td>`;
+                } else if (col.fieldKey === 'situacao_recuo') {
+                    rowsSintetica += `<td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0;">${getDocBadge(r.situacaoRecuo, 'recuo')}</td>`;
+                } else if (col.fieldKey === 'area_invadida') {
+                    rowsSintetica += `<td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: bold; font-size: 9pt; color: #0f172a;">${areaFmt}</td>`;
+                } else {
+                    const customVal = (r.rawRecord && r.rawRecord[col.fieldKey] !== undefined) ? r.rawRecord[col.fieldKey] : '---';
+                    rowsSintetica += `<td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 9pt; color: #0f172a;">${customVal}</td>`;
+                }
+            });
+            rowsSintetica += `</tr>`;
+        });
+
+        secao1DocHtml = `
+            <h2 style="font-size: 10pt; font-weight: bold; color: #0f172a; margin: 20px 0 8px 0; text-transform: uppercase; letter-spacing: 0.3px;">
+                ${tpl.sec1Title || '1. QUADRO SINTÉTICO (HISTÓRICO DE OCORRÊNCIAS)'}
+            </h2>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 22px;">
+                <thead>
+                    <tr>
+                        ${thsHtml}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsSintetica}
+                </tbody>
+            </table>
+        `;
+    }
+
+    // Seção 2 (Word - Relatório Analítico idêntico ao PDF)
+    let secao2DocHtml = '';
+    if (tpl.showSec2 !== false) {
+        let relatorioAnalitico = '';
+        records.forEach((r, idx) => {
+            const areaFmt = r.areaInvadida > 0 ? `${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(r.areaInvadida)} m²` : (r.hasArea ? '0,00 m²' : '---');
+            
+            let linksList = '';
+            if (sec2Fields.includes('links') && r.links && r.links.length > 0) {
+                let linkRowsHtml = '';
+                r.links.forEach(l => {
+                    const lTitle = l.title || l.name || 'Documento';
+                    const lNum = l.number ? ` &mdash; ${l.number.toLowerCase().includes('nº') || l.number.toLowerCase().includes('no') ? l.number : 'nº ' + l.number}` : '';
+                    const lUrl = l.url || '#';
+                    linkRowsHtml += `
+                        <table style="width: 100%; border-collapse: collapse; margin-top: 4px;">
+                            <tr>
+                                <td style="font-size: 9pt; color: #334155; vertical-align: middle;">
+                                    &bull; <strong>${lTitle}</strong>${lNum ? ` <span style="color:#0f172a; font-weight:bold;">${lNum}</span>` : ''}
+                                </td>
+                                <td style="text-align: right; vertical-align: middle; white-space: nowrap;">
+                                    ${lUrl && lUrl !== '#' ? `
+                                        <a href="${lUrl}" target="_blank" style="display: inline-block; background-color: #f0f9ff; color: #0284c7; border: 1px solid #bae6fd; padding: 2px 8px; border-radius: 4px; font-size: 8pt; font-weight: bold; text-decoration: none;">
+                                            Acessar Link &#8599;
+                                        </a>
+                                    ` : ''}
+                                </td>
+                            </tr>
+                        </table>
+                    `;
+                });
+
+                linksList = `
+                    <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #f1f5f9;">
+                        <span style="font-size: 7.5pt; font-weight: bold; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 3px;">
+                            DOCUMENTOS & HIPERLINKS ANEXADOS
+                        </span>
+                        ${linkRowsHtml}
+                    </div>
+                `;
+            }
+
+            relatorioAnalitico += `
+                <div style="margin-bottom: 16px; border: 1px solid #e2e8f0; border-top: 3px solid #0284c7; border-radius: 4px; background-color: #ffffff; padding: 12px 14px;">
+                    <!-- Cabeçalho do Card (Data + Órgão à esquerda | Área Invadida à direita) -->
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
+                        <tr>
+                            <td style="vertical-align: middle;">
+                                <span style="font-size: 10pt; font-weight: bold; color: #0f172a; margin-right: 8px;">${r.formattedDate}</span>
+                                <span style="background-color: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 8.5pt;">
+                                    Órgão: ${r.org}
+                                </span>
+                            </td>
+                            <td style="text-align: right; vertical-align: middle; font-size: 9pt; color: #64748b;">
+                                Área Invadida: <strong style="color: #0f172a; font-size: 9.5pt;">${areaFmt}</strong>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <!-- Status e Recuo com Badges -->
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px;">
+                        <tr>
+                            <td style="width: 50%; font-size: 9pt; color: #475569;">
+                                Situação da Ocupação: &nbsp;${getDocBadge(r.situacaoOcupacao, 'ocupacao')}
+                            </td>
+                            <td style="width: 50%; font-size: 9pt; color: #475569;">
+                                Situação do Recuo: &nbsp;${getDocBadge(r.situacaoRecuo, 'recuo')}
+                            </td>
+                        </tr>
+                    </table>
+
+                    <!-- Observações / Relato Técnico -->
+                    ${sec2Fields.includes('observacao') ? `
+                    <div style="margin-top: 8px; margin-bottom: 6px;">
+                        <span style="font-size: 7.5pt; font-weight: bold; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 2px;">
+                            OBSERVAÇÕES / RELATO TÉCNICO
+                        </span>
+                        <p style="margin: 0; font-size: 9pt; color: #334155; line-height: 1.4;">
+                            ${r.observacao ? r.observacao.replace(/\n/g, '<br>') : '<span style="color:#94a3b8; font-style:italic;">Nenhuma observação técnica registrada.</span>'}
+                        </p>
+                    </div>` : ''}
+
+                    <!-- Documentos & Hiperlinks -->
+                    ${linksList}
+                </div>
+            `;
+        });
+
+        secao2DocHtml = `
+            <h2 style="font-size: 10pt; font-weight: bold; color: #0f172a; margin: 22px 0 10px 0; text-transform: uppercase; letter-spacing: 0.3px;">
+                ${tpl.sec2Title || '2. RELATÓRIO ANALÍTICO DETALHADO'}
+            </h2>
+            ${relatorioAnalitico}
+        `;
+    }
+
+    const docContent = `
+        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+        <head>
+            <meta charset="utf-8">
+            <title>${tpl.title || 'Relatório Consolidado de Vistorias & Ocupação'}</title>
+            <style>
+                @page {
+                    size: A4;
+                    margin: 15mm 15mm 15mm 15mm;
+                }
+                body {
+                    font-family: 'Segoe UI', 'Arial', sans-serif;
+                    font-size: 9.5pt;
+                    color: #0f172a;
+                    line-height: 1.35;
+                    background-color: #ffffff;
+                }
+                h1 {
+                    font-size: 15pt;
+                    font-weight: bold;
+                    color: #0b1c3d;
+                    text-align: center;
+                    margin: 12px 0 4px 0;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                    line-height: 1.25;
+                }
+                h2 {
+                    font-size: 10pt;
+                    font-weight: bold;
+                    color: #0f172a;
+                    text-transform: uppercase;
+                }
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                }
+                a {
+                    color: #0284c7;
+                    text-decoration: none;
+                }
+            </style>
+        </head>
+        <body>
+            <!-- Subtítulo Superior Topo Direito -->
+            <div style="text-align: right; font-size: 9pt; color: #64748b; font-style: italic; margin-bottom: 8px;">
+                ${tpl.systemName || 'Sistema de Gestão Territorial'}
+            </div>
+
+            <!-- Título Principal Centralizado -->
+            <h1>${tpl.title || 'RELATÓRIO CONSOLIDADO DE VISTORIAS &<br>OCUPAÇÃO'}</h1>
+            <p style="text-align: center; font-size: 9.5pt; color: #334155; margin: 0 0 16px 0;">
+                Emissão: ${dataEmissao} &nbsp;|&nbsp; ${tpl.systemName || 'Sistema de Gestão Territorial'}
+            </p>
+
+            <!-- Quadro de Identificação do Imóvel -->
+            <div style="border: 1px solid #cbd5e1; background-color: #ffffff; padding: 10px 14px; margin-bottom: 20px; font-size: 10pt; line-height: 1.5;">
+                ${metaBoxHtml}
+            </div>
+
+            ${secao1DocHtml}
+            ${secao2DocHtml}
+
+            <!-- Rodapé Oficial Discreto -->
+            <div style="text-align: center; font-size: 8pt; color: #94a3b8; margin-top: 25px; border-top: 1px solid #f1f5f9; padding-top: 6px;">
+                ${tpl.footerText || 'Documento gerado automaticamente pelo Sistema de Gestão e Fiscalização de Obras e Imóveis'} &bull; Página 1 de 1
+            </div>
+        </body>
+        </html>
+    `;
+
+    const blob = new Blob(['\ufeff', docContent], { type: 'application/msword;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const docTitleClean = String(tpl.title || 'Relatorio_Consolidado').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 35);
+    link.download = `${docTitleClean}_${new Date().toISOString().slice(0,10)}.doc`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 };
 
 // Abaixo vamos colocar funções auxiliares de 1:N que a interface precisa
@@ -503,9 +1310,16 @@ window.deleteMultipleRecord = function(tabId, idx) {
         window.currentFormFeatureData[tabId] = JSON.stringify(records);
     }
     
-    // Simplest way is to just hide the row or re-render
-    const tbody = document.getElementById('multiple-table-body-' + tabId);
-    if (tbody.children[idx]) {
-        tbody.children[idx].style.display = 'none';
+    if (typeof window.renderDynamicForm === 'function' && window.currentFormContainerId) {
+        window.renderDynamicForm(window.currentFormFeatures, window.currentFormFeatureData, window.currentFormIsEditMode, window.currentFormContainerId, { isPreview: window.currentFormIsPreview, activeTabId: tabId });
+    } else {
+        const tbody = document.getElementById('multiple-table-body-' + tabId);
+        if (tbody && tbody.children[idx]) {
+            tbody.children[idx].style.display = 'none';
+        }
+        if (typeof window.evaluateFormCalculations === 'function') {
+            const container = document.getElementById(window.currentFormContainerId) || document.body;
+            window.evaluateFormCalculations(container);
+        }
     }
 };

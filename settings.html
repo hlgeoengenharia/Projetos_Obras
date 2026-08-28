@@ -104,6 +104,27 @@
     // --- FORMULA BUILDER CONTROLLER ---
     let currentFormulaFieldId = null;
     let currentFormulaConfig = null;
+    let currentFormulaMode = 'rules';
+
+    function switchFormulaMode(mode) {
+        currentFormulaMode = mode;
+        if (currentFormulaConfig) currentFormulaConfig.mode = mode;
+
+        const modes = ['rules', 'latest_1n', 'custom_script'];
+        modes.forEach(m => {
+            const btn = document.getElementById(`tab-btn-formula-${m === 'latest_1n' ? 'latest1n' : (m === 'custom_script' ? 'script' : 'rules')}`);
+            const pane = document.getElementById(`formula-mode-${m === 'latest_1n' ? 'latest1n' : (m === 'custom_script' ? 'script' : 'rules')}`);
+            if (btn && pane) {
+                if (m === mode) {
+                    btn.className = "flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 bg-white dark:bg-slate-800 text-sky-600 dark:text-sky-400 shadow-sm border border-slate-200 dark:border-slate-700";
+                    pane.classList.remove('hidden');
+                } else {
+                    btn.className = "flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200";
+                    pane.classList.add('hidden');
+                }
+            }
+        });
+    }
 
     function openFormulaModal(fieldId) {
        currentFormulaFieldId = fieldId;
@@ -114,16 +135,37 @@
        const field = activeTab.fields.find(f => f.id === fieldId);
        if (!field) return;
        
-       document.getElementById('formula-modal-title').innerText = `Configurar Fórmulas: ${field.label || 'Campo Sem Nome'}`;
+       document.getElementById('formula-modal-title').innerText = `Configurar Fórmulas & Sincronização: ${field.label || 'Campo Sem Nome'}`;
        
        // Clone config to avoid modifying directly
-       currentFormulaConfig = field.formulaConfig ? JSON.parse(JSON.stringify(field.formulaConfig)) : { rules: [], fallbackFormula: '' };
+       currentFormulaConfig = field.formulaConfig ? JSON.parse(JSON.stringify(field.formulaConfig)) : { mode: 'rules', rules: [], fallbackFormula: '' };
+       
+       if (!currentFormulaConfig.mode) {
+           currentFormulaConfig.mode = (currentFormulaConfig.latest1nConfig) ? 'latest_1n' : (currentFormulaConfig.customScript ? 'custom_script' : 'rules');
+       }
+       if (!currentFormulaConfig.rules) currentFormulaConfig.rules = [];
        if (!currentFormulaConfig.fallbackAction) {
            currentFormulaConfig.fallbackAction = { fieldId: '', operator: 'none', valueType: 'fixed', value: currentFormulaConfig.fallbackFormula || '0' };
        }
-       
+       if (!currentFormulaConfig.latest1nConfig) {
+           currentFormulaConfig.latest1nConfig = {
+               targetTabIds: [],
+               dateFieldId: 'auto',
+               sourceFieldId: '',
+               fallbackValue: ''
+           };
+       }
+
        renderFormulaRules();
        renderFallbackAction();
+       renderLatest1nOptions(field);
+       
+       const scriptArea = document.getElementById('formula-custom-script');
+       if (scriptArea) {
+           scriptArea.value = currentFormulaConfig.customScript || '';
+       }
+
+       switchFormulaMode(currentFormulaConfig.mode || 'rules');
        
        const modal = document.getElementById('formula-modal');
        modal.classList.remove('hidden');
@@ -135,6 +177,128 @@
        modal.classList.add('hidden');
        modal.classList.remove('flex');
        document.getElementById('formula-field-picker').classList.add('hidden');
+    }
+
+    function renderLatest1nOptions(currentField) {
+        const tabsContainer = document.getElementById('latest1n-tabs-container');
+        const dateSel = document.getElementById('latest1n-date-field');
+        const sourceSel = document.getElementById('latest1n-source-field');
+        const fallbackInput = document.getElementById('latest1n-fallback-value');
+        if (!tabsContainer || !dateSel || !sourceSel) return;
+
+        const cfg = currentFormulaConfig.latest1nConfig || {};
+        const selectedTabIds = cfg.targetTabIds || [];
+
+        // Abas 1:N disponíveis
+        let tabsHtml = '';
+        let availableMultipleTabs = builderTabs.filter(t => t.isMultiple || t.id !== activeBuilderTabId);
+        
+        if (availableMultipleTabs.length === 0) {
+            tabsContainer.innerHTML = '<div class="col-span-2 text-center py-4 text-xs text-slate-400 italic">Nenhuma outra aba encontrada neste formulário. Crie abas com o modo 1:N.</div>';
+        } else {
+            availableMultipleTabs.forEach(t => {
+                const isChecked = selectedTabIds.includes(t.id) || (selectedTabIds.length === 0 && t.isMultiple);
+                tabsHtml += `
+                    <label class="flex items-center gap-2.5 p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-sky-500/60 cursor-pointer text-xs select-none transition-colors">
+                        <input type="checkbox" value="${t.id}" ${isChecked ? 'checked' : ''} class="latest1n-tab-checkbox rounded border-slate-300 dark:border-slate-700 text-sky-600 focus:ring-sky-500 w-4 h-4" onchange="updateLatest1nSources()">
+                        <span class="font-bold text-slate-800 dark:text-slate-200 flex-1 truncate">${t.title}</span>
+                        ${t.isMultiple ? '<span class="text-[9px] bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded font-bold uppercase">1:N</span>' : '<span class="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded font-bold uppercase">1:1</span>'}
+                    </label>
+                `;
+            });
+            tabsContainer.innerHTML = tabsHtml;
+        }
+
+        // Campos de Data
+        let dateOptionsHtml = '<option value="auto">⚡ Detectar campo de Data automaticamente</option>';
+        builderTabs.forEach(tab => {
+            tab.fields.forEach(f => {
+                if (f.type === 'date' || f.id.includes('data') || f.label.toLowerCase().includes('data')) {
+                    dateOptionsHtml += `<option value="${f.id}" ${cfg.dateFieldId === f.id ? 'selected' : ''}>[${tab.title}] ${f.label}</option>`;
+                }
+            });
+        });
+        dateSel.innerHTML = dateOptionsHtml;
+
+        // Campos a Extrair
+        updateLatest1nSources(currentField);
+
+        // Fallback value
+        if (fallbackInput) {
+            fallbackInput.value = cfg.fallbackValue || '';
+        }
+    }
+
+    function selectAll1nTabsForLatest() {
+        const checkboxes = document.querySelectorAll('.latest1n-tab-checkbox');
+        checkboxes.forEach(cb => cb.checked = true);
+        updateLatest1nSources();
+    }
+
+    function updateLatest1nSources(currentField = null) {
+        const sourceSel = document.getElementById('latest1n-source-field');
+        if (!sourceSel) return;
+
+        const checkboxes = Array.from(document.querySelectorAll('.latest1n-tab-checkbox:checked'));
+        const checkedTabIds = checkboxes.map(cb => cb.value);
+
+        const currentActiveField = currentField || (builderTabs.find(t => t.id === activeBuilderTabId)?.fields.find(f => f.id === currentFormulaFieldId));
+        const currentFieldLabel = currentActiveField ? currentActiveField.label.toLowerCase().trim() : '';
+        const savedSourceId = currentFormulaConfig.latest1nConfig?.sourceFieldId || '';
+        const savedSourceLabel = currentFormulaConfig.latest1nConfig?.sourceFieldLabel || '';
+
+        // Agrupar campos por rótulo (Label) entre as abas selecionadas
+        const labelMap = new Map(); // label -> { fieldIds: [], tabTitles: [], firstField: null }
+        
+        builderTabs.forEach(tab => {
+            if (checkedTabIds.length === 0 || checkedTabIds.includes(tab.id)) {
+                tab.fields.forEach(f => {
+                    if (f.id !== currentFormulaFieldId && f.label && f.label.trim() !== '') {
+                        const trimmedLabel = f.label.trim();
+                        const key = trimmedLabel.toLowerCase();
+                        if (!labelMap.has(key)) {
+                            labelMap.set(key, {
+                                label: trimmedLabel,
+                                fieldIds: [f.id],
+                                tabTitles: [tab.title],
+                                firstField: f
+                            });
+                        } else {
+                            const entry = labelMap.get(key);
+                            entry.fieldIds.push(f.id);
+                            if (!entry.tabTitles.includes(tab.title)) entry.tabTitles.push(tab.title);
+                        }
+                    }
+                });
+            }
+        });
+
+        let sourcesHtml = '<option value="">Escolha o campo a copiar...</option>';
+        
+        // 1. Grupos unificados (quando o campo se repete ou corresponde às abas selecionadas)
+        labelMap.forEach((entry, key) => {
+            const isMatch = (savedSourceLabel && savedSourceLabel.toLowerCase() === key) || 
+                            (savedSourceId && entry.fieldIds.includes(savedSourceId)) ||
+                            (!savedSourceId && !savedSourceLabel && key === currentFieldLabel);
+            
+            const tabsInfo = entry.tabTitles.length > 1 ? ` (Presente em: ${entry.tabTitles.join(', ')})` : ` [${entry.tabTitles[0]}]`;
+            const icon = entry.tabTitles.length > 1 ? '✨ ' : '';
+            sourcesHtml += `<option value="${entry.firstField.id}" data-label="${entry.label}" ${isMatch ? 'selected' : ''}>${icon}${entry.label}${tabsInfo}</option>`;
+        });
+
+        sourceSel.innerHTML = sourcesHtml;
+    }
+
+    function insertScriptSnippet(type) {
+        const scriptArea = document.getElementById('formula-custom-script');
+        if (!scriptArea) return;
+
+        if (type === 'latest') {
+            scriptArea.value = `// Buscar valor do registro mais recente no tempo (por Data)\nreturn getLatestRecordAcrossTabs(['PF', 'SPU', 'Município'], 'data_vistoria', 'situacao_ocupacao');`;
+        } else if (type === 'sum') {
+            scriptArea.value = `// Somar valores numéricos de registros 1:N\nreturn getSumAcrossTabs(['PF', 'SPU'], 'area_invadida');`;
+        }
+        scriptArea.focus();
     }
 
     function renderFormulaRules() {
@@ -434,16 +598,39 @@
        
        const field = activeTab.fields.find(f => f.id === currentFormulaFieldId);
        if (!field) return;
-       
-       // Backwards-compatible fallback formula string generation if needed by old engine
-       if (currentFormulaConfig.fallbackAction) {
-           const act = currentFormulaConfig.fallbackAction;
-           if (act.operator === 'none') {
-               currentFormulaConfig.fallbackFormula = act.valueType === 'fixed' ? act.value : `[${act.value}]`;
-           } else {
-               const opSign = act.operator === 'multiply' ? '*' : act.operator === 'divide' ? '/' : act.operator === 'add' ? '+' : '-';
-               const valPart = act.valueType === 'fixed' ? act.value : `[${act.value}]`;
-               currentFormulaConfig.fallbackFormula = `[${act.fieldId}] ${opSign} ${valPart}`;
+
+       currentFormulaConfig.mode = currentFormulaMode || 'rules';
+
+       if (currentFormulaConfig.mode === 'latest_1n') {
+           const checkedBoxes = Array.from(document.querySelectorAll('.latest1n-tab-checkbox:checked'));
+           const dateSel = document.getElementById('latest1n-date-field');
+           const sourceSel = document.getElementById('latest1n-source-field');
+           const fallbackInput = document.getElementById('latest1n-fallback-value');
+           const selectedOption = sourceSel ? sourceSel.options[sourceSel.selectedIndex] : null;
+
+           currentFormulaConfig.latest1nConfig = {
+               targetTabIds: checkedBoxes.map(cb => cb.value),
+               dateFieldId: dateSel ? dateSel.value : 'auto',
+               sourceFieldId: sourceSel ? sourceSel.value : '',
+               sourceFieldLabel: selectedOption ? (selectedOption.getAttribute('data-label') || '') : '',
+               fallbackValue: fallbackInput ? fallbackInput.value : ''
+           };
+           currentFormulaConfig.fallbackFormula = `[Mais Recente de 1:N]`;
+       } else if (currentFormulaConfig.mode === 'custom_script') {
+           const scriptArea = document.getElementById('formula-custom-script');
+           currentFormulaConfig.customScript = scriptArea ? scriptArea.value.trim() : '';
+           currentFormulaConfig.fallbackFormula = `[Script Customizado]`;
+       } else {
+           // Modo Regras & Matemática
+           if (currentFormulaConfig.fallbackAction) {
+               const act = currentFormulaConfig.fallbackAction;
+               if (act.operator === 'none') {
+                   currentFormulaConfig.fallbackFormula = act.valueType === 'fixed' ? act.value : `[${act.value}]`;
+               } else {
+                   const opSign = act.operator === 'multiply' ? '*' : act.operator === 'divide' ? '/' : act.operator === 'add' ? '+' : '-';
+                   const valPart = act.valueType === 'fixed' ? act.value : `[${act.value}]`;
+                   currentFormulaConfig.fallbackFormula = `[${act.fieldId}] ${opSign} ${valPart}`;
+               }
            }
        }
        
@@ -451,7 +638,9 @@
        
        const btn = document.getElementById(`fx-btn-${currentFormulaFieldId}`);
        if (btn) {
-          const hasFormula = currentFormulaConfig.rules.length > 0 || (currentFormulaConfig.fallbackAction && currentFormulaConfig.fallbackAction.value !== '');
+          const hasFormula = (currentFormulaConfig.mode === 'latest_1n' && currentFormulaConfig.latest1nConfig?.sourceFieldId) ||
+                             (currentFormulaConfig.mode === 'custom_script' && currentFormulaConfig.customScript) ||
+                             (currentFormulaConfig.mode === 'rules' && (currentFormulaConfig.rules.length > 0 || (currentFormulaConfig.fallbackAction && currentFormulaConfig.fallbackAction.value !== '')));
           btn.className = `p-2 mt-6 ${hasFormula ? 'text-sky-500 bg-sky-50 dark:bg-sky-950/40 border border-sky-200/50 dark:border-sky-800/50' : 'text-slate-400 hover:text-sky-500 hover:bg-sky-50 dark:hover:bg-slate-800'} rounded-full transition-colors flex items-center justify-center`;
        }
        
@@ -637,6 +826,10 @@
           <span class="material-symbols-outlined text-[22px]">assignment</span>
           <span class="text-[9px] font-medium tracking-wide uppercase">Cadastro</span>
       </button>
+      <button onclick="switchTab('estatistica', this)" class="tab-btn h-full px-6 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[80px]" title="Geoestatística Espacial">
+          <span class="material-symbols-outlined text-[22px]">hub</span>
+          <span class="text-[9px] font-medium tracking-wide uppercase">Estatística</span>
+      </button>
       <button onclick="switchTab('layout', this)" class="tab-btn h-full px-6 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[80px]" title="Layout">
           <span class="material-symbols-outlined text-[22px]">palette</span>
           <span class="text-[9px] font-medium tracking-wide uppercase">Layout</span>
@@ -785,16 +978,37 @@
              </div>
              <!-- Tab Type Settings -->
              <div class="w-full mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6">
-                 <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 sm:mb-0">Tipo de Aba:</label>
-                 <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-900/50 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
-                    <button type="button" id="btn-type-single" onclick="updateActiveTabType(false)" class="px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2">
-                       <span class="material-symbols-outlined text-[18px]">draft</span> Cadastro Único (1:1)
-                    </button>
-                    <button type="button" id="btn-type-multiple" onclick="updateActiveTabType(true)" class="px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2">
-                       <span class="material-symbols-outlined text-[18px]">history</span> Histórico / Múltiplos (1:N)
-                    </button>
-                 </div>
-             </div>
+                  <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 sm:mb-0">Tipo de Aba:</label>
+                  <div class="flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-900/50 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
+                     <button type="button" id="btn-type-single" onclick="updateActiveTabType('single')" class="px-3.5 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[17px]">draft</span> Cadastro Único (1:1)
+                     </button>
+                     <button type="button" id="btn-type-multiple" onclick="updateActiveTabType('multiple')" class="px-3.5 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[17px]">history</span> Histórico / Múltiplos (1:N)
+                     </button>
+                     <button type="button" id="btn-type-consolidated" onclick="updateActiveTabType('consolidated')" class="px-3.5 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[17px]">analytics</span> Histórico Consolidado (Cross-Tabs)
+                     </button>
+                  </div>
+              </div>
+
+              <!-- Consolidated Tab Settings (Cross-Tabs) -->
+              <div id="tab-consolidated-settings" class="w-full mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 hidden">
+                  <div class="bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/50 rounded-xl p-4 text-xs text-indigo-950 dark:text-indigo-200 flex items-start gap-3">
+                      <span class="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-[22px] shrink-0">dashboard_customize</span>
+                      <div>
+                          <strong class="font-bold text-sm block mb-1">Aba de Consolidação Cronológica</strong>
+                          Esta aba renderiza automaticamente o <strong>Quadro Sintético (Tabela Executiva)</strong> e a <strong>Linha do Tempo Analítica (com Observações e Hiperlinks)</strong>, com botão para gerar relatório em <strong>Word / Google Docs (.docx)</strong>.
+                      </div>
+                  </div>
+
+                  <div class="mt-3">
+                      <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Abas 1:N que Alimentam este Histórico:</label>
+                      <div id="tab-consolidated-sources-list" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                          <!-- Populated via JS -->
+                      </div>
+                  </div>
+              </div>
              <!-- Conditional Logic Settings -->
              <div id="tab-condition-settings" class="w-full mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                  <div class="flex items-center gap-3 mb-4">
@@ -831,21 +1045,155 @@
              
           </div>
           
-          <div class="flex justify-between items-center mb-4 mt-8 border-t border-slate-200 dark:border-slate-700 pt-6">
-            <h3 class="text-md font-bold text-slate-800 dark:text-slate-100">Campos nesta Aba</h3>
-            <button onclick="addField()" class="flex items-center gap-1 px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-md font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm shadow-sm">
-              <span class="material-symbols-outlined text-[18px]">add</span> Adicionar Campo
-            </button>
+          <div id="standard-fields-section">
+            <div class="flex justify-between items-center mb-4 mt-8 border-t border-slate-200 dark:border-slate-700 pt-6">
+              <h3 class="text-md font-bold text-slate-800 dark:text-slate-100">Campos nesta Aba</h3>
+              <button onclick="addField()" class="flex items-center gap-1 px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-md font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm shadow-sm">
+                <span class="material-symbols-outlined text-[18px]">add</span> Adicionar Campo
+              </button>
+            </div>
+
+            <div id="fields-container" class="flex flex-col gap-4">
+              <!-- Fields go here -->
+            </div>
+
+            <div class="mt-6 flex justify-center">
+              <button onclick="addField()" class="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm">
+                <span class="material-symbols-outlined text-[20px]">add</span> Adicionar Mais um Campo
+              </button>
+            </div>
           </div>
 
-          <div id="fields-container" class="flex flex-col gap-4">
-            <!-- Fields go here -->
-          </div>
+          <!-- FOLHA DE IMPRESSÃO A4 (WYSIWYG TEMPLATE DO WORD / DOCS) -->
+          <div id="consolidated-sheet-section" class="mt-8 border-t border-slate-200 dark:border-slate-700 pt-6 hidden">
+              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6 bg-indigo-50 dark:bg-indigo-950/40 p-4 rounded-xl border border-indigo-200 dark:border-indigo-800/60">
+                  <div class="flex items-center gap-3">
+                      <span class="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-[28px]">article</span>
+                      <div>
+                          <h3 class="text-sm font-bold text-indigo-950 dark:text-indigo-200">Editor Visual da Folha de Impressão (Word / Google Docs)</h3>
+                          <p class="text-xs text-indigo-700 dark:text-indigo-300">Edite os títulos, aponte os campos cadastrais e veja como o documento oficial será gerado em tempo real.</p>
+                      </div>
+                  </div>
+                  <div class="flex items-center gap-2 text-xs font-bold text-slate-500 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm shrink-0">
+                      <span class="material-symbols-outlined text-[16px] text-blue-500">description</span> Padrão Folha A4
+                  </div>
+              </div>
 
-          <div class="mt-6 flex justify-center">
-            <button onclick="addField()" class="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm">
-              <span class="material-symbols-outlined text-[20px]">add</span> Adicionar Mais um Campo
-            </button>
+              <!-- Simulação da Página A4 -->
+              <div class="max-w-4xl mx-auto bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl shadow-2xl p-6 sm:p-10 font-sans text-slate-900 dark:text-slate-100 transition-all space-y-6">
+                  
+                  <!-- Cabeçalho Institucional & Título Editável -->
+                  <div class="text-center pb-4 border-b border-slate-200 dark:border-slate-800">
+                      <div class="inline-flex items-center gap-2 px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-3">
+                          <span class="material-symbols-outlined text-[14px]">edit_note</span> Título Principal do Relatório (Clique para editar)
+                      </div>
+                      <input type="text" id="report-template-title" oninput="updateReportTemplateConfig('title', this.value)" class="w-full text-center text-lg sm:text-xl font-black uppercase tracking-wide bg-transparent border-b-2 border-dashed border-indigo-400 hover:border-indigo-600 focus:border-indigo-600 focus:outline-none px-2 py-1 text-slate-900 dark:text-white transition-colors" placeholder="RELATÓRIO CONSOLIDADO DE VISTORIAS & OCUPAÇÃO" />
+                      
+                      <div class="mt-2 text-xs text-slate-400 dark:text-slate-500 flex items-center justify-center gap-2 font-mono">
+                          <span>Emissão: <strong class="text-slate-600 dark:text-slate-300">DD/MM/AAAA</strong> (Automática do Sistema)</span>
+                          <span>|</span>
+                          <input type="text" id="report-template-system-name" oninput="updateReportTemplateConfig('systemName', this.value)" class="bg-transparent border-b border-dashed border-slate-300 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 px-1 focus:outline-none" placeholder="Sistema de Gestão Territorial" />
+                      </div>
+                  </div>
+
+                  <!-- Quadro de Identificação do Imóvel (Mapeamento de Campos) -->
+                  <div class="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
+                      <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
+                          <span class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                              <span class="material-symbols-outlined text-[16px] text-amber-500">pin_drop</span>
+                              Mapeamento dos Dados de Identificação do Imóvel
+                          </span>
+                          <button type="button" onclick="addReportFieldMappingRow()" class="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1">
+                              <span class="material-symbols-outlined text-[14px]">add</span> Adicionar Linha
+                          </button>
+                      </div>
+                      
+                      <div id="report-field-mappings-container" class="space-y-2.5">
+                          <!-- JS will inject mappings -->
+                      </div>
+                  </div>
+
+                  <!-- Seção 1: Quadro Sintético -->
+                  <div class="space-y-3 p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700">
+                      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 pb-3">
+                          <div class="flex items-center gap-3">
+                              <label class="relative inline-flex items-center cursor-pointer">
+                                  <input type="checkbox" id="report-sec1-enabled" onchange="updateReportTemplateConfig('showSec1', this.checked); toggleSec1Ui(this.checked);" checked class="sr-only peer">
+                                  <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-sky-600"></div>
+                              </label>
+                              <span class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Exibir Seção 1 (Quadro Sintético) no Relatório</span>
+                          </div>
+                          <button type="button" onclick="addReportSec1Column()" id="btn-add-sec1-col" class="text-[11px] font-bold text-sky-600 dark:text-sky-400 hover:underline flex items-center gap-1">
+                              <span class="material-symbols-outlined text-[14px]">add</span> Adicionar Coluna
+                          </button>
+                      </div>
+
+                      <div id="sec1-controls-wrapper" class="space-y-3">
+                          <div class="flex items-center gap-2">
+                              <span class="text-[11px] font-bold text-slate-400 uppercase">Título da Seção:</span>
+                              <input type="text" id="report-template-sec1-title" oninput="updateReportTemplateConfig('sec1Title', this.value)" class="flex-1 font-bold text-sm uppercase text-slate-900 dark:text-white bg-transparent border-b border-dashed border-sky-400 hover:border-sky-600 focus:border-sky-600 focus:outline-none px-2 py-0.5" placeholder="1. QUADRO SINTÉTICO (ORDEM CRONOLÓGICA)" />
+                          </div>
+
+                          <!-- Configuração das Colunas da Seção 1 -->
+                          <div>
+                              <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Colunas da Tabela (Rótulo e Campo de Origem):</span>
+                              <div id="report-sec1-columns-container" class="space-y-2">
+                                  <!-- JS will inject column rows -->
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <!-- Seção 2: Relatório Analítico Detalhado -->
+                  <div class="space-y-3 p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700">
+                      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 pb-3">
+                          <div class="flex items-center gap-3">
+                              <label class="relative inline-flex items-center cursor-pointer">
+                                  <input type="checkbox" id="report-sec2-enabled" onchange="updateReportTemplateConfig('showSec2', this.checked); toggleSec2Ui(this.checked);" checked class="sr-only peer">
+                                  <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-indigo-600"></div>
+                              </label>
+                              <span class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Exibir Seção 2 (Relatório Analítico) no Relatório</span>
+                          </div>
+                      </div>
+
+                      <div id="sec2-controls-wrapper" class="space-y-3">
+                          <div class="flex items-center gap-2">
+                              <span class="text-[11px] font-bold text-slate-400 uppercase">Título da Seção:</span>
+                              <input type="text" id="report-template-sec2-title" oninput="updateReportTemplateConfig('sec2Title', this.value)" class="flex-1 font-bold text-sm uppercase text-slate-900 dark:text-white bg-transparent border-b border-dashed border-indigo-400 hover:border-indigo-600 focus:border-indigo-600 focus:outline-none px-2 py-0.5" placeholder="2. RELATÓRIO ANALÍTICO DETALHADO" />
+                          </div>
+
+                          <!-- Opções de Campos a Incluir no Analítico -->
+                          <div>
+                              <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Campos das Vistorias a Incluir nos Detalhes:</span>
+                              <div id="report-sec2-fields-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                                  <!-- JS will inject field checkboxes -->
+                              </div>
+                          </div>
+
+                          <!-- Prévia de Card Analítico (Sem Vistoria #1) -->
+                          <div class="p-3 bg-white dark:bg-slate-900 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 text-xs space-y-2 opacity-90 shadow-sm">
+                              <div class="flex justify-between items-center font-bold text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                                  <span class="flex items-center gap-1.5">
+                                      <span class="material-symbols-outlined text-slate-400 text-[15px]">calendar_month</span> 15/07/2026 &nbsp;|&nbsp; 
+                                      <span class="bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200 px-1.5 py-0.2 rounded text-[10px] font-bold">PF</span>
+                                  </span>
+                                  <span class="font-mono text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-[10px]">Área: 120,50 m²</span>
+                              </div>
+                              <p class="text-slate-600 dark:text-slate-400 italic">"Constatada ocupação irregular com muro construído em área de preservação..."</p>
+                              <div class="text-[11px] text-sky-600 dark:text-sky-400 font-bold flex items-center gap-1">
+                                  <span class="material-symbols-outlined text-[13px]">open_in_new</span> Processo Administrativo nº 08200.001234/2026
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <!-- Rodapé do Documento -->
+                  <div class="pt-4 border-t border-slate-200 dark:border-slate-800 text-center">
+                      <span class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Texto do Rodapé Oficial:</span>
+                      <input type="text" id="report-template-footer" oninput="updateReportTemplateConfig('footerText', this.value)" class="w-full text-center text-xs text-slate-500 dark:text-slate-400 bg-transparent border-b border-dashed border-slate-300 dark:border-slate-700 focus:outline-none px-2 py-1" placeholder="Documento gerado automaticamente pelo Sistema de Gestão e Fiscalização de Obras e Imóveis." />
+                  </div>
+
+              </div>
           </div>
         </div>
         
@@ -889,6 +1237,123 @@
         </div>
       </div>
   </div> <!-- Fecha tab-content de Cadastros -->
+
+  <!-- Tab Content: Estatística Espacial Cruzada -->
+  <div id="estatistica" class="tab-content">
+    <div class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 border-b border-slate-200 dark:border-slate-700 pb-4">
+        <div>
+          <h2 class="text-lg font-bold flex items-center gap-2">
+            <span class="material-symbols-outlined text-cyan-500">hub</span>
+            Geoestatística Espacial Cruzada
+          </h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm">Crie regras de cruzamento topológico entre camadas (Interseção, Confrontação, Proximidade) para contagem e destaque interativo no mapa.</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="openSpatialRuleModal()" class="flex items-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white px-4 py-2.5 rounded-lg text-sm font-bold transition-all shadow-md shrink-0">
+            <span class="material-symbols-outlined text-[18px]">add_location_alt</span> Nova Análise Espacial
+          </button>
+        </div>
+      </div>
+
+      <!-- Listagem de Análises Espaciais -->
+      <div id="spatial-rules-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+         <!-- Javascript irá preencher a lista de análises aqui -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Criação / Edição de Análise Espacial Cruzada -->
+  <div id="spatial-rule-modal" class="fixed inset-0 bg-black/60 z-[300] hidden flex items-center justify-center backdrop-blur-sm px-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col transform transition-all max-h-[90vh]">
+      <!-- Header do Modal -->
+      <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/40">
+        <h3 id="spatial-modal-title" class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+          <span class="material-symbols-outlined text-cyan-500">hub</span>
+          Nova Análise Espacial Cruzada
+        </h3>
+        <button onclick="closeSpatialRuleModal()" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <!-- Corpo do Modal -->
+      <div class="p-6 overflow-y-auto space-y-4 text-sm">
+        <input type="hidden" id="spatial-rule-id" value="">
+        
+        <div>
+          <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Título da Análise</label>
+          <input type="text" id="spatial-rule-name" placeholder="Ex: Imóveis que cruzam a Faixa de Praia" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500/50 outline-none text-sm">
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Camada Alvo (Feições Analisadas)</label>
+            <select id="spatial-target-layer" class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500/50 outline-none text-sm">
+               <!-- Preenchido via JS com temas/camadas vetoriais -->
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Operação Espacial</label>
+            <select id="spatial-op-type" onchange="onSpatialOpChange()" class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500/50 outline-none text-sm font-medium">
+               <option value="intersects">✂️ Interseção (Cruza / Sobrepõe)</option>
+               <option value="touches">🤝 Confrontação (Faz Face / Toca a Borda)</option>
+               <option value="buffer">📡 Raio de Proximidade (Buffer / Distância)</option>
+               <option value="within">📦 Contido em (Dentro de Polígono)</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="spatial-buffer-dist-container" class="hidden">
+          <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Distância de Influência (Metros)</label>
+          <div class="relative">
+            <input type="number" id="spatial-buffer-dist" value="30" min="1" max="10000" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500/50 outline-none text-sm font-mono">
+            <span class="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">metros</span>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Camada de Referência (Cruzada)</label>
+          <select id="spatial-ref-layer" class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500/50 outline-none text-sm">
+             <!-- Preenchido via JS com temas/camadas vetoriais -->
+          </select>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Cor de Destaque no Mapa</label>
+            <div class="flex items-center gap-3">
+              <input type="color" id="spatial-highlight-color" value="#06b6d4" class="w-10 h-10 rounded-lg cursor-pointer border border-slate-300 dark:border-slate-600 bg-transparent p-0.5 shrink-0">
+              <div class="flex flex-wrap gap-1.5">
+                <button type="button" onclick="document.getElementById('spatial-highlight-color').value='#ef4444'" class="w-6 h-6 rounded-full bg-red-500 border border-white/20 shadow-sm" title="Vermelho Alerta"></button>
+                <button type="button" onclick="document.getElementById('spatial-highlight-color').value='#06b6d4'" class="w-6 h-6 rounded-full bg-cyan-500 border border-white/20 shadow-sm" title="Ciano Neon"></button>
+                <button type="button" onclick="document.getElementById('spatial-highlight-color').value='#eab308'" class="w-6 h-6 rounded-full bg-yellow-500 border border-white/20 shadow-sm" title="Amarelo Ouro"></button>
+                <button type="button" onclick="document.getElementById('spatial-highlight-color').value='#10b981'" class="w-6 h-6 rounded-full bg-emerald-500 border border-white/20 shadow-sm" title="Verde Esmeralda"></button>
+                <button type="button" onclick="document.getElementById('spatial-highlight-color').value='#8b5cf6'" class="w-6 h-6 rounded-full bg-purple-500 border border-white/20 shadow-sm" title="Roxo"></button>
+              </div>
+            </div>
+          </div>
+
+          <div>
+             <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Calcular Área Sobreposta (m²)?</label>
+             <label class="flex items-center gap-2 mt-2 cursor-pointer select-none text-slate-700 dark:text-slate-300 font-medium text-xs">
+                <input type="checkbox" id="spatial-calc-area" checked class="rounded border-slate-300 dark:border-slate-600 text-cyan-600 focus:ring-cyan-500 w-4 h-4">
+                <span>Sim, calcular m² de sobreposição</span>
+             </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rodapé do Modal -->
+      <div class="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2 bg-slate-50 dark:bg-slate-950/40">
+        <button onclick="closeSpatialRuleModal()" class="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-colors">Cancelar</button>
+        <button onclick="saveSpatialRule()" class="px-5 py-2 text-sm font-bold bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-all shadow-md flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[18px]">save</span> Salvar Análise
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- Tab Content: Layout -->
   <div id="layout" class="tab-content">
@@ -1154,57 +1619,143 @@
 
   <!-- Modal: Construtor de Fórmulas e Regras -->
   <div id="formula-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150] hidden items-center justify-center p-4">
-      <div class="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[85vh] overflow-hidden text-slate-800 dark:text-slate-100 transition-all scale-95 duration-200">
+      <div class="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[88vh] overflow-hidden text-slate-800 dark:text-slate-100 transition-all scale-95 duration-200">
           <!-- Modal Header -->
           <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/20">
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2.5">
                   <span class="material-symbols-outlined text-sky-500 text-[24px]">functions</span>
                   <div>
-                      <h3 class="text-base font-bold text-slate-800 dark:text-white" id="formula-modal-title">Configurar Regras de Cálculo</h3>
-                      <p class="text-xs text-slate-500" id="formula-modal-subtitle">Defina condições para calcular o valor automaticamente.</p>
+                      <h3 class="text-base font-bold text-slate-800 dark:text-white" id="formula-modal-title">Configurar Fórmulas & Sincronização</h3>
+                      <p class="text-xs text-slate-500" id="formula-modal-subtitle">Defina regras de cálculo automático ou sincronização com registros mais recentes.</p>
                   </div>
               </div>
               <button onclick="closeFormulaModal()" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center justify-center">
                   <span class="material-symbols-outlined text-[20px]">close</span>
               </button>
           </div>
+
+          <!-- Seletor de Modo de Cálculo / Sincronização -->
+          <div class="flex border-b border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-950/50 p-1.5 gap-1.5 px-6">
+              <button type="button" id="tab-btn-formula-rules" onclick="switchFormulaMode('rules')" class="flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 bg-white dark:bg-slate-800 text-sky-600 dark:text-sky-400 shadow-sm border border-slate-200 dark:border-slate-700">
+                  <span class="material-symbols-outlined text-[16px]">calculate</span> Regras & Matemática
+              </button>
+              <button type="button" id="tab-btn-formula-latest1n" onclick="switchFormulaMode('latest_1n')" class="flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200">
+                  <span class="material-symbols-outlined text-[16px]">history</span> Mais Recente de 1:N (Cross-Tabs)
+              </button>
+              <button type="button" id="tab-btn-formula-script" onclick="switchFormulaMode('custom_script')" class="flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200">
+                  <span class="material-symbols-outlined text-[16px]">code</span> Script / Código Livre
+              </button>
+          </div>
           
           <!-- Modal Body (Scrollable) -->
           <div class="flex-1 overflow-y-auto p-6 space-y-6">
-              <!-- Info Alert -->
-              <div class="bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/50 rounded-lg p-3 text-xs text-sky-850 dark:text-sky-300 flex items-start gap-2">
-                  <span class="material-symbols-outlined text-[18px] text-sky-500 shrink-0">info</span>
-                  <div>
-                      As regras são avaliadas de cima para baixo. A primeira regra cujas condições forem satisfeitas definirá o valor do campo. Fórmulas usam o formato matemático padrão: ex. <code>[area_invadida] * 120</code>.
+              <!-- MODO 1: REGRAS CONDICIONAIS & MATEMÁTICA -->
+              <div id="formula-mode-rules" class="space-y-6">
+                  <!-- Info Alert -->
+                  <div class="bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/50 rounded-lg p-3 text-xs text-sky-850 dark:text-sky-300 flex items-start gap-2">
+                      <span class="material-symbols-outlined text-[18px] text-sky-500 shrink-0">info</span>
+                      <div>
+                          As regras são avaliadas de cima para baixo. A primeira regra cujas condições forem satisfeitas definirá o valor do campo. Fórmulas usam o formato matemático padrão: ex. <code>[area_invadida] * 120</code>.
+                      </div>
                   </div>
-              </div>
-              
-              <!-- Rules List Container -->
-              <div id="formula-rules-container" class="space-y-4">
-                  <!-- Rules will be injected here -->
-              </div>
-              
-              <!-- Add Rule Button -->
-              <div class="flex justify-start">
-                  <button type="button" onclick="addFormulaRule()" class="text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 font-medium border border-slate-200 dark:border-slate-700">
-                      <span class="material-symbols-outlined text-[14px]">add</span> Adicionar Regra
-                  </button>
+                  
+                  <!-- Rules List Container -->
+                  <div id="formula-rules-container" class="space-y-4">
+                      <!-- Rules will be injected here -->
+                  </div>
+                  
+                  <!-- Add Rule Button -->
+                  <div class="flex justify-start">
+                      <button type="button" onclick="addFormulaRule()" class="text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 font-medium border border-slate-200 dark:border-slate-700">
+                          <span class="material-symbols-outlined text-[14px]">add</span> Adicionar Regra
+                      </button>
+                  </div>
+
+                  <!-- Fallback Formula -->
+                  <div class="pt-4 border-t border-slate-200 dark:border-slate-800">
+                      <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Caso contrário (Valor Padrão / Fallback)</label>
+                      <div class="flex flex-wrap md:flex-nowrap gap-2 items-center" id="fallback-action-container">
+                          <!-- Populated dynamically via JS -->
+                      </div>
+                      <p class="text-[10px] text-slate-400 mt-1.5">Definido se nenhuma das regras acima for satisfeita.</p>
+                  </div>
               </div>
 
-              <!-- Fallback Formula -->
-              <div class="pt-4 border-t border-slate-200 dark:border-slate-800">
-                  <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Caso contrário (Valor Padrão / Fallback)</label>
-                  <div class="flex flex-wrap md:flex-nowrap gap-2 items-center" id="fallback-action-container">
-                      <!-- Populated dynamically via JS -->
+              <!-- MODO 2: MAIS RECENTE DE 1:N (CROSS-TABS AGGREGATION) -->
+              <div id="formula-mode-latest1n" class="hidden space-y-5">
+                  <div class="bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-cyan-950/30 dark:to-blue-950/30 border border-cyan-200 dark:border-cyan-800/50 rounded-xl p-4 text-xs text-slate-700 dark:text-slate-300 flex items-start gap-3 shadow-sm">
+                      <span class="material-symbols-outlined text-cyan-600 dark:text-cyan-400 text-[24px] shrink-0">auto_fix_high</span>
+                      <div class="leading-relaxed">
+                          <strong class="text-slate-900 dark:text-white font-bold block mb-0.5">Sincronização Cronológica Inteligente</strong>
+                          O sistema irá varrer todas as abas de histórico (1:N) selecionadas abaixo, localizar o registro com a <strong>data de vistoria mais recente</strong> e preencher automaticamente este campo com o valor correspondente nessa data.
+                      </div>
                   </div>
-                  <p class="text-[10px] text-slate-400 mt-1.5">Definido se nenhuma das regras acima for satisfeita.</p>
+
+                  <div>
+                      <div class="flex items-center justify-between mb-2">
+                          <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">1. Abas 1:N a Consultar</label>
+                          <button type="button" onclick="selectAll1nTabsForLatest()" class="text-[11px] text-sky-600 dark:text-sky-400 hover:underline font-semibold">Marcar Todas as 1:N</button>
+                      </div>
+                      <div id="latest1n-tabs-container" class="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-50 dark:bg-slate-950/40 p-3 rounded-xl border border-slate-200 dark:border-slate-800 max-h-48 overflow-y-auto">
+                          <!-- Preenchido via JS com as abas 1:N do formulário -->
+                      </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                          <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">2. Campo de Data de Referência</label>
+                          <select id="latest1n-date-field" class="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-sky-500/50 outline-none text-slate-800 dark:text-white">
+                              <option value="auto">⚡ Detectar campo de Data automaticamente</option>
+                              <!-- Opções de campos de data -->
+                          </select>
+                      </div>
+
+                      <div>
+                          <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">3. Campo a Extrair da Aba 1:N</label>
+                          <select id="latest1n-source-field" class="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-sky-500/50 outline-none text-slate-800 dark:text-white font-medium">
+                              <!-- Preenchido via JS com campos correspondentes -->
+                          </select>
+                      </div>
+                  </div>
+
+                  <div>
+                      <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">4. Valor Padrão (Caso não haja nenhum registro)</label>
+                      <input type="text" id="latest1n-fallback-value" placeholder="Deixe em branco ou digite um valor padrão (ex: Não Informado, 0, etc.)" class="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-sky-500/50 outline-none text-slate-800 dark:text-white">
+                  </div>
+              </div>
+
+              <!-- MODO 3: SCRIPT LIVRE / CÓDIGO CUSTOMIZADO -->
+              <div id="formula-mode-script" class="hidden space-y-4">
+                  <div class="bg-slate-900 text-slate-300 border border-slate-800 rounded-xl p-3 text-xs flex items-start gap-2.5 font-mono">
+                      <span class="material-symbols-outlined text-amber-400 text-[18px] shrink-0">terminal</span>
+                      <div>
+                          Modo Avançado: Digite uma expressão JavaScript personalizada. Ela receberá o objeto <code>featureData</code> e os helpers globais (ex: <code>getLatestRecord(tabs, dateField, field)</code>). O retorno da função será atribuído ao campo.
+                      </div>
+                  </div>
+
+                  <div>
+                      <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Código JavaScript da Fórmula</label>
+                      <textarea id="formula-custom-script" rows="6" placeholder="// Exemplo:&#10;return getLatestRecord(['PF', 'SPU', 'Município'], 'data_vistoria', 'situacao_ocupacao');" class="w-full p-3 font-mono text-xs bg-slate-950 text-cyan-400 border border-slate-800 rounded-xl focus:ring-2 focus:ring-cyan-500/50 outline-none resize-y"></textarea>
+                  </div>
+
+                  <div class="flex flex-wrap gap-2 pt-1">
+                      <span class="text-[11px] text-slate-400 font-bold self-center">Snippets Rápidos:</span>
+                      <button type="button" onclick="insertScriptSnippet('latest')" class="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-[11px] font-mono text-cyan-600 dark:text-cyan-400 transition-colors">
+                          + Mais Recente de 1:N
+                      </button>
+                      <button type="button" onclick="insertScriptSnippet('sum')" class="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-[11px] font-mono text-cyan-600 dark:text-cyan-400 transition-colors">
+                          + Somar 1:N
+                      </button>
+                  </div>
               </div>
           </div>
           
           <!-- Modal Footer -->
           <div class="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3 bg-slate-50 dark:bg-slate-950/20">
               <button onclick="closeFormulaModal()" class="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors">Cancelar</button>
-              <button onclick="saveFormulaConfig()" class="px-4 py-2 text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors shadow-sm">Salvar Fórmulas</button>
+              <button onclick="saveFormulaConfig()" class="px-5 py-2 text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all shadow-md flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[18px]">save</span> Salvar Fórmulas
+              </button>
           </div>
       </div>
       
@@ -1735,10 +2286,23 @@
     
 
 
-    function updateActiveTabType(isMultiple) {
+    function updateActiveTabType(type) {
        const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
        if (activeTab) {
-          activeTab.isMultiple = isMultiple;
+          if (type === 'consolidated') {
+              activeTab.tabType = 'consolidated';
+              activeTab.isConsolidated = true;
+              activeTab.isMultiple = false;
+              if (!activeTab.targetTabIds) activeTab.targetTabIds = [];
+          } else if (type === 'multiple') {
+              activeTab.tabType = 'multiple';
+              activeTab.isConsolidated = false;
+              activeTab.isMultiple = true;
+          } else {
+              activeTab.tabType = 'single';
+              activeTab.isConsolidated = false;
+              activeTab.isMultiple = false;
+          }
           renderBuilderTabsOnly();
        }
     }
@@ -1789,10 +2353,17 @@
                reorderTab(draggedTabId, tab.id);
             }
          };
-         btn.className = `flex items-center gap-1 px-4 py-2 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${isActive ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 cursor-grab active:cursor-grabbing'}`;
+         btn.className = `flex items-center gap-1.5 px-4 py-2 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${isActive ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 cursor-grab active:cursor-grabbing'}`;
          
-         btn.innerHTML = `${tab.isPrimary ? '<span class="material-symbols-outlined text-[16px]">star</span>' : ''} ${tab.title} 
-            ${tab.isMultiple ? '<span class="ml-1 text-[9px] bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-1 py-0.5 rounded uppercase font-bold">1:N</span>' : ''}
+         let badgeHtml = '';
+         if (tab.tabType === 'consolidated' || tab.isConsolidated || tab.title.toUpperCase().includes('HISTÓRICO DE OCUPAÇÃO') || tab.title.toUpperCase().includes('HISTORICO DE OCUPACAO')) {
+            badgeHtml = '<span class="ml-1 text-[9px] bg-indigo-100 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 px-1.5 py-0.5 rounded uppercase font-bold">CONSOLIDADO</span>';
+         } else if (tab.isMultiple) {
+            badgeHtml = '<span class="ml-1 text-[9px] bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-1.5 py-0.5 rounded uppercase font-bold">1:N</span>';
+         }
+
+         btn.innerHTML = `${tab.isPrimary ? '<span class="material-symbols-outlined text-[16px] text-amber-500">star</span>' : ''} ${tab.title} 
+            ${badgeHtml}
             ${builderTabs.length > 1 ? `<span class="material-symbols-outlined text-[16px] ml-2 text-slate-400 hover:text-red-500 cursor-pointer" onclick="event.stopPropagation(); deleteBuilderTab('${tab.id}')">close</span>` : ''}`;
          tabsContainer.appendChild(btn);
        });
@@ -1806,12 +2377,27 @@
           }
           const btnSingle = document.getElementById('btn-type-single');
           const btnMultiple = document.getElementById('btn-type-multiple');
-          if (!activeTab.isMultiple) {
-             btnSingle.className = "px-4 py-1.5 rounded-md text-sm font-bold transition-all flex items-center gap-2 bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200 dark:border-slate-600";
-             btnMultiple.className = "px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 border border-transparent";
-          } else {
-             btnSingle.className = "px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 border border-transparent";
-             btnMultiple.className = "px-4 py-1.5 rounded-md text-sm font-bold transition-all flex items-center gap-2 bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200 dark:border-slate-600";
+          const btnConsolidated = document.getElementById('btn-type-consolidated');
+          const consolidatedSettings = document.getElementById('tab-consolidated-settings');
+          
+          const isConsolidated = activeTab.tabType === 'consolidated' || activeTab.isConsolidated || 
+                                 activeTab.title.toUpperCase().includes('HISTÓRICO DE OCUPAÇÃO') || 
+                                 activeTab.title.toUpperCase().includes('HISTORICO DE OCUPACAO');
+
+          const activeClasses = "px-3.5 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200 dark:border-slate-600";
+          const inactiveClasses = "px-3.5 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 border border-transparent";
+
+          if (btnSingle) btnSingle.className = (!activeTab.isMultiple && !isConsolidated) ? activeClasses : inactiveClasses;
+          if (btnMultiple) btnMultiple.className = (activeTab.isMultiple && !isConsolidated) ? activeClasses : inactiveClasses;
+          if (btnConsolidated) btnConsolidated.className = isConsolidated ? activeClasses : inactiveClasses;
+
+          if (consolidatedSettings) {
+              if (isConsolidated) {
+                  consolidatedSettings.classList.remove('hidden');
+                  renderConsolidatedSourcesList(activeTab);
+              } else {
+                  consolidatedSettings.classList.add('hidden');
+              }
           }
           // Conditional Logic UI
           const conditionSettings = document.getElementById('tab-condition-settings');
@@ -1873,6 +2459,45 @@
        }
     }
     
+    function renderConsolidatedSourcesList(activeTab) {
+        const container = document.getElementById('tab-consolidated-sources-list');
+        if (!container) return;
+
+        const otherTabs = builderTabs.filter(t => t.id !== activeTab.id);
+        if (otherTabs.length === 0) {
+            container.innerHTML = '<div class="col-span-3 text-xs text-slate-400 italic py-2">Nenhuma outra aba cadastrada no formulário.</div>';
+            return;
+        }
+
+        if (!activeTab.targetTabIds) activeTab.targetTabIds = [];
+        
+        let html = '';
+        otherTabs.forEach(t => {
+            const isChecked = activeTab.targetTabIds.includes(t.id) || (activeTab.targetTabIds.length === 0 && t.isMultiple);
+            html += `
+                <label class="flex items-center gap-2 p-2 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 cursor-pointer text-xs select-none transition-colors">
+                    <input type="checkbox" value="${t.id}" ${isChecked ? 'checked' : ''} onchange="toggleConsolidatedSourceTab('${t.id}', this.checked)" class="rounded border-slate-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+                    <span class="font-bold text-slate-800 dark:text-slate-200 truncate flex-1">${t.title}</span>
+                    ${t.isMultiple ? '<span class="text-[9px] bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-1 py-0.2 rounded font-bold">1:N</span>' : '<span class="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-1 py-0.2 rounded font-bold">1:1</span>'}
+                </label>
+            `;
+        });
+
+        container.innerHTML = html;
+    }
+
+    function toggleConsolidatedSourceTab(tabId, isChecked) {
+        const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+        if (!activeTab) return;
+        if (!activeTab.targetTabIds) activeTab.targetTabIds = [];
+        
+        if (isChecked) {
+            if (!activeTab.targetTabIds.includes(tabId)) activeTab.targetTabIds.push(tabId);
+        } else {
+            activeTab.targetTabIds = activeTab.targetTabIds.filter(id => id !== tabId);
+        }
+    }
+
     function onConditionFieldChange() {
         renderConditionValueInput('');
         updateActiveTabCondition();
@@ -1970,17 +2595,346 @@
           }
        }
     }
+    // ----------------------------------------------------
+    // CONSTRUTOR VISUAL DA FOLHA DE IMPRESSÃO WORD / DOCS
+    // ----------------------------------------------------
+    function getAvailableFormFieldsForReport() {
+        const fieldsList = [];
+        builderTabs.forEach(t => {
+            if (t.id !== activeBuilderTabId) {
+                (t.fields || []).forEach(f => {
+                    fieldsList.push({
+                        tabTitle: t.title,
+                        tabId: t.id,
+                        fieldId: f.id,
+                        label: f.label,
+                        type: f.type
+                    });
+                });
+            }
+        });
+        return fieldsList;
+    }
+
+    function getDefaultReportTemplate() {
+        return {
+            title: 'RELATÓRIO CONSOLIDADO DE VISTORIAS & OCUPAÇÃO',
+            systemName: 'Sistema de Gestão Territorial',
+            fieldMappings: [
+                { label: 'Identificação do Imóvel (IPL):', fieldId: 'ipl' },
+                { label: 'Endereço:', fieldId: 'logradouro' },
+                { label: 'Proprietário / Responsável:', fieldId: 'proprietario' },
+                { label: 'Bairro / Município:', fieldId: 'bairro' }
+            ],
+            showSec1: true,
+            sec1Title: '1. QUADRO SINTÉTICO (ORDEM CRONOLÓGICA)',
+            sec1Columns: [
+                { label: 'Data', fieldKey: 'data' },
+                { label: 'Entidade / Órgão', fieldKey: 'org' },
+                { label: 'Situação da Ocupação', fieldKey: 'situacao_ocupacao' },
+                { label: 'Situação do Recuo', fieldKey: 'situacao_recuo' },
+                { label: 'Área Invadida (m²)', fieldKey: 'area_invadida' }
+            ],
+            showSec2: true,
+            sec2Title: '2. RELATÓRIO ANALÍTICO DETALHADO',
+            sec2Fields: ['situacao_ocupacao', 'situacao_recuo', 'area_invadida', 'observacao', 'links'],
+            footerText: 'Documento gerado automaticamente pelo Sistema de Gestão e Fiscalização de Obras e Imóveis.'
+        };
+    }
+
+    function toggleSec1Ui(show) {
+        const wrapper = document.getElementById('sec1-controls-wrapper');
+        const btnAdd = document.getElementById('btn-add-sec1-col');
+        if (wrapper) wrapper.style.display = show ? 'block' : 'none';
+        if (btnAdd) btnAdd.style.display = show ? 'inline-flex' : 'none';
+    }
+
+    function toggleSec2Ui(show) {
+        const wrapper = document.getElementById('sec2-controls-wrapper');
+        if (wrapper) wrapper.style.display = show ? 'block' : 'none';
+    }
+
+    function renderConsolidatedSheetBuilder(activeTab) {
+        if (!activeTab) return;
+        if (!activeTab.reportTemplate) {
+            activeTab.reportTemplate = getDefaultReportTemplate();
+        }
+        const cfg = activeTab.reportTemplate;
+        if (!cfg.sec1Columns) cfg.sec1Columns = getDefaultReportTemplate().sec1Columns;
+        if (!cfg.sec2Fields) cfg.sec2Fields = getDefaultReportTemplate().sec2Fields;
+        if (cfg.showSec1 === undefined) cfg.showSec1 = true;
+        if (cfg.showSec2 === undefined) cfg.showSec2 = true;
+
+        const titleInput = document.getElementById('report-template-title');
+        const sysInput = document.getElementById('report-template-system-name');
+        const sec1Chk = document.getElementById('report-sec1-enabled');
+        const sec1Input = document.getElementById('report-template-sec1-title');
+        const sec2Chk = document.getElementById('report-sec2-enabled');
+        const sec2Input = document.getElementById('report-template-sec2-title');
+        const footerInput = document.getElementById('report-template-footer');
+
+        if (titleInput) titleInput.value = cfg.title || '';
+        if (sysInput) sysInput.value = cfg.systemName || '';
+        if (sec1Chk) sec1Chk.checked = cfg.showSec1 !== false;
+        if (sec1Input) sec1Input.value = cfg.sec1Title || '';
+        if (sec2Chk) sec2Chk.checked = cfg.showSec2 !== false;
+        if (sec2Input) sec2Input.value = cfg.sec2Title || '';
+        if (footerInput) footerInput.value = cfg.footerText || '';
+
+        toggleSec1Ui(cfg.showSec1 !== false);
+        toggleSec2Ui(cfg.showSec2 !== false);
+
+        renderReportFieldMappings();
+        renderReportSec1Columns();
+        renderReportSec2Fields();
+    }
+
+    function updateReportTemplateConfig(key, value) {
+        const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+        if (!activeTab) return;
+        if (!activeTab.reportTemplate) activeTab.reportTemplate = getDefaultReportTemplate();
+        activeTab.reportTemplate[key] = value;
+    }
+
+    function renderReportSec1Columns() {
+        const container = document.getElementById('report-sec1-columns-container');
+        if (!container) return;
+
+        const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+        if (!activeTab || !activeTab.reportTemplate) return;
+
+        const cols = activeTab.reportTemplate.sec1Columns || [];
+        const availableFields = getAvailableFormFieldsForReport();
+
+        let html = '';
+        cols.forEach((col, idx) => {
+            let optionsHtml = `
+                <option value="data" ${col.fieldKey === 'data' ? 'selected' : ''}>📅 Data da Vistoria</option>
+                <option value="org" ${col.fieldKey === 'org' ? 'selected' : ''}>🏛️ Entidade / Órgão</option>
+                <option value="situacao_ocupacao" ${col.fieldKey === 'situacao_ocupacao' ? 'selected' : ''}>🏷️ Situação da Ocupação</option>
+                <option value="situacao_recuo" ${col.fieldKey === 'situacao_recuo' ? 'selected' : ''}>📐 Situação do Recuo</option>
+                <option value="area_invadida" ${col.fieldKey === 'area_invadida' ? 'selected' : ''}>📏 Área Invadida (m²)</option>
+            `;
+
+            // Adicionar campos extras das abas 1:N
+            const tabsMap = {};
+            availableFields.forEach(f => {
+                if (!tabsMap[f.tabTitle]) tabsMap[f.tabTitle] = [];
+                tabsMap[f.tabTitle].push(f);
+            });
+
+            for (const [tabTitle, fields] of Object.entries(tabsMap)) {
+                optionsHtml += `<optgroup label="Aba: ${tabTitle}">`;
+                fields.forEach(f => {
+                    const isSelected = col.fieldKey === f.fieldId ? 'selected' : '';
+                    optionsHtml += `<option value="${f.fieldId}" ${isSelected}>${f.label}</option>`;
+                });
+                optionsHtml += `</optgroup>`;
+            }
+
+            html += `
+                <div class="flex items-center gap-2 bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
+                    <span class="text-xs font-mono font-bold text-slate-400 w-6 text-center">${idx + 1}.</span>
+                    <input type="text" value="${col.label || ''}" oninput="updateReportSec1Column(${idx}, 'label', this.value)" class="w-1/2 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-xs font-bold text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-sky-500" placeholder="Nome da Coluna" />
+                    <select onchange="updateReportSec1Column(${idx}, 'fieldKey', this.value)" class="flex-1 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-xs text-slate-700 dark:text-slate-300 focus:ring-1 focus:ring-sky-500">
+                        ${optionsHtml}
+                    </select>
+                    <button type="button" onclick="removeReportSec1Column(${idx})" class="p-1.5 text-slate-400 hover:text-red-500 rounded transition-colors tooltip" title="Excluir Coluna">
+                        <span class="material-symbols-outlined text-[18px]">delete</span>
+                    </button>
+                </div>
+            `;
+        });
+
+        if (cols.length === 0) {
+            html = '<div class="text-xs text-slate-400 italic py-2">Nenhuma coluna configurada. Clique em "Adicionar Coluna" acima.</div>';
+        }
+
+        container.innerHTML = html;
+    }
+
+    function addReportSec1Column() {
+        const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+        if (!activeTab) return;
+        if (!activeTab.reportTemplate) activeTab.reportTemplate = getDefaultReportTemplate();
+        if (!activeTab.reportTemplate.sec1Columns) activeTab.reportTemplate.sec1Columns = [];
+
+        activeTab.reportTemplate.sec1Columns.push({
+            label: 'Nova Coluna',
+            fieldKey: 'data'
+        });
+        renderReportSec1Columns();
+    }
+
+    function removeReportSec1Column(idx) {
+        const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+        if (!activeTab || !activeTab.reportTemplate || !activeTab.reportTemplate.sec1Columns) return;
+        activeTab.reportTemplate.sec1Columns.splice(idx, 1);
+        renderReportSec1Columns();
+    }
+
+    function updateReportSec1Column(idx, key, val) {
+        const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+        if (!activeTab || !activeTab.reportTemplate || !activeTab.reportTemplate.sec1Columns) return;
+        if (activeTab.reportTemplate.sec1Columns[idx]) {
+            activeTab.reportTemplate.sec1Columns[idx][key] = val;
+        }
+    }
+
+    function renderReportSec2Fields() {
+        const container = document.getElementById('report-sec2-fields-container');
+        if (!container) return;
+
+        const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+        if (!activeTab || !activeTab.reportTemplate) return;
+
+        const selectedFields = activeTab.reportTemplate.sec2Fields || [];
+
+        const defaultFields = [
+            { key: 'situacao_ocupacao', label: 'Situação da Ocupação', icon: 'label' },
+            { key: 'situacao_recuo', label: 'Situação do Recuo', icon: 'straighten' },
+            { key: 'area_invadida', label: 'Área Invadida (m²)', icon: 'square_foot' },
+            { key: 'observacao', label: 'Observações Técnicas', icon: 'notes' },
+            { key: 'links', label: 'Hiperlinks & Documentos', icon: 'attachment' }
+        ];
+
+        let html = '';
+        defaultFields.forEach(f => {
+            const isChecked = selectedFields.includes(f.key);
+            html += `
+                <label class="flex items-center gap-2 p-2 rounded-md bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 cursor-pointer text-xs select-none transition-colors">
+                    <input type="checkbox" value="${f.key}" ${isChecked ? 'checked' : ''} onchange="toggleReportSec2Field('${f.key}', this.checked)" class="rounded border-slate-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+                    <span class="material-symbols-outlined text-[16px] text-indigo-500">${f.icon}</span>
+                    <span class="font-bold text-slate-700 dark:text-slate-300 flex-1">${f.label}</span>
+                </label>
+            `;
+        });
+
+        container.innerHTML = html;
+    }
+
+    function toggleReportSec2Field(fieldKey, isChecked) {
+        const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+        if (!activeTab) return;
+        if (!activeTab.reportTemplate) activeTab.reportTemplate = getDefaultReportTemplate();
+        if (!activeTab.reportTemplate.sec2Fields) activeTab.reportTemplate.sec2Fields = [];
+
+        if (isChecked) {
+            if (!activeTab.reportTemplate.sec2Fields.includes(fieldKey)) {
+                activeTab.reportTemplate.sec2Fields.push(fieldKey);
+            }
+        } else {
+            activeTab.reportTemplate.sec2Fields = activeTab.reportTemplate.sec2Fields.filter(k => k !== fieldKey);
+        }
+    }
+
+    function renderReportFieldMappings() {
+        const container = document.getElementById('report-field-mappings-container');
+        if (!container) return;
+
+        const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+        if (!activeTab || !activeTab.reportTemplate) return;
+
+        const availableFields = getAvailableFormFieldsForReport();
+        const mappings = activeTab.reportTemplate.fieldMappings || [];
+
+        let html = '';
+        mappings.forEach((m, idx) => {
+            let selectOptionsHtml = '<option value="">-- Campo Automático (Autodetectar) --</option>';
+            
+            const tabsMap = {};
+            availableFields.forEach(f => {
+                if (!tabsMap[f.tabTitle]) tabsMap[f.tabTitle] = [];
+                tabsMap[f.tabTitle].push(f);
+            });
+
+            for (const [tabTitle, fields] of Object.entries(tabsMap)) {
+                selectOptionsHtml += `<optgroup label="Aba: ${tabTitle}">`;
+                fields.forEach(f => {
+                    const selected = (m.fieldId === f.fieldId || (m.fieldId && m.fieldId.toLowerCase() === f.label.toLowerCase())) ? 'selected' : '';
+                    selectOptionsHtml += `<option value="${f.fieldId}" ${selected}>${f.label}</option>`;
+                });
+                selectOptionsHtml += `</optgroup>`;
+            }
+
+            html += `
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
+                    <input type="text" value="${m.label || ''}" oninput="updateReportFieldMappingRow(${idx}, 'label', this.value)" class="w-full sm:w-1/3 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-xs font-bold text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500" placeholder="Rótulo da Linha (ex: IPL:)" />
+                    <select onchange="updateReportFieldMappingRow(${idx}, 'fieldId', this.value)" class="flex-1 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-xs text-slate-700 dark:text-slate-300 focus:ring-1 focus:ring-indigo-500">
+                        ${selectOptionsHtml}
+                    </select>
+                    <button type="button" onclick="removeReportFieldMappingRow(${idx})" class="p-1.5 text-slate-400 hover:text-red-500 rounded transition-colors self-end sm:self-auto tooltip" title="Remover Linha">
+                        <span class="material-symbols-outlined text-[18px]">delete</span>
+                    </button>
+                </div>
+            `;
+        });
+
+        if (mappings.length === 0) {
+            html = '<div class="text-xs text-slate-400 italic py-2">Nenhuma linha de identificação configurada. Clique em "Adicionar Linha" acima.</div>';
+        }
+
+        container.innerHTML = html;
+    }
+
+    function addReportFieldMappingRow() {
+        const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+        if (!activeTab) return;
+        if (!activeTab.reportTemplate) activeTab.reportTemplate = getDefaultReportTemplate();
+        if (!activeTab.reportTemplate.fieldMappings) activeTab.reportTemplate.fieldMappings = [];
+
+        activeTab.reportTemplate.fieldMappings.push({
+            label: 'Novo Campo:',
+            fieldId: ''
+        });
+        renderReportFieldMappings();
+    }
+
+    function removeReportFieldMappingRow(idx) {
+        const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+        if (!activeTab || !activeTab.reportTemplate || !activeTab.reportTemplate.fieldMappings) return;
+        activeTab.reportTemplate.fieldMappings.splice(idx, 1);
+        renderReportFieldMappings();
+    }
+
+    function updateReportFieldMappingRow(idx, key, val) {
+        const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+        if (!activeTab || !activeTab.reportTemplate || !activeTab.reportTemplate.fieldMappings) return;
+        if (activeTab.reportTemplate.fieldMappings[idx]) {
+            activeTab.reportTemplate.fieldMappings[idx][key] = val;
+        }
+    }
+
     function renderBuilderTabs() {
        renderBuilderTabsOnly();
        
        const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
-       const fieldsContainer = document.getElementById('fields-container');
-       fieldsContainer.innerHTML = '';
-       
-       if (activeTab) {
-          activeTab.fields.forEach(f => {
-             renderFieldInBuilder(f);
-          });
+       const isConsolidated = activeTab && (activeTab.tabType === 'consolidated' || activeTab.isConsolidated || 
+                                           activeTab.title.toUpperCase().includes('HISTÓRICO DE OCUPAÇÃO') || 
+                                           activeTab.title.toUpperCase().includes('HISTORICO DE OCUPACAO'));
+
+       const standardSection = document.getElementById('standard-fields-section');
+       const consolidatedSection = document.getElementById('consolidated-sheet-section');
+
+       if (isConsolidated) {
+          if (standardSection) standardSection.classList.add('hidden');
+          if (consolidatedSection) {
+              consolidatedSection.classList.remove('hidden');
+              renderConsolidatedSheetBuilder(activeTab);
+          }
+       } else {
+          if (standardSection) standardSection.classList.remove('hidden');
+          if (consolidatedSection) consolidatedSection.classList.add('hidden');
+
+          const fieldsContainer = document.getElementById('fields-container');
+          if (fieldsContainer) {
+              fieldsContainer.innerHTML = '';
+              if (activeTab) {
+                 activeTab.fields.forEach(f => {
+                    renderFieldInBuilder(f);
+                 });
+              }
+          }
        }
     }
 
@@ -2932,50 +3886,205 @@
 
     function getStatFormHtml(stat = null, index = null) {
         const isEditing = stat !== null && index !== null;
-        let fieldOptions = '<option value="">(Nenhum / Total de Registros)</option>';
+        const suffix = index !== null ? index : 'new';
+        
+        // Todos os campos do formulário para filtros universais
+        let allFieldsOptions = '<option value="">Selecione um campo...</option>';
+        // Campos de agrupamento (select, radio, text curto, etc.)
+        let groupFieldsOptions = '<option value="">(Selecione o campo de agrupamento)</option>';
+        
         builderTabs.forEach(tab => {
             tab.fields.forEach(f => {
-                if(f.type === 'select' || f.type === 'radio' || f.type === 'checkbox') {
-                    const selected = (isEditing && stat.fieldId === f.id) ? 'selected' : '';
-                    fieldOptions += `<option value="${f.id}" ${selected}>${f.label} (${tab.title})</option>`;
+                const isSelectedGroup = (isEditing && stat.fieldId === f.id);
+                const isSelectedCond = (isEditing && stat.conditionField === f.id);
+                
+                allFieldsOptions += `<option value="${f.id}" data-type="${f.type}" data-options="${f.options || ''}" ${isSelectedCond ? 'selected' : ''}>${f.label} [${f.type}] (${tab.title})</option>`;
+                
+                if (['select', 'radio', 'checkbox', 'pa_anpp_ap', 'text'].includes(f.type)) {
+                    groupFieldsOptions += `<option value="${f.id}" ${isSelectedGroup ? 'selected' : ''}>${f.label} (${tab.title})</option>`;
                 }
             });
         });
 
-        const statType = isEditing ? stat.type : 'indicator';
+        const statType = isEditing ? (stat.type || 'indicator') : 'indicator';
         const statTitle = isEditing ? (stat.title || '') : '';
-        const suffix = index !== null ? index : 'new';
+        const calcMode = isEditing ? (stat.calcMode || (stat.fieldId ? 'condition' : 'all')) : 'all';
+        const conditionOp = isEditing ? (stat.conditionOp || 'equals') : 'equals';
+        const conditionValue = isEditing ? (stat.conditionValue || '') : '';
 
         return `
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                <div>
-                  <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Tipo de Gráfico</label>
-                  <select id="edit-stat-type-${suffix}" class="w-full px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 text-sm bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none">
-                      <option value="indicator" ${statType === 'indicator' ? 'selected' : ''}>Indicador Numérico (Apenas Total)</option>
-                      <option value="pie" ${statType === 'pie' ? 'selected' : ''}>Gráfico de Pizza</option>
-                      <option value="bar" ${statType === 'bar' ? 'selected' : ''}>Gráfico de Barras</option>
+                  <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Tipo de Gráfico / Widget</label>
+                  <select id="edit-stat-type-${suffix}" onchange="onStatTypeChange('${suffix}')" class="w-full px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 text-sm bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none font-medium">
+                      <option value="indicator" ${statType === 'indicator' ? 'selected' : ''}>📊 Indicador Numérico</option>
+                      <option value="pie" ${statType === 'pie' ? 'selected' : ''}>🥧 Gráfico de Pizza</option>
+                      <option value="donut" ${statType === 'donut' ? 'selected' : ''}>🍩 Gráfico de Rosca (Donut)</option>
+                      <option value="bar" ${statType === 'bar' ? 'selected' : ''}>📊 Gráfico de Barras</option>
                   </select>
                </div>
-               <div>
-                  <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Campo Fonte de Dados</label>
+               
+               <div id="stat-group-field-container-${suffix}" class="${statType === 'indicator' ? 'hidden' : 'block'}">
+                  <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Campo de Agrupamento</label>
                   <select id="edit-stat-field-${suffix}" class="w-full px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 text-sm bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none">
-                      ${fieldOptions}
+                      ${groupFieldsOptions}
+                  </select>
+               </div>
+
+               <div id="stat-calc-mode-container-${suffix}" class="${statType === 'indicator' ? 'block' : 'hidden'}">
+                  <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Modo de Cálculo do Indicador</label>
+                  <select id="edit-stat-calc-mode-${suffix}" onchange="onStatCalcModeChange('${suffix}')" class="w-full px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 text-sm bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none">
+                      <option value="all" ${calcMode === 'all' ? 'selected' : ''}>🔢 Total Geral de Registros</option>
+                      <option value="condition" ${calcMode === 'condition' ? 'selected' : ''}>🎯 Contagem Filtrada (Condicional)</option>
+                      <option value="sum" ${calcMode === 'sum' ? 'selected' : ''}>➕ Soma de Valores Numéricos</option>
+                      <option value="avg" ${calcMode === 'avg' ? 'selected' : ''}>📐 Média de Valores Numéricos</option>
                   </select>
                </div>
             </div>
-            <div>
-               <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Título do Gráfico</label>
-               <input type="text" id="edit-stat-title-${suffix}" value="${statTitle}" placeholder="Ex: Total de Obras por Situação" class="w-full px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 text-sm bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none">
+
+            <!-- Filtros Condicionais Universais (para Indicadores) -->
+            <div id="stat-condition-container-${suffix}" class="${(statType === 'indicator' && calcMode === 'condition') ? 'block' : 'hidden'} bg-indigo-50/70 dark:bg-indigo-950/30 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800/60 flex flex-col gap-2.5">
+               <div class="flex items-center gap-1.5 text-xs font-bold text-indigo-900 dark:text-indigo-300">
+                  <span class="material-symbols-outlined text-[16px]">filter_alt</span> Regra de Filtro Condicional:
+               </div>
+               <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div>
+                     <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Campo</label>
+                     <select id="edit-stat-cond-field-${suffix}" onchange="onStatCondFieldChange('${suffix}')" class="w-full px-2.5 py-1.5 rounded-md border border-slate-300 dark:border-slate-600 text-xs bg-white dark:bg-slate-800 dark:text-white outline-none">
+                         ${allFieldsOptions}
+                     </select>
+                  </div>
+                  <div>
+                     <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Operador</label>
+                     <select id="edit-stat-cond-op-${suffix}" onchange="onStatCondOpChange('${suffix}')" class="w-full px-2.5 py-1.5 rounded-md border border-slate-300 dark:border-slate-600 text-xs bg-white dark:bg-slate-800 dark:text-white outline-none">
+                         <option value="equals" ${conditionOp === 'equals' ? 'selected' : ''}>É igual a (=)</option>
+                         <option value="not_equals" ${conditionOp === 'not_equals' ? 'selected' : ''}>Diferente de (≠)</option>
+                         <option value="contains" ${conditionOp === 'contains' ? 'selected' : ''}>Contém texto</option>
+                         <option value="is_filled" ${conditionOp === 'is_filled' ? 'selected' : ''}>Está Preenchido</option>
+                         <option value="is_empty" ${conditionOp === 'is_empty' ? 'selected' : ''}>Está Vazio</option>
+                         <option value="gt" ${conditionOp === 'gt' ? 'selected' : ''}>Maior que (&gt;)</option>
+                         <option value="lt" ${conditionOp === 'lt' ? 'selected' : ''}>Menor que (&lt;)</option>
+                         <option value="gte" ${conditionOp === 'gte' ? 'selected' : ''}>Maior ou igual (&ge;)</option>
+                         <option value="lte" ${conditionOp === 'lte' ? 'selected' : ''}>Menor ou igual (&le;)</option>
+                     </select>
+                  </div>
+                  <div id="stat-cond-val-container-${suffix}">
+                     <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Valor Esperado</label>
+                     <div id="stat-cond-val-input-box-${suffix}">
+                        <input type="text" id="edit-stat-cond-val-${suffix}" value="${conditionValue}" placeholder="Ex: Já Recuou" class="w-full px-2.5 py-1.5 rounded-md border border-slate-300 dark:border-slate-600 text-xs bg-white dark:bg-slate-800 dark:text-white outline-none">
+                     </div>
+                  </div>
+               </div>
             </div>
+
+            <!-- Seleção de Campo para Soma ou Média -->
+            <div id="stat-numeric-field-container-${suffix}" class="${(statType === 'indicator' && (calcMode === 'sum' || calcMode === 'avg')) ? 'block' : 'hidden'}">
+               <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Campo Numérico de Origem</label>
+               <select id="edit-stat-num-field-${suffix}" class="w-full px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 text-sm bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none">
+                   ${allFieldsOptions}
+               </select>
+            </div>
+
+            <div>
+               <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Título do Gráfico / Indicador</label>
+               <input type="text" id="edit-stat-title-${suffix}" value="${statTitle}" placeholder="Ex: Total de Imóveis Recuados" class="w-full px-3 py-2 rounded-md border border-slate-300 dark:border-slate-600 text-sm bg-white dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none">
+            </div>
+
             <div id="stat-color-mapping-container-${suffix}" class="hidden flex flex-col gap-2 mt-1">
                <!-- Seletor de cores dinâmico -->
             </div>
+
             <div class="flex justify-end gap-2 mt-2 pt-2 border-t border-indigo-100 dark:border-indigo-800/50">
                <button onclick="cancelStatEdit(${index})" class="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md transition-colors">Cancelar</button>
                <button onclick="saveStatEdit(${index})" class="px-4 py-2 text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 rounded-md transition-colors shadow-sm">Salvar Gráfico</button>
             </div>
         `;
     }
+
+    window.onStatTypeChange = function(suffix) {
+        const typeSelect = document.getElementById(`edit-stat-type-${suffix}`);
+        const groupContainer = document.getElementById(`stat-group-field-container-${suffix}`);
+        const calcModeContainer = document.getElementById(`stat-calc-mode-container-${suffix}`);
+        const condContainer = document.getElementById(`stat-condition-container-${suffix}`);
+        const numContainer = document.getElementById(`stat-numeric-field-container-${suffix}`);
+        const colorContainer = document.getElementById(`stat-color-mapping-container-${suffix}`);
+        
+        if (!typeSelect) return;
+        const type = typeSelect.value;
+        
+        if (type === 'indicator') {
+            if (groupContainer) groupContainer.classList.add('hidden');
+            if (calcModeContainer) calcModeContainer.classList.remove('hidden');
+            if (colorContainer) colorContainer.classList.add('hidden');
+            onStatCalcModeChange(suffix);
+        } else {
+            if (groupContainer) groupContainer.classList.remove('hidden');
+            if (calcModeContainer) calcModeContainer.classList.add('hidden');
+            if (condContainer) condContainer.classList.add('hidden');
+            if (numContainer) numContainer.classList.add('hidden');
+            updateColorMappingInputs(suffix);
+        }
+    };
+
+    window.onStatCalcModeChange = function(suffix) {
+        const calcModeSelect = document.getElementById(`edit-stat-calc-mode-${suffix}`);
+        const condContainer = document.getElementById(`stat-condition-container-${suffix}`);
+        const numContainer = document.getElementById(`stat-numeric-field-container-${suffix}`);
+        if (!calcModeSelect) return;
+        
+        const mode = calcModeSelect.value;
+        if (mode === 'condition') {
+            if (condContainer) condContainer.classList.remove('hidden');
+            if (numContainer) numContainer.classList.add('hidden');
+            onStatCondFieldChange(suffix);
+        } else if (mode === 'sum' || mode === 'avg') {
+            if (condContainer) condContainer.classList.add('hidden');
+            if (numContainer) numContainer.classList.remove('hidden');
+        } else {
+            if (condContainer) condContainer.classList.add('hidden');
+            if (numContainer) numContainer.classList.add('hidden');
+        }
+    };
+
+    window.onStatCondFieldChange = function(suffix) {
+        const fieldSelect = document.getElementById(`edit-stat-cond-field-${suffix}`);
+        const valBox = document.getElementById(`stat-cond-val-input-box-${suffix}`);
+        if (!fieldSelect || !valBox) return;
+        
+        const selectedOpt = fieldSelect.options[fieldSelect.selectedIndex];
+        if (!selectedOpt) return;
+        
+        const type = selectedOpt.getAttribute('data-type');
+        const optsString = selectedOpt.getAttribute('data-options');
+        const currentVal = document.getElementById(`edit-stat-cond-val-${suffix}`) ? document.getElementById(`edit-stat-cond-val-${suffix}`).value : '';
+        
+        if (type === 'select' && optsString) {
+            const optionsArray = optsString.split(',').map(o => o.trim()).filter(o => o);
+            let html = `<select id="edit-stat-cond-val-${suffix}" class="w-full px-2.5 py-1.5 rounded-md border border-slate-300 dark:border-slate-600 text-xs bg-white dark:bg-slate-800 dark:text-white outline-none">`;
+            html += `<option value="">Selecione a opção...</option>`;
+            optionsArray.forEach(opt => {
+                const isSelected = (opt === currentVal) ? 'selected' : '';
+                html += `<option value="${opt}" ${isSelected}>${opt}</option>`;
+            });
+            html += `</select>`;
+            valBox.innerHTML = html;
+        } else {
+            valBox.innerHTML = `<input type="text" id="edit-stat-cond-val-${suffix}" value="${currentVal}" placeholder="Digite o valor..." class="w-full px-2.5 py-1.5 rounded-md border border-slate-300 dark:border-slate-600 text-xs bg-white dark:bg-slate-800 dark:text-white outline-none">`;
+        }
+    };
+
+    window.onStatCondOpChange = function(suffix) {
+        const opSelect = document.getElementById(`edit-stat-cond-op-${suffix}`);
+        const valContainer = document.getElementById(`stat-cond-val-container-${suffix}`);
+        if (!opSelect || !valContainer) return;
+        
+        const op = opSelect.value;
+        if (op === 'is_filled' || op === 'is_empty') {
+            valContainer.classList.add('opacity-40', 'pointer-events-none');
+        } else {
+            valContainer.classList.remove('opacity-40', 'pointer-events-none');
+        }
+    };
 
     function renderManualStats() {
         const listContainer = document.getElementById('manual-stats-list');
@@ -2998,12 +4107,10 @@
                 div.innerHTML = getStatFormHtml(stat, index);
                 listContainer.appendChild(div);
                 
-                // Add event listeners for editing stat color mapping
                 setTimeout(() => {
-                    const typeSelect = document.getElementById(`edit-stat-type-${index}`);
+                    onStatTypeChange(index);
                     const fieldSelect = document.getElementById(`edit-stat-field-${index}`);
-                    if (typeSelect && fieldSelect) {
-                        typeSelect.addEventListener('change', () => updateColorMappingInputs(index));
+                    if (fieldSelect) {
                         fieldSelect.addEventListener('change', () => updateColorMappingInputs(index));
                         updateColorMappingInputs(index);
                     }
@@ -3011,9 +4118,24 @@
             } else {
                 div.className = 'flex items-center justify-between p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded shadow-sm';
                 
-                const icon = stat.type === 'pie' ? 'pie_chart' : (stat.type === 'bar' ? 'bar_chart' : 'pin');
-                const typeName = stat.type === 'pie' ? 'Pizza' : (stat.type === 'bar' ? 'Barras' : 'Indicador');
+                const icon = stat.type === 'pie' ? 'pie_chart' : (stat.type === 'donut' ? 'donut_large' : (stat.type === 'bar' ? 'bar_chart' : 'pin'));
+                const typeName = stat.type === 'pie' ? 'Pizza' : (stat.type === 'donut' ? 'Rosca' : (stat.type === 'bar' ? 'Barras' : 'Indicador'));
                 
+                let detailText = '';
+                if (stat.type === 'indicator') {
+                    if (stat.calcMode === 'condition') {
+                        detailText = `Filtro Condicional: [${stat.conditionField || 'Campo'} ${stat.conditionOp || '='} "${stat.conditionValue || ''}"]`;
+                    } else if (stat.calcMode === 'sum') {
+                        detailText = `Soma do Campo: ${stat.numericField || stat.fieldId}`;
+                    } else if (stat.calcMode === 'avg') {
+                        detailText = `Média do Campo: ${stat.numericField || stat.fieldId}`;
+                    } else {
+                        detailText = `Total Geral de Feições`;
+                    }
+                } else {
+                    detailText = `Campo de Agrupamento: ${stat.fieldId || 'N/A'}`;
+                }
+
                 let colorsHtml = '';
                 if (stat.colorMap && Object.keys(stat.colorMap).length > 0) {
                     colorsHtml = '<div class="flex flex-wrap gap-1 mt-1.5">';
@@ -3039,7 +4161,7 @@
                        </div>
                        <div>
                           <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">${stat.title || 'Sem título'}</h4>
-                          <p class="text-xs text-slate-500 dark:text-slate-400">Tipo: ${typeName} | Campo Origem: ${stat.fieldId || 'Todos (Total)'}</p>
+                          <p class="text-xs text-slate-500 dark:text-slate-400">Tipo: <strong>${typeName}</strong> | ${detailText}</p>
                           ${colorsHtml}
                        </div>
                     </div>
@@ -3055,13 +4177,7 @@
 
     function addManualStatConfig() {
         const listContainer = document.getElementById('manual-stats-list');
-        
-        // Remove "empty" message if it exists
-        if (window._currentFormStatsConfig.length === 0) {
-            listContainer.innerHTML = '';
-        }
-
-        // Evita abrir múltiplos formulários de criação
+        if (window._currentFormStatsConfig.length === 0) listContainer.innerHTML = '';
         if (document.getElementById('manual-stat-form')) return;
         
         const formDiv = document.createElement('div');
@@ -3071,14 +4187,13 @@
         
         listContainer.insertBefore(formDiv, listContainer.firstChild);
         
-        // Listeners for dynamic color mapping
-        const typeSelect = document.getElementById('edit-stat-type-new');
-        const fieldSelect = document.getElementById('edit-stat-field-new');
-        
-        typeSelect.addEventListener('change', () => updateColorMappingInputs('new'));
-        fieldSelect.addEventListener('change', () => updateColorMappingInputs('new'));
-        
-        updateColorMappingInputs('new');
+        setTimeout(() => {
+            onStatTypeChange('new');
+            const fieldSelect = document.getElementById('edit-stat-field-new');
+            if (fieldSelect) {
+                fieldSelect.addEventListener('change', () => updateColorMappingInputs('new'));
+            }
+        }, 0);
     }
 
     function updateColorMappingInputs(index = 'new') {
@@ -3098,7 +4213,7 @@
             return;
         }
         
-        // Find the field options
+        // Find field options
         let field = null;
         builderTabs.forEach(tab => {
             const found = tab.fields.find(f => f.id === fieldId);
@@ -3122,7 +4237,6 @@
         
         const defaultColors = ['#06b6d4', '#3b82f6', '#8b5cf6', '#14b8a6', '#6366f1', '#475569', '#10b981', '#ef4444', '#f59e0b'];
         
-        // Se estivermos editando, obter o colorMap existente do stat para não perder as cores configuradas
         let existingColorMap = null;
         if (index !== 'new' && window._currentFormStatsConfig && window._currentFormStatsConfig[index]) {
             existingColorMap = window._currentFormStatsConfig[index].colorMap;
@@ -3142,10 +4256,10 @@
                 <div class="flex items-center justify-between bg-white dark:bg-slate-800/60 px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg">
                     <div class="flex items-center gap-2 truncate">
                         <input type="color" id="color-picker-${suffix}-${idx}" data-option="${opt}" value="${colorVal}" class="stat-option-color-${suffix} w-7 h-7 rounded cursor-pointer border border-slate-300 dark:border-slate-600 bg-transparent shrink-0 ${isNone ? 'opacity-30 pointer-events-none' : ''}">
-                        <span class="text-xs font-semibold text-slate-755 dark:text-slate-300 truncate">${opt}</span>
+                        <span class="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate">${opt}</span>
                     </div>
                     <label class="inline-flex items-center gap-1.5 cursor-pointer shrink-0 ml-1">
-                        <input type="checkbox" id="color-none-${suffix}-${idx}" data-option="${opt}" ${isNone ? 'checked' : ''} onchange="toggleOptionColorDisable(this, '${suffix}', '${idx}')" class="stat-option-none-${suffix} rounded border-slate-350 dark:border-slate-600 text-green-500 focus:ring-green-500/50 w-4 h-4 cursor-pointer">
+                        <input type="checkbox" id="color-none-${suffix}-${idx}" data-option="${opt}" ${isNone ? 'checked' : ''} onchange="toggleOptionColorDisable(this, '${suffix}', '${idx}')" class="stat-option-none-${suffix} rounded border-slate-300 dark:border-slate-600 text-green-500 focus:ring-green-500/50 w-4 h-4 cursor-pointer">
                         <span class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Sem Cor</span>
                         <span id="check-icon-${suffix}-${idx}" class="material-symbols-outlined text-green-500 text-[16px] font-extrabold ${isNone ? '' : 'hidden'} select-none shrink-0 ml-0.5">check</span>
                     </label>
@@ -3168,10 +4282,10 @@
             <div class="flex items-center justify-between bg-white dark:bg-slate-800/60 px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg">
                 <div class="flex items-center gap-2 truncate">
                     <input type="color" id="color-picker-${suffix}-${niIdx}" data-option="N/I" value="${niColor}" class="stat-option-color-${suffix} w-7 h-7 rounded cursor-pointer border border-slate-300 dark:border-slate-600 bg-transparent shrink-0 ${niIsNone ? 'opacity-30 pointer-events-none' : ''}">
-                    <span class="text-xs font-semibold text-slate-750 dark:text-slate-300 truncate">N/I (Não Informado)</span>
+                    <span class="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate">N/I (Não Informado)</span>
                 </div>
                 <label class="inline-flex items-center gap-1.5 cursor-pointer shrink-0 ml-1">
-                    <input type="checkbox" id="color-none-${suffix}-${niIdx}" data-option="N/I" ${niIsNone ? 'checked' : ''} onchange="toggleOptionColorDisable(this, '${suffix}', '${niIdx}')" class="stat-option-none-${suffix} rounded border-slate-350 dark:border-slate-600 text-green-500 focus:ring-green-500/50 w-4 h-4 cursor-pointer">
+                    <input type="checkbox" id="color-none-${suffix}-${niIdx}" data-option="N/I" ${niIsNone ? 'checked' : ''} onchange="toggleOptionColorDisable(this, '${suffix}', '${niIdx}')" class="stat-option-none-${suffix} rounded border-slate-300 dark:border-slate-600 text-green-500 focus:ring-green-500/50 w-4 h-4 cursor-pointer">
                     <span class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Sem Cor</span>
                     <span id="check-icon-${suffix}-${niIdx}" class="material-symbols-outlined text-green-500 text-[16px] font-extrabold ${niIsNone ? '' : 'hidden'} select-none shrink-0 ml-0.5">check</span>
                 </label>
@@ -3199,8 +4313,36 @@
     function saveStatEdit(index) {
         const suffix = index === null ? 'new' : index;
         const type = document.getElementById(`edit-stat-type-${suffix}`).value;
-        const fieldId = document.getElementById(`edit-stat-field-${suffix}`).value;
         const title = document.getElementById(`edit-stat-title-${suffix}`).value.trim() || 'Gráfico';
+        
+        let fieldId = '';
+        let calcMode = 'all';
+        let conditionField = '';
+        let conditionOp = 'equals';
+        let conditionValue = '';
+        let numericField = '';
+
+        if (type === 'indicator') {
+            const calcModeEl = document.getElementById(`edit-stat-calc-mode-${suffix}`);
+            calcMode = calcModeEl ? calcModeEl.value : 'all';
+            
+            if (calcMode === 'condition') {
+                const condFieldEl = document.getElementById(`edit-stat-cond-field-${suffix}`);
+                const condOpEl = document.getElementById(`edit-stat-cond-op-${suffix}`);
+                const condValEl = document.getElementById(`edit-stat-cond-val-${suffix}`);
+                
+                conditionField = condFieldEl ? condFieldEl.value : '';
+                conditionOp = condOpEl ? condOpEl.value : 'equals';
+                conditionValue = condValEl ? condValEl.value.trim() : '';
+            } else if (calcMode === 'sum' || calcMode === 'avg') {
+                const numFieldEl = document.getElementById(`edit-stat-num-field-${suffix}`);
+                numericField = numFieldEl ? numFieldEl.value : '';
+                fieldId = numericField;
+            }
+        } else {
+            const fieldEl = document.getElementById(`edit-stat-field-${suffix}`);
+            fieldId = fieldEl ? fieldEl.value : '';
+        }
         
         const colorMap = {};
         const noneCheckboxes = document.querySelectorAll(`.stat-option-none-${suffix}`);
@@ -3225,6 +4367,11 @@
             type: type,
             title: title,
             fieldId: fieldId,
+            calcMode: calcMode,
+            conditionField: conditionField,
+            conditionOp: conditionOp,
+            conditionValue: conditionValue,
+            numericField: numericField,
             colorMap: Object.keys(colorMap).length > 0 ? colorMap : null,
             description: ""
         };
@@ -3964,7 +5111,280 @@
         setTimeout(() => t.remove(), 2500);
     }
 
-    // Patch switchTab to load folders when storage or usuarios tab is opened
+    // === GEOESTATÍSTICA ESPACIAL CRUZADA ===
+    let spatialRules = [];
+
+    async function loadSpatialAnalyticsRules() {
+        const munId = activeMunicipioId || sessionStorage.getItem('municipio_ativo') || 'default';
+        const key = `spatial_rules_${munId}`;
+        const saved = localStorage.getItem(key) || localStorage.getItem('spatial_analytics_rules');
+        
+        if (saved) {
+            try { spatialRules = JSON.parse(saved); } catch(e) { spatialRules = []; }
+        } else {
+            spatialRules = [];
+        }
+
+        renderSpatialRulesList();
+    }
+    window.loadSpatialAnalyticsRules = loadSpatialAnalyticsRules;
+
+    function renderSpatialRulesList() {
+        const container = document.getElementById('spatial-rules-list');
+        if (!container) return;
+
+        if (spatialRules.length === 0) {
+            container.innerHTML = `
+                <div class="col-span-1 md:col-span-2 text-center py-10 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50/50 dark:bg-slate-900/30">
+                    <span class="material-symbols-outlined text-4xl text-slate-400 mb-2">hub</span>
+                    <h4 class="text-sm font-bold text-slate-700 dark:text-slate-300">Nenhuma Análise Espacial Cadastrada</h4>
+                    <p class="text-xs text-slate-500 max-w-sm mx-auto mt-1">Crie cruzamentos espaciais entre camadas para detectar sobreposições e confrontações no mapa.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const opLabels = {
+            'intersects': { label: 'Interseção / Cruzamento', icon: 'content_cut', color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800' },
+            'touches': { label: 'Confrontação / Borda', icon: 'handshake', color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800' },
+            'buffer': { label: 'Raio de Proximidade', icon: 'radar', color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800' },
+            'within': { label: 'Contido em', icon: 'all_inbox', color: 'text-purple-500 bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800' }
+        };
+
+        let html = '';
+        spatialRules.forEach(rule => {
+            const opInfo = opLabels[rule.opType] || { label: rule.opType, icon: 'hub', color: 'text-slate-500 bg-slate-50 border-slate-200' };
+            const bufferDetail = rule.opType === 'buffer' ? ` (${rule.bufferDist || 30}m)` : '';
+
+            html += `
+                <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between gap-3 group relative overflow-hidden">
+                    <div class="absolute top-0 left-0 bottom-0 w-1.5" style="background-color: ${rule.highlightColor || '#06b6d4'};"></div>
+                    
+                    <div>
+                        <div class="flex items-start justify-between gap-2 pl-2">
+                            <div>
+                                <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${opInfo.color} uppercase tracking-wider mb-1.5">
+                                    <span class="material-symbols-outlined text-[13px]">${opInfo.icon}</span> ${opInfo.label}${bufferDetail}
+                                </span>
+                                <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">${rule.name || 'Sem título'}</h3>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <button onclick="openSpatialRuleModal('${rule.id}')" class="p-1.5 text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" title="Editar">
+                                    <span class="material-symbols-outlined text-[18px]">edit</span>
+                                </button>
+                                <button onclick="deleteSpatialRule('${rule.id}')" class="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Excluir">
+                                    <span class="material-symbols-outlined text-[18px]">delete</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2 mt-3 pl-2 text-xs bg-slate-50 dark:bg-slate-900/60 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
+                            <div>
+                                <span class="text-[10px] uppercase font-bold text-slate-400 block">Camada Alvo:</span>
+                                <span class="font-semibold text-slate-700 dark:text-slate-300 truncate block" title="${rule.targetLayerName || rule.targetLayer}">${rule.targetLayerName || rule.targetLayer}</span>
+                            </div>
+                            <div>
+                                <span class="text-[10px] uppercase font-bold text-slate-400 block">Camada Referência:</span>
+                                <span class="font-semibold text-slate-700 dark:text-slate-300 truncate block" title="${rule.refLayerName || rule.refLayer}">${rule.refLayerName || rule.refLayer}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between pl-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500">
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-3 h-3 rounded-full border border-white/20 shadow-sm" style="background-color: ${rule.highlightColor || '#06b6d4'};"></span>
+                            <span>Cor no Mapa</span>
+                        </div>
+                        <span>${rule.calcArea ? '📐 Calcula área (m²)' : '🔢 Apenas contagem'}</span>
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+    }
+
+    async function populateSpatialLayerSelects() {
+        const targetSel = document.getElementById('spatial-target-layer');
+        const refSel = document.getElementById('spatial-ref-layer');
+        if (!targetSel || !refSel) return;
+
+        let optionsHtml = '';
+        
+        // Carrega camadas salvas localmente e do Supabase
+        const munId = activeMunicipioId || sessionStorage.getItem('municipio_ativo');
+        let layers = [];
+        
+        const localThemes = localStorage.getItem('constructive_themes');
+        if (localThemes) {
+            try { layers = JSON.parse(localThemes); } catch(e) {}
+        }
+        
+        if (typeof supabaseClient !== 'undefined' && supabaseClient && munId) {
+            try {
+                const { data } = await supabaseClient.from('temas').select('id, nome, cor, tipo_geometria').eq('municipio_id', munId);
+                if (data && data.length > 0) {
+                    layers = data;
+                }
+            } catch(e) {}
+        }
+
+        if (layers.length > 0) {
+            layers.forEach(l => {
+                optionsHtml += `<option value="${l.id}" data-name="${l.nome}">${l.nome} ${l.tipo_geometria ? `[${l.tipo_geometria}]` : ''}</option>`;
+            });
+        } else {
+            optionsHtml = `
+                <option value="imoveis" data-name="Imóveis Cadastrados">Imóveis Cadastrados [Polígonos]</option>
+                <option value="faixa_praia" data-name="Faixa de Praia / Proteção">Faixa de Praia / Proteção [Linha]</option>
+                <option value="logradouros" data-name="Eixo de Logradouros">Eixo de Logradouros [Linhas]</option>
+                <option value="app" data-name="Área de Preservação (APP)">Área de Preservação (APP) [Polígono]</option>
+            `;
+        }
+
+        targetSel.innerHTML = optionsHtml;
+        refSel.innerHTML = optionsHtml;
+        if (refSel.options.length > 1) refSel.selectedIndex = 1;
+    }
+
+    window.openSpatialRuleModal = function(ruleId = null) {
+        populateSpatialLayerSelects();
+        const modal = document.getElementById('spatial-rule-modal');
+        const titleEl = document.getElementById('spatial-modal-title');
+        const idInput = document.getElementById('spatial-rule-id');
+        const nameInput = document.getElementById('spatial-rule-name');
+        const targetSel = document.getElementById('spatial-target-layer');
+        const refSel = document.getElementById('spatial-ref-layer');
+        const opSel = document.getElementById('spatial-op-type');
+        const distInput = document.getElementById('spatial-buffer-dist');
+        const colorInput = document.getElementById('spatial-highlight-color');
+        const calcAreaInput = document.getElementById('spatial-calc-area');
+
+        if (ruleId) {
+            const rule = spatialRules.find(r => r.id === ruleId);
+            if (rule) {
+                titleEl.innerHTML = `<span class="material-symbols-outlined text-cyan-500">edit</span> Editar Análise Espacial`;
+                idInput.value = rule.id;
+                nameInput.value = rule.name || '';
+                targetSel.value = rule.targetLayer || '';
+                refSel.value = rule.refLayer || '';
+                opSel.value = rule.opType || 'intersects';
+                distInput.value = rule.bufferDist || 30;
+                colorInput.value = rule.highlightColor || '#06b6d4';
+                calcAreaInput.checked = (rule.calcArea !== false);
+            }
+        } else {
+            titleEl.innerHTML = `<span class="material-symbols-outlined text-cyan-500">add_location_alt</span> Nova Análise Espacial Cruzada`;
+            idInput.value = '';
+            nameInput.value = '';
+            opSel.value = 'intersects';
+            distInput.value = 30;
+            colorInput.value = '#06b6d4';
+            calcAreaInput.checked = true;
+        }
+
+        onSpatialOpChange();
+        modal.classList.remove('hidden');
+    };
+
+    window.closeSpatialRuleModal = function() {
+        const modal = document.getElementById('spatial-rule-modal');
+        if (modal) modal.classList.add('hidden');
+    };
+
+    window.onSpatialOpChange = function() {
+        const opSel = document.getElementById('spatial-op-type');
+        const distContainer = document.getElementById('spatial-buffer-dist-container');
+        if (opSel && distContainer) {
+            if (opSel.value === 'buffer') {
+                distContainer.classList.remove('hidden');
+            } else {
+                distContainer.classList.add('hidden');
+            }
+        }
+    };
+
+    window.saveSpatialRule = async function() {
+        const idInput = document.getElementById('spatial-rule-id');
+        const nameInput = document.getElementById('spatial-rule-name');
+        const targetSel = document.getElementById('spatial-target-layer');
+        const refSel = document.getElementById('spatial-ref-layer');
+        const opSel = document.getElementById('spatial-op-type');
+        const distInput = document.getElementById('spatial-buffer-dist');
+        const colorInput = document.getElementById('spatial-highlight-color');
+        const calcAreaInput = document.getElementById('spatial-calc-area');
+
+        const name = nameInput.value.trim();
+        if (!name) {
+            alert('Por favor, informe o título da análise.');
+            nameInput.focus();
+            return;
+        }
+
+        const targetOpt = targetSel.options[targetSel.selectedIndex];
+        const refOpt = refSel.options[refSel.selectedIndex];
+
+        const ruleData = {
+            id: idInput.value || generateUUID(),
+            name: name,
+            targetLayer: targetSel.value,
+            targetLayerName: targetOpt ? targetOpt.getAttribute('data-name') || targetOpt.text : targetSel.value,
+            refLayer: refSel.value,
+            refLayerName: refOpt ? refOpt.getAttribute('data-name') || refOpt.text : refSel.value,
+            opType: opSel.value,
+            bufferDist: parseFloat(distInput.value) || 30,
+            highlightColor: colorInput.value || '#06b6d4',
+            calcArea: calcAreaInput.checked,
+            createdAt: new Date().toISOString()
+        };
+
+        if (idInput.value) {
+            const idx = spatialRules.findIndex(r => r.id === idInput.value);
+            if (idx > -1) spatialRules[idx] = ruleData;
+        } else {
+            spatialRules.push(ruleData);
+        }
+
+        const munId = activeMunicipioId || sessionStorage.getItem('municipio_ativo') || 'default';
+        const key = `spatial_rules_${munId}`;
+        localStorage.setItem(key, JSON.stringify(spatialRules));
+        localStorage.setItem('spatial_analytics_rules', JSON.stringify(spatialRules));
+
+        if (typeof supabaseClient !== 'undefined' && supabaseClient && munId !== 'default') {
+            supabaseClient.from('municipio_config').upsert({
+                municipio_id: munId,
+                config_chave: `spatial_rules_${munId}`,
+                config_valor: spatialRules
+            }).catch(() => {});
+        }
+
+        closeSpatialRuleModal();
+        renderSpatialRulesList();
+        showStorageToast('✨ Análise espacial salva com sucesso!');
+    };
+
+    window.deleteSpatialRule = async function(ruleId) {
+        if (!confirm('Deseja realmente excluir esta análise espacial?')) return;
+        
+        spatialRules = spatialRules.filter(r => r.id !== ruleId);
+        const munId = activeMunicipioId || sessionStorage.getItem('municipio_ativo') || 'default';
+        const key = `spatial_rules_${munId}`;
+        localStorage.setItem(key, JSON.stringify(spatialRules));
+        localStorage.setItem('spatial_analytics_rules', JSON.stringify(spatialRules));
+
+        if (typeof supabaseClient !== 'undefined' && supabaseClient && munId !== 'default') {
+            supabaseClient.from('municipio_config').upsert({
+                municipio_id: munId,
+                config_chave: `spatial_rules_${munId}`,
+                config_valor: spatialRules
+            }).catch(() => {});
+        }
+
+        renderSpatialRulesList();
+        showStorageToast('🗑️ Análise espacial removida.');
+    };
+
+    // Patch switchTab to load folders when storage, usuarios or estatistica tab is opened
     const originalSwitchTab = window.switchTab;
     if (typeof originalSwitchTab === 'function') {
         window.switchTab = function(tabId, btn) {
@@ -3973,9 +5393,26 @@
                 loadStorageForActiveMunicipio();
             } else if (tabId === 'usuarios') {
                 loadUsersPanel();
+            } else if (tabId === 'estatistica') {
+                loadSpatialAnalyticsRules();
+                populateSpatialLayerSelects();
             }
         };
     }
+
+    // Auto-navegação para a aba passada na URL (?tab=estatistica ou #estatistica)
+    setTimeout(() => {
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            const targetTab = urlParams.get('tab') || window.location.hash.replace('#', '');
+            if (targetTab) {
+                const tabBtn = document.querySelector(`button[onclick*="switchTab('${targetTab}'"]`);
+                if (tabBtn && typeof window.switchTab === 'function') {
+                    window.switchTab(targetTab, tabBtn);
+                }
+            }
+        } catch(e) {}
+    }, 100);
 
     async function loadUsersPanel() {
         const munId = activeMunicipioId || sessionStorage.getItem('municipio_ativo');

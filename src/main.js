@@ -435,10 +435,34 @@ function initMap() {
     style: function(feature) {
       const themeId = feature.properties.themeId;
       const theme = themes.find(t => t.id === themeId);
-      const color = theme ? theme.color : '#333333';
-      const opacity = theme && theme.opacity !== undefined ? theme.opacity : 0.4;
-      const weight = theme && theme.weight !== undefined ? theme.weight : 2;
-      const dashArray = theme && theme.dashed ? '5, 5' : '';
+      let color = theme ? theme.color : '#333333';
+      let opacity = theme && theme.opacity !== undefined ? theme.opacity : 0.4;
+      let weight = theme && theme.weight !== undefined ? theme.weight : 2;
+      let dashArray = theme && theme.dashed ? '5, 5' : '';
+
+      // Preservar classificação temática ativa se o gráfico/dashboard estiver aberto
+      if (theme && theme._activeClassification) {
+        const { fieldId, colorsMap } = theme._activeClassification;
+        const val = getFeaturePropertyValue(theme, feature, fieldId);
+        const valStr = (val === undefined || val === null || val === '') ? "N/I" : String(val);
+        
+        let classColor = null;
+        if (colorsMap[valStr]) {
+            classColor = colorsMap[valStr];
+        } else {
+            const matchKey = Object.keys(colorsMap).find(k => k.trim().toLowerCase() === valStr.trim().toLowerCase());
+            if (matchKey) classColor = colorsMap[matchKey];
+        }
+        if (!classColor && (valStr === 'N/I' || valStr === 'Não Informado' || valStr === '')) {
+            classColor = colorsMap['N/I'] || colorsMap['Não Informado'];
+        }
+        if (classColor && classColor !== 'none') {
+            color = classColor;
+            opacity = 0.8;
+            weight = 2;
+        }
+      }
+
       return {
         fillColor: color,
         fillOpacity: opacity,
@@ -5003,14 +5027,54 @@ async function openStatsDashboard(themeId, specificIndex) {
 
         if (widget.type === 'indicator') {
             let count = 0;
-            if (widget.fieldId) {
+            const calcMode = widget.calcMode || (widget.fieldId ? 'condition' : 'all');
+            
+            if (calcMode === 'condition') {
+                const cField = widget.conditionField || widget.fieldId;
+                const cOp = widget.conditionOp || 'equals';
+                const cVal = widget.conditionValue || '';
+                
                 count = features.filter(f => {
-                    const val = getFeaturePropertyValue(theme, f, widget.fieldId);
-                    return val !== undefined && val !== null && val !== '';
+                    const raw = getFeaturePropertyValue(theme, f, cField);
+                    const valStr = (raw !== undefined && raw !== null) ? String(raw).trim() : '';
+                    const expStr = String(cVal).trim();
+                    
+                    if (cOp === 'is_filled') return valStr !== '' && valStr !== '[]' && valStr !== '{}';
+                    if (cOp === 'is_empty') return valStr === '' || valStr === '[]' || valStr === '{}';
+                    if (cOp === 'equals') return valStr.toLowerCase() === expStr.toLowerCase();
+                    if (cOp === 'not_equals') return valStr.toLowerCase() !== expStr.toLowerCase();
+                    if (cOp === 'contains') return valStr.toLowerCase().includes(expStr.toLowerCase());
+                    
+                    const numVal = parseFloat(valStr.replace(/[^\d.-]/g, ''));
+                    const numExp = parseFloat(expStr.replace(/[^\d.-]/g, ''));
+                    if (!isNaN(numVal) && !isNaN(numExp)) {
+                        if (cOp === 'gt') return numVal > numExp;
+                        if (cOp === 'lt') return numVal < numExp;
+                        if (cOp === 'gte') return numVal >= numExp;
+                        if (cOp === 'lte') return numVal <= numExp;
+                    }
+                    return false;
                 }).length;
+            } else if (calcMode === 'sum' || calcMode === 'avg') {
+                const numField = widget.numericField || widget.fieldId;
+                let totalSum = 0;
+                let validCount = 0;
+                features.forEach(f => {
+                    const raw = getFeaturePropertyValue(theme, f, numField);
+                    if (raw !== undefined && raw !== null) {
+                        const num = parseFloat(String(raw).replace(/[^\d.-]/g, ''));
+                        if (!isNaN(num)) {
+                            totalSum += num;
+                            validCount++;
+                        }
+                    }
+                });
+                count = calcMode === 'avg' ? (validCount > 0 ? (totalSum / validCount) : 0) : totalSum;
             } else {
                 count = features.length;
             }
+
+            const isFloat = (calcMode === 'sum' || calcMode === 'avg') && count % 1 !== 0;
             const countEl = document.createElement('div');
             countEl.className = "text-4xl font-light text-cyan-50 mt-2 z-10 relative";
             countEl.textContent = "0";
@@ -5024,13 +5088,14 @@ async function openStatsDashboard(themeId, specificIndex) {
                     if (!startTimestamp) startTimestamp = timestamp;
                     const progress = Math.min((timestamp - startTimestamp) / duration, 1);
                     const easeProgress = 1 - Math.pow(1 - progress, 4); // easeOutQuart
-                    countEl.textContent = Math.floor(easeProgress * count).toLocaleString();
+                    const curVal = isFloat ? (easeProgress * count).toFixed(2) : Math.floor(easeProgress * count);
+                    countEl.textContent = Number(curVal).toLocaleString('pt-BR');
                     if (progress < 1) window.requestAnimationFrame(step);
-                    else countEl.textContent = count.toLocaleString();
+                    else countEl.textContent = isFloat ? count.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : count.toLocaleString('pt-BR');
                 };
                 window.requestAnimationFrame(step);
             }, 300);
-        } else if (widget.type === 'pie' || widget.type === 'bar') {
+        } else if (widget.type === 'pie' || widget.type === 'donut' || widget.type === 'bar') {
             const fieldId = widget.fieldId;
             if (!fieldId) return;
 
@@ -5038,7 +5103,7 @@ async function openStatsDashboard(themeId, specificIndex) {
             features.forEach(f => {
                 let val = getFeaturePropertyValue(theme, f, fieldId);
                 if (val === undefined || val === null || val === '') {
-                    val = "N/I"; // Simplificado para caber melhor no mini-gráfico
+                    val = "N/I";
                 }
                 counts[val] = (counts[val] || 0) + 1;
             });
@@ -5046,18 +5111,51 @@ async function openStatsDashboard(themeId, specificIndex) {
             const rawLabels = Object.keys(counts);
             const data = Object.values(counts);
             
-            // Gerar mapa de cores para cada label
+            // Helper seguro para converter qualquer cor para RGBA válido no Chart.js
+            function safeChartColor(colorStr, alpha = 0.85) {
+                if (!colorStr || colorStr === 'none') {
+                    return `rgba(148, 163, 184, ${alpha})`;
+                }
+                colorStr = String(colorStr).trim();
+                if (/^#([0-9a-f]{3})$/i.test(colorStr)) {
+                    const r = parseInt(colorStr[1] + colorStr[1], 16);
+                    const g = parseInt(colorStr[2] + colorStr[2], 16);
+                    const b = parseInt(colorStr[3] + colorStr[3], 16);
+                    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                }
+                if (/^#([0-9a-f]{6})$/i.test(colorStr)) {
+                    const r = parseInt(colorStr.slice(1, 3), 16);
+                    const g = parseInt(colorStr.slice(3, 5), 16);
+                    const b = parseInt(colorStr.slice(5, 7), 16);
+                    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                }
+                if (/^#([0-9a-f]{8})$/i.test(colorStr)) {
+                    const r = parseInt(colorStr.slice(1, 3), 16);
+                    const g = parseInt(colorStr.slice(3, 5), 16);
+                    const b = parseInt(colorStr.slice(5, 7), 16);
+                    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                }
+                return colorStr;
+            }
+
+            // Gerar mapa de cores para cada label com matching resiliente
             const defaultColors = ['#06b6d4', '#3b82f6', '#8b5cf6', '#14b8a6', '#6366f1', '#475569', '#10b981', '#ef4444', '#f59e0b'];
             const colorsMap = {};
             
             rawLabels.forEach((label, i) => {
-                if (widget.colorMap && widget.colorMap[label]) {
-                    colorsMap[label] = widget.colorMap[label];
-                } else if (widget.colorMap && widget.colorMap['N/I'] && label === 'N/I') {
-                    colorsMap[label] = widget.colorMap['N/I'];
-                } else {
-                    colorsMap[label] = defaultColors[i % defaultColors.length];
+                let resolvedColor = null;
+                if (widget.colorMap) {
+                    if (widget.colorMap[label]) {
+                        resolvedColor = widget.colorMap[label];
+                    } else {
+                        const matchKey = Object.keys(widget.colorMap).find(k => k.trim().toLowerCase() === label.trim().toLowerCase());
+                        if (matchKey) resolvedColor = widget.colorMap[matchKey];
+                    }
+                    if (!resolvedColor && (label === 'N/I' || label === 'Não Informado' || label === '')) {
+                        resolvedColor = widget.colorMap['N/I'] || widget.colorMap['Não Informado'];
+                    }
                 }
+                colorsMap[label] = resolvedColor || defaultColors[i % defaultColors.length];
             });
             const colorsJson = JSON.stringify(colorsMap);
 
@@ -5077,29 +5175,28 @@ async function openStatsDashboard(themeId, specificIndex) {
             setTimeout(() => {
                 const ctx = canvas.getContext('2d');
                 new Chart(ctx, {
-                    type: widget.type === 'pie' ? 'doughnut' : 'bar',
+                    type: (widget.type === 'pie' || widget.type === 'donut') ? 'doughnut' : 'bar',
                     data: {
                         labels: chartLabels,
                         datasets: [{
                             data: data,
                             backgroundColor: rawLabels.map(label => {
                                 const col = colorsMap[label];
-                                if (col === 'none') return 'rgba(148, 163, 184, 0.2)';
-                                return col + (widget.type === 'bar' ? 'cc' : '');
+                                return safeChartColor(col, 0.85);
                             }),
                             hoverBackgroundColor: rawLabels.map(label => {
                                 const col = colorsMap[label];
-                                if (col === 'none') return 'rgba(148, 163, 184, 0.35)';
-                                return col;
+                                return safeChartColor(col, 1.0);
                             }),
                             borderWidth: 0,
                             borderRadius: widget.type === 'bar' ? 4 : 0,
-                            barPercentage: 0.6
+                            barPercentage: 0.6,
+                            cutout: widget.type === 'donut' ? '70%' : (widget.type === 'pie' ? '0%' : undefined)
                         }]
                     },
                     options: {
                         animation: {
-                            duration: 2000,
+                            duration: 1500,
                             easing: 'easeOutQuart'
                         },
                         responsive: true,
@@ -5107,7 +5204,7 @@ async function openStatsDashboard(themeId, specificIndex) {
                         layout: { padding: 0 },
                         plugins: {
                             legend: {
-                                display: widget.type === 'pie',
+                                display: (widget.type === 'pie' || widget.type === 'donut'),
                                 position: 'right',
                                 labels: { color: '#cbd5e1', font: { size: 10 }, usePointStyle: true, boxWidth: 6 }
                             },
@@ -5131,7 +5228,7 @@ async function openStatsDashboard(themeId, specificIndex) {
                         } : undefined
                     }
                 });
-            }, 500); // Aguarda a animação de abertura
+            }, 300);
             
             // Apply map classification automatically
             const colorsJsonAuto = JSON.stringify(colorsMap);
@@ -5194,6 +5291,8 @@ window.applyThemeClassification = function(themeId, fieldId, colorsJson) {
         if (!theme) return;
 
         const colorsMap = JSON.parse(colorsJson);
+        // Persistir a classificação ativa no tema para que qualquer re-render espacial mantenha as cores
+        theme._activeClassification = { fieldId, colorsMap };
         
         geojsonLayer.eachLayer(layer => {
             if (!layer || !layer.feature || !layer.feature.properties || layer.feature.properties.themeId !== themeId) return;
@@ -5210,7 +5309,18 @@ window.applyThemeClassification = function(themeId, fieldId, colorsJson) {
 
             const val = getFeaturePropertyValue(theme, layer.feature, fieldId);
             const valStr = (val === undefined || val === null || val === '') ? "N/I" : String(val);
-            const newColor = colorsMap[valStr] || theme.color || '#3388ff';
+            
+            let newColor = null;
+            if (colorsMap[valStr]) {
+                newColor = colorsMap[valStr];
+            } else {
+                const matchKey = Object.keys(colorsMap).find(k => k.trim().toLowerCase() === valStr.trim().toLowerCase());
+                if (matchKey) newColor = colorsMap[matchKey];
+            }
+            if (!newColor && (valStr === 'N/I' || valStr === 'Não Informado' || valStr === '')) {
+                newColor = colorsMap['N/I'] || colorsMap['Não Informado'];
+            }
+            if (!newColor) newColor = theme.color || '#3388ff';
 
             if (newColor === 'none') {
                 if (layer.options.originalStyle && layer.setStyle) {
@@ -5241,6 +5351,9 @@ window.resetThemeClassification = function(themeId) {
     try {
         const theme = themes.find(t => t.id === themeId);
         if (!theme) return;
+
+        // Limpar classificação ativa
+        delete theme._activeClassification;
 
         geojsonLayer.eachLayer(layer => {
             if (!layer || !layer.feature || !layer.feature.properties || layer.feature.properties.themeId !== themeId) return;

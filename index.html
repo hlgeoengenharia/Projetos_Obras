@@ -330,18 +330,33 @@
     <span class="material-symbols-outlined text-[20px] md:text-[22px]">streetview</span>
   </button>
   <div class="w-[1px] h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
-  <button class="w-9 h-9 md:w-10 md:h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-slate-700 dark:text-slate-300 tooltip tooltip-bottom" title="Aumentar Zoom" onclick="zoomIn()">
-    <span class="material-symbols-outlined text-[20px] md:text-[22px]">add</span>
-  </button>
-  <button class="w-9 h-9 md:w-10 md:h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-slate-700 dark:text-slate-300 tooltip tooltip-bottom" title="Diminuir Zoom" onclick="zoomOut()">
-    <span class="material-symbols-outlined text-[20px] md:text-[22px]">remove</span>
-  </button>
-  <div class="w-[1px] h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
-  <button class="w-9 h-9 md:w-10 md:h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center text-blue-600 dark:text-blue-400 tooltip tooltip-bottom" title="Minha Localização" onclick="goToMyLocation()">
-    <span class="material-symbols-outlined text-[20px] md:text-[22px]">my_location</span>
+
+  <!-- Botão Estatística Espacial Cruzada -->
+  <button id="btn-spatial-analytics" class="h-9 md:h-10 px-3.5 rounded-full bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 transition-all flex items-center justify-center gap-1.5 font-bold text-xs shadow-sm tooltip tooltip-bottom" title="Geoestatística Espacial Cruzada" onclick="window.spatialAnalyticsEngine ? window.spatialAnalyticsEngine.toggleMenu() : null">
+    <span class="material-symbols-outlined text-[20px]">hub</span>
+    <span class="hidden sm:inline uppercase tracking-wider text-[11px]">Estatística</span>
   </button>
 </div>
 </header>
+
+<!-- Controles de Navegação Flutuantes no Canto Inferior Esquerdo (Vertical) -->
+<div class="fixed bottom-6 left-6 z-[45] flex flex-col items-center gap-2 select-none">
+  <!-- Grupo de Zoom Vertical -->
+  <div class="flex flex-col items-center bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200/80 dark:border-slate-700/80 rounded-2xl p-1 shadow-lg shadow-black/10">
+    <button class="w-10 h-10 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all flex items-center justify-center text-slate-700 dark:text-slate-200 active:scale-95 tooltip tooltip-right" title="Aumentar Zoom (+)" onclick="zoomIn()">
+      <span class="material-symbols-outlined text-[20px]">add</span>
+    </button>
+    <div class="w-6 h-[1px] bg-slate-200 dark:bg-slate-700 my-0.5"></div>
+    <button class="w-10 h-10 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all flex items-center justify-center text-slate-700 dark:text-slate-200 active:scale-95 tooltip tooltip-right" title="Diminuir Zoom (-)" onclick="zoomOut()">
+      <span class="material-symbols-outlined text-[20px]">remove</span>
+    </button>
+  </div>
+
+  <!-- Botão Minha Localização (primeiro de baixo para cima) -->
+  <button class="w-11 h-11 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200/80 dark:border-slate-700/80 rounded-2xl hover:bg-blue-50 dark:hover:bg-blue-950/40 text-blue-600 dark:text-blue-400 transition-all flex items-center justify-center shadow-lg shadow-black/10 active:scale-95 tooltip tooltip-right" title="Minha Localização" onclick="goToMyLocation()">
+    <span class="material-symbols-outlined text-[22px]">my_location</span>
+  </button>
+</div>
 <!-- NavigationDrawer Overlay -->
 <div class="fixed inset-0 bg-black/50 z-[55] hidden" id="drawer-overlay" onclick="this.classList.add('hidden'); document.getElementById('side-drawer').classList.add('-translate-x-[120%]')"></div>
 <!-- NavigationDrawer -->
@@ -831,7 +846,7 @@
 
 <!-- Professional Feature Info Panel (Floating & Glassmorphism) -->
 <div id="feature-info-modal" class="z-[100] bg-transparent pointer-events-none hidden">
-  <div id="feature-info-card" class="fixed top-[4.5rem] md:top-[5rem] right-4 md:right-6 bottom-4 max-h-[calc(100dvh-5.5rem)] z-[100] bg-white/85 dark:bg-[#0B1120]/75 backdrop-blur-2xl rounded-2xl border border-slate-200/50 dark:border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.5)] w-[90%] max-w-sm sm:max-w-md flex flex-col overflow-hidden pointer-events-auto transition-transform duration-300">
+  <div id="feature-info-card" class="fixed top-[4.5rem] md:top-[5rem] right-4 md:right-6 bottom-4 max-h-[calc(100dvh-5.5rem)] z-[100] bg-white/85 dark:bg-[#0B1120]/75 backdrop-blur-2xl rounded-2xl border border-slate-200/50 dark:border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.5)] w-[92%] sm:w-[520px] md:w-[560px] lg:w-[600px] sm:max-w-[600px] flex flex-col overflow-hidden pointer-events-auto transition-transform duration-300">
     <div class="px-4 py-3 border-b border-slate-200/50 dark:border-white/10 flex justify-between items-center cursor-move touch-none" id="feature-info-header">
         <div id="feature-actions-container" class="flex items-center rounded-lg overflow-hidden border border-slate-300/50 dark:border-white/10 shadow-sm bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
 
@@ -1394,6 +1409,7 @@
 <script src="src/tableJoin.js"></script>
 <script src="src/geo-engine-turbo.js"></script>
 <script src="src/main.js"></script>
+<script src="src/spatialAnalytics.js"></script>
 <script src="src/measurement.js"></script>
 <script src="src/cesium-integration.js"></script>
 <script src="src/session-security.js"></script>
