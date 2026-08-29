@@ -475,21 +475,62 @@ function initMap() {
     pointToLayer: function(feature, latlng) {
       const themeId = feature.properties.themeId;
       const theme = themes.find(t => t.id === themeId);
-      const color = theme ? theme.color : '#333333';
-      const iconName = theme && theme.icon ? theme.icon : 'circle';
+      let color = theme ? theme.color : '#0284c7';
+      
+      // Preservar cor de classificação se ativa
+      if (theme && theme._activeClassification) {
+          const { fieldId, colorsMap } = theme._activeClassification;
+          const val = getFeaturePropertyValue(theme, feature, fieldId);
+          const valStr = (val === undefined || val === null || val === '') ? "N/I" : String(val);
+          if (colorsMap[valStr]) color = colorsMap[valStr];
+          else {
+              const matchKey = Object.keys(colorsMap).find(k => k.trim().toLowerCase() === valStr.trim().toLowerCase());
+              if (matchKey) color = colorsMap[matchKey];
+          }
+      }
+
+      const iconName = theme && theme.icon ? theme.icon : 'location_on';
       const customIconData = theme && theme.customIcon ? theme.customIcon : null;
       
       const iconHtml = customIconData 
-        ? `<img src="${customIconData}" style="width:16px; height:16px; object-fit:contain;">`
-        : `<span class="material-symbols-outlined" style="color: white; font-size: 14px;">${iconName}</span>`;
+        ? `<img src="${customIconData}" style="width:14px; height:14px; object-fit:contain; border-radius:50%;">`
+        : `<span class="material-symbols-outlined" style="color: ${color}; font-size: 15px; font-weight: bold;">${iconName === 'circle' ? 'circle' : iconName}</span>`;
+
+      const safeId = String(themeId).replace(/[^a-zA-Z0-9]/g, '_');
+
+      const pinHtml = `
+        <div class="map-pin-3d-marker" style="position: relative; width: 30px; height: 38px; cursor: pointer; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.35)); transition: transform 0.15s ease-out;">
+          <svg viewBox="0 0 30 38" width="30" height="38" style="display: block; overflow: visible;">
+            <defs>
+              <linearGradient id="grad_pin_${safeId}" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="${color}" />
+                <stop offset="100%" stop-color="#0f172a" stop-opacity="0.85" />
+              </linearGradient>
+            </defs>
+            <!-- Sombra de projeção no solo -->
+            <ellipse cx="15" cy="37" rx="5.5" ry="1.8" fill="rgba(0,0,0,0.25)" />
+            <!-- Pino 3D com formato de gota e ponta para baixo -->
+            <path d="M15,1 C7.268,1 1,7.268 1,15 C1,23.8 15,36.5 15,36.5 C15,36.5 29,23.8 29,15 C29,7.268 22.732,1 15,1 Z" 
+                  fill="${color}" 
+                  stroke="#ffffff" 
+                  stroke-width="1.8" 
+                  stroke-linejoin="round" />
+            <!-- Círculo interior branco com relevo para acomodar o ícone -->
+            <circle cx="15" cy="14" r="8" fill="#ffffff" />
+          </svg>
+          <!-- Ícone da camada perfeitamente centralizado -->
+          <div style="position: absolute; top: 5px; left: 6px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
+            ${iconHtml}
+          </div>
+        </div>
+      `;
 
       const customIcon = L.divIcon({
         className: `custom-div-icon theme-feature theme-${themeId}`,
-        html: `<div style="background-color: ${customIconData ? 'white' : color}; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid ${customIconData ? color : 'white'}; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
-                 ${iconHtml}
-               </div>`,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12]
+        html: pinHtml,
+        iconSize: [30, 38],
+        iconAnchor: [15, 37],
+        tooltipAnchor: [0, -36]
       });
       return L.marker(latlng, { icon: customIcon });
     },
@@ -616,12 +657,13 @@ function initMap() {
   });
 
   // Drawing Complete Event
-  map.on('pm:create', function(e) {
+  map.on('pm:create', async function(e) {
     if (!editingThemeId) return;
     
     const feature = e.layer.toGeoJSON();
     if (!feature.properties) feature.properties = {};
     feature.properties.themeId = editingThemeId;
+    if (!feature.properties._tempId) feature.properties._tempId = 'feat_' + Math.random().toString(36).substr(2, 9);
     
     const geomType = feature.geometry.type;
     if (geomType === 'LineString' || geomType === 'MultiLineString') {
@@ -638,8 +680,61 @@ function initMap() {
     }
     
     map.removeLayer(e.layer);
+
+    // 1. Salvar no Supabase com ID único
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        try {
+            const { data: insData, error: insErr } = await supabaseClient.from('feicoes').insert({
+                theme_id: editingThemeId,
+                propriedades: feature.properties,
+                geometria: feature.geometry
+            }).select();
+
+            if (!insErr && insData && insData.length > 0) {
+                feature.properties.id_banco = insData[0].id;
+            }
+        } catch(eDb) {
+            console.error("Erro ao salvar nova feição no Supabase:", eDb);
+        }
+    }
+
+    // 2. Adiciona ao tema em memória e no cache turbo
+    const theme = themes.find(t => t.id === editingThemeId);
+    if (theme) {
+        if (!theme.features) theme.features = [];
+        theme.features.push(feature);
+        if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.indexTheme === 'function') {
+            window.GeoEngineTurbo.indexTheme(editingThemeId, theme.features);
+        }
+        if (window.GeoTurboDB && typeof window.GeoTurboDB.saveThemeData === 'function') {
+            window.GeoTurboDB.saveThemeData(editingThemeId, theme.features, theme.features.length);
+        }
+    }
+
+    // 3. Adiciona a camada ao mapa
     geojsonLayer.addData(feature);
-    syncMapDataToThemes();
+
+    // 4. Atualiza os cards das camadas
+    renderThemes();
+
+    // 5. Finaliza o modo de desenho
+    stopDrawingMode();
+
+    // 6. Localiza a layer criada e abre imediatamente o card do formulário
+    let createdLayer = null;
+    geojsonLayer.eachLayer(l => {
+        if (l.feature && l.feature.properties) {
+            const p = l.feature.properties;
+            if ((feature.properties.id_banco && p.id_banco === feature.properties.id_banco) ||
+                (feature.properties._tempId && p._tempId === feature.properties._tempId)) {
+                createdLayer = l;
+            }
+        }
+    });
+
+    if (createdLayer) {
+        showFeatureInfoModal(createdLayer);
+    }
   });
 
   map.on('zoomend', function() {
@@ -1057,7 +1152,7 @@ function renderThemes() {
     
     const card = document.createElement('div');
     card.id = `theme-card-${theme.id}`;
-    card.className = `theme-card relative overflow-hidden cursor-move transition-all duration-300 hover:bg-slate-800/30 mx-2 mb-2 rounded-xl border border-white/5 ${isActiveSelection ? 'scale-[1.02] z-10' : ''}`;
+    card.className = `theme-card relative overflow-hidden cursor-move transition-all duration-300 mx-3 mb-3 rounded-2xl border ${isActiveSelection ? 'scale-[1.02] z-10' : ''}`;
     card.draggable = true;
     card.dataset.index = index;
     card.dataset.id = theme.id;
@@ -1103,17 +1198,18 @@ function renderThemes() {
       document.querySelectorAll('#themes-container > div').forEach(el => el.classList.remove('border-t-2', 'border-t-primary'));
     });
     
-    card.style.borderRight = `1px solid ${theme.color}40`;
-    card.style.borderBottom = `1px solid ${theme.color}40`;
     if (isActiveSelection) {
         card.classList.add('ring-2', 'ring-offset-2', 'ring-offset-slate-900');
         card.style.setProperty('--tw-ring-color', theme.color);
-        card.style.boxShadow = `0 0 30px ${theme.color}80, inset 0 0 20px ${theme.color}60`;
+        card.style.boxShadow = `0 0 25px ${theme.color}70, inset 0 0 15px ${theme.color}40`;
         card.style.borderColor = theme.color;
     } else {
-        card.style.boxShadow = isVisible ? `0 8px 32px rgba(0,0,0,0.3), 0 0 15px ${theme.color}30, inset 0 0 20px ${theme.color}10` : '0 8px 32px rgba(0,0,0,0.3)';
+        card.style.borderColor = isVisible ? `${theme.color}45` : 'rgba(255, 255, 255, 0.08)';
+        card.style.boxShadow = isVisible ? `0 8px 24px rgba(0,0,0,0.35), 0 0 15px ${theme.color}25` : '0 4px 16px rgba(0,0,0,0.25)';
     }
-    card.style.background = `linear-gradient(135deg, ${theme.color}25 0%, rgba(15,23,42,0.8) 100%)`;
+    card.style.background = isVisible 
+        ? `linear-gradient(135deg, ${theme.color}22 0%, rgba(15,23,42,0.75) 100%)` 
+        : `rgba(15,23,42,0.55)`;
     
     let statsListHtml = '';
     const form = typeof allForms !== 'undefined' ? allForms.find(f => f.id === theme.formId) : null;
@@ -1149,7 +1245,7 @@ function renderThemes() {
     }
 
     card.innerHTML = `
-      <div class="px-4 pt-4 pb-3 flex flex-col backdrop-blur-md">
+      <div class="px-4 pt-4 pb-3 flex flex-col">
         
         <!-- Header: Icon, Title, and Toggle -->
         <div class="flex items-center justify-between mb-4">
@@ -2106,8 +2202,6 @@ async function saveNewTheme() {
   saveThemes();
   renderThemes();
   closeNewThemeModal();
-  
-  startEditingTheme(id, name, color, geomType);
 }
 
 function openEditThemeModal(themeId) {
@@ -3383,6 +3477,16 @@ function showFeatureInfoModal(layer) {
       card.style.pointerEvents = 'auto';
   }
 
+  // Fecha e desativa o toolbar de ajuste de geometria se estiver visível
+  const geomEditToolbar = document.getElementById('geometry-edit-toolbar');
+  if (geomEditToolbar) {
+      geomEditToolbar.classList.add('hidden');
+      geomEditToolbar.classList.remove('flex');
+  }
+  if (activeFeatureLayer && activeFeatureLayer.pm && typeof activeFeatureLayer.pm.enabled === 'function' && activeFeatureLayer.pm.enabled()) {
+      activeFeatureLayer.pm.disable();
+  }
+
   // Garantia absoluta de que o stats-dashboard-modal não está bloqueando (cliques fantasmas)
   const statsModal = document.getElementById('stats-dashboard-modal');
   if (statsModal && statsModal.classList.contains('opacity-0')) {
@@ -3663,6 +3767,15 @@ async function saveFeatureData() {
       }
   }
 
+  if (!activeFeatureLayer || !activeFeatureLayer.feature) {
+      alert('Nenhuma feição ativa selecionada para salvar.');
+      return;
+  }
+
+  if (!activeFeatureLayer.feature.properties) {
+      activeFeatureLayer.feature.properties = {};
+  }
+
   inputs.forEach(input => {
     const key = input.getAttribute('data-key');
     if (key) {
@@ -3680,7 +3793,8 @@ async function saveFeatureData() {
   }
 
   const currentProps = activeFeatureLayer.feature.properties || {};
-  const idBanco = currentProps.id_banco;
+  let idBanco = currentProps.id_banco;
+  const tempId = currentProps._tempId;
   const themeId = currentProps.themeId;
 
   // 1. Validação de Conexão e Sessão Ativa: Redireciona para o login se a sessão tiver expirado
@@ -3712,10 +3826,11 @@ async function saveFeatureData() {
                   console.error('Erro ao salvar feição no Supabase:', updErr);
                   if (updErr.message && updErr.message.includes('Sem permissão para editar')) {
                       alert('Aviso de Permissão: Seu usuário não possui autorização de edição para esta camada.\n\nPeça ao Administrador do município para liberar a permissão de edição na aba: Configurações > Usuários.');
+                      return;
                   } else {
                       alert('Aviso ao salvar no servidor: ' + updErr.message);
+                      return;
                   }
-                  return;
               } else {
                   console.log(`[Supabase] Feição "${idBanco}" salva com sucesso!`);
               }
@@ -3729,8 +3844,14 @@ async function saveFeatureData() {
                   })
                   .select();
 
-              if (!insErr && insData && insData.length > 0) {
-                  activeFeatureLayer.feature.properties.id_banco = insData[0].id;
+              if (insErr) {
+                  console.error('Erro ao inserir nova feição no Supabase:', insErr);
+                  alert('Aviso ao registrar nova feição no servidor: ' + insErr.message);
+                  return;
+              } else if (insData && insData.length > 0) {
+                  idBanco = insData[0].id;
+                  activeFeatureLayer.feature.properties.id_banco = idBanco;
+                  console.log(`[Supabase] Nova feição criada com ID "${idBanco}"!`);
               }
           }
       } catch (eDb) {
@@ -3742,14 +3863,28 @@ async function saveFeatureData() {
   if (themeId) {
       const theme = themes.find(t => t.id === themeId);
       if (theme && theme.features) {
-          const idx = theme.features.findIndex(f => (f.properties && f.properties.id_banco === idBanco) || f === activeFeatureLayer.feature);
+          const idx = theme.features.findIndex(f => {
+              if (!f) return false;
+              const p = f.properties || {};
+              if (idBanco && p.id_banco === idBanco) return true;
+              if (tempId && p._tempId === tempId) return true;
+              if (f === activeFeatureLayer.feature) return true;
+              return false;
+          });
+
           if (idx !== -1) {
-              theme.features[idx] = activeFeatureLayer.feature;
+              theme.features[idx].properties = { ...activeFeatureLayer.feature.properties };
+              theme.features[idx].geometry = activeFeatureLayer.feature.geometry;
           } else {
               theme.features.push(activeFeatureLayer.feature);
           }
 
-          // 3. Atualiza o cache local do IndexedDB (GeoTurboDB) para o F5 vir 100% atualizado
+          // 3. Atualiza o índice espacial R-Tree
+          if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.indexTheme === 'function') {
+              window.GeoEngineTurbo.indexTheme(themeId, theme.features);
+          }
+
+          // 4. Atualiza o cache persistente do IndexedDB (GeoTurboDB) para o F5 vir 100% atualizado
           if (window.GeoTurboDB && typeof window.GeoTurboDB.saveThemeData === 'function') {
               try {
                   await window.GeoTurboDB.saveThemeData(themeId, theme.features, theme.features.length);
@@ -3758,18 +3893,22 @@ async function saveFeatureData() {
                   console.warn('Falha ao atualizar cache IndexedDB:', eCache);
               }
           }
+
+          // 5. Atualiza a lista lateral de feições se estiver visível
+          const featureListEl = document.getElementById('feature-list-' + themeId);
+          if (featureListEl && typeof renderFeatureListItems === 'function') {
+              featureListEl.innerHTML = renderFeatureListItems(theme);
+          }
       }
   }
 
-  syncMapDataToThemes(); 
-  
   isFeatureEditMode = false;
   window.activeFeatureEditTabId = null;
   renderFeatureInfo();
   document.getElementById('feature-actions-container').classList.remove('hidden');
 
   if (typeof showWarningToast === 'function') {
-      showWarningToast('Dados salvos com sucesso!');
+      showWarningToast('✅ Dados salvos com sucesso no banco de dados!');
   }
 }
 
@@ -3812,8 +3951,24 @@ function editFeatureGeometry() {
       });
 
       const toolbar = document.getElementById('geometry-edit-toolbar');
-      toolbar.classList.remove('hidden');
-      toolbar.classList.add('flex');
+      if (toolbar) {
+          toolbar.classList.remove('hidden');
+          toolbar.classList.add('flex');
+      }
+
+      // Para feição do tipo PONTO: ao soltar após arrastar, encerra a edição vetorial, fecha o pop-up AJUSTANDO e volta ao formulário
+      const geomType = layerToEdit.feature && layerToEdit.feature.geometry && layerToEdit.feature.geometry.type;
+      if (geomType === 'Point' || geomType === 'MultiPoint') {
+          const onPointDragEnd = () => {
+              layerToEdit.off('pm:dragend', onPointDragEnd);
+              layerToEdit.off('dragend', onPointDragEnd);
+              setTimeout(() => {
+                  stopGeometryEditing();
+              }, 50);
+          };
+          layerToEdit.once('pm:dragend', onPointDragEnd);
+          layerToEdit.once('dragend', onPointDragEnd);
+      }
   }
 }
  
@@ -3831,11 +3986,17 @@ function stopGeometryEditing() {
             length += points[i].distanceTo(points[i + 1]);
         }
         activeFeatureLayer.feature.properties['Extensão (m)'] = length.toFixed(2);
+    } else if (geomType === 'Point' || geomType === 'MultiPoint') {
+        if (typeof activeFeatureLayer.getLatLng === 'function') {
+            const latlng = activeFeatureLayer.getLatLng();
+            activeFeatureLayer.feature.properties['Coordenadas Geográficas WGS 84'] = `Latitude: ${latlng.lat.toFixed(6)} e Longitude: ${latlng.lng.toFixed(6)}`;
+        }
     }
     
     // Salva a geometria atualizada no Supabase e no IndexedDB
     const props = activeFeatureLayer.feature.properties || {};
     const idBanco = props.id_banco;
+    const tempId = props._tempId;
     const themeId = props.themeId;
 
     if (idBanco && typeof supabaseClient !== 'undefined' && supabaseClient) {
@@ -3849,12 +4010,28 @@ function stopGeometryEditing() {
 
     if (themeId) {
         const theme = themes.find(t => t.id === themeId);
-        if (theme && theme.features && window.GeoTurboDB) {
-            window.GeoTurboDB.saveThemeData(themeId, theme.features, theme.features.length);
+        if (theme && theme.features) {
+            const featIdx = theme.features.findIndex(f => {
+                const p = f.properties || {};
+                if (idBanco && p.id_banco === idBanco) return true;
+                if (tempId && p._tempId === tempId) return true;
+                if (f === activeFeatureLayer.feature) return true;
+                return false;
+            });
+            if (featIdx !== -1) {
+                theme.features[featIdx].geometry = activeFeatureLayer.feature.geometry;
+                theme.features[featIdx].properties = { ...theme.features[featIdx].properties, ...props };
+            } else {
+                theme.features.push(activeFeatureLayer.feature);
+            }
+            if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.indexTheme === 'function') {
+                window.GeoEngineTurbo.indexTheme(themeId, theme.features);
+            }
+            if (window.GeoTurboDB && typeof window.GeoTurboDB.saveThemeData === 'function') {
+                window.GeoTurboDB.saveThemeData(themeId, theme.features, theme.features.length);
+            }
         }
     }
-
-    syncMapDataToThemes();
   }
 
   // Restaura o estilo de pointer-events se houver uma seleção ativa
@@ -3869,52 +4046,79 @@ function stopGeometryEditing() {
   }
 
   const toolbar = document.getElementById('geometry-edit-toolbar');
-  toolbar.classList.add('hidden');
-  toolbar.classList.remove('flex');
+  if (toolbar) {
+      toolbar.classList.add('hidden');
+      toolbar.classList.remove('flex');
+  }
+
+  // Reabre imediatamente o card da tabela/formulário vinculado à feição editada
+  if (activeFeatureLayer) {
+      showFeatureInfoModal(activeFeatureLayer);
+  }
 }
 
 async function deleteActiveFeature() {
   if (!activeFeatureLayer) return;
 
+  const targetLayer = activeFeatureLayer;
+  const targetFeature = targetLayer.feature || {};
+  const props = targetFeature.properties || {};
+  const idBanco = props.id_banco;
+  const tempId = props._tempId;
+  const tId = props.themeId;
+
   if (!confirm("Tem certeza que deseja excluir esta feição permanentemente?")) return;
 
-  const props = activeFeatureLayer.feature && activeFeatureLayer.feature.properties;
-  const idBanco = props && props.id_banco;
-  const tempId = props && props._tempId;
-  const tId = props && props.themeId;
-
-  if (typeof supabaseClient !== 'undefined' && supabaseClient) {
-      if (idBanco) {
-          try {
-              const { error } = await supabaseClient.from('feicoes').update({ deletado_em: new Date().toISOString() }).eq('id', idBanco);
-              if (error) {
-                  alert('Não foi possível excluir: ' + error.message);
+  if (typeof supabaseClient !== 'undefined' && supabaseClient && idBanco) {
+      try {
+          // Tenta hard delete direto
+          let { error: delErr } = await supabaseClient.from('feicoes').delete().eq('id', idBanco);
+          if (delErr) {
+              // Se houver trigger ou soft delete configurado
+              const { error: updErr } = await supabaseClient.from('feicoes').update({ deletado_em: new Date().toISOString() }).eq('id', idBanco);
+              if (updErr) {
+                  console.error("Erro ao excluir feição:", delErr || updErr);
+                  alert('Não foi possível excluir no banco de dados: ' + (delErr.message || updErr.message));
                   return;
               }
-          } catch(e) {
-              console.error("Erro ao excluir feição no Supabase:", e);
-              return;
           }
+      } catch(e) {
+          console.error("Erro ao excluir feição no Supabase:", e);
       }
   }
 
   const theme = themes.find(t => t.id === tId);
-  if (theme) {
+  if (theme && theme.features) {
       theme.features = theme.features.filter(f => {
+          if (!f) return false;
           const p = f.properties || {};
           if (idBanco && p.id_banco === idBanco) return false;
-          if (!idBanco && tempId && p._tempId === tempId) return false;
+          if (tempId && p._tempId === tempId) return false;
+          if (f === targetFeature) return false;
           return true;
       });
+
+      if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.indexTheme === 'function') {
+          window.GeoEngineTurbo.indexTheme(tId, theme.features);
+      }
 
       if (window.GeoTurboDB && typeof window.GeoTurboDB.saveThemeData === 'function') {
           await window.GeoTurboDB.saveThemeData(tId, theme.features, theme.features.length);
       }
   }
 
-  geojsonLayer.removeLayer(activeFeatureLayer);
-  syncMapDataToThemes();
+  if (geojsonLayer && targetLayer) {
+      try {
+          geojsonLayer.removeLayer(targetLayer);
+      } catch(e){}
+  }
+  
+  if (typeof clearHighlight === 'function') {
+      clearHighlight();
+  }
+
   closeFeatureInfoModal();
+  renderThemes();
 }
 
 // --- ICON DROPDOWNS ---
@@ -4288,6 +4492,7 @@ window.downloadGeoJSON = downloadGeoJSON;
 window.closeGlobalImportModal = closeGlobalImportModal;
 window.confirmGlobalImport = confirmGlobalImport;
 window.showFeatureInfoModal = showFeatureInfoModal;
+window.openFeatureInfoModal = showFeatureInfoModal;
 window.renderFeatureInfo = renderFeatureInfo;
 window.handleFeatureSelectChange = handleFeatureSelectChange;
 window.toggleFeatureEditMode = toggleFeatureEditMode;
@@ -4391,15 +4596,14 @@ async function saveNewVisit() {
         }
     }
     
-    if(!activeFeatureLayer.feature.properties.visits) {
+    if (!activeFeatureLayer.feature.properties.visits) {
         activeFeatureLayer.feature.properties.visits = [];
     }
-    
     activeFeatureLayer.feature.properties.visits.push({
         date, tech, reason, situation, notes, photos, coords: currentVisitCoords
     });
     
-    syncMapDataToThemes();
+    await saveFeatureData();
     closeNewVisitModal();
     renderVisitsList();
 }
@@ -5629,8 +5833,8 @@ function renderRasterLayersList() {
 
     sortedRasters.forEach(raster => {
         const item = document.createElement('div');
-        item.className = 'flex flex-col rounded-xl overflow-hidden shadow-lg border border-white/10 transition-all duration-300';
-        item.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.1) 0%, rgba(15,23,42,0.8) 100%)';
+        item.className = 'flex flex-col rounded-2xl overflow-hidden shadow-md border border-emerald-500/30 transition-all duration-300';
+        item.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(15,23,42,0.75) 100%)';
         
         let dateFormatted = '';
         const effDate = raster.data_imagem || localStorage.getItem(`raster_date_${raster.id}`);
@@ -5644,7 +5848,7 @@ function renderRasterLayersList() {
         }
 
         item.innerHTML = `
-            <div class="p-3 flex flex-col backdrop-blur-md">
+            <div class="p-3.5 flex flex-col">
                 <!-- Header: Icon, Title, and Toggle -->
                 <div class="flex items-center justify-between mb-2.5">
                     <div class="flex items-center gap-2.5 overflow-hidden">

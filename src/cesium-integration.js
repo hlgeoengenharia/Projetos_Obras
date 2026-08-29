@@ -80,19 +80,55 @@ function setCesiumCursor(style) {
     }
 }
 
-window.openCesiumModal = function() {
+window.openCesiumModal = function(targetLayer) {
     cesiumModal.classList.remove('hidden');
     cesiumModal.style.display = 'flex';
     
     if (typeof closeMeasurementPanel === 'function') {
         closeMeasurementPanel();
     }
+
+    const featLayer = targetLayer || window.activeFeatureLayer;
+    let targetCoords = null;
+    let targetHeight = 350.0;
+
+    if (featLayer) {
+        try {
+            if (typeof featLayer.getLatLng === 'function') {
+                const ll = featLayer.getLatLng();
+                targetCoords = { lat: ll.lat, lng: ll.lng };
+                targetHeight = 220.0;
+            } else if (typeof featLayer.getBounds === 'function') {
+                const bounds = featLayer.getBounds();
+                const center = bounds.getCenter();
+                targetCoords = { lat: center.lat, lng: center.lng };
+                
+                const northEast = bounds.getNorthEast();
+                const distMeters = center.distanceTo(northEast) * 2;
+                targetHeight = Math.max(150.0, Math.min(800.0, distMeters * 3.0));
+            }
+        } catch(e) {
+            console.warn('Não foi possível calcular a posição da feição para o Cesium 3D:', e);
+        }
+    }
     
     if (!cesiumViewer) {
-        initCesiumViewer();
+        initCesiumViewer(targetCoords, targetHeight);
     } else {
         cesiumViewer.resize();
         sync2DLayersIntoCesium();
+        
+        if (targetCoords) {
+            cesiumViewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(targetCoords.lng, targetCoords.lat, targetHeight),
+                orientation: {
+                    heading: Cesium.Math.toRadians(0.0),
+                    pitch: Cesium.Math.toRadians(-45.0),
+                    roll: 0.0
+                },
+                duration: 1.5
+            });
+        }
     }
 };
 
@@ -246,7 +282,7 @@ function stopResizeModal() {
 // ==========================================
 // 2. INICIALIZAÇÃO DO CESIUM VIEWER & SNAPPING
 // ==========================================
-function initCesiumViewer() {
+function initCesiumViewer(initialCoords, initialHeight) {
     try {
         const emptyState = document.getElementById('cesium-empty-state');
         if (emptyState) emptyState.style.display = 'none';
@@ -277,14 +313,17 @@ function initCesiumViewer() {
             console.error("Erro ao carregar Satélite ArcGIS no Cesium:", error);
         });
 
-        const currentMapCenter = typeof map !== 'undefined' ? map.getCenter() : {lat: -7.035, lng: -34.835};
+        const currentMapCenter = initialCoords || (typeof map !== 'undefined' ? map.getCenter() : {lat: -7.035, lng: -34.835});
+        const flyHeight = initialHeight || 1800.0;
+
         cesiumViewer.camera.flyTo({
-            destination: Cesium.Cartesian3.fromDegrees(currentMapCenter.lng, currentMapCenter.lat, 1800.0),
+            destination: Cesium.Cartesian3.fromDegrees(currentMapCenter.lng, currentMapCenter.lat, flyHeight),
             orientation: {
                 heading: Cesium.Math.toRadians(0.0),
                 pitch: Cesium.Math.toRadians(-45.0),
                 roll: 0.0
-            }
+            },
+            duration: 1.5
         });
 
         cesiumViewer.scene.globe.depthTestAgainstTerrain = true;

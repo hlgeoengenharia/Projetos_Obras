@@ -5351,11 +5351,16 @@
         localStorage.setItem('spatial_analytics_rules', JSON.stringify(spatialRules));
 
         if (typeof supabaseClient !== 'undefined' && supabaseClient && munId !== 'default') {
-            supabaseClient.from('municipio_config').upsert({
-                municipio_id: munId,
-                config_chave: `spatial_rules_${munId}`,
-                config_valor: spatialRules
-            }).catch(() => {});
+            try {
+                await supabaseClient.from('municipio_config').upsert({
+                    municipio_id: munId,
+                    config_chave: `spatial_rules_${munId}`,
+                    config_valor: spatialRules,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'municipio_id,config_chave' });
+            } catch(e) {
+                console.warn('Falha ao salvar regra espacial no Supabase:', e);
+            }
         }
 
         closeSpatialRuleModal();
@@ -5373,11 +5378,16 @@
         localStorage.setItem('spatial_analytics_rules', JSON.stringify(spatialRules));
 
         if (typeof supabaseClient !== 'undefined' && supabaseClient && munId !== 'default') {
-            supabaseClient.from('municipio_config').upsert({
-                municipio_id: munId,
-                config_chave: `spatial_rules_${munId}`,
-                config_valor: spatialRules
-            }).catch(() => {});
+            try {
+                await supabaseClient.from('municipio_config').upsert({
+                    municipio_id: munId,
+                    config_chave: `spatial_rules_${munId}`,
+                    config_valor: spatialRules,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'municipio_id,config_chave' });
+            } catch(e) {
+                console.warn('Falha ao excluir regra espacial no Supabase:', e);
+            }
         }
 
         renderSpatialRulesList();
