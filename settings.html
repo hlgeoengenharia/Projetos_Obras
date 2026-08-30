@@ -1263,98 +1263,6 @@
     </div>
   </div>
 
-  <!-- Modal de Criação / Edição de Análise Espacial Cruzada -->
-  <div id="spatial-rule-modal" class="fixed inset-0 bg-black/60 z-[300] hidden flex items-center justify-center backdrop-blur-sm px-4">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col transform transition-all max-h-[90vh]">
-      <!-- Header do Modal -->
-      <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/40">
-        <h3 id="spatial-modal-title" class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-          <span class="material-symbols-outlined text-cyan-500">hub</span>
-          Nova Análise Espacial Cruzada
-        </h3>
-        <button onclick="closeSpatialRuleModal()" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
-          <span class="material-symbols-outlined text-[20px]">close</span>
-        </button>
-      </div>
-
-      <!-- Corpo do Modal -->
-      <div class="p-6 overflow-y-auto space-y-4 text-sm">
-        <input type="hidden" id="spatial-rule-id" value="">
-        
-        <div>
-          <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Título da Análise</label>
-          <input type="text" id="spatial-rule-name" placeholder="Ex: Imóveis que cruzam a Faixa de Praia" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500/50 outline-none text-sm">
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Camada Alvo (Feições Analisadas)</label>
-            <select id="spatial-target-layer" class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500/50 outline-none text-sm">
-               <!-- Preenchido via JS com temas/camadas vetoriais -->
-            </select>
-          </div>
-
-          <div>
-            <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Operação Espacial</label>
-            <select id="spatial-op-type" onchange="onSpatialOpChange()" class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500/50 outline-none text-sm font-medium">
-               <option value="intersects">✂️ Interseção (Cruza / Sobrepõe)</option>
-               <option value="touches">🤝 Confrontação (Faz Face / Toca a Borda)</option>
-               <option value="buffer">📡 Raio de Proximidade (Buffer / Distância)</option>
-               <option value="within">📦 Contido em (Dentro de Polígono)</option>
-            </select>
-          </div>
-        </div>
-
-        <div id="spatial-buffer-dist-container" class="hidden">
-          <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Distância de Influência (Metros)</label>
-          <div class="relative">
-            <input type="number" id="spatial-buffer-dist" value="30" min="1" max="10000" class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500/50 outline-none text-sm font-mono">
-            <span class="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">metros</span>
-          </div>
-        </div>
-
-        <div>
-          <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Camada de Referência (Cruzada)</label>
-          <select id="spatial-ref-layer" class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500/50 outline-none text-sm">
-             <!-- Preenchido via JS com temas/camadas vetoriais -->
-          </select>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-          <div>
-            <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Cor de Destaque no Mapa</label>
-            <div class="flex items-center gap-3">
-              <input type="color" id="spatial-highlight-color" value="#06b6d4" class="w-10 h-10 rounded-lg cursor-pointer border border-slate-300 dark:border-slate-600 bg-transparent p-0.5 shrink-0">
-              <div class="flex flex-wrap gap-1.5">
-                <button type="button" onclick="document.getElementById('spatial-highlight-color').value='#ef4444'" class="w-6 h-6 rounded-full bg-red-500 border border-white/20 shadow-sm" title="Vermelho Alerta"></button>
-                <button type="button" onclick="document.getElementById('spatial-highlight-color').value='#06b6d4'" class="w-6 h-6 rounded-full bg-cyan-500 border border-white/20 shadow-sm" title="Ciano Neon"></button>
-                <button type="button" onclick="document.getElementById('spatial-highlight-color').value='#eab308'" class="w-6 h-6 rounded-full bg-yellow-500 border border-white/20 shadow-sm" title="Amarelo Ouro"></button>
-                <button type="button" onclick="document.getElementById('spatial-highlight-color').value='#10b981'" class="w-6 h-6 rounded-full bg-emerald-500 border border-white/20 shadow-sm" title="Verde Esmeralda"></button>
-                <button type="button" onclick="document.getElementById('spatial-highlight-color').value='#8b5cf6'" class="w-6 h-6 rounded-full bg-purple-500 border border-white/20 shadow-sm" title="Roxo"></button>
-              </div>
-            </div>
-          </div>
-
-          <div>
-             <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Calcular Área Sobreposta (m²)?</label>
-             <label class="flex items-center gap-2 mt-2 cursor-pointer select-none text-slate-700 dark:text-slate-300 font-medium text-xs">
-                <input type="checkbox" id="spatial-calc-area" checked class="rounded border-slate-300 dark:border-slate-600 text-cyan-600 focus:ring-cyan-500 w-4 h-4">
-                <span>Sim, calcular m² de sobreposição</span>
-             </label>
-          </div>
-        </div>
-      </div>
-
-      <!-- Rodapé do Modal -->
-      <div class="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2 bg-slate-50 dark:bg-slate-950/40">
-        <button onclick="closeSpatialRuleModal()" class="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-colors">Cancelar</button>
-        <button onclick="saveSpatialRule()" class="px-5 py-2 text-sm font-bold bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-all shadow-md flex items-center gap-1.5">
-          <span class="material-symbols-outlined text-[18px]">save</span> Salvar Análise
-        </button>
-      </div>
-    </div>
-  </div>
-
   <!-- Tab Content: Layout -->
   <div id="layout" class="tab-content">
     <div class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
@@ -5117,12 +5025,26 @@
     async function loadSpatialAnalyticsRules() {
         const munId = activeMunicipioId || sessionStorage.getItem('municipio_ativo') || 'default';
         const key = `spatial_rules_${munId}`;
-        const saved = localStorage.getItem(key) || localStorage.getItem('spatial_analytics_rules');
+        let saved = localStorage.getItem(key) || localStorage.getItem('spatial_analytics_rules');
         
         if (saved) {
             try { spatialRules = JSON.parse(saved); } catch(e) { spatialRules = []; }
         } else {
             spatialRules = [];
+        }
+
+        if (typeof supabaseClient !== 'undefined' && supabaseClient && munId !== 'default') {
+            try {
+                const { data } = await supabaseClient.from('municipio_config').select('config_valor').eq('municipio_id', munId).eq('config_chave', key).single();
+                if (data && data.config_valor && Array.isArray(data.config_valor)) {
+                    spatialRules = data.config_valor;
+                    localStorage.setItem(key, JSON.stringify(spatialRules));
+                }
+            } catch(e) {}
+        }
+
+        if (window.spatialAnalyticsEngine) {
+            window.spatialAnalyticsEngine.rules = spatialRules;
         }
 
         renderSpatialRulesList();
@@ -5157,7 +5079,7 @@
             const bufferDetail = rule.opType === 'buffer' ? ` (${rule.bufferDist || 30}m)` : '';
 
             html += `
-                <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between gap-3 group relative overflow-hidden">
+                <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between gap-3 group relative overflow-hidden cursor-pointer" onclick="window.openSpatialRuleModal('${rule.id}')">
                     <div class="absolute top-0 left-0 bottom-0 w-1.5" style="background-color: ${rule.highlightColor || '#06b6d4'};"></div>
                     
                     <div>
@@ -5168,8 +5090,8 @@
                                 </span>
                                 <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">${rule.name || 'Sem título'}</h3>
                             </div>
-                            <div class="flex items-center gap-1">
-                                <button onclick="openSpatialRuleModal('${rule.id}')" class="p-1.5 text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" title="Editar">
+                            <div class="flex items-center gap-1" onclick="event.stopPropagation()">
+                                <button onclick="window.openSpatialRuleModal('${rule.id}')" class="p-1.5 text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" title="Editar">
                                     <span class="material-symbols-outlined text-[18px]">edit</span>
                                 </button>
                                 <button onclick="deleteSpatialRule('${rule.id}')" class="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Excluir">
@@ -5204,168 +5126,12 @@
         container.innerHTML = html;
     }
 
-    async function populateSpatialLayerSelects() {
-        const targetSel = document.getElementById('spatial-target-layer');
-        const refSel = document.getElementById('spatial-ref-layer');
-        if (!targetSel || !refSel) return;
-
-        let optionsHtml = '';
-        
-        // Carrega camadas salvas localmente e do Supabase
-        const munId = activeMunicipioId || sessionStorage.getItem('municipio_ativo');
-        let layers = [];
-        
-        const localThemes = localStorage.getItem('constructive_themes');
-        if (localThemes) {
-            try { layers = JSON.parse(localThemes); } catch(e) {}
-        }
-        
-        if (typeof supabaseClient !== 'undefined' && supabaseClient && munId) {
-            try {
-                const { data } = await supabaseClient.from('temas').select('id, nome, cor, tipo_geometria').eq('municipio_id', munId);
-                if (data && data.length > 0) {
-                    layers = data;
-                }
-            } catch(e) {}
-        }
-
-        if (layers.length > 0) {
-            layers.forEach(l => {
-                optionsHtml += `<option value="${l.id}" data-name="${l.nome}">${l.nome} ${l.tipo_geometria ? `[${l.tipo_geometria}]` : ''}</option>`;
-            });
-        } else {
-            optionsHtml = `
-                <option value="imoveis" data-name="Imóveis Cadastrados">Imóveis Cadastrados [Polígonos]</option>
-                <option value="faixa_praia" data-name="Faixa de Praia / Proteção">Faixa de Praia / Proteção [Linha]</option>
-                <option value="logradouros" data-name="Eixo de Logradouros">Eixo de Logradouros [Linhas]</option>
-                <option value="app" data-name="Área de Preservação (APP)">Área de Preservação (APP) [Polígono]</option>
-            `;
-        }
-
-        targetSel.innerHTML = optionsHtml;
-        refSel.innerHTML = optionsHtml;
-        if (refSel.options.length > 1) refSel.selectedIndex = 1;
-    }
-
     window.openSpatialRuleModal = function(ruleId = null) {
-        populateSpatialLayerSelects();
-        const modal = document.getElementById('spatial-rule-modal');
-        const titleEl = document.getElementById('spatial-modal-title');
-        const idInput = document.getElementById('spatial-rule-id');
-        const nameInput = document.getElementById('spatial-rule-name');
-        const targetSel = document.getElementById('spatial-target-layer');
-        const refSel = document.getElementById('spatial-ref-layer');
-        const opSel = document.getElementById('spatial-op-type');
-        const distInput = document.getElementById('spatial-buffer-dist');
-        const colorInput = document.getElementById('spatial-highlight-color');
-        const calcAreaInput = document.getElementById('spatial-calc-area');
-
         if (ruleId) {
-            const rule = spatialRules.find(r => r.id === ruleId);
-            if (rule) {
-                titleEl.innerHTML = `<span class="material-symbols-outlined text-cyan-500">edit</span> Editar Análise Espacial`;
-                idInput.value = rule.id;
-                nameInput.value = rule.name || '';
-                targetSel.value = rule.targetLayer || '';
-                refSel.value = rule.refLayer || '';
-                opSel.value = rule.opType || 'intersects';
-                distInput.value = rule.bufferDist || 30;
-                colorInput.value = rule.highlightColor || '#06b6d4';
-                calcAreaInput.checked = (rule.calcArea !== false);
-            }
+            window.location.href = `index.html?openSpatialRule=${encodeURIComponent(ruleId)}`;
         } else {
-            titleEl.innerHTML = `<span class="material-symbols-outlined text-cyan-500">add_location_alt</span> Nova Análise Espacial Cruzada`;
-            idInput.value = '';
-            nameInput.value = '';
-            opSel.value = 'intersects';
-            distInput.value = 30;
-            colorInput.value = '#06b6d4';
-            calcAreaInput.checked = true;
+            window.location.href = 'index.html?openSpatialRule=new';
         }
-
-        onSpatialOpChange();
-        modal.classList.remove('hidden');
-    };
-
-    window.closeSpatialRuleModal = function() {
-        const modal = document.getElementById('spatial-rule-modal');
-        if (modal) modal.classList.add('hidden');
-    };
-
-    window.onSpatialOpChange = function() {
-        const opSel = document.getElementById('spatial-op-type');
-        const distContainer = document.getElementById('spatial-buffer-dist-container');
-        if (opSel && distContainer) {
-            if (opSel.value === 'buffer') {
-                distContainer.classList.remove('hidden');
-            } else {
-                distContainer.classList.add('hidden');
-            }
-        }
-    };
-
-    window.saveSpatialRule = async function() {
-        const idInput = document.getElementById('spatial-rule-id');
-        const nameInput = document.getElementById('spatial-rule-name');
-        const targetSel = document.getElementById('spatial-target-layer');
-        const refSel = document.getElementById('spatial-ref-layer');
-        const opSel = document.getElementById('spatial-op-type');
-        const distInput = document.getElementById('spatial-buffer-dist');
-        const colorInput = document.getElementById('spatial-highlight-color');
-        const calcAreaInput = document.getElementById('spatial-calc-area');
-
-        const name = nameInput.value.trim();
-        if (!name) {
-            alert('Por favor, informe o título da análise.');
-            nameInput.focus();
-            return;
-        }
-
-        const targetOpt = targetSel.options[targetSel.selectedIndex];
-        const refOpt = refSel.options[refSel.selectedIndex];
-
-        const ruleData = {
-            id: idInput.value || generateUUID(),
-            name: name,
-            targetLayer: targetSel.value,
-            targetLayerName: targetOpt ? targetOpt.getAttribute('data-name') || targetOpt.text : targetSel.value,
-            refLayer: refSel.value,
-            refLayerName: refOpt ? refOpt.getAttribute('data-name') || refOpt.text : refSel.value,
-            opType: opSel.value,
-            bufferDist: parseFloat(distInput.value) || 30,
-            highlightColor: colorInput.value || '#06b6d4',
-            calcArea: calcAreaInput.checked,
-            createdAt: new Date().toISOString()
-        };
-
-        if (idInput.value) {
-            const idx = spatialRules.findIndex(r => r.id === idInput.value);
-            if (idx > -1) spatialRules[idx] = ruleData;
-        } else {
-            spatialRules.push(ruleData);
-        }
-
-        const munId = activeMunicipioId || sessionStorage.getItem('municipio_ativo') || 'default';
-        const key = `spatial_rules_${munId}`;
-        localStorage.setItem(key, JSON.stringify(spatialRules));
-        localStorage.setItem('spatial_analytics_rules', JSON.stringify(spatialRules));
-
-        if (typeof supabaseClient !== 'undefined' && supabaseClient && munId !== 'default') {
-            try {
-                await supabaseClient.from('municipio_config').upsert({
-                    municipio_id: munId,
-                    config_chave: `spatial_rules_${munId}`,
-                    config_valor: spatialRules,
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'municipio_id,config_chave' });
-            } catch(e) {
-                console.warn('Falha ao salvar regra espacial no Supabase:', e);
-            }
-        }
-
-        closeSpatialRuleModal();
-        renderSpatialRulesList();
-        showStorageToast('✨ Análise espacial salva com sucesso!');
     };
 
     window.deleteSpatialRule = async function(ruleId) {
@@ -5405,7 +5171,6 @@
                 loadUsersPanel();
             } else if (tabId === 'estatistica') {
                 loadSpatialAnalyticsRules();
-                populateSpatialLayerSelects();
             }
         };
     }

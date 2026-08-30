@@ -1219,25 +1219,26 @@ function renderThemes() {
             let iconHtml = widget.type === 'indicator' ? '123' : (widget.type === 'pie' ? 'pie_chart' : 'bar_chart');
             if (widget.type === 'indicator') {
                 statsListHtml += `
-                    <div class="flex items-center justify-between bg-slate-800/40 rounded-lg p-2 cursor-pointer hover:bg-slate-700/50 transition-colors" onclick="openStatsDashboard('${theme.id}', ${idx})" title="Ver Indicador">
-                        <div class="flex items-center gap-2 text-slate-300">
-                            <span class="material-symbols-outlined text-[16px] text-cyan-400">${iconHtml}</span>
+                    <div class="flex items-center justify-between bg-slate-800/40 hover:bg-slate-700/60 rounded-lg p-2.5 cursor-pointer transition-all select-none group" onclick="openStatsDashboard('${theme.id}', ${idx})" title="Ver Indicador">
+                        <div class="flex items-center gap-2 text-slate-300 group-hover:text-white transition-colors">
+                            <span class="material-symbols-outlined text-[18px] text-cyan-400">${iconHtml}</span>
                             <span class="text-xs font-semibold">${widget.title || 'Indicador'}</span>
                         </div>
+                        <span class="material-symbols-outlined text-[16px] text-slate-500 group-hover:text-cyan-400 transition-colors">open_in_new</span>
                     </div>
                 `;
             } else {
                 statsListHtml += `
-                    <div class="flex items-center justify-between bg-slate-800/40 rounded-lg p-2">
-                        <div class="flex items-center gap-2 text-slate-300">
-                            <span class="material-symbols-outlined text-[16px] text-cyan-400">${iconHtml}</span>
+                    <label class="flex items-center justify-between bg-slate-800/40 hover:bg-slate-700/60 rounded-lg p-2.5 cursor-pointer transition-all select-none group" title="Clique para ativar/desativar no mapa">
+                        <div class="flex items-center gap-2 text-slate-300 group-hover:text-white transition-colors">
+                            <span class="material-symbols-outlined text-[18px] text-cyan-400">${iconHtml}</span>
                             <span class="text-xs font-semibold">${widget.title || 'Gráfico'}</span>
                         </div>
-                        <label class="relative inline-flex items-center cursor-pointer group" title="Ativar Análise no Mapa">
+                        <div class="relative inline-flex items-center pointer-events-none">
                             <input type="checkbox" name="layer-stat-toggle" class="sr-only peer layer-stat-toggle-${theme.id}" onchange="handleStatToggle('${theme.id}', ${idx}, this)">
-                            <div class="w-8 h-4 bg-slate-700/50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-500"></div>
-                        </label>
-                    </div>
+                            <div class="w-8 h-4 bg-slate-700/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-500 shadow-inner"></div>
+                        </div>
+                    </label>
                 `;
             }
         });
@@ -5078,6 +5079,20 @@ window.handleStatToggle = function(themeId, chartIndex, checkbox) {
         if (t !== checkbox) t.checked = false;
     });
 
+    // Fecha o menu de Estatísticas Cruzadas e limpa qualquer análise espacial ativa
+    if (window.spatialAnalyticsEngine) {
+        if (typeof window.spatialAnalyticsEngine.closeMenu === 'function') {
+            window.spatialAnalyticsEngine.closeMenu();
+        }
+        if (typeof window.spatialAnalyticsEngine.clearActiveAnalysis === 'function') {
+            window.spatialAnalyticsEngine.clearActiveAnalysis(true);
+        }
+    }
+    const resCard = document.getElementById('spatial-result-card');
+    if (resCard) resCard.classList.add('hidden');
+    const spatialMenu = document.getElementById('spatial-analytics-menu');
+    if (spatialMenu) spatialMenu.classList.add('hidden');
+
     if (checkbox.checked) {
         // Open specific chart dashboard
         openStatsDashboard(themeId, chartIndex);
@@ -5088,6 +5103,21 @@ window.handleStatToggle = function(themeId, chartIndex, checkbox) {
 };
 
 async function openStatsDashboard(themeId, specificIndex) {
+    // Desativa e fecha qualquer estatística cruzada ativa no mapa
+    if (window.spatialAnalyticsEngine) {
+        if (typeof window.spatialAnalyticsEngine.closeMenu === 'function') {
+            window.spatialAnalyticsEngine.closeMenu();
+        }
+        if (typeof window.spatialAnalyticsEngine.clearActiveAnalysis === 'function') {
+            window.spatialAnalyticsEngine.clearActiveAnalysis(true);
+            window.spatialAnalyticsEngine.renderMenuList();
+        }
+    }
+    const resCard = document.getElementById('spatial-result-card');
+    if (resCard) resCard.classList.add('hidden');
+    const spatialMenu = document.getElementById('spatial-analytics-menu');
+    if (spatialMenu) spatialMenu.classList.add('hidden');
+
     const theme = themes.find(t => t.id === themeId);
     if (!theme) return;
 
@@ -5476,6 +5506,11 @@ window.closeStatsDashboard = function() {
         resetThemeClassification(themeId);
     }
     
+    // Limpa quaisquer rótulos ou destaques de análise espacial do mapa
+    if (window.spatialAnalyticsEngine && typeof window.spatialAnalyticsEngine.clearActiveAnalysis === 'function') {
+        window.spatialAnalyticsEngine.clearActiveAnalysis(true);
+    }
+
     // Uncheck all stats toggles in the layer list
     const allToggles = document.querySelectorAll('input[name="layer-stat-toggle"]');
     allToggles.forEach(t => t.checked = false);
