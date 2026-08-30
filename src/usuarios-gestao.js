@@ -1,11 +1,11 @@
 /**
- * GeoGestor — Gestão Unificada de Usuários, Entidades e Permissões Hierárquicas
- * Compartilhado entre home.html e settings.html (Espelho Total)
+ * GeoGestor — Gestão Unificada de Usuários Únicos, Entidades e Permissões Hierárquicas
+ * Compartilhado entre home.html e settings.html
  * 
  * Recursos:
- * - Cards de Usuários expansíveis (Accordion).
- * - Camadas expansíveis (Accordion de Camada com lista de abas).
- * - Modo Visualização vs Modo Edição (Botão "Editar" alterna para "Salvar" e "Cancelar").
+ * - 1 Único Card por Usuário (Agrupamento por user_id).
+ * - Seletor interativo de Municípios: ao clicar no município, exibe o quadro de camadas e abas daquele município.
+ * - Modo Visualização vs Modo Edição.
  * - Regra de Ouro: "Quem pode mais, pode menos; quem pode menos, não pode mais."
  */
 
@@ -35,8 +35,9 @@
     let _currentUserProfile = null;
     let _currentUserMembros = [];
     let _entidadesTipos = {}; // nome_entidade -> 'municipal' | 'externo' | 'outro'
-    let _targetMunicipioId = null; // Se preenchido (ex: settings.html), filtra pelo município
-    let _editingCardIds = new Set(); // IDs dos cards em modo edição
+    let _targetMunicipioId = null; // Se preenchido, prioriza o município ativo
+    let _editingUserIds = new Set(); // IDs dos usuários em modo edição
+    let _userSelectedMunMap = {}; // userId -> munId selecionado para visualizar/editar permissões
 
     async function initUsuariosManager({ containerId, searchInputId, municipioId = null, currentUserProfile }) {
         const container = document.getElementById(containerId);
@@ -53,7 +54,6 @@
         _currentUserProfile = currentUserProfile;
 
         try {
-            // Garante que o perfil do usuário logado está preenchido
             if (!_currentUserProfile || !_currentUserProfile.id) {
                 const { data: sessData } = await supabaseClient.auth.getSession();
                 if (sessData && sessData.session && sessData.session.user) {
@@ -113,7 +113,6 @@
                 _allAbaPerms[`${p.user_id}:${p.form_id}:${p.tab_id}`] = p;
             });
 
-            // Configura o ouvinte de busca se houver campo de busca
             if (searchInputId) {
                 const searchInput = document.getElementById(searchInputId);
                 if (searchInput) {
@@ -133,28 +132,22 @@
         }
     }
 
-    // Identifica se o usuário logado pode gerenciar o membro
-    function canManageMembro(membro) {
+    // Identifica se o usuário logado pode gerenciar o usuário alvo
+    function canManageUser(userObj) {
         if (!_currentUserProfile) return false;
         if (_currentUserProfile.super_admin) return true;
 
-        // Admin de Entidade: verifica se o usuário logado é admin no mesmo município e mesma entidade
-        const meuVinculo = _currentUserMembros.find(m => 
-            m.municipio_id === membro.municipio_id && 
-            m.status === 'aprovado' && 
-            m.papel === 'admin'
-        );
+        // Admin de Entidade: verifica se possui vínculo de admin no mesmo município e mesma entidade
+        const minhaEntidade = (_currentUserMembros[0]?.entidade || '').trim().toLowerCase();
+        const userEntidade = (userObj.entidade || '').trim().toLowerCase();
 
-        if (!meuVinculo) return false;
+        if (minhaEntidade && userEntidade && minhaEntidade === userEntidade) {
+            return _currentUserMembros.some(m => m.papel === 'admin' && m.status === 'aprovado');
+        }
 
-        // Regra de Isolamento de Entidade: Admin só gerencia membros da sua própria entidade
-        const minhaEntidade = (meuVinculo.entidade || '').trim().toLowerCase();
-        const membroEntidade = (membro.entidade || '').trim().toLowerCase();
-
-        return (minhaEntidade && membroEntidade && minhaEntidade === membroEntidade);
+        return false;
     }
 
-    // Identifica o teto de permissão do Admin logado ("Quem pode mais, pode menos...")
     function getAdminCeiling(themeId, formId, tabId) {
         if (!_currentUserProfile || _currentUserProfile.super_admin) {
             return { podeVer: true, podeEditar: true, podeExcluir: true };
@@ -188,27 +181,53 @@
         const isSuperAdmin = !!(_currentUserProfile && _currentUserProfile.super_admin);
         const query = searchQuery.trim().toLowerCase();
 
-        // 1. Filtragem por município ativo (se aplicável) e isolamento por entidade
-        let filtered = _allMembros.filter(m => {
-            if (_targetMunicipioId && m.municipio_id !== _targetMunicipioId) return false;
+        // 1. Agrupa os membros por pessoa única (user_id)
+        const userMap = new Map();
+        _allMembros.forEach(m => {
+            const uid = m.user_id;
+            if (!userMap.has(uid)) {
+                userMap.set(uid, {
+                    user_id: uid,
+                    profile: m.profiles || {},
+                    entidade: m.entidade,
+                    cargo: m.cargo,
+                    papel: m.papel,
+                    status: m.status,
+                    membros: []
+                });
+            }
+            const userObj = userMap.get(uid);
+            userObj.membros.push(m);
+            // Se houver algum vínculo aprovado ou admin, prioriza na exibição
+            if (m.status === 'aprovado') userObj.status = 'aprovado';
+            if (m.papel === 'admin') userObj.papel = 'admin';
+        });
 
-            // Se não for SuperAdmin, só pode ver membros que ele tem permissão de gerenciar
-            if (!isSuperAdmin && !canManageMembro(m)) return false;
+        let uniqueUsers = Array.from(userMap.values());
 
-            // Filtro de texto da busca
+        // 2. Filtra por busca e permissões
+        uniqueUsers = uniqueUsers.filter(u => {
+            if (_targetMunicipioId) {
+                // Se estiver dentro de um município específico, verifica se o usuário tem vínculo nele
+                const temNoMun = u.membros.some(mb => mb.municipio_id === _targetMunicipioId);
+                if (!temNoMun && !isSuperAdmin) return false;
+            }
+
+            if (!isSuperAdmin && !canManageUser(u)) return false;
+
             if (query) {
-                const nome = (m.profiles?.nome || '').toLowerCase();
-                const email = (m.profiles?.email || '').toLowerCase();
-                const entidade = (m.entidade || '').toLowerCase();
-                const cargo = (m.cargo || '').toLowerCase();
-                const mun = (m.municipios?.nome || '').toLowerCase();
+                const nome = (u.profile?.nome || '').toLowerCase();
+                const email = (u.profile?.email || '').toLowerCase();
+                const entidade = (u.entidade || '').toLowerCase();
+                const cargo = (u.cargo || '').toLowerCase();
+                const munNomes = u.membros.map(mb => (mb.municipios?.nome || '').toLowerCase()).join(' ');
 
-                return nome.includes(query) || email.includes(query) || entidade.includes(query) || cargo.includes(query) || mun.includes(query);
+                return nome.includes(query) || email.includes(query) || entidade.includes(query) || cargo.includes(query) || munNomes.includes(query);
             }
             return true;
         });
 
-        if (filtered.length === 0) {
+        if (uniqueUsers.length === 0) {
             container.innerHTML = `
                 <div class="p-8 text-center text-slate-400 text-sm italic bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/60 dark:border-slate-800">
                     ${query ? 'Nenhum usuário encontrado para esta busca.' : 'Nenhum usuário disponível para gerenciamento.'}
@@ -217,51 +236,70 @@
             return;
         }
 
-        // 2. Ordenação em ordem alfabética pelo nome do usuário
-        filtered.sort((a, b) => {
-            const nomeA = (a.profiles?.nome || '').trim();
-            const nomeB = (b.profiles?.nome || '').trim();
+        // 3. Ordenação alfabética pelo nome do usuário
+        uniqueUsers.sort((a, b) => {
+            const nomeA = (a.profile?.nome || '').trim();
+            const nomeB = (b.profile?.nome || '').trim();
             return nomeA.localeCompare(nomeB, 'pt-BR', { sensitivity: 'base' });
         });
 
-        container.innerHTML = filtered.map(m => renderUserCard(m)).join('');
+        container.innerHTML = uniqueUsers.map(u => renderUserCard(u)).join('');
     }
 
-    function renderUserCard(m) {
-        const perfil = m.profiles || {};
-        const municipio = m.municipios || {};
-        const entidadeNome = (m.entidade || 'Não informada').trim();
+    function renderUserCard(userObj) {
+        const userId = userObj.user_id;
+        const perfil = userObj.profile || {};
+        const entidadeNome = (userObj.entidade || 'Não informada').trim();
         const tipoEntidade = _entidadesTipos[entidadeNome] || (entidadeNome.toLowerCase().includes('prefeitura') ? 'municipal' : 'externo');
         const isMunicipal = (tipoEntidade === 'municipal');
-        const isEditing = _editingCardIds.has(m.id);
+        const isEditing = _editingUserIds.has(userId);
 
-        const temasDoMunicipio = _allTemas.filter(t => t.municipio_id === m.municipio_id);
+        const munIdsAprovados = new Set(userObj.membros.filter(mb => mb.status === 'aprovado').map(mb => mb.municipio_id));
+        const todosMunIdsDoUser = new Set(userObj.membros.map(mb => mb.municipio_id));
 
-        // Níveis de acesso permitidos de acordo com a entidade
+        // Define o município selecionado para este usuário no card
+        if (!_userSelectedMunMap[userId]) {
+            if (_targetMunicipioId && todosMunIdsDoUser.has(_targetMunicipioId)) {
+                _userSelectedMunMap[userId] = _targetMunicipioId;
+            } else if (munIdsAprovados.size > 0) {
+                _userSelectedMunMap[userId] = Array.from(munIdsAprovados)[0];
+            } else if (todosMunIdsDoUser.size > 0) {
+                _userSelectedMunMap[userId] = Array.from(todosMunIdsDoUser)[0];
+            } else if (_allMunicipios.length > 0) {
+                _userSelectedMunMap[userId] = _allMunicipios[0].id;
+            }
+        }
+
+        const selectedMunId = _userSelectedMunMap[userId];
+        const selectedMunObj = _allMunicipios.find(m => m.id === selectedMunId) || { nome: 'Município' };
+
+        // Níveis de acesso
         let papelOptionsHtml = '';
         if (isMunicipal) {
             papelOptionsHtml = `
-                <option value="admin" ${m.papel === 'admin' ? 'selected' : ''}>Administrador (Municipal)</option>
-                <option value="visualizador" ${m.papel === 'visualizador' || m.papel === 'editor' ? 'selected' : ''}>Usuário (Municipal)</option>
+                <option value="admin" ${userObj.papel === 'admin' ? 'selected' : ''}>Administrador (Municipal)</option>
+                <option value="visualizador" ${userObj.papel !== 'admin' ? 'selected' : ''}>Usuário (Municipal)</option>
             `;
         } else {
             papelOptionsHtml = `
-                <option value="admin" ${m.papel === 'admin' ? 'selected' : ''}>Administrador (${entidadeNome || 'Entidade'})</option>
-                <option value="externo" ${m.papel === 'externo' || m.papel === 'visualizador' || m.papel === 'editor' ? 'selected' : ''}>Acesso Externo</option>
+                <option value="admin" ${userObj.papel === 'admin' ? 'selected' : ''}>Administrador (${entidadeNome || 'Entidade'})</option>
+                <option value="externo" ${userObj.papel !== 'admin' ? 'selected' : ''}>Acesso Externo</option>
             `;
         }
 
         const statusOptionsHtml = ['pendente', 'aprovado', 'rejeitado'].map(s => 
-            `<option value="${s}" ${m.status === s ? 'selected' : ''}>${STATUS_LABELS[s]}</option>`
+            `<option value="${s}" ${userObj.status === s ? 'selected' : ''}>${STATUS_LABELS[s]}</option>`
         ).join('');
 
-        const statusBadgeColor = m.status === 'aprovado' 
+        const statusBadgeColor = userObj.status === 'aprovado' 
             ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' 
-            : (m.status === 'pendente' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20');
+            : (userObj.status === 'pendente' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20');
 
-        // Renderiza a Árvore de Permissões (Camadas ➔ Abas Expansíveis)
+        // Renderiza camadas do município selecionado
+        const temasDoMunicipio = _allTemas.filter(t => t.municipio_id === selectedMunId);
+
         const camadasHtml = temasDoMunicipio.map(tema => {
-            const userCamadaPerm = _allCamadaPerms[`${m.user_id}:${tema.id}`] || { pode_ver: false, pode_editar: false, pode_excluir: false };
+            const userCamadaPerm = _allCamadaPerms[`${userId}:${tema.id}`] || { pode_ver: false, pode_editar: false, pode_excluir: false };
             const adminCeiling = getAdminCeiling(tema.id);
 
             const podeVerCamada = !!userCamadaPerm.pode_ver;
@@ -270,16 +308,15 @@
             const formVinculado = (tema.tipo_cadastro && tema.tipo_cadastro !== 'padrao') ? _allForms[tema.tipo_cadastro] : null;
             const numAbas = (formVinculado && formVinculado.tabs) ? formVinculado.tabs.length : 0;
 
-            // Renderiza abas expansíveis se houver formulário
             let abasHtml = '';
             if (numAbas > 0) {
                 abasHtml = `
-                    <div id="camada-sub-abas-${m.id}-${tema.id}" class="camada-sub-abas hidden ml-3 pl-3 border-l-2 border-slate-300 dark:border-slate-600 mt-2 space-y-2 sub-abas-container transition-all" data-theme-id="${tema.id}">
+                    <div id="camada-sub-abas-${userId}-${tema.id}" class="camada-sub-abas hidden ml-3 pl-3 border-l-2 border-slate-300 dark:border-slate-600 mt-2 space-y-2 sub-abas-container transition-all" data-theme-id="${tema.id}">
                         <div class="text-[11px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400 mb-1.5 flex items-center gap-1">
                             <span class="material-symbols-outlined text-[14px]">article</span> Abas do Formulário: ${formVinculado.title || ''}
                         </div>
                         ${formVinculado.tabs.map(tab => {
-                            const userAbaPerm = _allAbaPerms[`${m.user_id}:${formVinculado.id}:${tab.id}`] || { pode_ver: false, pode_editar: false };
+                            const userAbaPerm = _allAbaPerms[`${userId}:${formVinculado.id}:${tab.id}`] || { pode_ver: false, pode_editar: false };
                             const abaCeiling = getAdminCeiling(tema.id, formVinculado.id, tab.id);
 
                             const verDisabled = (!isEditing || !abaCeiling.podeVer) ? 'disabled' : '';
@@ -308,24 +345,21 @@
 
             return `
                 <div class="bg-slate-100/90 dark:bg-slate-800/90 rounded-xl border-2 border-slate-300/90 dark:border-slate-700 shadow-sm transition-all overflow-hidden mb-2.5" style="border-left-width: 6px; border-left-color: ${tema.cor || '#0ea5e9'}" data-camada-id="${tema.id}">
-                    <!-- Cabeçalho Completo Clicável da Camada -->
-                    <div class="p-3.5 flex items-center justify-between gap-3 flex-wrap cursor-pointer select-none hover:bg-slate-200/70 dark:hover:bg-slate-700/60 transition-colors" onclick="window.UsuariosManager.toggleCamadaAccordion('${m.id}', '${tema.id}')">
-                        <!-- Título, Cor e Quantidade de Abas -->
+                    <div class="p-3.5 flex items-center justify-between gap-3 flex-wrap cursor-pointer select-none hover:bg-slate-200/70 dark:hover:bg-slate-700/60 transition-colors" onclick="window.UsuariosManager.toggleCamadaAccordion('${userId}', '${tema.id}')">
                         <div class="flex items-center gap-2.5 min-w-0 flex-1">
                             <span class="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm border border-white/40" style="background-color: ${tema.cor || '#0ea5e9'}"></span>
                             <span class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">${tema.nome}</span>
                             ${numAbas > 0 ? `
                                 <span class="text-[11px] font-semibold text-sky-700 dark:text-sky-400 bg-sky-100 dark:bg-sky-950/60 px-2 py-0.5 rounded-full border border-sky-300 dark:border-sky-800 flex items-center gap-0.5">
                                     ${numAbas} ${numAbas === 1 ? 'aba' : 'abas'}
-                                    <span id="camada-chevron-${m.id}-${tema.id}" class="material-symbols-outlined text-[16px] transition-transform duration-200">expand_more</span>
+                                    <span id="camada-chevron-${userId}-${tema.id}" class="material-symbols-outlined text-[16px] transition-transform duration-200">expand_more</span>
                                 </span>
                             ` : ''}
                         </div>
 
-                        <!-- Checkboxes da Camada (com stopPropagation para não conflitar com o clique do card) -->
                         <div class="flex items-center gap-4 shrink-0 bg-white/80 dark:bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 shadow-xs" onclick="event.stopPropagation()">
                             <label class="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 ${isEditing ? 'cursor-pointer' : 'cursor-default'}">
-                                <input type="checkbox" class="camada-ver-check rounded border-slate-400 dark:border-slate-500 text-sky-600 focus:ring-sky-500 w-4 h-4" ${podeVerCamada ? 'checked' : ''} ${camadaVerDisabled} onchange="window.UsuariosManager.toggleCamadaSubAbas(this, '${m.id}', '${tema.id}')">
+                                <input type="checkbox" class="camada-ver-check rounded border-slate-400 dark:border-slate-500 text-sky-600 focus:ring-sky-500 w-4 h-4" ${podeVerCamada ? 'checked' : ''} ${camadaVerDisabled} onchange="window.UsuariosManager.toggleCamadaSubAbas(this, '${userId}', '${tema.id}')">
                                 Ver Camada
                             </label>
                             <label class="flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 ${isEditing ? 'cursor-pointer' : 'cursor-default'}">
@@ -341,30 +375,38 @@
             `;
         }).join('');
 
-        // Seção de Atribuição de Múltiplos Municípios (para usuários não-municipais ou SuperAdmin)
+        // Seletor Interativo de Municípios Atribuídos
         let atribuicaoMunicipiosHtml = '';
         if (!isMunicipal || (_currentUserProfile && _currentUserProfile.super_admin)) {
-            const userMembros = _allMembros.filter(mb => mb.user_id === m.user_id && mb.status === 'aprovado');
-            const munIdsDoUser = new Set(userMembros.map(mb => mb.municipio_id));
-
             atribuicaoMunicipiosHtml = `
                 <div class="mt-4 pt-3.5 border-t border-slate-200 dark:border-slate-800">
-                    <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center justify-between mb-2 flex-wrap gap-1">
                         <span class="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
                             <span class="material-symbols-outlined text-[17px] text-sky-600 dark:text-sky-400">domain_add</span>
                             Municípios Atribuídos a este Usuário (${entidadeNome})
                         </span>
-                        <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Selecione as bases liberadas</span>
+                        <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Clique no município para ver/editar suas camadas</span>
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 mt-2">
                         ${_allMunicipios.map(mun => {
-                            const isChecked = munIdsDoUser.has(mun.id);
+                            const isChecked = todosMunIdsDoUser.has(mun.id);
+                            const isSelectedMun = (mun.id === selectedMunId);
                             const munDisabled = !isEditing ? 'disabled' : '';
+
+                            const activeBorder = isSelectedMun 
+                                ? 'border-sky-500 bg-sky-500/15 shadow-[0_0_12px_rgba(14,165,233,0.3)] ring-1 ring-sky-500' 
+                                : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 hover:border-slate-400 dark:hover:border-slate-600';
+
                             return `
-                                <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 ${isEditing ? 'cursor-pointer hover:border-sky-500' : 'cursor-default'} text-xs font-semibold text-slate-800 dark:text-slate-200 transition-all select-none">
-                                    <input type="checkbox" class="user-mun-check rounded border-slate-400 text-sky-600 focus:ring-sky-500 w-4 h-4" value="${mun.id}" ${isChecked ? 'checked' : ''} ${munDisabled}>
-                                    <span class="truncate">${mun.nome}${mun.uf ? ' - ' + mun.uf : ''}</span>
-                                </label>
+                                <div class="flex items-center justify-between p-2.5 rounded-xl border ${activeBorder} transition-all select-none cursor-pointer group" onclick="window.UsuariosManager.selectUserMun('${userId}', '${mun.id}')">
+                                    <div class="flex items-center gap-2 min-w-0 flex-1">
+                                        <input type="checkbox" class="user-mun-check rounded border-slate-400 text-sky-600 focus:ring-sky-500 w-4 h-4 shrink-0" value="${mun.id}" ${isChecked ? 'checked' : ''} ${munDisabled} onclick="event.stopPropagation()">
+                                        <span class="text-xs font-bold ${isSelectedMun ? 'text-sky-600 dark:text-sky-400' : 'text-slate-800 dark:text-slate-200'} truncate">
+                                            ${mun.nome}${mun.uf ? ' - ' + mun.uf : ''}
+                                        </span>
+                                    </div>
+                                    ${isSelectedMun ? '<span class="material-symbols-outlined text-[16px] text-sky-500 shrink-0">check_circle</span>' : ''}
+                                </div>
                             `;
                         }).join('')}
                     </div>
@@ -372,41 +414,49 @@
             `;
         }
 
-        // Botões de Ação no topo: Editar vs (Salvar + Cancelar)
+        // Nomes dos municípios atribuídos para o cabeçalho
+        const nomesMunicipiosDoUser = _allMunicipios
+            .filter(mun => todosMunIdsDoUser.has(mun.id))
+            .map(mun => mun.nome + (mun.uf ? ' - ' + mun.uf : ''))
+            .join(', ') || 'Nenhum município vinculado';
+
+        // Botões de Ação no topo
         const botoesAcaoHtml = isEditing ? `
             <div class="flex items-center gap-2">
-                <button type="button" onclick="window.UsuariosManager.cancelarEdicao('${m.id}')" class="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-sm">
+                <button type="button" onclick="window.UsuariosManager.cancelarEdicao('${userId}')" class="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-sm">
                     <span class="material-symbols-outlined text-[16px]">close</span> Cancelar
                 </button>
-                <button type="button" onclick="window.UsuariosManager.salvarUsuario('${m.id}')" class="px-4 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold shadow-md transition-colors flex items-center gap-1.5">
+                <button type="button" onclick="window.UsuariosManager.salvarUsuario('${userId}')" class="px-4 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold shadow-md transition-colors flex items-center gap-1.5">
                     <span class="material-symbols-outlined text-[16px]">save</span> Salvar
                 </button>
             </div>
         ` : `
-            <button type="button" onclick="window.UsuariosManager.iniciarEdicao('${m.id}')" class="px-3.5 py-1.5 bg-white hover:bg-sky-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-400 border-2 border-slate-300 dark:border-slate-600 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs">
+            <button type="button" onclick="window.UsuariosManager.iniciarEdicao('${userId}')" class="px-3.5 py-1.5 bg-white hover:bg-sky-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-400 border-2 border-slate-300 dark:border-slate-600 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs">
                 <span class="material-symbols-outlined text-[16px] text-sky-600 dark:text-sky-400">edit</span> Editar
             </button>
         `;
 
         return `
-            <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border-2 border-slate-300 dark:border-slate-700/90 shadow-md hover:shadow-lg mb-5 transition-all" data-user-card="${m.id}" data-user-id="${m.user_id}" data-municipio-id="${m.municipio_id}">
-                <!-- Cabeçalho do Card (Expansível ao Clicar com contraste) -->
+            <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border-2 border-slate-300 dark:border-slate-700/90 shadow-md hover:shadow-lg mb-5 transition-all" data-user-card="${userId}" data-user-id="${userId}" data-selected-mun="${selectedMunId}">
+                <!-- Cabeçalho do Card (Expansível ao Clicar) -->
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 select-none bg-slate-50/90 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60">
-                    <div class="flex items-center gap-2.5 cursor-pointer min-w-0 flex-1" onclick="window.UsuariosManager.toggleUserCard('${m.id}')">
-                        <span id="user-chevron-${m.id}" class="material-symbols-outlined text-[24px] text-slate-500 dark:text-slate-400 transition-transform duration-200 shrink-0 ${isEditing ? 'rotate-180' : ''}">expand_more</span>
+                    <div class="flex items-center gap-2.5 cursor-pointer min-w-0 flex-1" onclick="window.UsuariosManager.toggleUserCard('${userId}')">
+                        <span id="user-chevron-${userId}" class="material-symbols-outlined text-[24px] text-slate-500 dark:text-slate-400 transition-transform duration-200 shrink-0 ${isEditing ? 'rotate-180' : ''}">expand_more</span>
                         <div class="min-w-0">
                             <div class="flex items-center gap-2 flex-wrap">
                                 <h4 class="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white hover:text-sky-600 transition-colors truncate">${perfil.nome || '(Sem nome)'}</h4>
-                                <span class="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${statusBadgeColor} uppercase tracking-wider">${STATUS_LABELS[m.status] || m.status}</span>
-                                <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-600">${PAPEL_LABELS[m.papel] || m.papel}</span>
+                                <span class="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${statusBadgeColor} uppercase tracking-wider">${STATUS_LABELS[userObj.status] || userObj.status}</span>
+                                <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-600">${PAPEL_LABELS[userObj.papel] || userObj.papel}</span>
                             </div>
                             <div class="text-xs text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-2 flex-wrap font-medium">
                                 <span>${perfil.email || ''}</span>
                                 <span>•</span>
                                 <span class="font-bold text-slate-900 dark:text-slate-100">${entidadeNome}</span>
-                                ${m.cargo ? `<span>(${m.cargo})</span>` : ''}
+                                ${userObj.cargo ? `<span>(${userObj.cargo})</span>` : ''}
                                 <span>•</span>
-                                <span class="text-sky-600 dark:text-sky-400 font-bold">${municipio.nome || 'Município'}${municipio.uf ? ' - ' + municipio.uf : ''}</span>
+                                <span class="text-sky-600 dark:text-sky-400 font-bold" title="${nomesMunicipiosDoUser}">
+                                    ${nomesMunicipiosDoUser}
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -417,7 +467,7 @@
                 </div>
 
                 <!-- Corpo Expansível do Card -->
-                <div id="user-card-body-${m.id}" class="user-card-body ${isEditing ? '' : 'hidden'} mt-4 pt-4 border-t-2 border-slate-200 dark:border-slate-800 transition-all">
+                <div id="user-card-body-${userId}" class="user-card-body ${isEditing ? '' : 'hidden'} mt-4 pt-4 border-t-2 border-slate-200 dark:border-slate-800 transition-all">
                     <!-- Controles de Nível de Acesso e Status -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                         <div>
@@ -436,27 +486,26 @@
 
                     ${atribuicaoMunicipiosHtml}
 
-                    <!-- Gestão Granular de Camadas e Abas -->
+                    <!-- Gestão Granular de Camadas e Abas do Município Ativo -->
                     <div class="mt-4">
-                        <div class="flex items-center justify-between mb-2.5 pb-2 border-b border-slate-200 dark:border-slate-800">
+                        <div class="flex items-center justify-between mb-2.5 pb-2 border-b border-slate-200 dark:border-slate-800 flex-wrap gap-1">
                             <span class="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
                                 <span class="material-symbols-outlined text-[18px] text-sky-600 dark:text-sky-400">layers</span>
-                                Permissões de Camadas e Abas
+                                Permissões de Camadas e Abas — <span class="text-sky-600 dark:text-sky-400">${selectedMunObj.nome}${selectedMunObj.uf ? ' - ' + selectedMunObj.uf : ''}</span>
                             </span>
                             <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Clique na camada para expandir as abas</span>
                         </div>
 
                         <div class="space-y-3 max-h-96 overflow-y-auto pr-1">
-                            ${camadasHtml || '<div class="text-xs text-slate-400 italic py-2">Nenhuma camada cadastrada neste município.</div>'}
+                            ${camadasHtml || `<div class="text-xs text-slate-400 italic py-4 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">Nenhuma camada cadastrada em ${selectedMunObj.nome}.</div>`}
                         </div>
                     </div>
 
-                    <!-- Botão de Excluir Vínculo (só quando em edição) -->
                     ${isEditing ? `
                     <div class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">
-                        <button type="button" onclick="window.UsuariosManager.removerAcesso('${m.id}')" class="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-700 hover:underline flex items-center gap-1">
+                        <button type="button" onclick="window.UsuariosManager.removerAcesso('${userId}')" class="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-700 hover:underline flex items-center gap-1">
                             <span class="material-symbols-outlined text-[15px]">delete</span>
-                            Revogar acesso deste usuário neste município
+                            Revogar todos os acessos deste usuário
                         </button>
                     </div>
                     ` : ''}
@@ -465,20 +514,33 @@
         `;
     }
 
-    // Alterna a expansão do card de usuário (Acordeão exclusivo: fecha os outros)
-    function toggleUserCard(membroId) {
-        const body = document.getElementById(`user-card-body-${membroId}`);
-        const chevron = document.getElementById(`user-chevron-${membroId}`);
+    function selectUserMun(userId, munId) {
+        _userSelectedMunMap[userId] = munId;
+        const card = document.querySelector(`[data-user-card="${userId}"]`);
+        const container = card ? card.parentElement : null;
+        if (container) {
+            const searchInput = document.getElementById('usuarios-search') || document.getElementById('users-search');
+            renderUsersList(container.id, searchInput ? searchInput.value : '');
+            // Mantém o card aberto
+            const body = document.getElementById(`user-card-body-${userId}`);
+            const chevron = document.getElementById(`user-chevron-${userId}`);
+            if (body) body.classList.remove('hidden');
+            if (chevron) chevron.classList.add('rotate-180');
+        }
+    }
+
+    function toggleUserCard(userId) {
+        const body = document.getElementById(`user-card-body-${userId}`);
+        const chevron = document.getElementById(`user-chevron-${userId}`);
         if (!body) return;
 
         const isHidden = body.classList.contains('hidden');
 
-        // Fecha todos os outros cards de usuários
         document.querySelectorAll('.user-card-body').forEach(el => {
-            if (el.id !== `user-card-body-${membroId}`) el.classList.add('hidden');
+            if (el.id !== `user-card-body-${userId}`) el.classList.add('hidden');
         });
         document.querySelectorAll('[id^="user-chevron-"]').forEach(ch => {
-            if (ch.id !== `user-chevron-${membroId}`) ch.classList.remove('rotate-180');
+            if (ch.id !== `user-chevron-${userId}`) ch.classList.remove('rotate-180');
         });
 
         if (isHidden) {
@@ -490,10 +552,9 @@
         }
     }
 
-    // Alterna a expansão das sub-abas de uma camada
-    function toggleCamadaAccordion(membroId, temaId) {
-        const subAbas = document.getElementById(`camada-sub-abas-${membroId}-${temaId}`);
-        const chevron = document.getElementById(`camada-chevron-${membroId}-${temaId}`);
+    function toggleCamadaAccordion(userId, temaId) {
+        const subAbas = document.getElementById(`camada-sub-abas-${userId}-${temaId}`);
+        const chevron = document.getElementById(`camada-chevron-${userId}-${temaId}`);
         if (!subAbas) return;
 
         const isHidden = subAbas.classList.contains('hidden');
@@ -506,11 +567,24 @@
         }
     }
 
-    // Ativa o modo de edição para o card
-    function iniciarEdicao(membroId) {
-        _editingCardIds.clear(); // Apenas 1 usuário em edição por vez
-        _editingCardIds.add(membroId);
-        const card = document.querySelector(`[data-user-card="${membroId}"]`);
+    function iniciarEdicao(userId) {
+        _editingUserIds.clear();
+        _editingUserIds.add(userId);
+        const card = document.querySelector(`[data-user-card="${userId}"]`);
+        const container = card ? card.parentElement : null;
+        if (container) {
+            const searchInput = document.getElementById('usuarios-search') || document.getElementById('users-search');
+            renderUsersList(container.id, searchInput ? searchInput.value : '');
+            const body = document.getElementById(`user-card-body-${userId}`);
+            const chevron = document.getElementById(`user-chevron-${userId}`);
+            if (body) body.classList.remove('hidden');
+            if (chevron) chevron.classList.add('rotate-180');
+        }
+    }
+
+    function cancelarEdicao(userId) {
+        _editingUserIds.delete(userId);
+        const card = document.querySelector(`[data-user-card="${userId}"]`);
         const container = card ? card.parentElement : null;
         if (container) {
             const searchInput = document.getElementById('usuarios-search') || document.getElementById('users-search');
@@ -518,21 +592,9 @@
         }
     }
 
-    // Cancela o modo de edição
-    function cancelarEdicao(membroId) {
-        _editingCardIds.delete(membroId);
-        const card = document.querySelector(`[data-user-card="${membroId}"]`);
-        const container = card ? card.parentElement : null;
-        if (container) {
-            const searchInput = document.getElementById('usuarios-search') || document.getElementById('users-search');
-            renderUsersList(container.id, searchInput ? searchInput.value : '');
-        }
-    }
-
-    // Alterna visualmente as sub-abas ao marcar/desmarcar a camada
-    function toggleCamadaSubAbas(camadaCheckbox, membroId, themeId) {
+    function toggleCamadaSubAbas(camadaCheckbox, userId, themeId) {
         const isChecked = camadaCheckbox.checked;
-        const subContainer = document.getElementById(`camada-sub-abas-${membroId}-${themeId}`);
+        const subContainer = document.getElementById(`camada-sub-abas-${userId}-${themeId}`);
         if (subContainer) {
             subContainer.style.opacity = isChecked ? '1' : '0.4';
             subContainer.style.pointerEvents = isChecked ? 'auto' : 'none';
@@ -542,12 +604,10 @@
         }
     }
 
-    // Salva as permissões e dados do usuário no Supabase
-    async function salvarUsuario(membroId) {
-        const card = document.querySelector(`[data-user-card="${membroId}"]`);
+    async function salvarUsuario(userId) {
+        const card = document.querySelector(`[data-user-card="${userId}"]`);
         if (!card) return;
 
-        const userId = card.getAttribute('data-user-id');
         const papel = card.querySelector('.user-papel-select').value;
         const status = card.querySelector('.user-status-select').value;
 
@@ -559,15 +619,15 @@
         }
 
         try {
-            // 1. Atualiza município_membros
+            // 1. Atualiza município_membros existentes para este usuário
             const { error: membroErr } = await supabaseClient
                 .from('municipio_membros')
                 .update({ papel, status })
-                .eq('id', membroId);
+                .eq('user_id', userId);
 
             if (membroErr) throw membroErr;
 
-            // 2. Coleta permissões de camadas
+            // 2. Coleta permissões de camadas do município selecionado
             const camadaCards = card.querySelectorAll('[data-camada-id]');
             const camadaRows = [];
             const abaRows = [];
@@ -577,7 +637,6 @@
                 const podeVer = cCard.querySelector('.camada-ver-check').checked;
                 const podeExcluir = cCard.querySelector('.camada-excluir-check').checked;
 
-                // Coleta abas vinculadas
                 const abaEls = cCard.querySelectorAll('[data-form-id][data-tab-id]');
                 let podeEditarCamada = false;
 
@@ -623,21 +682,21 @@
                 if (aErr) console.warn('Erro ao atualizar permissoes_aba:', aErr);
             }
 
-            // 5. Sincroniza Municípios Atribuídos para Usuários Externos / Multi-Municipais
+            // 5. Sincroniza Municípios Atribuídos
             const munChecks = card.querySelectorAll('.user-mun-check');
-            const membroObj = _allMembros.find(m => m.id === membroId);
+            const userMembrosList = _allMembros.filter(m => m.user_id === userId);
+            const userPrimeiroMembro = userMembrosList[0] || {};
 
-            if (munChecks.length > 0 && membroObj) {
+            if (munChecks.length > 0) {
                 const selectedMunIds = Array.from(munChecks).filter(cb => cb.checked).map(cb => cb.value);
                 const unselectedMunIds = Array.from(munChecks).filter(cb => !cb.checked).map(cb => cb.value);
 
-                // Garante municípios marcados com status 'aprovado'
                 for (const munId of selectedMunIds) {
                     const existing = _allMembros.find(mb => mb.user_id === userId && mb.municipio_id === munId);
                     if (existing) {
-                        if (existing.status !== 'aprovado' || existing.papel !== papel) {
-                            await supabaseClient.from('municipio_membros').update({ status: 'aprovado', papel: papel }).eq('id', existing.id);
-                            existing.status = 'aprovado';
+                        if (existing.status !== status || existing.papel !== papel) {
+                            await supabaseClient.from('municipio_membros').update({ status, papel }).eq('id', existing.id);
+                            existing.status = status;
                             existing.papel = papel;
                         }
                     } else {
@@ -645,9 +704,9 @@
                             user_id: userId,
                             municipio_id: munId,
                             papel: papel,
-                            status: 'aprovado',
-                            entidade: membroObj.entidade || null,
-                            cargo: membroObj.cargo || null
+                            status: status,
+                            entidade: userPrimeiroMembro.entidade || null,
+                            cargo: userPrimeiroMembro.cargo || null
                         }).select('id, user_id, municipio_id, papel, status, entidade, cargo, solicitado_em, profiles!user_id(id, nome, email, super_admin), municipios(id, nome, uf)').single();
 
                         if (!insErr && newMb) {
@@ -656,21 +715,20 @@
                     }
                 }
 
-                // Revoga/remove municípios desmarcados (exceto o próprio card ativo se for único)
                 for (const unMunId of unselectedMunIds) {
                     const existing = _allMembros.find(mb => mb.user_id === userId && mb.municipio_id === unMunId);
-                    if (existing && existing.id !== membroId) {
+                    if (existing) {
                         await supabaseClient.from('municipio_membros').delete().eq('id', existing.id);
                         _allMembros = _allMembros.filter(mb => mb.id !== existing.id);
                     }
                 }
             }
 
-            // Atualiza cache em memória
-            if (membroObj) {
-                membroObj.papel = papel;
-                membroObj.status = status;
-            }
+            userMembrosList.forEach(mb => {
+                mb.papel = papel;
+                mb.status = status;
+            });
+
             camadaRows.forEach(cr => {
                 _allCamadaPerms[`${cr.user_id}:${cr.theme_id}`] = cr;
             });
@@ -678,7 +736,7 @@
                 _allAbaPerms[`${ar.user_id}:${ar.form_id}:${ar.tab_id}`] = ar;
             });
 
-            _editingCardIds.delete(membroId);
+            _editingUserIds.delete(userId);
 
             const container = card.parentElement;
             if (container) {
@@ -699,26 +757,26 @@
         }
     }
 
-    async function removerAcesso(membroId) {
-        if (!confirm('Deseja realmente revogar o acesso deste usuário neste município?')) return;
+    async function removerAcesso(userId) {
+        if (!confirm('Deseja realmente revogar todos os acessos deste usuário em todos os municípios?')) return;
 
         try {
-            const { error } = await supabaseClient.from('municipio_membros').delete().eq('id', membroId);
+            const { error } = await supabaseClient.from('municipio_membros').delete().eq('user_id', userId);
             if (error) throw error;
 
-            alert('Acesso revogado com sucesso!');
-            _editingCardIds.delete(membroId);
-            _allMembros = _allMembros.filter(m => m.id !== membroId);
-            const card = document.querySelector(`[data-user-card="${membroId}"]`);
+            alert('Acessos revogados com sucesso!');
+            _editingUserIds.delete(userId);
+            _allMembros = _allMembros.filter(m => m.user_id !== userId);
+            const card = document.querySelector(`[data-user-card="${userId}"]`);
             if (card) card.remove();
         } catch (err) {
-            alert('Erro ao revogar acesso: ' + (err.message || err));
+            alert('Erro ao revogar acessos: ' + (err.message || err));
         }
     }
 
-    // Expõe a API no escopo global
     window.UsuariosManager = {
         init: initUsuariosManager,
+        selectUserMun,
         toggleUserCard,
         toggleCamadaAccordion,
         iniciarEdicao,

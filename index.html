@@ -152,16 +152,61 @@
       }
 
       /* Inset shadow for active or input elements to create depth */
-      input, textarea, select, .bg-surface-container {
+      input:not([type="checkbox"]), textarea, select, .bg-surface-container {
         background: #f1f5f9 !important;
         box-shadow: inset 2px 2px 5px rgba(209, 217, 230, 0.5), inset -2px -2px 5px rgba(255, 255, 255, 0.8) !important;
         border: none !important;
         border-radius: 0.25rem !important;
       }
-      html.dark input, html.dark textarea, html.dark select, html.dark .bg-surface-container {
+      html.dark input:not([type="checkbox"]), html.dark textarea, html.dark select, html.dark .bg-surface-container {
         background: #0f172a !important;
         box-shadow: inset 2px 2px 5px rgba(11, 17, 32, 0.5), inset -2px -2px 5px rgba(30, 41, 59, 0.5) !important;
         color: #f8fafc !important;
+      }
+
+      /* Checkbox Padrão GeoGestor — Verde Esmeralda Vibrante com "✓" Branco Nítido */
+      input[type="checkbox"]:not(.sr-only):not(.peer) {
+        appearance: none !important;
+        -webkit-appearance: none !important;
+        width: 1.25rem !important;
+        height: 1.25rem !important;
+        min-width: 1.25rem !important;
+        min-height: 1.25rem !important;
+        border: 2px solid #94a3b8 !important;
+        border-radius: 0.375rem !important;
+        background: #ffffff !important;
+        cursor: pointer !important;
+        display: inline-grid !important;
+        place-content: center !important;
+        transition: all 0.15s ease-in-out !important;
+        vertical-align: middle !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+        position: relative !important;
+      }
+
+      html.dark input[type="checkbox"]:not(.sr-only):not(.peer) {
+        border-color: #64748b !important;
+        background: #1e293b !important;
+      }
+
+      input[type="checkbox"]:not(.sr-only):not(.peer):hover {
+        border-color: #10b981 !important;
+        box-shadow: 0 0 8px rgba(16, 185, 129, 0.35) !important;
+      }
+
+      input[type="checkbox"]:not(.sr-only):not(.peer):checked {
+        background: #10b981 !important;
+        border-color: #059669 !important;
+        box-shadow: 0 0 10px rgba(16, 185, 129, 0.5) !important;
+      }
+
+      input[type="checkbox"]:not(.sr-only):not(.peer):checked::before {
+        content: "" !important;
+        width: 0.4rem !important;
+        height: 0.7rem !important;
+        border: solid #ffffff !important;
+        border-width: 0 2.5px 2.5px 0 !important;
+        transform: rotate(45deg) translate(-1px, -1px) !important;
       }
 
       /* Extruded buttons with hover effects */
@@ -622,10 +667,64 @@
           </select>
         </div>
       </div>
+      <div class="pt-2 border-t border-slate-200 dark:border-slate-800">
+        <button type="button" onclick="openRemapAttributesModal()" class="w-full py-2.5 px-3 bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-700 hover:to-cyan-700 text-white rounded-lg font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2">
+          <span class="material-symbols-outlined text-[18px]">sync_alt</span>
+          Reconectar / Mapear Atributos (De-Para)
+        </button>
+      </div>
     </div>
     <div class="mt-6 flex justify-end gap-3">
       <button onclick="closeEditThemeModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg font-medium transition-colors">Cancelar</button>
       <button onclick="saveEditedTheme()" class="px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Reconectar / Mapear Atributos (De-Para) -->
+<div id="remap-attributes-modal" class="fixed inset-0 z-[110] bg-black/60 backdrop-blur-xs hidden flex items-center justify-center p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border-2 border-slate-300 dark:border-slate-700 flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200">
+    <!-- Header -->
+    <div class="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/60">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-cyan-600 flex items-center justify-center text-white shadow-md">
+          <span class="material-symbols-outlined text-[22px]">sync_alt</span>
+        </div>
+        <div>
+          <h3 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Reconectar / Mapear Atributos da Camada</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Vincule as colunas brutas do arquivo aos campos do formulário sem precisar reimportar o mapa.</p>
+        </div>
+      </div>
+      <button onclick="closeRemapAttributesModal()" class="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors">
+        <span class="material-symbols-outlined text-[20px]">close</span>
+      </button>
+    </div>
+
+    <!-- Info Banner -->
+    <div class="px-5 py-3 bg-sky-50 dark:bg-sky-950/40 border-b border-sky-200 dark:border-sky-800/60 flex items-center gap-3 text-xs text-sky-800 dark:text-sky-300 font-medium">
+      <span class="material-symbols-outlined text-sky-600 dark:text-sky-400 text-[20px] shrink-0">speed</span>
+      <span><strong>Atualização Leve:</strong> Apenas o texto dos atributos selecionados será atualizado em lote. As geometrias e polígonos não serão reenviados.</span>
+    </div>
+
+    <!-- Body / Table -->
+    <div class="p-5 overflow-y-auto flex-1 space-y-4">
+      <div id="remap-fields-container" class="space-y-3">
+        <!-- Injetado dinamicamente via JS -->
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 flex items-center justify-between flex-wrap gap-2">
+      <span id="remap-features-count" class="text-xs font-bold text-slate-600 dark:text-slate-300"></span>
+      <div class="flex items-center gap-3">
+        <button type="button" onclick="closeRemapAttributesModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-700 rounded-lg text-xs font-bold transition-colors">
+          Cancelar
+        </button>
+        <button type="button" id="btn-apply-remap" onclick="applyRemapAttributes()" class="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold shadow-md transition-all flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[16px]">check</span>
+          Aplicar e Atualizar Atributos
+        </button>
+      </div>
     </div>
   </div>
 </div>

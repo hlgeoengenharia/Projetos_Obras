@@ -2375,6 +2375,334 @@ async function saveEditedTheme() {
   closeEditThemeModal();
 }
 
+window.openRemapAttributesModal = function(specificThemeId = null) {
+    const themeId = specificThemeId || themeBeingEdited;
+    const theme = themes.find(t => t.id === themeId);
+    if (!theme) {
+        alert("Camada não encontrada.");
+        return;
+    }
+
+    const formId = document.getElementById('edit-theme-cadastro-type')?.value || theme.formId || theme.cadastroType;
+    if (!formId || typeof allForms === 'undefined') {
+        alert("Esta camada ainda não possui um Tipo de Cadastro (Formulário) vinculado. Selecione um Template de Formulário primeiro.");
+        return;
+    }
+
+    const form = allForms.find(f => f.id === formId);
+    if (!form) {
+        alert("Formulário associado não encontrado.");
+        return;
+    }
+
+    const schema = form.schema || form.tabs || [];
+    const container = document.getElementById('remap-fields-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    // 1. Coleta todas as propriedades existentes nas feições desta camada
+    const features = theme.features || [];
+    const availablePropKeys = new Set();
+    const sampleValuesMap = {};
+
+    features.forEach(f => {
+        if (f.properties) {
+            Object.entries(f.properties).forEach(([k, v]) => {
+                if (k && !k.startsWith('_') && typeof v !== 'object') {
+                    availablePropKeys.add(k);
+                    if (v !== undefined && v !== null && String(v).trim() !== '' && !sampleValuesMap[k]) {
+                        sampleValuesMap[k] = String(v).trim();
+                    }
+                }
+            });
+        }
+    });
+
+    const sortedPropKeys = Array.from(availablePropKeys).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+
+    const countEl = document.getElementById('remap-features-count');
+    if (countEl) {
+        countEl.textContent = `${features.length.toLocaleString('pt-BR')} feições encontradas nesta camada.`;
+    }
+
+    // 2. Extrai todos os campos das abas do formulário
+    const formFields = [];
+    schema.forEach(tab => {
+        if (tab.fields && Array.isArray(tab.fields)) {
+            tab.fields.forEach(field => {
+                if (field && field.id && !['photo', 'attachment', 'drawing_layer'].includes(field.type)) {
+                    formFields.push({
+                        ...field,
+                        tabTitle: tab.title || 'Geral'
+                    });
+                }
+            });
+        }
+    });
+
+    if (formFields.length === 0) {
+        container.innerHTML = `<div class="p-4 text-center text-xs text-slate-400 italic">Nenhum campo de texto configurado no formulário ${form.title || ''}.</div>`;
+        document.getElementById('remap-attributes-modal').classList.remove('hidden');
+        return;
+    }
+
+    // 3. Renderiza a tabela De-Para com checkboxes de ativação individual
+    let headerControlsHtml = `
+        <div class="flex items-center justify-between pb-3 mb-2 border-b border-slate-200 dark:border-slate-700/80 flex-wrap gap-2">
+            <span id="remap-selected-count" class="text-xs font-bold text-sky-600 dark:text-sky-400 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[16px]">checklist</span>
+                <span id="remap-selected-count-num">0</span> de ${formFields.length} campos marcados para atualizar
+            </span>
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="window.selectAllRemapRows(true)" class="px-2.5 py-1 text-[11px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-sky-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 rounded-lg transition-colors">
+                    Marcar Todos
+                </button>
+                <button type="button" onclick="window.selectAllRemapRows(false)" class="px-2.5 py-1 text-[11px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-600 rounded-lg transition-colors">
+                    Desmarcar Todos
+                </button>
+            </div>
+        </div>
+    `;
+
+    const savedMappings = theme.attributeMappings || {};
+
+    let rowsHtml = headerControlsHtml;
+    formFields.forEach(field => {
+        const fieldLabelNorm = (field.label || field.id).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        const fieldIdNorm = field.id.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+        // 1. Prioridade máxima: lê o mapeamento já salvo pelo usuário anteriormente
+        let matchedKey = savedMappings[field.id] || savedMappings[field.label] || '';
+
+        // 2. Se não houver mapeamento salvo, busca por correspondência de nome
+        if (!matchedKey || !availablePropKeys.has(matchedKey)) {
+            for (const pKey of sortedPropKeys) {
+                const pNorm = pKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                if (pNorm === fieldLabelNorm || pNorm === fieldIdNorm) {
+                    matchedKey = pKey;
+                    break;
+                }
+            }
+            if (!matchedKey) {
+                for (const pKey of sortedPropKeys) {
+                    const pNorm = pKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                    if (pNorm.includes(fieldLabelNorm) || fieldLabelNorm.includes(pNorm) || pNorm.includes(fieldIdNorm)) {
+                        matchedKey = pKey;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Valor de amostra atual já preenchido na feição
+        const currentSample = sampleValuesMap[field.id] || sampleValuesMap[field.label] || sampleValuesMap[field.label.toUpperCase()] || '---';
+        const isCurrentlyEmpty = (currentSample === '---' || !currentSample);
+        const shouldBeCheckedInitially = isCurrentlyEmpty && !!matchedKey;
+
+        let optionsHtml = `<option value="">-- Selecione a Coluna de Origem --</option>`;
+        sortedPropKeys.forEach(pKey => {
+            const isSel = (pKey === matchedKey);
+            const sampleVal = sampleValuesMap[pKey] ? ` (ex: "${sampleValuesMap[pKey].substring(0, 25)}")` : '';
+            optionsHtml += `<option value="${pKey}" ${isSel ? 'selected' : ''}>${pKey}${sampleVal}</option>`;
+        });
+
+        rowsHtml += `
+            <div id="remap-card-${field.id}" class="bg-slate-50 dark:bg-slate-800/80 rounded-xl p-3.5 border ${shouldBeCheckedInitially ? 'border-sky-500/80 shadow-xs' : 'border-slate-200 dark:border-slate-700/80 opacity-70'} flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all" data-remap-field-id="${field.id}" data-remap-field-label="${field.label}">
+                <div class="flex items-start gap-3 min-w-0 flex-1">
+                    <label class="flex items-center pt-0.5 cursor-pointer" title="Marque para atualizar este campo">
+                        <input type="checkbox" class="remap-active-check rounded border-slate-400 text-sky-600 focus:ring-sky-500 w-4 h-4 cursor-pointer" ${shouldBeCheckedInitially ? 'checked' : ''} onchange="window.toggleRemapRowActive(this, '${field.id}')">
+                    </label>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold text-slate-900 dark:text-white">${field.label}</span>
+                            <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-200/80 dark:bg-slate-700 px-2 py-0.5 rounded">${field.tabTitle}</span>
+                        </div>
+                        <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
+                            Valor atual no cadastro: <span class="font-semibold text-slate-700 dark:text-slate-300">${currentSample}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="w-full sm:w-64 shrink-0 pl-7 sm:pl-0">
+                    <label class="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Coluna de Origem (GeoJSON/Shape)</label>
+                    <select class="remap-source-select w-full text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-sky-500 ${!shouldBeCheckedInitially ? 'pointer-events-none opacity-60' : ''}" ${!shouldBeCheckedInitially ? 'disabled' : ''}>
+                        ${optionsHtml}
+                    </select>
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = rowsHtml;
+    window.updateRemapSelectedCount();
+    document.getElementById('remap-attributes-modal').classList.remove('hidden');
+};
+
+window.toggleRemapRowActive = function(checkbox, fieldId) {
+    const card = document.getElementById(`remap-card-${fieldId}`);
+    if (!card) return;
+    const select = card.querySelector('.remap-source-select');
+
+    if (checkbox.checked) {
+        card.classList.remove('opacity-70', 'border-slate-200', 'dark:border-slate-700/80');
+        card.classList.add('border-sky-500/80', 'shadow-xs');
+        if (select) {
+            select.removeAttribute('disabled');
+            select.classList.remove('pointer-events-none', 'opacity-60');
+        }
+    } else {
+        card.classList.add('opacity-70', 'border-slate-200', 'dark:border-slate-700/80');
+        card.classList.remove('border-sky-500/80', 'shadow-xs');
+        if (select) {
+            select.setAttribute('disabled', 'true');
+            select.classList.add('pointer-events-none', 'opacity-60');
+        }
+    }
+    window.updateRemapSelectedCount();
+};
+
+window.selectAllRemapRows = function(check) {
+    const container = document.getElementById('remap-fields-container');
+    if (!container) return;
+
+    const rowEls = container.querySelectorAll('[data-remap-field-id]');
+    rowEls.forEach(card => {
+        const cb = card.querySelector('.remap-active-check');
+        const fieldId = card.getAttribute('data-remap-field-id');
+        if (cb) {
+            cb.checked = check;
+            window.toggleRemapRowActive(cb, fieldId);
+        }
+    });
+};
+
+window.updateRemapSelectedCount = function() {
+    const container = document.getElementById('remap-fields-container');
+    if (!container) return;
+    const checkedCount = container.querySelectorAll('.remap-active-check:checked').length;
+    const countEl = document.getElementById('remap-selected-count-num');
+    if (countEl) countEl.textContent = checkedCount;
+};
+
+window.closeRemapAttributesModal = function() {
+    const modal = document.getElementById('remap-attributes-modal');
+    if (modal) modal.classList.add('hidden');
+};
+
+window.applyRemapAttributes = async function() {
+    const themeId = themeBeingEdited;
+    const theme = themes.find(t => t.id === themeId);
+    if (!theme) return;
+
+    const container = document.getElementById('remap-fields-container');
+    if (!container) return;
+
+    const rowEls = container.querySelectorAll('[data-remap-field-id]');
+    const mappings = [];
+
+    if (!theme.attributeMappings) theme.attributeMappings = {};
+
+    rowEls.forEach(el => {
+        const isActive = el.querySelector('.remap-active-check')?.checked;
+        if (!isActive) return; // Pula os campos desmarcados!
+
+        const fieldId = el.getAttribute('data-remap-field-id');
+        const fieldLabel = el.getAttribute('data-remap-field-label');
+        const sourceProp = el.querySelector('.remap-source-select')?.value;
+        if (sourceProp) {
+            mappings.push({ fieldId, fieldLabel, sourceProp });
+            theme.attributeMappings[fieldId] = sourceProp;
+            theme.attributeMappings[fieldLabel] = sourceProp;
+        }
+    });
+
+    if (mappings.length === 0) {
+        alert("Nenhum campo com checkbox marcado e coluna selecionada para atualizar. Marque a caixinha do campo que deseja atualizar.");
+        return;
+    }
+
+    const btnApply = document.getElementById('btn-apply-remap');
+    const originalText = btnApply ? btnApply.innerHTML : '';
+    if (btnApply) {
+        btnApply.innerHTML = '<span class="material-symbols-outlined text-[15px] animate-spin">refresh</span> Atualizando atributos...';
+        btnApply.disabled = true;
+    }
+
+    try {
+        const features = theme.features || [];
+        let updatedCount = 0;
+        const updatedDbPayloads = [];
+
+        features.forEach(f => {
+            if (!f.properties) f.properties = {};
+            let changed = false;
+
+            mappings.forEach(m => {
+                const rawVal = f.properties[m.sourceProp];
+                if (rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '') {
+                    // Grava no ID do campo e em todas as variações de label para compatibilidade total
+                    f.properties[m.fieldId] = rawVal;
+                    if (m.fieldLabel) {
+                        f.properties[m.fieldLabel] = rawVal;
+                        f.properties[m.fieldLabel.toUpperCase()] = rawVal;
+                        f.properties[m.fieldLabel.toLowerCase()] = rawVal;
+                    }
+                    changed = true;
+                }
+            });
+
+            if (changed) {
+                updatedCount++;
+                if (f.properties.id_banco) {
+                    updatedDbPayloads.push({
+                        id: f.properties.id_banco,
+                        theme_id: theme.id,
+                        propriedades: f.properties
+                    });
+                }
+            }
+        });
+
+        // Atualização em lotes no Supabase (apenas id e propriedades JSONB, SEM geometria!)
+        if (typeof supabaseClient !== 'undefined' && supabaseClient && updatedDbPayloads.length > 0) {
+            const chunkSize = 500;
+            for (let i = 0; i < updatedDbPayloads.length; i += chunkSize) {
+                const chunk = updatedDbPayloads.slice(i, i + chunkSize);
+                const { error: upErr } = await supabaseClient.from('feicoes').upsert(chunk, { onConflict: 'id' });
+                if (upErr) {
+                    console.warn(`Erro ao atualizar lote ${Math.floor(i/chunkSize) + 1} no Supabase:`, upErr);
+                }
+            }
+        }
+
+        // Atualiza no cache IndexedDB
+        if (typeof GeoEngineTurbo !== 'undefined' && GeoEngineTurbo.saveFeatures) {
+            try {
+                await GeoEngineTurbo.saveFeatures(theme.id, features);
+            } catch(eCache) {}
+        }
+
+        saveThemes();
+        renderThemes();
+        
+        // Se houver feição ativa no modal de detalhes, re-renderiza seus atributos imediatamente
+        if (activeFeatureLayer && activeFeatureLayer.feature && activeFeatureLayer.feature.properties && activeFeatureLayer.feature.properties.themeId === theme.id) {
+            renderFeatureInfo();
+        }
+
+        alert(`✓ Sucesso! Atributos reconectados e atualizados em ${updatedCount.toLocaleString('pt-BR')} feições!`);
+        closeRemapAttributesModal();
+
+    } catch(err) {
+        console.error("Erro ao aplicar remapeamento de atributos:", err);
+        alert("Erro ao aplicar remapeamento: " + (err.message || err));
+    } finally {
+        if (btnApply) {
+            btnApply.innerHTML = originalText;
+            btnApply.disabled = false;
+        }
+    }
+};
+
 function showLoadingOverlay(message) {
   const overlay = document.getElementById('loading-overlay');
   if (!overlay) return;
