@@ -110,7 +110,31 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
             html += `<div class="flex flex-col gap-2">`;
             if (tab.fields && tab.fields.length > 0) {
                 tab.fields.forEach(f => {
-                    const value = featureData[f.id] !== undefined ? featureData[f.id] : '';
+                    let value = featureData[f.id];
+                    if (value === undefined || value === null || value === '') {
+                        if (f.label && featureData[f.label] !== undefined && featureData[f.label] !== null && featureData[f.label] !== '') {
+                            value = featureData[f.label];
+                        } else if (f.label && featureData[f.label.toUpperCase()] !== undefined && featureData[f.label.toUpperCase()] !== null && featureData[f.label.toUpperCase()] !== '') {
+                            value = featureData[f.label.toUpperCase()];
+                        } else if (f.label && featureData[f.label.toLowerCase()] !== undefined && featureData[f.label.toLowerCase()] !== null && featureData[f.label.toLowerCase()] !== '') {
+                            value = featureData[f.label.toLowerCase()];
+                        } else if (f.name && featureData[f.name] !== undefined && featureData[f.name] !== null && featureData[f.name] !== '') {
+                            value = featureData[f.name];
+                        } else if (f.label) {
+                            const normLabel = f.label.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+                            for (const [k, v] of Object.entries(featureData)) {
+                                if (v !== undefined && v !== null && v !== '' && typeof v !== 'object') {
+                                    const normK = k.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+                                    if (normK === normLabel) {
+                                        value = v;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (value === undefined || value === null) value = '';
+
                     if (isTabEditMode) {
                         html += `<div>
                             <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-0.5">${f.label}</label>

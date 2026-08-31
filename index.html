@@ -503,17 +503,23 @@
         </button>
         <button id="btn-save-measurement" class="flex-1 py-2 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 opacity-50 cursor-not-allowed" disabled onclick="saveMeasurementPDF()">
             <span class="material-symbols-outlined text-[16px]">picture_as_pdf</span> Salvar
-        </button>
-    </div>
-</div>
-
-
-<!-- Modals -->
+       <!-- Modals -->
 <!-- New Theme Modal -->
-<div id="new-theme-modal" class="fixed inset-0 z-[100] bg-black/50 hidden flex items-center justify-center">
-  <div class="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-6 w-full max-w-sm border border-slate-200 dark:border-slate-800">
-    <h3 class="text-xl font-bold mb-4 text-slate-900 dark:text-white">Criar Novo Tema</h3>
-    <div class="flex flex-col gap-4">
+<div id="new-theme-modal" class="fixed inset-0 z-[100] bg-black/60 backdrop-blur-xs hidden flex items-center justify-center p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh] overflow-hidden">
+    <!-- Header -->
+    <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/60 shrink-0">
+      <div class="flex items-center gap-2.5">
+        <span class="material-symbols-outlined text-primary text-[22px]">add_box</span>
+        <h3 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Criar Novo Tema</h3>
+      </div>
+      <button onclick="closeNewThemeModal()" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors">
+        <span class="material-symbols-outlined text-[20px]">close</span>
+      </button>
+    </div>
+
+    <!-- Scrollable Body -->
+    <div class="p-6 overflow-y-auto flex-1 flex flex-col gap-4">
       <div>
         <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome do Tema</label>
         <input type="text" id="theme-name-input" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white" placeholder="Ex: Arborização">
@@ -551,34 +557,47 @@
             <input type="hidden" id="theme-custom-icon-data" value="">
         </div>
       </div>
-        <div>
-            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tipo de Feição</label>
-            <select id="theme-geometry" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white">
-                <option value="Point">Ponto</option>
-                <option value="LineString">Linha</option>
-                <option value="Polygon">Polígono</option>
-            </select>
-        </div>
-        
-        <div>
-            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tipo de Cadastro (Template)</label>
-            <select id="theme-cadastro-type" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white">
-                <option value="">Padrão Genérico</option>
-            </select>
-        </div>
+      <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tipo de Feição</label>
+          <select id="theme-geometry" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white">
+              <option value="Point">Ponto</option>
+              <option value="LineString">Linha</option>
+              <option value="Polygon">Polígono</option>
+          </select>
+      </div>
+      
+      <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tipo de Cadastro (Template)</label>
+          <select id="theme-cadastro-type" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white">
+              <option value="">Padrão Genérico</option>
+          </select>
+      </div>
     </div>
-    <div class="mt-6 flex justify-end gap-3">
-      <button onclick="closeNewThemeModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg font-medium transition-colors">Cancelar</button>
-      <button onclick="saveNewTheme()" class="px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors">Salvar</button>
+
+    <!-- Sticky Footer -->
+    <div class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 flex justify-end gap-3 shrink-0">
+      <button onclick="closeNewThemeModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-700 rounded-lg font-bold text-xs transition-colors">Cancelar</button>
+      <button onclick="saveNewTheme()" class="px-5 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg font-bold text-xs shadow-md transition-colors">Salvar</button>
     </div>
   </div>
 </div>
 
 <!-- Edit Theme Modal -->
-<div id="edit-theme-modal" class="fixed inset-0 z-[100] bg-black/50 hidden flex items-center justify-center">
-  <div class="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-6 w-full max-w-sm border border-slate-200 dark:border-slate-800">
-    <h3 class="text-xl font-bold mb-4 text-slate-900 dark:text-white">Editar Tema</h3>
-    <div class="flex flex-col gap-4">
+<div id="edit-theme-modal" class="fixed inset-0 z-[100] bg-black/60 backdrop-blur-xs hidden flex items-center justify-center p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh] overflow-hidden">
+    <!-- Header -->
+    <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/60 shrink-0">
+      <div class="flex items-center gap-2.5">
+        <span class="material-symbols-outlined text-primary text-[22px]">settings</span>
+        <h3 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Editar Tema</h3>
+      </div>
+      <button onclick="closeEditThemeModal()" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors">
+        <span class="material-symbols-outlined text-[20px]">close</span>
+      </button>
+    </div>
+
+    <!-- Scrollable Body -->
+    <div class="p-6 overflow-y-auto flex-1 flex flex-col gap-4">
       <div>
         <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome do Tema</label>
         <input type="text" id="edit-theme-name-input" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white">
@@ -631,7 +650,7 @@
       </div>
       <div>
         <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tipo de Cadastro (Template)</label>
-        <select id="edit-theme-cadastro-type" onchange="updateEditThemeFields()" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white mb-4">
+        <select id="edit-theme-cadastro-type" onchange="updateEditThemeFields()" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white mb-2">
             <option value="">Padrão Genérico</option>
         </select>
       </div>
@@ -674,55 +693,74 @@
         </button>
       </div>
     </div>
-    <div class="mt-6 flex justify-end gap-3">
-      <button onclick="closeEditThemeModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg font-medium transition-colors">Cancelar</button>
-      <button onclick="saveEditedTheme()" class="px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors">Salvar</button>
+
+    <!-- Sticky Footer -->
+    <div class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 flex justify-end gap-3 shrink-0">
+      <button onclick="closeEditThemeModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-700 rounded-lg font-bold text-xs transition-colors">Cancelar</button>
+      <button onclick="saveEditedTheme()" class="px-5 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg font-bold text-xs shadow-md transition-colors">Salvar</button>
     </div>
   </div>
 </div>
 
 <!-- Modal Reconectar / Mapear Atributos (De-Para) -->
 <div id="remap-attributes-modal" class="fixed inset-0 z-[110] bg-black/60 backdrop-blur-xs hidden flex items-center justify-center p-4">
-  <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border-2 border-slate-300 dark:border-slate-700 flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200">
+  <div class="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-6 w-full max-w-lg border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200">
     <!-- Header -->
-    <div class="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/60">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-cyan-600 flex items-center justify-center text-white shadow-md">
-          <span class="material-symbols-outlined text-[22px]">sync_alt</span>
-        </div>
-        <div>
-          <h3 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Reconectar / Mapear Atributos da Camada</h3>
-          <p class="text-xs text-slate-500 dark:text-slate-400">Vincule as colunas brutas do arquivo aos campos do formulário sem precisar reimportar o mapa.</p>
-        </div>
-      </div>
-      <button onclick="closeRemapAttributesModal()" class="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors">
+    <div class="flex items-center justify-between mb-2">
+      <h3 class="text-xl font-bold text-slate-900 dark:text-white">Reconectar / Mapear Atributos</h3>
+      <button onclick="closeRemapAttributesModal()" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
         <span class="material-symbols-outlined text-[20px]">close</span>
       </button>
     </div>
-
-    <!-- Info Banner -->
-    <div class="px-5 py-3 bg-sky-50 dark:bg-sky-950/40 border-b border-sky-200 dark:border-sky-800/60 flex items-center gap-3 text-xs text-sky-800 dark:text-sky-300 font-medium">
-      <span class="material-symbols-outlined text-sky-600 dark:text-sky-400 text-[20px] shrink-0">speed</span>
-      <span><strong>Atualização Leve:</strong> Apenas o texto dos atributos selecionados será atualizado em lote. As geometrias e polígonos não serão reenviados.</span>
+    
+    <div class="mb-4">
+      <span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold rounded" id="remap-geom-type">Tipo: Detectado</span>
     </div>
 
-    <!-- Body / Table -->
-    <div class="p-5 overflow-y-auto flex-1 space-y-4">
-      <div id="remap-fields-container" class="space-y-3">
-        <!-- Injetado dinamicamente via JS -->
+    <!-- Scrollable Content -->
+    <div class="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+      <div class="flex flex-col gap-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome do Tema</label>
+          <input type="text" id="remap-theme-name" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm font-medium">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tipo de Cadastro (Template)</label>
+          <select id="remap-cadastro-type" onchange="window.onRemapTemplateChanged()" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm font-medium">
+            <option value="">Padrão Genérico</option>
+          </select>
+        </div>
+        
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Mapeamento de Campos</label>
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="window.selectAllRemapRows(true)" class="px-2 py-0.5 text-[11px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 rounded transition-colors">
+                Marcar Todos
+              </button>
+              <button type="button" onclick="window.selectAllRemapRows(false)" class="px-2 py-0.5 text-[11px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-600 rounded transition-colors">
+                Desmarcar Todos
+              </button>
+            </div>
+          </div>
+          <p class="text-xs text-slate-500 mb-3">Vincule as colunas identificadas aos campos do formulário.</p>
+          
+          <div id="remap-fields-container" class="flex flex-col gap-2">
+            <!-- Fields dynamically generated here with exact Import layout -->
+          </div>
+        </div>
       </div>
     </div>
-
+    
     <!-- Footer -->
-    <div class="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 flex items-center justify-between flex-wrap gap-2">
-      <span id="remap-features-count" class="text-xs font-bold text-slate-600 dark:text-slate-300"></span>
+    <div class="mt-4 flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800 flex-wrap gap-2">
+      <span id="remap-features-count" class="text-xs font-semibold text-slate-500 dark:text-slate-400"></span>
       <div class="flex items-center gap-3">
-        <button type="button" onclick="closeRemapAttributesModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-700 rounded-lg text-xs font-bold transition-colors">
-          Cancelar
-        </button>
-        <button type="button" id="btn-apply-remap" onclick="applyRemapAttributes()" class="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold shadow-md transition-all flex items-center gap-1.5">
-          <span class="material-symbols-outlined text-[16px]">check</span>
-          Aplicar e Atualizar Atributos
+        <button type="button" onclick="closeRemapAttributesModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg text-sm font-medium transition-colors">Cancelar</button>
+        <button type="button" id="btn-apply-remap" onclick="applyRemapAttributes()" class="px-5 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-1.5 shadow-md">
+          <span class="material-symbols-outlined text-[16px]">sync_alt</span>
+          Aplicar e Atualizar
         </button>
       </div>
     </div>
@@ -1511,6 +1549,7 @@
 <script src="src/spatialAnalytics.js"></script>
 <script src="src/measurement.js"></script>
 <script src="src/cesium-integration.js"></script>
+<script src="src/auditLogger.js"></script>
 <script src="src/session-security.js"></script>
 <script src="src/swipe-comparator.js"></script>
 </body>

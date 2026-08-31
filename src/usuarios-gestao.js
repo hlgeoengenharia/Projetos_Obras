@@ -431,9 +431,14 @@
                 </button>
             </div>
         ` : `
-            <button type="button" onclick="window.UsuariosManager.iniciarEdicao('${userId}')" class="px-3.5 py-1.5 bg-white hover:bg-sky-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-400 border-2 border-slate-300 dark:border-slate-600 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs">
-                <span class="material-symbols-outlined text-[16px] text-sky-600 dark:text-sky-400">edit</span> Editar
-            </button>
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="window.inspectUserLogs('${userId}')" class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border-2 border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs" title="Inspecionar e rastrear atividades deste usuário">
+                    <span class="material-symbols-outlined text-[16px] text-indigo-600 dark:text-indigo-400">manage_search</span> Inspecionar
+                </button>
+                <button type="button" onclick="window.UsuariosManager.iniciarEdicao('${userId}')" class="px-3.5 py-1.5 bg-white hover:bg-sky-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-400 border-2 border-slate-300 dark:border-slate-600 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs">
+                    <span class="material-symbols-outlined text-[16px] text-sky-600 dark:text-sky-400">edit</span> Editar
+                </button>
+            </div>
         `;
 
         return `

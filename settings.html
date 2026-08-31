@@ -24,6 +24,29 @@
 <script src="/src/formRenderer.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+  /* Suporte a rolagem horizontal no mobile sem barra de rolagem nativa */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tab-btn.active {
+    color: #0ea5e9;
+    border-bottom: 2px solid #0ea5e9;
+    background-color: rgba(14, 165, 233, 0.06);
+  }
+  @media (max-width: 640px) {
+    .tab-btn {
+      min-width: 62px !important;
+      padding-left: 0.6rem !important;
+      padding-right: 0.6rem !important;
+    }
+  }
+</style>
 <script id="tailwind-config">
       tailwind.config = {
         darkMode: "class",
@@ -842,40 +865,44 @@
 <body class="bg-surface text-on-surface min-h-screen">
 <!-- TopAppBar Removed -->
 
-<header class="fixed top-0 left-0 right-0 h-16 bg-white/70 dark:bg-[#070b14]/75 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 shadow-md z-50 flex items-center justify-between px-4">
+<header class="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-[#070b14]/85 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 shadow-md z-50 flex items-center justify-between px-2 sm:px-4">
   <!-- Seta no canto esquerdo -->
-  <a href="index.html" class="h-full px-4 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[70px]" title="Voltar ao Mapa">
-      <span class="material-symbols-outlined text-[22px]">arrow_back</span>
-      <span class="text-[9px] font-medium tracking-wide uppercase">Voltar</span>
+  <a href="index.html" class="h-full px-2.5 sm:px-4 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-0.5 sm:gap-1 text-slate-600 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[50px] sm:min-w-[65px] shrink-0" title="Voltar ao Mapa">
+      <span class="material-symbols-outlined text-[20px] sm:text-[22px]">arrow_back</span>
+      <span class="text-[8px] sm:text-[9px] font-medium tracking-wide uppercase">Voltar</span>
   </a>
   
-  <!-- Abas centralizadas no rodateto -->
-  <div class="flex items-center h-full justify-center">
-      <button onclick="switchTab('cadastros', this)" class="tab-btn active h-full px-6 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 border-l border-r border-slate-200/50 dark:border-slate-800/50 min-w-[80px]" title="Cadastro">
-          <span class="material-symbols-outlined text-[22px]">assignment</span>
-          <span class="text-[9px] font-medium tracking-wide uppercase">Cadastro</span>
+  <!-- Abas centralizadas com suporte a swipe/scroll no mobile -->
+  <div class="flex items-center h-full flex-1 overflow-x-auto no-scrollbar scroll-smooth mx-1 sm:mx-2 justify-start md:justify-center">
+      <button onclick="switchTab('cadastros', this)" class="tab-btn active h-full px-2.5 sm:px-5 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-0.5 sm:gap-1 text-slate-600 dark:text-slate-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[58px] sm:min-w-[78px] shrink-0" title="Cadastro">
+          <span class="material-symbols-outlined text-[20px] sm:text-[22px]">assignment</span>
+          <span class="text-[8px] sm:text-[9px] font-medium tracking-wide uppercase">Cadastro</span>
       </button>
-      <button onclick="switchTab('estatistica', this)" class="tab-btn h-full px-6 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[80px]" title="Geoestatística Espacial">
-          <span class="material-symbols-outlined text-[22px]">hub</span>
-          <span class="text-[9px] font-medium tracking-wide uppercase">Estatística</span>
+      <button onclick="switchTab('estatistica', this)" class="tab-btn h-full px-2.5 sm:px-5 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-0.5 sm:gap-1 text-slate-600 dark:text-slate-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[58px] sm:min-w-[78px] shrink-0" title="Geoestatística Espacial">
+          <span class="material-symbols-outlined text-[20px] sm:text-[22px]">hub</span>
+          <span class="text-[8px] sm:text-[9px] font-medium tracking-wide uppercase">Estatística</span>
       </button>
-      <button onclick="switchTab('layout', this)" class="tab-btn h-full px-6 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[80px]" title="Layout">
-          <span class="material-symbols-outlined text-[22px]">palette</span>
-          <span class="text-[9px] font-medium tracking-wide uppercase">Layout</span>
+      <button onclick="switchTab('layout', this)" class="tab-btn h-full px-2.5 sm:px-5 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-0.5 sm:gap-1 text-slate-600 dark:text-slate-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[58px] sm:min-w-[78px] shrink-0" title="Layout">
+          <span class="material-symbols-outlined text-[20px] sm:text-[22px]">palette</span>
+          <span class="text-[8px] sm:text-[9px] font-medium tracking-wide uppercase">Layout</span>
       </button>
-      <button onclick="switchTab('storage', this)" class="tab-btn h-full px-6 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[80px]" title="Armazenamento">
-          <span class="material-symbols-outlined text-[22px]">cloud_upload</span>
-          <span class="text-[9px] font-medium tracking-wide uppercase">Arquivos</span>
+      <button onclick="switchTab('storage', this)" class="tab-btn h-full px-2.5 sm:px-5 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-0.5 sm:gap-1 text-slate-600 dark:text-slate-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[58px] sm:min-w-[78px] shrink-0" title="Armazenamento">
+          <span class="material-symbols-outlined text-[20px] sm:text-[22px]">cloud_upload</span>
+          <span class="text-[8px] sm:text-[9px] font-medium tracking-wide uppercase">Arquivos</span>
       </button>
-      <button onclick="switchTab('usuarios', this)" class="tab-btn h-full px-6 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[80px]" title="Usuários e Permissões">
-          <span class="material-symbols-outlined text-[22px]">group</span>
-          <span class="text-[9px] font-medium tracking-wide uppercase">Usuários</span>
+      <button onclick="switchTab('usuarios', this)" class="tab-btn h-full px-2.5 sm:px-5 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-0.5 sm:gap-1 text-slate-600 dark:text-slate-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[58px] sm:min-w-[78px] shrink-0" title="Usuários e Permissões">
+          <span class="material-symbols-outlined text-[20px] sm:text-[22px]">group</span>
+          <span class="text-[8px] sm:text-[9px] font-medium tracking-wide uppercase">Usuários</span>
+      </button>
+      <button id="tab-btn-auditoria" onclick="switchTab('auditoria', this)" class="tab-btn h-full px-2.5 sm:px-5 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-0.5 sm:gap-1 text-slate-600 dark:text-slate-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[58px] sm:min-w-[78px] shrink-0" title="Auditoria e Logs de Atividades">
+          <span class="material-symbols-outlined text-[20px] sm:text-[22px]">manage_history</span>
+          <span class="text-[8px] sm:text-[9px] font-medium tracking-wide uppercase">Auditoria</span>
       </button>
   </div>
   
   <!-- Perfil: mesmo modal usado em index.html/home.html -->
-  <div class="min-w-[70px] flex justify-end">
-    <button id="profile-btn" onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-9 h-9 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors" title="Perfil do Usuário">
+  <div class="min-w-[46px] sm:min-w-[65px] flex justify-end shrink-0 pl-1">
+    <button id="profile-btn" onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors" title="Perfil do Usuário">
       <img src="assets/logo.png" alt="Perfil" class="w-full h-full object-cover">
     </button>
   </div>
@@ -1495,6 +1522,240 @@
 
     <div id="users-list" class="flex flex-col gap-3">
       <div class="p-6 text-center text-slate-400 text-sm italic">Clique em "Atualizar" para carregar.</div>
+    </div>
+  </div>
+
+  <!-- Tab Content: Auditoria e Logs de Atividades -->
+  <div id="auditoria" class="tab-content">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+      <div>
+        <h2 class="text-lg font-bold flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary text-[22px]">manage_history</span>
+          Auditoria e Logs de Atividades
+        </h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400">Rastreamento de ações, segurança e monitoramento de presença de usuários no sistema.</p>
+      </div>
+      <button onclick="window.initAuditoriaTab()" class="flex items-center gap-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors shrink-0">
+        <span class="material-symbols-outlined text-[18px]">refresh</span> Atualizar Logs
+      </button>
+    </div>
+
+    <!-- Cards de Métricas e Usuários Online -->
+    <div class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+      <!-- Card 1: Usuários Online -->
+      <div class="bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent dark:from-emerald-950/30 border border-emerald-300 dark:border-emerald-800 rounded-2xl p-4 flex flex-col justify-between shadow-xs">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">Online Agora</span>
+          <span class="relative flex h-3 w-3">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+          </span>
+        </div>
+        <div class="my-2">
+          <span id="metric-online-count" class="text-2xl sm:text-3xl font-black text-emerald-700 dark:text-emerald-400">0</span>
+          <span class="text-xs text-emerald-600 dark:text-emerald-500 font-semibold ml-1">ao vivo</span>
+        </div>
+        <div id="metric-online-avatars" class="flex items-center -space-x-1.5 overflow-hidden pt-1">
+          <!-- Avatares dos online -->
+        </div>
+      </div>
+
+      <!-- Card 2: Ações Hoje -->
+      <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 flex flex-col justify-between shadow-xs">
+        <span class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Ações Hoje</span>
+        <div class="my-2">
+          <span id="metric-today-actions" class="text-2xl sm:text-3xl font-black text-slate-800 dark:text-slate-100">0</span>
+        </div>
+        <span class="text-[11px] text-slate-400">Registros nas últimas 24h</span>
+      </div>
+
+      <!-- Card 3: Criações -->
+      <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 flex flex-col justify-between shadow-xs">
+        <span class="text-xs font-bold text-sky-600 dark:text-sky-400 uppercase tracking-wider">Criações</span>
+        <div class="my-2">
+          <span id="metric-creates-count" class="text-2xl sm:text-3xl font-black text-sky-600 dark:text-sky-400">0</span>
+        </div>
+        <span class="text-[11px] text-slate-400">Novos itens/camadas</span>
+      </div>
+
+      <!-- Card 4: Edições -->
+      <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 flex flex-col justify-between shadow-xs">
+        <span class="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Edições</span>
+        <div class="my-2">
+          <span id="metric-edits-count" class="text-2xl sm:text-3xl font-black text-amber-600 dark:text-amber-400">0</span>
+        </div>
+        <span class="text-[11px] text-slate-400">Modificações salvas</span>
+      </div>
+
+      <!-- Card 5: Exclusões -->
+      <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 flex flex-col justify-between shadow-xs">
+        <span class="text-xs font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">Exclusões</span>
+        <div class="my-2">
+          <span id="metric-deletes-count" class="text-2xl sm:text-3xl font-black text-rose-600 dark:text-rose-400">0</span>
+        </div>
+        <span class="text-[11px] text-slate-400">Itens apagados</span>
+      </div>
+    </div>
+
+    <!-- Barra de Filtros -->
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 mb-6 shadow-xs">
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
+        <!-- Filtro: Usuário -->
+        <div>
+          <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Usuário</label>
+          <select id="audit-filter-user" onchange="window.onAuditFilterChanged()" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium focus:ring-2 focus:ring-primary dark:text-white">
+            <option value="">-- Todos os Usuários --</option>
+          </select>
+        </div>
+
+        <!-- Filtro: Tipo de Ação -->
+        <div>
+          <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Tipo de Ação</label>
+          <select id="audit-filter-action" onchange="window.onAuditFilterChanged()" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium focus:ring-2 focus:ring-primary dark:text-white">
+            <option value="TODAS">-- Todas as Ações --</option>
+            
+            <optgroup label="📍 Feições Espaciais (Ponto, Linha, Polígono)">
+              <option value="CRIAR_FEICAO">Criação de Feições</option>
+              <option value="EDITAR_FEICAO">Edição de Feições</option>
+              <option value="EXCLUIR_FEICAO">Exclusão de Feições</option>
+            </optgroup>
+
+            <optgroup label="📑 Dados e Atributos (1:N)">
+              <option value="CRIAR_DADOS">Criação de Dados / Histórico</option>
+              <option value="EDITAR_DADOS">Edição de Dados / Atributos</option>
+              <option value="EXCLUIR_DADOS">Exclusão de Dados</option>
+            </optgroup>
+
+            <optgroup label="🗺️ Camadas e Geometrias">
+              <option value="IMPORTAR_CAMADA">Importação de Camadas (GeoJSON/Shape)</option>
+              <option value="EDITAR_CAMADA">Edição de Camadas</option>
+              <option value="EXCLUIR_CAMADA">Exclusão de Camadas</option>
+              <option value="RECONECTAR_ATRIBUTOS">Reconexão de Atributos</option>
+            </optgroup>
+
+            <optgroup label="📋 Formulários e Cadastros">
+              <option value="CRIAR_FORMULARIO">Criação de Formulário</option>
+              <option value="EDITAR_FORMULARIO">Edição de Formulário</option>
+              <option value="EXCLUIR_FORMULARIO">Exclusão de Formulário</option>
+            </optgroup>
+
+            <optgroup label="📊 Ferramentas Geoestatísticas">
+              <option value="CRIAR_ESTATISTICA">Criação de Análise Estatística</option>
+              <option value="EDITAR_ESTATISTICA">Edição de Análise Estatística</option>
+              <option value="EXCLUIR_ESTATISTICA">Exclusão de Análise Estatística</option>
+            </optgroup>
+
+            <optgroup label="🔐 Segurança e Acessos">
+              <option value="LOGIN">Logins / Acessos</option>
+              <option value="ALTERAR_PERMISSOES">Permissões de Usuários</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <!-- Filtro: Período -->
+        <div>
+          <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Período</label>
+          <select id="audit-filter-period" onchange="window.onAuditFilterChanged()" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium focus:ring-2 focus:ring-primary dark:text-white">
+            <option value="hoje">Hoje</option>
+            <option value="7dias">Últimos 7 dias</option>
+            <option value="mes">Este Mês</option>
+            <option value="tudo">Todo o Histórico</option>
+          </select>
+        </div>
+
+        <!-- Campo com Botão de Busca -->
+        <div>
+          <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Buscar por Palavra-chave</label>
+          <div class="flex items-center gap-1.5">
+            <div class="relative flex-1">
+              <span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[16px] pointer-events-none">search</span>
+              <input type="text" id="audit-filter-search" onkeydown="if(event.key==='Enter') window.onAuditFilterChanged()" placeholder="Alvo, imóvel, e-mail..." class="w-full pl-8 pr-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium focus:ring-2 focus:ring-primary dark:text-white">
+            </div>
+            <button type="button" onclick="window.onAuditFilterChanged()" class="px-3 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-xs font-bold transition-colors shrink-0 flex items-center gap-1 shadow-xs" title="Executar Busca">
+              <span class="material-symbols-outlined text-[16px]">search</span> Buscar
+            </button>
+            <button type="button" onclick="window.clearAuditFilters()" class="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 rounded-lg text-xs transition-colors shrink-0" title="Limpar Filtros">
+              <span class="material-symbols-outlined text-[16px]">filter_alt_off</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabela de Logs de Auditoria -->
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm">
+      <div class="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40">
+        <span class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-2">
+          <span class="material-symbols-outlined text-[18px] text-primary">list_alt</span>
+          Linha do Tempo de Atividades
+        </span>
+        <span id="audit-logs-total-count" class="text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">0 registros</span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              <th class="py-3 px-4">Data / Hora</th>
+              <th class="py-3 px-4">Usuário</th>
+              <th class="py-3 px-4">Ação</th>
+              <th class="py-3 px-4">Objeto / Alvo</th>
+              <th class="py-3 px-4 text-right">Ação</th>
+            </tr>
+          </thead>
+          <tbody id="auditoria-table-body" class="divide-y divide-slate-100 dark:divide-slate-800/60">
+            <!-- Renderizado dinamicamente via JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Detalhes do Log de Auditoria -->
+  <div id="audit-details-modal" class="fixed inset-0 bg-black/60 z-[210] hidden flex items-center justify-center backdrop-blur-xs p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in duration-200">
+      <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-sky-500/10 text-sky-600 flex items-center justify-center">
+            <span class="material-symbols-outlined text-[20px]">info</span>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-slate-900 dark:text-white">Detalhes da Atividade Auditada</h3>
+            <span id="audit-modal-date" class="text-[11px] text-slate-400"></span>
+          </div>
+        </div>
+        <button onclick="window.closeAuditDetailsModal()" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <div class="p-5 overflow-y-auto space-y-4 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/60">
+          <div>
+            <span class="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">Usuário</span>
+            <span id="audit-modal-user" class="font-bold text-slate-800 dark:text-slate-200 text-xs"></span>
+          </div>
+          <div>
+            <span class="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">Tipo de Ação</span>
+            <span id="audit-modal-action" class="font-bold text-sky-600 dark:text-sky-400 text-xs"></span>
+          </div>
+          <div class="sm:col-span-2">
+            <span class="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">Alvo / Objeto Afetado</span>
+            <span id="audit-modal-target" class="font-bold text-slate-800 dark:text-slate-200 text-xs"></span>
+          </div>
+        </div>
+
+        <div>
+          <span class="text-[10px] font-bold uppercase text-slate-400 block mb-1.5">Dados Registrados (Payload JSON)</span>
+          <pre id="audit-modal-json" class="bg-slate-900 text-slate-100 p-4 rounded-xl font-mono text-[11px] overflow-x-auto max-h-[300px] custom-scrollbar border border-slate-800"></pre>
+        </div>
+      </div>
+
+      <div class="px-5 py-3 border-t border-slate-200 dark:border-slate-800 flex justify-end bg-slate-50/50 dark:bg-slate-800/40">
+        <button type="button" onclick="window.closeAuditDetailsModal()" class="px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-bold transition-colors">
+          Fechar
+        </button>
+      </div>
     </div>
   </div>
 
@@ -2161,20 +2422,20 @@
         }
         
         html += `
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
             <div class="flex-1 min-w-0">
-              <h3 class="font-bold text-slate-900 dark:text-white uppercase tracking-wide text-sm">${form.name}</h3>
-              <p class="text-sm text-slate-500 mt-1">${fieldCount} campo(s) distribuído(s) em ${form.tabs ? form.tabs.length : 0} aba(s)</p>
+              <h3 class="font-bold text-slate-900 dark:text-white uppercase tracking-wide text-sm sm:text-base truncate">${form.name}</h3>
+              <p class="text-xs sm:text-sm text-slate-500 mt-0.5">${fieldCount} campo(s) distribuído(s) em ${form.tabs ? form.tabs.length : 0} aba(s)</p>
             </div>
-            <div class="flex gap-2">
-              <button onclick="previewForm('${form.id}')" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-full transition-colors tooltip" title="Visualizar">
-                <span class="material-symbols-outlined text-[20px]">visibility</span>
+            <div class="flex items-center gap-1 sm:gap-1.5 self-end sm:self-auto bg-slate-50 dark:bg-slate-900/60 sm:bg-transparent p-1 sm:p-0 rounded-xl border border-slate-100 dark:border-slate-800 sm:border-0 shrink-0">
+              <button onclick="previewForm('${form.id}')" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-700/60 rounded-lg transition-colors tooltip" title="Visualizar">
+                <span class="material-symbols-outlined text-[19px] sm:text-[20px]">visibility</span>
               </button>
-              <button onclick="editForm('${form.id}')" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-full transition-colors tooltip" title="Editar">
-                <span class="material-symbols-outlined text-[20px]">edit</span>
+              <button onclick="editForm('${form.id}')" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-700/60 rounded-lg transition-colors tooltip" title="Editar">
+                <span class="material-symbols-outlined text-[19px] sm:text-[20px]">edit</span>
               </button>
-              <button onclick="deleteForm('${form.id}')" class="p-2 text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-slate-800 rounded-full transition-colors tooltip" title="Excluir">
-                <span class="material-symbols-outlined text-[20px]">delete</span>
+              <button onclick="deleteForm('${form.id}')" class="p-2 text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-slate-700/60 rounded-lg transition-colors tooltip" title="Excluir">
+                <span class="material-symbols-outlined text-[19px] sm:text-[20px]">delete</span>
               </button>
             </div>
           </div>
@@ -2963,7 +3224,7 @@
 
     function deleteForm(id) {
       const form = forms.find(f => f.id === id);
-      const formName = form ? form.title : 'este formulário';
+      const formName = form ? (form.name || form.title) : 'este formulário';
       const msg = `⚠️ ATENÇÃO: A exclusão do formulário "${formName}" pode causar PERDA PERMANENTE de todas as abas, campos e dados vinculados às camadas.\n\nDeseja realmente excluir permanentemente?`;
       if(confirm(msg)) {
         forms = forms.filter(f => f.id !== id);
@@ -2974,6 +3235,10 @@
             }).catch(e => console.error("Erro ao deletar form:", e));
         } else {
             renderFormsList();
+        }
+
+        if (window.auditLogger && typeof window.auditLogger.log === 'function') {
+            window.auditLogger.log('EXCLUIR_FORMULARIO', `Formulário: ${formName}`, { formId: id });
         }
       }
     }
@@ -3353,8 +3618,14 @@
 
       if (existingIndex >= 0) {
         forms[existingIndex] = formData;
+        if (window.auditLogger && typeof window.auditLogger.log === 'function') {
+            window.auditLogger.log('EDITAR_FORMULARIO', `Formulário: ${name}`, { formId: currentFormId, totalAbas: builderTabs.length, totalCampos: totalFields });
+        }
       } else {
         forms.push(formData);
+        if (window.auditLogger && typeof window.auditLogger.log === 'function') {
+            window.auditLogger.log('CRIAR_FORMULARIO', `Formulário: ${name}`, { formId: currentFormId, totalAbas: builderTabs.length, totalCampos: totalFields });
+        }
       }
 
       saveFormsToStorage();
@@ -5187,9 +5458,13 @@
 
         renderSpatialRulesList();
         showStorageToast('🗑️ Análise espacial removida.');
+
+        if (window.auditLogger && typeof window.auditLogger.log === 'function') {
+            window.auditLogger.log('EXCLUIR_ESTATISTICA', `Regra Geoestatística #${ruleId}`, { ruleId });
+        }
     };
 
-    // Patch switchTab to load folders when storage, usuarios or estatistica tab is opened
+    // Patch switchTab to load folders when storage, usuarios, estatistica or auditoria tab is opened
     const originalSwitchTab = window.switchTab;
     if (typeof originalSwitchTab === 'function') {
         window.switchTab = function(tabId, btn) {
@@ -5200,6 +5475,8 @@
                 loadUsersPanel();
             } else if (tabId === 'estatistica') {
                 loadSpatialAnalyticsRules();
+            } else if (tabId === 'auditoria') {
+                if (typeof window.initAuditoriaTab === 'function') window.initAuditoriaTab();
             }
         };
     }
@@ -5214,6 +5491,10 @@
                 if (tabBtn && typeof window.switchTab === 'function') {
                     window.switchTab(targetTab, tabBtn);
                 }
+            }
+            // Checa acesso da aba auditoria no carregamento
+            if (typeof window.initAuditoriaTab === 'function') {
+                window.initAuditoriaTab();
             }
         } catch(e) {}
     }, 100);
@@ -5241,6 +5522,8 @@
     };
 
   </script>
+  <script src="src/auditLogger.js"></script>
+  <script src="src/auditoria-gestao.js"></script>
   <script src="src/usuarios-gestao.js"></script>
   <script src="src/session-security.js"></script>
 </body>

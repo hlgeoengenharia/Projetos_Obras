@@ -2383,24 +2383,46 @@ window.openRemapAttributesModal = function(specificThemeId = null) {
         return;
     }
 
-    const formId = document.getElementById('edit-theme-cadastro-type')?.value || theme.formId || theme.cadastroType;
-    if (!formId || typeof allForms === 'undefined') {
-        alert("Esta camada ainda não possui um Tipo de Cadastro (Formulário) vinculado. Selecione um Template de Formulário primeiro.");
-        return;
+    // 1. Preenche dados do tema
+    const nameInput = document.getElementById('remap-theme-name');
+    if (nameInput) nameInput.value = theme.name || '';
+
+    const geomBadge = document.getElementById('remap-geom-type');
+    if (geomBadge) {
+        const geomType = theme.features?.[0]?.geometry?.type || theme.geometryType || 'Polygon';
+        const typeLabels = { 'Point': 'Ponto', 'LineString': 'Linha', 'Polygon': 'Polígono', 'MultiPolygon': 'Polígono', 'MultiLineString': 'Linha', 'MultiPoint': 'Ponto' };
+        geomBadge.textContent = `Tipo Detectado: ${typeLabels[geomType] || geomType}`;
     }
 
-    const form = allForms.find(f => f.id === formId);
-    if (!form) {
-        alert("Formulário associado não encontrado.");
-        return;
+    // 2. Preenche o select de Template (Cadastro)
+    const cadastroSelect = document.getElementById('remap-cadastro-type');
+    if (cadastroSelect && typeof allForms !== 'undefined') {
+        let options = `<option value="">Padrão Genérico</option>`;
+        allForms.forEach(f => {
+            const isSel = (f.id === (theme.formId || theme.cadastroType));
+            options += `<option value="${f.id}" ${isSel ? 'selected' : ''}>${f.title || f.name || f.id}</option>`;
+        });
+        cadastroSelect.innerHTML = options;
     }
 
-    const schema = form.schema || form.tabs || [];
+    // 3. Renderiza a lista de campos com o mesmo estilo do Importar GeoJSON
+    window.renderRemapFieldMapping(theme);
+    document.getElementById('remap-attributes-modal').classList.remove('hidden');
+};
+
+window.onRemapTemplateChanged = function() {
+    const themeId = themeBeingEdited;
+    const theme = themes.find(t => t.id === themeId);
+    if (!theme) return;
+    window.renderRemapFieldMapping(theme);
+};
+
+window.renderRemapFieldMapping = function(theme) {
     const container = document.getElementById('remap-fields-container');
     if (!container) return;
     container.innerHTML = '';
 
-    // 1. Coleta todas as propriedades existentes nas feições desta camada
+    const selectedFormId = document.getElementById('remap-cadastro-type')?.value;
     const features = theme.features || [];
     const availablePropKeys = new Set();
     const sampleValuesMap = {};
@@ -2425,163 +2447,90 @@ window.openRemapAttributesModal = function(specificThemeId = null) {
         countEl.textContent = `${features.length.toLocaleString('pt-BR')} feições encontradas nesta camada.`;
     }
 
-    // 2. Extrai todos os campos das abas do formulário
-    const formFields = [];
-    schema.forEach(tab => {
-        if (tab.fields && Array.isArray(tab.fields)) {
-            tab.fields.forEach(field => {
-                if (field && field.id && !['photo', 'attachment', 'drawing_layer'].includes(field.type)) {
-                    formFields.push({
-                        ...field,
-                        tabTitle: tab.title || 'Geral'
-                    });
-                }
-            });
-        }
-    });
-
-    if (formFields.length === 0) {
-        container.innerHTML = `<div class="p-4 text-center text-xs text-slate-400 italic">Nenhum campo de texto configurado no formulário ${form.title || ''}.</div>`;
-        document.getElementById('remap-attributes-modal').classList.remove('hidden');
-        return;
+    let formSchema = null;
+    if (selectedFormId && typeof allForms !== 'undefined') {
+        const form = allForms.find(f => f.id === selectedFormId);
+        if (form) formSchema = form.schema || form.tabs;
     }
-
-    // 3. Renderiza a tabela De-Para com checkboxes de ativação individual
-    let headerControlsHtml = `
-        <div class="flex items-center justify-between pb-3 mb-2 border-b border-slate-200 dark:border-slate-700/80 flex-wrap gap-2">
-            <span id="remap-selected-count" class="text-xs font-bold text-sky-600 dark:text-sky-400 flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-[16px]">checklist</span>
-                <span id="remap-selected-count-num">0</span> de ${formFields.length} campos marcados para atualizar
-            </span>
-            <div class="flex items-center gap-2">
-                <button type="button" onclick="window.selectAllRemapRows(true)" class="px-2.5 py-1 text-[11px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-sky-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 rounded-lg transition-colors">
-                    Marcar Todos
-                </button>
-                <button type="button" onclick="window.selectAllRemapRows(false)" class="px-2.5 py-1 text-[11px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-600 rounded-lg transition-colors">
-                    Desmarcar Todos
-                </button>
-            </div>
-        </div>
-    `;
 
     const savedMappings = theme.attributeMappings || {};
+    let htmlContent = '';
 
-    let rowsHtml = headerControlsHtml;
-    formFields.forEach(field => {
-        const fieldLabelNorm = (field.label || field.id).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-        const fieldIdNorm = field.id.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    if (formSchema && Array.isArray(formSchema)) {
+        formSchema.forEach(tab => {
+            if (tab.fields && Array.isArray(tab.fields) && tab.fields.length > 0) {
+                // Título da Aba centralizado estilo Importar GeoJSON
+                htmlContent += `<div class="font-bold text-center text-xs text-slate-700 dark:text-slate-300 mt-4 mb-2 uppercase tracking-wider bg-slate-100 dark:bg-slate-800/80 py-2 rounded-lg border border-slate-200 dark:border-slate-700/80 shadow-2xs">${tab.title || 'Aba'}</div>`;
 
-        // 1. Prioridade máxima: lê o mapeamento já salvo pelo usuário anteriormente
-        let matchedKey = savedMappings[field.id] || savedMappings[field.label] || '';
+                tab.fields.forEach(field => {
+                    if (['photo', 'attachment', 'drawing_layer'].includes(field.type)) return;
 
-        // 2. Se não houver mapeamento salvo, busca por correspondência de nome
-        if (!matchedKey || !availablePropKeys.has(matchedKey)) {
-            for (const pKey of sortedPropKeys) {
-                const pNorm = pKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-                if (pNorm === fieldLabelNorm || pNorm === fieldIdNorm) {
-                    matchedKey = pKey;
-                    break;
-                }
-            }
-            if (!matchedKey) {
-                for (const pKey of sortedPropKeys) {
-                    const pNorm = pKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-                    if (pNorm.includes(fieldLabelNorm) || fieldLabelNorm.includes(pNorm) || pNorm.includes(fieldIdNorm)) {
-                        matchedKey = pKey;
-                        break;
+                    const fieldLabelNorm = (field.label || field.id).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                    const fieldIdNorm = field.id.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+                    let matchedKey = savedMappings[field.id] || savedMappings[field.label] || '';
+                    if (!matchedKey || !availablePropKeys.has(matchedKey)) {
+                        for (const pKey of sortedPropKeys) {
+                            const pNorm = pKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                            if (pNorm === fieldLabelNorm || pNorm === fieldIdNorm) {
+                                matchedKey = pKey;
+                                break;
+                            }
+                        }
+                        if (!matchedKey) {
+                            for (const pKey of sortedPropKeys) {
+                                const pNorm = pKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                                if (pNorm.includes(fieldLabelNorm) || fieldLabelNorm.includes(pNorm) || pNorm.includes(fieldIdNorm)) {
+                                    matchedKey = pKey;
+                                    break;
+                                }
+                            }
+                        }
                     }
-                }
+
+                    const currentSample = sampleValuesMap[field.id] || sampleValuesMap[field.label] || sampleValuesMap[field.label?.toUpperCase()] || '';
+                    const isCurrentlyEmpty = (!currentSample || currentSample === '---');
+                    const shouldBeCheckedInitially = isCurrentlyEmpty && !!matchedKey;
+
+                    let options = `<option value="">-- Não mapeado --</option>`;
+                    sortedPropKeys.forEach(prop => {
+                        const isSelected = (matchedKey === prop) ? 'selected' : '';
+                        const sampleVal = sampleValuesMap[prop] ? ` (ex: "${sampleValuesMap[prop].substring(0, 20)}")` : '';
+                        options += `<option value="${prop}" ${isSelected}>${prop}${sampleVal}</option>`;
+                    });
+
+                    htmlContent += `
+                        <div class="flex items-center gap-2 mb-2 p-1 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors" data-remap-field-id="${field.id}" data-remap-field-label="${field.label}">
+                            <input type="checkbox" class="remap-active-check shrink-0 cursor-pointer" ${shouldBeCheckedInitially ? 'checked' : ''} onchange="window.updateRemapSelectedCount()">
+                            <span class="w-1/3 text-xs text-slate-700 dark:text-slate-300 font-semibold truncate" title="${field.label}">${field.label}</span>
+                            <span class="material-symbols-outlined text-slate-400 text-sm shrink-0">arrow_forward</span>
+                            <select onchange="this.parentElement.querySelector('.remap-active-check').checked = (this.value !== '')" class="remap-source-select flex-1 px-2.5 py-1.5 text-xs font-medium bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary dark:text-white truncate">
+                                ${options}
+                            </select>
+                        </div>
+                    `;
+                });
             }
-        }
-
-        // Valor de amostra atual já preenchido na feição
-        const currentSample = sampleValuesMap[field.id] || sampleValuesMap[field.label] || sampleValuesMap[field.label.toUpperCase()] || '---';
-        const isCurrentlyEmpty = (currentSample === '---' || !currentSample);
-        const shouldBeCheckedInitially = isCurrentlyEmpty && !!matchedKey;
-
-        let optionsHtml = `<option value="">-- Selecione a Coluna de Origem --</option>`;
-        sortedPropKeys.forEach(pKey => {
-            const isSel = (pKey === matchedKey);
-            const sampleVal = sampleValuesMap[pKey] ? ` (ex: "${sampleValuesMap[pKey].substring(0, 25)}")` : '';
-            optionsHtml += `<option value="${pKey}" ${isSel ? 'selected' : ''}>${pKey}${sampleVal}</option>`;
         });
-
-        rowsHtml += `
-            <div id="remap-card-${field.id}" class="bg-slate-50 dark:bg-slate-800/80 rounded-xl p-3.5 border ${shouldBeCheckedInitially ? 'border-sky-500/80 shadow-xs' : 'border-slate-200 dark:border-slate-700/80 opacity-70'} flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all" data-remap-field-id="${field.id}" data-remap-field-label="${field.label}">
-                <div class="flex items-start gap-3 min-w-0 flex-1">
-                    <label class="flex items-center pt-0.5 cursor-pointer" title="Marque para atualizar este campo">
-                        <input type="checkbox" class="remap-active-check rounded border-slate-400 text-sky-600 focus:ring-sky-500 w-4 h-4 cursor-pointer" ${shouldBeCheckedInitially ? 'checked' : ''} onchange="window.toggleRemapRowActive(this, '${field.id}')">
-                    </label>
-                    <div class="min-w-0 flex-1">
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs font-bold text-slate-900 dark:text-white">${field.label}</span>
-                            <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-200/80 dark:bg-slate-700 px-2 py-0.5 rounded">${field.tabTitle}</span>
-                        </div>
-                        <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
-                            Valor atual no cadastro: <span class="font-semibold text-slate-700 dark:text-slate-300">${currentSample}</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="w-full sm:w-64 shrink-0 pl-7 sm:pl-0">
-                    <label class="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Coluna de Origem (GeoJSON/Shape)</label>
-                    <select class="remap-source-select w-full text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-sky-500 ${!shouldBeCheckedInitially ? 'pointer-events-none opacity-60' : ''}" ${!shouldBeCheckedInitially ? 'disabled' : ''}>
-                        ${optionsHtml}
-                    </select>
-                </div>
-            </div>
-        `;
-    });
-
-    container.innerHTML = rowsHtml;
-    window.updateRemapSelectedCount();
-    document.getElementById('remap-attributes-modal').classList.remove('hidden');
-};
-
-window.toggleRemapRowActive = function(checkbox, fieldId) {
-    const card = document.getElementById(`remap-card-${fieldId}`);
-    if (!card) return;
-    const select = card.querySelector('.remap-source-select');
-
-    if (checkbox.checked) {
-        card.classList.remove('opacity-70', 'border-slate-200', 'dark:border-slate-700/80');
-        card.classList.add('border-sky-500/80', 'shadow-xs');
-        if (select) {
-            select.removeAttribute('disabled');
-            select.classList.remove('pointer-events-none', 'opacity-60');
-        }
-    } else {
-        card.classList.add('opacity-70', 'border-slate-200', 'dark:border-slate-700/80');
-        card.classList.remove('border-sky-500/80', 'shadow-xs');
-        if (select) {
-            select.setAttribute('disabled', 'true');
-            select.classList.add('pointer-events-none', 'opacity-60');
-        }
     }
+
+    if (!htmlContent) {
+        htmlContent = `<div class="p-4 text-center text-xs text-slate-400 italic">Nenhum campo disponível neste formulário.</div>`;
+    }
+
+    container.innerHTML = htmlContent;
     window.updateRemapSelectedCount();
 };
 
 window.selectAllRemapRows = function(check) {
     const container = document.getElementById('remap-fields-container');
     if (!container) return;
-
-    const rowEls = container.querySelectorAll('[data-remap-field-id]');
-    rowEls.forEach(card => {
-        const cb = card.querySelector('.remap-active-check');
-        const fieldId = card.getAttribute('data-remap-field-id');
-        if (cb) {
-            cb.checked = check;
-            window.toggleRemapRowActive(cb, fieldId);
-        }
-    });
+    const checks = container.querySelectorAll('.remap-active-check');
+    checks.forEach(cb => cb.checked = check);
+    window.updateRemapSelectedCount();
 };
 
-window.updateRemapSelectedCount = function() {
-    const container = document.getElementById('remap-fields-container');
-    if (!container) return;
-    const checkedCount = container.querySelectorAll('.remap-active-check:checked').length;
-    const countEl = document.getElementById('remap-selected-count-num');
-    if (countEl) countEl.textContent = checkedCount;
-};
+window.updateRemapSelectedCount = function() {};
 
 window.closeRemapAttributesModal = function() {
     const modal = document.getElementById('remap-attributes-modal');
@@ -2593,6 +2542,15 @@ window.applyRemapAttributes = async function() {
     const theme = themes.find(t => t.id === themeId);
     if (!theme) return;
 
+    const newName = document.getElementById('remap-theme-name')?.value?.trim();
+    if (newName) theme.name = newName;
+
+    const newFormId = document.getElementById('remap-cadastro-type')?.value;
+    if (newFormId !== undefined) {
+        theme.formId = newFormId;
+        theme.cadastroType = newFormId;
+    }
+
     const container = document.getElementById('remap-fields-container');
     if (!container) return;
 
@@ -2603,12 +2561,12 @@ window.applyRemapAttributes = async function() {
 
     rowEls.forEach(el => {
         const isActive = el.querySelector('.remap-active-check')?.checked;
-        if (!isActive) return; // Pula os campos desmarcados!
-
         const fieldId = el.getAttribute('data-remap-field-id');
         const fieldLabel = el.getAttribute('data-remap-field-label');
         const sourceProp = el.querySelector('.remap-source-select')?.value;
-        if (sourceProp) {
+
+        // Se o checkbox estiver ativo OU o usuário escolheu uma coluna válida
+        if ((isActive || sourceProp) && sourceProp && sourceProp !== "") {
             mappings.push({ fieldId, fieldLabel, sourceProp });
             theme.attributeMappings[fieldId] = sourceProp;
             theme.attributeMappings[fieldLabel] = sourceProp;
@@ -2616,7 +2574,7 @@ window.applyRemapAttributes = async function() {
     });
 
     if (mappings.length === 0) {
-        alert("Nenhum campo com checkbox marcado e coluna selecionada para atualizar. Marque a caixinha do campo que deseja atualizar.");
+        alert("Nenhuma coluna de origem foi selecionada para atualizar. Selecione a coluna correspondente no seletor.");
         return;
     }
 
@@ -2639,12 +2597,14 @@ window.applyRemapAttributes = async function() {
             mappings.forEach(m => {
                 const rawVal = f.properties[m.sourceProp];
                 if (rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '') {
-                    // Grava no ID do campo e em todas as variações de label para compatibilidade total
+                    // Grava em todas as formas de chave para garantia 100% de leitura no formulário
                     f.properties[m.fieldId] = rawVal;
                     if (m.fieldLabel) {
                         f.properties[m.fieldLabel] = rawVal;
                         f.properties[m.fieldLabel.toUpperCase()] = rawVal;
                         f.properties[m.fieldLabel.toLowerCase()] = rawVal;
+                        const normKey = m.fieldLabel.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+                        f.properties[normKey] = rawVal;
                     }
                     changed = true;
                 }
@@ -2662,15 +2622,58 @@ window.applyRemapAttributes = async function() {
             }
         });
 
-        // Atualização em lotes no Supabase (apenas id e propriedades JSONB, SEM geometria!)
+        // Atualização do Tema no Supabase (se mudou nome ou tipo de cadastro)
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            try {
+                await supabaseClient.from('temas').update({
+                    nome: theme.name,
+                    tipo_cadastro: theme.formId || 'padrao'
+                }).eq('id', theme.id);
+            } catch(eTheme) {
+                console.warn("Erro ao atualizar tema:", eTheme);
+            }
+        }
+
+        // Atualização em lotes no Supabase resiliente com chunkSize reduzido e retry adaptativo
         if (typeof supabaseClient !== 'undefined' && supabaseClient && updatedDbPayloads.length > 0) {
-            const chunkSize = 500;
-            for (let i = 0; i < updatedDbPayloads.length; i += chunkSize) {
-                const chunk = updatedDbPayloads.slice(i, i + chunkSize);
-                const { error: upErr } = await supabaseClient.from('feicoes').upsert(chunk, { onConflict: 'id' });
-                if (upErr) {
-                    console.warn(`Erro ao atualizar lote ${Math.floor(i/chunkSize) + 1} no Supabase:`, upErr);
+            const chunkSize = 100;
+            const totalChunks = Math.ceil(updatedDbPayloads.length / chunkSize);
+
+            async function upsertBatchWithRetry(items, maxRetries = 3) {
+                for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                    try {
+                        const { error: upErr } = await supabaseClient.from('feicoes').upsert(items, { onConflict: 'id' });
+                        if (!upErr) return true;
+                        
+                        console.warn(`Tentativa ${attempt} falhou no lote (${items.length} itens):`, upErr);
+                        if (attempt === maxRetries || items.length <= 10) {
+                            if (items.length > 10) {
+                                const mid = Math.floor(items.length / 2);
+                                await upsertBatchWithRetry(items.slice(0, mid));
+                                await upsertBatchWithRetry(items.slice(mid));
+                                return true;
+                            }
+                            throw upErr;
+                        }
+                    } catch(e) {
+                        if (attempt === maxRetries && items.length <= 10) throw e;
+                    }
+                    await new Promise(r => setTimeout(r, 150 * attempt));
                 }
+            }
+
+            for (let i = 0; i < updatedDbPayloads.length; i += chunkSize) {
+                const currentChunkIndex = Math.floor(i / chunkSize) + 1;
+                if (btnApply) {
+                    btnApply.innerHTML = `<span class="material-symbols-outlined text-[15px] animate-spin">refresh</span> Salvando no banco (${currentChunkIndex}/${totalChunks})...`;
+                }
+                const chunk = updatedDbPayloads.slice(i, i + chunkSize);
+                try {
+                    await upsertBatchWithRetry(chunk);
+                } catch(errChunk) {
+                    console.warn(`Lote ${currentChunkIndex} teve erro parcial:`, errChunk);
+                }
+                await new Promise(r => setTimeout(r, 30));
             }
         }
 
@@ -2684,9 +2687,22 @@ window.applyRemapAttributes = async function() {
         saveThemes();
         renderThemes();
         
-        // Se houver feição ativa no modal de detalhes, re-renderiza seus atributos imediatamente
-        if (activeFeatureLayer && activeFeatureLayer.feature && activeFeatureLayer.feature.properties && activeFeatureLayer.feature.properties.themeId === theme.id) {
+        // Se houver feição ativa selecionada no mapa, atualiza suas propriedades em tempo real
+        if (activeFeatureLayer && activeFeatureLayer.feature && activeFeatureLayer.feature.properties) {
+            const activeId = activeFeatureLayer.feature.properties.id_banco || activeFeatureLayer.feature.properties.id;
+            const updatedFeat = features.find(f => (f.properties?.id_banco && f.properties.id_banco === activeId) || f.properties?.id === activeId);
+            if (updatedFeat && updatedFeat.properties) {
+                Object.assign(activeFeatureLayer.feature.properties, updatedFeat.properties);
+            }
             renderFeatureInfo();
+        }
+
+        // Registra log de auditoria da reconexão
+        if (window.auditLogger && typeof window.auditLogger.log === 'function') {
+            window.auditLogger.log('RECONECTAR_ATRIBUTOS', `Camada: ${theme.name}`, {
+                totalFeicoes: updatedCount,
+                mapeamentosSalvos: mappings.map(m => `${m.fieldLabel || m.fieldId} ➔ ${m.sourceProp}`)
+            });
         }
 
         alert(`✓ Sucesso! Atributos reconectados e atualizados em ${updatedCount.toLocaleString('pt-BR')} feições!`);
@@ -4162,6 +4178,12 @@ async function saveFeatureData() {
                   }
               } else {
                   console.log(`[Supabase] Feição "${idBanco}" salva com sucesso!`);
+                  if (window.auditLogger && typeof window.auditLogger.log === 'function') {
+                      window.auditLogger.log('EDITAR_FEICAO', `Imóvel/Feição #${idBanco}`, {
+                          tema: theme?.name || themeId,
+                          inscricao: currentProps['INSC. IMOBILIÁRIA'] || currentProps['Inscrição Imobiliária'] || currentProps['SEQUENCIAL'] || currentProps['Sequencial'] || ''
+                      });
+                  }
               }
           } else {
               const { data: insData, error: insErr } = await supabaseClient
@@ -4181,6 +4203,11 @@ async function saveFeatureData() {
                   idBanco = insData[0].id;
                   activeFeatureLayer.feature.properties.id_banco = idBanco;
                   console.log(`[Supabase] Nova feição criada com ID "${idBanco}"!`);
+                  if (window.auditLogger && typeof window.auditLogger.log === 'function') {
+                      window.auditLogger.log('CRIAR_FEICAO', `Novo Imóvel/Feição #${idBanco}`, {
+                          tema: theme?.name || themeId
+                      });
+                  }
               }
           }
       } catch (eDb) {
