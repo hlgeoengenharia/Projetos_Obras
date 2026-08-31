@@ -2119,12 +2119,23 @@ function filterThemeFeatures(themeId) {
 }
 
 function openNewThemeModal() {
-  document.getElementById('new-theme-modal').classList.remove('hidden');
-  document.getElementById('theme-name-input').value = '';
+  const drawer = document.getElementById('side-drawer');
+  const overlay = document.getElementById('drawer-overlay');
+  if (drawer) drawer.classList.add('-translate-x-[120%]');
+  if (overlay) overlay.classList.add('hidden');
+
+  const modal = document.getElementById('new-theme-modal');
+  if (modal) modal.classList.remove('hidden');
+  const nameInput = document.getElementById('theme-name-input');
+  if (nameInput) {
+    nameInput.value = '';
+    setTimeout(() => nameInput.focus(), 50);
+  }
 }
 
 function closeNewThemeModal() {
-  document.getElementById('new-theme-modal').classList.add('hidden');
+  const modal = document.getElementById('new-theme-modal');
+  if (modal) modal.classList.add('hidden');
 }
 
 function handleCustomIconUpload(input, previewContainerId, dataInputId, labelId) {
@@ -4488,22 +4499,29 @@ async function deleteActiveFeature() {
 // --- ICON DROPDOWNS ---
 const availableIcons = [
   { val: 'circle', label: 'Círculo Básico' },
+  { val: 'light', label: 'Poste / Iluminação Pública' },
+  { val: 'bolt', label: 'Rede Elétrica / Energia' },
+  { val: 'cell_tower', label: 'Torre / Telecomunicações' },
+  { val: 'construction', label: 'Obras / Construção Civil' },
+  { val: 'account_balance', label: 'Obras Públicas / Institucional' },
+  { val: 'engineering', label: 'Engenharia / Infraestrutura' },
+  { val: 'domain', label: 'Prédio / Governo' },
   { val: 'location_on', label: 'Pino (Localização)' },
   { val: 'home', label: 'Casa' },
-  { val: 'business', label: 'Prédio' },
-  { val: 'park', label: 'Árvore / Parque' },
-  { val: 'directions_car', label: 'Carro' },
-  { val: 'build', label: 'Ferramenta / Obra' },
-  { val: 'warning', label: 'Alerta' },
-  { val: 'flag', label: 'Bandeira' },
+  { val: 'business', label: 'Empresa / Comércio' },
+  { val: 'park', label: 'Árvore / Meio Ambiente' },
+  { val: 'directions_car', label: 'Trânsito / Veículos' },
+  { val: 'build', label: 'Manutenção / Reparos' },
+  { val: 'warning', label: 'Alerta / Risco' },
+  { val: 'flag', label: 'Ponto de Controle / Marco' },
   { val: 'train', label: 'Linha Férrea' },
-  { val: 'route', label: 'Estradas' },
-  { val: 'water_drop', label: 'Água / Maré' },
-  { val: 'local_hospital', label: 'Hospital' },
+  { val: 'route', label: 'Vias / Pavimentação' },
+  { val: 'water_drop', label: 'Drenagem / Recursos Hídricos' },
+  { val: 'local_hospital', label: 'Saúde / Hospital' },
   { val: 'local_gas_station', label: 'Posto de Combustível' },
-  { val: 'school', label: 'Escola' },
-  { val: 'restaurant', label: 'Restaurante' },
-  { val: 'factory', label: 'Indústria' }
+  { val: 'school', label: 'Educação / Escola' },
+  { val: 'restaurant', label: 'Restaurante / Alimentação' },
+  { val: 'factory', label: 'Indústria / Polo Industrial' }
 ];
 
 function setupIconDropdowns() {
