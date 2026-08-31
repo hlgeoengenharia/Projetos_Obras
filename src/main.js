@@ -757,6 +757,14 @@ function initMap() {
       }, 70);
   });
 
+  // Garante que o mapa cubra 100% da tela dinamicamente em celulares e redimensionamentos
+  window.addEventListener('resize', () => {
+      if (map) map.invalidateSize();
+  });
+  window.addEventListener('orientationchange', () => {
+      setTimeout(() => { if (map) map.invalidateSize(); }, 200);
+  });
+
   loadThemes().then(async () => {
     renderThemes(); // mostra os cards já — a contagem preenche conforme carrega
     

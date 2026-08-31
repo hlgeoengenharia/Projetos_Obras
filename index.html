@@ -448,9 +448,9 @@
 </nav>
 </aside>
 <!-- Main Map Canvas -->
-<main class="relative w-full h-[calc(100vh-3.5rem)] md:h-screen pt-14 md:pt-16 pb-14 md:pb-0">
+<main class="fixed inset-0 w-full h-[100dvh] pt-14 md:pt-16 pb-0 overflow-hidden">
 <!-- Google Map -->
-<div id="map" class="absolute inset-0 z-0"></div>
+<div id="map" class="absolute inset-0 z-0 w-full h-full"></div>
 
 <!-- Print Viewfinder (A4 Aspect Ratio) -->
 <div id="print-viewfinder" class="pointer-events-none absolute inset-0 z-[1000] hidden items-center justify-center bg-black/60 transition-opacity opacity-0" style="margin-top: 3.5rem;">
