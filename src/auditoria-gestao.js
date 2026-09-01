@@ -74,8 +74,57 @@
         }
         if (!isAuthAdmin) return;
 
-        await loadAuditoriaData();
+        // 1. Inicializa o Seletor de Usuários
+        await populateUserFilterSelect();
+
+        // 2. Busca e Renderiza Usuários Online em tempo real
+        const onlineUsers = await window.auditLogger.getOnlineUsers();
+        const onlineCountEl = document.getElementById('metric-online-count');
+        if (onlineCountEl) onlineCountEl.textContent = onlineUsers.length;
+
+        const onlineAvatarsEl = document.getElementById('metric-online-avatars');
+        if (onlineAvatarsEl) {
+            if (onlineUsers.length === 0) {
+                onlineAvatarsEl.innerHTML = '<span class="text-[11px] text-slate-400 italic">Nenhum outro usuário ativo</span>';
+            } else {
+                onlineAvatarsEl.innerHTML = onlineUsers.slice(0, 4).map(u => `
+                    <div class="relative group cursor-pointer" title="${u.nome} (${u.email}) - Ativo há ${u.minutos_inativo} min">
+                        <div class="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-bold text-[10px] flex items-center justify-center border-2 border-white dark:border-slate-800 shadow-xs">
+                            ${(u.nome || u.email || 'U').substring(0, 2).toUpperCase()}
+                        </div>
+                        <span class="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 border border-white dark:border-slate-900"></span>
+                    </div>
+                `).join('');
+            }
+        }
+
+        // 3. Estado Inicial da Tabela: Aguardando clique em Buscar
+        renderInitialEmptyState();
     };
+
+    function renderInitialEmptyState() {
+        const tbody = document.getElementById('auditoria-table-body');
+        if (tbody) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="text-center py-14 px-4 text-xs text-slate-400">
+                        <div class="flex flex-col items-center justify-center gap-2.5 max-w-md mx-auto">
+                            <div class="w-12 h-12 rounded-2xl bg-sky-50 dark:bg-sky-950/50 text-sky-500 flex items-center justify-center border border-sky-200 dark:border-sky-800 shadow-sm">
+                                <span class="material-symbols-outlined text-[26px]">manage_search</span>
+                            </div>
+                            <h4 class="font-bold text-sm text-slate-700 dark:text-slate-200">Pronto para Pesquisar Atividades</h4>
+                            <p class="text-[11px] text-slate-400 leading-relaxed">
+                                Selecione os filtros desejados acima (Usuário, Tipo de Ação ou Período) e clique no botão <strong class="text-sky-500 font-bold">Buscar</strong> para carregar a Linha do Tempo.
+                            </p>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+
+        const countBadge = document.getElementById('audit-logs-total-count');
+        if (countBadge) countBadge.textContent = 'Aguardando busca';
+    }
 
     async function checkAuditoriaAccess() {
         try {
@@ -111,8 +160,11 @@
     async function loadAuditoriaData() {
         const container = document.getElementById('auditoria-table-body');
         if (container) {
-            container.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-xs text-slate-400"><span class="material-symbols-outlined animate-spin text-[20px] mb-1">refresh</span><br>Carregando registros de auditoria...</td></tr>`;
+            container.innerHTML = `<tr><td colspan="5" class="text-center py-12 text-xs text-slate-400"><div class="flex flex-col items-center justify-center gap-2"><span class="material-symbols-outlined animate-spin text-[26px] text-sky-500">refresh</span><span class="font-semibold">Consultando registros no servidor...</span></div></td></tr>`;
         }
+
+        const countBadge = document.getElementById('audit-logs-total-count');
+        if (countBadge) countBadge.textContent = 'Buscando...';
 
         // 1. Calcula datas do filtro de período
         let startDate = null;
@@ -125,12 +177,19 @@
             startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
         } else if (currentFilters.periodo === 'mes') {
             startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        } else if (currentFilters.periodo === 'data_especifica') {
+            const rawDate = document.getElementById('audit-filter-custom-date')?.value;
+            if (rawDate) {
+                const [year, month, day] = rawDate.split('-').map(Number);
+                startDate = new Date(year, month - 1, day, 0, 0, 0, 0).toISOString();
+                endDate = new Date(year, month - 1, day, 23, 59, 59, 999).toISOString();
+            }
         }
 
         // 2. Busca Usuários Online
         const onlineUsers = await window.auditLogger.getOnlineUsers();
 
-        // 3. Busca Logs
+        // 3. Busca Logs filtrados no Supabase
         currentLogs = await window.auditLogger.fetchLogs({
             userId: currentFilters.userId,
             tipoAcao: currentFilters.tipoAcao,
@@ -142,10 +201,7 @@
         // 4. Renderiza Métricas
         renderAuditoriaMetrics(currentLogs, onlineUsers);
 
-        // 5. Renderiza Seletor de Usuários no Filtro (se ainda não preenchido)
-        populateUserFilterSelect();
-
-        // 6. Renderiza Tabela de Logs
+        // 5. Renderiza Tabela de Logs
         renderAuditoriaTable();
     }
 
@@ -332,14 +388,35 @@
         if (modal) modal.classList.add('hidden');
     };
 
-    // Filtros de Auditoria
-    window.onAuditFilterChanged = function() {
+    // Execução da Busca de Auditoria (Disparada EXCLUSIVAMENTE pelo botão "Buscar" ou tecla Enter)
+    window.executeAuditSearch = function() {
         currentFilters.userId = document.getElementById('audit-filter-user')?.value || '';
         currentFilters.tipoAcao = document.getElementById('audit-filter-action')?.value || 'TODAS';
         currentFilters.periodo = document.getElementById('audit-filter-period')?.value || 'hoje';
         currentFilters.searchTerm = document.getElementById('audit-filter-search')?.value || '';
 
         loadAuditoriaData();
+    };
+
+    // Mantém compatibilidade com chamadas existentes
+    window.onAuditFilterChanged = window.executeAuditSearch;
+
+    // Controle do seletor dinâmico de Data Específica
+    window.toggleAuditCustomDate = function(periodoVal) {
+        const dateInput = document.getElementById('audit-filter-custom-date');
+        if (!dateInput) return;
+        if (periodoVal === 'data_especifica') {
+            dateInput.classList.remove('hidden');
+            if (!dateInput.value) {
+                const today = new Date();
+                const yyyy = today.getFullYear();
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const dd = String(today.getDate()).padStart(2, '0');
+                dateInput.value = `${yyyy}-${mm}-${dd}`;
+            }
+        } else {
+            dateInput.classList.add('hidden');
+        }
     };
 
     window.clearAuditFilters = function() {
@@ -359,13 +436,19 @@
         const periodSelect = document.getElementById('audit-filter-period');
         if (periodSelect) periodSelect.value = 'hoje';
 
+        const customDateInput = document.getElementById('audit-filter-custom-date');
+        if (customDateInput) {
+            customDateInput.value = '';
+            customDateInput.classList.add('hidden');
+        }
+
         const searchInput = document.getElementById('audit-filter-search');
         if (searchInput) searchInput.value = '';
 
-        loadAuditoriaData();
+        renderInitialEmptyState();
     };
 
-    // Atalho direto da aba USUÁRIOS para inspecionar um usuário específico
+    // Atalho direto da aba USUÁRIOS para selecionar um usuário específico
     window.inspectUserLogs = function(userId) {
         if (!userId) return;
 
@@ -385,6 +468,7 @@
         const periodSelect = document.getElementById('audit-filter-period');
         if (periodSelect) periodSelect.value = '7dias';
 
-        loadAuditoriaData();
+        // Apenas prepara o filtro e deixa aguardando o clique em "Buscar"
+        renderInitialEmptyState();
     };
 })();

@@ -58,20 +58,54 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
                 return '<p class="text-sm font-medium text-slate-500 dark:text-slate-400">Nenhum arquivo anexado</p>';
             }
         } else if (f.type === 'geolocation') {
-            const lat = value.lat;
-            const lng = value.lng;
+            let lat = null, lng = null;
+            if (value) {
+                if (typeof value === 'object' && value.lat !== undefined && value.lng !== undefined) {
+                    lat = parseFloat(value.lat);
+                    lng = parseFloat(value.lng);
+                } else if (typeof value === 'string' && value.trim()) {
+                    try {
+                        const parsed = JSON.parse(value);
+                        if (parsed && typeof parsed === 'object' && parsed.lat !== undefined && parsed.lng !== undefined) {
+                            lat = parseFloat(parsed.lat);
+                            lng = parseFloat(parsed.lng);
+                        }
+                    } catch(e) {
+                        const parts = value.split(',').map(p => parseFloat(p.trim()));
+                        if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                            lat = parts[0];
+                            lng = parts[1];
+                        }
+                    }
+                }
+            }
+
+            // Fallback: se não estiver salvo nas propriedades mas o activeFeatureLayer estiver aberto
+            if ((lat === null || isNaN(lat)) && typeof activeFeatureLayer !== 'undefined' && activeFeatureLayer) {
+                let latlng = null;
+                if (typeof activeFeatureLayer.getLatLng === 'function') latlng = activeFeatureLayer.getLatLng();
+                else if (typeof activeFeatureLayer.getBounds === 'function') latlng = activeFeatureLayer.getBounds().getCenter();
+                if (latlng) {
+                    lat = latlng.lat;
+                    lng = latlng.lng;
+                }
+            }
+
+            if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
+                return '<div class="text-xs text-slate-400 italic">Coordenadas não disponíveis</div>';
+            }
             
             return `
                 <div class="space-y-1">
                     <span class="text-[9px] uppercase text-slate-400 font-bold block">Decimal</span>
-                    <div class="text-xs font-mono text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1.5 rounded border border-slate-200 dark:border-slate-700 select-all">${parseFloat(lat).toFixed(6)}, ${parseFloat(lng).toFixed(6)}</div>
+                    <div class="text-xs font-mono text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1.5 rounded border border-slate-200 dark:border-slate-700 select-all">${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
                 </div>
                 <div class="space-y-1 mt-1.5">
                     <span class="text-[9px] uppercase text-slate-400 font-bold block">Graus, Min, Seg</span>
                     <div class="text-xs font-mono text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1.5 rounded border border-slate-200 dark:border-slate-700 select-all">${typeof formatDMS === 'function' ? formatDMS(lat, lng) : 'N/A'}</div>
                 </div>
                 <div class="space-y-1 mt-1.5">
-                    <span class="text-[9px] uppercase text-slate-400 font-bold block">UTM (WGS84)</span>
+                    <span class="text-[9px] uppercase text-slate-400 font-bold block">UTM (SIRGAS 2000 / WGS84)</span>
                     <div class="text-xs font-mono text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2 py-1.5 rounded border border-slate-200 dark:border-slate-700 select-all">${typeof formatUTM === 'function' ? formatUTM(lat, lng) : 'N/A'}</div>
                 </div>
             `;
@@ -304,18 +338,49 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
         `;
     } else if (f.type === 'geolocation') {
         let decStr = "N/A", dmsStr = "N/A", utmStr = "N/A";
-        if (typeof activeFeatureLayer !== 'undefined' && activeFeatureLayer) {
+        let curLat = null, curLng = null;
+
+        // 1. Extrai do value existente se houver
+        if (value) {
+            if (typeof value === 'object' && value.lat !== undefined && value.lng !== undefined) {
+                curLat = parseFloat(value.lat);
+                curLng = parseFloat(value.lng);
+            } else if (typeof value === 'string' && value.trim()) {
+                try {
+                    const parsed = JSON.parse(value);
+                    if (parsed && typeof parsed === 'object' && parsed.lat !== undefined && parsed.lng !== undefined) {
+                        curLat = parseFloat(parsed.lat);
+                        curLng = parseFloat(parsed.lng);
+                    }
+                } catch(e) {
+                    const parts = value.split(',').map(p => parseFloat(p.trim()));
+                    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                        curLat = parts[0];
+                        curLng = parts[1];
+                    }
+                }
+            }
+        }
+
+        // 2. Se não tiver no value, extrai diretamente da geometria ativa no mapa
+        if ((curLat === null || isNaN(curLat)) && typeof activeFeatureLayer !== 'undefined' && activeFeatureLayer) {
             let latlng = null;
             if (typeof activeFeatureLayer.getLatLng === 'function') latlng = activeFeatureLayer.getLatLng();
             else if (typeof activeFeatureLayer.getBounds === 'function') latlng = activeFeatureLayer.getBounds().getCenter();
-            
             if (latlng) {
-                decStr = `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`;
-                if(typeof formatDMS === 'function') {
-                    dmsStr = formatDMS(latlng.lat, latlng.lng);
-                    utmStr = formatUTM(latlng.lat, latlng.lng);
-                }
+                curLat = latlng.lat;
+                curLng = latlng.lng;
             }
+        }
+
+        let hiddenValue = '';
+        if (curLat !== null && curLng !== null && !isNaN(curLat) && !isNaN(curLng)) {
+            decStr = `${curLat.toFixed(6)}, ${curLng.toFixed(6)}`;
+            if(typeof formatDMS === 'function') {
+                dmsStr = formatDMS(curLat, curLng);
+                utmStr = formatUTM(curLat, curLng);
+            }
+            hiddenValue = JSON.stringify({ lat: curLat, lng: curLng });
         }
         
         html += `
@@ -338,7 +403,7 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
                     <div id="geo-utm-${f.id}" class="text-sm font-mono text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-3 py-2 rounded border border-slate-200 dark:border-slate-700 select-all">${utmStr}</div>
                 </div>
                 
-                <input type="hidden" data-key="${f.id}" id="geo-input-${f.id}" class="feature-data-input" value='${value || ''}'>
+                <input type="hidden" data-key="${f.id}" id="geo-input-${f.id}" class="feature-data-input" value='${hiddenValue.replace(/'/g, '&#39;')}'>
             </div>
         `;
     } else if (f.type === 'cpfcnpj') {
@@ -959,10 +1024,12 @@ function updateGeolocation(fieldId) {
             const dec = document.getElementById(`geo-dec-${fieldId}`);
             const dms = document.getElementById(`geo-dms-${fieldId}`);
             const utm = document.getElementById(`geo-utm-${fieldId}`);
+            const input = document.getElementById(`geo-input-${fieldId}`) || document.querySelector(`input[data-key="${fieldId}"]`);
             
             if (dec) dec.innerText = `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`;
             if (dms && typeof formatDMS === 'function') dms.innerText = formatDMS(latlng.lat, latlng.lng);
             if (utm && typeof formatUTM === 'function') utm.innerText = formatUTM(latlng.lat, latlng.lng);
+            if (input) input.value = JSON.stringify({ lat: latlng.lat, lng: latlng.lng });
         }
     }
 }
