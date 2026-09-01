@@ -772,6 +772,7 @@ function initMap() {
     let loadedCount = 0;
     
     for (const t of themes) {
+        if (typeof userCanOnTheme === 'function' && !userCanOnTheme(t.id, 'ver')) continue;
         if (typeof updateSplashProgress === 'function') {
             const pct = 50 + Math.round((loadedCount / Math.max(1, totalThemes)) * 40);
             updateSplashProgress(`🗺️ Carregando camada "${t.name}"...`, pct);
@@ -1407,21 +1408,11 @@ async function loadThemeProperties(themeId) {
     if (cached && cached.features && cached.features.length > 0 && !shouldInvalidateCache) {
         console.log(`[GeoEngineTurbo] Tema "${theme.name}" recuperado do cache local validado: ${cached.features.length} feições`);
         
-        const existingByBankId = new Map();
-        theme.features.forEach(f => {
-            if (f.properties && f.properties.id_banco) existingByBankId.set(f.properties.id_banco, f);
-        });
-
-        cached.features.forEach(f => {
-            const idBanco = f.properties && f.properties.id_banco;
-            if (idBanco && existingByBankId.has(idBanco)) {
-                const existing = existingByBankId.get(idBanco);
-                existing.properties = { ...f.properties, themeId, _propertiesLoaded: true };
-                if (!existing.geometry) existing.geometry = f.geometry;
-            } else {
-                theme.features.push(f);
-            }
-        });
+        // Atribui o array limpo para evitar duplicações acumuladas (ex: 20709 * 2)
+        theme.features = cached.features.map(f => ({
+            ...f,
+            properties: { ...(f.properties || {}), themeId, _propertiesLoaded: true }
+        }));
 
         theme._propertiesFullyLoaded = true;
         theme._geometryLoaded = true;
