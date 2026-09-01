@@ -692,6 +692,14 @@ function initMap() {
 
             if (!insErr && insData && insData.length > 0) {
                 feature.properties.id_banco = insData[0].id;
+                const tName = (themes.find(t => t.id === editingThemeId)?.name) || editingThemeId;
+                if (window.auditLogger && typeof window.auditLogger.log === 'function') {
+                    window.auditLogger.log('CRIAR_FEICAO', `${tName} — Nova Feição #${insData[0].id}`, {
+                        tema: tName,
+                        feicao_id: insData[0].id,
+                        tipo_geometria: geomType
+                    });
+                }
             }
         } catch(eDb) {
             console.error("Erro ao salvar nova feição no Supabase:", eDb);
@@ -4211,6 +4219,9 @@ async function saveFeatureData() {
           return;
       }
 
+      const currentTheme = themes.find(t => t.id === themeId);
+      const themeName = currentTheme ? currentTheme.name : (themeId || 'Camada');
+
       try {
           if (idBanco) {
               const { error: updErr } = await supabaseClient
@@ -4233,8 +4244,9 @@ async function saveFeatureData() {
               } else {
                   console.log(`[Supabase] Feição "${idBanco}" salva com sucesso!`);
                   if (window.auditLogger && typeof window.auditLogger.log === 'function') {
-                      window.auditLogger.log('EDITAR_FEICAO', `Imóvel/Feição #${idBanco}`, {
-                          tema: theme?.name || themeId,
+                      window.auditLogger.log('EDITAR_DADOS', `${themeName} — Feição #${idBanco}`, {
+                          tema: themeName,
+                          feicao_id: idBanco,
                           inscricao: currentProps['INSC. IMOBILIÁRIA'] || currentProps['Inscrição Imobiliária'] || currentProps['SEQUENCIAL'] || currentProps['Sequencial'] || ''
                       });
                   }
@@ -4258,8 +4270,9 @@ async function saveFeatureData() {
                   activeFeatureLayer.feature.properties.id_banco = idBanco;
                   console.log(`[Supabase] Nova feição criada com ID "${idBanco}"!`);
                   if (window.auditLogger && typeof window.auditLogger.log === 'function') {
-                      window.auditLogger.log('CRIAR_FEICAO', `Novo Imóvel/Feição #${idBanco}`, {
-                          tema: theme?.name || themeId
+                      window.auditLogger.log('CRIAR_FEICAO', `${themeName} — Nova Feição #${idBanco}`, {
+                          tema: themeName,
+                          feicao_id: idBanco
                       });
                   }
               }
@@ -4415,6 +4428,14 @@ function stopGeometryEditing() {
             propriedades: props
         }).eq('id', idBanco).then(() => {
             console.log(`[Supabase] Geometria da feição "${idBanco}" atualizada.`);
+            const tName = (themes.find(t => t.id === themeId)?.name) || themeId;
+            if (window.auditLogger && typeof window.auditLogger.log === 'function') {
+                window.auditLogger.log('EDITAR_FEICAO', `${tName} — Geometria Feição #${idBanco}`, {
+                    tema: tName,
+                    feicao_id: idBanco,
+                    tipo: 'Ajuste Espacial / Geometria'
+                });
+            }
         });
     }
 
@@ -4491,6 +4512,13 @@ async function deleteActiveFeature() {
                   alert('Não foi possível excluir no banco de dados: ' + (delErr.message || updErr.message));
                   return;
               }
+          }
+          const tName = (themes.find(t => t.id === tId)?.name) || tId;
+          if (window.auditLogger && typeof window.auditLogger.log === 'function') {
+              window.auditLogger.log('EXCLUIR_FEICAO', `${tName} — Exclusão Feição #${idBanco}`, {
+                  tema: tName,
+                  feicao_id: idBanco
+              });
           }
       } catch(e) {
           console.error("Erro ao excluir feição no Supabase:", e);

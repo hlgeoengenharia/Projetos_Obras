@@ -58,10 +58,11 @@
                 if (typeof supabaseClient === 'undefined' || !supabaseClient) return;
 
                 // Garante perfil
-                if (!currentUserProfile) {
+                if (!currentUserProfile || !currentUserProfile.id) {
                     const { data: { user } } = await supabaseClient.auth.getUser();
                     if (user) {
-                        currentUserProfile = { id: user.id, email: user.email, nome: user.user_metadata?.nome || user.email.split('@')[0] };
+                        const { data: prof } = await supabaseClient.from('profiles').select('*').eq('id', user.id).maybeSingle();
+                        currentUserProfile = prof || { id: user.id, email: user.email, nome: user.user_metadata?.nome || user.email.split('@')[0] };
                     }
                 }
 
@@ -72,7 +73,7 @@
 
                 const payload = {
                     user_id: currentUserProfile.id,
-                    user_nome: currentUserProfile.nome || 'Usuário',
+                    user_nome: currentUserProfile.nome || currentUserProfile.email?.split('@')[0] || 'Usuário',
                     user_email: currentUserProfile.email || '',
                     entidade_id: activeEntidade,
                     municipio_id: activeMunicipio,
@@ -82,10 +83,13 @@
                     user_agent: navigator.userAgent ? navigator.userAgent.substring(0, 200) : ''
                 };
 
-                // Inserção assíncrona não bloqueante
-                supabaseClient.from('auditoria_logs').insert([payload]).then(({ error }) => {
-                    if (error) console.warn('[AuditLogger] Erro ao gravar log:', error.message);
-                }).catch(() => {});
+                // Inserção com retorno explícito de log
+                const { error } = await supabaseClient.from('auditoria_logs').insert([payload]);
+                if (error) {
+                    console.warn('[AuditLogger] Erro ao gravar log:', error.message);
+                } else {
+                    console.log('[AuditLogger] Log registrado com sucesso:', payload.tipo_acao, payload.alvo);
+                }
 
             } catch(err) {
                 console.warn('[AuditLogger] Falha ao registrar log:', err);
