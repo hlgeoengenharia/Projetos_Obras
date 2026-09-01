@@ -1277,25 +1277,25 @@ function renderThemes() {
           </label>
         </div>
         
-        <!-- Footer: Actions -->
-        <div class="flex justify-between items-center border-t border-white/20 dark:border-white/10 pt-3 w-full">
-            <button onclick="toggleThemeStatsList('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Painel de Estatísticas">
+        <!-- Footer: Actions (Distribuídos em grid uniforme ocupando 100% do espaço) -->
+        <div class="grid grid-flow-col auto-cols-fr gap-1.5 items-center border-t border-white/20 dark:border-white/10 pt-3 w-full">
+            <button onclick="toggleThemeStatsList('${theme.id}')" class="flex items-center justify-center py-2 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-xl tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Painel de Estatísticas">
               <span class="material-symbols-outlined text-[18px]">pie_chart</span>
             </button>
-            <button onclick="startEditingTheme('${theme.id}', '${theme.name}', '${theme.color}', '${theme.geomType || ''}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Adicionar Feição">
+            <button onclick="startEditingTheme('${theme.id}', '${theme.name}', '${theme.color}', '${theme.geomType || ''}')" class="flex items-center justify-center py-2 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-xl tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Adicionar Feição">
               <span class="material-symbols-outlined text-[18px]">add</span>
             </button>
-            <button onclick="openEditThemeModal('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Editar Camada">
+            <button onclick="openEditThemeModal('${theme.id}')" class="flex items-center justify-center py-2 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-xl tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Editar Camada">
               <span class="material-symbols-outlined text-[18px]">settings</span>
             </button>
             ${isSuperAdmin ? `
-            <button onclick="triggerUpload('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Importar GeoJSON">
+            <button onclick="triggerUpload('${theme.id}')" class="flex items-center justify-center py-2 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-xl tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Importar GeoJSON">
               <span class="material-symbols-outlined text-[18px]">upload</span>
             </button>
-            <button onclick="downloadGeoJSON('${theme.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Exportar">
+            <button onclick="downloadGeoJSON('${theme.id}')" class="flex items-center justify-center py-2 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-xl tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Exportar">
               <span class="material-symbols-outlined text-[18px]">download</span>
             </button>
-            <button onclick="deleteTheme('${theme.id}')" class="p-1.5 hover:bg-red-500/30 rounded-lg tooltip text-red-500 transition-colors" title="Excluir">
+            <button onclick="deleteTheme('${theme.id}')" class="flex items-center justify-center py-2 px-1 bg-red-500/15 hover:bg-red-500/30 active:scale-95 rounded-xl tooltip text-red-400 hover:text-red-300 transition-all border border-red-500/20 shadow-xs" title="Excluir">
               <span class="material-symbols-outlined text-[18px]">delete</span>
             </button>` : ''}
         </div>
