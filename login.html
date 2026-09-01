@@ -205,6 +205,9 @@
     }
 
     if (authData && authData.user) {
+      if (window.auditLogger && typeof window.auditLogger.log === 'function') {
+        window.auditLogger.log('LOGIN', 'Autenticação realizada com sucesso');
+      }
       await handlePostLoginRouting(authData.user.id);
     } else {
       window.location.href = 'home.html';
@@ -212,5 +215,6 @@
   });
 })();
 </script>
+<script src="src/auditLogger.js"></script>
 </body>
 </html>

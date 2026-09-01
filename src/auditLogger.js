@@ -67,8 +67,8 @@
 
                 if (!currentUserProfile?.id) return;
 
-                const activeMunicipio = typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : (localStorage.getItem('activeMunicipioId') || null);
-                const activeEntidade = currentUserProfile.entidade_id || (localStorage.getItem('activeEntidadeId') || null);
+                const activeMunicipio = typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : (sessionStorage.getItem('municipio_ativo') || localStorage.getItem('activeMunicipioId') || null);
+                const activeEntidade = currentUserProfile.entidade_id || (sessionStorage.getItem('activeEntidadeId') || localStorage.getItem('activeEntidadeId') || null);
 
                 const payload = {
                     user_id: currentUserProfile.id,

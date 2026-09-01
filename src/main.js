@@ -855,6 +855,7 @@ function loadAllFeaturesToMap() {
   const allFeatures = [];
 
   themes.slice().reverse().forEach(theme => {
+    if (typeof userCanOnTheme === 'function' && !userCanOnTheme(theme.id, 'ver')) return;
     if (theme.visible !== false) {
       const withGeom = (theme.features || []).filter(f => f.geometry);
       let toRender = withGeom;
@@ -1147,11 +1148,9 @@ function renderThemes() {
   let draggedThemeIndex = null;
 
   themes.forEach((theme, index) => {
-    // Filtro de Permissão: se o usuário não for admin e não tiver permissão para ver a camada, não exibe
-    if (!isAdmin && typeof currentUserPermissions !== 'undefined' && currentUserPermissions[theme.id]) {
-        if (currentUserPermissions[theme.id].pode_ver === false) {
-            return;
-        }
+    // Filtro de Permissão: oculta completamente camadas que o usuário não tem permissão para ver
+    if (typeof userCanOnTheme === 'function' && !userCanOnTheme(theme.id, 'ver')) {
+        return;
     }
 
     const featureCount = theme.features ? theme.features.length : 0;
@@ -1377,12 +1376,13 @@ async function loadThemeProperties(themeId) {
     const theme = themes.find(t => t.id === themeId);
     if (!theme || theme._propertiesFullyLoaded) return;
 
-    // 1. TENTA RECUPERAR DO CACHE PERSISTENTE INDEXED DB (Zero consumo de rede no Supabase Free Tier)
+    // 1. TENTA RECUPERAR DO CACHE PERSISTENTE INDEXED DB (Exibição instantânea)
+    let usedCache = false;
     if (window.GeoTurboDB && typeof window.GeoTurboDB.getThemeData === 'function') {
         try {
             const cached = await window.GeoTurboDB.getThemeData(themeId);
             if (cached && cached.features && cached.features.length > 0) {
-                console.log(`[GeoEngineTurbo] Tema "${theme.name}" recuperado INSTANTANEAMENTE do cache IndexedDB: ${cached.features.length} feições`);
+                console.log(`[GeoEngineTurbo] Tema "${theme.name}" recuperado do cache local: ${cached.features.length} feições`);
                 
                 const existingByBankId = new Map();
                 theme.features.forEach(f => {
@@ -1423,7 +1423,7 @@ async function loadThemeProperties(themeId) {
                         finally { isRefreshingDropdowns = false; }
                     }
                 }
-                return; // Carregamento instantâneo concluído com sucesso!
+                usedCache = true;
             }
         } catch(eCache) {
             console.warn('[GeoEngineTurbo] Falha na leitura do cache IndexedDB:', eCache);
@@ -3847,16 +3847,36 @@ function showFeatureInfoModal(layer) {
       geomEditToolbar.classList.add('hidden');
       geomEditToolbar.classList.remove('flex');
   }
-  if (activeFeatureLayer && activeFeatureLayer.pm && typeof activeFeatureLayer.pm.enabled === 'function' && activeFeatureLayer.pm.enabled()) {
-      activeFeatureLayer.pm.disable();
-  }
+  // Sincronização em tempo real com o banco (se outro usuário editou a feição)
+  const bankId = layer.feature && layer.feature.properties && layer.feature.properties.id_banco;
+  if (bankId && typeof supabaseClient !== 'undefined' && supabaseClient) {
+      supabaseClient
+          .from('feicoes')
+          .select('propriedades, geometria')
+          .eq('id', bankId)
+          .maybeSingle()
+          .then(({ data: freshRow, error }) => {
+              if (!error && freshRow && freshRow.propriedades) {
+                  const currentProps = layer.feature.properties || {};
+                  layer.feature.properties = { ...currentProps, ...freshRow.propriedades, id_banco: bankId, themeId: themeId || currentProps.themeId };
+                  if (freshRow.geometria) layer.feature.geometry = freshRow.geometria;
+                  
+                  if (themeId) {
+                      const theme = themes.find(t => t.id === themeId);
+                      if (theme && theme.features) {
+                          const idx = theme.features.findIndex(f => f.properties && f.properties.id_banco === bankId);
+                          if (idx !== -1) {
+                              theme.features[idx].properties = { ...layer.feature.properties };
+                              if (freshRow.geometria) theme.features[idx].geometry = freshRow.geometria;
+                          }
+                      }
+                  }
 
-  // Garantia absoluta de que o stats-dashboard-modal não está bloqueando (cliques fantasmas)
-  const statsModal = document.getElementById('stats-dashboard-modal');
-  if (statsModal && statsModal.classList.contains('opacity-0')) {
-      statsModal.style.display = 'none';
-      statsModal.style.zIndex = '-1';
-      statsModal.classList.add('pointer-events-none', 'hidden');
+                  if (activeFeatureLayer === layer) {
+                      renderFeatureInfo();
+                  }
+              }
+          }).catch(console.warn);
   }
 }
 
@@ -4671,14 +4691,25 @@ let currentMunicipioPapel = null; // papel do usuário NO MUNICÍPIO ATIVO (não
 // esconder/desabilitar botões, não como a barreira de segurança em si.
 function userCanOnTheme(themeId, acao) {
     if (currentUserProfile && currentUserProfile.super_admin) return true;
+    
+    // Se há permissão explícita configurada em permissoes_camada, ela é soberana!
+    const pc = currentUserPermissions ? currentUserPermissions[themeId] : null;
+    if (pc) {
+        if (acao === 'ver') return pc.pode_ver !== false;
+        if (acao === 'editar') return !!pc.pode_editar;
+        if (acao === 'excluir') return !!pc.pode_excluir;
+        return false;
+    }
+
+    // Se o usuário tem entidade externa associada (ex: Ministério Público Federal) ou papel 'externo',
+    // ele só pode ver o que foi explicitamente concedido (default: false se não listado).
+    const isEntidadeExterna = !!(currentUserProfile && currentUserProfile.entidade_id);
+    if (isEntidadeExterna || currentMunicipioPapel === 'externo') {
+        return false;
+    }
+
     if (currentMunicipioPapel === 'admin') return true;
-    if (currentMunicipioPapel === 'externo' && acao !== 'ver') return false;
-    const pc = currentUserPermissions[themeId];
-    if (!pc) return false;
-    if (acao === 'ver') return !!pc.pode_ver;
-    if (acao === 'editar') return !!pc.pode_editar;
-    if (acao === 'excluir') return !!pc.pode_excluir;
-    return false;
+    return acao === 'ver';
 }
 
 // Abas de formulário (dentro de uma camada): super_admin e admin do
