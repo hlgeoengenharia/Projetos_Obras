@@ -1376,64 +1376,82 @@ async function loadThemeProperties(themeId) {
     const theme = themes.find(t => t.id === themeId);
     if (!theme || theme._propertiesFullyLoaded) return;
 
-    // 1. TENTA RECUPERAR DO CACHE PERSISTENTE INDEXED DB (Exibição instantânea)
-    let usedCache = false;
+    let cached = null;
+
+    // 1. TENTA RECUPERAR DO CACHE PERSISTENTE INDEXED DB
     if (window.GeoTurboDB && typeof window.GeoTurboDB.getThemeData === 'function') {
         try {
-            const cached = await window.GeoTurboDB.getThemeData(themeId);
-            if (cached && cached.features && cached.features.length > 0) {
-                console.log(`[GeoEngineTurbo] Tema "${theme.name}" recuperado do cache local: ${cached.features.length} feições`);
-                
-                const existingByBankId = new Map();
-                theme.features.forEach(f => {
-                    if (f.properties && f.properties.id_banco) existingByBankId.set(f.properties.id_banco, f);
-                });
-
-                cached.features.forEach(f => {
-                    const idBanco = f.properties && f.properties.id_banco;
-                    if (idBanco && existingByBankId.has(idBanco)) {
-                        const existing = existingByBankId.get(idBanco);
-                        existing.properties = { ...f.properties, themeId, _propertiesLoaded: true };
-                        if (!existing.geometry) existing.geometry = f.geometry;
-                    } else {
-                        theme.features.push(f);
-                    }
-                });
-
-                theme._propertiesFullyLoaded = true;
-                theme._geometryLoaded = true;
-
-                // Indexa na R-Tree para consultas espaciais instantâneas
-                if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.indexThemeFeatures === 'function') {
-                    window.GeoEngineTurbo.indexThemeFeatures(theme.id, theme.features);
-                }
-
-                loadAllFeaturesToMap();
-
-                const countEl = document.getElementById('theme-count-' + themeId);
-                if (countEl) countEl.textContent = theme.features.length;
-
-                const listEl = document.getElementById('list-' + themeId);
-                if (listEl && !listEl.classList.contains('hidden')) {
-                    const featureListEl = document.getElementById('feature-list-' + themeId);
-                    if (featureListEl) featureListEl.innerHTML = renderFeatureListItems(theme);
-                    if (!isRefreshingDropdowns) {
-                        isRefreshingDropdowns = true;
-                        try { refreshFilterDropdownOptions(themeId); }
-                        finally { isRefreshingDropdowns = false; }
-                    }
-                }
-                usedCache = true;
-            }
+            cached = await window.GeoTurboDB.getThemeData(themeId);
         } catch(eCache) {
             console.warn('[GeoEngineTurbo] Falha na leitura do cache IndexedDB:', eCache);
         }
     }
 
-    // Se o tema já foi recuperado do cache local e possui volume expressivo (>300 feições como o CTM de 20k),
-    // finaliza aqui para evitar sobrecarga de rede e erro 500 de timeout no Supabase.
-    if (usedCache && theme.features && theme.features.length > 300) {
-        return;
+    // 2. CHECAGEM ULTRA-LEVE DE INTEGRIDADE NO SUPABASE (head: true gasta 0 bytes de geometria)
+    let shouldInvalidateCache = false;
+    if (typeof supabaseClient !== 'undefined' && supabaseClient && cached && cached.features && cached.features.length > 0) {
+        try {
+            const { count: realDbCount, error: countErr } = await supabaseClient
+                .from('feicoes')
+                .select('id', { count: 'exact', head: true })
+                .eq('theme_id', themeId);
+            
+            if (!countErr && typeof realDbCount === 'number' && realDbCount !== cached.features.length) {
+                console.log(`[GeoEngineTurbo] Sincronização detectou alteração no tema "${theme.name}": banco=${realDbCount} vs cache=${cached.features.length}. Atualizando base...`);
+                shouldInvalidateCache = true;
+            }
+        } catch(eCount) {}
+    }
+
+    // Se o cache é válido e a contagem de registros bate com o Supabase
+    if (cached && cached.features && cached.features.length > 0 && !shouldInvalidateCache) {
+        console.log(`[GeoEngineTurbo] Tema "${theme.name}" recuperado do cache local validado: ${cached.features.length} feições`);
+        
+        const existingByBankId = new Map();
+        theme.features.forEach(f => {
+            if (f.properties && f.properties.id_banco) existingByBankId.set(f.properties.id_banco, f);
+        });
+
+        cached.features.forEach(f => {
+            const idBanco = f.properties && f.properties.id_banco;
+            if (idBanco && existingByBankId.has(idBanco)) {
+                const existing = existingByBankId.get(idBanco);
+                existing.properties = { ...f.properties, themeId, _propertiesLoaded: true };
+                if (!existing.geometry) existing.geometry = f.geometry;
+            } else {
+                theme.features.push(f);
+            }
+        });
+
+        theme._propertiesFullyLoaded = true;
+        theme._geometryLoaded = true;
+
+        // Indexa na R-Tree para consultas espaciais instantâneas
+        if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.indexThemeFeatures === 'function') {
+            window.GeoEngineTurbo.indexThemeFeatures(theme.id, theme.features);
+        }
+
+        loadAllFeaturesToMap();
+
+        const countEl = document.getElementById('theme-count-' + themeId);
+        if (countEl) countEl.textContent = theme.features.length;
+
+        const listEl = document.getElementById('list-' + themeId);
+        if (listEl && !listEl.classList.contains('hidden')) {
+            const featureListEl = document.getElementById('feature-list-' + themeId);
+            if (featureListEl) featureListEl.innerHTML = renderFeatureListItems(theme);
+            if (!isRefreshingDropdowns) {
+                isRefreshingDropdowns = true;
+                try { refreshFilterDropdownOptions(themeId); }
+                finally { isRefreshingDropdowns = false; }
+            }
+        }
+        return; // Cache 100% válido e sincronizado!
+    }
+
+    // Se o cache estava desatualizado (feições foram excluídas/criadas por outro usuário), limpa os dados antigos
+    if (shouldInvalidateCache) {
+        theme.features = [];
     }
 
     if (!supabaseClient) return;
