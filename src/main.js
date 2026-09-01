@@ -1430,6 +1430,12 @@ async function loadThemeProperties(themeId) {
         }
     }
 
+    // Se o tema já foi recuperado do cache local e possui volume expressivo (>300 feições como o CTM de 20k),
+    // finaliza aqui para evitar sobrecarga de rede e erro 500 de timeout no Supabase.
+    if (usedCache && theme.features && theme.features.length > 300) {
+        return;
+    }
+
     if (!supabaseClient) return;
 
     try {
