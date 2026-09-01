@@ -5,7 +5,7 @@
  * - Sincronização entre múltiplas abas via localStorage e BroadcastChannel
  * - Tempo de Inatividade: 15 minutos (900s)
  * - Aviso Prévio com Contagem Regressiva: 60 segundos antes de encerrar (aos 14 minutos)
- * - Logout seguro com limpeza de tokens e redirecionamento para login.html
+ * - Logout seguro com limpeza profunda de tokens e bloqueio de reentrada por favoritos
  */
 
 (function() {
@@ -14,6 +14,7 @@
     const WARNING_THRESHOLD_MS = INACTIVITY_LIMIT_MS - WARNING_DURATION_MS; // 14 minutos
 
     const STORAGE_KEY = 'geogestor_last_activity_ts';
+    const EXPIRED_FLAG_KEY = 'geogestor_session_expired';
     const BROADCAST_CHANNEL_NAME = 'geogestor_session_channel';
 
     let timerInterval = null;
@@ -45,6 +46,7 @@
             lastThrottledRecord = now;
             try {
                 localStorage.setItem(STORAGE_KEY, String(now));
+                localStorage.removeItem(EXPIRED_FLAG_KEY);
             } catch(e) {}
 
             if (isWarningOpen) {
@@ -59,9 +61,9 @@
     function getLastActivity() {
         try {
             const stored = localStorage.getItem(STORAGE_KEY);
-            return stored ? parseInt(stored, 10) : Date.now();
+            return stored ? parseInt(stored, 10) : 0;
         } catch(e) {
-            return Date.now();
+            return 0;
         }
     }
 
@@ -144,7 +146,7 @@
         }
     }
 
-    // Executa Logout e Redireciona
+    // Executa Logout Completo e Invalida Todas as Chaves de Sessão
     async function performLogout(skipBroadcast = false) {
         if (!skipBroadcast && broadcastChannel) {
             try { broadcastChannel.postMessage({ type: 'FORCE_LOGOUT' }); } catch(e) {}
@@ -154,20 +156,35 @@
         
         try {
             sessionStorage.clear();
-            localStorage.removeItem('supabase.auth.token');
+            localStorage.setItem(EXPIRED_FLAG_KEY, 'true');
             localStorage.removeItem(STORAGE_KEY);
+
+            // Limpeza completa de todos os tokens do Supabase no localStorage
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && (key.startsWith('sb-') || key.includes('supabase') || key.includes('auth-token'))) {
+                    keysToRemove.push(key);
+                }
+            }
+            keysToRemove.forEach(k => localStorage.removeItem(k));
         } catch(e) {}
 
         if (window.supabaseClient) {
-            try { await window.supabaseClient.auth.signOut(); } catch(e) {}
+            try { await window.supabaseClient.auth.signOut({ scope: 'global' }); } catch(e) {}
         }
 
-        window.location.href = 'login.html?reason=inactivity';
+        window.location.replace('login.html?reason=inactivity');
     }
 
     // Loop de Verificação de Inatividade a cada 1 segundo
     function checkInactivityLoop() {
         const lastAct = getLastActivity();
+        if (!lastAct) {
+            performLogout();
+            return;
+        }
+
         const elapsed = Date.now() - lastAct;
 
         if (elapsed >= INACTIVITY_LIMIT_MS) {
@@ -186,7 +203,7 @@
         }
     }
 
-    // Inicia o módulo de segurança
+    // Inicia o módulo de segurança com validação rigorosa pré-renderização
     function initSessionSecurity() {
         const currentPath = window.location.pathname.toLowerCase();
         // Não ativa o detector na página de login ou registro público
@@ -194,6 +211,18 @@
             return;
         }
 
+        // 1. CHECAGEM CRÍTICA DE EXPIRAÇÃO PREGRESSA (Bloqueia reentrada por Favoritos)
+        const isExpired = localStorage.getItem(EXPIRED_FLAG_KEY) === 'true';
+        const lastAct = getLastActivity();
+        const now = Date.now();
+
+        if (isExpired || !lastAct || (now - lastAct >= INACTIVITY_LIMIT_MS)) {
+            console.warn("🛡️ Sessão expirada por inatividade detectada. Redirecionando para login...");
+            performLogout(true);
+            return;
+        }
+
+        // Se está válido, registra a atividade atual
         recordActivity();
         ensureWarningModal();
 

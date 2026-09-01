@@ -171,7 +171,12 @@
   // Já logado?
   (async function redirectIfLoggedIn() {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('reason') === 'inactivity') return;
+    if (params.get('reason') === 'inactivity' || localStorage.getItem('geogestor_session_expired') === 'true') {
+      if (supabaseClient) {
+        try { await supabaseClient.auth.signOut({ scope: 'global' }); } catch(e) {}
+      }
+      return;
+    }
     if (!supabaseClient) return;
     const { data } = await supabaseClient.auth.getSession();
     if (data && data.session) {
@@ -205,6 +210,12 @@
     }
 
     if (authData && authData.user) {
+      // Reativa e renova a sessão de segurança
+      try {
+        localStorage.removeItem('geogestor_session_expired');
+        localStorage.setItem('geogestor_last_activity_ts', String(Date.now()));
+      } catch(e) {}
+
       if (window.auditLogger && typeof window.auditLogger.log === 'function') {
         window.auditLogger.log('LOGIN', 'Autenticação realizada com sucesso');
       }
