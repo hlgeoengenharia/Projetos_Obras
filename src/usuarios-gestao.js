@@ -16,7 +16,7 @@
         admin: 'Administrador',
         visualizador: 'Usuário',
         editor: 'Usuário',
-        externo: 'Acesso Externo'
+        externo: 'Usuário'
     };
 
     const STATUS_LABELS = {
@@ -273,19 +273,11 @@
         const selectedMunId = _userSelectedMunMap[userId];
         const selectedMunObj = _allMunicipios.find(m => m.id === selectedMunId) || { nome: 'Município' };
 
-        // Níveis de acesso
-        let papelOptionsHtml = '';
-        if (isMunicipal) {
-            papelOptionsHtml = `
-                <option value="admin" ${userObj.papel === 'admin' ? 'selected' : ''}>Administrador (Municipal)</option>
-                <option value="visualizador" ${userObj.papel !== 'admin' ? 'selected' : ''}>Usuário (Municipal)</option>
-            `;
-        } else {
-            papelOptionsHtml = `
-                <option value="admin" ${userObj.papel === 'admin' ? 'selected' : ''}>Administrador (${entidadeNome || 'Entidade'})</option>
-                <option value="externo" ${userObj.papel !== 'admin' ? 'selected' : ''}>Acesso Externo</option>
-            `;
-        }
+        // Níveis de acesso simplificados: Administrador ou Usuário
+        const papelOptionsHtml = `
+            <option value="visualizador" ${userObj.papel !== 'admin' ? 'selected' : ''}>Usuário</option>
+            <option value="admin" ${userObj.papel === 'admin' ? 'selected' : ''}>Administrador</option>
+        `;
 
         const statusOptionsHtml = ['pendente', 'aprovado', 'rejeitado'].map(s => 
             `<option value="${s}" ${userObj.status === s ? 'selected' : ''}>${STATUS_LABELS[s]}</option>`
@@ -501,7 +493,7 @@
                             <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Clique na camada para expandir as abas</span>
                         </div>
 
-                        <div class="space-y-3 max-h-96 overflow-y-auto pr-1">
+                        <div class="space-y-3">
                             ${camadasHtml || `<div class="text-xs text-slate-400 italic py-4 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">Nenhuma camada cadastrada em ${selectedMunObj.nome}.</div>`}
                         </div>
                     </div>
@@ -779,8 +771,18 @@
         }
     }
 
+    function setMunicipio(munId) {
+        _targetMunicipioId = munId;
+        const container = document.getElementById('usuarios-list') || document.getElementById('users-container');
+        if (container && _allMembros.length > 0) {
+            const searchInput = document.getElementById('usuarios-search') || document.getElementById('users-search');
+            renderUsersList(container.id, searchInput ? searchInput.value : '');
+        }
+    }
+
     window.UsuariosManager = {
         init: initUsuariosManager,
+        setMunicipio,
         selectUserMun,
         toggleUserCard,
         toggleCamadaAccordion,

@@ -19,12 +19,20 @@
     } catch(e) {}
   })();
 </script>
+<script>
+  if (window.self !== window.top || new URLSearchParams(window.location.search).get('embedded') === '1') {
+    document.documentElement.classList.add('is-embedded');
+  }
+</script>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <script src="/src/customFields.js"></script>
 <script src="/src/formRenderer.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <style>
+  html.is-embedded header { display: none !important; }
+  html.is-embedded main { padding-top: 1rem !important; }
+  html.is-embedded body { background-color: transparent !important; }
   /* Suporte a rolagem horizontal no mobile sem barra de rolagem nativa */
   .no-scrollbar::-webkit-scrollbar {
     display: none;
@@ -1988,6 +1996,7 @@
 
       activeMunicipioId = sessionStorage.getItem('municipio_ativo');
       if (!activeMunicipioId) {
+        if (window.self !== window.top) return false;
         window.location.href = 'home.html';
         return false;
       }
@@ -2011,6 +2020,7 @@
         .maybeSingle();
 
       if (!membro || membro.papel !== 'admin') {
+        if (window.self !== window.top) return false;
         alert('Esta área é restrita ao administrador deste município.');
         window.location.href = 'home.html';
         return false;

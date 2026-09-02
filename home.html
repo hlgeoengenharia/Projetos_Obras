@@ -107,34 +107,82 @@
 </head>
 <body class="font-sans min-h-screen">
 
-<header class="h-16 bg-white/70 dark:bg-[#070b14]/75 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 shadow-sm flex items-center px-2 md:px-8 gap-2 md:gap-4">
-  <!-- Abas (só aparecem pra quem tem mais de uma coisa pra ver — hoje, super_admin) -->
-  <div id="home-tabs" class="hidden flex-1 min-w-0 items-center justify-center gap-0.5 sm:gap-1 h-full overflow-x-auto">
-    <button class="tab-btn active h-full px-2 sm:px-3 md:px-6 shrink-0 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('municipios-section', this)" title="Municípios">
-      <span class="material-symbols-outlined text-[20px]">location_city</span>
-      <span class="text-[9px] font-medium uppercase tracking-wide">Municípios</span>
-    </button>
-    <button id="tab-btn-entidades" class="hidden tab-btn h-full px-2 sm:px-3 md:px-6 shrink-0 flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('entidades-section', this)" title="Entidades Padrão">
-      <span class="material-symbols-outlined text-[20px]">domain</span>
-      <span class="text-[9px] font-medium uppercase tracking-wide">Entidades</span>
-    </button>
-    <button id="tab-btn-pendentes" class="hidden relative tab-btn h-full px-2 sm:px-3 md:px-6 shrink-0 flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('pending-section', this)" title="Solicitações">
-      <span class="material-symbols-outlined text-[20px]">pending_actions</span>
-      <span class="text-[9px] font-medium uppercase tracking-wide">Solicitações</span>
-      <span id="pending-badge" class="hidden absolute top-2 right-3 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center"></span>
-    </button>
-    <button id="tab-btn-usuarios" class="hidden tab-btn h-full px-2 sm:px-3 md:px-6 shrink-0 flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchHomeTab('usuarios-section', this)" title="Usuários">
-      <span class="material-symbols-outlined text-[20px]">group</span>
-      <span class="text-[9px] font-medium uppercase tracking-wide">Usuários</span>
-    </button>
+<header class="h-16 bg-white/70 dark:bg-[#070b14]/75 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 shadow-sm flex items-center px-4 md:px-8 gap-4 justify-between">
+
+  <!-- VISÃO 1: Portal Geral (Lista de Municípios / Configurações Globais) -->
+  <div id="header-portal-view" class="flex items-center justify-between w-full">
+    <!-- Logomarca / Título -->
+    <div class="flex items-center gap-2.5">
+      <img src="assets/logo.png" alt="GeoGestor" class="w-8 h-8 rounded-lg object-contain">
+      <span class="font-extrabold text-sm tracking-tight text-slate-800 dark:text-slate-100 hidden sm:inline">GeoGestor</span>
+    </div>
+
+    <!-- Canto Direito: Configurações Globais (SuperAdmin) + Perfil -->
+    <div class="flex items-center gap-2.5 ml-auto">
+      <!-- Botão CONFIGURAÇÕES (exclusivo SuperAdmin, estilo circular idêntico ao perfil) -->
+      <button id="btn-global-config" onclick="abrirConfiguracoesGlobais()" class="hidden w-9 h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all items-center justify-center cursor-pointer shadow-sm" title="Configurações Globais (Entidades e Novo Município)">
+        <span class="material-symbols-outlined text-[20px]">settings</span>
+      </button>
+
+      <!-- Botão Perfil -->
+      <button id="profile-btn" onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-9 h-9 md:w-10 md:h-10 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors cursor-pointer shadow-sm" title="Perfil do Usuário">
+        <img src="assets/logo.png" alt="Perfil" class="w-full h-full object-cover">
+      </button>
+    </div>
   </div>
 
-  <!-- Perfil: mesmo modal usado em index.html -->
-  <div class="shrink-0 ml-auto">
-    <button id="profile-btn" onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-9 h-9 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors">
-      <img src="assets/logo.png" alt="Perfil" class="w-full h-full object-cover">
+  <!-- VISÃO 2: Painel do Município Ativo (ao clicar em ABRIR em um município) -->
+  <div id="header-municipio-view" class="hidden items-center justify-between w-full h-full gap-2 sm:gap-4">
+    <!-- Esquerda: Seta Voltar circular (mesmo estilo e tamanho do perfil) -->
+    <button onclick="voltarParaMunicipios()" class="w-9 h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all flex items-center justify-center cursor-pointer shadow-sm shrink-0" title="Voltar aos Municípios">
+      <span class="material-symbols-outlined text-[20px]">arrow_back</span>
     </button>
+
+    <!-- Centro: Abas do Município (com rolagem horizontal para telas menores) -->
+    <div id="municipio-tabs" class="flex-1 min-w-0 flex items-center justify-start md:justify-center gap-0.5 sm:gap-1 h-full overflow-x-auto no-scrollbar px-1 sm:px-2">
+      <button class="tab-btn h-full px-2 sm:px-3 shrink-0 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="window.location.href='index.html'" title="Abrir Mapa Interativo">
+        <span class="material-symbols-outlined text-[20px] text-primary">map</span>
+        <span class="text-[9px] font-medium uppercase tracking-wide">Mapa</span>
+      </button>
+      <button id="tab-btn-cadastros" class="tab-btn h-full px-2 sm:px-3 shrink-0 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchMunicipioTab('cadastros', this)" title="Cadastros e Formulários Dinâmicos">
+        <span class="material-symbols-outlined text-[20px]">assignment</span>
+        <span class="text-[9px] font-medium uppercase tracking-wide">Cadastros</span>
+      </button>
+      <button id="tab-btn-estatistica" class="tab-btn h-full px-2 sm:px-3 shrink-0 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchMunicipioTab('estatistica', this)" title="Geoestatística Espacial">
+        <span class="material-symbols-outlined text-[20px]">hub</span>
+        <span class="text-[9px] font-medium uppercase tracking-wide">Estatística</span>
+      </button>
+      <button id="tab-btn-layout" class="tab-btn h-full px-2 sm:px-3 shrink-0 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchMunicipioTab('layout', this)" title="Layout de Impressão">
+        <span class="material-symbols-outlined text-[20px]">palette</span>
+        <span class="text-[9px] font-medium uppercase tracking-wide">Layout</span>
+      </button>
+      <button id="tab-btn-storage" class="tab-btn h-full px-2 sm:px-3 shrink-0 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchMunicipioTab('storage', this)" title="Arquivos na Nuvem">
+        <span class="material-symbols-outlined text-[20px]">cloud_upload</span>
+        <span class="text-[9px] font-medium uppercase tracking-wide">Arquivos</span>
+      </button>
+      <button id="tab-btn-usuarios" class="tab-btn h-full px-2 sm:px-3 shrink-0 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchMunicipioTab('usuarios', this)" title="Usuários e Permissões">
+        <span class="material-symbols-outlined text-[20px]">group</span>
+        <span class="text-[9px] font-medium uppercase tracking-wide">Usuários</span>
+      </button>
+      <button id="tab-btn-pendentes" class="relative tab-btn h-full px-2 sm:px-3 shrink-0 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchMunicipioTab('pending-section', this)" title="Solicitações">
+        <span class="material-symbols-outlined text-[20px]">pending_actions</span>
+        <span class="text-[9px] font-medium uppercase tracking-wide">Solicitações</span>
+        <span id="pending-badge" class="hidden absolute top-2 right-2 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center"></span>
+      </button>
+      <button id="tab-btn-auditoria" class="tab-btn h-full px-2 sm:px-3 shrink-0 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchMunicipioTab('auditoria', this)" title="Auditoria e Logs de Atividades">
+        <span class="material-symbols-outlined text-[20px]">manage_history</span>
+        <span class="text-[9px] font-medium uppercase tracking-wide">Auditoria</span>
+      </button>
+    </div>
+
+    <!-- Direita: Perfil (fixo) -->
+    <div class="shrink-0 ml-auto flex items-center">
+      <button onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-9 h-9 md:w-10 md:h-10 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors cursor-pointer shadow-sm" title="Perfil do Usuário">
+        <img src="assets/logo.png" alt="Perfil" class="w-full h-full object-cover">
+      </button>
+    </div>
   </div>
+
 </header>
 
 <!-- Profile Modal (idêntico ao de index.html) -->
@@ -235,45 +283,101 @@
     <div id="pending-list" class="flex flex-col gap-2"></div>
   </section>
 
-  <!-- Todos os usuários da plataforma (só super_admin) -->
-  <section id="usuarios-section" class="tab-content">
-    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Usuários</h2>
-    <div class="relative mb-3">
-      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px] pointer-events-none">search</span>
-      <input id="usuarios-search" type="text" placeholder="Buscar por nome, e-mail, entidade ou município..." oninput="filterUsuariosList(this.value)" class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white">
+
+  <!-- Seletor / Lista de Municípios com Pesquisador -->
+  <section id="municipios-section" class="tab-content active">
+    <!-- Cabeçalho descritivo -->
+    <div class="mb-4">
+      <h2 class="text-base font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Municípios Autorizados</h2>
+      <p class="text-xs text-slate-400 mt-0.5">Selecione um município para acessar o mapa ou gerenciar configurações</p>
     </div>
-    <div id="usuarios-list" class="flex flex-col gap-2"></div>
+
+    <!-- Campo de Busca com a mesma largura dos cards (w-full) e abaixo do texto -->
+    <div class="relative w-full mb-5">
+      <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[18px] pointer-events-none">search</span>
+      <input id="municipios-search" type="text" placeholder="Buscar município ou UF..." oninput="filterMunicipiosList(this.value)" class="w-full pl-10 pr-4 py-2.5 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary dark:text-white shadow-sm transition-all">
+    </div>
+
+    <!-- Lista de Cards de Municípios -->
+    <div id="municipios-list" class="flex flex-col gap-3"></div>
+    <div id="municipios-empty-filter" class="hidden text-center py-10 text-xs text-slate-400 italic">Nenhum município encontrado com esse termo de busca.</div>
   </section>
 
-  <!-- Seletor de município -->
-  <section id="municipios-section" class="tab-content">
-    <div class="flex items-center justify-between mb-3">
-      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Selecione o Município</h2>
-      <button id="btn-novo-municipio" onclick="document.getElementById('novo-municipio-form').classList.toggle('hidden')" class="hidden text-xs font-semibold text-primary hover:underline items-center gap-1.5">
-        <span class="material-symbols-outlined text-[16px]">add_circle</span> Novo Município
-      </button>
-    </div>
-    <div id="novo-municipio-form" class="hidden card rounded-xl p-4 flex flex-col sm:flex-row gap-2 mb-4">
-      <input id="novo-municipio-nome" type="text" placeholder="Nome do município" class="flex-1 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-2">
-      <input id="novo-municipio-uf" type="text" maxlength="2" placeholder="UF" class="w-full sm:w-20 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-2 uppercase">
-      <button onclick="criarMunicipio()" class="text-xs bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 shrink-0">Criar</button>
-    </div>
-    <div id="municipios-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"></div>
-  </section>
+  <!-- Configurações Globais (exclusivo SuperAdmin) -->
+  <section id="configuracoes-section" class="tab-content">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-6 border-b border-slate-200 dark:border-slate-800 gap-4">
+      <div class="flex items-center gap-3">
+        <button onclick="voltarParaMunicipios()" class="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer" title="Voltar aos Municípios">
+          <span class="material-symbols-outlined text-[20px]">arrow_back</span>
+        </button>
+        <div>
+          <h2 class="text-base font-bold text-slate-800 dark:text-slate-100">Configurações Globais</h2>
+          <p class="text-xs text-slate-400">Gerenciamento de entidades padrão e cadastro de novos municípios</p>
+        </div>
+      </div>
 
-  <!-- Entidades padrão do cadastro (só super_admin) -->
-  <section id="entidades-section" class="tab-content">
-    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Entidades Padrão (lista do cadastro)</h2>
-    <div id="entidades-list" class="flex flex-col gap-2 mb-3"></div>
-    <div class="card rounded-xl p-4 flex flex-col sm:flex-row gap-2">
-      <input id="nova-entidade-nome" type="text" placeholder="Nome completo" class="flex-1 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-2">
-      <input id="nova-entidade-sigla" type="text" placeholder="Sigla (opcional)" class="w-full sm:w-32 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-2">
-      <select id="nova-entidade-tipo" class="text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-2">
-        <option value="municipal">Municipal</option>
-        <option value="externo" selected>Externo</option>
-        <option value="outro">Outro</option>
-      </select>
-      <button onclick="adicionarEntidade()" class="text-xs bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 shrink-0">Adicionar</button>
+      <!-- Sub-abas: Entidades | Novo Município -->
+      <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
+        <button id="subtab-btn-entidades" onclick="switchConfigSubTab('entidades')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-900 text-primary shadow-sm cursor-pointer">
+          Entidades
+        </button>
+        <button id="subtab-btn-novomun" onclick="switchConfigSubTab('novomun')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer">
+          Novo Município
+        </button>
+      </div>
+    </div>
+
+    <!-- Sub-aba 1: Entidades Padrão -->
+    <div id="config-subtab-entidades" class="space-y-4">
+      <div class="card rounded-2xl p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Adicionar Nova Entidade</h3>
+        <div class="flex flex-col sm:flex-row gap-2.5">
+          <input id="nova-entidade-nome" type="text" placeholder="Nome completo da entidade" class="flex-1 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2.5">
+          <input id="nova-entidade-sigla" type="text" placeholder="Sigla (opcional)" class="w-full sm:w-36 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2.5">
+          <select id="nova-entidade-tipo" class="text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2.5">
+            <option value="municipal">Municipal</option>
+            <option value="externo" selected>Externo</option>
+            <option value="outro">Outro</option>
+          </select>
+          <button onclick="adicionarEntidade()" class="text-xs font-bold bg-primary text-white px-5 py-2.5 rounded-xl hover:bg-primary/90 shrink-0 shadow-sm transition-all cursor-pointer">Adicionar</button>
+        </div>
+      </div>
+
+      <div>
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Entidades Cadastradas</h3>
+        <div id="entidades-list" class="flex flex-col gap-2"></div>
+      </div>
+    </div>
+
+    <!-- Sub-aba 2: Novo Município -->
+    <div id="config-subtab-novomun" class="hidden space-y-4">
+      <div class="card rounded-2xl p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Cadastrar Novo Município</h3>
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+          <input id="novo-municipio-nome" type="text" placeholder="Nome do município (ex: João Pessoa)" class="flex-1 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2.5">
+          <input id="novo-municipio-uf" type="text" maxlength="2" placeholder="UF" class="w-full sm:w-20 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2.5 uppercase text-center font-bold">
+          
+          <!-- Campo para importar a logo do município -->
+          <label class="relative flex items-center justify-center gap-2 px-3 py-2.5 border border-dashed border-slate-300 dark:border-slate-700 hover:border-primary dark:hover:border-primary rounded-xl cursor-pointer bg-slate-50 dark:bg-slate-800/60 hover:bg-primary/5 transition-all text-xs text-slate-600 dark:text-slate-300 shrink-0" title="Selecionar imagem da logo do município">
+            <img id="novo-municipio-logo-preview" class="w-5 h-5 rounded object-contain hidden" alt="Preview">
+            <span id="novo-municipio-logo-icon" class="material-symbols-outlined text-[18px] text-primary">add_photo_alternate</span>
+            <span id="novo-municipio-logo-label" class="truncate max-w-[120px]">Importar Logo</span>
+            <input id="novo-municipio-logo" type="file" accept="image/png, image/jpeg, image/svg+xml, image/webp" class="hidden" onchange="previewNovoMunicipioLogo(this)">
+          </label>
+
+          <button onclick="criarMunicipio()" class="text-xs font-bold bg-primary text-white px-5 py-2.5 rounded-xl hover:bg-primary/90 shrink-0 shadow-sm transition-all cursor-pointer">Cadastrar Município</button>
+        </div>
+        <!-- Informação do tipo de arquivo que deve ser importado -->
+        <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-2.5 flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[15px] text-primary">info</span>
+          <span>Formatos suportados: <strong>PNG, JPG, SVG ou WEBP</strong> (recomendado brasão/logo com fundo transparente, máx. 2MB).</span>
+        </p>
+      </div>
+
+      <div>
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Municípios Cadastrados</h3>
+        <div id="global-municipios-list" class="flex flex-col gap-2"></div>
+      </div>
     </div>
   </section>
 
@@ -283,6 +387,25 @@
     <p class="mt-3 text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto">Sua solicitação de acesso está em análise. Assim que for aprovada, o município aparecerá aqui.</p>
   </section>
 
+  <!-- Tela Padrão de Boas-Vindas ao Entrar no Município (nenhuma aba aberta inicialmente) -->
+  <section id="municipio-welcome-section" class="tab-content flex-col items-center justify-center min-h-[55vh] text-center px-4 py-20">
+    <div class="w-16 h-16 rounded-3xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-5 shadow-sm mx-auto overflow-hidden p-2">
+      <img id="welcome-municipio-logo" class="w-full h-full object-contain hidden" alt="Logo">
+      <span id="welcome-municipio-icon" class="material-symbols-outlined text-primary text-[36px]">location_city</span>
+    </div>
+    <h2 id="welcome-municipio-title" class="text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight mb-2">
+      Bem-vindo ao GeoGestor
+    </h2>
+    <p class="text-xs sm:text-sm text-slate-400 max-w-md mx-auto">
+      Selecione uma das abas acima para acessar as ferramentas de gestão ou o mapa interativo deste município.
+    </p>
+  </section>
+
+  <!-- Container Embutido das Ferramentas de Gestão (Cadastros, Estatística, Layout, Arquivos, Auditoria) -->
+  <section id="settings-frame-section" class="tab-content -mx-4 md:-mx-8 -my-6">
+    <iframe id="settings-iframe" src="about:blank" class="w-full h-[calc(100vh-4rem)] border-0 bg-transparent" allowtransparency="true"></iframe>
+  </section>
+
   <div id="loading-section" class="text-center py-16 text-sm text-slate-400 italic">Carregando...</div>
 
 </main>
@@ -290,24 +413,430 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js"></script>
 <script>
-// Editor e Visualizador sempre se comportaram exatamente igual no sistema
-// (nenhuma checagem de permissão distingue os dois — ambos caem na mesma
-// checagem fina de permissoes_camada/permissoes_aba). Simplificado pra só
-// 3 níveis reais: Administrador (bypassa tudo), Usuário (a checagem fina
-// decide o que ele vê/edita) e Acesso Externo (trava dura: nunca edita/
-// exclui, não importa o que for concedido). 'editor' continua mapeado
-// aqui só por compatibilidade com linhas antigas que ainda tenham esse
-// valor salvo — a tela não oferece mais essa opção.
-const PAPEL_LABELS = { admin: 'Administrador', editor: 'Usuário', visualizador: 'Usuário', externo: 'Acesso Externo' };
+// Simplificado para 2 níveis reais: Administrador e Usuário
+const PAPEL_LABELS = { admin: 'Administrador', editor: 'Usuário', visualizador: 'Usuário', externo: 'Usuário' };
 let homeUserProfile = null;
 
-function switchHomeTab(sectionId, btn) {
-    document.querySelectorAll('#home-tabs .tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('main .tab-content').forEach(s => s.classList.remove('active'));
-    document.getElementById(sectionId).classList.add('active');
-    btn.classList.add('active');
-}
-window.switchHomeTab = switchHomeTab;
+const SETTINGS_TABS = ['cadastros', 'estatistica', 'layout', 'storage', 'usuarios', 'auditoria'];
+let currentActiveSettingsTab = null;
+
+window.abrirMunicipio = function(id, nome, papel) {
+    sessionStorage.setItem('municipio_ativo', id);
+    sessionStorage.setItem('municipio_ativo_nome', nome);
+
+    const ehAdmin = papel === 'admin' || (homeUserProfile && homeUserProfile.super_admin);
+
+    if (!ehAdmin) {
+        // Usuário comum abre direto o mapa
+        window.location.href = 'index.html';
+        return;
+    }
+
+    // Administrador entra na visão de gestão do município
+    const portalHeader = document.getElementById('header-portal-view');
+    const munHeader = document.getElementById('header-municipio-view');
+    if (portalHeader) {
+        portalHeader.classList.add('hidden');
+        portalHeader.classList.remove('flex');
+    }
+    if (munHeader) {
+        munHeader.classList.remove('hidden');
+        munHeader.classList.add('flex');
+    }
+
+    // Nenhuma aba começa ativa de início
+    document.querySelectorAll('#municipio-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+
+    // Configura a mensagem padrão centralizada de boas-vindas e a logo
+    const welcomeTitle = document.getElementById('welcome-municipio-title');
+    if (welcomeTitle) {
+        welcomeTitle.textContent = `Bem-vindo ao GeoGestor ${nome}`;
+    }
+    const welcomeLogo = document.getElementById('welcome-municipio-logo');
+    const welcomeIcon = document.getElementById('welcome-municipio-icon');
+    const munObj = (window.municipiosParaMostrarCache || []).find(m => m.id === id);
+    if (munObj && munObj.logo_url) {
+        if (welcomeLogo) { welcomeLogo.src = munObj.logo_url; welcomeLogo.classList.remove('hidden'); }
+        if (welcomeIcon) { welcomeIcon.classList.add('hidden'); }
+    } else {
+        if (welcomeLogo) { welcomeLogo.src = ''; welcomeLogo.classList.add('hidden'); }
+        if (welcomeIcon) { welcomeIcon.classList.remove('hidden'); }
+    }
+
+    // Exibe apenas a tela neutra de boas-vindas (nenhum iframe ou aba aberta)
+    document.querySelectorAll('main > section').forEach(s => s.classList.remove('active'));
+    const welcomeSec = document.getElementById('municipio-welcome-section');
+    if (welcomeSec) {
+        welcomeSec.classList.add('active');
+    }
+
+    // Limpa o iframe para quando o usuário clicar na aba desejada
+    const iframe = document.getElementById('settings-iframe');
+    if (iframe) {
+        iframe.src = 'about:blank';
+    }
+};
+
+window.voltarParaMunicipios = function() {
+    const portalHeader = document.getElementById('header-portal-view');
+    const munHeader = document.getElementById('header-municipio-view');
+    if (portalHeader) {
+        portalHeader.classList.remove('hidden');
+        portalHeader.classList.add('flex');
+    }
+    if (munHeader) {
+        munHeader.classList.add('hidden');
+        munHeader.classList.remove('flex');
+    }
+
+    // Esconde seções de gestão e boas-vindas, e mostra a lista de municípios
+    document.querySelectorAll('main > section').forEach(s => s.classList.remove('active'));
+    const munSec = document.getElementById('municipios-section');
+    if (munSec) munSec.classList.add('active');
+
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('tab');
+        window.history.replaceState({}, '', url.pathname);
+    } catch(e) {}
+};
+
+window.abrirConfiguracoesGlobais = function() {
+    document.querySelectorAll('main > section').forEach(s => s.classList.remove('active'));
+    const cfgSec = document.getElementById('configuracoes-section');
+    if (cfgSec) cfgSec.classList.add('active');
+
+    switchConfigSubTab('entidades');
+    loadEntidadesSection();
+    loadGlobalMunicipiosList();
+};
+
+window.switchConfigSubTab = function(subTab) {
+    const btnEntidades = document.getElementById('subtab-btn-entidades');
+    const btnNovoMun = document.getElementById('subtab-btn-novomun');
+    const secEntidades = document.getElementById('config-subtab-entidades');
+    const secNovoMun = document.getElementById('config-subtab-novomun');
+
+    if (subTab === 'entidades') {
+        if (btnEntidades) {
+            btnEntidades.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-900 text-primary shadow-sm cursor-pointer';
+        }
+        if (btnNovoMun) {
+            btnNovoMun.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer';
+        }
+        if (secEntidades) secEntidades.classList.remove('hidden');
+        if (secNovoMun) secNovoMun.classList.add('hidden');
+    } else {
+        if (btnNovoMun) {
+            btnNovoMun.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-900 text-primary shadow-sm cursor-pointer';
+        }
+        if (btnEntidades) {
+            btnEntidades.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer';
+        }
+        if (secNovoMun) secNovoMun.classList.remove('hidden');
+        if (secEntidades) secEntidades.classList.add('hidden');
+    }
+};
+
+window.previewNovoMunicipioLogo = function(input) {
+    if (!input || !input.files || !input.files[0]) return;
+    const file = input.files[0];
+    if (file.size > 2 * 1024 * 1024) {
+        alert('O arquivo selecionado é maior que 2MB. Escolha uma imagem menor.');
+        input.value = '';
+        return;
+    }
+    const preview = document.getElementById('novo-municipio-logo-preview');
+    const icon = document.getElementById('novo-municipio-logo-icon');
+    const label = document.getElementById('novo-municipio-logo-label');
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        if (preview) {
+            preview.src = e.target.result;
+            preview.classList.remove('hidden');
+        }
+        if (icon) icon.classList.add('hidden');
+        if (label) label.textContent = file.name;
+    };
+    reader.readAsDataURL(file);
+};
+
+window.previewCardMunicipioLogo = function(id, input) {
+    if (!input || !input.files || !input.files[0]) return;
+    const file = input.files[0];
+    if (file.size > 2 * 1024 * 1024) {
+        alert('O arquivo selecionado é maior que 2MB. Escolha uma imagem menor.');
+        input.value = '';
+        return;
+    }
+    const card = document.querySelector(`[data-mun-card="${id}"]`);
+    if (!card) return;
+    const preview = card.querySelector('.mun-edit-logo-preview');
+    const label = card.querySelector('.mun-edit-logo-label');
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        if (preview) {
+            preview.src = e.target.result;
+            preview.classList.remove('hidden');
+        }
+        if (label) label.textContent = file.name;
+    };
+    reader.readAsDataURL(file);
+};
+
+window.fileToDataUrl = function(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+};
+
+window.uploadLogoToStorage = async function(file, prefix) {
+    if (!file) return null;
+
+    // 1. Tenta enviar para o bucket do Supabase Storage
+    try {
+        const ext = file.name.split('.').pop() || 'png';
+        const cleanName = (prefix || 'logo').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const filePath = `logos/${cleanName}_${Date.now()}.${ext}`;
+
+        const { data: uploadData, error: uploadError } = await supabaseClient.storage
+            .from('arquivos-obras')
+            .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: true
+            });
+
+        if (!uploadError && uploadData) {
+            const { data: pubData } = supabaseClient.storage.from('arquivos-obras').getPublicUrl(filePath);
+            if (pubData && pubData.publicUrl) {
+                return pubData.publicUrl;
+            }
+        } else if (uploadError) {
+            console.warn('Storage upload retornou erro (aplicando fallback Base64):', uploadError);
+        }
+    } catch (e) {
+        console.warn('Exceção ao tentar upload no storage (aplicando fallback Base64):', e);
+    }
+
+    // 2. Fallback de alta resiliência: converte para Data URL (Base64)
+    // Permite que a logo seja salva e exibida imediatamente sem erros 400!
+    try {
+        const dataUrl = await window.fileToDataUrl(file);
+        return dataUrl;
+    } catch (e) {
+        throw new Error('Falha ao processar arquivo de imagem: ' + e.message);
+    }
+};
+
+window.editarMunicipioCard = function(id) {
+    const card = document.querySelector(`[data-mun-card="${id}"]`);
+    if (!card) return;
+    card.querySelector('.mun-view-mode').classList.add('hidden');
+    card.querySelector('.mun-view-mode').classList.remove('flex');
+    card.querySelector('.mun-edit-mode').classList.remove('hidden');
+    card.querySelector('.mun-edit-mode').classList.add('flex');
+};
+
+window.cancelarEdicaoMunicipio = function(id) {
+    const card = document.querySelector(`[data-mun-card="${id}"]`);
+    if (!card) return;
+    const origNome = card.getAttribute('data-orig-nome') || '';
+    const origUf = card.getAttribute('data-orig-uf') || '';
+    const origLogo = card.getAttribute('data-orig-logo') || '';
+    const origAtivo = card.getAttribute('data-orig-ativo') === '1';
+
+    card.querySelector('.mun-edit-nome').value = origNome;
+    card.querySelector('.mun-edit-uf').value = origUf;
+    card.querySelector('.mun-edit-ativo').checked = origAtivo;
+    const fileInput = card.querySelector('.mun-edit-logo-file');
+    if (fileInput) fileInput.value = '';
+    const preview = card.querySelector('.mun-edit-logo-preview');
+    if (preview) {
+        preview.src = origLogo;
+        if (origLogo) preview.classList.remove('hidden'); else preview.classList.add('hidden');
+    }
+    const label = card.querySelector('.mun-edit-logo-label');
+    if (label) label.textContent = origLogo ? 'Trocar Logo' : 'Nova Logo';
+
+    card.querySelector('.mun-edit-mode').classList.add('hidden');
+    card.querySelector('.mun-edit-mode').classList.remove('flex');
+    card.querySelector('.mun-view-mode').classList.remove('hidden');
+    card.querySelector('.mun-view-mode').classList.add('flex');
+};
+
+window.salvarEdicaoMunicipio = async function(id) {
+    const card = document.querySelector(`[data-mun-card="${id}"]`);
+    if (!card) return;
+
+    const nome = card.querySelector('.mun-edit-nome').value.trim();
+    const uf = card.querySelector('.mun-edit-uf').value.trim().toUpperCase();
+    const ativo = card.querySelector('.mun-edit-ativo').checked;
+    const fileInput = card.querySelector('.mun-edit-logo-file');
+    let logoUrl = card.getAttribute('data-orig-logo') || null;
+
+    if (!nome) {
+        alert('Informe o nome do município.');
+        return;
+    }
+
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+        try {
+            const uploadedUrl = await window.uploadLogoToStorage(fileInput.files[0], id);
+            if (uploadedUrl) logoUrl = uploadedUrl;
+        } catch(err) {
+            alert('Erro ao enviar imagem da logo: ' + err.message);
+            return;
+        }
+    }
+
+    let updatePayload = { nome, uf: uf || null, ativo };
+    if (logoUrl) updatePayload.logo_url = logoUrl;
+
+    let { error } = await supabaseClient.from('municipios').update(updatePayload).eq('id', id);
+
+    if (error && error.message && error.message.includes('logo_url')) {
+        delete updatePayload.logo_url;
+        const res2 = await supabaseClient.from('municipios').update(updatePayload).eq('id', id);
+        if (res2.error) {
+            alert('Erro ao salvar município: ' + res2.error.message);
+            return;
+        }
+        alert('Município atualizado! Nota: Para persistir a Logo no banco de dados, execute o script SQL "supabase_municipios_logo_setup.sql" no painel do Supabase.');
+    } else if (error) {
+        alert('Erro ao salvar município: ' + error.message);
+        return;
+    } else {
+        alert('Município atualizado com sucesso!');
+    }
+
+    loadGlobalMunicipiosList();
+    init();
+};
+
+window.loadGlobalMunicipiosList = async function() {
+    const listContainer = document.getElementById('global-municipios-list');
+    if (!listContainer) return;
+    listContainer.innerHTML = '<div class="text-xs text-slate-400 italic py-2">Carregando municípios...</div>';
+
+    const { data: muns, error } = await supabaseClient.from('municipios').select('*').order('nome');
+    if (error) {
+        listContainer.innerHTML = '<div class="text-xs text-red-500">Erro ao carregar lista de municípios.</div>';
+        return;
+    }
+
+    if (!muns || muns.length === 0) {
+        listContainer.innerHTML = '<div class="text-xs text-slate-400 italic py-2">Nenhum município cadastrado.</div>';
+        return;
+    }
+
+    listContainer.innerHTML = muns.map(m => `
+        <div class="card rounded-2xl p-3.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-all" data-mun-card="${m.id}" data-orig-nome="${(m.nome || '').replace(/"/g, '&quot;')}" data-orig-uf="${(m.uf || '').replace(/"/g, '&quot;')}" data-orig-logo="${m.logo_url || ''}" data-orig-ativo="${m.ativo ? '1' : '0'}">
+            <!-- MODO VISUALIZAÇÃO -->
+            <div class="mun-view-mode flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 flex items-center justify-center shrink-0 overflow-hidden p-1">
+                        ${m.logo_url ? `<img src="${m.logo_url}" class="w-full h-full object-contain" alt="Logo">` : `<span class="material-symbols-outlined text-primary text-[22px]">location_city</span>`}
+                    </div>
+                    <div class="min-w-0">
+                        <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate block">${m.nome}${m.uf ? ' - ' + m.uf : ''}</span>
+                        <span class="text-[10px] text-slate-400 block">${m.ativo ? 'Ativo no sistema' : 'Inativo'}</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <label class="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 cursor-pointer mr-1">
+                        <input type="checkbox" ${m.ativo ? 'checked' : ''} onchange="toggleMunicipioAtivo('${m.id}', this.checked)" class="rounded border-slate-300 text-primary focus:ring-primary">
+                        <span class="text-[11px] font-medium">${m.ativo ? 'Ativo' : 'Inativo'}</span>
+                    </label>
+                    <button type="button" onclick="editarMunicipioCard('${m.id}')" class="px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-all flex items-center gap-1 cursor-pointer" title="Editar nome, UF e logo deste município">
+                        <span class="material-symbols-outlined text-[15px]">edit</span>
+                        <span>Editar</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- MODO EDIÇÃO -->
+            <div class="mun-edit-mode hidden flex-col gap-2.5 pt-1">
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <input class="mun-edit-nome flex-1 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2.5 py-2 text-slate-800 dark:text-slate-100 font-semibold" value="${(m.nome || '').replace(/"/g, '&quot;')}" placeholder="Nome do município">
+                    <input class="mun-edit-uf w-full sm:w-20 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2.5 py-2 text-slate-800 dark:text-slate-100 font-bold uppercase text-center" value="${(m.uf || '').replace(/"/g, '&quot;')}" placeholder="UF" maxlength="2">
+                    
+                    <label class="flex items-center gap-1.5 px-2.5 py-2 border border-dashed border-slate-300 dark:border-slate-700 hover:border-primary rounded-lg cursor-pointer bg-slate-50 dark:bg-slate-800 text-xs text-slate-600 dark:text-slate-300 shrink-0" title="Alterar imagem da logo">
+                        <img class="mun-edit-logo-preview w-4 h-4 rounded object-contain ${m.logo_url ? '' : 'hidden'}" src="${m.logo_url || ''}">
+                        <span class="material-symbols-outlined text-[16px] text-primary">add_photo_alternate</span>
+                        <span class="mun-edit-logo-label text-[11px] truncate max-w-[95px]">${m.logo_url ? 'Trocar Logo' : 'Nova Logo'}</span>
+                        <input type="file" accept="image/png, image/jpeg, image/svg+xml, image/webp" class="mun-edit-logo-file hidden" onchange="previewCardMunicipioLogo('${m.id}', this)">
+                    </label>
+
+                    <label class="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer shrink-0">
+                        <input type="checkbox" class="mun-edit-ativo rounded border-slate-300 text-primary" ${m.ativo ? 'checked' : ''}>
+                        <span class="text-[11px] font-medium">Ativo</span>
+                    </label>
+                </div>
+
+                <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                    <span class="text-[10px] text-slate-400">PNG, JPG, SVG ou WEBP (máx. 2MB)</span>
+                    <div class="flex items-center gap-1.5">
+                        <button type="button" onclick="cancelarEdicaoMunicipio('${m.id}')" class="px-2.5 py-1 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg transition-all flex items-center gap-1 cursor-pointer">
+                            <span class="material-symbols-outlined text-[14px]">close</span> Cancelar
+                        </button>
+                        <button type="button" onclick="salvarEdicaoMunicipio('${m.id}')" class="px-3 py-1 text-xs font-bold text-white bg-primary hover:bg-primary/90 rounded-lg transition-all shadow-sm flex items-center gap-1 cursor-pointer">
+                            <span class="material-symbols-outlined text-[14px]">save</span> Salvar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+};
+
+window.toggleMunicipioAtivo = async function(id, ativo) {
+    const { error } = await supabaseClient.from('municipios').update({ ativo }).eq('id', id);
+    if (error) {
+        alert('Erro ao atualizar status do município: ' + error.message);
+    }
+};
+
+window.switchMunicipioTab = function(sectionOrTab, btn) {
+    document.querySelectorAll('#municipio-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
+    const SETTINGS_TABS = ['cadastros', 'estatistica', 'layout', 'storage', 'usuarios', 'auditoria'];
+
+    if (SETTINGS_TABS.includes(sectionOrTab)) {
+        document.querySelectorAll('main > section:not(#settings-frame-section)').forEach(s => s.classList.remove('active'));
+        const frameSec = document.getElementById('settings-frame-section');
+        if (frameSec) frameSec.classList.add('active');
+
+        const iframe = document.getElementById('settings-iframe');
+        const targetSrc = `settings.html?tab=${sectionOrTab}&embedded=1`;
+
+        if (iframe) {
+            if (!iframe.src || iframe.src === 'about:blank' || !iframe.src.includes('settings.html')) {
+                iframe.src = targetSrc;
+            } else {
+                try {
+                    if (iframe.contentWindow && typeof iframe.contentWindow.switchTab === 'function') {
+                        iframe.contentWindow.switchTab(sectionOrTab);
+                    } else {
+                        iframe.src = targetSrc;
+                    }
+                } catch(e) {
+                    iframe.src = targetSrc;
+                }
+            }
+        }
+    } else {
+        const frameSec = document.getElementById('settings-frame-section');
+        if (frameSec) frameSec.classList.remove('active');
+        document.querySelectorAll('main > section:not(#settings-frame-section)').forEach(s => s.classList.remove('active'));
+        const target = document.getElementById(sectionOrTab);
+        if (target) target.classList.add('active');
+    }
+};
+window.switchHomeTab = window.switchMunicipioTab;
 
 // Mesmo comportamento de tema usado em index.html/settings.html
 window.changeTheme = function(theme) {
@@ -460,106 +989,117 @@ function onSolicitacaoFormChange(membroId, formId) {
 }
 window.onSolicitacaoFormChange = onSolicitacaoFormChange;
 
-async function decidirSolicitacao(membroId, aprovar, papelSelectId) {
-    const papel = aprovar ? document.getElementById(papelSelectId).value : 'visualizador';
+async function decidirSolicitacoesUsuario(targetUserId, aprovar, papelSelectId) {
+    const card = document.querySelector(`[data-usuario-card-solicitacao="${targetUserId}"]`);
+    if (!card) return;
+
     const decididoPor = (await supabaseClient.auth.getSession()).data.session.user.id;
+    const papel = aprovar ? document.getElementById(papelSelectId).value : 'visualizador';
+    const entidade = card.getAttribute('data-entidade') || null;
+    const cargo = card.getAttribute('data-cargo') || null;
 
-    const { data: updatedRow, error } = await supabaseClient.from('municipio_membros').update({
-        status: aprovar ? 'aprovado' : 'rejeitado',
-        papel: papel,
-        decidido_em: new Date().toISOString(),
-        decidido_por: decididoPor
-    }).eq('id', membroId).select('user_id, municipio_id, entidade, cargo').single();
+    const checkboxes = Array.from(card.querySelectorAll('.municipio-solicitacao-cb'));
 
-    if (error) {
-        alert('Erro ao processar solicitação: ' + error.message);
-        return;
-    }
-
-    // Municípios extras marcados no card ("Conceder acesso a outros
-    // municípios também") viram vínculos já aprovados, com o mesmo papel/
-    // entidade/cargo da solicitação original.
-    if (aprovar && updatedRow) {
-        const card = document.querySelector(`[data-membro-card="${membroId}"]`);
-        const extraIds = card ? Array.from(card.querySelectorAll('.extra-municipio-checkbox:checked')).map(cb => cb.value) : [];
-        if (extraIds.length > 0) {
-            const rows = extraIds.map(municipio_id => ({
-                user_id: updatedRow.user_id,
-                municipio_id,
-                status: 'aprovado',
-                papel: papel,
-                entidade: updatedRow.entidade,
-                cargo: updatedRow.cargo,
-                decidido_em: new Date().toISOString(),
-                decidido_por: decididoPor
-            }));
-            const { error: extraError } = await supabaseClient.from('municipio_membros').insert(rows);
-            if (extraError) {
-                alert('Solicitação aprovada, mas houve erro ao conceder os municípios extras: ' + extraError.message);
+    if (aprovar) {
+        const marcados = checkboxes.filter(cb => cb.checked);
+        if (marcados.length === 0) {
+            if (!confirm('Nenhum município foi selecionado para este usuário. Deseja rejeitar todas as solicitações dele?')) {
+                return;
             }
+            const rejectIds = checkboxes.map(cb => cb.getAttribute('data-membro-id')).filter(Boolean);
+            if (rejectIds.length > 0) {
+                await supabaseClient.from('municipio_membros').update({
+                    status: 'rejeitado',
+                    decidido_em: new Date().toISOString(),
+                    decidido_por: decididoPor
+                }).in('id', rejectIds);
+            }
+            init();
+            return;
         }
 
-        // Formulário Ativo + abas: cada aba marcada vira uma linha em
-        // permissoes_aba (o formRenderer.js usa isso pra esconder/mostrar
-        // seções do formulário). Além disso, precisa refletir em
-        // permissoes_camada — é ESSA tabela que o RLS/gatilho no banco
-        // realmente consulta pra liberar ver/editar/excluir linhas de
-        // feicoes; permissoes_aba é só um recorte de UI dentro do que já
-        // foi liberado por camada.
-        const formSelectEl = card ? card.querySelector('.form-select-permissao') : null;
-        const selectedFormId = formSelectEl ? formSelectEl.value : '';
-        if (selectedFormId) {
-            const tabRows = card.querySelectorAll('.form-tabs-container [data-tab-id]');
-            const abaRows = [];
-            let podeVerAlgumaAba = false;
-            let podeEditarAlgumaAba = false;
-            tabRows.forEach(row => {
-                const tabId = row.getAttribute('data-tab-id');
-                const podeVer = row.querySelector('.tab-ver-checkbox').checked;
-                const podeEditar = row.querySelector('.tab-editar-checkbox').checked;
-                if (podeVer) podeVerAlgumaAba = true;
-                if (podeEditar) podeEditarAlgumaAba = true;
-                abaRows.push({ user_id: updatedRow.user_id, form_id: selectedFormId, tab_id: tabId, pode_ver: podeVer, pode_editar: podeEditar });
-            });
+        const updatesAprovar = [];
+        const updatesRejeitar = [];
+        const insertsNovos = [];
 
-            if (abaRows.length > 0) {
-                const { error: abaError } = await supabaseClient.from('permissoes_aba').upsert(abaRows, { onConflict: 'user_id,form_id,tab_id' });
-                if (abaError) alert('Solicitação aprovada, mas houve erro ao salvar as permissões por aba: ' + abaError.message);
-            }
+        checkboxes.forEach(cb => {
+            const munId = cb.value;
+            const membroId = cb.getAttribute('data-membro-id');
+            const isChecked = cb.checked;
 
-            const podeExcluirEl = card.querySelector('.excluir-camada-checkbox');
-            const podeExcluir = podeExcluirEl ? podeExcluirEl.checked : false;
-            const { data: temasDoForm } = await supabaseClient
-                .from('temas')
-                .select('id')
-                .eq('tipo_cadastro', selectedFormId)
-                .eq('municipio_id', updatedRow.municipio_id);
-            if (temasDoForm && temasDoForm.length > 0) {
-                const camadaRows = temasDoForm.map(t => ({
-                    user_id: updatedRow.user_id,
-                    theme_id: t.id,
-                    pode_ver: podeVerAlgumaAba,
-                    pode_editar: podeEditarAlgumaAba,
-                    pode_excluir: podeExcluir
-                }));
-                const { error: camadaError } = await supabaseClient.from('permissoes_camada').upsert(camadaRows, { onConflict: 'user_id,theme_id' });
-                if (camadaError) alert('Solicitação aprovada, mas houve erro ao liberar a camada: ' + camadaError.message);
+            if (isChecked) {
+                if (membroId) {
+                    updatesAprovar.push(membroId);
+                } else {
+                    insertsNovos.push({
+                        user_id: targetUserId,
+                        municipio_id: munId,
+                        status: 'aprovado',
+                        papel: papel,
+                        entidade: entidade,
+                        cargo: cargo,
+                        decidido_em: new Date().toISOString(),
+                        decidido_por: decididoPor
+                    });
+                }
+            } else {
+                if (membroId) {
+                    updatesRejeitar.push(membroId);
+                }
             }
+        });
+
+        const promises = [];
+        if (updatesAprovar.length > 0) {
+            promises.push(
+                supabaseClient.from('municipio_membros').update({
+                    status: 'aprovado',
+                    papel: papel,
+                    decidido_em: new Date().toISOString(),
+                    decidido_por: decididoPor
+                }).in('id', updatesAprovar)
+            );
+        }
+        if (updatesRejeitar.length > 0) {
+            promises.push(
+                supabaseClient.from('municipio_membros').update({
+                    status: 'rejeitado',
+                    decidido_em: new Date().toISOString(),
+                    decidido_por: decididoPor
+                }).in('id', updatesRejeitar)
+            );
+        }
+        if (insertsNovos.length > 0) {
+            promises.push(
+                supabaseClient.from('municipio_membros').insert(insertsNovos)
+            );
+        }
+
+        await Promise.all(promises);
+    } else {
+        const rejectIds = checkboxes.map(cb => cb.getAttribute('data-membro-id')).filter(Boolean);
+        if (rejectIds.length > 0) {
+            await supabaseClient.from('municipio_membros').update({
+                status: 'rejeitado',
+                decidido_em: new Date().toISOString(),
+                decidido_por: decididoPor
+            }).in('id', rejectIds);
         }
     }
 
     init();
 }
-window.decidirSolicitacao = decidirSolicitacao;
+window.decidirSolicitacoesUsuario = decidirSolicitacoesUsuario;
+window.decidirSolicitacao = decidirSolicitacoesUsuario;
 
 const TIPO_LABELS = { municipal: 'Municipal', externo: 'Externo', outro: 'Outro' };
 
 async function loadEntidadesSection() {
     const { data, error } = await supabaseClient.from('entidades_padrao').select('*').order('created_at');
     const list = document.getElementById('entidades-list');
+    if (!list) return;
     if (error) {
         list.innerHTML = '<div class="text-xs text-red-500">Erro ao carregar entidades.</div>';
-        document.getElementById('entidades-section').classList.remove('hidden');
         return;
     }
     list.innerHTML = (data || []).map(e => {
@@ -587,7 +1127,6 @@ async function loadEntidadesSection() {
             </div>
         </div>`;
     }).join('') || '<div class="text-xs text-slate-400 italic py-2">Nenhuma entidade cadastrada ainda.</div>';
-    document.getElementById('entidades-section').classList.remove('hidden');
 }
 
 function editarEntidade(id) {
@@ -654,349 +1193,59 @@ async function adicionarEntidade() {
 }
 window.adicionarEntidade = adicionarEntidade;
 
-// --- Aba "Usuários" (só super_admin): todo mundo, de todos os municípios,
-// com perfil + nível de acesso + status + permissões (mesma UI de
-// "Formulário Ativo" de Solicitações/settings.html, agora pra editar quem
-// já existe, com os valores atuais pré-marcados). ---
-async function loadUsuariosSection() {
-    const list = document.getElementById('usuarios-list');
-    if (!list) return;
-    list.innerHTML = '<div class="text-xs text-slate-400 italic py-2">Carregando...</div>';
 
-    // Esta aba é exclusiva do super_admin (ensureAdminAccess/tab gating já
-    // garante isso), que enxerga todo mundo sem filtro nenhum.
-    const { data: membros, error } = await supabaseClient
-        .from('municipio_membros')
-        .select('id, user_id, municipio_id, papel, status, entidade, cargo, solicitado_em, profiles!user_id(nome, email, entidade_admin), municipios(nome)')
-        .order('solicitado_em', { ascending: false });
-    if (error) {
-        list.innerHTML = '<div class="text-xs text-red-500">Erro ao carregar usuários.</div>';
-        console.error('Erro ao buscar usuários:', error);
-        return;
-    }
-
-    const municipioIds = [...new Set((membros || []).map(m => m.municipio_id).filter(Boolean))];
-    window.usuariosFormsCache = {};
-    window.usuariosFormIdToThemeIds = {};
-    window._usuariosFormsPorMunicipio = {};
-    if (municipioIds.length > 0) {
-        const { data: temasComForm } = await supabaseClient
-            .from('temas')
-            .select('id, municipio_id, tipo_cadastro')
-            .in('municipio_id', municipioIds)
-            .not('tipo_cadastro', 'is', null)
-            .neq('tipo_cadastro', 'padrao');
-        const formIds = [...new Set((temasComForm || []).map(t => t.tipo_cadastro))];
-        if (formIds.length > 0) {
-            const { data: formsRows } = await supabaseClient.from('forms').select('id, title, schema').in('id', formIds);
-            (formsRows || []).forEach(f => {
-                let tabs = f.schema;
-                if (f.schema && !Array.isArray(f.schema) && f.schema.tabs) tabs = f.schema.tabs;
-                window.usuariosFormsCache[f.id] = { id: f.id, title: f.title, tabs: Array.isArray(tabs) ? tabs : [] };
-            });
-            (temasComForm || []).forEach(t => {
-                if (!window.usuariosFormsCache[t.tipo_cadastro]) return;
-                if (!window._usuariosFormsPorMunicipio[t.municipio_id]) window._usuariosFormsPorMunicipio[t.municipio_id] = [];
-                if (!window._usuariosFormsPorMunicipio[t.municipio_id].some(f => f.id === t.tipo_cadastro)) {
-                    window._usuariosFormsPorMunicipio[t.municipio_id].push(window.usuariosFormsCache[t.tipo_cadastro]);
-                }
-                if (!window.usuariosFormIdToThemeIds[t.tipo_cadastro]) window.usuariosFormIdToThemeIds[t.tipo_cadastro] = [];
-                window.usuariosFormIdToThemeIds[t.tipo_cadastro].push(t.id);
-            });
-        }
-    }
-
-    const allFormIds = Object.keys(window.usuariosFormsCache);
-    window._usuariosAbaPerms = {};
-    if (allFormIds.length > 0) {
-        const { data: abaPerms } = await supabaseClient.from('permissoes_aba').select('*').in('form_id', allFormIds);
-        (abaPerms || []).forEach(p => { window._usuariosAbaPerms[p.user_id + ':' + p.form_id + ':' + p.tab_id] = p; });
-    }
-    const { data: camadaPerms } = await supabaseClient.from('permissoes_camada').select('*');
-    window._usuariosCamadaPerms = camadaPerms || [];
-
-    list.innerHTML = (membros && membros.length > 0)
-        ? membros.map(m => renderUsuarioCard(m)).join('')
-        : '<div class="text-xs text-slate-400 italic py-2">Nenhum usuário ainda.</div>';
-}
-window.loadUsuariosSection = loadUsuariosSection;
-
-const STATUS_LABELS_HOME = { pendente: 'Pendente', aprovado: 'Aprovado', rejeitado: 'Rejeitado' };
-
-function renderUsuarioCard(m) {
-    const formsDoMunicipio = (window._usuariosFormsPorMunicipio && window._usuariosFormsPorMunicipio[m.municipio_id]) || [];
-    const formOptionsHtml = formsDoMunicipio.map(f => `<option value="${f.id}">${f.title}</option>`).join('');
-    const papelOptions = ['admin', 'visualizador', 'externo'].map(v =>
-        `<option value="${v}" ${m.papel === v ? 'selected' : ''}>${PAPEL_LABELS[v]}</option>`
-    ).join('');
-    const statusOptions = ['pendente', 'aprovado', 'rejeitado'].map(v =>
-        `<option value="${v}" ${m.status === v ? 'selected' : ''}>${STATUS_LABELS_HOME[v]}</option>`
-    ).join('');
-    const jaAdminEnte = m.profiles && m.profiles.entidade_admin;
-    const nome = (m.profiles && m.profiles.nome) || '(sem nome)';
-    const nivelResumo = PAPEL_LABELS[m.papel] || m.papel || '';
-
-    // Texto de busca: nome, e-mail, entidade, cargo, município — tudo que
-    // dá pra filtrar mais pra frente com muitos usuários cadastrados.
-    const searchText = [nome, (m.profiles && m.profiles.email), m.entidade, m.cargo, (m.municipios && m.municipios.nome)]
-        .filter(Boolean).join(' ').toLowerCase().replace(/"/g, '&quot;');
-
-    const statusResumo = STATUS_LABELS_HOME[m.status] || m.status || '';
-
-    return `
-    <div class="card rounded-xl overflow-hidden" data-usuario-card="${m.id}" data-search="${searchText}">
-        <button type="button" onclick="toggleUsuarioCard('${m.id}')" class="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-            <span class="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">
-                ${nome} <span class="text-xs font-medium text-slate-400 normal-case">(${nivelResumo}${jaAdminEnte ? ' · Admin de Ente' : ''})</span>
-            </span>
-            <span class="usuario-card-chevron material-symbols-outlined text-slate-400 text-[20px] shrink-0">expand_more</span>
-        </button>
-        <div class="usuario-card-body hidden px-4 pb-4 flex flex-col gap-2">
-            <div class="text-xs text-slate-500">${(m.profiles && m.profiles.email) || ''} · ${m.entidade || '-'} · ${m.cargo || '-'}</div>
-            <div class="text-xs text-primary mt-0.5">Município: ${(m.municipios && m.municipios.nome) || '-'}</div>
-
-            <!-- Visualização: mostra o que já está configurado, sem deixar mexer -->
-            <div class="usuario-view-mode flex items-center justify-between gap-3 mt-1">
-                <div class="flex items-center gap-4">
-                    <div class="text-xs">
-                        <span class="text-slate-400 uppercase text-[9px] block">Status</span>
-                        <span class="font-semibold text-slate-700 dark:text-slate-200">${statusResumo}</span>
-                    </div>
-                    <div class="text-xs">
-                        <span class="text-slate-400 uppercase text-[9px] block">Nível de Acesso</span>
-                        <span class="font-semibold text-slate-700 dark:text-slate-200">${nivelResumo}</span>
-                    </div>
-                </div>
-                <button type="button" onclick="enterUsuarioEditMode('${m.id}')" class="text-xs bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 flex items-center gap-1 shrink-0">
-                    <span class="material-symbols-outlined text-[16px]">edit</span> Editar
-                </button>
-            </div>
-
-            <!-- Edição: só aparece depois de clicar em Editar; é aqui que mora o Excluir -->
-            <div class="usuario-edit-mode hidden flex flex-col gap-2 mt-1">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div class="flex items-end gap-2 flex-wrap">
-                        <div class="flex flex-col gap-0.5">
-                            <label class="text-[9px] text-slate-400 uppercase tracking-wide">Status</label>
-                            <select class="usuario-status-select text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5">
-                                ${statusOptions}
-                            </select>
-                        </div>
-                        <div class="flex flex-col gap-0.5">
-                            <label class="text-[9px] text-slate-400 uppercase tracking-wide">Nível de Acesso</label>
-                            <select class="usuario-papel-select text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5">
-                                ${papelOptions}
-                            </select>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-2 shrink-0">
-                        <button onclick="salvarUsuario('${m.id}', '${m.user_id}')" class="text-xs bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary/90">Salvar</button>
-                        <button onclick="cancelarEdicaoUsuario('${m.id}')" class="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700">Cancelar</button>
-                    </div>
-                </div>
-                ${formsDoMunicipio.length > 0 ? `
-                <div class="border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
-                    <label class="text-[10px] text-slate-400 uppercase tracking-wide block mb-1">Formulário Ativo (permissão por aba)</label>
-                    <select class="form-select-permissao text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5 w-full sm:w-auto" onchange="onUsuarioFormChange('${m.id}', '${m.user_id}', this.value)">
-                        <option value="">— Nenhum —</option>
-                        ${formOptionsHtml}
-                    </select>
-                    <div class="form-tabs-container mt-2 flex flex-col gap-1"></div>
-                    <label class="excluir-camada-label flex items-center gap-2 text-xs text-red-600 dark:text-red-400 cursor-pointer mt-2">
-                        <input type="checkbox" class="excluir-camada-checkbox rounded border-slate-300 dark:border-slate-600 text-red-500 focus:ring-red-500">
-                        Pode excluir dados desta camada (remove também a feição do mapa)
-                    </label>
-                </div>` : ''}
-                <div class="border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
-                    <button type="button" onclick="excluirUsuarioMembro('${m.id}', '${nome.replace(/'/g, "\\'")}')" class="text-xs text-red-600 dark:text-red-400 hover:underline flex items-center gap-1">
-                        <span class="material-symbols-outlined text-[16px]">delete</span> Excluir acesso deste usuário a este município
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>`;
-}
-window.renderUsuarioCard = renderUsuarioCard;
-
-function enterUsuarioEditMode(membroId) {
-    const card = document.querySelector(`[data-usuario-card="${membroId}"]`);
-    if (!card) return;
-    const viewMode = card.querySelector('.usuario-view-mode');
-    const editMode = card.querySelector('.usuario-edit-mode');
-    if (viewMode) viewMode.classList.add('hidden');
-    if (editMode) editMode.classList.remove('hidden');
-}
-window.enterUsuarioEditMode = enterUsuarioEditMode;
-
-function cancelarEdicaoUsuario(membroId) {
-    const card = document.querySelector(`[data-usuario-card="${membroId}"]`);
-    if (!card) return;
-    const viewMode = card.querySelector('.usuario-view-mode');
-    const editMode = card.querySelector('.usuario-edit-mode');
-    if (editMode) editMode.classList.add('hidden');
-    if (viewMode) viewMode.classList.remove('hidden');
-}
-window.cancelarEdicaoUsuario = cancelarEdicaoUsuario;
-
-async function excluirUsuarioMembro(membroId, nome) {
-    if (!confirm(`Tem certeza que deseja excluir o acesso de "${nome}" a este município? Essa ação não pode ser desfeita.`)) return;
-    const { error } = await supabaseClient.from('municipio_membros').delete().eq('id', membroId);
-    if (error) {
-        alert('Erro ao excluir: ' + error.message);
-        return;
-    }
-    alert('Acesso excluído.');
-    loadUsuariosSection();
-}
-window.excluirUsuarioMembro = excluirUsuarioMembro;
-
-function toggleUsuarioCard(membroId) {
-    const card = document.querySelector(`[data-usuario-card="${membroId}"]`);
-    if (!card) return;
-    const body = card.querySelector('.usuario-card-body');
-    const chevron = card.querySelector('.usuario-card-chevron');
-    if (!body) return;
-    const abrindo = body.classList.contains('hidden');
-
-    if (abrindo) {
-        // Acordeão: abrir um card fecha qualquer outro que estivesse aberto
-        // (e desfaz a edição dele, se estivesse em edição).
-        document.querySelectorAll('#usuarios-list [data-usuario-card]').forEach(function(otherCard) {
-            if (otherCard === card) return;
-            const otherBody = otherCard.querySelector('.usuario-card-body');
-            const otherChevron = otherCard.querySelector('.usuario-card-chevron');
-            if (otherBody && !otherBody.classList.contains('hidden')) {
-                otherBody.classList.add('hidden');
-                if (otherChevron) otherChevron.textContent = 'expand_more';
-                cancelarEdicaoUsuario(otherCard.getAttribute('data-usuario-card'));
-            }
-        });
-    }
-
-    body.classList.toggle('hidden');
-    if (chevron) chevron.textContent = abrindo ? 'expand_less' : 'expand_more';
-}
-window.toggleUsuarioCard = toggleUsuarioCard;
-
-function filterUsuariosList(query) {
-    const q = query.trim().toLowerCase();
-    document.querySelectorAll('#usuarios-list [data-usuario-card]').forEach(card => {
-        const text = card.getAttribute('data-search') || '';
-        card.style.display = (!q || text.includes(q)) ? '' : 'none';
-    });
-}
-window.filterUsuariosList = filterUsuariosList;
-
-function onUsuarioFormChange(membroId, userId, formId) {
-    const card = document.querySelector(`[data-usuario-card="${membroId}"]`);
-    if (!card) return;
-    const container = card.querySelector('.form-tabs-container');
-    if (!container) return;
-    if (!formId) { container.innerHTML = ''; return; }
-    const form = (window.usuariosFormsCache || {})[formId];
-    if (!form || !form.tabs || form.tabs.length === 0) {
-        container.innerHTML = '<div class="text-[11px] text-slate-400 italic">Este formulário não tem abas configuradas.</div>';
-        return;
-    }
-    // Esta aba é exclusiva do super_admin, sem teto — pré-marca com o que
-    // já está salvo (window._usuariosAbaPerms).
-    const abaPerms = window._usuariosAbaPerms || {};
-    container.innerHTML = form.tabs.map(tab => {
-        const perm = abaPerms[userId + ':' + formId + ':' + tab.id];
-        return `
-        <div class="flex items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/60 rounded-lg px-2 py-1.5" data-tab-id="${tab.id}">
-            <span class="text-xs text-slate-700 dark:text-slate-200 truncate">${tab.title}</span>
-            <div class="flex items-center gap-3 shrink-0">
-                <label class="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 cursor-pointer">
-                    <input type="checkbox" class="tab-ver-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" ${perm && perm.pode_ver ? 'checked' : ''}> Ver
-                </label>
-                <label class="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 cursor-pointer">
-                    <input type="checkbox" class="tab-editar-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" ${perm && perm.pode_editar ? 'checked' : ''}> Editar
-                </label>
-            </div>
-        </div>`;
-    }).join('');
-
-    const themeIds = (window.usuariosFormIdToThemeIds && window.usuariosFormIdToThemeIds[formId]) || [];
-    const camadaPerms = window._usuariosCamadaPerms || [];
-    const jaPodeExcluir = themeIds.some(id => camadaPerms.some(pc => pc.user_id === userId && pc.theme_id === id && pc.pode_excluir));
-    const excluirEl = card.querySelector('.excluir-camada-checkbox');
-    if (excluirEl) excluirEl.checked = jaPodeExcluir;
-}
-window.onUsuarioFormChange = onUsuarioFormChange;
-
-async function salvarUsuario(membroId, userId) {
-    const card = document.querySelector(`[data-usuario-card="${membroId}"]`);
-    if (!card) return;
-
-    const papel = card.querySelector('.usuario-papel-select').value;
-    const status = card.querySelector('.usuario-status-select').value;
-    const { data: sessionData } = await supabaseClient.auth.getSession();
-    const { error } = await supabaseClient.from('municipio_membros').update({
-        papel,
-        status,
-        decidido_em: new Date().toISOString(),
-        decidido_por: sessionData.session.user.id
-    }).eq('id', membroId);
-    if (error) {
-        alert('Erro ao salvar usuário: ' + error.message);
-        return;
-    }
-
-    const formSelectEl = card.querySelector('.form-select-permissao');
-    const formId = formSelectEl ? formSelectEl.value : '';
-    if (formId) {
-        const tabRows = card.querySelectorAll('.form-tabs-container [data-tab-id]');
-        const abaRows = [];
-        let podeVerAlgumaAba = false;
-        let podeEditarAlgumaAba = false;
-        tabRows.forEach(row => {
-            const tabId = row.getAttribute('data-tab-id');
-            const podeVer = row.querySelector('.tab-ver-checkbox').checked;
-            const podeEditar = row.querySelector('.tab-editar-checkbox').checked;
-            if (podeVer) podeVerAlgumaAba = true;
-            if (podeEditar) podeEditarAlgumaAba = true;
-            abaRows.push({ user_id: userId, form_id: formId, tab_id: tabId, pode_ver: podeVer, pode_editar: podeEditar });
-        });
-        if (abaRows.length > 0) {
-            const { error: abaError } = await supabaseClient.from('permissoes_aba').upsert(abaRows, { onConflict: 'user_id,form_id,tab_id' });
-            if (abaError) { alert('Usuário salvo, mas houve erro ao salvar permissões por aba: ' + abaError.message); return; }
-        }
-
-        const excluirEl = card.querySelector('.excluir-camada-checkbox');
-        const podeExcluir = excluirEl ? excluirEl.checked : false;
-        const themeIds = (window.usuariosFormIdToThemeIds && window.usuariosFormIdToThemeIds[formId]) || [];
-        if (themeIds.length > 0) {
-            const camadaRows = themeIds.map(themeId => ({
-                user_id: userId,
-                theme_id: themeId,
-                pode_ver: podeVerAlgumaAba,
-                pode_editar: podeEditarAlgumaAba,
-                pode_excluir: podeExcluir
-            }));
-            const { error: camadaError } = await supabaseClient.from('permissoes_camada').upsert(camadaRows, { onConflict: 'user_id,theme_id' });
-            if (camadaError) { alert('Usuário salvo, mas houve erro ao liberar a camada: ' + camadaError.message); return; }
-        }
-    }
-
-    alert('Usuário atualizado!');
-    loadUsuariosSection();
-}
-window.salvarUsuario = salvarUsuario;
 
 async function criarMunicipio() {
     const nome = document.getElementById('novo-municipio-nome').value.trim();
     const uf = document.getElementById('novo-municipio-uf').value.trim().toUpperCase();
+    const logoInput = document.getElementById('novo-municipio-logo');
+    const logoFile = logoInput && logoInput.files ? logoInput.files[0] : null;
+
     if (!nome) { alert('Informe o nome do município.'); return; }
 
-    const { error } = await supabaseClient.from('municipios').insert({ nome, uf: uf || null });
-    if (error) {
+    let logoUrl = null;
+    if (logoFile) {
+        try {
+            logoUrl = await window.uploadLogoToStorage(logoFile, nome);
+        } catch (err) {
+            alert('Erro ao enviar imagem da logo: ' + err.message);
+            return;
+        }
+    }
+
+    let insertPayload = { nome, uf: uf || null };
+    if (logoUrl) insertPayload.logo_url = logoUrl;
+
+    let { error } = await supabaseClient.from('municipios').insert(insertPayload);
+
+    if (error && error.message && error.message.includes('logo_url')) {
+        delete insertPayload.logo_url;
+        const res2 = await supabaseClient.from('municipios').insert(insertPayload);
+        if (res2.error) {
+            alert('Erro ao criar município: ' + res2.error.message);
+            return;
+        }
+        alert('Município cadastrado! Nota: Para persistir a Logo no banco de dados, execute o script SQL "supabase_municipios_logo_setup.sql" no painel do Supabase.');
+    } else if (error) {
         alert('Erro ao criar município: ' + error.message);
         return;
+    } else {
+        alert('Município cadastrado com sucesso!');
     }
+
     document.getElementById('novo-municipio-nome').value = '';
     document.getElementById('novo-municipio-uf').value = '';
-    document.getElementById('novo-municipio-form').classList.add('hidden');
+    if (logoInput) logoInput.value = '';
+    const preview = document.getElementById('novo-municipio-logo-preview');
+    if (preview) { preview.src = ''; preview.classList.add('hidden'); }
+    const icon = document.getElementById('novo-municipio-logo-icon');
+    if (icon) icon.classList.remove('hidden');
+    const label = document.getElementById('novo-municipio-logo-label');
+    if (label) label.textContent = 'Importar Logo';
+
+    if (typeof window.loadGlobalMunicipiosList === 'function') {
+        window.loadGlobalMunicipiosList();
+    }
     init();
 }
 window.criarMunicipio = criarMunicipio;
@@ -1031,28 +1280,51 @@ async function init() {
         .eq('status', 'aprovado');
     const souMunicipioAdmin = !!(meusMunicipiosAdmin && meusMunicipiosAdmin.length > 0);
 
-    // --- Solicitações pendentes (super_admin vê todas; admin de município
-    // só as do(s) município(s) em que é administrador). Entidades Padrão e
-    // Novo Município continuam exclusivos do super_admin.
-    if (homeUserProfile.super_admin || souMunicipioAdmin) {
-        document.getElementById('home-tabs').classList.remove('hidden');
-        document.getElementById('home-tabs').classList.add('flex');
-        document.getElementById('tab-btn-pendentes').classList.remove('hidden');
-        document.getElementById('tab-btn-pendentes').classList.add('flex');
+    // 1. Busca todos os municípios cadastrados e entidades
+    const [municipiosRes, entidadesRes] = await Promise.all([
+        supabaseClient.from('municipios').select('id, nome, uf').eq('ativo', true).order('nome'),
+        supabaseClient.from('entidades_padrao').select('nome, tipo')
+    ]);
+    const todosMunicipios = municipiosRes.data || [];
+    const entidadesTiposMap = {};
+    (entidadesRes.data || []).forEach(e => {
+        if (e.nome) entidadesTiposMap[e.nome.trim().toLowerCase()] = e.tipo;
+    });
 
+    // 2. Determina municípios que este usuário pode gerenciar
+    let adminMunicipios = [];
+    if (homeUserProfile.super_admin) {
+        adminMunicipios = todosMunicipios || [];
+    } else if (souMunicipioAdmin) {
+        const meusIds = (meusMunicipiosAdmin || []).map(m => m.municipio_id);
+        adminMunicipios = (todosMunicipios || []).filter(m => meusIds.includes(m.id));
+    }
+
+    const ehAdminDeAlgum = homeUserProfile.super_admin || adminMunicipios.length > 0;
+
+    // Ativa o botão de Configurações Globais exclusivo para SuperAdmin
+    const btnGlobalConfig = document.getElementById('btn-global-config');
+    if (btnGlobalConfig) {
         if (homeUserProfile.super_admin) {
-            document.getElementById('tab-btn-entidades').classList.remove('hidden');
-            document.getElementById('tab-btn-entidades').classList.add('flex');
-            document.getElementById('btn-novo-municipio').classList.remove('hidden');
-            document.getElementById('btn-novo-municipio').classList.add('flex');
-            document.getElementById('tab-btn-usuarios').classList.remove('hidden');
-            document.getElementById('tab-btn-usuarios').classList.add('flex');
+            btnGlobalConfig.classList.remove('hidden');
+            btnGlobalConfig.classList.add('flex');
+        } else {
+            btnGlobalConfig.classList.add('hidden');
+            btnGlobalConfig.classList.remove('flex');
+        }
+    }
+
+        // Garante que haja um município ativo selecionado na sessão para as ferramentas
+        let activeMunId = sessionStorage.getItem('municipio_ativo');
+        if (!activeMunId || !adminMunicipios.some(m => m.id === activeMunId)) {
+            if (adminMunicipios.length > 0) {
+                activeMunId = adminMunicipios[0].id;
+                sessionStorage.setItem('municipio_ativo', activeMunId);
+                sessionStorage.setItem('municipio_ativo_nome', `${adminMunicipios[0].nome}${adminMunicipios[0].uf ? ' - ' + adminMunicipios[0].uf : ''}`);
+            }
         }
 
-        // Quem mais enxerga cada solicitação: nada aqui é uma ação de "enviar
-        // pra alguém" — é só mostrar pro super_admin o resultado do filtro
-        // automático (RLS por município) que já decide quem mais vê essa
-        // linha em Solicitações.
+        // Quem mais enxerga cada solicitação: para super_admin
         let municipioAdminsPorMunicipio = {};
         if (homeUserProfile.super_admin) {
             const { data: admMunicipios } = await supabaseClient
@@ -1067,206 +1339,262 @@ async function init() {
             });
         }
 
-        // profiles!user_id desambigua: municipio_membros tem duas FKs pra
-        // profiles (user_id e decidido_por) — sem isso o Supabase recusa a
-        // consulta por ambiguidade (e o erro passava batido antes, sem log).
+        // 3. Busca solicitações pendentes
         const { data: pendentes, error: pendentesError } = await supabaseClient
             .from('municipio_membros')
-            .select('id, user_id, municipio_id, entidade, cargo, solicitado_em, profiles!user_id(nome, email), municipios(nome)')
+            .select('id, user_id, municipio_id, entidade, cargo, solicitado_em, profiles!user_id(nome, email), municipios(id, nome, uf)')
             .eq('status', 'pendente')
             .order('solicitado_em', { ascending: true });
         if (pendentesError) console.error('Erro ao buscar solicitações pendentes:', pendentesError);
 
+        // Municípios que este Admin tem poder de conceder/aprovar
+        const meusMunicipioIds = (meusMunicipiosAdmin || []).map(m => m.municipio_id);
+        const adminMunicipiosAcessiveis = homeUserProfile.super_admin
+            ? (todosMunicipios || [])
+            : (todosMunicipios || []).filter(m => meusMunicipioIds.includes(m.id));
+
+        // 4. Agrupa as solicitações pendentes por usuário (user_id)
+        const usuariosPendentesMap = {};
+        (pendentes || []).forEach(p => {
+            if (!usuariosPendentesMap[p.user_id]) {
+                usuariosPendentesMap[p.user_id] = {
+                    user_id: p.user_id,
+                    nome: (p.profiles && p.profiles.nome) || '(sem nome)',
+                    email: (p.profiles && p.profiles.email) || '',
+                    entidade: p.entidade || '-',
+                    cargo: p.cargo || '-',
+                    pedidos: {} // municipio_id -> membro_id
+                };
+            }
+            usuariosPendentesMap[p.user_id].pedidos[p.municipio_id] = p.id;
+        });
+
+        const userIds = Object.keys(usuariosPendentesMap);
+
+        // Atualiza o Badge da Aba Solicitações (contagem de usuários aguardando aprovação)
         const badge = document.getElementById('pending-badge');
-        if (pendentes && pendentes.length > 0) {
-            badge.textContent = pendentes.length;
+        if (userIds.length > 0) {
+            badge.textContent = userIds.length;
             badge.classList.remove('hidden');
         } else {
             badge.classList.add('hidden');
         }
 
-        // Pra cada solicitação, o admin também pode conceder de uma vez outros
-        // municípios cadastrados que esse usuário ainda não tem nenhum vínculo
-        // (nem pendente, nem aprovado, nem rejeitado) — evita ele ter que voltar
-        // aqui depois se já sabe que o mesmo órgão vai precisar de mais de um.
-        const { data: todosMunicipios } = await supabaseClient.from('municipios').select('id, nome, uf').eq('ativo', true).order('nome');
-        const userIds = [...new Set((pendentes || []).map(p => p.user_id))];
+        // 4. Busca vínculos existentes (aprovados ou outros) desses usuários
         let vinculosPorUsuario = {};
         if (userIds.length > 0) {
-            const { data: vinculos } = await supabaseClient.from('municipio_membros').select('user_id, municipio_id').in('user_id', userIds);
+            const { data: vinculos } = await supabaseClient
+                .from('municipio_membros')
+                .select('user_id, municipio_id, status')
+                .in('user_id', userIds);
             (vinculos || []).forEach(v => {
-                if (!vinculosPorUsuario[v.user_id]) vinculosPorUsuario[v.user_id] = new Set();
-                vinculosPorUsuario[v.user_id].add(v.municipio_id);
+                if (!vinculosPorUsuario[v.user_id]) vinculosPorUsuario[v.user_id] = {};
+                vinculosPorUsuario[v.user_id][v.municipio_id] = v.status;
             });
         }
 
-        // Formulário Ativo + abas: super_admin e admin de município concedem
-        // essa permissão fina, sem teto — quem chega até aqui já é
-        // administrador pleno daquele município (o RLS só deixa ele ver
-        // pedidos de municípios que ele mesmo administra). Só entram na
-        // lista formulários que ESTÃO associados a uma camada de verdade
-        // (tipo_cadastro aponta pra um tema existente) — um formulário
-        // criado no builder mas nunca vinculado a nenhuma camada
-        // importada/criada não serve pra nada aqui ainda.
-        let formsPorMunicipio = {};
-        window.pendingFormsCache = {};
-        window.formIdToThemeIds = {};
-        if (homeUserProfile.super_admin || souMunicipioAdmin) {
-            const municipioIdsDosPedidos = [...new Set((pendentes || []).map(p => p.municipio_id).filter(Boolean))];
-            if (municipioIdsDosPedidos.length > 0) {
-                const { data: temasComForm } = await supabaseClient
-                    .from('temas')
-                    .select('id, municipio_id, tipo_cadastro')
-                    .in('municipio_id', municipioIdsDosPedidos)
-                    .not('tipo_cadastro', 'is', null)
-                    .neq('tipo_cadastro', 'padrao');
-                const formIds = [...new Set((temasComForm || []).map(t => t.tipo_cadastro))];
-                if (formIds.length > 0) {
-                    const { data: formsRows } = await supabaseClient.from('forms').select('id, title, schema').in('id', formIds);
-                    (formsRows || []).forEach(f => {
-                        let tabs = f.schema;
-                        if (f.schema && !Array.isArray(f.schema) && f.schema.tabs) tabs = f.schema.tabs;
-                        window.pendingFormsCache[f.id] = { id: f.id, title: f.title, tabs: Array.isArray(tabs) ? tabs : [] };
-                    });
-                    (temasComForm || []).forEach(t => {
-                        if (!window.pendingFormsCache[t.tipo_cadastro]) return;
-                        if (!formsPorMunicipio[t.municipio_id]) formsPorMunicipio[t.municipio_id] = [];
-                        if (!formsPorMunicipio[t.municipio_id].some(f => f.id === t.tipo_cadastro)) {
-                            formsPorMunicipio[t.municipio_id].push(window.pendingFormsCache[t.tipo_cadastro]);
-                        }
-                        if (!window.formIdToThemeIds[t.tipo_cadastro]) window.formIdToThemeIds[t.tipo_cadastro] = [];
-                        window.formIdToThemeIds[t.tipo_cadastro].push(t.id);
-                    });
-                }
-            }
-        }
-
+        // 5. Renderiza a lista de cards agrupados por usuário
         const list = document.getElementById('pending-list');
-        list.innerHTML = (pendentes && pendentes.length > 0) ? pendentes.map(p => {
-            const selectId = 'papel-' + p.id;
-            // Quem chega até aqui (super_admin ou admin do município do
-            // pedido) já pode conceder qualquer Nível de Acesso, inclusive
-            // Administrador — sem restrição, sem teto.
-            const papelOptions = ['admin', 'visualizador', 'externo'].map(v =>
-                `<option value="${v}">${PAPEL_LABELS[v]}</option>`
-            ).join('');
-            const jaTem = vinculosPorUsuario[p.user_id] || new Set();
-            const extras = (todosMunicipios || []).filter(m => !jaTem.has(m.id));
-            const extrasHtml = extras.length > 0 ? `
-                <div class="border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
-                    <button type="button" onclick="this.nextElementSibling.classList.toggle('hidden')" class="text-xs text-primary hover:underline flex items-center gap-1">
-                        <span class="material-symbols-outlined text-[14px]">add_circle</span> Conceder acesso a outros municípios também
-                    </button>
-                    <div class="hidden mt-2 flex flex-col gap-1 max-h-32 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg p-2">
-                        ${extras.map(m => `
-                            <label class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
-                                <input type="checkbox" class="extra-municipio-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" value="${m.id}">
-                                ${m.nome}${m.uf ? ' - ' + m.uf : ''}
-                            </label>`).join('')}
-                    </div>
-                </div>` : '';
-            // Formulário Ativo (associado a uma camada de verdade) + abas
-            // com Ver/Editar, e um único "Excluir" pra camada toda (excluir
-            // remove a feição do mapa também, não é por aba).
-            const formsDoMunicipio = formsPorMunicipio[p.municipio_id] || [];
-            const formOptionsHtml = formsDoMunicipio.map(f => `<option value="${f.id}">${f.title}</option>`).join('');
-            const formularioHtml = (homeUserProfile.super_admin || souMunicipioAdmin) ? `
-                <div class="border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
-                    <label class="text-[10px] text-slate-400 uppercase tracking-wide block mb-1">Formulário Ativo (permissão por aba)</label>
-                    ${formsDoMunicipio.length > 0 ? `
-                    <select class="form-select-permissao text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5 w-full sm:w-auto" onchange="onSolicitacaoFormChange('${p.id}', this.value)">
-                        <option value="">— Nenhum —</option>
-                        ${formOptionsHtml}
-                    </select>
-                    <div class="form-tabs-container mt-2 flex flex-col gap-1"></div>
-                    <label class="excluir-camada-label flex items-center gap-2 text-xs text-red-600 dark:text-red-400 cursor-pointer mt-2">
-                        <input type="checkbox" class="excluir-camada-checkbox rounded border-slate-300 dark:border-slate-600 text-red-500 focus:ring-red-500">
-                        Pode excluir dados desta camada (remove também a feição do mapa)
-                    </label>` : '<div class="text-[11px] text-slate-400 italic">Nenhum formulário associado a uma camada existente neste município ainda.</div>'}
-                </div>` : '';
+        list.innerHTML = (userIds.length > 0) ? userIds.map(uid => {
+            const u = usuariosPendentesMap[uid];
+            const selectId = 'papel-' + u.user_id;
+
+            // Apenas dois níveis: Usuário (padrão seguro) ou Administrador
+            const papelOptions = [
+                { val: 'visualizador', label: 'Usuário' },
+                { val: 'admin', label: 'Administrador' }
+            ].map(opt => `<option value="${opt.val}">${opt.label}</option>`).join('');
+
+            const entNomeClean = (u.entidade || '').trim().toLowerCase();
+            const tipoEnt = entidadesTiposMap[entNomeClean] || 'externo';
+            const isMunicipal = (tipoEnt === 'municipal');
+            const tagEntidadeHtml = isMunicipal
+                ? `<span class="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 px-2 py-0.5 rounded-full uppercase tracking-wider">Municipal</span>`
+                : `<span class="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/60 px-2 py-0.5 rounded-full uppercase tracking-wider">Órgão Externo</span>`;
+
+            const userVinculos = vinculosPorUsuario[u.user_id] || {};
+
+            const municipiosCheckboxesHtml = adminMunicipiosAcessiveis.map(m => {
+                const statusExistente = userVinculos[m.id];
+                const membroIdPendente = u.pedidos[m.id];
+                const foiSolicitado = !!membroIdPendente;
+                const jaAprovado = statusExistente === 'aprovado';
+
+                if (jaAprovado) {
+                    return `
+                        <div class="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60">
+                            <span class="text-xs font-semibold text-emerald-800 dark:text-emerald-200">${m.nome}${m.uf ? ' - ' + m.uf : ''}</span>
+                            <span class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[13px]">check_circle</span> Já Aprovado
+                            </span>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <label class="flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer select-none ${foiSolicitado ? 'bg-sky-50/60 dark:bg-sky-950/30 border-sky-300 dark:border-sky-800 shadow-xs' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'}">
+                        <div class="flex items-center gap-2.5">
+                            <input type="checkbox" class="municipio-solicitacao-cb rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary w-4 h-4 cursor-pointer" value="${m.id}" data-membro-id="${membroIdPendente || ''}" ${foiSolicitado ? 'checked' : ''}>
+                            <span class="text-xs font-medium text-slate-700 dark:text-slate-200">${m.nome}${m.uf ? ' - ' + m.uf : ''}</span>
+                        </div>
+                        ${foiSolicitado 
+                            ? `<span class="text-[10px] font-bold text-sky-700 dark:text-sky-300 bg-sky-100 dark:bg-sky-900/60 px-2 py-0.5 rounded-full uppercase tracking-wider">Solicitado</span>`
+                            : `<span class="text-[10px] text-slate-400 font-medium">Disponível</span>`
+                        }
+                    </label>
+                `;
+            }).join('');
+
             return `
-            <div class="card rounded-xl p-4 flex flex-col gap-1" data-membro-card="${p.id}">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="card rounded-2xl p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex flex-col gap-4" data-usuario-card-solicitacao="${u.user_id}" data-entidade="${(u.entidade || '').replace(/"/g, '&quot;')}" data-cargo="${(u.cargo || '').replace(/"/g, '&quot;')}">
+                <!-- Cabeçalho do Usuário Solicitante -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-100 dark:border-slate-800">
                     <div>
-                        <div class="text-sm font-bold text-slate-800 dark:text-slate-100">${(p.profiles && p.profiles.nome) || '(sem nome)'}</div>
-                        <div class="text-xs text-slate-500">${(p.profiles && p.profiles.email) || ''} · ${p.entidade || '-'} · ${p.cargo || '-'}</div>
-                        <div class="text-xs text-primary mt-0.5">Município: ${(p.municipios && p.municipios.nome) || '-'}</div>
-                        ${homeUserProfile.super_admin ? `
-                        <div class="text-[11px] text-slate-400 mt-0.5">
-                            ${(municipioAdminsPorMunicipio[p.municipio_id] || []).length > 0
-                                ? `Também visto por: ${municipioAdminsPorMunicipio[p.municipio_id].join(', ')} (admin de ${(p.municipios && p.municipios.nome) || 'município'})`
-                                : `Nenhum admin designado para "${(p.municipios && p.municipios.nome) || '-'}" ainda — só você vê este pedido`}
-                        </div>` : ''}
+                        <div class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                            ${u.nome}
+                            <span class="text-xs font-normal text-slate-400">(${u.email})</span>
+                        </div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400 mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                            <span><strong>Órgão/Entidade:</strong> ${u.entidade}</span>
+                            ${tagEntidadeHtml}
+                            <span>•</span>
+                            <span><strong>Cargo:</strong> ${u.cargo}</span>
+                        </div>
                     </div>
+
                     <div class="flex items-center gap-2 shrink-0">
                         <div class="flex flex-col gap-0.5">
-                            <label for="${selectId}" class="text-[9px] text-slate-400 uppercase tracking-wide">Nível de Acesso</label>
-                            <select id="${selectId}" class="text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5">
+                            <label for="${selectId}" class="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Nível de Acesso</label>
+                            <select id="${selectId}" class="text-xs font-semibold border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-primary text-slate-700 dark:text-slate-200">
                                 ${papelOptions}
                             </select>
                         </div>
-                        <button onclick="decidirSolicitacao('${p.id}', true, '${selectId}')" class="text-xs bg-emerald-500 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-600">Aprovar</button>
-                        <button onclick="decidirSolicitacao('${p.id}', false, '${selectId}')" class="text-xs bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Rejeitar</button>
+                        <button onclick="decidirSolicitacoesUsuario('${u.user_id}', true, '${selectId}')" class="text-xs bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-1">
+                            <span class="material-symbols-outlined text-[16px]">check</span> Aprovar
+                        </button>
+                        <button onclick="decidirSolicitacoesUsuario('${u.user_id}', false, '${selectId}')" class="text-xs bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold px-3.5 py-2 rounded-lg transition-colors flex items-center gap-1">
+                            <span class="material-symbols-outlined text-[16px]">close</span> Rejeitar
+                        </button>
                     </div>
                 </div>
-                ${extrasHtml}
-                ${formularioHtml}
+
+                <!-- Relação de Municípios para Ativar/Desativar -->
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-primary text-[18px]">location_city</span>
+                            Municípios Liberados para Acesso
+                        </label>
+                        <span class="text-[11px] text-slate-400">Ative ou desative os municípios para este usuário</span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-950/40 p-3 rounded-xl border border-slate-200 dark:border-slate-800/80">
+                        ${municipiosCheckboxesHtml}
+                    </div>
+                </div>
             </div>`;
         }).join('') : '<div class="text-xs text-slate-400 italic py-2">Nenhuma solicitação pendente.</div>';
 
         if (homeUserProfile.super_admin) {
             await loadEntidadesSection();
         }
-        if (homeUserProfile.super_admin || souMunicipioAdmin) {
-            if (window.UsuariosManager) {
-                window.UsuariosManager.init({
-                    containerId: 'usuarios-list',
-                    searchInputId: 'usuarios-search',
-                    currentUserProfile: homeUserProfile
-                });
-            }
-        }
-    }
 
     // --- Grade de municípios (aba padrão, sempre ativa) ---
     let municipiosParaMostrar = [];
     if (homeUserProfile.super_admin) {
-        const { data: todos } = await supabaseClient.from('municipios').select('id, nome, uf').eq('ativo', true).order('nome');
-        municipiosParaMostrar = (todos || []).map(m => ({ id: m.id, nome: m.nome, uf: m.uf, papel: 'admin' }));
+        const { data: todos } = await supabaseClient.from('municipios').select('*').eq('ativo', true).order('nome');
+        municipiosParaMostrar = (todos || []).map(m => ({ id: m.id, nome: m.nome, uf: m.uf, papel: 'admin', logo_url: m.logo_url }));
     } else {
         const { data: aprovados } = await supabaseClient
             .from('municipio_membros')
-            .select('papel, municipios(id, nome, uf)')
+            .select('papel, municipios(*)')
             .eq('user_id', userId)
             .eq('status', 'aprovado');
         municipiosParaMostrar = (aprovados || [])
             .filter(m => m.municipios)
-            .map(m => ({ id: m.municipios.id, nome: m.municipios.nome, uf: m.municipios.uf, papel: m.papel }));
+            .map(m => ({ id: m.municipios.id, nome: m.municipios.nome, uf: m.municipios.uf, papel: m.papel, logo_url: m.municipios.logo_url }));
     }
+    window.municipiosParaMostrarCache = municipiosParaMostrar;
 
-    // Usuário comum (não admin de nada) com um único município aprovado não
-    // precisa escolher — entra direto na base dele.
-    if (!homeUserProfile.super_admin && !homeUserProfile.entidade_admin && municipiosParaMostrar.length === 1) {
-        selectMunicipio(municipiosParaMostrar[0].id, municipiosParaMostrar[0].nome);
+    // Se o usuário tiver um único município aprovado e não for SuperAdmin:
+    // Admin Municipal: abre direto na tela de boas-vindas/gestão do município
+    // Usuário Comum: abre direto o mapa interativo
+    const urlParams = new URLSearchParams(window.location.search);
+    const forcandoLista = urlParams.get('lista') === '1' || urlParams.get('portal') === '1';
+
+    if (!forcandoLista && !homeUserProfile.super_admin && municipiosParaMostrar.length === 1) {
+        const unicoMun = municipiosParaMostrar[0];
+        abrirMunicipio(unicoMun.id, unicoMun.nome, unicoMun.papel);
         return;
     }
 
     if (municipiosParaMostrar.length > 0) {
-        const grid = document.getElementById('municipios-grid');
-        grid.innerHTML = municipiosParaMostrar.map(m => `
-            <button onclick="selectMunicipio('${m.id}', '${(m.nome || '').replace(/'/g, "\\'")}')" class="municipio-card card rounded-xl p-5 text-left flex flex-col gap-2">
-                <span class="material-symbols-outlined text-primary text-[28px]">location_city</span>
-                <span class="text-sm font-bold text-slate-800 dark:text-slate-100">${m.nome}${m.uf ? ' - ' + m.uf : ''}</span>
-                <span class="text-[10px] uppercase tracking-wider text-slate-400">${PAPEL_LABELS[m.papel] || m.papel}</span>
-            </button>
-        `).join('');
+        const listContainer = document.getElementById('municipios-list');
+        const activeMunId = sessionStorage.getItem('municipio_ativo');
+
+        listContainer.innerHTML = municipiosParaMostrar.map(m => {
+            const isCurrentActive = activeMunId === m.id;
+            const ehAdmin = m.papel === 'admin' || homeUserProfile.super_admin;
+            return `
+            <div class="card rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-primary/40 transition-all border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm" data-nome="${(m.nome || '').toLowerCase()}" data-uf="${(m.uf || '').toLowerCase()}">
+                <div class="flex items-center gap-3.5 min-w-0">
+                    <div class="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden p-1.5">
+                        ${m.logo_url ? `<img src="${m.logo_url}" class="w-full h-full object-contain" alt="${m.nome}">` : `<span class="material-symbols-outlined text-primary text-[26px]">location_city</span>`}
+                    </div>
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <h3 class="text-base font-bold text-slate-800 dark:text-slate-100">${m.nome}${m.uf ? ' - ' + m.uf : ''}</h3>
+                            <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${ehAdmin ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}">
+                                ${PAPEL_LABELS[m.papel] || m.papel}
+                            </span>
+                            ${isCurrentActive ? `<span class="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 px-2 py-0.5 rounded-full flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Ativo</span>` : ''}
+                        </div>
+                        <p class="text-xs text-slate-400 mt-0.5">Acesso autorizado para consulta e operações espaciais</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                    <button onclick="abrirMunicipio('${m.id}', '${(m.nome || '').replace(/'/g, "\\'")}', '${m.papel}')" class="px-5 py-2.5 text-xs font-bold bg-primary hover:bg-primary/90 text-white rounded-xl transition-all shadow-sm flex items-center gap-1.5 active:scale-95 cursor-pointer" title="Abrir configurações e mapa deste município">
+                        <span>Abrir</span>
+                        <span class="material-symbols-outlined text-[17px]">arrow_forward</span>
+                    </button>
+                </div>
+            </div>`;
+        }).join('');
         document.getElementById('municipios-section').classList.add('active');
     } else if (homeUserProfile.super_admin) {
-        document.getElementById('municipios-grid').innerHTML = '<div class="text-xs text-slate-400 italic py-2">Nenhum município cadastrado ainda.</div>';
+        document.getElementById('municipios-list').innerHTML = '<div class="text-xs text-slate-400 italic py-6 text-center">Nenhum município cadastrado ainda.</div>';
         document.getElementById('municipios-section').classList.add('active');
     } else {
         document.getElementById('empty-section').classList.remove('hidden');
     }
+
+    // Auto-navegação para a aba ou visão passada na URL (?tab=... ou ?view=...)
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetTab = urlParams.get('tab') || window.location.hash.replace('#', '');
+        const targetView = urlParams.get('view');
+        if (targetTab) {
+            if (targetTab === 'configuracoes') {
+                abrirConfiguracoesGlobais();
+            } else {
+                const activeMunId = sessionStorage.getItem('municipio_ativo');
+                const activeMunNome = sessionStorage.getItem('municipio_ativo_nome') || 'Município';
+                if (activeMunId) {
+                    abrirMunicipio(activeMunId, activeMunNome, 'admin');
+                    const tabBtn = document.querySelector(`#municipio-tabs button[onclick*="'${targetTab}'"]`);
+                    if (tabBtn && typeof window.switchMunicipioTab === 'function') {
+                        window.switchMunicipioTab(targetTab, tabBtn);
+                    }
+                }
+            }
+        } else if (targetView === 'municipio' || targetView === 'welcome') {
+            const activeMunId = sessionStorage.getItem('municipio_ativo');
+            const activeMunNome = sessionStorage.getItem('municipio_ativo_nome') || 'Município';
+            if (activeMunId) {
+                abrirMunicipio(activeMunId, activeMunNome, 'admin');
+            }
+        }
+    } catch(e) {}
 }
 
 init();

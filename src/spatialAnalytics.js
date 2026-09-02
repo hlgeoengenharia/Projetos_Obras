@@ -206,7 +206,7 @@
                         <h3 class="text-xs font-bold uppercase tracking-wider text-slate-100">Estatísticas Cruzadas</h3>
                     </div>
                     <div class="flex items-center gap-1">
-                        <button type="button" onclick="window.location.href='settings.html?tab=estatistica'" class="p-1.5 hover:bg-white/10 rounded-full text-white/60 hover:text-cyan-400 transition-colors mr-1 cursor-pointer" title="Configurar em Ajustes">
+                        <button type="button" onclick="window.location.href='home.html?tab=estatistica'" class="p-1.5 hover:bg-white/10 rounded-full text-white/60 hover:text-cyan-400 transition-colors mr-1 cursor-pointer" title="Configurar em Ajustes">
                             <span class="material-symbols-outlined text-[18px]">settings</span>
                         </button>
                         <button type="button" onclick="window.spatialAnalyticsEngine.closeMenu()" class="p-1.5 hover:bg-white/10 rounded-full text-white/60 hover:text-red-400 transition-colors cursor-pointer" title="Fechar">

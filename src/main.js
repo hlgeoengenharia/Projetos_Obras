@@ -4689,10 +4689,24 @@ async function ensureAuthenticated() {
                 return false;
             }
             currentMunicipioPapel = membro.papel;
+
+            // Verifica quantos municípios este usuário tem liberados
+            try {
+                const { count } = await supabaseClient
+                    .from('municipio_membros')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('user_id', data.session.user.id)
+                    .eq('status', 'aprovado');
+                window.userTotalMunicipiosAprovados = count || 1;
+            } catch(e) {
+                window.userTotalMunicipiosAprovados = 1;
+            }
         } catch (e) {
             window.location.href = 'home.html';
             return false;
         }
+    } else {
+        window.userTotalMunicipiosAprovados = 999;
     }
 
     // Mapa local de permissões por tema indexado com case-insensitivity
@@ -4730,9 +4744,24 @@ async function ensureAuthenticated() {
 function applyPermissionUIGating() {
     const isSuperAdmin = !!(currentUserProfile && currentUserProfile.super_admin);
     const isAdmin = isSuperAdmin || currentMunicipioPapel === 'admin';
+    const temMultiplosMunicipios = isSuperAdmin || (window.userTotalMunicipiosAprovados && window.userTotalMunicipiosAprovados > 1);
 
-    const ajustesEl = document.getElementById('drawer-btn-ajustes');
-    if (ajustesEl) ajustesEl.style.display = isAdmin ? '' : 'none';
+    const homeEl = document.getElementById('drawer-btn-home') || document.getElementById('drawer-btn-ajustes');
+    if (homeEl) {
+        if (isAdmin) {
+            homeEl.style.display = '';
+            homeEl.href = 'home.html?view=municipio';
+            homeEl.title = 'Voltar ao Painel do Município';
+        } else if (temMultiplosMunicipios) {
+            homeEl.style.display = '';
+            homeEl.href = 'home.html?portal=1';
+            homeEl.title = 'Trocar de Município';
+            const homeLabel = homeEl.querySelector('span:last-child');
+            if (homeLabel) homeLabel.textContent = 'Municípios';
+        } else {
+            homeEl.style.display = 'none';
+        }
+    }
 
     const importarEl = document.getElementById('drawer-btn-importar');
     if (importarEl) importarEl.style.display = isSuperAdmin ? '' : 'none';
@@ -6548,7 +6577,7 @@ window.openSelectRasterModal = async function() {
                 <div class="p-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center gap-2">
                     <span class="material-symbols-outlined text-[40px] text-slate-400 opacity-40">satellite</span>
                     <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Nenhuma ortofoto enviada ainda para este município.</p>
-                    <button onclick="window.location.href='settings.html#storage'" class="mt-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow">
+                    <button onclick="window.location.href='home.html?tab=storage'" class="mt-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow">
                         <span class="material-symbols-outlined text-[16px]">cloud_upload</span> Abrir Gerenciador de Arquivos
                     </button>
                 </div>

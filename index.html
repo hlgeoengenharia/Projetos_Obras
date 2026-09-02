@@ -356,9 +356,6 @@
 <button class="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors rounded-full shrink-0" onclick="document.getElementById('side-drawer').classList.remove('-translate-x-[120%]'); document.getElementById('drawer-overlay').classList.remove('hidden')">
 <span class="material-symbols-outlined text-slate-900 dark:text-slate-50">menu</span>
 </button>
-<button class="flex p-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors rounded-full shrink-0 tooltip tooltip-bottom" title="Voltar aos Municípios" onclick="window.location.href='home.html'">
-<span class="material-symbols-outlined text-slate-900 dark:text-slate-50">location_city</span>
-</button>
 <h1 class="text-lg font-bold tracking-tighter text-slate-900 dark:text-slate-50"></h1>
 </div>
 <div class="flex-1 flex justify-center items-center gap-1 md:gap-2 min-w-0">
@@ -380,6 +377,13 @@
   <button id="btn-spatial-analytics" class="h-9 md:h-10 px-3.5 rounded-full bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 transition-all flex items-center justify-center gap-1.5 font-bold text-xs shadow-sm tooltip tooltip-bottom" title="Geoestatística Espacial Cruzada" onclick="window.spatialAnalyticsEngine ? window.spatialAnalyticsEngine.toggleMenu() : null">
     <span class="material-symbols-outlined text-[20px]">hub</span>
     <span class="hidden sm:inline uppercase tracking-wider text-[11px]">Estatística</span>
+  </button>
+</div>
+
+<!-- Canto Direito: Perfil do Usuário -->
+<div class="flex items-center justify-end shrink-0">
+  <button id="btn-header-profile" onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-9 h-9 md:w-10 md:h-10 rounded-full hover:ring-2 hover:ring-primary dark:hover:ring-sky-400 transition-all flex items-center justify-center overflow-hidden border border-slate-200/80 dark:border-slate-700/80 shadow-sm tooltip tooltip-bottom" title="Perfil do Usuário">
+    <img src="assets/logo.png" alt="Avatar" class="w-full h-full object-cover">
   </button>
 </div>
 </header>
@@ -407,14 +411,10 @@
 <!-- NavigationDrawer -->
 <aside class="fixed top-0 left-0 md:top-[4.5rem] md:left-4 z-[60] flex flex-col h-[100dvh] md:h-[calc(100vh-5.5rem)] w-full md:w-80 lg:w-96 bg-white/50 dark:bg-[#070b14]/50 backdrop-blur-md rounded-none md:rounded-2xl border-0 md:border border-slate-200/50 dark:border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-out -translate-x-[120%] overflow-hidden" id="side-drawer">
 <div class="p-0 border-b border-slate-200 dark:border-slate-800 flex items-center justify-center">
-    <a id="drawer-btn-ajustes" href="settings.html" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400">
-        <span class="material-symbols-outlined text-[22px]">settings</span>
-        <span class="text-[9px] font-medium tracking-wide uppercase">Ajustes</span>
+    <a id="drawer-btn-home" href="home.html?view=municipio" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400" title="Voltar ao Painel do Município">
+        <span class="material-symbols-outlined text-[22px]">home</span>
+        <span class="text-[9px] font-medium tracking-wide uppercase">Home</span>
     </a>
-    <button onclick="document.getElementById('profile-modal').classList.remove('hidden'); document.getElementById('side-drawer').classList.add('-translate-x-[120%]'); document.getElementById('drawer-overlay').classList.add('hidden')" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 group border-l border-slate-200/50 dark:border-slate-800/50" title="Perfil do Usuário">
-        <img src="assets/logo.png" alt="Avatar" class="w-[22px] h-[22px] rounded-full border border-slate-300 dark:border-slate-600 group-hover:border-primary dark:group-hover:border-sky-400 transition-colors object-cover">
-        <span class="text-[9px] font-medium tracking-wide uppercase">Perfil</span>
-    </button>
     <button id="drawer-btn-importar" onclick="openImportOptionsModal()" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 border-l border-slate-200/50 dark:border-slate-800/50">
         <span class="material-symbols-outlined text-[22px]">upload_file</span>
         <span class="text-[9px] font-medium tracking-wide uppercase">Importar</span>
@@ -875,7 +875,7 @@
 
     <!-- Rodapé: Atalho para Gerenciador de Arquivos -->
     <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center shrink-0">
-      <button onclick="window.location.href='settings.html#storage'" class="text-xs text-primary hover:text-sky-400 font-bold flex items-center gap-1.5 transition-colors">
+      <button onclick="window.location.href='home.html?tab=storage'" class="text-xs text-primary hover:text-sky-400 font-bold flex items-center gap-1.5 transition-colors">
         <span class="material-symbols-outlined text-[16px]">cloud_upload</span> Enviar Nova Pasta de Tiles
       </button>
       <button onclick="closeSelectRasterModal()" class="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
