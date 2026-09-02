@@ -1382,6 +1382,7 @@ function toggleThemeVisibility(themeId, inputEl) {
 
 // Carrega propriedades completas de todas as feições de uma camada
 async function loadThemeProperties(themeId) {
+    if (typeof userCanOnTheme === 'function' && !userCanOnTheme(themeId, 'ver')) return;
     const theme = themes.find(t => t.id === themeId);
     if (!theme || theme._propertiesFullyLoaded) return;
 
@@ -3836,6 +3837,13 @@ let activeFeatureLayer = null;
 let isFeatureEditMode = false;
 
 function showFeatureInfoModal(layer) {
+  if (!layer) return;
+  const themeId = layer.feature && layer.feature.properties && layer.feature.properties.themeId;
+  if (themeId && typeof userCanOnTheme === 'function' && !userCanOnTheme(themeId, 'ver')) {
+      console.warn('[Permissão] Acesso negado à camada da feição:', themeId);
+      return;
+  }
+
   activeFeatureLayer = layer;
   isFeatureEditMode = false;
   renderFeatureInfo();
@@ -3846,7 +3854,6 @@ function showFeatureInfoModal(layer) {
   // Esconde editar/excluir se o usuário não tem permissão nesta camada
   // (o RLS/gatilho no banco já recusaria — isto é só pra não oferecer um
   // botão que vai falhar).
-  const themeId = layer.feature && layer.feature.properties && layer.feature.properties.themeId;
   const deleteBtn = document.getElementById('btn-delete-feature');
   if (deleteBtn) {
       const canDelete = typeof userCanOnTheme !== 'function' || userCanOnTheme(themeId, 'excluir');
@@ -4680,44 +4687,45 @@ async function ensureAuthenticated() {
         }
     }
 
-    // Mapa local de permissões por tema — só pra não mostrar botões que o
-    // RLS/gatilho no banco vai recusar de qualquer forma (UX, não segurança).
+    // Mapa local de permissões por tema indexado com case-insensitivity
     currentUserPermissions = {};
     try {
         const { data: perms } = await supabaseClient.from('permissoes_camada').select('*').eq('user_id', data.session.user.id);
-        (perms || []).forEach(p => { currentUserPermissions[p.theme_id] = p; });
-    } catch (e) {}
+        (perms || []).forEach(p => { 
+            const tid = String(p.theme_id).toLowerCase().trim();
+            currentUserPermissions[tid] = p;
+            currentUserPermissions[p.theme_id] = p;
+        });
+    } catch (e) {
+        console.warn('Erro ao carregar permissoes_camada:', e);
+    }
 
-    // Permissão por aba de formulário (ver/editar dentro do card de uma
-    // camada) — usado pelo formRenderer.js pra esconder abas inteiras.
+    // Permissão por aba de formulário (ver/editar dentro do card de uma camada)
     window.currentUserAbaPermissions = {};
     try {
         const { data: abaPerms } = await supabaseClient.from('permissoes_aba').select('*').eq('user_id', data.session.user.id);
-        (abaPerms || []).forEach(p => { window.currentUserAbaPermissions[p.form_id + ':' + p.tab_id] = p; });
-    } catch (e) {}
+        (abaPerms || []).forEach(p => { 
+            const aid = `${p.form_id}:${p.tab_id}`.toLowerCase().trim();
+            window.currentUserAbaPermissions[aid] = p;
+            window.currentUserAbaPermissions[p.form_id + ':' + p.tab_id] = p;
+        });
+    } catch (e) {
+        console.warn('Erro ao carregar permissoes_aba:', e);
+    }
 
     if (typeof applyCurrentUserToProfileModal === 'function') applyCurrentUserToProfileModal();
     applyPermissionUIGating();
     return true;
 }
 
-// Esconde ações globais (não é por tema — é "Ajustes", "Importar", "Nova
-// Camada" no menu lateral) de acordo com o papel do usuário no município
-// ativo. Só UX (esconder o que o RLS já recusaria); a segurança de verdade
-// continua sendo o RLS/gatilhos no banco.
+// Esconde ações globais (não é por tema — é "Ajustes", "Importar", "Nova Camada")
 function applyPermissionUIGating() {
     const isSuperAdmin = !!(currentUserProfile && currentUserProfile.super_admin);
     const isAdmin = isSuperAdmin || currentMunicipioPapel === 'admin';
 
-    // style.display em vez da classe "hidden" do Tailwind: esses botões já
-    // têm "flex" nas classes base, e a ordem entre utilities equivalentes no
-    // CSS gerado pelo Tailwind CDN não é garantida — display inline sempre
-    // vence, sem depender de qual regra o Tailwind emitiu por último.
     const ajustesEl = document.getElementById('drawer-btn-ajustes');
     if (ajustesEl) ajustesEl.style.display = isAdmin ? '' : 'none';
 
-    // Importar/Nova mexem na base de dados da camada inteira (não é edição
-    // de feição) — só o SuperAdmin vê, nem admin de município.
     const importarEl = document.getElementById('drawer-btn-importar');
     if (importarEl) importarEl.style.display = isSuperAdmin ? '' : 'none';
 
@@ -4727,32 +4735,49 @@ function applyPermissionUIGating() {
     if (typeof renderThemes === 'function') renderThemes();
 }
 
-let currentUserPermissions = {};
-let currentMunicipioPapel = null; // papel do usuário NO MUNICÍPIO ATIVO (não é mais global)
-
-// Só reflete o que o RLS/gatilho no banco decide de verdade — usado pra
-// esconder/desabilitar botões, não como a barreira de segurança em si.
+// Avaliação definitiva de permissão de tema: Soberania de permissoes_camada e Princípio do Menor Privilégio
 function userCanOnTheme(themeId, acao) {
-    if (currentUserProfile && currentUserProfile.super_admin) return true;
-    
-    // Se há permissão explícita configurada em permissoes_camada, ela é soberana!
-    const pc = currentUserPermissions ? currentUserPermissions[themeId] : null;
+    if (!themeId) return false;
+
+    // 1. SuperAdmin Geral do sistema tem acesso irrestrito a tudo
+    if (currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin')) {
+        return true;
+    }
+
+    const tid = String(themeId).toLowerCase().trim();
+    const pc = currentUserPermissions ? (currentUserPermissions[tid] || currentUserPermissions[themeId]) : null;
+
+    // 2. Se há regra explícita em permissoes_camada para esta camada:
+    // A regra explícita é SOBERANA (vale para qualquer usuário e sobrepõe qualquer papel).
     if (pc) {
-        if (acao === 'ver') return pc.pode_ver !== false;
-        if (acao === 'editar') return !!pc.pode_editar;
-        if (acao === 'excluir') return !!pc.pode_excluir;
+        if (acao === 'ver') return pc.pode_ver === true || pc.pode_ver === 'true';
+        if (acao === 'editar') return pc.pode_editar === true || pc.pode_editar === 'true';
+        if (acao === 'excluir') return pc.pode_excluir === true || pc.pode_excluir === 'true';
         return false;
     }
 
-    // Se o usuário tem entidade externa associada (ex: Ministério Público Federal) ou papel 'externo',
-    // ele só pode ver o que foi explicitamente concedido (default: false se não listado).
-    const isEntidadeExterna = !!(currentUserProfile && currentUserProfile.entidade_id);
-    if (isEntidadeExterna || currentMunicipioPapel === 'externo') {
+    // 3. Se o usuário tem regras cadastradas em permissoes_camada (ou seja, o Administrador já configurou suas visões):
+    // QUALQUER camada fora dessa lista é NEGADA por padrão.
+    const totalPermissoesCadastradas = currentUserPermissions ? Object.keys(currentUserPermissions).length : 0;
+    if (totalPermissoesCadastradas > 0) {
         return false;
     }
 
-    if (currentMunicipioPapel === 'admin') return true;
-    return acao === 'ver';
+    // 4. Se o usuário tem entidade associada ou papel 'externo':
+    // Bloqueado para qualquer camada sem concessão explícita.
+    const hasEntidade = !!(currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_id));
+    if (hasEntidade || currentMunicipioPapel === 'externo') {
+        return false;
+    }
+
+    // 5. Administrador do Município sem nenhuma restrição explícita de camadas vê tudo
+    if (currentMunicipioPapel === 'admin') {
+        return true;
+    }
+
+    // 6. Usuários comuns (editor, visualizador, etc.) sem permissões atribuídas:
+    // Princípio do Menor Privilégio: NÃO ver nada até que o Administrador libere!
+    return false;
 }
 
 // Abas de formulário (dentro de uma camada): super_admin e admin do
