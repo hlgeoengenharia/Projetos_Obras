@@ -4166,6 +4166,14 @@ async function saveFeatureData() {
   }
   const inputs = document.querySelectorAll('.feature-data-input');
   
+  // Atualiza automaticamente os campos de Geolocalização antes de salvar
+  const geoInputs = document.querySelectorAll('.feature-data-input[id^="geo-input-"]');
+  geoInputs.forEach(input => {
+      const fieldId = input.getAttribute('data-key');
+      if(fieldId && typeof window.updateGeolocation === 'function') {
+          window.updateGeolocation(fieldId);
+      }
+  });
   // Validação: Exigir título para todos os anexos não excluídos
   for (let input of inputs) {
       if (input.classList.contains('complex-file-input')) {

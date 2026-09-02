@@ -220,7 +220,7 @@
       return;
     }
 
-    const municipioIds = Array.from(document.querySelectorAll('.signup-municipio-checkbox:checked')).map(cb => cb.value);
+    const municipioIds = Array.from(document.querySelectorAll('.signup-municipio-input:checked')).map(cb => cb.value);
     if (municipioIds.length === 0) {
       showError('Selecione ao menos um município.');
       return;
@@ -245,6 +245,7 @@
       options: {
         data: {
           nome: nomeEl.value.trim(),
+          municipio_id: municipioIds[0] || null,
           municipio_ids: municipioIds,
           entidade: entidadeFinal,
           cargo: cargoEl.value.trim()
