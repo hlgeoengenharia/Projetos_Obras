@@ -4790,18 +4790,32 @@ function userCanOnTheme(themeId, acao) {
 function canSeeFormTab(formId, tabId) {
     if (currentUserProfile && currentUserProfile.super_admin) return true;
     if (currentMunicipioPapel === 'admin') return true;
-    if (!formId || !window.currentUserAbaPermissions) return false;
-    const perm = window.currentUserAbaPermissions[formId + ':' + tabId];
-    return !!(perm && perm.pode_ver);
+    if (!formId) return true;
+
+    const totalAbaRules = window.currentUserAbaPermissions ? Object.keys(window.currentUserAbaPermissions).length : 0;
+    if (totalAbaRules > 0) {
+        const key = `${formId}:${tabId}`.toLowerCase().trim();
+        const perm = window.currentUserAbaPermissions[key] || window.currentUserAbaPermissions[formId + ':' + tabId];
+        return !!(perm && (perm.pode_ver === true || perm.pode_ver === 'true'));
+    }
+
+    return true;
 }
 window.canSeeFormTab = canSeeFormTab;
 
 function canEditFormTab(formId, tabId) {
     if (currentUserProfile && currentUserProfile.super_admin) return true;
     if (currentMunicipioPapel === 'admin') return true;
-    if (!formId || !window.currentUserAbaPermissions) return false;
-    const perm = window.currentUserAbaPermissions[formId + ':' + tabId];
-    return !!(perm && perm.pode_editar);
+    if (!formId) return true;
+
+    const totalAbaRules = window.currentUserAbaPermissions ? Object.keys(window.currentUserAbaPermissions).length : 0;
+    if (totalAbaRules > 0) {
+        const key = `${formId}:${tabId}`.toLowerCase().trim();
+        const perm = window.currentUserAbaPermissions[key] || window.currentUserAbaPermissions[formId + ':' + tabId];
+        return !!(perm && (perm.pode_editar === true || perm.pode_editar === 'true'));
+    }
+
+    return true;
 }
 window.canEditFormTab = canEditFormTab;
 
