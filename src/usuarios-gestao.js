@@ -93,7 +93,7 @@
             </div>
         `;
 
-        _targetMunicipioId = municipioId;
+        _targetMunicipioId = municipioId || sessionStorage.getItem('municipio_ativo');
         _currentUserProfile = currentUserProfile;
 
         try {
@@ -301,12 +301,35 @@
 
         const parceirosMap = new Map();
 
+        // Se a entidade do Administrador NÃO for o Município (ex: Admin da SPU, MPF, etc.),
+        // o Município que foi acessado nesta sessão DEVE ser o parceiro principal para compartilhamento!
+        const munAtivoObj = _allMunicipios.find(m => m.id === _targetMunicipioId);
+        const munNomeLabel = munAtivoObj ? (munAtivoObj.nome || 'Município') : (sessionStorage.getItem('municipio_ativo_nome') || 'Município');
+
+        if (minhaSigla !== 'Município') {
+            parceirosMap.set('Município', {
+                sigla: 'Município',
+                label: munNomeLabel,
+                nome: munAtivoObj ? `Prefeitura Municipal de ${munAtivoObj.nome}` : 'Prefeitura Municipal',
+                icone: 'location_city'
+            });
+        }
+
+        const munTitleEl = document.getElementById('usuarios-header-title') || document.querySelector('#usuarios h2');
+        if (munTitleEl && munNomeLabel && munNomeLabel !== 'Município') {
+            munTitleEl.innerHTML = `Usuários e Permissões — <span class="text-primary font-extrabold">${munNomeLabel}</span>`;
+        }
+
         // 1. Entidades cadastradas em entidades_padrao
         _allEntidadesPadrao.forEach(e => {
             const s = getEntitySigla(e.sigla || e.nome);
-            if (s && s !== minhaSigla && s !== 'Município') {
-                if (!parceirosMap.has(s)) {
-                    parceirosMap.set(s, { sigla: s, nome: e.nome });
+            if (s && s !== minhaSigla) {
+                if (s === 'Município') {
+                    if (minhaSigla !== 'Município' && !parceirosMap.has('Município')) {
+                        parceirosMap.set('Município', { sigla: 'Município', label: munNomeLabel, nome: 'Prefeitura Municipal', icone: 'location_city' });
+                    }
+                } else if (!parceirosMap.has(s)) {
+                    parceirosMap.set(s, { sigla: s, label: s, nome: e.nome });
                 }
             }
         });
@@ -317,26 +340,35 @@
             const ent = (prof.entidade || m.entidade || '').trim();
             if (ent) {
                 const s = getEntitySigla(ent);
-                if (s && s !== minhaSigla && s !== 'Município') {
-                    if (!parceirosMap.has(s)) {
-                        parceirosMap.set(s, { sigla: s, nome: ent });
+                if (s && s !== minhaSigla) {
+                    if (s === 'Município') {
+                        if (minhaSigla !== 'Município' && !parceirosMap.has('Município')) {
+                            parceirosMap.set('Município', { sigla: 'Município', label: munNomeLabel, nome: 'Prefeitura Municipal', icone: 'location_city' });
+                        }
+                    } else if (!parceirosMap.has(s)) {
+                        parceirosMap.set(s, { sigla: s, label: s, nome: ent });
                     }
                 }
             }
         });
 
-        // Se ainda não houver parceiros registrados, exibe 'MPF' como padrão
+        // Se ainda não houver parceiros registrados além de MPF
         if (parceirosMap.size === 0) {
-            parceirosMap.set('MPF', { sigla: 'MPF', nome: 'Ministério Público Federal' });
+            if (minhaSigla !== 'Município') {
+                parceirosMap.set('Município', { sigla: 'Município', label: munNomeLabel, nome: 'Prefeitura Municipal', icone: 'location_city' });
+            } else {
+                parceirosMap.set('MPF', { sigla: 'MPF', label: 'MPF', nome: 'Ministério Público Federal' });
+            }
         }
 
         const todas = [
-            { sigla: minhaSigla, nome: minhaEntidade, isLocal: true, icone: 'domain' },
+            { sigla: minhaSigla, label: minhaSigla, nome: minhaEntidade, isLocal: true, icone: minhaSigla === 'Município' ? 'domain' : 'account_balance' },
             ...Array.from(parceirosMap.values()).map(p => ({
                 sigla: p.sigla,
+                label: p.label || p.sigla,
                 nome: p.nome,
                 isLocal: false,
-                icone: p.sigla === 'MPF' ? 'gavel' : (p.sigla === 'PF' ? 'security' : (p.sigla === 'SPU' ? 'account_balance' : 'handshake'))
+                icone: p.icone || (p.sigla === 'MPF' ? 'gavel' : (p.sigla === 'PF' ? 'security' : (p.sigla === 'SPU' ? 'account_balance' : (p.sigla === 'Município' ? 'location_city' : 'handshake'))))
             }))
         ];
 
@@ -360,7 +392,11 @@
                     const prof = m.profiles || {};
                     const s = getEntitySigla((prof.entidade || m.entidade || '').trim());
                     if (s === item.sigla && (prof.ponto_focal || false)) {
-                        uniquePfIds.add(m.user_id);
+                        if (item.sigla === 'Município' && _targetMunicipioId) {
+                            if (m.municipio_id === _targetMunicipioId) uniquePfIds.add(m.user_id);
+                        } else {
+                            uniquePfIds.add(m.user_id);
+                        }
                     }
                 });
                 const pfCount = uniquePfIds.size;
@@ -373,7 +409,7 @@
                 ? `<span class="ml-1 px-1.5 py-0.2 text-[9px] font-extrabold rounded-full ${isActive ? 'bg-white/25 text-white' : 'bg-sky-200 dark:bg-sky-800 text-sky-800 dark:text-sky-200'}">Minha Entidade</span>` 
                 : '';
 
-            const labelText = item.isLocal ? (item.sigla || 'Local') : item.sigla;
+            const labelText = item.label || item.sigla;
 
             return `
                 <button type="button" 
@@ -831,11 +867,14 @@
             `;
         }
 
-        // Nomes dos municípios atribuídos para o cabeçalho
-        const nomesMunicipiosDoUser = _allMunicipios
-            .filter(mun => todosMunIdsDoUser.has(mun.id))
-            .map(mun => mun.nome + (mun.uf ? ' - ' + mun.uf : ''))
-            .join(', ') || 'Nenhum município vinculado';
+        // Nome do município a exibir no cabeçalho (prioriza o município acessado nesta sessão)
+        const munAtivoObjCard = _allMunicipios.find(m => m.id === _targetMunicipioId);
+        const nomesMunicipiosDoUser = munAtivoObjCard 
+            ? (munAtivoObjCard.nome + (munAtivoObjCard.uf ? ' - ' + munAtivoObjCard.uf : ''))
+            : (_allMunicipios
+                .filter(mun => todosMunIdsDoUser.has(mun.id))
+                .map(mun => mun.nome + (mun.uf ? ' - ' + mun.uf : ''))
+                .join(', ') || 'Nenhum município vinculado');
 
         // Botões de Ação no topo
         const botoesAcaoHtml = isEditing ? `
