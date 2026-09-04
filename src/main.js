@@ -5074,16 +5074,16 @@ function userCanOnTheme(themeId, acao) {
         return false;
     }
 
-    // 4. Se o usuário tem entidade associada ou papel 'externo':
+    // 4. Administrador do Município sem nenhuma restrição explícita de camadas vê tudo de sua própria entidade
+    if (currentMunicipioPapel === 'admin') {
+        return true;
+    }
+
+    // 5. Se o usuário tem entidade associada ou papel 'externo':
     // Bloqueado para qualquer camada sem concessão explícita.
     const hasEntidade = !!(currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_id));
     if (hasEntidade || currentMunicipioPapel === 'externo') {
         return false;
-    }
-
-    // 5. Administrador do Município sem nenhuma restrição explícita de camadas vê tudo de sua própria entidade
-    if (currentMunicipioPapel === 'admin') {
-        return true;
     }
 
     // 6. Usuários comuns (editor, visualizador, etc.) sem permissões atribuídas:
@@ -7458,11 +7458,15 @@ window.updateSharedLayersBadge = function() {
 window.openSharedLayersCatalog = function() {
     const searchInput = document.getElementById('shared-layers-search');
     if (searchInput) searchInput.value = '';
-    renderSharedLayersCatalog();
     const modal = document.getElementById('shared-layers-modal');
     if (modal) {
         modal.classList.remove('hidden');
         setTimeout(() => modal.firstElementChild?.classList.remove('scale-95'), 10);
+    }
+    try {
+        renderSharedLayersCatalog();
+    } catch (err) {
+        console.error('Erro ao renderizar catálogo compartilhado:', err);
     }
 };
 
