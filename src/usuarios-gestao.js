@@ -81,7 +81,7 @@
             const [membrosRes, temasRes, formsRes, permsCamadaRes, permsAbaRes, entidadesRes, minhasRes, munRes, rastersRes, permsRasterRes] = await Promise.all([
                 supabaseClient
                     .from('municipio_membros')
-                    .select('id, user_id, municipio_id, papel, status, entidade, cargo, solicitado_em, profiles!user_id(id, nome, email, super_admin, ponto_focal), municipios(id, nome, uf)')
+                    .select('id, user_id, municipio_id, papel, status, entidade, cargo, solicitado_em, profiles!user_id(id, nome, email, super_admin, ponto_focal, entidade), municipios(id, nome, uf)')
                     .order('solicitado_em', { ascending: false }),
                 supabaseClient.from('temas').select('*'),
                 supabaseClient.from('forms').select('id, title, schema'),
@@ -204,13 +204,17 @@
         const userMap = new Map();
         _allMembros.forEach(m => {
             const uid = m.user_id;
+            const prof = m.profiles || {};
+            const userEntidade = (prof.entidade || m.entidade || 'Prefeitura Municipal').trim();
+            const userCargo = (prof.cargo || m.cargo || '').trim();
+
             if (!userMap.has(uid)) {
                 userMap.set(uid, {
                     user_id: uid,
-                    profile: m.profiles || {},
-                    ponto_focal: !!(m.profiles && m.profiles.ponto_focal),
-                    entidade: m.entidade,
-                    cargo: m.cargo,
+                    profile: prof,
+                    ponto_focal: !!prof.ponto_focal,
+                    entidade: userEntidade,
+                    cargo: userCargo,
                     papel: m.papel,
                     status: m.status,
                     membros: []
@@ -218,7 +222,10 @@
             }
             const userObj = userMap.get(uid);
             userObj.membros.push(m);
-            if (m.profiles?.ponto_focal) userObj.ponto_focal = true;
+            if (prof.ponto_focal) userObj.ponto_focal = true;
+            if (prof.entidade) userObj.entidade = prof.entidade.trim();
+            if (prof.cargo) userObj.cargo = prof.cargo.trim();
+            if (Object.keys(prof).length > 0) userObj.profile = prof;
             // Se houver algum vínculo aprovado ou admin, prioriza na exibição
             if (m.status === 'aprovado') userObj.status = 'aprovado';
             if (m.papel === 'admin') userObj.papel = 'admin';
@@ -618,6 +625,22 @@
 
                 <!-- Corpo Expansível do Card -->
                 <div id="user-card-body-${userId}" class="user-card-body ${isEditing ? '' : 'hidden'} mt-4 pt-4 border-t-2 border-slate-200 dark:border-slate-800 transition-all">
+                    <!-- Entidade e Cargo do Usuário -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[14px] text-cyan-500">hub</span> Entidade / Órgão
+                            </label>
+                            <input type="text" class="user-entidade-input w-full text-xs font-semibold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 ${!isEditing ? 'opacity-70 pointer-events-none' : ''}" value="${entidadeNome}" ${!isEditing ? 'disabled' : ''} placeholder="Ex: Prefeitura Municipal, MPF...">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[14px] text-indigo-500">badge</span> Cargo / Função
+                            </label>
+                            <input type="text" class="user-cargo-input w-full text-xs font-semibold bg-slate-50 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 ${!isEditing ? 'opacity-70 pointer-events-none' : ''}" value="${userObj.cargo || ''}" ${!isEditing ? 'disabled' : ''} placeholder="Ex: Analista, Diretor...">
+                        </div>
+                    </div>
+
                     <!-- Controles de Nível de Acesso e Status -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                         <div>
@@ -867,12 +890,25 @@
                 if (aErr) console.warn('Erro ao atualizar permissoes_aba:', aErr);
             }
 
-            // 4.1 Salva ponto_focal em profiles
+            // 4.1 Salva ponto_focal, entidade e cargo em profiles e municipio_membros
             const isPontoFocal = !!card.querySelector('.user-ponto-focal-check')?.checked;
+            const inputEntidade = card.querySelector('.user-entidade-input')?.value?.trim();
+            const inputCargo = card.querySelector('.user-cargo-input')?.value?.trim();
+
+            const profileUpdatePayload = { ponto_focal: isPontoFocal };
+            if (inputEntidade) profileUpdatePayload.entidade = inputEntidade;
+            if (inputCargo !== undefined) profileUpdatePayload.cargo = inputCargo;
+
             try {
-                await supabaseClient.from('profiles').update({ ponto_focal: isPontoFocal }).eq('id', userId);
+                await supabaseClient.from('profiles').update(profileUpdatePayload).eq('id', userId);
+                if (inputEntidade) {
+                    await supabaseClient.from('municipio_membros').update({
+                        entidade: inputEntidade,
+                        cargo: inputCargo || null
+                    }).eq('user_id', userId);
+                }
             } catch(e) {
-                console.warn('Erro ao atualizar ponto_focal:', e);
+                console.warn('Erro ao atualizar profiles e municipio_membros:', e);
             }
 
             // 4.2 Salva permissoes_raster

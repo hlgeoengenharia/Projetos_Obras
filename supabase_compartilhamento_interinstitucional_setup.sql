@@ -118,3 +118,15 @@ CREATE POLICY membros_update_self_rejeitado ON public.municipio_membros
     user_id = auth.uid() AND status = 'pendente' AND papel = 'visualizador'
   );
 
+-- 8. SINCRONIZAÇÃO DE ENTIDADE (PROFILES -> MUNICIPIO_MEMBROS)
+-- Garante a coluna cargo em profiles e sincroniza a entidade oficial com municipio_membros
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS cargo text;
+
+UPDATE public.municipio_membros mm
+SET entidade = p.entidade
+FROM public.profiles p
+WHERE mm.user_id = p.id
+  AND p.entidade IS NOT NULL;
+
+
+

@@ -284,21 +284,21 @@
 </header>
 
 <!-- Profile Modal (idêntico ao de index.html) -->
-<div id="profile-modal" class="fixed inset-0 bg-black/60 z-[200] hidden flex items-center justify-center backdrop-blur-sm px-4">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col transform transition-all">
+<div id="profile-modal" class="fixed inset-0 bg-black/60 z-[200] hidden flex items-center justify-center backdrop-blur-sm px-4 py-4 sm:py-6 overflow-hidden">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm max-h-[88vh] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col my-auto transform transition-all">
         <!-- Header -->
-        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/20">
-            <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+        <div class="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/20 shrink-0">
+            <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                 <span class="material-symbols-outlined text-primary">person</span>
                 Perfil do Usuário
             </h3>
-            <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
+            <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors" title="Fechar">
                 <span class="material-symbols-outlined">close</span>
             </button>
         </div>
 
         <!-- Body -->
-        <div class="p-6 overflow-y-auto">
+        <div class="p-5 sm:p-6 overflow-y-auto flex-1 min-h-0">
             <div class="flex flex-col items-center mb-6">
                 <img src="assets/logo.png" alt="Avatar" class="w-20 h-20 rounded-full border-4 border-slate-100 dark:border-slate-800 shadow-sm object-cover mb-3">
                 <h4 id="profile-user-name" class="text-base font-bold text-slate-800 dark:text-white">Usuário Logado</h4>
@@ -369,8 +369,8 @@
                         <input id="perfil-edit-cargo" type="text" placeholder="Ex: Analista, Engenheiro..." class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none">
                     </div>
                     <div class="flex items-center justify-end gap-2 pt-1">
-                        <button type="button" onclick="cancelEditPerfilModal()" class="px-2.5 py-1 text-xs rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 transition-colors">Cancelar</button>
-                        <button type="button" onclick="salvarPerfilModal()" class="px-3 py-1 text-xs font-bold rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors shadow-sm flex items-center gap-1">
+                        <button type="button" onclick="cancelEditPerfilModal()" class="px-2.5 py-1 text-xs rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 transition-colors cursor-pointer">Cancelar</button>
+                        <button type="button" onclick="salvarPerfilModal()" class="px-3 py-1 text-xs font-bold rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors shadow-sm flex items-center gap-1 cursor-pointer">
                             <span class="material-symbols-outlined text-[14px]">check</span> Salvar
                         </button>
                     </div>
@@ -396,8 +396,8 @@
                 </div>
             </div>
 
-            <div class="border-t border-slate-200 dark:border-slate-800 pt-4 mt-4">
-                <button onclick="document.getElementById('profile-modal').classList.add('hidden'); openRequestMunicipioModal()" class="w-full flex items-center gap-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:text-primary dark:hover:text-sky-400 transition-colors">
+            <div id="profile-solicitar-outro-municipio-container" class="border-t border-slate-200 dark:border-slate-800 pt-4 mt-4">
+                <button onclick="document.getElementById('profile-modal').classList.add('hidden'); openRequestMunicipioModal()" class="w-full flex items-center gap-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:text-primary dark:hover:text-sky-400 transition-colors cursor-pointer">
                     <span class="material-symbols-outlined text-[20px] text-primary">add_location_alt</span>
                     Solicitar acesso a outro município
                 </button>
@@ -405,40 +405,44 @@
         </div>
 
         <!-- Footer -->
-        <div class="px-5 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 flex gap-2">
-            <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="flex-1 px-5 py-2 text-sm font-medium bg-primary text-white hover:bg-primary/90 rounded-lg transition-colors shadow-sm">
+        <div class="px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 flex gap-2 shrink-0">
+            <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="flex-1 px-5 py-2 text-sm font-medium bg-primary text-white hover:bg-primary/90 rounded-lg transition-colors shadow-sm cursor-pointer">
                 Pronto
             </button>
-            <button onclick="window.handleLogout()" class="px-4 py-2 text-sm font-medium bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1.5">
+            <button onclick="window.handleLogout()" class="px-4 py-2 text-sm font-medium bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer" title="Sair do sistema">
                 <span class="material-symbols-outlined text-[18px]">logout</span> Sair
             </button>
         </div>
     </div>
 </div>
 
-<!-- Solicitar acesso a outro município (usuário já aprovado em pelo menos um) -->
-<div id="request-municipio-modal" class="fixed inset-0 bg-black/60 z-[200] hidden flex items-center justify-center backdrop-blur-sm px-4">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
-        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/20">
+<!-- Solicitar acesso a município -->
+<div id="request-municipio-modal" class="fixed inset-0 bg-black/60 z-[200] hidden flex items-center justify-center backdrop-blur-sm px-4 py-4 sm:py-6 overflow-hidden">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm max-h-[90vh] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col my-auto">
+        <div class="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/20 shrink-0">
             <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                 <span class="material-symbols-outlined text-primary">add_location_alt</span>
-                Solicitar Acesso
+                <span>Solicitar Acesso</span>
             </h3>
-            <button onclick="closeRequestMunicipioModal()" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
+            <button onclick="closeRequestMunicipioModal()" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors" title="Fechar">
                 <span class="material-symbols-outlined">close</span>
             </button>
         </div>
-        <div class="p-5">
-            <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">Selecione o(s) município(s) que deseja acessar. O pedido entra na fila de aprovação do administrador.</p>
+        <div class="p-5 overflow-y-auto flex-1 min-h-0">
+            <p id="request-municipio-desc" class="text-xs text-slate-500 dark:text-slate-400 mb-3 leading-relaxed">Selecione o município que deseja acessar. O pedido entra na fila de aprovação do administrador.</p>
             <div id="request-municipio-list" class="max-h-56 overflow-y-auto flex flex-col gap-1.5 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5"></div>
             <div id="request-municipio-error" class="hidden text-xs text-red-600 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2 mt-3"></div>
         </div>
-        <div class="px-5 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 flex gap-2">
-            <button onclick="enviarSolicitacoesMunicipio()" class="flex-1 px-5 py-2 text-sm font-medium bg-primary text-white hover:bg-primary/90 rounded-lg transition-colors shadow-sm">
+        <div class="px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 flex items-center gap-2 shrink-0">
+            <button onclick="enviarSolicitacoesMunicipio()" class="flex-1 px-4 py-2 text-xs font-bold bg-primary text-white hover:bg-primary/90 rounded-lg transition-colors shadow-sm cursor-pointer">
                 Enviar Solicitação
             </button>
-            <button onclick="closeRequestMunicipioModal()" class="px-4 py-2 text-sm font-medium bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors">
+            <button onclick="closeRequestMunicipioModal()" class="px-3 py-2 text-xs font-semibold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer" title="Fechar esta janela">
                 Cancelar
+            </button>
+            <button type="button" onclick="window.handleLogout()" class="px-2.5 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors flex items-center gap-1 shrink-0 cursor-pointer" title="Sair do sistema">
+                <span class="material-symbols-outlined text-[16px]">logout</span>
+                <span>Sair</span>
             </button>
         </div>
     </div>
@@ -454,7 +458,7 @@
 
 
   <!-- Seletor / Mapa e Lista de Municípios com Pesquisador -->
-  <section id="municipios-section" class="tab-content active h-full min-h-0">
+  <section id="municipios-section" class="tab-content h-full min-h-0">
     <!-- Campo de Busca -->
     <div class="relative w-full mb-2.5 shrink-0">
       <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[18px] pointer-events-none">search</span>
@@ -576,6 +580,10 @@
       <button onclick="openRequestMunicipioModal()" class="px-5 py-2.5 text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer active:scale-95">
         <span class="material-symbols-outlined text-[18px] text-primary">add_location_alt</span>
         <span>Solicitar Novo Acesso</span>
+      </button>
+      <button onclick="window.handleLogout()" class="px-4 py-2.5 text-xs font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
+        <span class="material-symbols-outlined text-[18px]">logout</span>
+        <span>Sair</span>
       </button>
     </div>
   </section>
@@ -1062,6 +1070,13 @@ window.changeTheme = function(theme) {
     }
 };
 
+function isEntidadeMunicipal(entidade) {
+    if (!entidade) return false;
+    const e = entidade.toLowerCase().trim();
+    return e.includes('prefeitura') || e.includes('municipal') || e.includes('município') || e.includes('municipio');
+}
+window.isEntidadeMunicipal = isEntidadeMunicipal;
+
 function applyCurrentUserToProfileModal() {
     if (!homeUserProfile) return;
     const nameEl = document.getElementById('profile-user-name');
@@ -1088,6 +1103,17 @@ function applyCurrentUserToProfileModal() {
             pfBadge.classList.remove('hidden');
         } else {
             pfBadge.classList.add('hidden');
+        }
+    }
+
+    // Servidores de Prefeitura Municipal são restritos a 1 município;
+    // Oculta o botão inferior para evitar duplicidade ou confusão.
+    const outroMunContainer = document.getElementById('profile-solicitar-outro-municipio-container');
+    if (outroMunContainer) {
+        if (isEntidadeMunicipal(entNome)) {
+            outroMunContainer.classList.add('hidden');
+        } else {
+            outroMunContainer.classList.remove('hidden');
         }
     }
 }
@@ -1189,24 +1215,36 @@ async function openRequestMunicipioModal() {
     const cargoAtual = homeUserProfile?.cargo || (minhas && minhas[0]?.cargo) || '';
     usuarioEntidadeCargo = { entidade: entAtual, cargo: cargoAtual };
 
+    const ehMunicipal = isEntidadeMunicipal(entAtual);
+    const descEl = document.getElementById('request-municipio-desc');
+    if (descEl) {
+        descEl.textContent = ehMunicipal
+            ? 'Como integrante de Prefeitura Municipal, selecione o seu município de atuação (escolha única). O pedido entra na fila de aprovação do administrador.'
+            : 'Selecione o(s) município(s) que deseja acessar. O pedido entra na fila de aprovação do administrador.';
+    }
+
     const { data: todos } = await supabaseClient.from('municipios').select('id, nome, uf').eq('ativo', true).order('nome');
     const disponiveis = (todos || []).filter(m => !emAnaliseOuAprovados.has(m.id));
 
     const list = document.getElementById('request-municipio-list');
     document.getElementById('request-municipio-error').classList.add('hidden');
+
+    const inputType = ehMunicipal ? 'radio' : 'checkbox';
+    const inputName = ehMunicipal ? 'name="solicitar_mun_opcao"' : '';
+
     list.innerHTML = disponiveis.length > 0
         ? disponiveis.map(m => {
             const eraRejeitado = (minhas || []).some(item => item.municipio_id === m.id && item.status === 'rejeitado');
             return `
-            <label class="flex items-center justify-between gap-2 text-sm text-slate-700 dark:text-slate-200 cursor-pointer p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                <div class="flex items-center gap-2 min-w-0">
-                    <input type="checkbox" class="request-municipio-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" value="${m.id}">
-                    <span class="font-medium truncate">${m.nome}${m.uf ? ' - ' + m.uf : ''}</span>
+            <label class="flex items-center justify-between gap-2.5 text-sm text-slate-700 dark:text-slate-200 cursor-pointer p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <input type="${inputType}" ${inputName} class="request-municipio-input rounded${ehMunicipal ? '-full' : ''} border-slate-300 dark:border-slate-600 text-primary focus:ring-primary w-4 h-4 cursor-pointer" value="${m.id}">
+                    <span class="font-medium truncate text-xs sm:text-sm">${m.nome}${m.uf ? ' - ' + m.uf : ''}</span>
                 </div>
                 ${eraRejeitado ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 shrink-0">Anteriormente Rejeitado</span>' : ''}
             </label>`;
         }).join('')
-        : '<div class="text-xs text-slate-400 italic py-2">Você já possui acesso ou solicitações em análise para todos os municípios cadastrados.</div>';
+        : '<div class="text-xs text-slate-400 italic py-3 text-center">Você já possui acesso ou solicitações em análise para todos os municípios cadastrados.</div>';
 
     document.getElementById('request-municipio-modal').classList.remove('hidden');
 }
@@ -1221,9 +1259,19 @@ async function enviarSolicitacoesMunicipio() {
     const errorEl = document.getElementById('request-municipio-error');
     errorEl.classList.add('hidden');
 
-    const ids = Array.from(document.querySelectorAll('.request-municipio-checkbox:checked')).map(cb => cb.value);
+    const ids = Array.from(document.querySelectorAll('.request-municipio-input:checked')).map(cb => cb.value);
     if (ids.length === 0) {
         errorEl.textContent = 'Selecione ao menos um município.';
+        errorEl.classList.remove('hidden');
+        return;
+    }
+
+    const entFinal = homeUserProfile?.entidade || usuarioEntidadeCargo.entidade || null;
+    const cargoFinal = homeUserProfile?.cargo || usuarioEntidadeCargo.cargo || null;
+    const ehMunicipal = isEntidadeMunicipal(entFinal);
+
+    if (ehMunicipal && ids.length > 1) {
+        errorEl.textContent = 'Integrantes de Prefeitura Municipal só podem solicitar acesso a um único município.';
         errorEl.classList.remove('hidden');
         return;
     }
@@ -1239,9 +1287,6 @@ async function enviarSolicitacoesMunicipio() {
         .in('municipio_id', ids);
 
     const mapExistentes = new Map((existentes || []).map(e => [e.municipio_id, e.id]));
-
-    const entFinal = homeUserProfile?.entidade || usuarioEntidadeCargo.entidade || null;
-    const cargoFinal = homeUserProfile?.cargo || usuarioEntidadeCargo.cargo || null;
 
     const promises = [];
     ids.forEach(municipio_id => {
@@ -1905,6 +1950,22 @@ async function init() {
         document.getElementById('municipios-section').classList.add('active');
         initParaibaMap([]);
     } else {
+        // Desativa a seção de municípios e esconde o mapa vazio da Paraíba
+        const munSec = document.getElementById('municipios-section');
+        if (munSec) {
+            munSec.classList.remove('active');
+            munSec.classList.add('hidden');
+            munSec.style.display = 'none';
+        }
+
+        // Esconde botões de alternância Mapa / Lista no header
+        const viewToggles = document.querySelectorAll('.inline-flex.rounded-xl.bg-slate-100, #header-map-view-toggle');
+        viewToggles.forEach(el => { el.style.display = 'none'; });
+
+        // Esconde botão inferior do perfil de "Solicitar acesso a outro município" para evitar duplicidade
+        const outroMunContainer = document.getElementById('profile-solicitar-outro-municipio-container');
+        if (outroMunContainer) outroMunContainer.classList.add('hidden');
+
         // Verifica se o usuário possui alguma solicitação que foi rejeitada
         const { data: minhasRejeicoes } = await supabaseClient
             .from('municipio_membros')
@@ -1922,7 +1983,7 @@ async function init() {
                 if (rejMsg) {
                     const munNomes = minhasRejeicoes.map(r => r.municipios?.nome).filter(Boolean).join(', ');
                     rejMsg.textContent = munNomes
-                        ? `Sua solicitação de acesso para ${munNomes} foi rejeitada pelo Administrador. Por favor, revise seus dados abaixo e solicite novo acesso.`
+                        ? `Sua solicitação de acesso para ${munNomes} foi rejeitada pelo Administrador. Por favor, solicite novo acesso.`
                         : 'Rejeitado pelo Administrador, por favor solicitar novo acesso.';
                 }
             }
@@ -1932,18 +1993,19 @@ async function init() {
             const emptyMsg = document.getElementById('empty-section-msg');
             if (emptyIcon) {
                 emptyIcon.innerHTML = '<span class="material-symbols-outlined text-[36px] text-rose-500">person_cancel</span>';
-                emptyIcon.className = 'w-16 h-16 rounded-full bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 flex items-center justify-center mx-auto mb-4';
+                emptyIcon.className = 'w-16 h-16 rounded-full bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 flex items-center justify-center mx-auto mb-4 shadow-sm';
             }
             if (emptyTitle) {
                 emptyTitle.textContent = 'Acesso Rejeitado pelo Administrador';
                 emptyTitle.className = 'text-base font-bold text-rose-600 dark:text-rose-400';
             }
             if (emptyMsg) {
-                emptyMsg.textContent = 'Sua solicitação anterior foi rejeitada pelo Administrador. Abra o seu Perfil para conferir seus dados ou solicitar novo acesso.';
+                emptyMsg.textContent = 'Sua solicitação foi rejeitada pelo Administrador. Abra o seu Perfil para conferir seus dados ou solicitar novo acesso.';
             }
 
-            // Direciona abrindo o modal do Perfil do Usuário
-            document.getElementById('profile-modal').classList.remove('hidden');
+            // Direciona imediatamente para o card "Perfil do Usuário"
+            const profModal = document.getElementById('profile-modal');
+            if (profModal) profModal.classList.remove('hidden');
         } else {
             if (rejAlert) rejAlert.classList.add('hidden');
             const emptyIcon = document.getElementById('empty-section-icon');
@@ -1962,7 +2024,12 @@ async function init() {
             }
         }
 
-        document.getElementById('empty-section').classList.remove('hidden');
+        const emptySec = document.getElementById('empty-section');
+        if (emptySec) {
+            emptySec.classList.remove('hidden');
+            emptySec.classList.add('active');
+            emptySec.style.display = 'block';
+        }
     }
 
     // Auto-navegação para a aba ou visão passada na URL (?tab=... ou ?view=...)
