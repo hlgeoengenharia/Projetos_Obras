@@ -27,12 +27,24 @@
 
     function getEntitySigla(name) {
         if (!name) return 'Município';
-        const n = name.trim().toLowerCase();
-        if (n.includes('mpf') || n.includes('ministério público')) return 'MPF';
-        if (n.includes('polícia federal') || n.includes('policia federal') || n === 'pf') return 'PF';
-        if (n.includes('spu') || n.includes('patrimônio da união')) return 'SPU';
-        if (n.includes('prefeitura') || n.includes('município') || n.includes('municipio') || n === 'pmc') return 'Município';
-        return name;
+        const raw = String(name).trim();
+        const lower = raw.toLowerCase();
+        if (lower === '' || lower === 'geral' || lower === 'pública' || lower === 'publica' || lower === 'público' || lower === 'publico') return 'Município';
+        if (lower.includes('mpf') || lower.includes('ministério público') || lower.includes('ministerio publico')) return 'MPF';
+        if (lower.includes('polícia federal') || lower.includes('policia federal') || lower === 'pf') return 'PF';
+        if (lower.includes('spu') || lower.includes('patrimônio da união') || lower.includes('patrimonio da uniao') || lower.includes('união') || lower.includes('uniao')) return 'SPU';
+        if (lower.includes('prefeitura') || lower.includes('municipal') || lower.includes('município') || lower.includes('municipio') || lower === 'pmc' || lower === 'pmr') return 'Município';
+        
+        if (Array.isArray(_allEntidadesPadrao)) {
+            const found = _allEntidadesPadrao.find(e => (e.nome && e.nome.toLowerCase() === lower) || (e.sigla && e.sigla.toLowerCase() === lower));
+            if (found && found.sigla) {
+                const s = found.sigla.trim();
+                const sl = s.toLowerCase();
+                if (sl === 'municipal' || sl.includes('municip') || sl.includes('prefeit')) return 'Município';
+                return s;
+            }
+        }
+        return raw;
     }
 
     // Estado interno do painel
@@ -141,7 +153,7 @@
             });
 
             // Inicializa filtro de entidade (padrão: minha entidade)
-            const minhaEntidade = (_currentUserMembros[0]?.entidade || _currentUserProfile?.entidade || 'Prefeitura Municipal').trim();
+            const minhaEntidade = (_currentUserProfile?.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
             const minhaSigla = getEntitySigla(minhaEntidade);
             if (!_selectedEntidadeFiltro) {
                 _selectedEntidadeFiltro = minhaSigla;
@@ -174,15 +186,16 @@
         if (!_currentUserProfile) return false;
         if (_currentUserProfile.super_admin) return true;
 
-        // Admin de Entidade: verifica se possui vínculo de admin no mesmo município e mesma entidade
-        const minhaEntidade = (_currentUserMembros[0]?.entidade || '').trim().toLowerCase();
-        const userEntidade = (userObj.entidade || '').trim().toLowerCase();
+        const isAdmin = (_currentUserProfile.papel === 'admin') || 
+                        _currentUserMembros.some(m => m.papel === 'admin' && m.status === 'aprovado');
+        if (!isAdmin) return false;
 
-        if (minhaEntidade && userEntidade && minhaEntidade === userEntidade) {
-            return _currentUserMembros.some(m => m.papel === 'admin' && m.status === 'aprovado');
-        }
+        const minhaEntidade = (_currentUserProfile.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
+        const minhaSigla = getEntitySigla(minhaEntidade);
+        const userEntidade = (userObj.entidade || userObj.profile?.entidade || '').trim();
+        const userSigla = getEntitySigla(userEntidade);
 
-        return false;
+        return (minhaSigla === userSigla) || (minhaSigla === 'Município' && (!userSigla || userSigla === 'Município'));
     }
 
     function getAdminCeiling(themeId, formId, tabId) {
@@ -215,7 +228,7 @@
         const container = document.getElementById('usuarios-entidades-toggle');
         if (!container) return;
 
-        const minhaEntidade = (_currentUserMembros[0]?.entidade || _currentUserProfile?.entidade || 'Prefeitura Municipal').trim();
+        const minhaEntidade = (_currentUserProfile?.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
         const minhaSigla = getEntitySigla(minhaEntidade);
 
         if (!_selectedEntidadeFiltro) {
@@ -259,7 +272,7 @@
                 sigla: p.sigla,
                 nome: p.nome,
                 isLocal: false,
-                icone: p.sigla === 'MPF' ? 'gavel' : (p.sigla === 'PF' ? 'security' : 'handshake')
+                icone: p.sigla === 'MPF' ? 'gavel' : (p.sigla === 'PF' ? 'security' : (p.sigla === 'SPU' ? 'account_balance' : 'handshake'))
             }))
         ];
 
@@ -268,13 +281,18 @@
             const activeClass = "bg-white dark:bg-slate-900 text-primary shadow-sm";
             const inactiveClass = "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100";
             
-            // Contagem de pontos focais para entes externos
+            // Contagem de pontos focais para entes externos (USUÁRIOS ÚNICOS!)
             let badgeCount = '';
             if (!item.isLocal) {
-                const pfCount = _allMembros.filter(m => {
-                    const s = getEntitySigla((m.profiles?.entidade || m.entidade || '').trim());
-                    return s === item.sigla && (m.profiles?.ponto_focal || false);
-                }).length;
+                const uniquePfIds = new Set();
+                _allMembros.forEach(m => {
+                    const prof = m.profiles || {};
+                    const s = getEntitySigla((prof.entidade || m.entidade || '').trim());
+                    if (s === item.sigla && (prof.ponto_focal || false)) {
+                        uniquePfIds.add(m.user_id);
+                    }
+                });
+                const pfCount = uniquePfIds.size;
                 if (pfCount > 0) {
                     badgeCount = `<span class="ml-1 px-1.5 py-0.2 text-[9px] font-bold rounded-full ${isActive ? 'bg-primary/15 text-primary' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}">${pfCount}</span>`;
                 }
@@ -312,7 +330,7 @@
         const isSuperAdmin = !!(_currentUserProfile && _currentUserProfile.super_admin);
         const query = searchQuery.trim().toLowerCase();
 
-        const minhaEntidade = (_currentUserMembros[0]?.entidade || _currentUserProfile?.entidade || 'Prefeitura Municipal').trim();
+        const minhaEntidade = (_currentUserProfile?.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
         const minhaSigla = getEntitySigla(minhaEntidade);
         const isFiltrandoExterno = (_selectedEntidadeFiltro && _selectedEntidadeFiltro !== minhaSigla);
 
@@ -427,11 +445,26 @@
         const isMunicipal = (tipoEntidade === 'municipal');
         const isEditing = _editingUserIds.has(userId);
 
+        // Determina a entidade do usuário deste card
+        const userEntidadeRaw = (userObj.entidade || userObj.profile?.entidade || (userObj.membros && userObj.membros[0]?.entidade) || 'Prefeitura Municipal').trim();
+        const userSigla = getEntitySigla(userEntidadeRaw);
+
+        const minhaEntidade = (_currentUserProfile?.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
+        const minhaSigla = getEntitySigla(minhaEntidade);
+        const isPartnerPontoFocal = (userSigla !== minhaSigla && (userObj.ponto_focal || userObj.profile?.ponto_focal));
+
         const munIdsAprovados = new Set(userObj.membros.filter(mb => mb.status === 'aprovado').map(mb => mb.municipio_id));
         const todosMunIdsDoUser = new Set(userObj.membros.map(mb => mb.municipio_id));
 
         // Define o município selecionado para este usuário no card
-        if (isMunicipal) {
+        if (isPartnerPontoFocal) {
+            // Para Ponto Focal Parceiro, o município relevante é SEMPRE o município gerenciado pelo Admin logado!
+            if (_targetMunicipioId) {
+                _userSelectedMunMap[userId] = _targetMunicipioId;
+            } else if (!_userSelectedMunMap[userId] && _allMunicipios.length > 0) {
+                _userSelectedMunMap[userId] = _allMunicipios[0].id;
+            }
+        } else if (isMunicipal) {
             // Usuários municipais são 100% restritos ao seu município de cadastro
             const munOrigem = userObj.membros[0]?.municipio_id || Array.from(todosMunIdsDoUser)[0];
             if (munOrigem) {
@@ -467,14 +500,6 @@
         const statusBadgeColor = userObj.status === 'aprovado' 
             ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' 
             : (userObj.status === 'pendente' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20');
-
-        // Determina a entidade do usuário deste card
-        const userEntidadeRaw = (userObj.entidade || userObj.profile?.entidade || (userObj.membros && userObj.membros[0]?.entidade) || 'Prefeitura Municipal').trim();
-        const userSigla = getEntitySigla(userEntidadeRaw);
-
-        const minhaEntidade = (_currentUserMembros[0]?.entidade || _currentUserProfile?.entidade || 'Prefeitura Municipal').trim();
-        const minhaSigla = getEntitySigla(minhaEntidade);
-        const isPartnerPontoFocal = (userSigla !== minhaSigla && (userObj.ponto_focal || userObj.profile?.ponto_focal));
 
         let localMeta = {};
         try {
@@ -1080,8 +1105,16 @@
             // 4.1 Salva ponto_focal, entidade e cargo em profiles e municipio_membros APENAS se for usuário local
             if (!isPartnerPontoFocal) {
                 const isPontoFocal = !!card.querySelector('.user-ponto-focal-check')?.checked;
-                const inputEntidade = card.querySelector('.user-entidade-input')?.value?.trim();
+                let inputEntidade = card.querySelector('.user-entidade-input')?.value?.trim();
                 const inputCargo = card.querySelector('.user-cargo-input')?.value?.trim();
+
+                // Normaliza entidade para garantir consistência institucional
+                if (inputEntidade) {
+                    const s = getEntitySigla(inputEntidade);
+                    if (s === 'Município' && (inputEntidade.toLowerCase() === 'municipal' || inputEntidade.toLowerCase() === 'municipio')) {
+                        inputEntidade = 'Prefeitura Municipal';
+                    }
+                }
 
                 const profileUpdatePayload = { ponto_focal: isPontoFocal };
                 if (inputEntidade) profileUpdatePayload.entidade = inputEntidade;
@@ -1098,6 +1131,20 @@
                 } catch(e) {
                     console.warn('Erro ao atualizar profiles e municipio_membros:', e);
                 }
+
+                // Atualiza em memória imediatamente para que os dados e filtros reflitam sem recarregar a página
+                _allMembros.filter(m => m.user_id === userId).forEach(m => {
+                    if (!m.profiles) m.profiles = {};
+                    m.profiles.ponto_focal = isPontoFocal;
+                    if (inputEntidade) {
+                        m.profiles.entidade = inputEntidade;
+                        m.entidade = inputEntidade;
+                    }
+                    if (inputCargo !== undefined) {
+                        m.profiles.cargo = inputCargo;
+                        m.cargo = inputCargo;
+                    }
+                });
             }
 
             // 4.2 Salva permissoes_raster
