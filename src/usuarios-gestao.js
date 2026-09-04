@@ -132,6 +132,7 @@
             _currentUserMembros = minhasRes.data || [];
             _allMunicipios = munRes.data || [];
             _allEntidadesPadrao = entidadesRes.data || [];
+            _allRasters = rastersRes.data || [];
             // Inicializa filtro de entidade (padrão: minha entidade)
             const minhaEntidade = (_currentUserProfile?.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
             const minhaSigla = getEntitySigla(minhaEntidade);
@@ -728,6 +729,8 @@
             if (r.municipio_id && r.municipio_id !== selectedMunId) return false;
             const rEntRaw = (r.entidade || 'Prefeitura Municipal').trim();
             const rSigla = getEntitySigla(rEntRaw);
+
+            if (_currentUserProfile?.super_admin) return true;
 
             if (isPartnerPontoFocal) {
                 // Ortofotos da entidade do Administrador disponíveis para conceder acesso a este parceiro
