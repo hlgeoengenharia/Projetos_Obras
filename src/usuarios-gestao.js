@@ -120,11 +120,42 @@
             _currentUserMembros = minhasRes.data || [];
             _allMunicipios = munRes.data || [];
             _allEntidadesPadrao = entidadesRes.data || [];
-            _allRasters = rastersRes?.data || [];
+            // Inicializa filtro de entidade (padrão: minha entidade)
+            const minhaEntidade = (_currentUserProfile?.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
+            const minhaSigla = getEntitySigla(minhaEntidade);
+            if (!_selectedEntidadeFiltro) {
+                _selectedEntidadeFiltro = minhaSigla;
+            }
+
+            // Mapeia e sanitiza permissões de raster
             _allRasterPerms = {};
+            const orphanRasterIds = [];
             (permsRasterRes?.data || []).forEach(p => {
+                const userObj = _allMembros.find(m => m.user_id === p.user_id);
+                const userEntidadeRaw = (userObj?.entidade || userObj?.profiles?.entidade || '').trim();
+                const userSigla = getEntitySigla(userEntidadeRaw);
+
+                const rasterObj = _allRasters.find(r => r.id === p.raster_id);
+                const rasterEntidadeRaw = (rasterObj?.entidade || '').trim();
+                const rasterSigla = getEntitySigla(rasterEntidadeRaw);
+
+                const isUserRejeitado = userObj && userObj.status === 'rejeitado';
+                // Permissão de raster pertencente a um terceiro ente que não é do usuário nem do admin gestor
+                const isThirdPartyResidual = rasterSigla && userSigla && minhaSigla && (rasterSigla !== userSigla) && (rasterSigla !== minhaSigla);
+
+                if (isUserRejeitado || isThirdPartyResidual) {
+                    orphanRasterIds.push(p.id);
+                    return;
+                }
+
                 _allRasterPerms[`${p.user_id}:${p.raster_id}`] = p;
             });
+
+            if (orphanRasterIds.length > 0) {
+                supabaseClient.from('permissoes_raster').delete().in('id', orphanRasterIds).then(() => {
+                    console.log(`[UsuariosManager] ${orphanRasterIds.length} permissões de raster residuais excluídas.`);
+                }).catch(e => console.warn('Erro ao deletar permissões de raster residuais:', e));
+            }
 
             // Mapeia tipos de entidades
             _entidadesTipos = {};
@@ -141,23 +172,42 @@
             });
 
             // Mapeia permissões por camada (user_id:theme_id -> record)
+            // Sanitização: usuários novos ou aceitos em outro ente começam com todas as camadas desativadas por padrão
             _allCamadaPerms = {};
+            const orphanCamadaIds = [];
+
             (permsCamadaRes.data || []).forEach(p => {
+                const userObj = _allMembros.find(m => m.user_id === p.user_id);
+                const userEntidadeRaw = (userObj?.entidade || userObj?.profiles?.entidade || '').trim();
+                const userSigla = getEntitySigla(userEntidadeRaw);
+
+                const temaObj = _allTemas.find(t => t.id === p.theme_id);
+                const temaEntidadeRaw = temaObj ? ((temaObj.metadata && temaObj.metadata.entidade) || temaObj.entidade || '').trim() : '';
+                const temaSigla = getEntitySigla(temaEntidadeRaw);
+
+                const isUserRejeitado = userObj && userObj.status === 'rejeitado';
+                // Permissão residual de outro ente (ex: camada do MPF gravada em servidora da SPU)
+                const isThirdPartyResidual = temaSigla && userSigla && minhaSigla && (temaSigla !== userSigla) && (temaSigla !== minhaSigla);
+
+                if (isUserRejeitado || isThirdPartyResidual) {
+                    orphanCamadaIds.push(p.id);
+                    return; // Desativa por padrão e agenda remoção do banco
+                }
+
                 _allCamadaPerms[`${p.user_id}:${p.theme_id}`] = p;
             });
+
+            if (orphanCamadaIds.length > 0) {
+                supabaseClient.from('permissoes_camada').delete().in('id', orphanCamadaIds).then(() => {
+                    console.log(`[UsuariosManager] ${orphanCamadaIds.length} permissões residuais órfãs de outros entes excluídas com sucesso.`);
+                }).catch(e => console.warn('Erro ao deletar permissões órfãs:', e));
+            }
 
             // Mapeia permissões por aba (user_id:form_id:tab_id -> record)
             _allAbaPerms = {};
             (permsAbaRes.data || []).forEach(p => {
                 _allAbaPerms[`${p.user_id}:${p.form_id}:${p.tab_id}`] = p;
             });
-
-            // Inicializa filtro de entidade (padrão: minha entidade)
-            const minhaEntidade = (_currentUserProfile?.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
-            const minhaSigla = getEntitySigla(minhaEntidade);
-            if (!_selectedEntidadeFiltro) {
-                _selectedEntidadeFiltro = minhaSigla;
-            }
 
             // Renderiza o alternador de entidades em pílulas
             renderEntidadesToggle();
@@ -1045,6 +1095,14 @@
                     .eq('user_id', userId);
 
                 if (membroErr) throw membroErr;
+
+                if (status === 'rejeitado') {
+                    await Promise.allSettled([
+                        supabaseClient.from('permissoes_camada').delete().eq('user_id', userId),
+                        supabaseClient.from('permissoes_raster').delete().eq('user_id', userId),
+                        supabaseClient.from('permissoes_aba').delete().eq('user_id', userId)
+                    ]);
+                }
             }
 
             // 2. Coleta permissões de camadas do município selecionado
