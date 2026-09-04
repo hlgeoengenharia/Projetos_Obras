@@ -1516,14 +1516,19 @@
 
   <!-- Tab Content: Usuários e Permissões -->
   <div id="usuarios" class="tab-content">
-    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-4">
       <div>
         <h2 class="text-lg font-bold">Usuários e Permissões</h2>
         <p class="text-sm text-slate-500 dark:text-slate-400">Defina o papel de cada usuário e quais camadas cada um pode ver, editar ou excluir.</p>
       </div>
-      <button onclick="loadUsersPanel()" class="flex items-center gap-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors shrink-0">
-        <span class="material-symbols-outlined text-[18px]">refresh</span> Atualizar
-      </button>
+      <div class="flex items-center gap-2.5 flex-wrap shrink-0">
+        <!-- Alternador em Pílulas estilo Mapa/Lista dos Entes Externos e Pontos Focais -->
+        <div id="usuarios-entidades-toggle" class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm">
+        </div>
+        <button onclick="loadUsersPanel()" class="flex items-center gap-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors shrink-0">
+          <span class="material-symbols-outlined text-[18px]">refresh</span> Atualizar
+        </button>
+      </div>
     </div>
 
     <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3 mb-5 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
@@ -4973,9 +4978,6 @@
                         <div class="flex items-center gap-2">
                             <button onclick="navigator.clipboard.writeText('${r.url_imagem}').then(() => showStorageToast('Link dos Tiles copiado!'))" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 shadow-xs" title="Copiar URL">
                                 <span class="material-symbols-outlined text-[15px]">content_copy</span> Copiar Link
-                            </button>
-                            <button type="button" onclick="window.abrirModalAcessosRaster('${r.id}', '${r.nome}')" class="px-3 py-1.5 bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-700 rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-xs" title="Gerenciar Acessos Externos (Pontos Focais de outros entes)">
-                                <span class="material-symbols-outlined text-[15px] text-cyan-600 dark:text-cyan-400">lock_person</span> Acessos
                             </button>
                             <button type="button" onclick="window.iniciarEdicaoRaster('${r.id}')" class="px-3 py-1.5 bg-white hover:bg-sky-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-400 border border-slate-300 dark:border-slate-600 rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-xs" title="Editar Ortofoto">
                                 <span class="material-symbols-outlined text-[15px] text-sky-600 dark:text-sky-400">edit</span> Editar

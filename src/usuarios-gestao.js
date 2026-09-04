@@ -44,6 +44,10 @@
     let _allRasters = [];
     let _allRasterPerms = {};
     let _allMunicipios = [];
+    let _allEntidadesPadrao = [];
+    let _selectedEntidadeFiltro = null;
+    let _containerIdAtual = null;
+    let _searchInputIdAtual = null;
     let _currentUserProfile = null;
     let _currentUserMembros = [];
     let _entidadesTipos = {}; // nome_entidade -> 'municipal' | 'externo' | 'outro'
@@ -54,6 +58,9 @@
     async function initUsuariosManager({ containerId, searchInputId, municipioId = null, currentUserProfile }) {
         const container = document.getElementById(containerId);
         if (!container || typeof supabaseClient === 'undefined' || !supabaseClient) return;
+
+        _containerIdAtual = containerId;
+        _searchInputIdAtual = searchInputId;
 
         container.innerHTML = `
             <div class="p-8 flex flex-col items-center justify-center gap-3 text-slate-400">
@@ -100,6 +107,7 @@
             _allTemas = temasRes.data || [];
             _currentUserMembros = minhasRes.data || [];
             _allMunicipios = munRes.data || [];
+            _allEntidadesPadrao = entidadesRes.data || [];
             _allRasters = rastersRes?.data || [];
             _allRasterPerms = {};
             (permsRasterRes?.data || []).forEach(p => {
@@ -131,6 +139,16 @@
             (permsAbaRes.data || []).forEach(p => {
                 _allAbaPerms[`${p.user_id}:${p.form_id}:${p.tab_id}`] = p;
             });
+
+            // Inicializa filtro de entidade (padrão: minha entidade)
+            const minhaEntidade = (_currentUserMembros[0]?.entidade || _currentUserProfile?.entidade || 'Prefeitura Municipal').trim();
+            const minhaSigla = getEntitySigla(minhaEntidade);
+            if (!_selectedEntidadeFiltro) {
+                _selectedEntidadeFiltro = minhaSigla;
+            }
+
+            // Renderiza o alternador de entidades em pílulas
+            renderEntidadesToggle();
 
             if (searchInputId) {
                 const searchInput = document.getElementById(searchInputId);
@@ -193,12 +211,110 @@
         };
     }
 
+    function renderEntidadesToggle() {
+        const container = document.getElementById('usuarios-entidades-toggle');
+        if (!container) return;
+
+        const minhaEntidade = (_currentUserMembros[0]?.entidade || _currentUserProfile?.entidade || 'Prefeitura Municipal').trim();
+        const minhaSigla = getEntitySigla(minhaEntidade);
+
+        if (!_selectedEntidadeFiltro) {
+            _selectedEntidadeFiltro = minhaSigla;
+        }
+
+        const parceirosMap = new Map();
+
+        // 1. Entidades cadastradas em entidades_padrao
+        _allEntidadesPadrao.forEach(e => {
+            const s = getEntitySigla(e.sigla || e.nome);
+            if (s && s !== minhaSigla && s !== 'Município') {
+                if (!parceirosMap.has(s)) {
+                    parceirosMap.set(s, { sigla: s, nome: e.nome });
+                }
+            }
+        });
+
+        // 2. Entidades presentes em membros (especialmente se tiverem ponto_focal)
+        _allMembros.forEach(m => {
+            const prof = m.profiles || {};
+            const ent = (prof.entidade || m.entidade || '').trim();
+            if (ent) {
+                const s = getEntitySigla(ent);
+                if (s && s !== minhaSigla && s !== 'Município') {
+                    if (!parceirosMap.has(s)) {
+                        parceirosMap.set(s, { sigla: s, nome: ent });
+                    }
+                }
+            }
+        });
+
+        // Se ainda não houver parceiros registrados, exibe 'MPF' como padrão
+        if (parceirosMap.size === 0) {
+            parceirosMap.set('MPF', { sigla: 'MPF', nome: 'Ministério Público Federal' });
+        }
+
+        const todas = [
+            { sigla: minhaSigla, nome: minhaEntidade, isLocal: true, icone: 'domain' },
+            ...Array.from(parceirosMap.values()).map(p => ({
+                sigla: p.sigla,
+                nome: p.nome,
+                isLocal: false,
+                icone: p.sigla === 'MPF' ? 'gavel' : (p.sigla === 'PF' ? 'security' : 'handshake')
+            }))
+        ];
+
+        container.innerHTML = todas.map(item => {
+            const isActive = (_selectedEntidadeFiltro === item.sigla);
+            const activeClass = "bg-white dark:bg-slate-900 text-primary shadow-sm";
+            const inactiveClass = "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100";
+            
+            // Contagem de pontos focais para entes externos
+            let badgeCount = '';
+            if (!item.isLocal) {
+                const pfCount = _allMembros.filter(m => {
+                    const s = getEntitySigla((m.profiles?.entidade || m.entidade || '').trim());
+                    return s === item.sigla && (m.profiles?.ponto_focal || false);
+                }).length;
+                if (pfCount > 0) {
+                    badgeCount = `<span class="ml-1 px-1.5 py-0.2 text-[9px] font-bold rounded-full ${isActive ? 'bg-primary/15 text-primary' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}">${pfCount}</span>`;
+                }
+            }
+
+            const labelText = item.isLocal ? (item.sigla || 'Local') : item.sigla;
+
+            return `
+                <button type="button" 
+                    onclick="window.UsuariosManager.selectEntidadeFiltro('${item.sigla}')" 
+                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${isActive ? activeClass : inactiveClass}" 
+                    title="${item.isLocal ? 'Servidores Internos da ' + item.nome : 'Pontos Focais de ' + item.nome}">
+                    <span class="material-symbols-outlined text-[16px]">${item.icone}</span>
+                    <span>${labelText}</span>
+                    ${badgeCount}
+                </button>
+            `;
+        }).join('');
+    }
+
+    function selectEntidadeFiltro(sigla) {
+        _selectedEntidadeFiltro = sigla;
+        renderEntidadesToggle();
+        const container = document.getElementById(_containerIdAtual || 'users-list') || document.getElementById('usuarios-list');
+        if (container) {
+            const searchInput = document.getElementById(_searchInputIdAtual || 'users-search') || document.getElementById('usuarios-search');
+            renderUsersList(container.id, searchInput ? searchInput.value : '');
+        }
+    }
+
     function renderUsersList(containerId, searchQuery = '') {
         const container = document.getElementById(containerId);
         if (!container) return;
 
         const isSuperAdmin = !!(_currentUserProfile && _currentUserProfile.super_admin);
         const query = searchQuery.trim().toLowerCase();
+
+        const minhaEntidade = (_currentUserMembros[0]?.entidade || _currentUserProfile?.entidade || 'Prefeitura Municipal').trim();
+        const minhaSigla = getEntitySigla(minhaEntidade);
+        const isFiltrandoExterno = (_selectedEntidadeFiltro && _selectedEntidadeFiltro !== minhaSigla);
 
         // 1. Agrupa os membros por pessoa única (user_id)
         const userMap = new Map();
@@ -233,20 +349,29 @@
 
         let uniqueUsers = Array.from(userMap.values());
 
-        // 2. Filtra por busca e permissões
+        // 2. Filtra por entidade selecionada, busca e permissões
         uniqueUsers = uniqueUsers.filter(u => {
-            if (_targetMunicipioId) {
-                // Se estiver dentro de um município específico, verifica se o usuário tem vínculo ativo nele.
-                // Usuários com status 'rejeitado' neste município NÃO aparecem para o Admin deste município!
-                const temNoMunAtivo = u.membros.some(mb => mb.municipio_id === _targetMunicipioId && mb.status !== 'rejeitado');
-                if (!temNoMunAtivo && !isSuperAdmin) return false;
+            const uSigla = getEntitySigla(u.entidade);
+
+            if (isFiltrandoExterno) {
+                // MODO PONTO FOCAL EXTERNO:
+                // Exibe APENAS servidores daquela entidade que são PONTO FOCAL
+                if (uSigla !== _selectedEntidadeFiltro) return false;
+                if (!u.ponto_focal && !u.profile?.ponto_focal) return false;
+            } else {
+                // MODO ENTE LOCAL:
+                if (!isSuperAdmin) {
+                    if (uSigla !== minhaSigla) return false;
+                    // Se todos os vínculos foram rejeitados, sai da visão
+                    const temVinculoValido = u.membros.some(mb => mb.status !== 'rejeitado' && (!_targetMunicipioId || mb.municipio_id === _targetMunicipioId));
+                    if (!temVinculoValido) return false;
+                    if (!canManageUser(u)) return false;
+                }
             }
 
-            if (!isSuperAdmin) {
-                // Para o Admin do ente/município, se todos os vínculos do usuário com este município/ente foram rejeitados, ele sai da visão
-                const temVinculoValido = u.membros.some(mb => mb.status !== 'rejeitado' && (!_targetMunicipioId || mb.municipio_id === _targetMunicipioId));
-                if (!temVinculoValido) return false;
-                if (!canManageUser(u)) return false;
+            if (_targetMunicipioId && !isFiltrandoExterno) {
+                const temNoMunAtivo = u.membros.some(mb => mb.municipio_id === _targetMunicipioId && mb.status !== 'rejeitado');
+                if (!temNoMunAtivo && !isSuperAdmin) return false;
             }
 
             if (query) {
@@ -262,11 +387,25 @@
         });
 
         if (uniqueUsers.length === 0) {
-            container.innerHTML = `
-                <div class="p-8 text-center text-slate-400 text-sm italic bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/60 dark:border-slate-800">
-                    ${query ? 'Nenhum usuário encontrado para esta busca.' : 'Nenhum usuário disponível para gerenciamento.'}
-                </div>
-            `;
+            if (isFiltrandoExterno) {
+                container.innerHTML = `
+                    <div class="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 shadow-xs">
+                        <div class="w-12 h-12 rounded-2xl bg-cyan-500/10 text-cyan-500 flex items-center justify-center mx-auto mb-3 border border-cyan-500/20">
+                            <span class="material-symbols-outlined text-[26px]">lock_person</span>
+                        </div>
+                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">Nenhum Ponto Focal de ${_selectedEntidadeFiltro}</h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                            ${query ? 'Nenhum resultado corresponde à sua pesquisa.' : 'Para compartilhar camadas e ortofotos com servidores deste órgão parceiro, o servidor deve estar cadastrado e marcado como <b>Ponto Focal</b>.'}
+                        </p>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <div class="p-8 text-center text-slate-400 text-sm italic bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/60 dark:border-slate-800 shadow-xs">
+                        ${query ? 'Nenhum usuário encontrado para esta busca.' : 'Nenhum usuário disponível para gerenciamento.'}
+                    </div>
+                `;
+            }
             return;
         }
 
@@ -333,6 +472,10 @@
         const userEntidadeRaw = (userObj.entidade || userObj.profile?.entidade || (userObj.membros && userObj.membros[0]?.entidade) || 'Prefeitura Municipal').trim();
         const userSigla = getEntitySigla(userEntidadeRaw);
 
+        const minhaEntidade = (_currentUserMembros[0]?.entidade || _currentUserProfile?.entidade || 'Prefeitura Municipal').trim();
+        const minhaSigla = getEntitySigla(minhaEntidade);
+        const isPartnerPontoFocal = (userSigla !== minhaSigla && (userObj.ponto_focal || userObj.profile?.ponto_focal));
+
         let localMeta = {};
         try {
             localMeta = JSON.parse(localStorage.getItem('constructive_themes_meta') || '{}');
@@ -347,13 +490,18 @@
 
         // Renderiza camadas do município selecionado
         // FILTRO DE SEGURANÇA E ISOLAMENTO INSTITUCIONAL:
-        // No card de cada usuário aparecem estritamente as camadas referentes à SUA entidade,
-        // ou camadas de outros órgãos onde este usuário já possui autorização pontual concedida.
+        // Se for um Ponto Focal de outro ente, exibe as camadas do ente do ADMIN para concessão de compartilhamento!
+        // Se for usuário interno, exibe as camadas da entidade dele.
         const temasDoMunicipio = _allTemas.filter(t => {
             if (t.municipio_id && t.municipio_id !== selectedMunId) return false;
             
             const tEntRaw = getThemeEntity(t);
             const tSigla = getEntitySigla(tEntRaw);
+
+            if (isPartnerPontoFocal) {
+                // Camadas da entidade do Administrador disponíveis para compartilhar com este Ponto Focal
+                return tSigla === minhaSigla;
+            }
 
             // A camada pertence à entidade do usuário deste card
             if (tSigla === userSigla) return true;
@@ -450,11 +598,16 @@
             `;
         }).join('');
 
-        // Ortofotos do município selecionado (filtradas estritamente pela entidade do usuário)
+        // Ortofotos do município selecionado
         const rastersDoMunicipio = (_allRasters || []).filter(r => {
             if (r.municipio_id && r.municipio_id !== selectedMunId) return false;
             const rEntRaw = (r.entidade || 'Prefeitura Municipal').trim();
             const rSigla = getEntitySigla(rEntRaw);
+
+            if (isPartnerPontoFocal) {
+                // Ortofotos da entidade do Administrador disponíveis para conceder acesso a este parceiro
+                return rSigla === minhaSigla;
+            }
 
             // A ortofoto pertence à entidade do usuário
             if (rSigla === userSigla) return true;
@@ -511,7 +664,7 @@
 
         // Seletor de Municípios Atribuídos
         let atribuicaoMunicipiosHtml = '';
-        if (!isMunicipal) {
+        if (!isMunicipal && !isPartnerPontoFocal) {
             // Entidades Externas / Fiscais (MPF, PF, SPU, etc.): Podem atuar transversalmente em múltiplos municípios
             atribuicaoMunicipiosHtml = `
                 <div class="mt-4 pt-3.5 border-t border-slate-200 dark:border-slate-800">
@@ -529,35 +682,31 @@
                             const munDisabled = !isEditing ? 'disabled' : '';
 
                             const activeBorder = isSelectedMun 
-                                ? 'border-sky-500 bg-sky-500/15 shadow-[0_0_12px_rgba(14,165,233,0.3)] ring-1 ring-sky-500' 
-                                : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 hover:border-slate-400 dark:hover:border-slate-600';
+                                ? 'border-sky-500 dark:border-sky-400 bg-sky-50 dark:bg-sky-950/40 ring-2 ring-sky-400/40' 
+                                : (isChecked ? 'border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50' : 'border-slate-200 dark:border-slate-800 opacity-60 bg-transparent');
 
                             return `
                                 <div class="flex items-center justify-between p-2.5 rounded-xl border ${activeBorder} transition-all select-none cursor-pointer group" onclick="window.UsuariosManager.selectUserMun('${userId}', '${mun.id}')">
-                                    <div class="flex items-center gap-2 min-w-0 flex-1">
-                                        <input type="checkbox" class="user-mun-check rounded border-slate-400 text-sky-600 focus:ring-sky-500 w-4 h-4 shrink-0" value="${mun.id}" ${isChecked ? 'checked' : ''} ${munDisabled} onclick="event.stopPropagation()">
-                                        <span class="text-xs font-bold ${isSelectedMun ? 'text-sky-600 dark:text-sky-400' : 'text-slate-800 dark:text-slate-200'} truncate">
-                                            ${mun.nome}${mun.uf ? ' - ' + mun.uf : ''}
-                                        </span>
+                                    <div class="flex items-center gap-2 min-w-0 pr-1">
+                                        <input type="checkbox" class="user-mun-check rounded border-slate-400 dark:border-slate-500 text-sky-600 focus:ring-sky-500 w-3.5 h-3.5 shrink-0 ${munDisabled}" data-mun-id="${mun.id}" ${isChecked ? 'checked' : ''} ${munDisabled} onclick="event.stopPropagation()">
+                                        <span class="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate group-hover:text-sky-600 transition-colors">${mun.nome}${mun.uf ? ' - ' + mun.uf : ''}</span>
                                     </div>
-                                    ${isSelectedMun ? '<span class="material-symbols-outlined text-[16px] text-sky-500 shrink-0">check_circle</span>' : ''}
+                                    ${isSelectedMun ? `
+                                        <span class="text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-sky-500 text-white shrink-0 shadow-xs">Ativo</span>
+                                    ` : ''}
                                 </div>
                             `;
                         }).join('')}
                     </div>
                 </div>
             `;
-        } else {
-            // Entidades Municipais (Prefeitura Municipal): Usuário estritamente vinculado ao seu município
+        } else if (isMunicipal) {
             atribuicaoMunicipiosHtml = `
                 <div class="mt-4 pt-3.5 border-t border-slate-200 dark:border-slate-800">
-                    <div class="flex items-center justify-between mb-2 flex-wrap gap-1">
+                    <div class="flex items-center justify-between mb-2">
                         <span class="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                            <span class="material-symbols-outlined text-[17px] text-sky-600 dark:text-sky-400">location_city</span>
-                            Município de Atuação — Entidade Municipal (${entidadeNome})
-                        </span>
-                        <span class="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 shadow-xs">
-                            <span class="material-symbols-outlined text-[14px]">lock</span> Acesso exclusivo ao município de origem
+                            <span class="material-symbols-outlined text-[17px] text-sky-600 dark:text-sky-400">home_work</span>
+                            Município de Atuação
                         </span>
                     </div>
                     <div class="flex items-center justify-between p-2.5 px-3.5 rounded-xl border border-sky-400/50 bg-sky-50/50 dark:bg-sky-950/25 text-slate-800 dark:text-slate-200 text-xs shadow-xs">
@@ -609,7 +758,11 @@
                                 <h4 class="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white hover:text-sky-600 transition-colors truncate">${perfil.nome || '(Sem nome)'}</h4>
                                 <span class="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${statusBadgeColor} uppercase tracking-wider">${STATUS_LABELS[userObj.status] || userObj.status}</span>
                                 <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-600">${PAPEL_LABELS[userObj.papel] || userObj.papel}</span>
-                                ${userObj.ponto_focal ? `<span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 flex items-center gap-1"><span class="material-symbols-outlined text-[12px]">share_location</span>Ponto Focal</span>` : ''}
+                                ${isPartnerPontoFocal ? `
+                                    <span class="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 flex items-center gap-1">
+                                        <span class="material-symbols-outlined text-[12px]">handshake</span> Ponto Focal ${userSigla}
+                                    </span>
+                                ` : (userObj.ponto_focal ? `<span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 flex items-center gap-1"><span class="material-symbols-outlined text-[12px]">share_location</span>Ponto Focal</span>` : '')}
                             </div>
                             <div class="text-xs text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-2 flex-wrap font-medium">
                                 <span>${perfil.email || ''}</span>
@@ -631,6 +784,24 @@
 
                 <!-- Corpo Expansível do Card -->
                 <div id="user-card-body-${userId}" class="user-card-body ${isEditing ? '' : 'hidden'} mt-4 pt-4 border-t-2 border-slate-200 dark:border-slate-800 transition-all">
+                    
+                    ${isPartnerPontoFocal ? `
+                    <!-- Banner de Ponto Focal Interinstitucional -->
+                    <div class="mb-4 p-3.5 bg-gradient-to-r from-cyan-500/10 to-sky-500/10 dark:from-cyan-950/30 dark:to-sky-950/30 border border-cyan-500/30 rounded-xl flex items-start gap-3 shadow-xs">
+                        <div class="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0 border border-cyan-500/30 mt-0.5">
+                            <span class="material-symbols-outlined text-[20px]">share</span>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <h4 class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                Compartilhamento Interinstitucional com ${userSigla}
+                                <span class="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30">Ponto Focal</span>
+                            </h4>
+                            <p class="text-[11px] text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
+                                Marque abaixo quais camadas e ortofotos da <b>sua entidade (${minhaSigla})</b> este servidor poderá acessar em <b>${selectedMunObj.nome}</b>. Ao salvar, as camadas marcadas aparecerão automaticamente na aba <b>COMPARTILHADO</b> para ele no catálogo.
+                            </p>
+                        </div>
+                    </div>
+                    ` : `
                     <!-- Entidade e Cargo do Usuário -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                         <div>
@@ -682,6 +853,7 @@
                             <div class="w-9 h-5 bg-slate-300 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-sky-500"></div>
                         </label>
                     </div>
+                    `}
 
                     ${atribuicaoMunicipiosHtml}
 
@@ -690,13 +862,13 @@
                         <div class="flex items-center justify-between mb-2.5 pb-2 border-b border-slate-200 dark:border-slate-800 flex-wrap gap-1">
                             <span class="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
                                 <span class="material-symbols-outlined text-[18px] text-sky-600 dark:text-sky-400">layers</span>
-                                Permissões de Camadas e Abas — <span class="text-sky-600 dark:text-sky-400">${selectedMunObj.nome}${selectedMunObj.uf ? ' - ' + selectedMunObj.uf : ''}</span>
+                                ${isPartnerPontoFocal ? `Camadas da sua Entidade (${minhaSigla}) para Compartilhar` : `Permissões de Camadas e Abas`} — <span class="text-sky-600 dark:text-sky-400">${selectedMunObj.nome}${selectedMunObj.uf ? ' - ' + selectedMunObj.uf : ''}</span>
                             </span>
                             <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Clique na camada para expandir as abas</span>
                         </div>
 
                         <div class="space-y-3">
-                            ${camadasHtml || `<div class="text-xs text-slate-400 italic py-4 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">Nenhuma camada da entidade ${userSigla} cadastrada em ${selectedMunObj.nome}.</div>`}
+                            ${camadasHtml || `<div class="text-xs text-slate-400 italic py-4 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">${isPartnerPontoFocal ? `Nenhuma camada da sua entidade (${minhaSigla}) cadastrada em ${selectedMunObj.nome} para compartilhar.` : `Nenhuma camada da entidade ${userSigla} cadastrada em ${selectedMunObj.nome}.`}</div>`}
                         </div>
                     </div>
 
@@ -705,17 +877,17 @@
                         <div class="flex items-center justify-between mb-2.5 pb-2 border-b border-slate-200 dark:border-slate-800 flex-wrap gap-1">
                             <span class="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
                                 <span class="material-symbols-outlined text-[18px] text-emerald-600 dark:text-emerald-400">satellite_alt</span>
-                                Permissões de Ortofotos — <span class="text-emerald-600 dark:text-emerald-400">${selectedMunObj.nome}${selectedMunObj.uf ? ' - ' + selectedMunObj.uf : ''}</span>
+                                ${isPartnerPontoFocal ? `Ortofotos da sua Entidade (${minhaSigla}) para Compartilhar` : `Permissões de Ortofotos`} — <span class="text-emerald-600 dark:text-emerald-400">${selectedMunObj.nome}${selectedMunObj.uf ? ' - ' + selectedMunObj.uf : ''}</span>
                             </span>
                             <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Imagens aéreas e ortofotos liberadas</span>
                         </div>
 
                         <div class="space-y-2">
-                            ${ortofotosHtml || `<div class="text-xs text-slate-400 italic py-3 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">Nenhuma ortofoto da entidade ${userSigla} cadastrada em ${selectedMunObj.nome}.</div>`}
+                            ${ortofotosHtml || `<div class="text-xs text-slate-400 italic py-3 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">${isPartnerPontoFocal ? `Nenhuma ortofoto da sua entidade (${minhaSigla}) cadastrada em ${selectedMunObj.nome} para compartilhar.` : `Nenhuma ortofoto da entidade ${userSigla} cadastrada em ${selectedMunObj.nome}.`}</div>`}
                         </div>
                     </div>
 
-                    ${isEditing ? `
+                    ${(isEditing && !isPartnerPontoFocal) ? `
                     <div class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">
                         <button type="button" onclick="window.UsuariosManager.removerAcesso('${userId}')" class="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-700 hover:underline flex items-center gap-1">
                             <span class="material-symbols-outlined text-[15px]">delete</span>
@@ -833,13 +1005,22 @@
         }
 
         try {
-            // 1. Atualiza município_membros existentes para este usuário
-            const { error: membroErr } = await supabaseClient
-                .from('municipio_membros')
-                .update({ papel, status })
-                .eq('user_id', userId);
+            const minhaEntidade = (_currentUserMembros[0]?.entidade || _currentUserProfile?.entidade || 'Prefeitura Municipal').trim();
+            const minhaSigla = getEntitySigla(minhaEntidade);
+            const userObj = _allMembros.find(m => m.user_id === userId);
+            const userEntidadeRaw = (userObj?.entidade || userObj?.profiles?.entidade || '').trim();
+            const userSigla = getEntitySigla(userEntidadeRaw);
+            const isPartnerPontoFocal = (userSigla !== minhaSigla && (userObj?.ponto_focal || userObj?.profiles?.ponto_focal));
 
-            if (membroErr) throw membroErr;
+            // 1. Atualiza município_membros APENAS para usuários locais (não sobrescreve o cadastro corporativo de parceiros)
+            if (!isPartnerPontoFocal) {
+                const { error: membroErr } = await supabaseClient
+                    .from('municipio_membros')
+                    .update({ papel, status })
+                    .eq('user_id', userId);
+
+                if (membroErr) throw membroErr;
+            }
 
             // 2. Coleta permissões de camadas do município selecionado
             const camadaCards = card.querySelectorAll('[data-camada-id]');
@@ -896,25 +1077,27 @@
                 if (aErr) console.warn('Erro ao atualizar permissoes_aba:', aErr);
             }
 
-            // 4.1 Salva ponto_focal, entidade e cargo em profiles e municipio_membros
-            const isPontoFocal = !!card.querySelector('.user-ponto-focal-check')?.checked;
-            const inputEntidade = card.querySelector('.user-entidade-input')?.value?.trim();
-            const inputCargo = card.querySelector('.user-cargo-input')?.value?.trim();
+            // 4.1 Salva ponto_focal, entidade e cargo em profiles e municipio_membros APENAS se for usuário local
+            if (!isPartnerPontoFocal) {
+                const isPontoFocal = !!card.querySelector('.user-ponto-focal-check')?.checked;
+                const inputEntidade = card.querySelector('.user-entidade-input')?.value?.trim();
+                const inputCargo = card.querySelector('.user-cargo-input')?.value?.trim();
 
-            const profileUpdatePayload = { ponto_focal: isPontoFocal };
-            if (inputEntidade) profileUpdatePayload.entidade = inputEntidade;
-            if (inputCargo !== undefined) profileUpdatePayload.cargo = inputCargo;
+                const profileUpdatePayload = { ponto_focal: isPontoFocal };
+                if (inputEntidade) profileUpdatePayload.entidade = inputEntidade;
+                if (inputCargo !== undefined) profileUpdatePayload.cargo = inputCargo;
 
-            try {
-                await supabaseClient.from('profiles').update(profileUpdatePayload).eq('id', userId);
-                if (inputEntidade) {
-                    await supabaseClient.from('municipio_membros').update({
-                        entidade: inputEntidade,
-                        cargo: inputCargo || null
-                    }).eq('user_id', userId);
+                try {
+                    await supabaseClient.from('profiles').update(profileUpdatePayload).eq('id', userId);
+                    if (inputEntidade) {
+                        await supabaseClient.from('municipio_membros').update({
+                            entidade: inputEntidade,
+                            cargo: inputCargo || null
+                        }).eq('user_id', userId);
+                    }
+                } catch(e) {
+                    console.warn('Erro ao atualizar profiles e municipio_membros:', e);
                 }
-            } catch(e) {
-                console.warn('Erro ao atualizar profiles e municipio_membros:', e);
             }
 
             // 4.2 Salva permissoes_raster
@@ -941,64 +1124,65 @@
                 }
             }
 
-            // 5. Sincroniza Municípios Atribuídos
-            const munChecks = card.querySelectorAll('.user-mun-check');
-            const userMembrosList = _allMembros.filter(m => m.user_id === userId);
-            const userPrimeiroMembro = userMembrosList[0] || {};
-            const userEntidade = (userPrimeiroMembro.entidade || '').trim();
-            const userTipo = _entidadesTipos[userEntidade] || (userEntidade.toLowerCase().includes('prefeitura') || userEntidade.toLowerCase().includes('municipal') ? 'municipal' : 'externo');
+            // 5. Sincroniza Municípios Atribuídos APENAS para usuários locais
+            if (!isPartnerPontoFocal) {
+                const munChecks = card.querySelectorAll('.user-mun-check');
+                const userMembrosList = _allMembros.filter(m => m.user_id === userId);
+                const userPrimeiroMembro = userMembrosList[0] || {};
+                const userEntidade = (userPrimeiroMembro.entidade || '').trim();
+                const userTipo = _entidadesTipos[userEntidade] || (userEntidade.toLowerCase().includes('prefeitura') || userEntidade.toLowerCase().includes('municipal') ? 'municipal' : 'externo');
 
-            if (userTipo === 'municipal') {
-                // Segurança Estrita: Usuário municipal NUNCA deve ter vínculos em múltiplos municípios
-                if (userMembrosList.length > 1) {
-                    const munOrigemId = userPrimeiroMembro.municipio_id;
-                    const strayMembros = userMembrosList.filter(mb => mb.municipio_id !== munOrigemId);
-                    for (const stray of strayMembros) {
-                        await supabaseClient.from('municipio_membros').delete().eq('id', stray.id);
-                        _allMembros = _allMembros.filter(mb => mb.id !== stray.id);
-                    }
-                }
-            } else if (munChecks.length > 0) {
-                const selectedMunIds = Array.from(munChecks).filter(cb => cb.checked).map(cb => cb.value);
-                const unselectedMunIds = Array.from(munChecks).filter(cb => !cb.checked).map(cb => cb.value);
-
-                for (const munId of selectedMunIds) {
-                    const existing = _allMembros.find(mb => mb.user_id === userId && mb.municipio_id === munId);
-                    if (existing) {
-                        if (existing.status !== status || existing.papel !== papel) {
-                            await supabaseClient.from('municipio_membros').update({ status, papel }).eq('id', existing.id);
-                            existing.status = status;
-                            existing.papel = papel;
-                        }
-                    } else {
-                        const { data: newMb, error: insErr } = await supabaseClient.from('municipio_membros').insert({
-                            user_id: userId,
-                            municipio_id: munId,
-                            papel: papel,
-                            status: status,
-                            entidade: userPrimeiroMembro.entidade || null,
-                            cargo: userPrimeiroMembro.cargo || null
-                        }).select('id, user_id, municipio_id, papel, status, entidade, cargo, solicitado_em, profiles!user_id(id, nome, email, super_admin), municipios(id, nome, uf)').single();
-
-                        if (!insErr && newMb) {
-                            _allMembros.push(newMb);
+                if (userTipo === 'municipal') {
+                    if (userMembrosList.length > 1) {
+                        const munOrigemId = userPrimeiroMembro.municipio_id;
+                        const strayMembros = userMembrosList.filter(mb => mb.municipio_id !== munOrigemId);
+                        for (const stray of strayMembros) {
+                            await supabaseClient.from('municipio_membros').delete().eq('id', stray.id);
+                            _allMembros = _allMembros.filter(mb => mb.id !== stray.id);
                         }
                     }
-                }
+                } else if (munChecks.length > 0) {
+                    const selectedMunIds = Array.from(munChecks).filter(cb => cb.checked).map(cb => cb.value);
+                    const unselectedMunIds = Array.from(munChecks).filter(cb => !cb.checked).map(cb => cb.value);
 
-                for (const unMunId of unselectedMunIds) {
-                    const existing = _allMembros.find(mb => mb.user_id === userId && mb.municipio_id === unMunId);
-                    if (existing) {
-                        await supabaseClient.from('municipio_membros').delete().eq('id', existing.id);
-                        _allMembros = _allMembros.filter(mb => mb.id !== existing.id);
+                    for (const munId of selectedMunIds) {
+                        const existing = _allMembros.find(mb => mb.user_id === userId && mb.municipio_id === munId);
+                        if (existing) {
+                            if (existing.status !== status || existing.papel !== papel) {
+                                await supabaseClient.from('municipio_membros').update({ status, papel }).eq('id', existing.id);
+                                existing.status = status;
+                                existing.papel = papel;
+                            }
+                        } else {
+                            const { data: newMb, error: insErr } = await supabaseClient.from('municipio_membros').insert({
+                                user_id: userId,
+                                municipio_id: munId,
+                                papel: papel,
+                                status: status,
+                                entidade: userPrimeiroMembro.entidade || null,
+                                cargo: userPrimeiroMembro.cargo || null
+                            }).select('id, user_id, municipio_id, papel, status, entidade, cargo, solicitado_em, profiles!user_id(id, nome, email, super_admin), municipios(id, nome, uf)').single();
+
+                            if (!insErr && newMb) {
+                                _allMembros.push(newMb);
+                            }
+                        }
+                    }
+
+                    for (const unMunId of unselectedMunIds) {
+                        const existing = _allMembros.find(mb => mb.user_id === userId && mb.municipio_id === unMunId);
+                        if (existing) {
+                            await supabaseClient.from('municipio_membros').delete().eq('id', existing.id);
+                            _allMembros = _allMembros.filter(mb => mb.id !== existing.id);
+                        }
                     }
                 }
+
+                userMembrosList.forEach(mb => {
+                    mb.papel = papel;
+                    mb.status = status;
+                });
             }
-
-            userMembrosList.forEach(mb => {
-                mb.papel = papel;
-                mb.status = status;
-            });
 
             camadaRows.forEach(cr => {
                 _allCamadaPerms[`${cr.user_id}:${cr.theme_id}`] = cr;
@@ -1015,7 +1199,11 @@
                 renderUsersList(container.id, searchInput ? searchInput.value : '');
             }
 
-            alert('✓ Permissões e dados do usuário atualizados com sucesso!');
+            if (isPartnerPontoFocal) {
+                alert('✓ Permissões de compartilhamento salvas com sucesso!\nAs camadas marcadas já estão disponíveis na aba COMPARTILHADO para este Ponto Focal.');
+            } else {
+                alert('✓ Permissões e dados do usuário atualizados com sucesso!');
+            }
 
         } catch (err) {
             console.error('Erro ao salvar usuário:', err);
@@ -1064,7 +1252,8 @@
         cancelarEdicao,
         salvarUsuario,
         removerAcesso,
-        toggleCamadaSubAbas
+        toggleCamadaSubAbas,
+        selectEntidadeFiltro
     };
 
 })(window);

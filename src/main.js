@@ -1382,11 +1382,6 @@ function renderThemes() {
               <span class="material-symbols-outlined text-[18px]">settings</span>
             </button>
             ` : ''}
-            ${(canEditThisTheme && isCompartilhada) ? `
-            <button onclick="abrirModalAcessosCamada('${theme.id}', '${theme.name}')" class="flex items-center justify-center py-1.5 px-1 bg-cyan-500/15 hover:bg-cyan-500/30 active:scale-95 rounded-lg tooltip text-cyan-300 transition-all border border-cyan-500/25 shadow-xs" title="Gerenciar Acessos Externos (Pontos Focais de outros órgãos)">
-              <span class="material-symbols-outlined text-[18px]">lock_person</span>
-            </button>
-            ` : ''}
             ${canEditThisTheme && isSuperAdmin ? `
             <button onclick="triggerUpload('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Importar GeoJSON">
               <span class="material-symbols-outlined text-[18px]">upload</span>
@@ -5035,7 +5030,35 @@ function userCanOnTheme(themeId, acao) {
     const tid = String(themeId).toLowerCase().trim();
     const pc = currentUserPermissions ? (currentUserPermissions[tid] || currentUserPermissions[themeId]) : null;
 
-    // 2. Se há regra explícita em permissoes_camada para esta camada:
+    // Identifica se a camada pertence a outro órgão/ente
+    const targetTheme = (themes || []).find(t => String(t.id).toLowerCase() === tid);
+    const themeEntidade = targetTheme ? ((targetTheme.metadata && targetTheme.metadata.entidade) || targetTheme.entidade || '').trim() : '';
+    const userEntidade = (window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').trim();
+    
+    const themeSigla = typeof getEntitySigla === 'function' ? getEntitySigla(themeEntidade) : themeEntidade;
+    const userSigla = typeof getEntitySigla === 'function' ? getEntitySigla(userEntidade) : userEntidade;
+    const isOutroEnte = themeEntidade && userEntidade && (themeSigla !== userSigla) && (themeEntidade.toLowerCase() !== 'geral');
+
+    // REGRA DE OURO INTERINSTITUCIONAL:
+    // Se a camada for de outro ente governamental parceiro:
+    // O usuário DEVE ser Ponto Focal (currentUserProfile.ponto_focal === true)
+    // E DEVE ter permissão expressa concedida em permissoes_camada (pc.pode_ver === true).
+    // Usuários sem Ponto Focal (como Klebson) JAMAIS visualizam dados de outros entes!
+    if (isOutroEnte) {
+        const isPontoFocal = !!(currentUserProfile && currentUserProfile.ponto_focal);
+        if (!isPontoFocal) {
+            return false;
+        }
+        if (!pc) {
+            return false;
+        }
+        if (acao === 'ver') return pc.pode_ver === true || pc.pode_ver === 'true';
+        if (acao === 'editar') return pc.pode_editar === true || pc.pode_editar === 'true';
+        if (acao === 'excluir') return pc.pode_excluir === true || pc.pode_excluir === 'true';
+        return false;
+    }
+
+    // 2. Se há regra explícita em permissoes_camada para esta camada interna:
     // A regra explícita é SOBERANA (vale para qualquer usuário e sobrepõe qualquer papel).
     if (pc) {
         if (acao === 'ver') return pc.pode_ver === true || pc.pode_ver === 'true';
@@ -5058,7 +5081,7 @@ function userCanOnTheme(themeId, acao) {
         return false;
     }
 
-    // 5. Administrador do Município sem nenhuma restrição explícita de camadas vê tudo
+    // 5. Administrador do Município sem nenhuma restrição explícita de camadas vê tudo de sua própria entidade
     if (currentMunicipioPapel === 'admin') {
         return true;
     }
