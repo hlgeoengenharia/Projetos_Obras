@@ -1224,7 +1224,10 @@
                 const { error: cErr } = await supabaseClient
                     .from('permissoes_camada')
                     .upsert(camadaRows, { onConflict: 'user_id,theme_id' });
-                if (cErr) console.warn('Erro ao atualizar permissoes_camada:', cErr);
+                if (cErr) {
+                    console.error('Erro ao atualizar permissoes_camada:', cErr);
+                    throw new Error('Falha ao salvar permissões de camada: ' + (cErr.message || 'Violação de política RLS no banco de dados.'));
+                }
             }
 
             // 4. Salva permissoes_aba
@@ -1232,7 +1235,10 @@
                 const { error: aErr } = await supabaseClient
                     .from('permissoes_aba')
                     .upsert(abaRows, { onConflict: 'user_id,form_id,tab_id' });
-                if (aErr) console.warn('Erro ao atualizar permissoes_aba:', aErr);
+                if (aErr) {
+                    console.error('Erro ao atualizar permissoes_aba:', aErr);
+                    throw new Error('Falha ao salvar permissões de aba: ' + (aErr.message || 'Violação de política RLS no banco de dados.'));
+                }
             }
 
             // 4.1 Salva ponto_focal, entidade e cargo em profiles e municipio_membros APENAS se for usuário local
