@@ -6616,7 +6616,8 @@ async function loadRasterLayers() {
             }
 
             const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
-            const userEntidade = (window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').trim().toLowerCase();
+            const userEntidadeRaw = (window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').trim();
+            const userSigla = (typeof getEntitySigla === 'function') ? getEntitySigla(userEntidadeRaw) : 'Município';
             const currentUserId = (currentUserProfile && currentUserProfile.id) || null;
 
             // Busca permissões explícitas de ortofoto para este usuário
@@ -6631,20 +6632,37 @@ async function loadRasterLayers() {
                     if (prData) {
                         prData.forEach(p => myRasterPerms.add(p.raster_id));
                     }
-                } catch(e) {}
+                } catch(e) {
+                    console.warn('Tabela permissoes_raster indisponível:', e);
+                }
             }
 
             // Filtro de Segurança Institucional de Ortofotos:
             // 1. SuperAdmin vê tudo
             // 2. Ortofoto da própria entidade do usuário: VÊ
             // 3. Ortofoto pública/geral: VÊ
-            // 4. Ortofoto compartilhada de outro ente: VÊ APENAS se tiver permissão explícita em permissoes_raster
+            // 4. Ortofoto de outro ente parceiro: VÊ APENAS se tiver permissão explícita em permissoes_raster!
             const visibleRasters = (data || []).filter(r => {
                 if (isSuperAdmin) return true;
-                const rEnt = (r.entidade || 'Prefeitura Municipal').trim().toLowerCase();
-                if (rEnt === 'geral' || rEnt === 'público' || rEnt === 'publico') return true;
-                if (userEntidade && rEnt === userEntidade) return true;
-                if (r.compartilhada && myRasterPerms.has(r.id)) return true;
+                const rEntRaw = (r.entidade || 'Prefeitura Municipal').trim();
+                const rSigla = (typeof getEntitySigla === 'function') ? getEntitySigla(rEntRaw) : 'Município';
+
+                // Ortofoto explicitamente pública / geral
+                if (rSigla === 'Público' || rSigla === 'Geral' || rEntRaw.toLowerCase() === 'geral' || rEntRaw.toLowerCase() === 'público') {
+                    return true;
+                }
+
+                // Ortofoto da mesma entidade do usuário
+                if (userSigla && rSigla && userSigla === rSigla) {
+                    return true;
+                }
+
+                // Ortofoto de outro órgão governamental parceiro:
+                // SÓ pode ser visualizada se o Administrador daquele órgão concedeu permissão explícita!
+                if (myRasterPerms.has(r.id)) {
+                    return true;
+                }
+
                 return false;
             });
             
@@ -6897,6 +6915,35 @@ window.openSelectRasterModal = async function() {
                 rasters = data;
             }
         }
+
+        const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
+        const userEntidadeRaw = (window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').trim();
+        const userSigla = (typeof getEntitySigla === 'function') ? getEntitySigla(userEntidadeRaw) : 'Município';
+        const currentUserId = (currentUserProfile && currentUserProfile.id) || null;
+
+        let myRasterPerms = new Set();
+        if (currentUserId && !isSuperAdmin) {
+            try {
+                const { data: prData } = await supabaseClient
+                    .from('permissoes_raster')
+                    .select('raster_id')
+                    .eq('user_id', currentUserId)
+                    .eq('pode_ver', true);
+                if (prData) {
+                    prData.forEach(p => myRasterPerms.add(p.raster_id));
+                }
+            } catch(e) {}
+        }
+
+        rasters = rasters.filter(r => {
+            if (isSuperAdmin) return true;
+            const rEntRaw = (r.entidade || 'Prefeitura Municipal').trim();
+            const rSigla = (typeof getEntitySigla === 'function') ? getEntitySigla(rEntRaw) : 'Município';
+            if (rSigla === 'Público' || rSigla === 'Geral' || rEntRaw.toLowerCase() === 'geral' || rEntRaw.toLowerCase() === 'público') return true;
+            if (userSigla && rSigla && userSigla === rSigla) return true;
+            if (myRasterPerms.has(r.id)) return true;
+            return false;
+        });
 
         // Se não encontrou no banco, usa as em memória
         if (rasters.length === 0) {

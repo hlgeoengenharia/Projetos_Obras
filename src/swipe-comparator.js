@@ -362,17 +362,46 @@
                             sessionStorage.getItem('municipio_ativo') || 
                             (typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : null);
 
-        let rasters = (window.rasterLayers && window.rasterLayers.length > 0) ? window.rasterLayers : [];
+        let rasters = (window.rasterLayers && Array.isArray(window.rasterLayers) && window.rasterLayers.length > 0) ? [...window.rasterLayers] : [];
 
-        // Busca ortofotos mais recentes
+        // Busca ortofotos mais recentes com validação estrita de permissões institucionais
         if (typeof supabaseClient !== 'undefined' && supabaseClient) {
             try {
                 let query = supabaseClient.from('imagens_raster').select('*').order('created_at', { ascending: false });
                 if (activeMunId) query = query.eq('municipio_id', activeMunId);
                 const { data } = await query;
                 if (data && data.length > 0) {
-                    rasters = data;
-                    window.rasterLayers = data;
+                    const prof = window.currentUserProfile || {};
+                    const isSuperAdmin = !!(prof.super_admin || prof.is_superadmin || prof.papel === 'superadmin');
+                    const userEntidadeRaw = (window.currentUserEntidade || prof.entidade || prof.entidade_nome || '').trim();
+                    const userSigla = (typeof window.getEntitySigla === 'function') ? window.getEntitySigla(userEntidadeRaw) : 'Município';
+                    const currentUserId = prof.id || null;
+
+                    let myRasterPerms = new Set();
+                    if (currentUserId && !isSuperAdmin) {
+                        try {
+                            const { data: prData } = await supabaseClient
+                                .from('permissoes_raster')
+                                .select('raster_id')
+                                .eq('user_id', currentUserId)
+                                .eq('pode_ver', true);
+                            if (prData) {
+                                prData.forEach(p => myRasterPerms.add(p.raster_id));
+                            }
+                        } catch(e) {}
+                    }
+
+                    // Filtra ortofotos autorizadas para este usuário
+                    rasters = data.filter(r => {
+                        if (isSuperAdmin) return true;
+                        const rEntRaw = (r.entidade || 'Prefeitura Municipal').trim();
+                        const rSigla = (typeof window.getEntitySigla === 'function') ? window.getEntitySigla(rEntRaw) : 'Município';
+
+                        if (rSigla === 'Público' || rSigla === 'Geral' || rEntRaw.toLowerCase() === 'geral' || rEntRaw.toLowerCase() === 'público') return true;
+                        if (userSigla && rSigla && userSigla === rSigla) return true;
+                        if (myRasterPerms.has(r.id)) return true;
+                        return false;
+                    });
                 }
             } catch(e) {
                 console.warn('Erro ao atualizar rasters:', e);
@@ -386,10 +415,13 @@
         });
 
         if (_availableRasters.length < 2) {
+            const msg = _availableRasters.length === 0 
+                ? 'Você não possui ortofotos habilitadas para visualização neste município.'
+                : 'Você possui apenas 1 ortofoto habilitada. São necessárias pelo menos 2 ortofotos liberadas para comparação temporal.';
             if (typeof showStorageToast === 'function') {
-                showStorageToast('São necessárias pelo menos 2 ortofotos cadastradas para comparar.');
+                showStorageToast(msg);
             } else {
-                alert('São necessárias pelo menos 2 ortofotos cadastradas neste município para usar a comparação temporal.');
+                alert(msg);
             }
             return;
         }
