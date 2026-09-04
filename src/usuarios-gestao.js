@@ -153,8 +153,10 @@
                 const rasterSigla = getEntitySigla(rasterEntidadeRaw);
 
                 const isUserRejeitado = userObj && userObj.status === 'rejeitado';
-                // Permissão de raster pertencente a um terceiro ente que não é do usuário nem do admin gestor
-                const isThirdPartyResidual = rasterSigla && userSigla && minhaSigla && (rasterSigla !== userSigla) && (rasterSigla !== minhaSigla);
+                const isPontoFocal = !!(userObj?.ponto_focal || userObj?.profiles?.ponto_focal);
+                const isSuperAdmin = !!_currentUserProfile?.super_admin;
+                // Permissão de raster pertencente a um terceiro ente só é residual se o usuário NÃO for ponto focal e não for o SuperAdmin
+                const isThirdPartyResidual = !isSuperAdmin && !isPontoFocal && rasterSigla && userSigla && (rasterSigla !== userSigla);
 
                 if (isUserRejeitado || isThirdPartyResidual) {
                     orphanRasterIds.push(p.id);
@@ -199,8 +201,10 @@
                 const temaSigla = getEntitySigla(temaEntidadeRaw);
 
                 const isUserRejeitado = userObj && userObj.status === 'rejeitado';
-                // Permissão residual de outro ente (ex: camada do MPF gravada em servidora da SPU)
-                const isThirdPartyResidual = temaSigla && userSigla && minhaSigla && (temaSigla !== userSigla) && (temaSigla !== minhaSigla);
+                const isPontoFocal = !!(userObj?.ponto_focal || userObj?.profiles?.ponto_focal);
+                const isSuperAdmin = !!_currentUserProfile?.super_admin;
+                // Permissão residual de outro ente só existe se o usuário NÃO for ponto focal de integração e não for SuperAdmin
+                const isThirdPartyResidual = !isSuperAdmin && !isPontoFocal && temaSigla && userSigla && (temaSigla !== userSigla);
 
                 if (isUserRejeitado || isThirdPartyResidual) {
                     orphanCamadaIds.push(p.id);
@@ -1303,13 +1307,12 @@
                 });
             });
             if (rasterRows.length > 0) {
-                try {
-                    const { error: rErr } = await supabaseClient
-                        .from('permissoes_raster')
-                        .upsert(rasterRows, { onConflict: 'user_id,raster_id' });
-                    if (rErr) console.warn('Erro ao atualizar permissoes_raster:', rErr);
-                } catch(e) {
-                    console.warn('Tabela permissoes_raster ainda indisponível:', e);
+                const { error: rErr } = await supabaseClient
+                    .from('permissoes_raster')
+                    .upsert(rasterRows, { onConflict: 'user_id,raster_id' });
+                if (rErr) {
+                    console.error('Erro ao atualizar permissoes_raster:', rErr);
+                    throw new Error('Falha ao salvar permissões de ortofoto: ' + (rErr.message || 'Violação de política RLS no banco de dados.'));
                 }
             }
 
@@ -1379,6 +1382,9 @@
             abaRows.forEach(ar => {
                 _allAbaPerms[`${ar.user_id}:${ar.form_id}:${ar.tab_id}`] = ar;
             });
+            rasterRows.forEach(rr => {
+                _allRasterPerms[`${rr.user_id}:${rr.raster_id}`] = rr;
+            });
 
             _editingUserIds.delete(userId);
 
@@ -1389,7 +1395,7 @@
             }
 
             if (isPartnerPontoFocal) {
-                alert('✓ Permissões de compartilhamento salvas com sucesso!\nAs camadas marcadas já estão disponíveis na aba COMPARTILHADO para este Ponto Focal.');
+                alert('✓ Permissões de compartilhamento salvas com sucesso!\nAs camadas e ortofotos marcadas já estão disponíveis na aba COMPARTILHADO para este Ponto Focal.');
             } else {
                 alert('✓ Permissões e dados do usuário atualizados com sucesso!');
             }
