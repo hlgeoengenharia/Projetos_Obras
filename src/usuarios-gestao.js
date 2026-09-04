@@ -842,7 +842,7 @@
                             return `
                                 <div class="flex items-center justify-between p-2.5 rounded-xl border ${activeBorder} transition-all select-none cursor-pointer group" onclick="window.UsuariosManager.selectUserMun('${userId}', '${mun.id}')">
                                     <div class="flex items-center gap-2 min-w-0 pr-1">
-                                        <input type="checkbox" class="user-mun-check rounded border-slate-400 dark:border-slate-500 text-sky-600 focus:ring-sky-500 w-3.5 h-3.5 shrink-0 ${munDisabled}" data-mun-id="${mun.id}" ${isChecked ? 'checked' : ''} ${munDisabled} onclick="event.stopPropagation()">
+                                        <input type="checkbox" class="user-mun-check rounded border-slate-400 dark:border-slate-500 text-sky-600 focus:ring-sky-500 w-3.5 h-3.5 shrink-0 ${munDisabled}" value="${mun.id}" data-mun-id="${mun.id}" ${isChecked ? 'checked' : ''} ${munDisabled} onclick="event.stopPropagation()">
                                         <span class="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate group-hover:text-sky-600 transition-colors">${mun.nome}${mun.uf ? ' - ' + mun.uf : ''}</span>
                                     </div>
                                     ${isSelectedMun ? `
@@ -1334,8 +1334,14 @@
                         }
                     }
                 } else if (munChecks.length > 0) {
-                    const selectedMunIds = Array.from(munChecks).filter(cb => cb.checked).map(cb => cb.value);
-                    const unselectedMunIds = Array.from(munChecks).filter(cb => !cb.checked).map(cb => cb.value);
+                    const getMunIdFromCb = (cb) => {
+                        const val = cb.value;
+                        if (val && val !== 'on' && val !== 'true') return val;
+                        return cb.dataset.munId || cb.getAttribute('data-mun-id');
+                    };
+
+                    const selectedMunIds = Array.from(munChecks).filter(cb => cb.checked).map(getMunIdFromCb).filter(Boolean);
+                    const unselectedMunIds = Array.from(munChecks).filter(cb => !cb.checked).map(getMunIdFromCb).filter(Boolean);
 
                     for (const munId of selectedMunIds) {
                         const existing = _allMembros.find(mb => mb.user_id === userId && mb.municipio_id === munId);
@@ -1353,9 +1359,11 @@
                                 status: status,
                                 entidade: userPrimeiroMembro.entidade || null,
                                 cargo: userPrimeiroMembro.cargo || null
-                            }).select('id, user_id, municipio_id, papel, status, entidade, cargo, solicitado_em, profiles!user_id(id, nome, email, super_admin), municipios(id, nome, uf)').single();
+                            }).select('id, user_id, municipio_id, papel, status, entidade, cargo, solicitado_em, profiles!user_id(id, nome, email, super_admin, ponto_focal, entidade), municipios(id, nome, uf)').single();
 
-                            if (!insErr && newMb) {
+                            if (insErr) {
+                                console.error('Erro ao vincular membro ao município:', insErr);
+                            } else if (newMb) {
                                 _allMembros.push(newMb);
                             }
                         }
