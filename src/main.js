@@ -1,3 +1,15 @@
+
+window.updateCompartilhadaDesc = function(inputEl, descId) {
+    const descEl = document.getElementById(descId);
+    if (!descEl) return;
+    if (inputEl.checked) {
+        descEl.textContent = 'Visível no catálogo Compartilhado para outras entidades deste município.';
+        descEl.className = 'text-[11px] text-cyan-600 dark:text-cyan-400 font-medium';
+    } else {
+        descEl.textContent = 'Privada: visível e acessível apenas pelos membros do seu próprio ente.';
+        descEl.className = 'text-[11px] text-amber-600 dark:text-amber-400 font-medium';
+    }
+};
 window.changeTheme = function(theme) {
     localStorage.setItem('constructive_theme', theme);
     document.documentElement.classList.remove('light', 'dark', 'neon');
@@ -227,6 +239,9 @@ async function loadThemes() {
                       mainTitle: tMeta.mainTitle || '',
                       disp1Active: tMeta.disp1Active !== false,
                       disp2Active: tMeta.disp2Active !== false,
+                      entidade: tMeta.entidade || t.entidade || '',
+                      compartilhada: tMeta.compartilhada !== undefined ? !!tMeta.compartilhada : (t.compartilhada !== undefined ? !!t.compartilhada : true),
+                      metadata: tMeta,
                       // Por padrão TODAS as camadas começam DESLIGADAS — o usuário ativa no switch sob demanda
                       visible: false,
                       _geometryLoaded: false,
@@ -234,6 +249,14 @@ async function loadThemes() {
                   };
                   themes.push(theme);
               });
+
+              // Inicializa lista de IDs de camadas compartilhadas ativas salvas
+              try {
+                  window.activeSharedLayers = JSON.parse(localStorage.getItem('shared_layers_' + activeMunicipioId) || '[]');
+              } catch(e) {
+                  window.activeSharedLayers = [];
+              }
+              if (typeof updateSharedLayersBadge === 'function') updateSharedLayersBadge();
           }
           try {
               await loadRasterLayers();
@@ -1147,12 +1170,32 @@ function toggleThemeListAndSelection(themeId) {
     }
 }
 
+// Retorna apenas a sigla/abreviação da entidade para exibição compacta nos cards das camadas
+function getEntitySigla(name) {
+    if (!name) return 'Público';
+    const raw = String(name).trim();
+    const lower = raw.toLowerCase();
+    if (lower === '' || lower === 'geral' || lower === 'pública' || lower === 'publica' || lower === 'público' || lower === 'publico' || lower.includes('geral /') || lower.includes('geral/')) return 'Público';
+    if (lower.includes('prefeitura') || lower.includes('municipal') || lower.includes('município') || lower.includes('municipio')) return 'Município';
+    if (lower.includes('ministério público') || lower.includes('ministerio publico') || lower.includes('mpf') || lower === 'mpf') return 'MPF';
+    if (lower.includes('polícia federal') || lower.includes('policia federal') || lower.includes('polícia') || lower.includes('policia') || lower === 'pf') return 'PF';
+    if (lower.includes('patrimônio da união') || lower.includes('patrimonio da uniao') || lower.includes('patrimônio') || lower.includes('patrimonio') || lower.includes('união') || lower.includes('uniao') || lower.includes('spu') || lower === 'spu') return 'SPU';
+    
+    if (Array.isArray(window.allEntidadesList)) {
+        const found = window.allEntidadesList.find(e => (e.nome && e.nome.toLowerCase() === lower) || (e.sigla && e.sigla.toLowerCase() === lower));
+        if (found && found.sigla) return found.sigla;
+    }
+    return raw;
+}
+window.getEntitySigla = getEntitySigla;
+
 function renderThemes() {
   const container = document.getElementById('themes-container');
   container.innerHTML = '';
 
-  const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && currentUserProfile.super_admin);
+  const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
   const isAdmin = isSuperAdmin || (typeof currentMunicipioPapel !== 'undefined' && currentMunicipioPapel === 'admin');
+  const userEntidade = (window.currentUserEntidade || '').trim();
 
   let draggedThemeIndex = null;
 
@@ -1162,13 +1205,34 @@ function renderThemes() {
         return;
     }
 
+    const themeEntidade = ((theme.metadata && theme.metadata.entidade) || theme.entidade || '').trim();
+    const isSharedActive = Array.isArray(window.activeSharedLayers) && window.activeSharedLayers.includes(theme.id);
+    const isCompartilhada = theme.compartilhada !== false && (!theme.metadata || theme.metadata.compartilhada !== false);
+
+    // Regra de Exibição no Painel Principal:
+    // 1. SuperAdmin vê todas as camadas
+    // 2. Camada da própria entidade do usuário: MOSTRA (Minha Camada)
+    // 3. Camada Geral / Sem Entidade (pública): MOSTRA
+    const themeSigla = getEntitySigla(themeEntidade);
+    const userSigla = getEntitySigla(userEntidade);
+    const isMyEntity = !userEntidade || !themeEntidade || themeEntidade === 'Geral' || (themeSigla === userSigla) || (themeEntidade.toLowerCase() === userEntidade.toLowerCase());
+    
+    if (!isSuperAdmin && !isMyEntity && !isSharedActive) {
+        return; // Fica oculta do painel principal, disponível apenas no botão COMPARTILHADO
+    }
+
+    const isSharedFromOtherEntity = !isSuperAdmin && !isMyEntity && isSharedActive;
+    const canManageThisEntityLayer = isSuperAdmin || isMyEntity;
+    const canEditThisTheme = isSuperAdmin || (!isSharedFromOtherEntity && isAdmin);
+    const canAddFeatures = isSuperAdmin || !isSharedFromOtherEntity;
+
     const featureCount = theme.features ? theme.features.length : 0;
     const isVisible = theme.visible !== false;
     const isActiveSelection = window.activeSelectionThemeId === String(theme.id);
     
     const card = document.createElement('div');
     card.id = `theme-card-${theme.id}`;
-    card.className = `theme-card relative overflow-hidden cursor-move transition-all duration-300 mx-3 mb-3 rounded-2xl border ${isActiveSelection ? 'scale-[1.02] z-10' : ''}`;
+    card.className = `theme-card relative overflow-hidden cursor-move transition-all duration-300 mx-3 mb-2 rounded-2xl border ${isActiveSelection ? 'scale-[1.02] z-10' : ''}`;
     card.draggable = true;
     card.dataset.index = index;
     card.dataset.id = theme.id;
@@ -1230,12 +1294,12 @@ function renderThemes() {
     let statsListHtml = '';
     const form = typeof allForms !== 'undefined' ? allForms.find(f => f.id === theme.formId) : null;
     if (form && form.statsConfig && form.statsConfig.length > 0) {
-        statsListHtml = `<div id="stats-list-${theme.id}" class="hidden flex-col gap-2 mt-3 pt-3 border-t border-white/10 w-full transition-all">`;
+        statsListHtml = `<div id="stats-list-${theme.id}" class="hidden flex-col gap-2 mt-2.5 pt-2.5 border-t border-white/10 w-full transition-all">`;
         form.statsConfig.forEach((widget, idx) => {
             let iconHtml = widget.type === 'indicator' ? '123' : (widget.type === 'pie' ? 'pie_chart' : 'bar_chart');
             if (widget.type === 'indicator') {
                 statsListHtml += `
-                    <div class="flex items-center justify-between bg-slate-800/40 hover:bg-slate-700/60 rounded-lg p-2.5 cursor-pointer transition-all select-none group" onclick="openStatsDashboard('${theme.id}', ${idx})" title="Ver Indicador">
+                    <div class="flex items-center justify-between bg-slate-800/40 hover:bg-slate-700/60 rounded-lg p-2 cursor-pointer transition-all select-none group" onclick="openStatsDashboard('${theme.id}', ${idx})" title="Ver Indicador">
                         <div class="flex items-center gap-2 text-slate-300 group-hover:text-white transition-colors">
                             <span class="material-symbols-outlined text-[18px] text-cyan-400">${iconHtml}</span>
                             <span class="text-xs font-semibold">${widget.title || 'Indicador'}</span>
@@ -1245,7 +1309,7 @@ function renderThemes() {
                 `;
             } else {
                 statsListHtml += `
-                    <label class="flex items-center justify-between bg-slate-800/40 hover:bg-slate-700/60 rounded-lg p-2.5 cursor-pointer transition-all select-none group" title="Clique para ativar/desativar no mapa">
+                    <label class="flex items-center justify-between bg-slate-800/40 hover:bg-slate-700/60 rounded-lg p-2 cursor-pointer transition-all select-none group" title="Clique para ativar/desativar no mapa">
                         <div class="flex items-center gap-2 text-slate-300 group-hover:text-white transition-colors">
                             <span class="material-symbols-outlined text-[18px] text-cyan-400">${iconHtml}</span>
                             <span class="text-xs font-semibold">${widget.title || 'Gráfico'}</span>
@@ -1262,52 +1326,81 @@ function renderThemes() {
     }
 
     card.innerHTML = `
-      <div class="px-4 pt-4 pb-3 flex flex-col">
+      <div class="px-3.5 pt-2.5 pb-2.5 flex flex-col">
         
         <!-- Header: Icon, Title, and Toggle -->
-        <div class="flex items-center justify-between mb-4">
-          <div class="flex items-center gap-3 cursor-pointer group" onclick="toggleThemeListAndSelection('${theme.id}')" title="Clique para expandir e isolar seleção no mapa">
-            <div class="w-12 h-12 rounded-xl shrink-0 flex items-center justify-center text-white shadow-lg transition-transform group-hover:scale-110 border border-white/20" style="background-color: ${theme.color}; box-shadow: 0 4px 20px ${theme.color}80;">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2.5 min-w-0 pr-2 cursor-pointer group" onclick="toggleThemeListAndSelection('${theme.id}')" title="Clique para expandir e isolar seleção no mapa">
+            <div class="w-12 h-12 rounded-xl shrink-0 flex items-center justify-center text-white shadow-lg transition-transform group-hover:scale-105 border border-white/20" style="background-color: ${theme.color}; box-shadow: 0 4px 16px ${theme.color}80;">
                <span class="material-symbols-outlined text-[24px]">${theme.icon || 'layers'}</span>
             </div>
-            <div class="flex flex-col">
-              <h3 class="text-base font-black text-white tracking-widest uppercase drop-shadow-md ${!isVisible ? 'opacity-50' : ''}">${theme.name}</h3>
-              <div class="text-[12px] font-bold text-slate-200 mt-0.5">
-                <span id="theme-count-${theme.id}">${featureCount}</span> <span class="text-[10px] text-slate-300 font-normal uppercase tracking-wider">Registros</span>
+            <div class="flex flex-col min-w-0">
+              <h3 class="text-xs sm:text-[13px] font-extrabold text-white tracking-wide uppercase drop-shadow-md leading-tight truncate ${!isVisible ? 'opacity-50' : ''}" title="${theme.name}">${theme.name}</h3>
+              ${(isSharedFromOtherEntity || isSuperAdmin || (themeEntidade && themeEntidade.toLowerCase() !== 'geral') || !isCompartilhada) ? `
+                <div class="flex items-center gap-1 mt-0.5 flex-wrap">
+                  ${themeEntidade ? `
+                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[8.5px] font-bold rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 truncate max-w-[170px]" title="Entidade: ${themeEntidade || 'Público'}">
+                      <span class="material-symbols-outlined text-[10px]">hub</span>
+                      <span>${getEntitySigla(themeEntidade)}</span>
+                    </span>
+                  ` : ''}
+                  ${!isCompartilhada ? `
+                    <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[8.5px] font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/30" title="Camada Privada: não compartilhada com outros entes">
+                      <span class="material-symbols-outlined text-[10px]">lock</span>
+                      <span>Privada</span>
+                    </span>
+                  ` : ''}
+                </div>
+              ` : ''}
+              <div class="text-[10px] font-semibold text-slate-300 mt-0.5 flex items-center gap-1">
+                <span id="theme-count-${theme.id}" class="font-bold text-slate-100">${featureCount}</span>
+                <span class="text-slate-400 font-normal uppercase tracking-wider text-[9px]">registros</span>
               </div>
             </div>
           </div>
           
           <!-- iOS-style Neon Toggle -->
-          <label class="relative inline-flex items-center cursor-pointer" title="${isVisible ? 'Ocultar' : 'Mostrar'} Camada">
+          <label class="relative inline-flex items-center cursor-pointer shrink-0" title="${isVisible ? 'Ocultar' : 'Mostrar'} Camada">
             <input type="checkbox" id="theme-toggle-${theme.id}" class="sr-only peer" ${isVisible ? 'checked' : ''} onchange="toggleThemeVisibility('${theme.id}', this)">
             <div id="theme-toggle-bg-${theme.id}" class="w-11 h-6 bg-slate-700/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all" style="${isVisible ? `background-color: ${theme.color}; box-shadow: 0 0 12px ${theme.color}90;` : ''}"></div>
           </label>
         </div>
         
-        <!-- Footer: Actions (Distribuídos em grid uniforme ocupando 100% do espaço) -->
-        <div class="grid grid-flow-col auto-cols-fr gap-1.5 items-center border-t border-white/20 dark:border-white/10 pt-3 w-full">
-            <button onclick="toggleThemeStatsList('${theme.id}')" class="flex items-center justify-center py-2 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-xl tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Painel de Estatísticas">
+        <!-- Footer: Actions (Visível apenas para o ente proprietário ou SuperAdmin) -->
+        ${canManageThisEntityLayer ? `
+        <div class="grid grid-flow-col auto-cols-fr gap-1 items-center border-t border-white/20 dark:border-white/10 pt-2 w-full">
+            <button onclick="toggleThemeStatsList('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Painel de Estatísticas">
               <span class="material-symbols-outlined text-[18px]">pie_chart</span>
             </button>
-            <button onclick="startEditingTheme('${theme.id}', '${theme.name}', '${theme.color}', '${theme.geomType || ''}')" class="flex items-center justify-center py-2 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-xl tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Adicionar Feição">
+            ${canAddFeatures ? `
+            <button onclick="startEditingTheme('${theme.id}', '${theme.name}', '${theme.color}', '${theme.geomType || ''}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Adicionar Feição">
               <span class="material-symbols-outlined text-[18px]">add</span>
             </button>
-            <button onclick="openEditThemeModal('${theme.id}')" class="flex items-center justify-center py-2 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-xl tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Editar Camada">
+            ` : ''}
+            ${canEditThisTheme ? `
+            <button onclick="openEditThemeModal('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Editar Camada">
               <span class="material-symbols-outlined text-[18px]">settings</span>
             </button>
-            ${isSuperAdmin ? `
-            <button onclick="triggerUpload('${theme.id}')" class="flex items-center justify-center py-2 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-xl tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Importar GeoJSON">
-              <span class="material-symbols-outlined text-[18px]">upload</span>
+            ` : ''}
+            ${(canEditThisTheme && isCompartilhada) ? `
+            <button onclick="abrirModalAcessosCamada('${theme.id}', '${theme.name}')" class="flex items-center justify-center py-1.5 px-1 bg-cyan-500/15 hover:bg-cyan-500/30 active:scale-95 rounded-lg tooltip text-cyan-300 transition-all border border-cyan-500/25 shadow-xs" title="Gerenciar Acessos Externos (Pontos Focais de outros órgãos)">
+              <span class="material-symbols-outlined text-[18px]">lock_person</span>
             </button>
-            <button onclick="downloadGeoJSON('${theme.id}')" class="flex items-center justify-center py-2 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-xl tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Exportar">
+            ` : ''}
+            ${canEditThisTheme && isSuperAdmin ? `
+            <button onclick="triggerUpload('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Importar GeoJSON">
+              <span class="material-symbols-outlined text-[18px]">upload</span>
+            </button>` : ''}
+            <button onclick="downloadGeoJSON('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Exportar">
               <span class="material-symbols-outlined text-[18px]">download</span>
             </button>
-            <button onclick="deleteTheme('${theme.id}')" class="flex items-center justify-center py-2 px-1 bg-red-500/15 hover:bg-red-500/30 active:scale-95 rounded-xl tooltip text-red-400 hover:text-red-300 transition-all border border-red-500/20 shadow-xs" title="Excluir">
+            ${canEditThisTheme && isSuperAdmin ? `
+            <button onclick="deleteTheme('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-red-500/15 hover:bg-red-500/30 active:scale-95 rounded-lg tooltip text-red-400 hover:text-red-300 transition-all border border-red-500/20 shadow-xs" title="Excluir">
               <span class="material-symbols-outlined text-[18px]">delete</span>
             </button>` : ''}
         </div>
         ${statsListHtml}
+        ` : ''}
       </div>
       
       <div id="list-${theme.id}" class="bg-black/20 dark:bg-black/40 border-t border-white/10 hidden backdrop-blur-md">
@@ -1351,6 +1444,25 @@ function toggleThemeVisibility(themeId, inputEl) {
   const isChecked = inputEl ? inputEl.checked : (theme.visible === false);
   theme.visible = isChecked;
   saveThemes();
+
+  // Se for camada compartilhada de outra entidade e o usuário desativou o switch:
+  if (!isChecked && Array.isArray(window.activeSharedLayers) && window.activeSharedLayers.includes(themeId)) {
+      window.activeSharedLayers = window.activeSharedLayers.filter(id => id !== themeId);
+      localStorage.setItem('shared_layers_' + activeMunicipioId, JSON.stringify(window.activeSharedLayers));
+      if (typeof updateSharedLayersBadge === 'function') updateSharedLayersBadge();
+      
+      const cardEl = document.getElementById('theme-card-' + themeId);
+      if (cardEl) {
+          cardEl.style.transition = 'all 0.25s ease';
+          cardEl.style.opacity = '0';
+          cardEl.style.transform = 'scale(0.95)';
+          setTimeout(() => {
+              renderThemes();
+              loadAllFeaturesToMap();
+          }, 250);
+          return;
+      }
+  }
 
   // Resposta visual imediata no background do switch (muda de cor na hora para a cor do tema)
   const bgEl = document.getElementById('theme-toggle-bg-' + themeId);
@@ -1695,6 +1807,21 @@ function getThemeFieldsOptions(theme) {
 function addFilterRow(themeId) {
     const theme = themes.find(t => t.id === themeId);
     if (!theme) return;
+
+    const themeEntidade = ((theme.metadata && theme.metadata.entidade) || theme.entidade || '').trim();
+    const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
+    const themeSigla = getEntitySigla(themeEntidade);
+    const userSigla = getEntitySigla(userEntidade);
+    const isMyEntity = !themeEntidade || themeEntidade === 'Geral' || (themeSigla === userSigla) || (userEntidade && themeEntidade.toLowerCase() === userEntidade.toLowerCase());
+
+    if (!isSuperAdmin && !isMyEntity) {
+        if (typeof showWarningToast === 'function') {
+            showWarningToast('Acesso restrito: Estatísticas exclusivas da entidade proprietária desta camada.');
+        } else {
+            alert('Acesso restrito: Estatísticas exclusivas da entidade proprietária desta camada.');
+        }
+        return;
+    }
     
     const container = document.getElementById('filters-container-' + themeId);
     const row = document.createElement('div');
@@ -2155,6 +2282,31 @@ function openNewThemeModal() {
     nameInput.value = '';
     setTimeout(() => nameInput.focus(), 50);
   }
+
+  // Reset do toggle de compartilhamento
+  const compInput = document.getElementById('theme-compartilhada-input');
+  if (compInput) {
+    compInput.checked = true;
+    window.updateCompartilhadaDesc(compInput, 'theme-compartilhada-desc');
+  }
+
+  // Popula seletor de Entidade se for SuperAdmin
+  const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
+  const entContainer = document.getElementById('theme-entidade-container');
+  const entSelect = document.getElementById('theme-entidade-select');
+  if (entContainer && entSelect) {
+    if (isSuperAdmin) {
+      entContainer.classList.remove('hidden');
+      let opts = '<option value="">🌐 Geral / Compartilhada (Todas as Entidades)</option>';
+      (window.allEntidadesList || []).forEach(e => {
+        opts += `<option value="${e.nome}">${e.sigla ? '[' + e.sigla + '] ' : ''}${e.nome}</option>`;
+      });
+      entSelect.innerHTML = opts;
+      entSelect.value = '';
+    } else {
+      entContainer.classList.add('hidden');
+    }
+  }
 }
 
 function closeNewThemeModal() {
@@ -2188,7 +2340,30 @@ async function saveNewTheme() {
   const formId = document.getElementById('theme-cadastro-type') ? document.getElementById('theme-cadastro-type').value : '';
   if (!name) return;
 
+  const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
+  const userEntidade = (window.currentUserEntidade || '').trim();
+  const selectedEntidade = isSuperAdmin 
+      ? (document.getElementById('theme-entidade-select')?.value || '') 
+      : userEntidade;
+
+  const isCompartilhada = document.getElementById('theme-compartilhada-input') 
+      ? document.getElementById('theme-compartilhada-input').checked 
+      : true;
+
   let id = 'theme_' + Date.now();
+  let metadataPayload = {
+      opacity: opacity,
+      weight: 2,
+      dashed: false,
+      disp1: 'Lote',
+      disp2: 'Quadra',
+      mainTitle: '',
+      disp1Active: false,
+      disp2Active: false,
+      customIcon: customIcon,
+      entidade: selectedEntidade,
+      compartilhada: isCompartilhada
+  };
   
   if (typeof supabaseClient !== 'undefined' && supabaseClient) {
       try {
@@ -2201,17 +2376,7 @@ async function saveNewTheme() {
               municipio_id: activeMunicipioId
           };
           if (window.supabaseTemasHasMetadata) {
-              insertPayload.metadata = {
-                  opacity: opacity,
-                  weight: 2,
-                  dashed: false,
-                  disp1: 'Lote',
-                  disp2: 'Quadra',
-                  mainTitle: '',
-                  disp1Active: false,
-                  disp2Active: false,
-                  customIcon: customIcon
-              };
+              insertPayload.metadata = metadataPayload;
           }
           const { data, error } = await supabaseClient.from('temas').insert(insertPayload).select();
           
@@ -2240,15 +2405,20 @@ async function saveNewTheme() {
       cadastroType: formId, 
       disp1Active: false, 
       disp2Active: false, 
+      entidade: selectedEntidade,
+      compartilhada: isCompartilhada,
+      metadata: metadataPayload,
+      visible: true, 
       features: [] 
   });
   
   saveThemes();
   renderThemes();
   closeNewThemeModal();
+  if (typeof focusOnThemeCard === 'function') focusOnThemeCard(id);
 }
 
-function openEditThemeModal(themeId) {
+function openEditThemeModal(themeId, focusField = null) {
   const theme = themes.find(t => t.id === themeId);
   if (!theme) return;
   themeBeingEdited = themeId;
@@ -2272,6 +2442,41 @@ function openEditThemeModal(themeId) {
   const formSelect = document.getElementById('edit-theme-cadastro-type');
   if (formSelect) {
       formSelect.value = theme.formId || '';
+  }
+
+  // Configura toggle de compartilhamento
+  const isCompartilhada = (theme.compartilhada !== false && (!theme.metadata || theme.metadata.compartilhada !== false));
+  const editCompInput = document.getElementById('edit-theme-compartilhada-input');
+  if (editCompInput) {
+      editCompInput.checked = isCompartilhada;
+      window.updateCompartilhadaDesc(editCompInput, 'edit-theme-compartilhada-desc');
+  }
+
+  // Popula seletor de Entidade no modo edição se for SuperAdmin
+  const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
+  const editEntContainer = document.getElementById('edit-theme-entidade-container');
+  const editEntSelect = document.getElementById('edit-theme-entidade-select');
+  if (editEntContainer && editEntSelect) {
+      if (isSuperAdmin) {
+          editEntContainer.classList.remove('hidden');
+          let opts = '<option value="">🌐 Geral / Compartilhada (Todas as Entidades)</option>';
+          (window.allEntidadesList || []).forEach(e => {
+              opts += `<option value="${e.nome}">${e.sigla ? '[' + e.sigla + '] ' : ''}${e.nome}</option>`;
+          });
+          editEntSelect.innerHTML = opts;
+          editEntSelect.value = theme.entidade || (theme.metadata && theme.metadata.entidade) || '';
+
+          if (focusField === 'entidade') {
+              setTimeout(() => {
+                  editEntContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  editEntSelect.focus();
+                  editEntContainer.classList.add('ring-2', 'ring-cyan-400');
+                  setTimeout(() => editEntContainer.classList.remove('ring-2', 'ring-cyan-400'), 2500);
+              }, 150);
+          }
+      } else {
+          editEntContainer.classList.add('hidden');
+      }
   }
   
   updateEditThemeFields();
@@ -2365,6 +2570,7 @@ async function saveEditedTheme() {
   
   if (!name || !themeBeingEdited) return;
 
+  const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
   const theme = themes.find(t => t.id === themeBeingEdited);
   if (theme) {
     theme.name = name;
@@ -2381,6 +2587,17 @@ async function saveEditedTheme() {
     theme.disp2Active = disp2Active;
     theme.formId = formId;
     theme.cadastroType = formId;
+
+    const editCompInput = document.getElementById('edit-theme-compartilhada-input');
+    const isCompartilhada = editCompInput ? editCompInput.checked : (theme.compartilhada !== false);
+    theme.compartilhada = isCompartilhada;
+
+    if (isSuperAdmin) {
+        const editEntSelect = document.getElementById('edit-theme-entidade-select');
+        if (editEntSelect) {
+            theme.entidade = editEntSelect.value;
+        }
+    }
     
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         try {
@@ -2401,8 +2618,11 @@ async function saveEditedTheme() {
                     mainTitle: mainTitle,
                     disp1Active: disp1Active,
                     disp2Active: disp2Active,
-                    customIcon: customIcon
+                    customIcon: customIcon,
+                    entidade: theme.entidade || '',
+                    compartilhada: isCompartilhada
                 };
+                theme.metadata = updatePayload.metadata;
             }
             
             await supabaseClient.from('temas').update(updatePayload).eq('id', themeBeingEdited);
@@ -2414,6 +2634,7 @@ async function saveEditedTheme() {
     saveThemes();
     loadAllFeaturesToMap(); // Update colors on the map
     renderThemes();
+    if (typeof focusOnThemeCard === 'function') focusOnThemeCard(themeBeingEdited);
   }
   closeEditThemeModal();
 }
@@ -3598,18 +3819,26 @@ async function confirmGlobalImport() {
   const colors = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"];
   const themeColor = colors[Math.floor(Math.random() * colors.length)];
   
+  const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
+  const userEntidade = (window.currentUserEntidade || '').trim();
+  const themeEntidade = isSuperAdmin ? '' : userEntidade;
+
   let themeId = 'theme_' + Date.now();
   
   if (typeof supabaseClient !== 'undefined' && supabaseClient) {
       try {
-          const { data, error } = await supabaseClient.from('temas').insert({
+          const insertImportPayload = {
               nome: themeName,
               cor: themeColor,
               icone: 'map',
               tipo_geometria: 'Polygon',
               tipo_cadastro: formId || 'padrao',
               municipio_id: activeMunicipioId
-          }).select();
+          };
+          if (window.supabaseTemasHasMetadata) {
+              insertImportPayload.metadata = { entidade: themeEntidade };
+          }
+          const { data, error } = await supabaseClient.from('temas').insert(insertImportPayload).select();
           
           if (error) {
               console.error("Erro ao criar tema na importação:", error);
@@ -3810,7 +4039,19 @@ async function confirmGlobalImport() {
   });
   
   if (!themeName) themeName = "Tema Importado";
-  themes.push({ id: themeId, name: themeName, color: themeColor, formId: formId, cadastroType: formId, disp1Active: false, disp2Active: false, features: [] });
+  themes.push({ 
+      id: themeId, 
+      name: themeName, 
+      color: themeColor, 
+      formId: formId, 
+      cadastroType: formId, 
+      disp1Active: false, 
+      disp2Active: false, 
+      entidade: themeEntidade,
+      metadata: { entidade: themeEntidade },
+      visible: true,
+      features: [] 
+  });
 
   updateImportProgress(`Renderizando ${pendingGlobalGeoJSON.features.length.toLocaleString('pt-BR')} feições no mapa...`);
   await new Promise(r => setTimeout(r, 20));
@@ -3819,8 +4060,8 @@ async function confirmGlobalImport() {
   geojsonLayer.addData(pendingGlobalGeoJSON);
   
   closeGlobalImportModal();
-  document.getElementById('side-drawer').classList.add('-translate-x-[120%]');
-  document.getElementById('drawer-overlay').classList.add('hidden');
+  renderThemes();
+  focusOnThemeCard(themeId);
   
   const bounds = newLayer.getBounds();
   if (bounds.isValid()) {
@@ -4678,7 +4919,7 @@ async function ensureAuthenticated() {
         try {
             const { data: membro } = await supabaseClient
                 .from('municipio_membros')
-                .select('papel, status')
+                .select('papel, status, entidade')
                 .eq('user_id', data.session.user.id)
                 .eq('municipio_id', activeMunicipioId)
                 .eq('status', 'aprovado')
@@ -4689,6 +4930,7 @@ async function ensureAuthenticated() {
                 return false;
             }
             currentMunicipioPapel = membro.papel;
+            window.currentUserEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || (membro && membro.entidade) || '';
 
             // Verifica quantos municípios este usuário tem liberados
             try {
@@ -4707,6 +4949,15 @@ async function ensureAuthenticated() {
         }
     } else {
         window.userTotalMunicipiosAprovados = 999;
+        window.currentUserEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '';
+    }
+
+    // Carrega entidades padrão para listagem no seletor de criação e catálogo
+    try {
+        const { data: ents } = await supabaseClient.from('entidades_padrao').select('*').order('nome');
+        window.allEntidadesList = ents || [];
+    } catch(eEnt) {
+        window.allEntidadesList = [];
     }
 
     // Mapa local de permissões por tema indexado com case-insensitivity
@@ -4866,10 +5117,24 @@ function applyCurrentUserToProfileModal() {
     const nameEl = document.getElementById('profile-user-name');
     const roleEl = document.getElementById('profile-user-role');
     const munEl = document.getElementById('profile-user-municipio');
+    const entEl = document.getElementById('profile-user-entidade');
+    const pfBadge = document.getElementById('profile-user-ponto-focal-badge');
+
     if (munEl) munEl.textContent = sessionStorage.getItem('municipio_ativo_nome') || '';
     if (nameEl) nameEl.textContent = currentUserProfile.nome || 'Usuário';
     const papelExibido = currentUserProfile.super_admin ? 'Administrador Geral' : (PAPEL_LABELS[currentMunicipioPapel] || currentMunicipioPapel || '—');
     if (roleEl) roleEl.textContent = papelExibido;
+
+    const entNome = window.currentUserEntidade || currentUserProfile.entidade || 'Prefeitura Municipal';
+    if (entEl) entEl.textContent = entNome;
+
+    if (pfBadge) {
+        if (currentUserProfile.ponto_focal) {
+            pfBadge.classList.remove('hidden');
+        } else {
+            pfBadge.classList.add('hidden');
+        }
+    }
 }
 
 window.handleLogout = async function() {
@@ -6326,13 +6591,46 @@ async function loadRasterLayers() {
                 console.error("Erro ao carregar imagens raster:", error);
                 return;
             }
+
+            const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
+            const userEntidade = (window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').trim().toLowerCase();
+            const currentUserId = (currentUserProfile && currentUserProfile.id) || null;
+
+            // Busca permissões explícitas de ortofoto para este usuário
+            let myRasterPerms = new Set();
+            if (currentUserId && !isSuperAdmin) {
+                try {
+                    const { data: prData } = await supabaseClient
+                        .from('permissoes_raster')
+                        .select('raster_id')
+                        .eq('user_id', currentUserId)
+                        .eq('pode_ver', true);
+                    if (prData) {
+                        prData.forEach(p => myRasterPerms.add(p.raster_id));
+                    }
+                } catch(e) {}
+            }
+
+            // Filtro de Segurança Institucional de Ortofotos:
+            // 1. SuperAdmin vê tudo
+            // 2. Ortofoto da própria entidade do usuário: VÊ
+            // 3. Ortofoto pública/geral: VÊ
+            // 4. Ortofoto compartilhada de outro ente: VÊ APENAS se tiver permissão explícita em permissoes_raster
+            const visibleRasters = (data || []).filter(r => {
+                if (isSuperAdmin) return true;
+                const rEnt = (r.entidade || 'Prefeitura Municipal').trim().toLowerCase();
+                if (rEnt === 'geral' || rEnt === 'público' || rEnt === 'publico') return true;
+                if (userEntidade && rEnt === userEntidade) return true;
+                if (r.compartilhada && myRasterPerms.has(r.id)) return true;
+                return false;
+            });
             
             // Limpar overlays antigos do mapa
             Object.values(leafletRasterOverlays).forEach(overlay => {
                 if (map) map.removeLayer(overlay);
             });
             // Por padrão as ortofotos iniciam DESLIGADAS — o usuário ativa no switch quando quiser ver
-            rasterLayers = (data || []).map(r => ({ ...r, visivel: false }));
+            rasterLayers = visibleRasters.map(r => ({ ...r, visivel: false }));
             window.rasterLayers = rasterLayers;
             window.activeMunicipioId = activeMunicipioId;
             
@@ -6384,9 +6682,7 @@ function renderRasterLayersList() {
         return;
     }
 
-    // Editar/excluir imagem de fundo é ação de admin (mesma régua do resto
-    // do app) — quem só tem acesso de leitura ainda vê/liga a camada, só
-    // não mexe nela.
+    const isSuperAdmin = !!((typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin')));
     const isAdmin = !!((typeof currentUserProfile !== 'undefined' && currentUserProfile && currentUserProfile.super_admin) || (typeof currentMunicipioPapel !== 'undefined' && currentMunicipioPapel === 'admin'));
 
     container.innerHTML = '';
@@ -6413,6 +6709,12 @@ function renderRasterLayersList() {
             else if (matchYear) dateFormatted = matchYear[1];
         }
 
+        const rEnt = (raster.entidade || 'Prefeitura Municipal').trim();
+        const rSigla = (typeof getEntitySigla === 'function') ? getEntitySigla(rEnt) : rEnt;
+        const userEntidade = (window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').trim().toLowerCase();
+        const isFromOtherEntity = userEntidade && rEnt.toLowerCase() !== userEntidade && rEnt.toLowerCase() !== 'geral';
+        const canManageRaster = isSuperAdmin || !isFromOtherEntity;
+
         item.innerHTML = `
             <div class="p-3.5 flex flex-col">
                 <!-- Header: Icon, Title, and Toggle -->
@@ -6424,6 +6726,12 @@ function renderRasterLayersList() {
                         <div class="flex flex-col overflow-hidden">
                             <div class="flex items-center gap-1.5 flex-wrap">
                                 <span class="text-xs font-bold text-white truncate max-w-[150px]" title="${raster.nome}">${raster.nome}</span>
+                                ${(isSuperAdmin || isFromOtherEntity) ? `
+                                    <span class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[8.5px] font-bold rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 truncate" title="Entidade: ${rEnt}">
+                                        <span class="material-symbols-outlined text-[10px]">hub</span>
+                                        <span>${rSigla}</span>
+                                    </span>
+                                ` : ''}
                                 ${dateFormatted ? `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/30 text-indigo-200 border border-indigo-500/40 flex items-center gap-0.5"><span class="material-symbols-outlined text-[10px]">calendar_today</span>${dateFormatted}</span>` : ''}
                             </div>
                             <span class="text-[9px] text-slate-400 font-normal uppercase tracking-wider mt-0.5">${raster.tipo === 'xyz_tiles' ? 'Ortofoto • XYZ Tiles' : 'GeoTIFF • Imagem'}</span>
@@ -6437,7 +6745,7 @@ function renderRasterLayersList() {
                     </label>
                 </div>
                 
-                ${isAdmin ? `
+                ${(isAdmin && canManageRaster) ? `
                 <!-- Footer: Actions -->
                 <div class="flex justify-start items-center border-t border-white/20 dark:border-white/10 pt-3 gap-2 w-full">
                     <button onclick="openEditRasterModal('${raster.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Configurações da Imagem">
@@ -7076,4 +7384,470 @@ window.saveEditedRaster = async function() {
     }
     
     closeEditRasterModal();
+};
+
+// =========================================================================
+// CAMADAS COMPARTILHADAS POR ENTIDADE E AÇÕES UNIFICADAS
+// =========================================================================
+
+window.openAddLayerModal = function() {
+    const modal = document.getElementById('add-layer-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        setTimeout(() => modal.firstElementChild?.classList.remove('scale-95'), 10);
+    }
+};
+
+window.closeAddLayerModal = function() {
+    const modal = document.getElementById('add-layer-modal');
+    if (modal) {
+        modal.firstElementChild?.classList.add('scale-95');
+        setTimeout(() => modal.classList.add('hidden'), 150);
+    }
+};
+
+window.focusOnThemeCard = function(themeId) {
+    const drawer = document.getElementById('side-drawer');
+    const overlay = document.getElementById('drawer-overlay');
+    if (drawer) drawer.classList.remove('-translate-x-[120%]');
+    if (overlay) overlay.classList.remove('hidden');
+    
+    setTimeout(() => {
+        const cardEl = document.getElementById('theme-card-' + themeId);
+        if (cardEl) {
+            cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            cardEl.classList.add('ring-2', 'ring-cyan-400', 'shadow-[0_0_25px_rgba(6,182,212,0.6)]');
+            setTimeout(() => {
+                cardEl.classList.remove('ring-2', 'ring-cyan-400', 'shadow-[0_0_25px_rgba(6,182,212,0.6)]');
+            }, 3000);
+        }
+    }, 250);
+};
+
+window.updateSharedLayersBadge = function() {
+    const badge = document.getElementById('shared-layers-badge');
+    if (badge) {
+        const hasActive = Array.isArray(window.activeSharedLayers) && window.activeSharedLayers.length > 0;
+        badge.classList.toggle('hidden', !hasActive);
+    }
+};
+
+window.openSharedLayersCatalog = function() {
+    const searchInput = document.getElementById('shared-layers-search');
+    if (searchInput) searchInput.value = '';
+    renderSharedLayersCatalog();
+    const modal = document.getElementById('shared-layers-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        setTimeout(() => modal.firstElementChild?.classList.remove('scale-95'), 10);
+    }
+};
+
+window.closeSharedLayersCatalog = function() {
+    const modal = document.getElementById('shared-layers-modal');
+    if (modal) {
+        modal.firstElementChild?.classList.add('scale-95');
+        setTimeout(() => modal.classList.add('hidden'), 150);
+    }
+};
+
+window.onFilterSharedLayers = function(query) {
+    renderSharedLayersCatalog(query);
+};
+
+window.toggleSharedAccordion = function(selectedIndex) {
+    const targetBody = document.getElementById(`shared-accordion-group-${selectedIndex}`);
+    const targetChevron = document.getElementById(`shared-accordion-chevron-${selectedIndex}`);
+    const isCurrentlyOpen = targetBody && !targetBody.classList.contains('hidden');
+
+    // Fecha todos os outros acordeões
+    document.querySelectorAll('.shared-accordion-body').forEach(body => {
+        body.classList.add('hidden');
+    });
+    document.querySelectorAll('.shared-accordion-chevron').forEach(chev => {
+        chev.classList.remove('rotate-180');
+    });
+
+    // Se o clicado estava fechado, abre apenas ele
+    if (!isCurrentlyOpen && targetBody) {
+        targetBody.classList.remove('hidden');
+        if (targetChevron) {
+            targetChevron.classList.add('rotate-180');
+        }
+        setTimeout(() => {
+            const cardEl = targetBody.closest('.shared-accordion-card');
+            if (cardEl) {
+                cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }, 100);
+    }
+};
+
+window.renderSharedLayersCatalog = function(searchQuery = '') {
+    const container = document.getElementById('shared-layers-accordion');
+    const totalCountEl = document.getElementById('shared-layers-total-count');
+    if (!container) return;
+
+    const userEntidade = (window.currentUserEntidade || '').trim();
+    const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
+    const q = (searchQuery || '').toLowerCase().trim();
+
+    // Agrupa temas elegíveis para compartilhamento por Entidade
+    const groups = {};
+    let totalEligible = 0;
+
+    themes.forEach(t => {
+        const tEntidade = ((t.metadata && t.metadata.entidade) || t.entidade || '').trim();
+        const isCompartilhada = (t.compartilhada !== false && (!t.metadata || t.metadata.compartilhada !== false));
+        
+        // Se a camada NÃO for compartilhada, ela NÃO DEVE APARECER no catálogo compartilhado
+        if (!isCompartilhada) return;
+
+        // PRINCÍPIO DE AUTORIZAÇÃO PONTUAL:
+        // Se não for SuperAdmin e a camada pertencer a OUTRA entidade,
+        // o usuário só pode vê-la se tiver autorização explícita (userCanOnTheme(t.id, 'ver') === true)
+        const tSigla = getEntitySigla(tEntidade);
+        const uSigla = getEntitySigla(userEntidade);
+        const isFromOtherEntity = userEntidade && tEntidade && (tSigla !== uSigla) && (tEntidade.toLowerCase() !== 'geral');
+        if (!isSuperAdmin && isFromOtherEntity && typeof userCanOnTheme === 'function' && !userCanOnTheme(t.id, 'ver')) {
+            return; // Bloqueado! Não aparece no catálogo de compartilhamento deste usuário.
+        }
+
+        // Se for SuperAdmin: permite explorar todas as entidades
+        // Se for usuário comum: só lista entidades diferentes da sua própria
+        const isEligibleEntity = isSuperAdmin || (tEntidade && tSigla !== uSigla);
+        
+        if (!isEligibleEntity) return;
+
+        // Se houver busca, filtra por nome da camada ou nome da entidade
+        if (q && !t.name.toLowerCase().includes(q) && !tEntidade.toLowerCase().includes(q)) {
+            return;
+        }
+
+        const groupKey = tEntidade || 'Geral / Pública';
+        if (!groups[groupKey]) groups[groupKey] = [];
+        groups[groupKey].push(t);
+        totalEligible++;
+    });
+
+    if (totalCountEl) {
+        totalCountEl.textContent = `${totalEligible} disponível${totalEligible !== 1 ? 'is' : ''}`;
+    }
+
+    if (totalEligible === 0) {
+        container.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-12 text-center text-slate-400">
+                <span class="material-symbols-outlined text-[44px] text-slate-500 mb-2">folder_off</span>
+                <p class="text-sm font-semibold">Nenhuma camada compartilhada encontrada.</p>
+                <p class="text-xs text-slate-500 mt-1 max-w-sm">
+                    ${q ? 'Nenhum resultado corresponde à sua pesquisa.' : 'As camadas criadas por outras entidades aparecerão organizadas aqui para consulta.'}
+                </p>
+            </div>
+        `;
+        return;
+    }
+
+    // Ícones temáticos por tipo de entidade
+    function getEntityIcon(name) {
+        const lower = name.toLowerCase();
+        if (lower.includes('prefeitura') || lower.includes('municipal')) return 'apartment';
+        if (lower.includes('público') || lower.includes('mpf') || lower.includes('mpe')) return 'balance';
+        if (lower.includes('polícia') || lower.includes('pf') || lower.includes('segurança')) return 'shield';
+        if (lower.includes('união') || lower.includes('spu') || lower.includes('federal')) return 'account_balance';
+        return 'domain';
+    }
+
+    let html = '';
+    const groupKeys = Object.keys(groups).sort();
+
+    groupKeys.forEach((entidadeName, gIdx) => {
+        const groupThemes = groups[entidadeName];
+        const iconName = getEntityIcon(entidadeName);
+        const activeCount = groupThemes.filter(t => Array.isArray(window.activeSharedLayers) && window.activeSharedLayers.includes(t.id)).length;
+        const accordionId = `shared-accordion-group-${gIdx}`;
+
+        html += `
+            <div class="shared-accordion-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 shadow-xs transition-all">
+                <!-- Header do Acordeão -->
+                <button type="button" onclick="toggleSharedAccordion(${gIdx})" class="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-slate-800/80 transition-colors cursor-pointer select-none rounded-2xl">
+                    <div class="flex items-center gap-3 min-w-0 pr-2">
+                        <div class="w-9 h-9 rounded-xl bg-cyan-500/15 text-cyan-400 flex items-center justify-center shrink-0 shadow-xs border border-cyan-500/20">
+                            <span class="material-symbols-outlined text-[20px]">${iconName}</span>
+                        </div>
+                        <div class="flex flex-col min-w-0">
+                            <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${entidadeName}</span>
+                            <span class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">${groupThemes.length} camada${groupThemes.length !== 1 ? 's' : ''} ${activeCount > 0 ? `· <strong class="text-cyan-400 font-bold">${activeCount} ativa${activeCount !== 1 ? 's' : ''}</strong>` : ''}</span>
+                        </div>
+                    </div>
+                    <span id="shared-accordion-chevron-${gIdx}" class="shared-accordion-chevron material-symbols-outlined text-[22px] text-slate-400 transition-transform duration-200 ${gIdx === 0 ? 'rotate-180' : ''}">expand_more</span>
+                </button>
+
+                <!-- Conteúdo das Camadas da Entidade -->
+                <div id="${accordionId}" class="shared-accordion-body p-3 pt-2 border-t border-slate-200/80 dark:border-slate-700/60 flex flex-col gap-2.5 bg-white/40 dark:bg-slate-900/30 ${gIdx === 0 ? '' : 'hidden'}">
+                    ${groupThemes.map(t => {
+                        const isActive = Array.isArray(window.activeSharedLayers) && window.activeSharedLayers.includes(t.id);
+                        const count = t.features ? t.features.length : 0;
+                        return `
+                            <div class="flex items-center justify-between p-3 rounded-xl border ${isActive ? 'border-cyan-500/40 bg-cyan-500/10 shadow-xs' : 'border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-800/90'} hover:border-cyan-400/60 transition-all">
+                                <div class="flex items-center gap-3 min-w-0 pr-2">
+                                    <div class="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center text-white shadow-md border border-white/20" style="background-color: ${t.color}; box-shadow: 0 4px 12px ${t.color}40;">
+                                        <span class="material-symbols-outlined text-[20px]">${t.icon || 'layers'}</span>
+                                    </div>
+                                    <div class="flex flex-col min-w-0">
+                                        <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${t.name}</span>
+                                        <span class="text-[10px] text-slate-500 dark:text-slate-400">${count} registro${count !== 1 ? 's' : ''} · ${t.tipo_geometria || t.geometryType || 'Polígono'}</span>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center gap-3 shrink-0">
+                                    ${isSuperAdmin ? `
+                                    <button type="button" onclick="closeSharedLayersCatalog(); openEditThemeModal('${t.id}', 'entidade')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-cyan-500/20 dark:bg-slate-700/60 dark:hover:bg-cyan-500/20 text-slate-700 dark:text-slate-300 hover:text-cyan-400 border border-slate-300/60 dark:border-slate-600/60 hover:border-cyan-500/40 transition-colors cursor-pointer flex items-center gap-1.5 text-[11px] font-semibold" title="Definir Entidade Proprietária desta camada (SuperAdmin)">
+                                        <span class="material-symbols-outlined text-[15px] text-cyan-400">edit</span>
+                                        <span class="hidden sm:inline">Definir Entidade</span>
+                                    </button>
+                                    ` : ''}
+
+                                    <!-- Switch iOS Neon idêntico ao da Camada Principal -->
+                                    <label class="relative inline-flex items-center cursor-pointer shrink-0" title="${isActive ? 'Ocultar' : 'Mostrar'} Camada">
+                                        <input type="checkbox" id="shared-toggle-${t.id}" class="sr-only peer" ${isActive ? 'checked' : ''} onchange="toggleSharedLayer('${t.id}', this)">
+                                        <div id="shared-toggle-bg-${t.id}" class="w-11 h-6 bg-slate-700/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all shadow-inner" style="${isActive ? `background-color: ${t.color}; box-shadow: 0 0 12px ${t.color}90;` : ''}"></div>
+                                    </label>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+};
+
+window.toggleSharedLayer = async function(themeId, inputEl) {
+    if (!Array.isArray(window.activeSharedLayers)) window.activeSharedLayers = [];
+    const theme = themes.find(t => t.id === themeId);
+    if (!theme) return;
+    
+    const isCurrentlyActive = window.activeSharedLayers.includes(themeId);
+    const shouldBeActive = inputEl !== undefined ? inputEl.checked : !isCurrentlyActive;
+    
+    // Resposta visual instantânea no background do switch
+    const bgEl = document.getElementById('shared-toggle-bg-' + themeId);
+    if (bgEl) {
+        if (shouldBeActive) {
+            bgEl.style.backgroundColor = theme.color;
+            bgEl.style.boxShadow = `0 0 12px ${theme.color}90`;
+        } else {
+            bgEl.style.backgroundColor = '';
+            bgEl.style.boxShadow = '';
+        }
+    }
+
+    if (!shouldBeActive) {
+        window.activeSharedLayers = window.activeSharedLayers.filter(id => id !== themeId);
+        theme.visible = false;
+        showWarningToast(`Camada "${theme.name}" desativada.`);
+    } else {
+        if (!window.activeSharedLayers.includes(themeId)) {
+            window.activeSharedLayers.push(themeId);
+        }
+        theme.visible = true;
+        showWarningToast(`Camada "${theme.name}" ativada no seu painel!`);
+    }
+    
+    localStorage.setItem('shared_layers_' + activeMunicipioId, JSON.stringify(window.activeSharedLayers));
+    saveThemes();
+    renderThemes();
+    updateSharedLayersBadge();
+    
+    if (theme.visible) {
+        if (!theme._propertiesFullyLoaded) {
+            await loadThemeProperties(theme.id);
+        }
+        loadAllFeaturesToMap();
+    } else {
+        loadAllFeaturesToMap();
+    }
+};
+
+// Modal de Gestão de Acessos Externos para Camada Vetorial (Pontos Focais de outros órgãos parceiros)
+window.abrirModalAcessosCamada = async function(themeId, themeName) {
+    let modal = document.getElementById('modal-acessos-camada');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modal-acessos-camada';
+        modal.className = 'fixed inset-0 bg-black/60 z-[300] flex items-center justify-center backdrop-blur-sm p-4';
+        modal.innerHTML = `
+            <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
+                <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/40">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-cyan-500/15 text-cyan-500 flex items-center justify-center shrink-0 border border-cyan-500/20">
+                            <span class="material-symbols-outlined text-[22px]">lock_person</span>
+                        </div>
+                        <div>
+                            <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white" id="modal-acessos-camada-title">Acessos Externos</h3>
+                            <p class="text-xs text-slate-500 dark:text-slate-400">Pontos Focais autorizados a visualizar e editar esta camada</p>
+                        </div>
+                    </div>
+                    <button onclick="document.getElementById('modal-acessos-camada').classList.add('hidden')" class="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+
+                <div id="modal-acessos-camada-body" class="p-6 overflow-y-auto space-y-4 flex-1">
+                    <div class="text-center py-8 text-xs text-slate-400">Carregando parceiros...</div>
+                </div>
+
+                <div class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 flex items-center justify-between">
+                    <span class="text-[11px] text-slate-400">Apenas servidores marcados como Ponto Focal aparecem aqui.</span>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="document.getElementById('modal-acessos-camada').classList.add('hidden')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800">Fechar</button>
+                        <button type="button" id="btn-salvar-acessos-camada" class="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-bold shadow-md flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-[16px]">save</span> Salvar Permissões
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    } else {
+        modal.classList.remove('hidden');
+    }
+
+    const titleEl = document.getElementById('modal-acessos-camada-title');
+    if (titleEl) titleEl.textContent = `Acessos Externos — ${themeName}`;
+
+    const bodyEl = document.getElementById('modal-acessos-camada-body');
+    bodyEl.innerHTML = '<div class="text-center py-8 text-xs text-slate-400"><div class="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin inline-block mr-2"></div>Carregando parceiros...</div>';
+
+    const myEntidade = (window.currentUserEntidade || currentUserProfile?.entidade || currentUserProfile?.entidade_nome || '').trim().toLowerCase();
+    
+    try {
+        const { data: membrosData } = await supabaseClient
+            .from('municipio_membros')
+            .select('user_id, entidade, cargo, profiles!user_id(id, nome, email, ponto_focal)')
+            .eq('municipio_id', activeMunicipioId);
+
+        let permsMap = {};
+        try {
+            const { data: permsData } = await supabaseClient
+                .from('permissoes_camada')
+                .select('*')
+                .eq('theme_id', themeId);
+            (permsData || []).forEach(p => { permsMap[p.user_id] = p; });
+        } catch(e) {}
+
+        const uniquePoints = new Map();
+        (membrosData || []).forEach(m => {
+            const p = m.profiles;
+            if (!p || !p.ponto_focal) return;
+            const pEnt = (m.entidade || '').trim();
+            if (pEnt.toLowerCase() === myEntidade) return;
+            if (!uniquePoints.has(p.id)) {
+                uniquePoints.set(p.id, {
+                    id: p.id,
+                    nome: p.nome || '(Sem nome)',
+                    email: p.email || '',
+                    entidade: pEnt || 'Outro Ente',
+                    cargo: m.cargo || '',
+                    pode_ver: !!permsMap[p.id]?.pode_ver,
+                    pode_editar: !!permsMap[p.id]?.pode_editar
+                });
+            }
+        });
+
+        const pontFocais = Array.from(uniquePoints.values());
+
+        if (pontFocais.length === 0) {
+            bodyEl.innerHTML = `
+                <div class="text-center py-10 text-xs text-slate-400 italic">
+                    <span class="material-symbols-outlined text-[36px] text-slate-500 mb-2">person_off</span>
+                    <p class="font-bold text-slate-600 dark:text-slate-300">Nenhum Ponto Focal encontrado em outros órgãos parceiros para este município.</p>
+                    <p class="mt-1 max-w-sm mx-auto text-[11px] text-slate-400">Para que servidores de outros órgãos possam receber esta camada, o Administrador daquele órgão deve marcá-los como "Ponto Focal Interinstitucional" na aba Usuários.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const porEntidade = {};
+        pontFocais.forEach(pf => {
+            if (!porEntidade[pf.entidade]) porEntidade[pf.entidade] = [];
+            porEntidade[pf.entidade].push(pf);
+        });
+
+        let html = '';
+        Object.keys(porEntidade).sort().forEach(entNome => {
+            const lista = porEntidade[entNome];
+            const sigla = (typeof getEntitySigla === 'function') ? getEntitySigla(entNome) : entNome;
+            html += `
+                <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden">
+                    <div class="px-4 py-2.5 bg-slate-100 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
+                        <span class="text-xs font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-[16px] text-cyan-500">hub</span>
+                            ${entNome} (${sigla})
+                        </span>
+                        <span class="text-[10px] font-bold text-slate-400">${lista.length} ponto${lista.length !== 1 ? 's' : ''} focal</span>
+                    </div>
+                    <div class="p-3 divide-y divide-slate-100 dark:divide-slate-800">
+                        ${lista.map(u => `
+                            <div class="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
+                                <div class="min-w-0 flex-1">
+                                    <div class="font-bold text-xs text-slate-900 dark:text-white truncate">${u.nome}</div>
+                                    <div class="text-[11px] text-slate-400 truncate">${u.email} ${u.cargo ? '• ' + u.cargo : ''}</div>
+                                </div>
+                                <div class="flex items-center gap-3 shrink-0">
+                                    <label class="flex items-center gap-1.5 text-xs font-bold cursor-pointer text-slate-700 dark:text-slate-300">
+                                        <input type="checkbox" data-pf-camada-ver="${u.id}" ${u.pode_ver ? 'checked' : ''} class="w-4 h-4 text-cyan-600 rounded focus:ring-cyan-500">
+                                        <span>Pode Ver</span>
+                                    </label>
+                                    <label class="flex items-center gap-1.5 text-xs font-bold cursor-pointer text-slate-700 dark:text-slate-300">
+                                        <input type="checkbox" data-pf-camada-editar="${u.id}" ${u.pode_editar ? 'checked' : ''} class="w-4 h-4 text-sky-600 rounded focus:ring-sky-500">
+                                        <span>Pode Editar</span>
+                                    </label>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        });
+
+        bodyEl.innerHTML = html;
+
+        const saveBtn = document.getElementById('btn-salvar-acessos-camada');
+        saveBtn.onclick = async () => {
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="material-symbols-outlined text-[15px] animate-spin">refresh</span> Salvando...';
+            
+            const rows = [];
+            bodyEl.querySelectorAll('[data-pf-camada-ver]').forEach(cbVer => {
+                const uId = cbVer.getAttribute('data-pf-camada-ver');
+                const cbEdit = bodyEl.querySelector(`[data-pf-camada-editar="${uId}"]`);
+                rows.push({
+                    user_id: uId,
+                    theme_id: themeId,
+                    pode_ver: cbVer.checked,
+                    pode_editar: cbEdit ? cbEdit.checked : false,
+                    pode_excluir: false,
+                    concedido_por: currentUserProfile?.id || null
+                });
+            });
+
+            try {
+                const { error } = await supabaseClient.from('permissoes_camada').upsert(rows, { onConflict: 'user_id,theme_id' });
+                if (error) throw error;
+                showWarningToast('Acessos da camada atualizados com sucesso!');
+                modal.classList.add('hidden');
+            } catch(e) {
+                alert('Erro ao salvar acessos da camada: ' + e.message);
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '<span class="material-symbols-outlined text-[16px]">save</span> Salvar Permissões';
+            }
+        };
+
+    } catch(e) {
+        bodyEl.innerHTML = `<div class="p-6 text-center text-rose-500 text-xs font-bold">Erro ao carregar parceiros: ${e.message}</div>`;
+    }
 };

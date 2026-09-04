@@ -413,19 +413,20 @@
 <div class="p-0 border-b border-slate-200 dark:border-slate-800 flex items-center justify-center">
     <a id="drawer-btn-home" href="home.html?view=municipio" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400" title="Voltar ao Painel do Município">
         <span class="material-symbols-outlined text-[22px]">home</span>
-        <span class="text-[9px] font-medium tracking-wide uppercase">Home</span>
+        <span class="text-[9px] font-semibold tracking-wide uppercase">Home</span>
     </a>
-    <button id="drawer-btn-importar" onclick="openImportOptionsModal()" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 border-l border-slate-200/50 dark:border-slate-800/50">
-        <span class="material-symbols-outlined text-[22px]">upload_file</span>
-        <span class="text-[9px] font-medium tracking-wide uppercase">Importar</span>
+    <button id="drawer-btn-compartilhado" onclick="openSharedLayersCatalog()" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-cyan-400 dark:hover:text-cyan-400 border-l border-slate-200/50 dark:border-slate-800/50 relative cursor-pointer group" title="Catálogo de Camadas Compartilhadas de outras Entidades">
+        <span class="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">hub</span>
+        <span class="text-[8px] sm:text-[8.5px] font-semibold tracking-wide uppercase">Compartilhado</span>
+        <span id="shared-layers-badge" class="hidden absolute top-2 right-2 w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee] animate-pulse"></span>
     </button>
-    <button id="drawer-btn-nova" onclick="openNewThemeModal()" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 border-l border-slate-200/50 dark:border-slate-800/50">
-        <span class="material-symbols-outlined text-[22px]">add_circle</span>
-        <span class="text-[9px] font-medium tracking-wide uppercase">Nova</span>
+    <button id="drawer-btn-adicionar" onclick="openAddLayerModal()" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 border-l border-slate-200/50 dark:border-slate-800/50 cursor-pointer group" title="Adicionar Nova Camada (Criar ou Importar)">
+        <span class="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">add_circle</span>
+        <span class="text-[9px] font-semibold tracking-wide uppercase">+ Camada</span>
     </button>
-    <button onclick="document.getElementById('side-drawer').classList.add('-translate-x-[120%]'); document.getElementById('drawer-overlay').classList.add('hidden')" class="flex-1 h-16 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 border-l border-slate-200/50 dark:border-slate-800/50">
+    <button onclick="document.getElementById('side-drawer').classList.add('-translate-x-[120%]'); document.getElementById('drawer-overlay').classList.add('hidden')" class="flex-1 h-16 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 border-l border-slate-200/50 dark:border-slate-800/50 cursor-pointer" title="Fechar Painel">
         <span class="material-symbols-outlined text-[22px]">close</span>
-        <span class="text-[9px] font-medium tracking-wide uppercase">Fechar</span>
+        <span class="text-[9px] font-semibold tracking-wide uppercase">Fechar</span>
     </button>
 </div>
 
@@ -576,6 +577,42 @@
               <option value="">Padrão Genérico</option>
           </select>
       </div>
+
+      <!-- Entidade Proprietária (Exibido para SuperAdmin) -->
+      <div id="theme-entidade-container" class="hidden p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/30">
+          <div class="flex items-center justify-between mb-1">
+              <label class="block text-xs font-bold text-cyan-500 dark:text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[16px]">domain</span>
+                  <span>Entidade Proprietária</span>
+              </label>
+              <span class="text-[9px] bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border border-cyan-500/30">SuperAdmin</span>
+          </div>
+          <p class="text-[11px] text-slate-500 dark:text-slate-400 mb-2">Defina a qual entidade pertence esta camada vetorial:</p>
+          <select id="theme-entidade-select" class="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-cyan-500/40 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 text-slate-900 dark:text-white text-xs font-medium">
+              <option value="">🌐 Geral / Compartilhada (Todas as Entidades)</option>
+          </select>
+      </div>
+
+      <!-- Opção de Compartilhamento com Outros Entes -->
+      <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
+          <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                  <span class="material-symbols-outlined text-[20px] text-cyan-500 dark:text-cyan-400">share</span>
+                  <div>
+                      <label for="theme-compartilhada-input" class="text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer">
+                          Compartilhar com outros Entes
+                      </label>
+                      <p id="theme-compartilhada-desc" class="text-[11px] text-cyan-600 dark:text-cyan-400 font-medium">
+                          Visível no catálogo Compartilhado para outras entidades deste município.
+                      </p>
+                  </div>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer shrink-0 ml-2">
+                  <input type="checkbox" id="theme-compartilhada-input" class="sr-only peer" checked onchange="window.updateCompartilhadaDesc && window.updateCompartilhadaDesc(this, 'theme-compartilhada-desc')">
+                  <div class="w-10 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500 shadow-inner"></div>
+              </label>
+          </div>
+      </div>
     </div>
 
     <!-- Sticky Footer -->
@@ -658,6 +695,43 @@
             <option value="">Padrão Genérico</option>
         </select>
       </div>
+
+      <!-- Entidade Proprietária (Exibido para SuperAdmin) -->
+      <div id="edit-theme-entidade-container" class="hidden mb-3 p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/30">
+          <div class="flex items-center justify-between mb-1">
+              <label class="block text-xs font-bold text-cyan-500 dark:text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[16px]">domain</span>
+                  <span>Entidade Proprietária</span>
+              </label>
+              <span class="text-[9px] bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border border-cyan-500/30">SuperAdmin</span>
+          </div>
+          <p class="text-[11px] text-slate-500 dark:text-slate-400 mb-2">Defina a qual entidade pertence esta camada vetorial:</p>
+          <select id="edit-theme-entidade-select" class="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-cyan-500/40 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 text-slate-900 dark:text-white text-xs font-medium">
+              <option value="">🌐 Geral / Compartilhada (Todas as Entidades)</option>
+          </select>
+      </div>
+
+      <!-- Opção de Compartilhamento com Outros Entes -->
+      <div id="edit-theme-compartilhada-container" class="mb-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
+          <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                  <span class="material-symbols-outlined text-[20px] text-cyan-500 dark:text-cyan-400">share</span>
+                  <div>
+                      <label for="edit-theme-compartilhada-input" class="text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer">
+                          Compartilhar com outros Entes
+                      </label>
+                      <p id="edit-theme-compartilhada-desc" class="text-[11px] text-cyan-600 dark:text-cyan-400 font-medium">
+                          Visível no catálogo Compartilhado para outras entidades deste município.
+                      </p>
+                  </div>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer shrink-0 ml-2">
+                  <input type="checkbox" id="edit-theme-compartilhada-input" class="sr-only peer" checked onchange="window.updateCompartilhadaDesc && window.updateCompartilhadaDesc(this, 'edit-theme-compartilhada-desc')">
+                  <div class="w-10 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500 shadow-inner"></div>
+              </label>
+          </div>
+      </div>
+
       <div>
         <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Título Principal da Feição</label>
         <select id="edit-theme-main-title" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">
@@ -804,6 +878,111 @@
     <div class="mt-6 flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
       <button onclick="closeEditRasterModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg font-medium transition-colors">Cancelar</button>
       <button onclick="saveEditedRaster()" class="px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Unificado de Adicionar Camada (Criar ou Importar) -->
+<div id="add-layer-modal" class="fixed inset-0 z-[100] bg-black/60 backdrop-blur-xs hidden flex items-center justify-center p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-slate-200 dark:border-slate-800 flex flex-col transition-all duration-300 transform scale-95">
+    <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center text-primary">
+          <span class="material-symbols-outlined text-[22px]">add_circle</span>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-slate-900 dark:text-white">Adicionar Camada</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Escolha como deseja adicionar uma nova camada</p>
+        </div>
+      </div>
+      <button onclick="closeAddLayerModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+        <span class="material-symbols-outlined text-[20px]">close</span>
+      </button>
+    </div>
+    
+    <div class="flex flex-col gap-3">
+      <!-- Opção 1: Criar Camada Vetorial em Branco -->
+      <button onclick="closeAddLayerModal(); openNewThemeModal()" class="flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-primary dark:hover:border-sky-500 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-left transition-all duration-200 group cursor-pointer">
+        <div class="w-11 h-11 rounded-xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <span class="material-symbols-outlined text-[26px]">edit_square</span>
+        </div>
+        <div class="flex-1">
+          <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200 group-hover:text-primary dark:group-hover:text-sky-400 transition-colors">Criar Camada em Branco</h4>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Defina nome, cor e geometria para desenhar e cadastrar feições manualmente no mapa.</p>
+        </div>
+      </button>
+
+      <!-- Opção 2: Importar Arquivo Vetorial (GeoJSON) -->
+      <button onclick="closeAddLayerModal(); triggerGeoJSONImport()" class="flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-primary dark:hover:border-sky-500 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-left transition-all duration-200 group cursor-pointer">
+        <div class="w-11 h-11 rounded-xl bg-sky-500/15 text-primary dark:text-sky-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <span class="material-symbols-outlined text-[26px]">upload_file</span>
+        </div>
+        <div class="flex-1">
+          <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200 group-hover:text-primary dark:group-hover:text-sky-400 transition-colors">Importar Camada Vetorial (GeoJSON)</h4>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Carregue feições espaciais prontas a partir de arquivos GeoJSON.</p>
+        </div>
+      </button>
+
+      <!-- Opção 3: Ortofoto Fatiada (XYZ Tiles Turbo) -->
+      <button onclick="closeAddLayerModal(); openSelectRasterModal()" class="flex items-start gap-4 p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500 hover:bg-emerald-500/10 text-left transition-all duration-200 group cursor-pointer">
+        <div class="w-11 h-11 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <span class="material-symbols-outlined text-[26px]">satellite_alt</span>
+        </div>
+        <div class="flex-1">
+          <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+            Ortofoto de Drone (Tiles XYZ)
+            <span class="text-[9px] bg-emerald-500 text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Raster</span>
+          </h4>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Selecione uma ortofoto já processada para exibir como camada base raster.</p>
+        </div>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal do Catálogo de Camadas Compartilhadas -->
+<div id="shared-layers-modal" class="fixed inset-0 z-[100] bg-black/60 backdrop-blur-xs hidden flex items-center justify-center p-3 sm:p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh] overflow-hidden transition-all duration-300 transform scale-95">
+    
+    <!-- Header -->
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/60 shrink-0">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center text-cyan-400">
+          <span class="material-symbols-outlined text-[24px]">hub</span>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            Camadas Compartilhadas
+            <span id="shared-layers-total-count" class="text-[11px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full font-bold border border-cyan-500/30">0 disponíveis</span>
+          </h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Ative dados de outras entidades para visualizar e cruzar informações no mapa</p>
+        </div>
+      </div>
+      <button onclick="closeSharedLayersCatalog()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+        <span class="material-symbols-outlined text-[20px]">close</span>
+      </button>
+    </div>
+
+    <!-- Search Input -->
+    <div class="px-5 py-3 border-b border-slate-200 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900">
+      <div class="relative w-full">
+        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">search</span>
+        <input id="shared-layers-search" type="text" placeholder="Buscar por entidade ou nome da camada..." oninput="onFilterSharedLayers(this.value)" class="w-full pl-9 pr-4 py-2 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary dark:text-white shadow-xs">
+      </div>
+    </div>
+
+    <!-- Accordion Body -->
+    <div id="shared-layers-accordion" class="p-4 sm:p-5 pb-14 overflow-y-auto flex-1 flex flex-col gap-3.5 custom-scrollbar">
+      <!-- Injected by JS -->
+    </div>
+
+    <!-- Sticky Footer -->
+    <div class="px-5 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 flex items-center justify-between shrink-0">
+      <div class="text-[11px] text-slate-400 flex items-center gap-1.5">
+        <span class="material-symbols-outlined text-[14px] text-cyan-400">info</span>
+        <span>Camadas ativadas ficam no seu painel lateral até serem desativadas no botão liga/desliga.</span>
+      </div>
+      <button onclick="closeSharedLayersCatalog()" class="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl font-bold text-xs shadow-md transition-colors cursor-pointer">Concluir</button>
     </div>
   </div>
 </div>
@@ -1490,6 +1669,14 @@
                 <h4 id="profile-user-name" class="text-base font-bold text-slate-800 dark:text-white">Usuário Logado</h4>
                 <p id="profile-user-role" class="text-sm text-slate-500 dark:text-slate-400">—</p>
                 <p id="profile-user-municipio" class="text-xs text-primary font-semibold mt-0.5"></p>
+                <div id="profile-user-entidade-container" class="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 dark:bg-cyan-950/40 border border-cyan-500/30 text-cyan-700 dark:text-cyan-300 shadow-xs">
+                    <span class="material-symbols-outlined text-[15px] text-cyan-600 dark:text-cyan-400">hub</span>
+                    <span id="profile-user-entidade" class="text-xs font-bold">—</span>
+                </div>
+                <div id="profile-user-ponto-focal-badge" class="hidden mt-1.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-sky-500/15 border border-sky-500/30 text-sky-600 dark:text-sky-400 text-[10.5px] font-extrabold shadow-xs">
+                    <span class="material-symbols-outlined text-[13px]">share_location</span>
+                    <span>Ponto Focal Interinstitucional</span>
+                </div>
             </div>
             
             <div class="border-t border-slate-200 dark:border-slate-800 pt-5">

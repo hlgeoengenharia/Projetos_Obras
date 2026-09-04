@@ -936,6 +936,14 @@
                 <h4 id="profile-user-name" class="text-base font-bold text-slate-800 dark:text-white">Usuário Logado</h4>
                 <p id="profile-user-role" class="text-sm text-slate-500 dark:text-slate-400">—</p>
                 <p id="profile-user-municipio" class="text-xs text-primary font-semibold mt-0.5"></p>
+                <div id="profile-user-entidade-container" class="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 dark:bg-cyan-950/40 border border-cyan-500/30 text-cyan-700 dark:text-cyan-300 shadow-xs">
+                    <span class="material-symbols-outlined text-[15px] text-cyan-600 dark:text-cyan-400">hub</span>
+                    <span id="profile-user-entidade" class="text-xs font-bold">—</span>
+                </div>
+                <div id="profile-user-ponto-focal-badge" class="hidden mt-1.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-sky-500/15 border border-sky-500/30 text-sky-600 dark:text-sky-400 text-[10.5px] font-extrabold shadow-xs">
+                    <span class="material-symbols-outlined text-[13px]">share_location</span>
+                    <span>Ponto Focal Interinstitucional</span>
+                </div>
             </div>
 
             <div class="border-t border-slate-200 dark:border-slate-800 pt-5">
@@ -2036,9 +2044,23 @@
         const nameEl = document.getElementById('profile-user-name');
         const roleEl = document.getElementById('profile-user-role');
         const munEl = document.getElementById('profile-user-municipio');
+        const entEl = document.getElementById('profile-user-entidade');
+        const pfBadge = document.getElementById('profile-user-ponto-focal-badge');
+
         if (munEl) munEl.textContent = sessionStorage.getItem('municipio_ativo_nome') || '';
         if (nameEl) nameEl.textContent = currentUserProfile.nome || 'Usuário';
         if (roleEl) roleEl.textContent = currentUserProfile.super_admin ? 'Administrador Geral' : 'Administrador';
+
+        const entNome = currentUserProfile.entidade || sessionStorage.getItem('user_entidade') || 'Prefeitura Municipal';
+        if (entEl) entEl.textContent = entNome;
+
+        if (pfBadge) {
+            if (currentUserProfile.ponto_focal) {
+                pfBadge.classList.remove('hidden');
+            } else {
+                pfBadge.classList.add('hidden');
+            }
+        }
     }
 
     window.changeTheme = function(theme) {
@@ -2327,6 +2349,45 @@
     let activeBuilderTabId = null;
 
     // Load forms from local storage and Supabase
+    function getEntitySigla(name) {
+        if (!name) return 'Público';
+        const raw = String(name).trim();
+        const lower = raw.toLowerCase();
+        if (lower === '' || lower === 'geral' || lower === 'pública' || lower === 'publica' || lower === 'público' || lower === 'publico' || lower.includes('geral /') || lower.includes('geral/')) return 'Público';
+        if (lower.includes('prefeitura') || lower.includes('municipal') || lower.includes('município') || lower.includes('municipio')) return 'Município';
+        if (lower.includes('ministério público') || lower.includes('ministerio publico') || lower === 'mpf') return 'MPF';
+        if (lower.includes('polícia federal') || lower.includes('policia federal') || lower === 'pf') return 'PF';
+        if (lower.includes('patrimônio da união') || lower.includes('patrimonio da uniao') || lower === 'spu') return 'SPU';
+        return raw;
+    }
+    window.getEntitySigla = getEntitySigla;
+
+    function getFormEntity(form) {
+        if (!form) return 'Geral';
+        if (form.entidade) return form.entidade;
+        if (form.schema && form.schema.entidade) return form.schema.entidade;
+        
+        let themesList = [];
+        try {
+            const saved = localStorage.getItem('constructive_themes');
+            if (saved) themesList = JSON.parse(saved);
+        } catch(e) {}
+        
+        const found = themesList.find(t => String(t.formId) === String(form.id) || (t.name && form.name && t.name.trim().toLowerCase() === form.name.trim().toLowerCase()));
+        if (found) {
+            const ent = ((found.metadata && found.metadata.entidade) || found.entidade || '').trim();
+            if (ent) return ent;
+        }
+        
+        const lower = (form.name || '').toLowerCase();
+        if (lower.includes('mpf') || lower.includes('ministério público')) return 'Ministério Público Federal';
+        if (lower.includes('spu') || lower.includes('lpm') || lower.includes('ltm') || lower.includes('patrimônio da união')) return 'Superintendência do Patrimônio da União';
+        if (lower.includes('municipal') || lower.includes('prefeitura') || lower.includes('ctm') || lower.includes('obras')) return 'Prefeitura Municipal';
+        if (lower.includes('pf') || lower.includes('polícia federal')) return 'Polícia Federal';
+        
+        return 'Geral';
+    }
+
     async function loadForms() {
       if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         try {
@@ -2428,17 +2489,38 @@
         return;
       }
       
+      const isSuperAdmin = !!(currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin));
+      const userEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome) || '').trim();
+
+      const visibleForms = forms.filter(form => {
+        if (isSuperAdmin) return true;
+        const fEnt = getFormEntity(form);
+        if (!fEnt || fEnt === 'Geral' || fEnt.toLowerCase() === 'público' || fEnt.toLowerCase() === 'publico') return true;
+        if (!userEntidade) return true;
+        return fEnt.toLowerCase() === userEntidade.toLowerCase();
+      });
+
+      if (visibleForms.length === 0) {
+        container.innerHTML = '<div class="text-slate-500 text-sm py-4">Nenhum formulário cadastrado para a sua entidade.</div>';
+        return;
+      }
+      
       let html = '';
-      forms.forEach(form => {
+      visibleForms.forEach(form => {
         let fieldCount = 0;
         if(form.tabs) {
            form.tabs.forEach(t => fieldCount += t.fields.length);
         }
+        const fEnt = getFormEntity(form);
+        const sigla = getEntitySigla(fEnt);
         
         html += `
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
             <div class="flex-1 min-w-0">
-              <h3 class="font-bold text-slate-900 dark:text-white uppercase tracking-wide text-sm sm:text-base truncate">${form.name}</h3>
+              <div class="flex items-center gap-2">
+                <h3 class="font-bold text-slate-900 dark:text-white uppercase tracking-wide text-sm sm:text-base truncate">${form.name}</h3>
+                ${sigla ? `<span class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[9px] font-bold rounded bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 truncate max-w-[120px]" title="Entidade: ${fEnt}"><span class="material-symbols-outlined text-[11px]">hub</span><span>${sigla}</span></span>` : ''}
+              </div>
               <p class="text-xs sm:text-sm text-slate-500 mt-0.5">${fieldCount} campo(s) distribuído(s) em ${form.tabs ? form.tabs.length : 0} aba(s)</p>
             </div>
             <div class="flex items-center gap-1 sm:gap-1.5 self-end sm:self-auto bg-slate-50 dark:bg-slate-900/60 sm:bg-transparent p-1 sm:p-0 rounded-xl border border-slate-100 dark:border-slate-800 sm:border-0 shrink-0">
@@ -3621,10 +3703,14 @@
         return;
       }
 
-      const existingIndex = forms.findIndex(f => f.id === currentFormId);
+      const existingForm = existingIndex >= 0 ? forms[existingIndex] : null;
+      const userEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome) || '').trim();
+      const formEntidade = (existingForm && (existingForm.entidade || getFormEntity(existingForm))) || userEntidade || 'Geral';
+
       const formData = {
         id: currentFormId,
         name: name,
+        entidade: formEntidade,
         tabs: JSON.parse(JSON.stringify(builderTabs)),
         statsConfig: window._currentFormStatsConfig || null,
         updatedAt: new Date().toISOString()
@@ -4820,6 +4906,17 @@
                 dbRasters = rastersData || [];
             }
 
+            const isSuperAdmin = !!(currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin));
+            const userEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome) || '').trim().toLowerCase();
+
+            // Filtro de Segurança Institucional: Ente comum só vê as suas ortofotos ou ortofotos públicas/gerais
+            if (!isSuperAdmin && userEntidade) {
+                dbRasters = dbRasters.filter(r => {
+                    const rEnt = (r.entidade || 'Prefeitura Municipal').trim().toLowerCase();
+                    return rEnt === userEntidade || rEnt === 'geral' || rEnt === 'público' || rEnt === 'publico';
+                });
+            }
+
             // Separa arquivos normais avulsos (PDF, DWG, TIF, etc.) ignorando pastas de tiles e imagens internas
             const individualFiles = (storageFiles || []).filter(f => {
                 if (!f.name || f.name.startsWith('.')) return false;
@@ -4859,6 +4956,10 @@
                         }
                     }
 
+                    const isCompartilhada = r.compartilhada === true;
+                    const rEnt = r.entidade || 'Prefeitura Municipal';
+                    const rSigla = (typeof getEntitySigla === 'function') ? getEntitySigla(rEnt) : rEnt;
+
                     const botoesAcaoHtml = isEditing ? `
                         <div class="flex items-center gap-2">
                             <button type="button" onclick="window.cancelarEdicaoRaster('${r.id}')" class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-sm">
@@ -4872,6 +4973,9 @@
                         <div class="flex items-center gap-2">
                             <button onclick="navigator.clipboard.writeText('${r.url_imagem}').then(() => showStorageToast('Link dos Tiles copiado!'))" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 shadow-xs" title="Copiar URL">
                                 <span class="material-symbols-outlined text-[15px]">content_copy</span> Copiar Link
+                            </button>
+                            <button type="button" onclick="window.abrirModalAcessosRaster('${r.id}', '${r.nome}')" class="px-3 py-1.5 bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-700 rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-xs" title="Gerenciar Acessos Externos (Pontos Focais de outros entes)">
+                                <span class="material-symbols-outlined text-[15px] text-cyan-600 dark:text-cyan-400">lock_person</span> Acessos
                             </button>
                             <button type="button" onclick="window.iniciarEdicaoRaster('${r.id}')" class="px-3 py-1.5 bg-white hover:bg-sky-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-400 border border-slate-300 dark:border-slate-600 rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-xs" title="Editar Ortofoto">
                                 <span class="material-symbols-outlined text-[15px] text-sky-600 dark:text-sky-400">edit</span> Editar
@@ -4895,6 +4999,14 @@
                                     ` : `
                                         <span class="font-bold text-slate-800 dark:text-slate-100 truncate text-sm" title="${r.nome}">${r.nome}</span>
                                     `}
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 font-bold text-[10px] border border-cyan-500/30" title="Entidade: ${rEnt}">
+                                        <span class="material-symbols-outlined text-[11px]">hub</span>
+                                        ${rSigla}
+                                    </span>
+                                    ${isCompartilhada 
+                                        ? `<span class="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] rounded-full border border-emerald-300/40 flex items-center gap-1" title="Compartilhada com outros órgãos parceiros"><span class="material-symbols-outlined text-[12px]">share</span>Compartilhada</span>` 
+                                        : `<span class="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold text-[10px] rounded-full border border-slate-300/40 dark:border-slate-700 flex items-center gap-1" title="Restrita a esta entidade"><span class="material-symbols-outlined text-[12px]">lock</span>Privada</span>`
+                                    }
                                     <span class="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] rounded-full border border-emerald-300/40">XYZ TILES</span>
                                     ${dateVal ? `<span class="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-bold text-[10px] rounded-full border border-indigo-300/40 flex items-center gap-1"><span class="material-symbols-outlined text-[12px]">calendar_today</span>${dateVal.split('-').reverse().join('/')}</span>` : ''}
                                 </div>
@@ -4904,8 +5016,16 @@
                             </div>
                         </div>
 
-                        <!-- Controles: Checkbox Comparador, Data do Voo e Ações -->
+                        <!-- Controles: Checkbox Compartilhamento, Comparador, Data do Voo e Ações -->
                         <div class="flex items-center gap-2.5 shrink-0 self-end lg:self-center flex-wrap">
+                            ${isEditing ? `
+                            <!-- Switch de Compartilhamento na Edição -->
+                            <label class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all bg-white dark:bg-slate-800 border-cyan-300 dark:border-cyan-600 cursor-pointer text-cyan-900 dark:text-cyan-200" title="Marque para permitir que esta ortofoto seja visualizada por órgãos parceiros autorizados">
+                                <input type="checkbox" id="raster-compartilhada-${r.id}" ${isCompartilhada ? 'checked' : ''} class="w-4 h-4 rounded text-cyan-600 focus:ring-cyan-500 cursor-pointer">
+                                <span>Compartilhar</span>
+                            </label>
+                            ` : ''}
+
                             <!-- Checkbox para a Ferramenta Temporal (Marcável apenas após abrir edição) -->
                             <label class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${isEditing ? 'bg-white dark:bg-slate-800 border-indigo-300 dark:border-indigo-600 cursor-pointer text-indigo-900 dark:text-indigo-200' : 'bg-slate-100/80 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700/60 text-slate-500 opacity-80 cursor-not-allowed'}" title="${isEditing ? 'Marque para incluir esta ortofoto no Comparador Temporal' : 'Clique em Editar para alterar a inclusão no Comparador'}">
                                 <input type="checkbox" id="raster-swipe-${r.id}" ${usarNoSwipe ? 'checked' : ''} ${!isEditing ? 'disabled' : ''} class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 ${!isEditing ? 'cursor-not-allowed' : 'cursor-pointer'}">
@@ -4994,10 +5114,12 @@
         const dateInput = document.getElementById(`raster-date-${rasterId}`);
         const swipeCheckbox = document.getElementById(`raster-swipe-${rasterId}`);
         const nameInput = document.getElementById(`raster-nome-${rasterId}`);
+        const compartilhadaCheckbox = document.getElementById(`raster-compartilhada-${rasterId}`);
 
         const dateVal = dateInput ? dateInput.value : null;
         const usarNoSwipe = swipeCheckbox ? swipeCheckbox.checked : true;
         const nomeVal = nameInput ? nameInput.value.trim() : null;
+        const compartilhadaVal = compartilhadaCheckbox ? compartilhadaCheckbox.checked : false;
 
         // Persistência local imediata como garantia
         if (dateVal) {
@@ -5011,7 +5133,8 @@
             // Tenta update completo (caso as colunas existam no Supabase)
             const updatePayload = {
                 data_imagem: dateVal || null,
-                usar_no_swipe: usarNoSwipe
+                usar_no_swipe: usarNoSwipe,
+                compartilhada: compartilhadaVal
             };
             if (nomeVal) updatePayload.nome = nomeVal;
 
@@ -5273,9 +5396,10 @@
         const fileExt = sampleFile && sampleFile.name.endsWith('.webp') ? 'webp' : 'png';
         const tileTemplateUrl = `${baseUrl}/{z}/{x}/{y}.${fileExt}`;
 
+        let userEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || 'Prefeitura Municipal';
         if (activeMunicipioId) {
             try {
-                // Tenta insert com campos novos
+                // Tenta insert com campos novos (entidade, compartilhada)
                 const { error: insError } = await supabaseClient.from('imagens_raster').insert({
                     municipio_id: activeMunicipioId,
                     nome: cleanLayerName,
@@ -5285,7 +5409,9 @@
                     zoom_min: 14,
                     zoom_max: detectedMaxZoom,
                     opacidade: 0.9,
-                    visivel: false
+                    visivel: false,
+                    entidade: userEntidade,
+                    compartilhada: false
                 });
 
                 if (insError) {
@@ -5369,11 +5495,39 @@
         const container = document.getElementById('spatial-rules-list');
         if (!container) return;
 
-        if (spatialRules.length === 0) {
+        const isSuperAdmin = !!(currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin));
+        const userEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome) || '').trim();
+
+        function getRuleEntityLocal(rule) {
+            if (rule && rule.entidade) return rule.entidade;
+            let themesList = [];
+            try {
+                const saved = localStorage.getItem('constructive_themes');
+                if (saved) themesList = JSON.parse(saved);
+            } catch(e) {}
+            if (rule && rule.targetLayer) {
+                const t = themesList.find(x => String(x.id) === String(rule.targetLayer));
+                if (t) {
+                    const ent = ((t.metadata && t.metadata.entidade) || t.entidade || '').trim();
+                    if (ent) return ent;
+                }
+            }
+            return 'Geral';
+        }
+
+        const visibleRules = (spatialRules || []).filter(rule => {
+            if (isSuperAdmin) return true;
+            const rEnt = getRuleEntityLocal(rule);
+            if (!rEnt || rEnt === 'Geral' || rEnt.toLowerCase() === 'público' || rEnt.toLowerCase() === 'publico') return true;
+            if (!userEntidade) return true;
+            return rEnt.toLowerCase() === userEntidade.toLowerCase();
+        });
+
+        if (visibleRules.length === 0) {
             container.innerHTML = `
                 <div class="col-span-1 md:col-span-2 text-center py-10 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50/50 dark:bg-slate-900/30">
                     <span class="material-symbols-outlined text-4xl text-slate-400 mb-2">hub</span>
-                    <h4 class="text-sm font-bold text-slate-700 dark:text-slate-300">Nenhuma Análise Espacial Cadastrada</h4>
+                    <h4 class="text-sm font-bold text-slate-700 dark:text-slate-300">Nenhuma Análise Espacial Cadastrada para a sua Entidade</h4>
                     <p class="text-xs text-slate-500 max-w-sm mx-auto mt-1">Crie cruzamentos espaciais entre camadas para detectar sobreposições e confrontações no mapa.</p>
                 </div>
             `;
@@ -5388,9 +5542,11 @@
         };
 
         let html = '';
-        spatialRules.forEach(rule => {
+        visibleRules.forEach(rule => {
             const opInfo = opLabels[rule.opType] || { label: rule.opType, icon: 'hub', color: 'text-slate-500 bg-slate-50 border-slate-200' };
             const bufferDetail = rule.opType === 'buffer' ? ` (${rule.bufferDist || 30}m)` : '';
+            const rEnt = getRuleEntityLocal(rule);
+            const sigla = getEntitySigla(rEnt);
 
             html += `
                 <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between gap-3 group relative overflow-hidden cursor-pointer" onclick="window.openSpatialRuleModal('${rule.id}')">
@@ -5402,7 +5558,10 @@
                                 <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${opInfo.color} uppercase tracking-wider mb-1.5">
                                     <span class="material-symbols-outlined text-[13px]">${opInfo.icon}</span> ${opInfo.label}${bufferDetail}
                                 </span>
-                                <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">${rule.name || 'Sem título'}</h3>
+                                <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                                    <span>${rule.name || 'Sem título'}</span>
+                                    ${sigla ? `<span class="inline-flex items-center px-1.5 py-0.2 text-[8.5px] font-bold rounded bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30" title="Entidade: ${rEnt}">${sigla}</span>` : ''}
+                                </h3>
                             </div>
                             <div class="flex items-center gap-1" onclick="event.stopPropagation()">
                                 <button onclick="window.openSpatialRuleModal('${rule.id}')" class="p-1.5 text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" title="Editar">
@@ -5525,6 +5684,177 @@
         }
     }
     window.loadUsersPanel = loadUsersPanel;
+
+    // Modal de Gestão de Acessos Externos para Ortofoto (Pontos Focais de outros órgãos)
+    window.abrirModalAcessosRaster = async function(rasterId, rasterNome) {
+        let modal = document.getElementById('modal-acessos-raster');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'modal-acessos-raster';
+            modal.className = 'fixed inset-0 bg-black/60 z-[300] flex items-center justify-center backdrop-blur-sm p-4';
+            modal.innerHTML = `
+                <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
+                    <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/40">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-cyan-500/15 text-cyan-500 flex items-center justify-center shrink-0 border border-cyan-500/20">
+                                <span class="material-symbols-outlined text-[22px]">lock_person</span>
+                            </div>
+                            <div>
+                                <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white" id="modal-acessos-raster-title">Acessos Externos</h3>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">Pontos Focais de outros órgãos autorizados a visualizar esta ortofoto</p>
+                            </div>
+                        </div>
+                        <button onclick="document.getElementById('modal-acessos-raster').classList.add('hidden')" class="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                            <span class="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
+
+                    <div id="modal-acessos-raster-body" class="p-6 overflow-y-auto space-y-4 flex-1">
+                        <div class="text-center py-8 text-xs text-slate-400">Carregando parceiros...</div>
+                    </div>
+
+                    <div class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 flex items-center justify-between">
+                        <span class="text-[11px] text-slate-400">Apenas servidores marcados como Ponto Focal aparecem aqui.</span>
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="document.getElementById('modal-acessos-raster').classList.add('hidden')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800">Fechar</button>
+                            <button type="button" id="btn-salvar-acessos-raster" class="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-bold shadow-md flex items-center gap-1.5">
+                                <span class="material-symbols-outlined text-[16px]">save</span> Salvar Permissões
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        } else {
+            modal.classList.remove('hidden');
+        }
+
+        const titleEl = document.getElementById('modal-acessos-raster-title');
+        if (titleEl) titleEl.textContent = `Acessos Externos — ${rasterNome}`;
+
+        const bodyEl = document.getElementById('modal-acessos-raster-body');
+        bodyEl.innerHTML = '<div class="text-center py-8 text-xs text-slate-400"><div class="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin inline-block mr-2"></div>Carregando parceiros...</div>';
+
+        const myEntidade = (currentUserProfile?.entidade || currentUserProfile?.entidade_nome || '').trim().toLowerCase();
+        
+        try {
+            const { data: membrosData } = await supabaseClient
+                .from('municipio_membros')
+                .select('user_id, entidade, cargo, profiles!user_id(id, nome, email, ponto_focal)')
+                .eq('municipio_id', activeMunicipioId || sessionStorage.getItem('municipio_ativo'));
+
+            let permsMap = {};
+            try {
+                const { data: permsData } = await supabaseClient
+                    .from('permissoes_raster')
+                    .select('*')
+                    .eq('raster_id', rasterId);
+                (permsData || []).forEach(p => { permsMap[p.user_id] = p.pode_ver; });
+            } catch(e) {}
+
+            const uniquePoints = new Map();
+            (membrosData || []).forEach(m => {
+                const p = m.profiles;
+                if (!p || !p.ponto_focal) return;
+                const pEnt = (m.entidade || '').trim();
+                if (pEnt.toLowerCase() === myEntidade) return;
+                if (!uniquePoints.has(p.id)) {
+                    uniquePoints.set(p.id, {
+                        id: p.id,
+                        nome: p.nome || '(Sem nome)',
+                        email: p.email || '',
+                        entidade: pEnt || 'Outro Ente',
+                        cargo: m.cargo || '',
+                        pode_ver: !!permsMap[p.id]
+                    });
+                }
+            });
+
+            const pontFocais = Array.from(uniquePoints.values());
+
+            if (pontFocais.length === 0) {
+                bodyEl.innerHTML = `
+                    <div class="text-center py-10 text-xs text-slate-400 italic">
+                        <span class="material-symbols-outlined text-[36px] text-slate-500 mb-2">person_off</span>
+                        <p class="font-bold text-slate-600 dark:text-slate-300">Nenhum Ponto Focal encontrado em outros órgãos parceiros para este município.</p>
+                        <p class="mt-1 max-w-sm mx-auto text-[11px] text-slate-400">Para que servidores de outros órgãos possam receber esta ortofoto, o Administrador daquele órgão deve marcá-los como "Ponto Focal Interinstitucional" na aba Usuários.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const porEntidade = {};
+            pontFocais.forEach(pf => {
+                if (!porEntidade[pf.entidade]) porEntidade[pf.entidade] = [];
+                porEntidade[pf.entidade].push(pf);
+            });
+
+            let html = '';
+            Object.keys(porEntidade).sort().forEach(entNome => {
+                const lista = porEntidade[entNome];
+                const sigla = (typeof getEntitySigla === 'function') ? getEntitySigla(entNome) : entNome;
+                html += `
+                    <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden">
+                        <div class="px-4 py-2.5 bg-slate-100 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
+                            <span class="text-xs font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                                <span class="material-symbols-outlined text-[16px] text-cyan-500">hub</span>
+                                ${entNome} (${sigla})
+                            </span>
+                            <span class="text-[10px] font-bold text-slate-400">${lista.length} ponto${lista.length !== 1 ? 's' : ''} focal</span>
+                        </div>
+                        <div class="p-3 divide-y divide-slate-100 dark:divide-slate-800">
+                            ${lista.map(u => `
+                                <div class="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="font-bold text-xs text-slate-900 dark:text-white truncate">${u.nome}</div>
+                                        <div class="text-[11px] text-slate-400 truncate">${u.email} ${u.cargo ? '• ' + u.cargo : ''}</div>
+                                    </div>
+                                    <label class="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-700 dark:text-slate-300">
+                                        <input type="checkbox" data-pf-raster-user="${u.id}" ${u.pode_ver ? 'checked' : ''} class="w-4 h-4 text-cyan-600 rounded focus:ring-cyan-500">
+                                        <span>Autorizar Acesso</span>
+                                    </label>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            });
+
+            bodyEl.innerHTML = html;
+
+            const saveBtn = document.getElementById('btn-salvar-acessos-raster');
+            saveBtn.onclick = async () => {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<span class="material-symbols-outlined text-[15px] animate-spin">refresh</span> Salvando...';
+                
+                const rows = [];
+                bodyEl.querySelectorAll('[data-pf-raster-user]').forEach(cb => {
+                    const uId = cb.getAttribute('data-pf-raster-user');
+                    rows.push({
+                        user_id: uId,
+                        raster_id: rasterId,
+                        pode_ver: cb.checked,
+                        concedido_por: currentUserProfile?.id || null
+                    });
+                });
+
+                try {
+                    const { error } = await supabaseClient.from('permissoes_raster').upsert(rows, { onConflict: 'user_id,raster_id' });
+                    if (error) throw error;
+                    showStorageToast('Acessos externos da ortofoto atualizados com sucesso!');
+                    modal.classList.add('hidden');
+                } catch(e) {
+                    alert('Erro ao salvar acessos da ortofoto: ' + e.message);
+                } finally {
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = '<span class="material-symbols-outlined text-[16px]">save</span> Salvar Permissões';
+                }
+            };
+
+        } catch(e) {
+            bodyEl.innerHTML = `<div class="p-6 text-center text-rose-500 text-xs font-bold">Erro ao carregar pontos focais: ${e.message}</div>`;
+        }
+    };
 
     // Mocks for Form Preview Mode
     window.saveFeatureData = async function() {

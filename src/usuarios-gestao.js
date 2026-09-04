@@ -25,12 +25,24 @@
         rejeitado: 'Rejeitado'
     };
 
+    function getEntitySigla(name) {
+        if (!name) return 'Município';
+        const n = name.trim().toLowerCase();
+        if (n.includes('mpf') || n.includes('ministério público')) return 'MPF';
+        if (n.includes('polícia federal') || n.includes('policia federal') || n === 'pf') return 'PF';
+        if (n.includes('spu') || n.includes('patrimônio da união')) return 'SPU';
+        if (n.includes('prefeitura') || n.includes('município') || n.includes('municipio') || n === 'pmc') return 'Município';
+        return name;
+    }
+
     // Estado interno do painel
     let _allMembros = [];
     let _allTemas = [];
     let _allForms = {};
     let _allCamadaPerms = {};
     let _allAbaPerms = {};
+    let _allRasters = [];
+    let _allRasterPerms = {};
     let _allMunicipios = [];
     let _currentUserProfile = null;
     let _currentUserMembros = [];
@@ -66,18 +78,20 @@
             const currentUserId = _currentUserProfile ? _currentUserProfile.id : null;
 
             // 1. Carrega dados básicos em paralelo
-            const [membrosRes, temasRes, formsRes, permsCamadaRes, permsAbaRes, entidadesRes, minhasRes, munRes] = await Promise.all([
+            const [membrosRes, temasRes, formsRes, permsCamadaRes, permsAbaRes, entidadesRes, minhasRes, munRes, rastersRes, permsRasterRes] = await Promise.all([
                 supabaseClient
                     .from('municipio_membros')
-                    .select('id, user_id, municipio_id, papel, status, entidade, cargo, solicitado_em, profiles!user_id(id, nome, email, super_admin), municipios(id, nome, uf)')
+                    .select('id, user_id, municipio_id, papel, status, entidade, cargo, solicitado_em, profiles!user_id(id, nome, email, super_admin, ponto_focal), municipios(id, nome, uf)')
                     .order('solicitado_em', { ascending: false }),
-                supabaseClient.from('temas').select('id, nome, municipio_id, tipo_cadastro, cor, icone'),
+                supabaseClient.from('temas').select('*'),
                 supabaseClient.from('forms').select('id, title, schema'),
                 supabaseClient.from('permissoes_camada').select('*'),
                 supabaseClient.from('permissoes_aba').select('*'),
-                supabaseClient.from('entidades_padrao').select('nome, tipo'),
+                supabaseClient.from('entidades_padrao').select('nome, tipo, sigla'),
                 currentUserId ? supabaseClient.from('municipio_membros').select('*').eq('user_id', currentUserId) : Promise.resolve({ data: [] }),
-                supabaseClient.from('municipios').select('id, nome, uf').eq('ativo', true).order('nome')
+                supabaseClient.from('municipios').select('id, nome, uf').eq('ativo', true).order('nome'),
+                supabaseClient.from('imagens_raster').select('id, nome, tipo, data_imagem, municipio_id, entidade, compartilhada'),
+                supabaseClient.from('permissoes_raster').select('*')
             ]);
 
             if (membrosRes.error) throw membrosRes.error;
@@ -86,6 +100,11 @@
             _allTemas = temasRes.data || [];
             _currentUserMembros = minhasRes.data || [];
             _allMunicipios = munRes.data || [];
+            _allRasters = rastersRes?.data || [];
+            _allRasterPerms = {};
+            (permsRasterRes?.data || []).forEach(p => {
+                _allRasterPerms[`${p.user_id}:${p.raster_id}`] = p;
+            });
 
             // Mapeia tipos de entidades
             _entidadesTipos = {};
@@ -189,6 +208,7 @@
                 userMap.set(uid, {
                     user_id: uid,
                     profile: m.profiles || {},
+                    ponto_focal: !!(m.profiles && m.profiles.ponto_focal),
                     entidade: m.entidade,
                     cargo: m.cargo,
                     papel: m.papel,
@@ -198,6 +218,7 @@
             }
             const userObj = userMap.get(uid);
             userObj.membros.push(m);
+            if (m.profiles?.ponto_focal) userObj.ponto_focal = true;
             // Se houver algum vínculo aprovado ou admin, prioriza na exibição
             if (m.status === 'aprovado') userObj.status = 'aprovado';
             if (m.papel === 'admin') userObj.papel = 'admin';
@@ -250,7 +271,7 @@
         const userId = userObj.user_id;
         const perfil = userObj.profile || {};
         const entidadeNome = (userObj.entidade || 'Não informada').trim();
-        const tipoEntidade = _entidadesTipos[entidadeNome] || (entidadeNome.toLowerCase().includes('prefeitura') ? 'municipal' : 'externo');
+        const tipoEntidade = _entidadesTipos[entidadeNome] || (entidadeNome.toLowerCase().includes('prefeitura') || entidadeNome.toLowerCase().includes('municipal') ? 'municipal' : 'externo');
         const isMunicipal = (tipoEntidade === 'municipal');
         const isEditing = _editingUserIds.has(userId);
 
@@ -258,7 +279,15 @@
         const todosMunIdsDoUser = new Set(userObj.membros.map(mb => mb.municipio_id));
 
         // Define o município selecionado para este usuário no card
-        if (!_userSelectedMunMap[userId]) {
+        if (isMunicipal) {
+            // Usuários municipais são 100% restritos ao seu município de cadastro
+            const munOrigem = userObj.membros[0]?.municipio_id || Array.from(todosMunIdsDoUser)[0];
+            if (munOrigem) {
+                _userSelectedMunMap[userId] = munOrigem;
+            } else if (_allMunicipios.length > 0) {
+                _userSelectedMunMap[userId] = _allMunicipios[0].id;
+            }
+        } else if (!_userSelectedMunMap[userId]) {
             if (_targetMunicipioId && todosMunIdsDoUser.has(_targetMunicipioId)) {
                 _userSelectedMunMap[userId] = _targetMunicipioId;
             } else if (munIdsAprovados.size > 0) {
@@ -287,8 +316,41 @@
             ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' 
             : (userObj.status === 'pendente' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20');
 
+        // Determina a entidade do usuário deste card
+        const userEntidadeRaw = (userObj.entidade || userObj.profile?.entidade || (userObj.membros && userObj.membros[0]?.entidade) || 'Prefeitura Municipal').trim();
+        const userSigla = getEntitySigla(userEntidadeRaw);
+
+        let localMeta = {};
+        try {
+            localMeta = JSON.parse(localStorage.getItem('constructive_themes_meta') || '{}');
+        } catch(e) {}
+
+        function getThemeEntity(t) {
+            if (t.metadata && t.metadata.entidade) return t.metadata.entidade.trim();
+            if (localMeta[t.id] && localMeta[t.id].entidade) return localMeta[t.id].entidade.trim();
+            if (t.entidade) return t.entidade.trim();
+            return 'Prefeitura Municipal';
+        }
+
         // Renderiza camadas do município selecionado
-        const temasDoMunicipio = _allTemas.filter(t => t.municipio_id === selectedMunId);
+        // FILTRO DE SEGURANÇA E ISOLAMENTO INSTITUCIONAL:
+        // No card de cada usuário aparecem estritamente as camadas referentes à SUA entidade,
+        // ou camadas de outros órgãos onde este usuário já possui autorização pontual concedida.
+        const temasDoMunicipio = _allTemas.filter(t => {
+            if (t.municipio_id && t.municipio_id !== selectedMunId) return false;
+            
+            const tEntRaw = getThemeEntity(t);
+            const tSigla = getEntitySigla(tEntRaw);
+
+            // A camada pertence à entidade do usuário deste card
+            if (tSigla === userSigla) return true;
+
+            // Se for camada compartilhada de outro ente, só aparece se o usuário tiver autorização pontual
+            const userHasPerm = _allCamadaPerms[`${userId}:${t.id}`]?.pode_ver;
+            if (userHasPerm) return true;
+            
+            return false;
+        });
 
         const camadasHtml = temasDoMunicipio.map(tema => {
             const userCamadaPerm = _allCamadaPerms[`${userId}:${tema.id}`] || { pode_ver: false, pode_editar: false, pode_excluir: false };
@@ -299,6 +361,10 @@
 
             const formVinculado = (tema.tipo_cadastro && tema.tipo_cadastro !== 'padrao') ? _allForms[tema.tipo_cadastro] : null;
             const numAbas = (formVinculado && formVinculado.tabs) ? formVinculado.tabs.length : 0;
+
+            const tEntRaw = getThemeEntity(tema);
+            const tSigla = getEntitySigla(tEntRaw);
+            const isFromOtherEntity = tSigla !== userSigla;
 
             let abasHtml = '';
             if (numAbas > 0) {
@@ -341,6 +407,10 @@
                         <div class="flex items-center gap-2.5 min-w-0 flex-1">
                             <span class="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm border border-white/40" style="background-color: ${tema.cor || '#0ea5e9'}"></span>
                             <span class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">${tema.nome}</span>
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-extrabold rounded ${isFromOtherEntity ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30' : 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30'} shrink-0" title="Entidade: ${tEntRaw}${isFromOtherEntity ? ' (Compartilhada de outro órgão)' : ''}">
+                                <span class="material-symbols-outlined text-[10px]">${isFromOtherEntity ? 'share' : 'hub'}</span>
+                                ${tSigla}${isFromOtherEntity ? ' (Compartilhada)' : ''}
+                            </span>
                             ${numAbas > 0 ? `
                                 <span class="text-[11px] font-semibold text-sky-700 dark:text-sky-400 bg-sky-100 dark:bg-sky-950/60 px-2 py-0.5 rounded-full border border-sky-300 dark:border-sky-800 flex items-center gap-0.5">
                                     ${numAbas} ${numAbas === 1 ? 'aba' : 'abas'}
@@ -367,15 +437,75 @@
             `;
         }).join('');
 
-        // Seletor Interativo de Municípios Atribuídos
+        // Ortofotos do município selecionado (filtradas estritamente pela entidade do usuário)
+        const rastersDoMunicipio = (_allRasters || []).filter(r => {
+            if (r.municipio_id && r.municipio_id !== selectedMunId) return false;
+            const rEntRaw = (r.entidade || 'Prefeitura Municipal').trim();
+            const rSigla = getEntitySigla(rEntRaw);
+
+            // A ortofoto pertence à entidade do usuário
+            if (rSigla === userSigla) return true;
+
+            // Ou o usuário tem autorização pontual concedida
+            const userHasPerm = _allRasterPerms[`${userId}:${r.id}`]?.pode_ver;
+            if (userHasPerm) return true;
+
+            return false;
+        });
+
+        const ortofotosHtml = rastersDoMunicipio.map(r => {
+            const userRasterPerm = _allRasterPerms[`${userId}:${r.id}`] || { pode_ver: false };
+            const podeVerRaster = !!userRasterPerm.pode_ver;
+            let dateStr = '';
+            if (r.data_imagem) {
+                dateStr = r.data_imagem.split('-').reverse().join('/');
+            } else if (r.nome) {
+                const m = r.nome.match(/(\d{2})[-/](\d{2})[-/](\d{4})/);
+                if (m) dateStr = `${m[1]}/${m[2]}/${m[3]}`;
+            }
+
+            const rEntRaw = (r.entidade || 'Prefeitura Municipal').trim();
+            const rSigla = getEntitySigla(rEntRaw);
+            const isOtherRaster = rSigla !== userSigla;
+
+            return `
+                <div class="flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xs hover:border-slate-300 dark:hover:border-slate-600 transition-colors" data-raster-id="${r.id}">
+                    <div class="flex items-center gap-3 min-w-0 pr-2">
+                        <div class="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-500 flex items-center justify-center shrink-0 border border-emerald-500/20">
+                            <span class="material-symbols-outlined text-[18px]">satellite</span>
+                        </div>
+                        <div class="flex flex-col min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate" title="${r.nome}">${r.nome}</span>
+                                <span class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[8.5px] font-extrabold rounded ${isOtherRaster ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30' : 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30'} shrink-0">
+                                    <span class="material-symbols-outlined text-[10px]">${isOtherRaster ? 'share' : 'hub'}</span>
+                                    ${rSigla}${isOtherRaster ? ' (Compartilhada)' : ''}
+                                </span>
+                                ${dateStr ? `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">${dateStr}</span>` : ''}
+                            </div>
+                            <span class="text-[10px] text-slate-400 font-medium">${r.tipo === 'xyz_tiles' ? 'Ortofoto • XYZ Tiles' : 'GeoTIFF • Imagem'}</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 shrink-0">
+                        <label class="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 ${isEditing ? 'cursor-pointer' : 'cursor-default'}">
+                            <input type="checkbox" class="raster-ver-check rounded border-slate-400 dark:border-slate-500 text-emerald-600 focus:ring-emerald-500 w-4 h-4" ${podeVerRaster ? 'checked' : ''} ${!isEditing ? 'disabled' : ''}>
+                            Ver Ortofoto
+                        </label>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Seletor de Municípios Atribuídos
         let atribuicaoMunicipiosHtml = '';
-        if (!isMunicipal || (_currentUserProfile && _currentUserProfile.super_admin)) {
+        if (!isMunicipal) {
+            // Entidades Externas / Fiscais (MPF, PF, SPU, etc.): Podem atuar transversalmente em múltiplos municípios
             atribuicaoMunicipiosHtml = `
                 <div class="mt-4 pt-3.5 border-t border-slate-200 dark:border-slate-800">
                     <div class="flex items-center justify-between mb-2 flex-wrap gap-1">
                         <span class="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
                             <span class="material-symbols-outlined text-[17px] text-sky-600 dark:text-sky-400">domain_add</span>
-                            Municípios Atribuídos a este Usuário (${entidadeNome})
+                            Municípios Atribuídos a este Usuário Externo (${entidadeNome})
                         </span>
                         <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Clique no município para ver/editar suas camadas</span>
                     </div>
@@ -401,6 +531,28 @@
                                 </div>
                             `;
                         }).join('')}
+                    </div>
+                </div>
+            `;
+        } else {
+            // Entidades Municipais (Prefeitura Municipal): Usuário estritamente vinculado ao seu município
+            atribuicaoMunicipiosHtml = `
+                <div class="mt-4 pt-3.5 border-t border-slate-200 dark:border-slate-800">
+                    <div class="flex items-center justify-between mb-2 flex-wrap gap-1">
+                        <span class="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-[17px] text-sky-600 dark:text-sky-400">location_city</span>
+                            Município de Atuação — Entidade Municipal (${entidadeNome})
+                        </span>
+                        <span class="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 shadow-xs">
+                            <span class="material-symbols-outlined text-[14px]">lock</span> Acesso exclusivo ao município de origem
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between p-2.5 px-3.5 rounded-xl border border-sky-400/50 bg-sky-50/50 dark:bg-sky-950/25 text-slate-800 dark:text-slate-200 text-xs shadow-xs">
+                        <div class="flex items-center gap-2.5 font-bold text-sky-700 dark:text-sky-300">
+                            <span class="material-symbols-outlined text-[20px] text-sky-600 dark:text-sky-400">domain</span>
+                            <span class="text-sm font-extrabold">${selectedMunObj.nome}${selectedMunObj.uf ? ' - ' + selectedMunObj.uf : ''}</span>
+                        </div>
+                        <span class="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Usuários municipais não podem ser vinculados a outros municípios</span>
                     </div>
                 </div>
             `;
@@ -444,6 +596,7 @@
                                 <h4 class="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white hover:text-sky-600 transition-colors truncate">${perfil.nome || '(Sem nome)'}</h4>
                                 <span class="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${statusBadgeColor} uppercase tracking-wider">${STATUS_LABELS[userObj.status] || userObj.status}</span>
                                 <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-600">${PAPEL_LABELS[userObj.papel] || userObj.papel}</span>
+                                ${userObj.ponto_focal ? `<span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 flex items-center gap-1"><span class="material-symbols-outlined text-[12px]">share_location</span>Ponto Focal</span>` : ''}
                             </div>
                             <div class="text-xs text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-2 flex-wrap font-medium">
                                 <span>${perfil.email || ''}</span>
@@ -481,6 +634,26 @@
                         </div>
                     </div>
 
+                    <!-- Ponto Focal Interinstitucional -->
+                    <div class="mb-4 p-3 rounded-xl border border-sky-200 dark:border-sky-800/80 bg-sky-50/70 dark:bg-sky-950/30 flex items-center justify-between gap-3 shadow-xs">
+                        <div class="flex items-center gap-2.5 min-w-0 pr-2">
+                            <div class="w-8 h-8 rounded-lg bg-sky-500/20 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0 border border-sky-500/30">
+                                <span class="material-symbols-outlined text-[18px]">share_location</span>
+                            </div>
+                            <div class="flex flex-col min-w-0">
+                                <span class="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                                    Ponto Focal Interinstitucional
+                                    ${userObj.ponto_focal ? '<span class="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-600 dark:text-sky-400 border border-sky-500/30">Habilitado</span>' : ''}
+                                </span>
+                                <span class="text-[10px] text-slate-500 dark:text-slate-400">Autoriza este servidor a ser visualizado e receber camadas/ortofotos sigilosas compartilhadas por outros órgãos parceiros</span>
+                            </div>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer shrink-0" title="Ativar/desativar este servidor como ponto focal interinstitucional">
+                            <input type="checkbox" class="user-ponto-focal-check sr-only peer" ${userObj.ponto_focal ? 'checked' : ''} ${!isEditing ? 'disabled' : ''}>
+                            <div class="w-9 h-5 bg-slate-300 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-sky-500"></div>
+                        </label>
+                    </div>
+
                     ${atribuicaoMunicipiosHtml}
 
                     <!-- Gestão Granular de Camadas e Abas do Município Ativo -->
@@ -494,7 +667,22 @@
                         </div>
 
                         <div class="space-y-3">
-                            ${camadasHtml || `<div class="text-xs text-slate-400 italic py-4 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">Nenhuma camada cadastrada em ${selectedMunObj.nome}.</div>`}
+                            ${camadasHtml || `<div class="text-xs text-slate-400 italic py-4 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">Nenhuma camada da entidade ${userSigla} cadastrada em ${selectedMunObj.nome}.</div>`}
+                        </div>
+                    </div>
+
+                    <!-- Gestão Granular de Ortofotos do Município Ativo -->
+                    <div class="mt-5 pt-3 border-t border-slate-200 dark:border-slate-800">
+                        <div class="flex items-center justify-between mb-2.5 pb-2 border-b border-slate-200 dark:border-slate-800 flex-wrap gap-1">
+                            <span class="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                                <span class="material-symbols-outlined text-[18px] text-emerald-600 dark:text-emerald-400">satellite_alt</span>
+                                Permissões de Ortofotos — <span class="text-emerald-600 dark:text-emerald-400">${selectedMunObj.nome}${selectedMunObj.uf ? ' - ' + selectedMunObj.uf : ''}</span>
+                            </span>
+                            <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Imagens aéreas e ortofotos liberadas</span>
+                        </div>
+
+                        <div class="space-y-2">
+                            ${ortofotosHtml || `<div class="text-xs text-slate-400 italic py-3 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">Nenhuma ortofoto da entidade ${userSigla} cadastrada em ${selectedMunObj.nome}.</div>`}
                         </div>
                     </div>
 
@@ -679,12 +867,56 @@
                 if (aErr) console.warn('Erro ao atualizar permissoes_aba:', aErr);
             }
 
+            // 4.1 Salva ponto_focal em profiles
+            const isPontoFocal = !!card.querySelector('.user-ponto-focal-check')?.checked;
+            try {
+                await supabaseClient.from('profiles').update({ ponto_focal: isPontoFocal }).eq('id', userId);
+            } catch(e) {
+                console.warn('Erro ao atualizar ponto_focal:', e);
+            }
+
+            // 4.2 Salva permissoes_raster
+            const rasterCards = card.querySelectorAll('[data-raster-id]');
+            const rasterRows = [];
+            rasterCards.forEach(rCard => {
+                const rasterId = rCard.getAttribute('data-raster-id');
+                const podeVer = rCard.querySelector('.raster-ver-check')?.checked;
+                rasterRows.push({
+                    user_id: userId,
+                    raster_id: rasterId,
+                    pode_ver: !!podeVer,
+                    concedido_por: _currentUserProfile?.id || null
+                });
+            });
+            if (rasterRows.length > 0) {
+                try {
+                    const { error: rErr } = await supabaseClient
+                        .from('permissoes_raster')
+                        .upsert(rasterRows, { onConflict: 'user_id,raster_id' });
+                    if (rErr) console.warn('Erro ao atualizar permissoes_raster:', rErr);
+                } catch(e) {
+                    console.warn('Tabela permissoes_raster ainda indisponível:', e);
+                }
+            }
+
             // 5. Sincroniza Municípios Atribuídos
             const munChecks = card.querySelectorAll('.user-mun-check');
             const userMembrosList = _allMembros.filter(m => m.user_id === userId);
             const userPrimeiroMembro = userMembrosList[0] || {};
+            const userEntidade = (userPrimeiroMembro.entidade || '').trim();
+            const userTipo = _entidadesTipos[userEntidade] || (userEntidade.toLowerCase().includes('prefeitura') || userEntidade.toLowerCase().includes('municipal') ? 'municipal' : 'externo');
 
-            if (munChecks.length > 0) {
+            if (userTipo === 'municipal') {
+                // Segurança Estrita: Usuário municipal NUNCA deve ter vínculos em múltiplos municípios
+                if (userMembrosList.length > 1) {
+                    const munOrigemId = userPrimeiroMembro.municipio_id;
+                    const strayMembros = userMembrosList.filter(mb => mb.municipio_id !== munOrigemId);
+                    for (const stray of strayMembros) {
+                        await supabaseClient.from('municipio_membros').delete().eq('id', stray.id);
+                        _allMembros = _allMembros.filter(mb => mb.id !== stray.id);
+                    }
+                }
+            } else if (munChecks.length > 0) {
                 const selectedMunIds = Array.from(munChecks).filter(cb => cb.checked).map(cb => cb.value);
                 const unselectedMunIds = Array.from(munChecks).filter(cb => !cb.checked).map(cb => cb.value);
 

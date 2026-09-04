@@ -21,6 +21,8 @@
 <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="icon" type="image/png" href="assets/logo.png">
 <script id="tailwind-config">
   tailwind.config = {
@@ -45,8 +47,18 @@
   .municipio-card { transition: transform .15s ease, box-shadow .15s ease; }
   .municipio-card:hover { transform: translateY(-2px); }
 
-  .tab-content { display: none; }
-  .tab-content.active { display: block; }
+  .tab-content { display: none !important; }
+  .tab-content.active { display: block !important; }
+  #municipios-section.active {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+  }
+  #municipio-welcome-section.active {
+    display: flex !important;
+  }
   .tab-btn { transition: all 0.2s ease; border-bottom: 2px solid transparent; }
   .tab-btn.active {
     background-color: rgba(14, 165, 233, 0.08);
@@ -103,9 +115,83 @@
     border-width: 0 2.5px 2.5px 0 !important;
     transform: rotate(45deg) translate(-1px, -1px) !important;
   }
+
+  /* Leaflet custom popup no mapa da Paraíba */
+  .leaflet-popup-content-wrapper {
+    background: #0f172a !important;
+    color: #f8fafc !important;
+    border-radius: 1rem !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5) !important;
+    padding: 0 !important;
+  }
+  .leaflet-popup-content {
+    margin: 0 !important;
+    line-height: 1.4 !important;
+  }
+  .leaflet-popup-tip {
+    background: #0f172a !important;
+  }
+  .leaflet-container {
+    background-color: #090d16 !important;
+    font-family: inherit !important;
+  }
+  .mun-path {
+    transition: fill 0.2s ease, stroke 0.2s ease, stroke-width 0.2s ease;
+  }
+  .mun-authorized-path {
+    cursor: pointer;
+  }
+
+  /* Rótulos dos municípios dentro dos polígonos com controle de zoom */
+  .mun-center-label {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    pointer-events: none !important;
+    white-space: nowrap !important;
+    display: none;
+    transform: translate(-50%, -50%);
+  }
+  .mun-center-label span {
+    font-size: 10px;
+    font-weight: 700;
+    color: #e2e8f0;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 6px rgba(0, 0, 0, 0.9);
+    padding: 1.5px 5px;
+    border-radius: 4px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .mun-center-label.authorized span {
+    font-size: 11px;
+    font-weight: 800;
+    color: #38bdf8;
+    background: rgba(8, 51, 68, 0.75);
+    border: 1px solid rgba(56, 189, 248, 0.45);
+    box-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
+    text-shadow: 0 0 6px rgba(6, 182, 212, 0.9), 0 1px 3px rgba(0, 0, 0, 0.95);
+  }
+
+  /* Controle de Zoom:
+     - Zoom < 9 (Estado todo): Rótulos ocultos (zero poluição)
+     - Zoom == 9 (Intermediário): Apenas municípios autorizados
+     - Zoom >= 10 (Aproximado): Todos os municípios visíveis */
+  .leaflet-container:not(.zoom-mid):not(.zoom-close) .mun-center-label {
+    display: none !important;
+  }
+  .leaflet-container.zoom-mid .mun-center-label.authorized {
+    display: block !important;
+  }
+  .leaflet-container.zoom-mid .mun-center-label:not(.authorized) {
+    display: none !important;
+  }
+  .leaflet-container.zoom-close .mun-center-label {
+    display: block !important;
+  }
 </style>
 </head>
-<body class="font-sans min-h-screen">
+<body class="font-sans h-screen flex flex-col overflow-hidden">
 
 <header class="h-16 bg-white/70 dark:bg-[#070b14]/75 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 shadow-sm flex items-center px-4 md:px-8 gap-4 justify-between">
 
@@ -117,8 +203,20 @@
       <span class="font-extrabold text-sm tracking-tight text-slate-800 dark:text-slate-100 hidden sm:inline">GeoGestor</span>
     </div>
 
-    <!-- Canto Direito: Configurações Globais (SuperAdmin) + Perfil -->
+    <!-- Canto Direito: Alternador Mapa/Lista + Configurações Globais (SuperAdmin) + Perfil -->
     <div class="flex items-center gap-2.5 ml-auto">
+      <!-- Botões de Alternância: [ 🗺️ Mapa ] [ 📋 Lista ] -->
+      <div id="view-mode-toggle-group" class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm">
+        <button id="view-mode-map-btn" type="button" onclick="switchMunicipiosViewMode('map')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-900 text-primary shadow-sm cursor-pointer">
+          <span class="material-symbols-outlined text-[16px]">map</span>
+          <span>Mapa</span>
+        </button>
+        <button id="view-mode-list-btn" type="button" onclick="switchMunicipiosViewMode('list')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer">
+          <span class="material-symbols-outlined text-[16px]">format_list_bulleted</span>
+          <span>Lista</span>
+        </button>
+      </div>
+
       <!-- Botão CONFIGURAÇÕES (exclusivo SuperAdmin, estilo circular idêntico ao perfil) -->
       <button id="btn-global-config" onclick="abrirConfiguracoesGlobais()" class="hidden w-9 h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all items-center justify-center cursor-pointer shadow-sm" title="Configurações Globais (Entidades e Novo Município)">
         <span class="material-symbols-outlined text-[20px]">settings</span>
@@ -206,6 +304,14 @@
                 <h4 id="profile-user-name" class="text-base font-bold text-slate-800 dark:text-white">Usuário Logado</h4>
                 <p id="profile-user-role" class="text-sm text-slate-500 dark:text-slate-400">—</p>
                 <p id="profile-user-municipio" class="text-xs text-primary font-semibold mt-0.5"></p>
+                <div id="profile-user-entidade-container" class="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 dark:bg-cyan-950/40 border border-cyan-500/30 text-cyan-700 dark:text-cyan-300 shadow-xs">
+                    <span class="material-symbols-outlined text-[15px] text-cyan-600 dark:text-cyan-400">hub</span>
+                    <span id="profile-user-entidade" class="text-xs font-bold">—</span>
+                </div>
+                <div id="profile-user-ponto-focal-badge" class="hidden mt-1.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-sky-500/15 border border-sky-500/30 text-sky-600 dark:text-sky-400 text-[10.5px] font-extrabold shadow-xs">
+                    <span class="material-symbols-outlined text-[13px]">share_location</span>
+                    <span>Ponto Focal Interinstitucional</span>
+                </div>
             </div>
 
             <div class="border-t border-slate-200 dark:border-slate-800 pt-5">
@@ -275,36 +381,47 @@
     </div>
 </div>
 
-<main class="max-w-5xl mx-auto px-4 md:px-8 py-8">
+<main class="flex-1 min-h-0 w-full max-w-7xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex flex-col overflow-hidden">
 
   <!-- Solicitações pendentes (só super_admin) -->
-  <section id="pending-section" class="tab-content">
+  <section id="pending-section" class="tab-content h-full overflow-y-auto pr-1">
     <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Solicitações Pendentes</h2>
     <div id="pending-list" class="flex flex-col gap-2"></div>
   </section>
 
 
-  <!-- Seletor / Lista de Municípios com Pesquisador -->
-  <section id="municipios-section" class="tab-content active">
-    <!-- Cabeçalho descritivo -->
-    <div class="mb-4">
-      <h2 class="text-base font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Municípios Autorizados</h2>
-      <p class="text-xs text-slate-400 mt-0.5">Selecione um município para acessar o mapa ou gerenciar configurações</p>
-    </div>
-
-    <!-- Campo de Busca com a mesma largura dos cards (w-full) e abaixo do texto -->
-    <div class="relative w-full mb-5">
+  <!-- Seletor / Mapa e Lista de Municípios com Pesquisador -->
+  <section id="municipios-section" class="tab-content active h-full min-h-0">
+    <!-- Campo de Busca -->
+    <div class="relative w-full mb-2.5 shrink-0">
       <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[18px] pointer-events-none">search</span>
-      <input id="municipios-search" type="text" placeholder="Buscar município ou UF..." oninput="filterMunicipiosList(this.value)" class="w-full pl-10 pr-4 py-2.5 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary dark:text-white shadow-sm transition-all">
+      <input id="municipios-search" type="text" placeholder="Buscar município no mapa ou na lista..." oninput="onSearchMunicipios(this.value)" class="w-full pl-10 pr-4 py-2 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary dark:text-white shadow-sm transition-all">
     </div>
 
-    <!-- Lista de Cards de Municípios -->
-    <div id="municipios-list" class="flex flex-col gap-3"></div>
-    <div id="municipios-empty-filter" class="hidden text-center py-10 text-xs text-slate-400 italic">Nenhum município encontrado com esse termo de busca.</div>
+    <!-- Container do Mapa do Estado da Paraíba (Visão Principal) - Ocupa 100% da altura da tela -->
+    <div id="paraiba-map-container" style="min-height: calc(100vh - 130px); height: calc(100vh - 130px);" class="relative w-full rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-xl bg-slate-950 transition-all">
+      <div id="paraiba-map" class="w-full h-full z-0"></div>
+
+      <!-- Legenda minimalista flutuante no mapa -->
+      <div class="absolute bottom-4 left-4 z-[400] bg-slate-900/90 backdrop-blur-md px-3.5 py-2.5 rounded-xl border border-white/10 text-[11px] text-white flex flex-col gap-1.5 shadow-lg pointer-events-none">
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-md bg-cyan-500 border border-cyan-300 shadow-[0_0_8px_rgba(6,182,212,0.8)]"></span>
+          <span class="font-semibold text-slate-200">Município Autorizado</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-md bg-slate-800 border border-slate-700"></span>
+          <span class="text-slate-400">Demais Municípios (PB)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lista de Cards de Municípios (Visão Alternativa) com rolagem interna -->
+    <div id="municipios-list" style="max-height: calc(100vh - 130px); overflow-y: auto;" class="hidden flex-1 min-h-0 flex flex-col gap-3 pr-1"></div>
+    <div id="municipios-empty-filter" class="hidden text-center py-10 text-xs text-slate-400 italic shrink-0">Nenhum município encontrado com esse termo de busca.</div>
   </section>
 
   <!-- Configurações Globais (exclusivo SuperAdmin) -->
-  <section id="configuracoes-section" class="tab-content">
+  <section id="configuracoes-section" class="tab-content h-full overflow-y-auto pr-1">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-6 border-b border-slate-200 dark:border-slate-800 gap-4">
       <div class="flex items-center gap-3">
         <button onclick="voltarParaMunicipios()" class="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer" title="Voltar aos Municípios">
@@ -463,8 +580,15 @@ window.abrirMunicipio = function(id, nome, papel) {
         if (welcomeIcon) { welcomeIcon.classList.remove('hidden'); }
     }
 
+    // Fecha qualquer popup aberto no mapa da Paraíba
+    if (typeof paraibaMapInstance !== 'undefined' && paraibaMapInstance) {
+        paraibaMapInstance.closePopup();
+    }
+
     // Exibe apenas a tela neutra de boas-vindas (nenhum iframe ou aba aberta)
     document.querySelectorAll('main > section').forEach(s => s.classList.remove('active'));
+    const munSec = document.getElementById('municipios-section');
+    if (munSec) munSec.classList.remove('active');
     const welcomeSec = document.getElementById('municipio-welcome-section');
     if (welcomeSec) {
         welcomeSec.classList.add('active');
@@ -489,10 +613,21 @@ window.voltarParaMunicipios = function() {
         munHeader.classList.remove('flex');
     }
 
-    // Esconde seções de gestão e boas-vindas, e mostra a lista de municípios
+    // Esconde seções de gestão e boas-vindas, e mostra a lista/mapa de municípios
     document.querySelectorAll('main > section').forEach(s => s.classList.remove('active'));
     const munSec = document.getElementById('municipios-section');
-    if (munSec) munSec.classList.add('active');
+    if (munSec) {
+        munSec.classList.add('active');
+        if (typeof paraibaMapInstance !== 'undefined' && paraibaMapInstance) {
+            setTimeout(() => {
+                paraibaMapInstance.invalidateSize();
+                const bounds = paraibaGeojsonLayer?.getBounds();
+                if (bounds && bounds.isValid()) {
+                    paraibaMapInstance.fitBounds(bounds, { padding: [20, 20] });
+                }
+            }, 100);
+        }
+    }
 
     try {
         const url = new URL(window.location.href);
@@ -856,13 +991,25 @@ function applyCurrentUserToProfileModal() {
     const nameEl = document.getElementById('profile-user-name');
     const roleEl = document.getElementById('profile-user-role');
     const themeSelect = document.getElementById('profile-theme-select');
+    const entEl = document.getElementById('profile-user-entidade');
+    const pfBadge = document.getElementById('profile-user-ponto-focal-badge');
+
     if (nameEl) nameEl.textContent = homeUserProfile.nome || homeUserProfile.email || 'Usuário';
     if (roleEl) roleEl.textContent = homeUserProfile.super_admin
         ? 'Administrador Geral'
-        : (homeUserProfile.entidade_admin ? `Administrador — ${homeUserProfile.entidade || 'entidade'}` : '—');
+        : (homeUserProfile.entidade_admin ? `Administrador — ${homeUserProfile.entidade || 'entidade'}` : (homeUserProfile.papel === 'admin' ? 'Administrador' : 'Usuário'));
     if (themeSelect) themeSelect.value = localStorage.getItem('constructive_theme') || 'Claro';
-    // profile-user-municipio fica vazio aqui — nesta página o usuário ainda
-    // não escolheu um município (é o índex.html que sabe qual está ativo).
+
+    const entNome = homeUserProfile.entidade || 'Prefeitura Municipal';
+    if (entEl) entEl.textContent = entNome;
+
+    if (pfBadge) {
+        if (homeUserProfile.ponto_focal) {
+            pfBadge.classList.remove('hidden');
+        } else {
+            pfBadge.classList.add('hidden');
+        }
+    }
 }
 
 window.handleLogout = async function() {
@@ -1262,6 +1409,12 @@ async function init() {
 
     const { data: profile } = await supabaseClient.from('profiles').select('*').eq('id', userId).single();
     homeUserProfile = profile || { nome: sessionData.session.user.email, super_admin: false };
+    if (!homeUserProfile.entidade) {
+        const { data: mData } = await supabaseClient.from('municipio_membros').select('entidade').eq('user_id', userId).limit(1);
+        if (mData && mData[0] && mData[0].entidade) {
+            homeUserProfile.entidade = mData[0].entidade;
+        }
+    }
     applyCurrentUserToProfileModal();
 
     document.getElementById('loading-section').classList.add('hidden');
@@ -1561,9 +1714,12 @@ async function init() {
             </div>`;
         }).join('');
         document.getElementById('municipios-section').classList.add('active');
+        // Inicializa o mapa interativo do Estado da Paraíba com os municípios autorizados
+        initParaibaMap(municipiosParaMostrar);
     } else if (homeUserProfile.super_admin) {
         document.getElementById('municipios-list').innerHTML = '<div class="text-xs text-slate-400 italic py-6 text-center">Nenhum município cadastrado ainda.</div>';
         document.getElementById('municipios-section').classList.add('active');
+        initParaibaMap([]);
     } else {
         document.getElementById('empty-section').classList.remove('hidden');
     }
@@ -1596,6 +1752,323 @@ async function init() {
         }
     } catch(e) {}
 }
+
+// --- MAPA INTERATIVO DO ESTADO DA PARAÍBA NA PÁGINA INICIAL ---
+let paraibaMapInstance = null;
+let paraibaGeojsonLayer = null;
+let paraibaGeojsonData = null;
+let paraibaFeatureLayers = {};
+
+function normMunString(str) {
+    return String(str || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+window.switchMunicipiosViewMode = function(mode) {
+    const mapContainer = document.getElementById('paraiba-map-container');
+    const listContainer = document.getElementById('municipios-list');
+    const mapBtn = document.getElementById('view-mode-map-btn');
+    const listBtn = document.getElementById('view-mode-list-btn');
+
+    if (mode === 'map') {
+        if (mapContainer) mapContainer.classList.remove('hidden');
+        if (listContainer) listContainer.classList.add('hidden');
+        
+        if (mapBtn) {
+            mapBtn.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-900 text-primary shadow-sm cursor-pointer";
+        }
+        if (listBtn) {
+            listBtn.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer";
+        }
+
+        localStorage.setItem('geogestor_home_view_mode', 'map');
+        if (paraibaMapInstance) {
+            setTimeout(() => { paraibaMapInstance.invalidateSize(); }, 150);
+        }
+    } else {
+        if (mapContainer) mapContainer.classList.add('hidden');
+        if (listContainer) listContainer.classList.remove('hidden');
+
+        if (listBtn) {
+            listBtn.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-900 text-primary shadow-sm cursor-pointer";
+        }
+        if (mapBtn) {
+            mapBtn.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer";
+        }
+
+        localStorage.setItem('geogestor_home_view_mode', 'list');
+    }
+};
+
+window.initParaibaMap = async function(municipiosAutorizados = []) {
+    const mapDiv = document.getElementById('paraiba-map');
+    if (!mapDiv) return;
+
+    if (paraibaMapInstance) {
+        paraibaMapInstance.invalidateSize();
+        return;
+    }
+
+    try {
+        paraibaMapInstance = L.map('paraiba-map', {
+            center: [-7.15, -36.75],
+            zoom: 8,
+            minZoom: 7,
+            maxZoom: 14,
+            zoomControl: false,
+            attributionControl: false
+        });
+
+        L.control.zoom({ position: 'topright' }).addTo(paraibaMapInstance);
+
+        const isDark = document.documentElement.classList.contains('dark') || document.documentElement.classList.contains('neon');
+        const baseTileUrl = isDark 
+            ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+            : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+        const refTileUrl = isDark
+            ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}'
+            : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}';
+
+        L.tileLayer(baseTileUrl, {
+            maxZoom: 16
+        }).addTo(paraibaMapInstance);
+
+        L.tileLayer(refTileUrl, {
+            maxZoom: 16,
+            pane: 'tilePane'
+        }).addTo(paraibaMapInstance);
+
+        if (!paraibaGeojsonData) {
+            const resp = await fetch('data/paraiba_municipios.geojson');
+            if (!resp.ok) throw new Error("Erro ao carregar GeoJSON da Paraíba");
+            paraibaGeojsonData = await resp.json();
+        }
+
+        const authMap = new Map();
+        (municipiosAutorizados || []).forEach(m => {
+            const key = normMunString(m.nome);
+            authMap.set(key, m);
+        });
+
+        paraibaFeatureLayers = {};
+
+        paraibaGeojsonLayer = L.geoJSON(paraibaGeojsonData, {
+            style: (feature) => {
+                const munNome = feature.properties?.nome || '';
+                const norm = normMunString(munNome);
+                const isAuth = authMap.has(norm);
+
+                if (isAuth) {
+                    return {
+                        fillColor: '#06b6d4',
+                        fillOpacity: 0.65,
+                        color: '#38bdf8',
+                        weight: 2,
+                        className: 'mun-path mun-authorized-path'
+                    };
+                } else {
+                    return {
+                        fillColor: isDark ? '#090d16' : '#cbd5e1',
+                        fillOpacity: 0.4,
+                        color: isDark ? '#1e293b' : '#94a3b8',
+                        weight: 0.8,
+                        className: 'mun-path'
+                    };
+                }
+            },
+            onEachFeature: (feature, layer) => {
+                const munNome = feature.properties?.nome || '';
+                const norm = normMunString(munNome);
+                const authData = authMap.get(norm);
+                paraibaFeatureLayers[norm] = layer;
+
+                if (authData) {
+                    const ehAdmin = authData.papel === 'admin' || (homeUserProfile && homeUserProfile.super_admin);
+                    const papelLabel = (typeof PAPEL_LABELS !== 'undefined' && PAPEL_LABELS[authData.papel]) || authData.papel;
+
+                    const popupHtml = `
+                    <div class="p-3.5 min-w-[230px] flex flex-col gap-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-11 h-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shrink-0 overflow-hidden p-1">
+                                ${authData.logo_url 
+                                    ? `<img src="${authData.logo_url}" class="w-full h-full object-contain" alt="${authData.nome}">` 
+                                    : `<span class="material-symbols-outlined text-cyan-400 text-[24px]">location_city</span>`}
+                            </div>
+                            <div class="min-w-0">
+                                <h4 class="text-sm font-bold text-white tracking-wide truncate">${authData.nome} - PB</h4>
+                                <span class="inline-block text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${ehAdmin ? 'bg-indigo-950/80 text-indigo-300 border border-indigo-700/60' : 'bg-slate-800 text-slate-300 border border-slate-700'} mt-0.5">
+                                    ${papelLabel}
+                                </span>
+                            </div>
+                        </div>
+                        <p class="text-[11px] text-slate-400 leading-tight">Acesso autorizado para consulta e operações espaciais.</p>
+                        <button onclick="abrirMunicipio('${authData.id}', '${authData.nome.replace(/'/g, "\\'")}', '${authData.papel}')" class="w-full py-2 px-3 text-xs font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer">
+                            <span>Abrir Município</span>
+                            <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+                        </button>
+                    </div>`;
+
+                    layer.bindPopup(popupHtml, { 
+                        maxWidth: 280,
+                        autoPan: false,
+                        closeButton: true
+                    });
+
+                    layer.on({
+                        click: (e) => {
+                            if (e && e.originalEvent) {
+                                L.DomEvent.stopPropagation(e);
+                            }
+                            const center = layer.getBounds().getCenter();
+                            paraibaMapInstance.flyToBounds(layer.getBounds(), {
+                                maxZoom: 11,
+                                duration: 0.6,
+                                padding: [70, 70]
+                            });
+                            setTimeout(() => {
+                                layer.openPopup(center);
+                            }, 150);
+                        },
+                        mouseover: (e) => {
+                            const l = e.target;
+                            l.setStyle({
+                                fillOpacity: 0.9,
+                                weight: 3,
+                                color: '#ffffff'
+                            });
+                            if (l.bringToFront) l.bringToFront();
+                        },
+                        mouseout: (e) => {
+                            paraibaGeojsonLayer.resetStyle(e.target);
+                        }
+                    });
+                } else {
+                    layer.bindTooltip(`<strong>${munNome} - PB</strong><br><span class="text-[10px] text-slate-400">Acesso restrito</span>`, {
+                        sticky: true,
+                        direction: 'top',
+                        className: 'text-xs'
+                    });
+
+                    layer.on({
+                        click: (e) => {
+                            if (e && e.originalEvent) {
+                                L.DomEvent.stopPropagation(e);
+                            }
+                            paraibaMapInstance.flyToBounds(layer.getBounds(), {
+                                maxZoom: 11,
+                                duration: 0.6,
+                                padding: [70, 70]
+                            });
+                            layer.openTooltip(layer.getBounds().getCenter());
+                        },
+                        mouseover: (e) => {
+                            e.target.setStyle({
+                                fillOpacity: 0.65,
+                                weight: 1.5,
+                                color: '#64748b'
+                            });
+                        },
+                        mouseout: (e) => {
+                            paraibaGeojsonLayer.resetStyle(e.target);
+                        }
+                    });
+                }
+
+                // Cria o rótulo do município centralizado dentro do polígono
+                try {
+                    const center = layer.getBounds().getCenter();
+                    L.marker(center, {
+                        icon: L.divIcon({
+                            className: authData ? 'mun-center-label authorized' : 'mun-center-label',
+                            html: `<span>${munNome}</span>`,
+                            iconSize: null
+                        }),
+                        interactive: false
+                    }).addTo(paraibaMapInstance);
+                } catch(err) {}
+            }
+        }).addTo(paraibaMapInstance);
+
+        // Atualiza as classes de zoom no container do mapa para controle inteligente dos rótulos
+        function updateMapZoomClasses() {
+            if (!paraibaMapInstance) return;
+            const zoom = paraibaMapInstance.getZoom();
+            const container = paraibaMapInstance.getContainer();
+            if (!container) return;
+            container.classList.toggle('zoom-mid', zoom === 9);
+            container.classList.toggle('zoom-close', zoom >= 10);
+        }
+        paraibaMapInstance.on('zoomend', updateMapZoomClasses);
+        updateMapZoomClasses();
+
+        const bounds = paraibaGeojsonLayer.getBounds();
+        if (bounds.isValid()) {
+            paraibaMapInstance.fitBounds(bounds, { padding: [20, 20] });
+        }
+
+        // Garante sincronização perfeita do tamanho do container contra saltos de clique
+        setTimeout(() => {
+            if (paraibaMapInstance) paraibaMapInstance.invalidateSize();
+        }, 100);
+        setTimeout(() => {
+            if (paraibaMapInstance) paraibaMapInstance.invalidateSize();
+        }, 350);
+
+        window.addEventListener('resize', () => {
+            if (paraibaMapInstance) paraibaMapInstance.invalidateSize();
+        });
+
+        const savedView = localStorage.getItem('geogestor_home_view_mode') || 'map';
+        switchMunicipiosViewMode(savedView);
+
+    } catch (e) {
+        console.error("Erro ao carregar mapa da Paraíba:", e);
+        switchMunicipiosViewMode('list');
+    }
+};
+
+window.onSearchMunicipios = function(query) {
+    filterMunicipiosList(query);
+
+    if (!paraibaMapInstance || !paraibaFeatureLayers) return;
+
+    const clean = normMunString(query);
+    if (!clean) {
+        if (paraibaGeojsonLayer) {
+            paraibaMapInstance.fitBounds(paraibaGeojsonLayer.getBounds(), { padding: [20, 20], duration: 0.8 });
+        }
+        return;
+    }
+
+    const matchKey = Object.keys(paraibaFeatureLayers).find(k => k.includes(clean));
+    if (matchKey) {
+        const targetLayer = paraibaFeatureLayers[matchKey];
+        if (targetLayer && targetLayer.getBounds) {
+            paraibaMapInstance.flyToBounds(targetLayer.getBounds(), { maxZoom: 11, duration: 1.0, padding: [60, 60] });
+            if (targetLayer.openPopup && targetLayer.getPopup()) {
+                setTimeout(() => { targetLayer.openPopup(); }, 700);
+            }
+        }
+    }
+};
+
+window.filterMunicipiosList = function(query) {
+    const term = (query || '').toLowerCase().trim();
+    const cards = document.querySelectorAll('#municipios-list > .card');
+    let visibleCount = 0;
+
+    cards.forEach(card => {
+        const nome = card.dataset.nome || '';
+        const uf = card.dataset.uf || '';
+        const matches = !term || nome.includes(term) || uf.includes(term);
+        card.style.display = matches ? '' : 'none';
+        if (matches) visibleCount++;
+    });
+
+    const emptyMsg = document.getElementById('municipios-empty-filter');
+    if (emptyMsg) {
+        emptyMsg.classList.toggle('hidden', visibleCount > 0 || cards.length === 0);
+    }
+};
 
 init();
 </script>

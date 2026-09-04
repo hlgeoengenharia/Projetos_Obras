@@ -115,11 +115,41 @@
             console.log('✅ SpatialAnalyticsManager inicializado com Painel Estatístico em Tela Cheia.');
         }
 
+        getRuleEntity(rule) {
+            if (rule && rule.entidade) return rule.entidade;
+            const allThemes = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes : (window.themes || []);
+            if (rule && rule.targetLayer) {
+                const targetTheme = allThemes.find(t => String(t.id) === String(rule.targetLayer));
+                if (targetTheme) {
+                    const ent = ((targetTheme.metadata && targetTheme.metadata.entidade) || targetTheme.entidade || '').trim();
+                    if (ent) return ent;
+                }
+            }
+            if (rule && rule.refLayer) {
+                const refTheme = allThemes.find(t => String(t.id) === String(rule.refLayer));
+                if (refTheme) {
+                    const ent = ((refTheme.metadata && refTheme.metadata.entidade) || refTheme.entidade || '').trim();
+                    if (ent) return ent;
+                }
+            }
+            return 'Geral';
+        }
+
         updateBadge() {
             const badge = document.getElementById('spatial-rules-badge');
             if (badge) {
-                if (this.rules && this.rules.length > 0) {
-                    badge.textContent = this.rules.length;
+                const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
+                const userEntidade = (window.currentUserEntidade || '').trim();
+                const visibleRules = (this.rules || []).filter(rule => {
+                    if (isSuperAdmin) return true;
+                    const rEnt = (rule.entidade || this.getRuleEntity(rule)).trim();
+                    if (!rEnt || rEnt === 'Geral' || rEnt.toLowerCase() === 'público' || rEnt.toLowerCase() === 'publico') return true;
+                    if (!userEntidade) return true;
+                    return rEnt.toLowerCase() === userEntidade.toLowerCase();
+                });
+
+                if (visibleRules.length > 0) {
+                    badge.textContent = visibleRules.length;
                     badge.classList.remove('hidden');
                 } else {
                     badge.classList.add('hidden');
@@ -228,11 +258,22 @@
             const container = document.getElementById('spatial-menu-items');
             if (!container) return;
 
-            if (this.rules.length === 0) {
+            const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
+            const userEntidade = (window.currentUserEntidade || '').trim();
+
+            const visibleRules = (this.rules || []).filter(rule => {
+                if (isSuperAdmin) return true;
+                const rEnt = (rule.entidade || this.getRuleEntity(rule)).trim();
+                if (!rEnt || rEnt === 'Geral' || rEnt.toLowerCase() === 'público' || rEnt.toLowerCase() === 'publico') return true;
+                if (!userEntidade) return true;
+                return rEnt.toLowerCase() === userEntidade.toLowerCase();
+            });
+
+            if (visibleRules.length === 0) {
                 container.innerHTML = `
                     <div class="text-center py-6 text-slate-400">
                         <span class="material-symbols-outlined text-3xl mb-1 opacity-50">hub</span>
-                        <p class="text-xs">Nenhuma regra de estatística cadastrada.</p>
+                        <p class="text-xs">Nenhuma regra de estatística cadastrada para sua entidade.</p>
                         <button type="button" onclick="window.openSpatialRuleModal()" class="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 rounded-lg text-xs font-bold text-cyan-600 dark:text-cyan-400 transition-colors cursor-pointer">
                             <span class="material-symbols-outlined text-[15px]">add_circle</span> Configurar Análise Espacial
                         </button>
@@ -254,9 +295,11 @@
             };
 
             let html = '';
-            this.rules.forEach(rule => {
+            visibleRules.forEach(rule => {
                 const isActive = (this.activeRuleId === rule.id);
                 const icon = opIcons[rule.opType] || 'hub';
+                const rEnt = rule.entidade || this.getRuleEntity(rule);
+                const sigla = (typeof window.getEntitySigla === 'function') ? window.getEntitySigla(rEnt) : rEnt;
 
                 html += `
                     <div class="w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${isActive ? 'bg-cyan-500/10 dark:bg-cyan-950/40 border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.2)]' : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/60 hover:border-slate-300 dark:hover:border-slate-600'}">
@@ -265,7 +308,10 @@
                                 <span class="material-symbols-outlined text-[18px]">${icon}</span>
                             </div>
                             <div class="truncate">
-                                <h4 class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${rule.name}</h4>
+                                <div class="flex items-center gap-1.5 truncate">
+                                    <h4 class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${rule.name}</h4>
+                                    ${sigla ? `<span class="inline-flex items-center px-1.5 py-0.2 text-[8px] font-bold rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 shrink-0" title="Entidade: ${rEnt}">${sigla}</span>` : ''}
+                                </div>
                                 <p class="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
                                     ${rule.targetLayerName || 'Alvo'} ➔ ${rule.refLayerName || 'Ref.'}
                                 </p>
@@ -2129,18 +2175,33 @@
             }
         }
 
-        if (themesList && themesList.length > 0) {
-            themesList.forEach(t => {
+        const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
+        const userEntidade = (window.currentUserEntidade || '').trim();
+
+        // Filtra camadas: usuário vê suas camadas da sua entidade, camadas gerais e camadas de outras entidades que sejam compartilhadas e ativadas
+        const filteredThemes = (themesList || []).filter(t => {
+            if (isSuperAdmin) return true;
+            const tEnt = ((t.metadata && t.metadata.entidade) || t.entidade || '').trim();
+            const isMyEnt = !tEnt || tEnt === 'Geral' || (userEntidade && tEnt.toLowerCase() === userEntidade.toLowerCase());
+            const isCompartilhada = (t.compartilhada !== false && (!t.metadata || t.metadata.compartilhada !== false));
+            const isSharedActive = Array.isArray(window.activeSharedLayers) && window.activeSharedLayers.includes(t.id) && isCompartilhada;
+            return isMyEnt || isSharedActive;
+        });
+
+        if (filteredThemes && filteredThemes.length > 0) {
+            filteredThemes.forEach(t => {
                 const name = t.name || t.nome || 'Camada';
                 const geomType = t.geometryType || t.tipo_geometria || '';
                 const geomStr = geomType ? ` [${geomType}]` : '';
-                optionsHtml += `<option value="${t.id}" data-name="${name}">${name}${geomStr}</option>`;
+                const tEnt = ((t.metadata && t.metadata.entidade) || t.entidade || '').trim();
+                const sigla = (typeof window.getEntitySigla === 'function') ? window.getEntitySigla(tEnt) : (tEnt || 'Público');
+                optionsHtml += `<option value="${t.id}" data-name="${name}">[${sigla}] ${name}${geomStr}</option>`;
             });
         } else {
             optionsHtml = `
-                <option value="imoveis" data-name="Imóveis Cadastrados">Imóveis Cadastrados [Polygon]</option>
-                <option value="logradouros" data-name="Logradouros">Logradouros [LineString]</option>
-                <option value="loteamentos" data-name="Limite Loteamentos">Limite Loteamentos [Polygon]</option>
+                <option value="imoveis" data-name="Imóveis Cadastrados">[Município] Imóveis Cadastrados [Polygon]</option>
+                <option value="logradouros" data-name="Logradouros">[Município] Logradouros [LineString]</option>
+                <option value="loteamentos" data-name="Limite Loteamentos">[Município] Limite Loteamentos [Polygon]</option>
             `;
         }
 
@@ -2877,9 +2938,14 @@
             ruleId = 'rule_' + Date.now();
         }
 
+        const userEntidade = (window.currentUserEntidade || '').trim();
+        const existingRule = currentRules.find(r => r.id === ruleId);
+        const ruleEntidade = (existingRule && existingRule.entidade) || userEntidade || 'Geral';
+
         const savedRule = {
             id: ruleId,
             name: name,
+            entidade: ruleEntidade,
             targetLayer: targetSel.value,
             targetLayerName: targetSel.options[targetSel.selectedIndex]?.text,
             targetAttrField: targetAttrField?.value || '',
