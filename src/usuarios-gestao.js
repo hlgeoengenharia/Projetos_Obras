@@ -1019,8 +1019,8 @@
         const card = document.querySelector(`[data-user-card="${userId}"]`);
         if (!card) return;
 
-        const papel = card.querySelector('.user-papel-select').value;
-        const status = card.querySelector('.user-status-select').value;
+        const papel = card.querySelector('.user-papel-select')?.value || 'visualizador';
+        const status = card.querySelector('.user-status-select')?.value || 'aprovado';
 
         const saveBtn = card.querySelector('button[onclick*="salvarUsuario"]');
         const originalText = saveBtn ? saveBtn.innerHTML : '';
@@ -1030,7 +1030,7 @@
         }
 
         try {
-            const minhaEntidade = (_currentUserMembros[0]?.entidade || _currentUserProfile?.entidade || 'Prefeitura Municipal').trim();
+            const minhaEntidade = (_currentUserProfile?.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
             const minhaSigla = getEntitySigla(minhaEntidade);
             const userObj = _allMembros.find(m => m.user_id === userId);
             const userEntidadeRaw = (userObj?.entidade || userObj?.profiles?.entidade || '').trim();
@@ -1054,8 +1054,8 @@
 
             camadaCards.forEach(cCard => {
                 const themeId = cCard.getAttribute('data-camada-id');
-                const podeVer = cCard.querySelector('.camada-ver-check').checked;
-                const podeExcluir = cCard.querySelector('.camada-excluir-check').checked;
+                const podeVer = !!cCard.querySelector('.camada-ver-check')?.checked;
+                const podeExcluir = !!cCard.querySelector('.camada-excluir-check')?.checked;
 
                 const abaEls = cCard.querySelectorAll('[data-form-id][data-tab-id]');
                 let podeEditarCamada = false;
@@ -1063,8 +1063,8 @@
                 abaEls.forEach(aEl => {
                     const formId = aEl.getAttribute('data-form-id');
                     const tabId = aEl.getAttribute('data-tab-id');
-                    const podeVerAba = aEl.querySelector('.aba-ver-check').checked;
-                    const podeEditarAba = aEl.querySelector('.aba-editar-check').checked;
+                    const podeVerAba = !!aEl.querySelector('.aba-ver-check')?.checked;
+                    const podeEditarAba = !!aEl.querySelector('.aba-editar-check')?.checked;
 
                     if (podeEditarAba) podeEditarCamada = true;
 
