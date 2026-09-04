@@ -47,6 +47,18 @@
         return raw;
     }
 
+    function getThemeEntity(t) {
+        if (!t) return 'Prefeitura Municipal';
+        if (t.metadata && t.metadata.entidade) return t.metadata.entidade.trim();
+        let localMeta = {};
+        try {
+            localMeta = JSON.parse(localStorage.getItem('constructive_themes_meta') || '{}');
+        } catch(e) {}
+        if (localMeta[t.id] && localMeta[t.id].entidade) return localMeta[t.id].entidade.trim();
+        if (t.entidade) return t.entidade.trim();
+        return 'Prefeitura Municipal';
+    }
+
     // Estado interno do painel
     let _allMembros = [];
     let _allTemas = [];
@@ -522,15 +534,11 @@
 
         // Define o município selecionado para este usuário no card
         if (isPartnerPontoFocal) {
-            // Para Ponto Focal Parceiro, se ainda não escolheu um município nesta sessão, define o padrão inicial:
-            if (!_userSelectedMunMap[userId]) {
-                if (_targetMunicipioId && todosMunIdsDoUser.has(_targetMunicipioId)) {
-                    _userSelectedMunMap[userId] = _targetMunicipioId;
-                } else if (todosMunIdsDoUser.size > 0) {
-                    _userSelectedMunMap[userId] = Array.from(todosMunIdsDoUser)[0];
-                } else if (_allMunicipios.length > 0) {
-                    _userSelectedMunMap[userId] = _allMunicipios[0].id;
-                }
+            // Para Ponto Focal Parceiro, o município relevante é estritamente o município acessado nesta sessão
+            if (_targetMunicipioId) {
+                _userSelectedMunMap[userId] = _targetMunicipioId;
+            } else if (!_userSelectedMunMap[userId] && _allMunicipios.length > 0) {
+                _userSelectedMunMap[userId] = _allMunicipios[0].id;
             }
         } else if (isMunicipal) {
             // Usuários municipais são 100% restritos ao seu município de cadastro
@@ -568,18 +576,6 @@
         const statusBadgeColor = userObj.status === 'aprovado' 
             ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' 
             : (userObj.status === 'pendente' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20');
-
-        let localMeta = {};
-        try {
-            localMeta = JSON.parse(localStorage.getItem('constructive_themes_meta') || '{}');
-        } catch(e) {}
-
-        function getThemeEntity(t) {
-            if (t.metadata && t.metadata.entidade) return t.metadata.entidade.trim();
-            if (localMeta[t.id] && localMeta[t.id].entidade) return localMeta[t.id].entidade.trim();
-            if (t.entidade) return t.entidade.trim();
-            return 'Prefeitura Municipal';
-        }
 
         // Renderiza camadas do município selecionado
         // FILTRO DE SEGURANÇA E ISOLAMENTO INSTITUCIONAL:
@@ -761,42 +757,21 @@
         // Seletor de Municípios Atribuídos
         let atribuicaoMunicipiosHtml = '';
         if (isPartnerPontoFocal) {
-            // Ponto Focal de Órgão Parceiro:
-            // Exibe botões/ícones de cada município vinculado a este Ponto Focal,
-            // permitindo ao Administrador alternar entre os municípios e conceder as camadas/ortofotos da sua entidade.
-            const municipiosDoPontoFocal = _allMunicipios.filter(mun => todosMunIdsDoUser.has(mun.id));
-            const listaMuns = municipiosDoPontoFocal.length > 0 ? municipiosDoPontoFocal : _allMunicipios;
-
+            // Ponto Focal de Órgão Parceiro: Exibe exclusivamente o município acessado nesta sessão
             atribuicaoMunicipiosHtml = `
                 <div class="mt-4 pt-3.5 border-t border-slate-200 dark:border-slate-800">
-                    <div class="flex items-center justify-between mb-2 flex-wrap gap-1">
+                    <div class="flex items-center justify-between mb-2">
                         <span class="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                            <span class="material-symbols-outlined text-[17px] text-cyan-600 dark:text-cyan-400">location_city</span>
-                            Municípios de Atuação deste Ponto Focal (${userSigla})
+                            <span class="material-symbols-outlined text-[17px] text-cyan-600 dark:text-cyan-400">home_work</span>
+                            Município de Compartilhamento
                         </span>
-                        <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Clique no município para ver e compartilhar as camadas da sua entidade</span>
                     </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 mt-2">
-                        ${listaMuns.map(mun => {
-                            const isSelectedMun = (mun.id === selectedMunId);
-                            const activeBorder = isSelectedMun 
-                                ? 'border-cyan-500 dark:border-cyan-400 bg-cyan-50 dark:bg-cyan-950/40 ring-2 ring-cyan-400/40 shadow-sm' 
-                                : 'border-slate-300 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/60 hover:border-cyan-400 dark:hover:border-cyan-500 cursor-pointer';
-
-                            return `
-                                <div class="flex items-center justify-between p-2.5 rounded-xl border ${activeBorder} transition-all select-none cursor-pointer group" onclick="window.UsuariosManager.selectUserMun('${userId}', '${mun.id}')">
-                                    <div class="flex items-center gap-2 min-w-0 pr-1">
-                                        <span class="material-symbols-outlined text-[18px] ${isSelectedMun ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-400 group-hover:text-cyan-500'} transition-colors">domain</span>
-                                        <span class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">${mun.nome}${mun.uf ? ' - ' + mun.uf : ''}</span>
-                                    </div>
-                                    ${isSelectedMun ? `
-                                        <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-cyan-600 text-white shrink-0 shadow-xs">Ativo</span>
-                                    ` : `
-                                        <span class="text-[10px] font-bold text-slate-400 group-hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">Selecionar</span>
-                                    `}
-                                </div>
-                            `;
-                        }).join('')}
+                    <div class="flex items-center justify-between p-2.5 px-3.5 rounded-xl border border-cyan-400/50 bg-cyan-50/50 dark:bg-cyan-950/25 text-slate-800 dark:text-slate-200 text-xs shadow-xs">
+                        <div class="flex items-center gap-2.5 font-bold text-cyan-700 dark:text-cyan-300">
+                            <span class="material-symbols-outlined text-[20px] text-cyan-600 dark:text-cyan-400">domain</span>
+                            <span class="text-sm font-extrabold">${selectedMunObj.nome}${selectedMunObj.uf ? ' - ' + selectedMunObj.uf : ''}</span>
+                        </div>
+                        <span class="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Município acessado</span>
                     </div>
                 </div>
             `;
