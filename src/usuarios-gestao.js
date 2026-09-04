@@ -249,29 +249,31 @@
     }
 
     function getAdminCeiling(themeId, formId, tabId) {
-        if (!_currentUserProfile || _currentUserProfile.super_admin) {
+        if (!_currentUserProfile) {
+            return { podeVer: false, podeEditar: false, podeExcluir: false };
+        }
+        // 1. SuperAdmin Geral tem controle sobre todas as camadas e abas de todos os órgãos
+        if (_currentUserProfile.super_admin) {
             return { podeVer: true, podeEditar: true, podeExcluir: true };
         }
 
-        const userId = _currentUserProfile.id;
-        const camadaPerm = _allCamadaPerms[`${userId}:${themeId}`] || { pode_ver: false, pode_editar: false, pode_excluir: false };
-        
-        let podeVerAba = camadaPerm.pode_ver;
-        let podeEditarAba = camadaPerm.pode_editar;
+        const minhaEntidade = (_currentUserProfile.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
+        const minhaSigla = getEntitySigla(minhaEntidade);
 
-        if (formId && tabId) {
-            const abaPerm = _allAbaPerms[`${userId}:${formId}:${tabId}`];
-            if (abaPerm) {
-                podeVerAba = !!abaPerm.pode_ver;
-                podeEditarAba = !!abaPerm.pode_editar;
-            }
+        // Identifica a entidade proprietária desta camada
+        const tema = _allTemas.find(t => t.id === themeId);
+        const tEntRaw = tema ? getThemeEntity(tema) : '';
+        const tSigla = getEntitySigla(tEntRaw);
+
+        // 2. Administrador de um Ente tem soberania TOTAL sobre as camadas da sua própria entidade!
+        // Pode ver, editar, excluir e conceder para sua equipe ou parceiros.
+        if (tSigla === minhaSigla) {
+            return { podeVer: true, podeEditar: true, podeExcluir: true };
         }
 
-        return {
-            podeVer: podeVerAba,
-            podeEditar: podeEditarAba,
-            podeExcluir: !!camadaPerm.pode_excluir
-        };
+        // 3. Administrador de um ente NÃO pode gerenciar nem conceder camadas de OUTROS entes parceiros!
+        // Quem gerencia o compartilhamento de camadas do MPF é o MPF; quem gerencia a SPU é a SPU.
+        return { podeVer: false, podeEditar: false, podeExcluir: false };
     }
 
     function renderEntidadesToggle() {
@@ -709,6 +711,9 @@
             const rSigla = getEntitySigla(rEntRaw);
             const isOtherRaster = rSigla !== userSigla;
 
+            const canManageRaster = _currentUserProfile?.super_admin || (rSigla === minhaSigla);
+            const rasterDisabled = (!isEditing || !canManageRaster) ? 'disabled' : '';
+
             return `
                 <div class="flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xs hover:border-slate-300 dark:hover:border-slate-600 transition-colors" data-raster-id="${r.id}">
                     <div class="flex items-center gap-3 min-w-0 pr-2">
@@ -728,8 +733,8 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-3 shrink-0">
-                        <label class="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 ${isEditing ? 'cursor-pointer' : 'cursor-default'}">
-                            <input type="checkbox" class="raster-ver-check rounded border-slate-400 dark:border-slate-500 text-emerald-600 focus:ring-emerald-500 w-4 h-4" ${podeVerRaster ? 'checked' : ''} ${!isEditing ? 'disabled' : ''}>
+                        <label class="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 ${isEditing && canManageRaster ? 'cursor-pointer' : 'cursor-default'}">
+                            <input type="checkbox" class="raster-ver-check rounded border-slate-400 dark:border-slate-500 text-emerald-600 focus:ring-emerald-500 w-4 h-4" ${podeVerRaster ? 'checked' : ''} ${rasterDisabled}>
                             Ver Ortofoto
                         </label>
                     </div>
