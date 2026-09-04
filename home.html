@@ -1378,6 +1378,10 @@ async function decidirSolicitacoesUsuario(targetUserId, aprovar, papelSelectId) 
 
     if (aprovar) {
         const marcados = checkboxes.filter(cb => cb.checked);
+        if (isEntidadeMunicipal(entidade) && marcados.length > 1) {
+            alert('Atenção: Usuários de entidade municipal só podem ter 1 único município aprovado.');
+            return;
+        }
         if (marcados.length === 0) {
             if (!confirm('Nenhum município foi selecionado para este usuário. Deseja rejeitar todas as solicitações dele?')) {
                 return;
@@ -1788,15 +1792,21 @@ async function init() {
             ].map(opt => `<option value="${opt.val}">${opt.label}</option>`).join('');
 
             const entNomeClean = (u.entidade || '').trim().toLowerCase();
-            const tipoEnt = entidadesTiposMap[entNomeClean] || 'externo';
-            const isMunicipal = (tipoEnt === 'municipal');
+            const tipoEnt = entidadesTiposMap[entNomeClean] || (isEntidadeMunicipal(u.entidade) ? 'municipal' : 'externo');
+            const isMunicipal = (tipoEnt === 'municipal') || isEntidadeMunicipal(u.entidade);
             const tagEntidadeHtml = isMunicipal
                 ? `<span class="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 px-2 py-0.5 rounded-full uppercase tracking-wider">Municipal</span>`
                 : `<span class="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/60 px-2 py-0.5 rounded-full uppercase tracking-wider">Órgão Externo</span>`;
 
             const userVinculos = vinculosPorUsuario[u.user_id] || {};
 
-            const municipiosCheckboxesHtml = adminMunicipiosAcessiveis.map(m => {
+            // Para entidade municipal: NÃO exibe outros municípios disponíveis!
+            // Exibe estritamente o(s) município(s) solicitado(s) ou já aprovados.
+            const municipiosParaRenderizar = isMunicipal
+                ? adminMunicipiosAcessiveis.filter(m => u.pedidos[m.id] || userVinculos[m.id] === 'aprovado')
+                : adminMunicipiosAcessiveis;
+
+            const municipiosCheckboxesHtml = municipiosParaRenderizar.map(m => {
                 const statusExistente = userVinculos[m.id];
                 const membroIdPendente = u.pedidos[m.id];
                 const foiSolicitado = !!membroIdPendente;
@@ -1816,7 +1826,7 @@ async function init() {
                 return `
                     <label class="flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer select-none ${foiSolicitado ? 'bg-sky-50/60 dark:bg-sky-950/30 border-sky-300 dark:border-sky-800 shadow-xs' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'}">
                         <div class="flex items-center gap-2.5">
-                            <input type="checkbox" class="municipio-solicitacao-cb rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary w-4 h-4 cursor-pointer" value="${m.id}" data-membro-id="${membroIdPendente || ''}" ${foiSolicitado ? 'checked' : ''}>
+                            <input type="checkbox" class="municipio-solicitacao-cb rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary w-4 h-4 cursor-pointer" value="${m.id}" data-membro-id="${membroIdPendente || ''}" ${foiSolicitado ? 'checked' : ''} ${isMunicipal ? 'onclick="return false;" style="pointer-events: none;"' : ''}>
                             <span class="text-xs font-medium text-slate-700 dark:text-slate-200">${m.nome}${m.uf ? ' - ' + m.uf : ''}</span>
                         </div>
                         ${foiSolicitado 
@@ -1865,9 +1875,11 @@ async function init() {
                     <div class="flex items-center justify-between mb-2">
                         <label class="text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                             <span class="material-symbols-outlined text-primary text-[18px]">location_city</span>
-                            Municípios Liberados para Acesso
+                            ${isMunicipal ? 'Município Solicitado (Entidade Municipal)' : 'Municípios Liberados para Acesso'}
                         </label>
-                        <span class="text-[11px] text-slate-400">Ative ou desative os municípios para este usuário</span>
+                        <span class="text-[11px] text-slate-400">
+                            ${isMunicipal ? 'Usuário de ente municipal é restrito exclusivamente ao seu município de atuação' : 'Ative ou desative os municípios para este usuário'}
+                        </span>
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-950/40 p-3 rounded-xl border border-slate-200 dark:border-slate-800/80">
                         ${municipiosCheckboxesHtml}
