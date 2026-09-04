@@ -4173,11 +4173,16 @@ function renderFeatureInfo() {
 
   if (dynamicFormSchema && dynamicFormSchema.length > 0) {
       if (typeof window.renderDynamicForm === 'function') {
-          window.renderDynamicForm(dynamicFormSchema, properties, isFeatureEditMode, 'feature-info-content', { activeTabId: window.currentActiveTabId, editTabId: window.activeFeatureEditTabId || null, formId: theme.formId });
+          window.renderDynamicForm(dynamicFormSchema, properties, isFeatureEditMode, 'feature-info-content', { 
+              activeTabId: window.currentActiveTabId, 
+              editTabId: window.activeFeatureEditTabId || null, 
+              formId: theme.formId,
+              themeId: theme.id,
+              theme: theme 
+          });
           return;
       }
   }
-  // OLD LOGIC FALLBACK
 
   {
     const container = document.getElementById('feature-info-content');
@@ -5092,41 +5097,120 @@ function userCanOnTheme(themeId, acao) {
 }
 
 // Abas de formulário (dentro de uma camada): super_admin e admin do
-// município sempre veem/editam tudo. Pra qualquer outro papel, negado por
-// padrão — só aparece o que tiver uma linha explícita em permissoes_aba
-// com pode_ver/pode_editar. Isso é de propósito: uma aba nova criada depois
-// (ou um formulário novo associado a uma camada nova) não deve aparecer pra
-// ninguém até alguém autorizar de novo, mesmo que a pessoa já tivesse
-// acesso a outras abas daquele mesmo formulário.
-function canSeeFormTab(formId, tabId) {
-    if (currentUserProfile && currentUserProfile.super_admin) return true;
-    if (currentMunicipioPapel === 'admin') return true;
-    if (!formId) return true;
-
-    const totalAbaRules = window.currentUserAbaPermissions ? Object.keys(window.currentUserAbaPermissions).length : 0;
-    if (totalAbaRules > 0) {
-        const key = `${formId}:${tabId}`.toLowerCase().trim();
-        const perm = window.currentUserAbaPermissions[key] || window.currentUserAbaPermissions[formId + ':' + tabId];
-        return !!(perm && (perm.pode_ver === true || perm.pode_ver === 'true'));
+// Avaliação de permissão de visualização de abas do formulário (Segurança e Isolamento Interinstitucional)
+function canSeeFormTab(formId, tabId, options = {}) {
+    // 1. SuperAdmin geral do sistema tem acesso irrestrito a todas as abas
+    if (currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin')) {
+        return true;
     }
 
-    return true;
+    if (!formId || !tabId) return true;
+
+    const fId = String(formId).toLowerCase().trim();
+    const tId = String(tabId).toLowerCase().trim();
+    const key = `${fId}:${tId}`;
+
+    // Identifica se este formulário pertence a uma camada de outro ente
+    const targetTheme = options.theme || (themes || []).find(t => 
+        (t.formId && String(t.formId).toLowerCase().trim() === fId) ||
+        (t.tipo_cadastro && String(t.tipo_cadastro).toLowerCase().trim() === fId)
+    );
+    
+    const themeEntidade = targetTheme ? ((targetTheme.metadata && targetTheme.metadata.entidade) || targetTheme.entidade || 'Prefeitura Municipal').trim() : '';
+    const userEntidade = (window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').trim();
+    
+    const themeSigla = typeof getEntitySigla === 'function' ? getEntitySigla(themeEntidade) : themeEntidade;
+    const userSigla = typeof getEntitySigla === 'function' ? getEntitySigla(userEntidade) : userEntidade;
+    const isOutroEnte = themeEntidade && userEntidade && (themeSigla !== userSigla) && (themeEntidade.toLowerCase() !== 'geral');
+
+    const perm = window.currentUserAbaPermissions ? (window.currentUserAbaPermissions[key] || window.currentUserAbaPermissions[`${formId}:${tabId}`]) : null;
+
+    // REGRA DE OURO INTERINSTITUCIONAL:
+    // Camada compartilhada de OUTRO ente: o usuário NUNCA herda privilégios de Administrador!
+    // Princípio do Menor Privilégio: Só vê o que foi explicitamente concedido pelo Administrador do ente proprietário.
+    if (isOutroEnte) {
+        if (!perm) return false;
+        return perm.pode_ver === true || perm.pode_ver === 'true';
+    }
+
+    // Camada da própria entidade:
+    // Se há regra explícita de aba para este usuário, ela é SOBERANA sobre qualquer papel
+    if (perm) {
+        return perm.pode_ver === true || perm.pode_ver === 'true';
+    }
+
+    // Se existem outras regras de abas configuradas para este formulário, as não listadas ficam ocultas
+    const totalRulesForThisForm = window.currentUserAbaPermissions 
+        ? Object.keys(window.currentUserAbaPermissions).filter(k => k.startsWith(fId + ':')).length 
+        : 0;
+    if (totalRulesForThisForm > 0) {
+        return false;
+    }
+
+    // Administrador da própria entidade sem restrições pontuais cadastradas vê tudo de sua própria entidade
+    if (currentMunicipioPapel === 'admin') {
+        return true;
+    }
+
+    return false;
 }
 window.canSeeFormTab = canSeeFormTab;
 
-function canEditFormTab(formId, tabId) {
-    if (currentUserProfile && currentUserProfile.super_admin) return true;
-    if (currentMunicipioPapel === 'admin') return true;
-    if (!formId) return true;
-
-    const totalAbaRules = window.currentUserAbaPermissions ? Object.keys(window.currentUserAbaPermissions).length : 0;
-    if (totalAbaRules > 0) {
-        const key = `${formId}:${tabId}`.toLowerCase().trim();
-        const perm = window.currentUserAbaPermissions[key] || window.currentUserAbaPermissions[formId + ':' + tabId];
-        return !!(perm && (perm.pode_editar === true || perm.pode_editar === 'true'));
+// Avaliação de permissão de edição de abas do formulário (Segurança e Isolamento Interinstitucional)
+function canEditFormTab(formId, tabId, options = {}) {
+    // 1. SuperAdmin geral tem acesso irrestrito
+    if (currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin')) {
+        return true;
     }
 
-    return true;
+    if (!formId || !tabId) return false;
+
+    const fId = String(formId).toLowerCase().trim();
+    const tId = String(tabId).toLowerCase().trim();
+    const key = `${fId}:${tId}`;
+
+    const targetTheme = options.theme || (themes || []).find(t => 
+        (t.formId && String(t.formId).toLowerCase().trim() === fId) ||
+        (t.tipo_cadastro && String(t.tipo_cadastro).toLowerCase().trim() === fId)
+    );
+
+    // Se o tema como um todo não permite edição (ex: permissão de camada pode_editar = false), a aba NUNCA pode ser editada
+    if (targetTheme && typeof userCanOnTheme === 'function' && !userCanOnTheme(targetTheme.id, 'editar')) {
+        return false;
+    }
+
+    const themeEntidade = targetTheme ? ((targetTheme.metadata && targetTheme.metadata.entidade) || targetTheme.entidade || 'Prefeitura Municipal').trim() : '';
+    const userEntidade = (window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').trim();
+    
+    const themeSigla = typeof getEntitySigla === 'function' ? getEntitySigla(themeEntidade) : themeEntidade;
+    const userSigla = typeof getEntitySigla === 'function' ? getEntitySigla(userEntidade) : userEntidade;
+    const isOutroEnte = themeEntidade && userEntidade && (themeSigla !== userSigla) && (themeEntidade.toLowerCase() !== 'geral');
+
+    const perm = window.currentUserAbaPermissions ? (window.currentUserAbaPermissions[key] || window.currentUserAbaPermissions[`${formId}:${tabId}`]) : null;
+
+    // Se a camada for de outro ente: NUNCA herda admin! Exige pode_editar explícito para esta aba!
+    if (isOutroEnte) {
+        if (!perm) return false;
+        return perm.pode_editar === true || perm.pode_editar === 'true';
+    }
+
+    // Camada da própria entidade:
+    if (perm) {
+        return perm.pode_editar === true || perm.pode_editar === 'true';
+    }
+
+    const totalRulesForThisForm = window.currentUserAbaPermissions 
+        ? Object.keys(window.currentUserAbaPermissions).filter(k => k.startsWith(fId + ':')).length 
+        : 0;
+    if (totalRulesForThisForm > 0) {
+        return false;
+    }
+
+    if (currentMunicipioPapel === 'admin') {
+        return true;
+    }
+
+    return false;
 }
 window.canEditFormTab = canEditFormTab;
 

@@ -25,14 +25,20 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
     window.currentFormIsPreview = options.isPreview || false;
     window.currentFormEditTabId = options.editTabId || null;
 
-    // Permissão por aba (permissoes_aba): só se aplica a dados reais (não
-    // ao preview do form builder em settings.html) e só restringe quando
-    // existe mesmo uma linha pra essa aba — quem nunca recebeu restrição
-    // continua vendo tudo, como sempre viu.
-    const formId = options.formId || null;
+    // Preserva opções do formulário (incluindo formId, themeId e theme) para persistência entre renderizações
+    if (options.formId) window.currentFormId = options.formId;
+    if (options.theme) window.currentFormTheme = options.theme;
+    if (options.themeId) window.currentFormThemeId = options.themeId;
+
+    const formId = options.formId || window.currentFormId || null;
+    options.formId = formId;
+    if (!options.theme && window.currentFormTheme) options.theme = window.currentFormTheme;
+    if (!options.themeId && window.currentFormThemeId) options.themeId = window.currentFormThemeId;
+    window.currentFormOptions = options;
+
     const visibleTabs = (options.isPreview || typeof window.canSeeFormTab !== 'function')
         ? formConfig
-        : formConfig.filter(tab => window.canSeeFormTab(formId, tab.id));
+        : formConfig.filter(tab => window.canSeeFormTab(formId, tab.id, options));
 
     if (visibleTabs.length === 0) {
         container.innerHTML = '<div class="p-4 text-xs text-slate-400 italic text-center">Você não tem permissão para ver nenhuma aba deste formulário.</div>';
@@ -74,7 +80,7 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
                 <div id="acc-content-${tab.id}" class="accordion-content transition-all duration-300 ${isPrimary ? 'block p-4 sm:p-5 border-t border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-950' : 'hidden'}">
         `;
         
-        const canEditThisTab = (options.isPreview || typeof window.canEditFormTab !== 'function') || window.canEditFormTab(formId, tab.id);
+        const canEditThisTab = (options.isPreview || typeof window.canEditFormTab !== 'function') || window.canEditFormTab(formId, tab.id, options);
 
         let isTabEditMode = false;
         if (isEditMode) {
@@ -1314,7 +1320,7 @@ window.saveMultipleRecord = function(tabId) {
     
     // Instead of appending a row, just re-render the whole dynamic form to keep it simple and clean
     if (typeof window.renderDynamicForm === 'function' && window.currentFormContainerId) {
-        window.renderDynamicForm(window.currentFormFeatures, window.currentFormFeatureData, window.currentFormIsEditMode, window.currentFormContainerId, { isPreview: window.currentFormIsPreview, activeTabId: tabId });
+        window.renderDynamicForm(window.currentFormFeatures, window.currentFormFeatureData, window.currentFormIsEditMode, window.currentFormContainerId, Object.assign({}, window.currentFormOptions || {}, { isPreview: window.currentFormIsPreview, activeTabId: tabId }));
     } else {
         toggleMultipleForm(tabId, false);
     }
@@ -1335,7 +1341,7 @@ window.deleteMultipleRecord = function(tabId, idx) {
     }
     
     if (typeof window.renderDynamicForm === 'function' && window.currentFormContainerId) {
-        window.renderDynamicForm(window.currentFormFeatures, window.currentFormFeatureData, window.currentFormIsEditMode, window.currentFormContainerId, { isPreview: window.currentFormIsPreview, activeTabId: tabId });
+        window.renderDynamicForm(window.currentFormFeatures, window.currentFormFeatureData, window.currentFormIsEditMode, window.currentFormContainerId, Object.assign({}, window.currentFormOptions || {}, { isPreview: window.currentFormIsPreview, activeTabId: tabId }));
     } else {
         const tbody = document.getElementById('multiple-table-body-' + tabId);
         if (tbody && tbody.children[idx]) {
