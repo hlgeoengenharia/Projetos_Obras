@@ -161,7 +161,21 @@
         return;
       }
 
-      // Diferente de municipal (múltiplos municípios): entra na Home
+      // Se não tiver municípios aprovados, verifica se foi rejeitado pelo Admin
+      if (municipiosAtribuidos.length === 0) {
+        const { data: rejeitados } = await supabaseClient
+          .from('municipio_membros')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('status', 'rejeitado')
+          .limit(1);
+        if (rejeitados && rejeitados.length > 0) {
+          window.location.href = 'home.html?rejeitado=1';
+          return;
+        }
+      }
+
+      // Diferente de municipal (múltiplos municípios ou solicitação pendente): entra na Home
       window.location.href = 'home.html';
     } catch(err) {
       window.location.href = 'home.html';

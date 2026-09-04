@@ -107,3 +107,14 @@ CREATE POLICY imagens_raster_select_authenticated ON public.imagens_raster
       AND pr.pode_ver = true
     )
   );
+
+-- 7. PERMITIR QUE USUÁRIO REJEITADO SOLICITE NOVO ACESSO
+-- Permite que o próprio usuário atualize sua solicitação rejeitada para pendente ao solicitar novo acesso.
+DROP POLICY IF EXISTS membros_update_self_rejeitado ON public.municipio_membros;
+CREATE POLICY membros_update_self_rejeitado ON public.municipio_membros
+  FOR UPDATE USING (
+    user_id = auth.uid() AND status = 'rejeitado'
+  ) WITH CHECK (
+    user_id = auth.uid() AND status = 'pendente' AND papel = 'visualizador'
+  );
+

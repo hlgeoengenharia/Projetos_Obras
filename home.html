@@ -312,10 +312,73 @@
                     <span class="material-symbols-outlined text-[13px]">share_location</span>
                     <span>Ponto Focal Interinstitucional</span>
                 </div>
+
+                <!-- Alerta de Rejeição pelo Administrador -->
+                <div id="profile-rejeitado-alert" class="hidden mt-3.5 w-full text-left p-3.5 rounded-xl bg-rose-500/10 dark:bg-rose-950/50 border border-rose-500/30 text-rose-700 dark:text-rose-300 shadow-sm">
+                    <div class="flex items-start gap-2.5">
+                        <span class="material-symbols-outlined text-rose-500 text-[22px] shrink-0 mt-0.5">error</span>
+                        <div class="flex-1 min-w-0">
+                            <h5 class="text-xs font-bold text-rose-700 dark:text-rose-300 flex items-center gap-1">
+                                Rejeitado pelo Administrador
+                            </h5>
+                            <p id="profile-rejeitado-msg" class="text-[11.5px] mt-1 text-slate-600 dark:text-slate-300 leading-snug">
+                                Rejeitado pelo Administrador, por favor solicitar novo acesso.
+                            </p>
+                            <button type="button" onclick="document.getElementById('profile-modal').classList.add('hidden'); openRequestMunicipioModal();" class="mt-2.5 w-full py-2 px-3 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer active:scale-95">
+                                <span class="material-symbols-outlined text-[16px]">add_location_alt</span>
+                                <span>Solicitar Novo Acesso</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <div class="border-t border-slate-200 dark:border-slate-800 pt-5">
-                <h4 class="text-sm font-bold text-slate-800 dark:text-white mb-4 uppercase tracking-wider">Configurações Gerais</h4>
+            <!-- Dados Institucionais (Entidade / Cargo com Edição) -->
+            <div class="border-t border-slate-200 dark:border-slate-800 pt-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h4 class="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[16px] text-cyan-500">domain</span>
+                        Dados Institucionais
+                    </h4>
+                    <button type="button" id="btn-toggle-edit-perfil" onclick="toggleEditPerfilModal()" class="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer">
+                        <span class="material-symbols-outlined text-[13px]">edit</span>
+                        <span id="btn-toggle-edit-perfil-text">Editar</span>
+                    </button>
+                </div>
+
+                <!-- Modo Visualização -->
+                <div id="perfil-dados-view" class="space-y-1.5 text-xs">
+                    <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
+                        <span class="text-slate-400">Entidade:</span>
+                        <span id="perfil-view-entidade" class="font-bold text-slate-700 dark:text-slate-200">—</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
+                        <span class="text-slate-400">Cargo:</span>
+                        <span id="perfil-view-cargo" class="font-semibold text-slate-700 dark:text-slate-200">—</span>
+                    </div>
+                </div>
+
+                <!-- Modo Edição -->
+                <div id="perfil-dados-edit" class="hidden space-y-2.5 mt-2 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">Entidade / Órgão</label>
+                        <input id="perfil-edit-entidade" type="text" placeholder="Ex: Prefeitura Municipal, MPF, SPU..." class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">Cargo / Função</label>
+                        <input id="perfil-edit-cargo" type="text" placeholder="Ex: Analista, Engenheiro..." class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none">
+                    </div>
+                    <div class="flex items-center justify-end gap-2 pt-1">
+                        <button type="button" onclick="cancelEditPerfilModal()" class="px-2.5 py-1 text-xs rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 transition-colors">Cancelar</button>
+                        <button type="button" onclick="salvarPerfilModal()" class="px-3 py-1 text-xs font-bold rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors shadow-sm flex items-center gap-1">
+                            <span class="material-symbols-outlined text-[14px]">check</span> Salvar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="border-t border-slate-200 dark:border-slate-800 pt-4 mt-4">
+                <h4 class="text-sm font-bold text-slate-800 dark:text-white mb-3 uppercase tracking-wider">Configurações Gerais</h4>
 
                 <div class="space-y-4">
                     <div>
@@ -333,8 +396,8 @@
                 </div>
             </div>
 
-            <div class="border-t border-slate-200 dark:border-slate-800 pt-5 mt-5">
-                <button onclick="document.getElementById('profile-modal').classList.add('hidden'); openRequestMunicipioModal()" class="w-full flex items-center gap-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:text-primary dark:hover:text-sky-400 transition-colors">
+            <div class="border-t border-slate-200 dark:border-slate-800 pt-4 mt-4">
+                <button onclick="document.getElementById('profile-modal').classList.add('hidden'); openRequestMunicipioModal()" class="w-full flex items-center gap-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:text-primary dark:hover:text-sky-400 transition-colors">
                     <span class="material-symbols-outlined text-[20px] text-primary">add_location_alt</span>
                     Solicitar acesso a outro município
                 </button>
@@ -498,10 +561,23 @@
     </div>
   </section>
 
-  <!-- Sem acesso aprovado ainda -->
-  <section id="empty-section" class="hidden text-center py-16">
-    <span class="material-symbols-outlined text-[48px] text-slate-300 dark:text-slate-600">hourglass_empty</span>
-    <p class="mt-3 text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto">Sua solicitação de acesso está em análise. Assim que for aprovada, o município aparecerá aqui.</p>
+  <!-- Sem acesso aprovado ainda / Rejeitado -->
+  <section id="empty-section" class="hidden text-center py-16 px-4">
+    <div id="empty-section-icon" class="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4 text-slate-400 shadow-sm">
+      <span class="material-symbols-outlined text-[36px]">hourglass_empty</span>
+    </div>
+    <h3 id="empty-section-title" class="text-base font-bold text-slate-800 dark:text-slate-100">Solicitação em Análise</h3>
+    <p id="empty-section-msg" class="mt-2 text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">Sua solicitação de acesso está em análise. Assim que for aprovada, o município aparecerá aqui.</p>
+    <div id="empty-section-actions" class="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+      <button onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="px-5 py-2.5 text-xs font-bold bg-primary text-white hover:bg-primary/90 rounded-xl transition-all shadow-sm flex items-center gap-2 cursor-pointer active:scale-95">
+        <span class="material-symbols-outlined text-[18px]">person</span>
+        <span>Abrir Perfil</span>
+      </button>
+      <button onclick="openRequestMunicipioModal()" class="px-5 py-2.5 text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer active:scale-95">
+        <span class="material-symbols-outlined text-[18px] text-primary">add_location_alt</span>
+        <span>Solicitar Novo Acesso</span>
+      </button>
+    </div>
   </section>
 
   <!-- Tela Padrão de Boas-Vindas ao Entrar no Município (nenhuma aba aberta inicialmente) -->
@@ -993,6 +1069,8 @@ function applyCurrentUserToProfileModal() {
     const themeSelect = document.getElementById('profile-theme-select');
     const entEl = document.getElementById('profile-user-entidade');
     const pfBadge = document.getElementById('profile-user-ponto-focal-badge');
+    const viewEnt = document.getElementById('perfil-view-entidade');
+    const viewCargo = document.getElementById('perfil-view-cargo');
 
     if (nameEl) nameEl.textContent = homeUserProfile.nome || homeUserProfile.email || 'Usuário';
     if (roleEl) roleEl.textContent = homeUserProfile.super_admin
@@ -1002,6 +1080,8 @@ function applyCurrentUserToProfileModal() {
 
     const entNome = homeUserProfile.entidade || 'Prefeitura Municipal';
     if (entEl) entEl.textContent = entNome;
+    if (viewEnt) viewEnt.textContent = entNome;
+    if (viewCargo) viewCargo.textContent = homeUserProfile.cargo || 'Não informado';
 
     if (pfBadge) {
         if (homeUserProfile.ponto_focal) {
@@ -1011,6 +1091,65 @@ function applyCurrentUserToProfileModal() {
         }
     }
 }
+
+window.toggleEditPerfilModal = function() {
+    const viewDiv = document.getElementById('perfil-dados-view');
+    const editDiv = document.getElementById('perfil-dados-edit');
+    if (!editDiv || !viewDiv) return;
+    const isHidden = editDiv.classList.contains('hidden');
+    if (isHidden) {
+        document.getElementById('perfil-edit-entidade').value = homeUserProfile?.entidade || '';
+        document.getElementById('perfil-edit-cargo').value = homeUserProfile?.cargo || '';
+        viewDiv.classList.add('hidden');
+        editDiv.classList.remove('hidden');
+        const txt = document.getElementById('btn-toggle-edit-perfil-text');
+        if (txt) txt.textContent = 'Fechar';
+    } else {
+        cancelEditPerfilModal();
+    }
+};
+
+window.cancelEditPerfilModal = function() {
+    const viewDiv = document.getElementById('perfil-dados-view');
+    const editDiv = document.getElementById('perfil-dados-edit');
+    if (viewDiv) viewDiv.classList.remove('hidden');
+    if (editDiv) editDiv.classList.add('hidden');
+    const txt = document.getElementById('btn-toggle-edit-perfil-text');
+    if (txt) txt.textContent = 'Editar';
+};
+
+window.salvarPerfilModal = async function() {
+    const novaEntidade = document.getElementById('perfil-edit-entidade').value.trim();
+    const novoCargo = document.getElementById('perfil-edit-cargo').value.trim();
+    if (!novaEntidade) {
+        alert('Por favor, informe a Entidade / Órgão.');
+        return;
+    }
+
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    if (!sessionData || !sessionData.session) return;
+    const uid = sessionData.session.user.id;
+
+    const { error } = await supabaseClient.from('profiles').update({
+        entidade: novaEntidade,
+        cargo: novoCargo || null
+    }).eq('id', uid);
+
+    if (error) {
+        alert('Erro ao atualizar perfil: ' + error.message);
+        return;
+    }
+
+    if (homeUserProfile) {
+        homeUserProfile.entidade = novaEntidade;
+        homeUserProfile.cargo = novoCargo;
+    }
+    usuarioEntidadeCargo = { entidade: novaEntidade, cargo: novoCargo };
+
+    applyCurrentUserToProfileModal();
+    cancelEditPerfilModal();
+    alert('✅ Dados institucionais atualizados com sucesso!');
+};
 
 window.handleLogout = async function() {
     if (supabaseClient) {
@@ -1026,10 +1165,8 @@ function selectMunicipio(id, nome) {
 }
 
 // Município(s) além do(s) já solicitado(s) — reaproveita a entidade/cargo
-// do pedido mais recente do usuário, já que a rotina é só marcar quais
-// municípios faltam; cada município selecionado vira uma nova linha
-// 'pendente' (a política de INSERT já permite o próprio usuário criar
-// pedidos pendentes pra si mesmo, sem precisar do gatilho do cadastro).
+// do pedido mais recente do usuário, ou permite solicitar novo acesso para
+// municípios anteriormente rejeitados.
 let usuarioEntidadeCargo = { entidade: '', cargo: '' };
 
 async function openRequestMunicipioModal() {
@@ -1039,27 +1176,37 @@ async function openRequestMunicipioModal() {
 
     const { data: minhas } = await supabaseClient
         .from('municipio_membros')
-        .select('municipio_id, entidade, cargo, solicitado_em')
+        .select('municipio_id, status, entidade, cargo, solicitado_em')
         .eq('user_id', userId)
         .order('solicitado_em', { ascending: false });
 
-    const jaTem = new Set((minhas || []).map(m => m.municipio_id));
-    if (minhas && minhas.length > 0) {
-        usuarioEntidadeCargo = { entidade: minhas[0].entidade || '', cargo: minhas[0].cargo || '' };
-    }
+    // Bloqueia apenas municípios que já estão aprovados ou com pedido pendente.
+    // Se o município foi rejeitado, o usuário PODE solicitar novo acesso!
+    const emAnaliseOuAprovados = new Set((minhas || []).filter(m => m.status === 'aprovado' || m.status === 'pendente').map(m => m.municipio_id));
+    
+    // Recupera entidade e cargo atuais
+    const entAtual = homeUserProfile?.entidade || (minhas && minhas[0]?.entidade) || '';
+    const cargoAtual = homeUserProfile?.cargo || (minhas && minhas[0]?.cargo) || '';
+    usuarioEntidadeCargo = { entidade: entAtual, cargo: cargoAtual };
 
     const { data: todos } = await supabaseClient.from('municipios').select('id, nome, uf').eq('ativo', true).order('nome');
-    const disponiveis = (todos || []).filter(m => !jaTem.has(m.id));
+    const disponiveis = (todos || []).filter(m => !emAnaliseOuAprovados.has(m.id));
 
     const list = document.getElementById('request-municipio-list');
     document.getElementById('request-municipio-error').classList.add('hidden');
     list.innerHTML = disponiveis.length > 0
-        ? disponiveis.map(m => `
-            <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200 cursor-pointer">
-                <input type="checkbox" class="request-municipio-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" value="${m.id}">
-                ${m.nome}${m.uf ? ' - ' + m.uf : ''}
-            </label>`).join('')
-        : '<div class="text-xs text-slate-400 italic py-2">Você já solicitou acesso a todos os municípios disponíveis.</div>';
+        ? disponiveis.map(m => {
+            const eraRejeitado = (minhas || []).some(item => item.municipio_id === m.id && item.status === 'rejeitado');
+            return `
+            <label class="flex items-center justify-between gap-2 text-sm text-slate-700 dark:text-slate-200 cursor-pointer p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                <div class="flex items-center gap-2 min-w-0">
+                    <input type="checkbox" class="request-municipio-checkbox rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary" value="${m.id}">
+                    <span class="font-medium truncate">${m.nome}${m.uf ? ' - ' + m.uf : ''}</span>
+                </div>
+                ${eraRejeitado ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 shrink-0">Anteriormente Rejeitado</span>' : ''}
+            </label>`;
+        }).join('')
+        : '<div class="text-xs text-slate-400 italic py-2">Você já possui acesso ou solicitações em análise para todos os municípios cadastrados.</div>';
 
     document.getElementById('request-municipio-modal').classList.remove('hidden');
 }
@@ -1084,24 +1231,61 @@ async function enviarSolicitacoesMunicipio() {
     const { data: sessionData } = await supabaseClient.auth.getSession();
     const userId = sessionData.session.user.id;
 
-    const rows = ids.map(municipio_id => ({
-        user_id: userId,
-        municipio_id,
-        status: 'pendente',
-        papel: 'visualizador',
-        entidade: usuarioEntidadeCargo.entidade,
-        cargo: usuarioEntidadeCargo.cargo
-    }));
+    // Busca registros existentes para saber se é UPDATE (re-solicitação) ou INSERT (novo município)
+    const { data: existentes } = await supabaseClient
+        .from('municipio_membros')
+        .select('id, municipio_id')
+        .eq('user_id', userId)
+        .in('municipio_id', ids);
 
-    const { error } = await supabaseClient.from('municipio_membros').insert(rows);
-    if (error) {
-        errorEl.textContent = 'Erro ao enviar solicitação: ' + error.message;
+    const mapExistentes = new Map((existentes || []).map(e => [e.municipio_id, e.id]));
+
+    const entFinal = homeUserProfile?.entidade || usuarioEntidadeCargo.entidade || null;
+    const cargoFinal = homeUserProfile?.cargo || usuarioEntidadeCargo.cargo || null;
+
+    const promises = [];
+    ids.forEach(municipio_id => {
+        if (mapExistentes.has(municipio_id)) {
+            // Re-solicitação de município rejeitado: volta para 'pendente'
+            const membroId = mapExistentes.get(municipio_id);
+            promises.push(
+                supabaseClient.from('municipio_membros').update({
+                    status: 'pendente',
+                    papel: 'visualizador',
+                    entidade: entFinal,
+                    cargo: cargoFinal,
+                    solicitado_em: new Date().toISOString(),
+                    decidido_em: null,
+                    decidido_por: null
+                }).eq('id', membroId)
+            );
+        } else {
+            // Novo município solicitado
+            promises.push(
+                supabaseClient.from('municipio_membros').insert([{
+                    user_id: userId,
+                    municipio_id,
+                    status: 'pendente',
+                    papel: 'visualizador',
+                    entidade: entFinal,
+                    cargo: cargoFinal,
+                    solicitado_em: new Date().toISOString()
+                }])
+            );
+        }
+    });
+
+    const results = await Promise.all(promises);
+    const hasError = results.find(r => r && r.error);
+    if (hasError) {
+        errorEl.textContent = 'Erro ao enviar solicitação: ' + hasError.error.message;
         errorEl.classList.remove('hidden');
         return;
     }
 
     closeRequestMunicipioModal();
-    alert('Solicitação enviada! Aguarde a aprovação do administrador.');
+    alert('✨ Nova solicitação enviada com sucesso! Aguarde a aprovação do administrador.');
+    init();
 }
 window.enviarSolicitacoesMunicipio = enviarSolicitacoesMunicipio;
 
@@ -1721,6 +1905,63 @@ async function init() {
         document.getElementById('municipios-section').classList.add('active');
         initParaibaMap([]);
     } else {
+        // Verifica se o usuário possui alguma solicitação que foi rejeitada
+        const { data: minhasRejeicoes } = await supabaseClient
+            .from('municipio_membros')
+            .select('id, status, entidade, cargo, municipios(nome, uf)')
+            .eq('user_id', userId)
+            .eq('status', 'rejeitado');
+
+        const temRejeicao = minhasRejeicoes && minhasRejeicoes.length > 0;
+        const rejAlert = document.getElementById('profile-rejeitado-alert');
+        const rejMsg = document.getElementById('profile-rejeitado-msg');
+
+        if (temRejeicao) {
+            if (rejAlert) {
+                rejAlert.classList.remove('hidden');
+                if (rejMsg) {
+                    const munNomes = minhasRejeicoes.map(r => r.municipios?.nome).filter(Boolean).join(', ');
+                    rejMsg.textContent = munNomes
+                        ? `Sua solicitação de acesso para ${munNomes} foi rejeitada pelo Administrador. Por favor, revise seus dados abaixo e solicite novo acesso.`
+                        : 'Rejeitado pelo Administrador, por favor solicitar novo acesso.';
+                }
+            }
+
+            const emptyIcon = document.getElementById('empty-section-icon');
+            const emptyTitle = document.getElementById('empty-section-title');
+            const emptyMsg = document.getElementById('empty-section-msg');
+            if (emptyIcon) {
+                emptyIcon.innerHTML = '<span class="material-symbols-outlined text-[36px] text-rose-500">person_cancel</span>';
+                emptyIcon.className = 'w-16 h-16 rounded-full bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 flex items-center justify-center mx-auto mb-4';
+            }
+            if (emptyTitle) {
+                emptyTitle.textContent = 'Acesso Rejeitado pelo Administrador';
+                emptyTitle.className = 'text-base font-bold text-rose-600 dark:text-rose-400';
+            }
+            if (emptyMsg) {
+                emptyMsg.textContent = 'Sua solicitação anterior foi rejeitada pelo Administrador. Abra o seu Perfil para conferir seus dados ou solicitar novo acesso.';
+            }
+
+            // Direciona abrindo o modal do Perfil do Usuário
+            document.getElementById('profile-modal').classList.remove('hidden');
+        } else {
+            if (rejAlert) rejAlert.classList.add('hidden');
+            const emptyIcon = document.getElementById('empty-section-icon');
+            const emptyTitle = document.getElementById('empty-section-title');
+            const emptyMsg = document.getElementById('empty-section-msg');
+            if (emptyIcon) {
+                emptyIcon.innerHTML = '<span class="material-symbols-outlined text-[36px]">hourglass_empty</span>';
+                emptyIcon.className = 'w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4 text-slate-400 shadow-sm';
+            }
+            if (emptyTitle) {
+                emptyTitle.textContent = 'Solicitação em Análise';
+                emptyTitle.className = 'text-base font-bold text-slate-800 dark:text-slate-100';
+            }
+            if (emptyMsg) {
+                emptyMsg.textContent = 'Sua solicitação de acesso está em análise. Assim que for aprovada, o município aparecerá aqui.';
+            }
+        }
+
         document.getElementById('empty-section').classList.remove('hidden');
     }
 
