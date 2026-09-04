@@ -236,12 +236,18 @@
         // 2. Filtra por busca e permissões
         uniqueUsers = uniqueUsers.filter(u => {
             if (_targetMunicipioId) {
-                // Se estiver dentro de um município específico, verifica se o usuário tem vínculo nele
-                const temNoMun = u.membros.some(mb => mb.municipio_id === _targetMunicipioId);
-                if (!temNoMun && !isSuperAdmin) return false;
+                // Se estiver dentro de um município específico, verifica se o usuário tem vínculo ativo nele.
+                // Usuários com status 'rejeitado' neste município NÃO aparecem para o Admin deste município!
+                const temNoMunAtivo = u.membros.some(mb => mb.municipio_id === _targetMunicipioId && mb.status !== 'rejeitado');
+                if (!temNoMunAtivo && !isSuperAdmin) return false;
             }
 
-            if (!isSuperAdmin && !canManageUser(u)) return false;
+            if (!isSuperAdmin) {
+                // Para o Admin do ente/município, se todos os vínculos do usuário com este município/ente foram rejeitados, ele sai da visão
+                const temVinculoValido = u.membros.some(mb => mb.status !== 'rejeitado' && (!_targetMunicipioId || mb.municipio_id === _targetMunicipioId));
+                if (!temVinculoValido) return false;
+                if (!canManageUser(u)) return false;
+            }
 
             if (query) {
                 const nome = (u.profile?.nome || '').toLowerCase();
