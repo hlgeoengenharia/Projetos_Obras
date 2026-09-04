@@ -361,12 +361,17 @@
                 <!-- Modo Edição -->
                 <div id="perfil-dados-edit" class="hidden space-y-2.5 mt-2 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
                     <div>
-                        <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">Entidade / Órgão</label>
-                        <input id="perfil-edit-entidade" type="text" placeholder="Ex: Prefeitura Municipal, MPF, SPU..." class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none">
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300">Entidade / Órgão</label>
+                            <span id="perfil-edit-tipo-badge" class="text-[9.5px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30">Municipal</span>
+                        </div>
+                        <select id="perfil-edit-entidade" onchange="onPerfilEntidadeChange()" class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer">
+                            <option value="">Carregando entidades...</option>
+                        </select>
                     </div>
                     <div>
                         <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">Cargo / Função</label>
-                        <input id="perfil-edit-cargo" type="text" placeholder="Ex: Analista, Engenheiro..." class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none">
+                        <input id="perfil-edit-cargo" type="text" placeholder="Ex: Analista, Engenheiro, Auditor..." class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none">
                     </div>
                     <div class="flex items-center justify-end gap-2 pt-1">
                         <button type="button" onclick="cancelEditPerfilModal()" class="px-2.5 py-1 text-xs rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 transition-colors cursor-pointer">Cancelar</button>
@@ -418,23 +423,58 @@
 
 <!-- Solicitar acesso a município -->
 <div id="request-municipio-modal" class="fixed inset-0 bg-black/60 z-[200] hidden flex items-center justify-center backdrop-blur-sm px-4 py-4 sm:py-6 overflow-hidden">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm max-h-[90vh] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col my-auto">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md max-h-[90vh] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col my-auto">
         <div class="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/20 shrink-0">
             <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                 <span class="material-symbols-outlined text-primary">add_location_alt</span>
-                <span>Solicitar Acesso</span>
+                <span>Solicitar Novo Acesso</span>
             </h3>
-            <button onclick="closeRequestMunicipioModal()" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors" title="Fechar">
+            <button onclick="closeRequestMunicipioModal()" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors cursor-pointer" title="Fechar">
                 <span class="material-symbols-outlined">close</span>
             </button>
         </div>
-        <div class="p-5 overflow-y-auto flex-1 min-h-0">
-            <p id="request-municipio-desc" class="text-xs text-slate-500 dark:text-slate-400 mb-3 leading-relaxed">Selecione o município que deseja acessar. O pedido entra na fila de aprovação do administrador.</p>
-            <div id="request-municipio-list" class="max-h-56 overflow-y-auto flex flex-col gap-1.5 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5"></div>
-            <div id="request-municipio-error" class="hidden text-xs text-red-600 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2 mt-3"></div>
+        <div class="p-5 overflow-y-auto flex-1 min-h-0 space-y-4">
+            <!-- Card de Escolha do Ente / Órgão -->
+            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                <div class="flex items-center justify-between">
+                    <label class="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[16px] text-cyan-500">domain</span>
+                        <span>Entidade / Órgão Desejado</span>
+                    </label>
+                    <span id="request-entidade-tipo-badge" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30">
+                        Municipal
+                    </span>
+                </div>
+                <select id="request-municipio-entidade" onchange="onRequestEntidadeChange()" class="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl dark:text-white focus:ring-2 focus:ring-primary focus:outline-none cursor-pointer">
+                    <option value="">Carregando entidades cadastradas...</option>
+                </select>
+
+                <div>
+                    <label class="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">Cargo / Função</label>
+                    <input id="request-municipio-cargo" type="text" placeholder="Ex: Analista, Fiscal, Auditor, Engenheiro..." class="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none">
+                </div>
+            </div>
+
+            <!-- Seção de Municípios -->
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <label class="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[16px] text-primary">location_city</span>
+                        <span>Municípios</span>
+                    </label>
+                    <span id="request-municipio-regra-badge" class="text-[10.5px] font-bold text-amber-600 dark:text-amber-400">
+                        Escolha Única
+                    </span>
+                </div>
+                <p id="request-municipio-desc" class="text-xs text-slate-500 dark:text-slate-400 mb-2.5 leading-relaxed">
+                    Selecione o seu município de atuação.
+                </p>
+                <div id="request-municipio-list" class="max-h-52 overflow-y-auto flex flex-col gap-1.5 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50/50 dark:bg-slate-900/50"></div>
+                <div id="request-municipio-error" class="hidden text-xs text-red-600 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2 mt-3"></div>
+            </div>
         </div>
         <div class="px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 flex items-center gap-2 shrink-0">
-            <button onclick="enviarSolicitacoesMunicipio()" class="flex-1 px-4 py-2 text-xs font-bold bg-primary text-white hover:bg-primary/90 rounded-lg transition-colors shadow-sm cursor-pointer">
+            <button onclick="enviarSolicitacoesMunicipio()" class="flex-1 px-4 py-2 text-xs font-bold bg-primary text-white hover:bg-primary/90 rounded-lg transition-colors shadow-sm cursor-pointer active:scale-95">
                 Enviar Solicitação
             </button>
             <button onclick="closeRequestMunicipioModal()" class="px-3 py-2 text-xs font-semibold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer" title="Fechar esta janela">
@@ -1118,13 +1158,59 @@ function applyCurrentUserToProfileModal() {
     }
 }
 
-window.toggleEditPerfilModal = function() {
+let cachedEntidadesPadrao = null;
+
+async function getEntidadesPadrao() {
+    if (cachedEntidadesPadrao && cachedEntidadesPadrao.length > 0) {
+        return cachedEntidadesPadrao;
+    }
+    try {
+        const { data, error } = await supabaseClient
+            .from('entidades_padrao')
+            .select('id, nome, sigla, tipo, ativo')
+            .eq('ativo', true)
+            .order('created_at');
+        if (!error && data && data.length > 0) {
+            cachedEntidadesPadrao = data;
+            return cachedEntidadesPadrao;
+        }
+    } catch (e) {
+        console.warn('Erro ao consultar entidades_padrao:', e);
+    }
+    // Fallback padrão se tabela estiver vazia
+    cachedEntidadesPadrao = [
+        { id: '1', nome: 'Prefeitura Municipal', sigla: 'Município', tipo: 'municipal', ativo: true },
+        { id: '2', nome: 'Ministério Público Federal', sigla: 'MPF', tipo: 'externo', ativo: true },
+        { id: '3', nome: 'Polícia Federal', sigla: 'PF', tipo: 'externo', ativo: true },
+        { id: '4', nome: 'Secretaria do Patrimônio da União', sigla: 'SPU', tipo: 'externo', ativo: true }
+    ];
+    return cachedEntidadesPadrao;
+}
+
+window.toggleEditPerfilModal = async function() {
     const viewDiv = document.getElementById('perfil-dados-view');
     const editDiv = document.getElementById('perfil-dados-edit');
     if (!editDiv || !viewDiv) return;
     const isHidden = editDiv.classList.contains('hidden');
     if (isHidden) {
-        document.getElementById('perfil-edit-entidade').value = homeUserProfile?.entidade || '';
+        const ents = await getEntidadesPadrao();
+        const entSelect = document.getElementById('perfil-edit-entidade');
+        const userEnt = homeUserProfile?.entidade || '';
+        
+        if (entSelect) {
+            let optionsHtml = ents.map(e => {
+                const label = e.sigla ? `${e.nome} (${e.sigla})` : e.nome;
+                return `<option value="${e.nome}" data-tipo="${e.tipo}">${label}</option>`;
+            }).join('');
+            
+            if (userEnt && !ents.some(e => e.nome.toLowerCase().trim() === userEnt.toLowerCase().trim())) {
+                optionsHtml = `<option value="${userEnt}" data-tipo="${isEntidadeMunicipal(userEnt) ? 'municipal' : 'externo'}">${userEnt}</option>` + optionsHtml;
+            }
+            entSelect.innerHTML = optionsHtml;
+            entSelect.value = userEnt || (ents[0]?.nome || 'Prefeitura Municipal');
+            onPerfilEntidadeChange();
+        }
+
         document.getElementById('perfil-edit-cargo').value = homeUserProfile?.cargo || '';
         viewDiv.classList.add('hidden');
         editDiv.classList.remove('hidden');
@@ -1132,6 +1218,21 @@ window.toggleEditPerfilModal = function() {
         if (txt) txt.textContent = 'Fechar';
     } else {
         cancelEditPerfilModal();
+    }
+};
+
+window.onPerfilEntidadeChange = function() {
+    const entSelect = document.getElementById('perfil-edit-entidade');
+    const badge = document.getElementById('perfil-edit-tipo-badge');
+    if (!entSelect || !badge) return;
+    const opt = entSelect.options[entSelect.selectedIndex];
+    const tipo = opt ? opt.getAttribute('data-tipo') : (isEntidadeMunicipal(entSelect.value) ? 'municipal' : 'externo');
+    if (tipo === 'municipal') {
+        badge.textContent = 'Municipal';
+        badge.className = 'text-[9.5px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30';
+    } else {
+        badge.textContent = 'Externo';
+        badge.className = 'text-[9.5px] font-bold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30';
     }
 };
 
@@ -1145,7 +1246,8 @@ window.cancelEditPerfilModal = function() {
 };
 
 window.salvarPerfilModal = async function() {
-    const novaEntidade = document.getElementById('perfil-edit-entidade').value.trim();
+    const entSelect = document.getElementById('perfil-edit-entidade');
+    const novaEntidade = entSelect ? entSelect.value.trim() : '';
     const novoCargo = document.getElementById('perfil-edit-cargo').value.trim();
     if (!novaEntidade) {
         alert('Por favor, informe a Entidade / Órgão.');
@@ -1190,10 +1292,8 @@ function selectMunicipio(id, nome) {
     window.location.href = 'index.html';
 }
 
-// Município(s) além do(s) já solicitado(s) — reaproveita a entidade/cargo
-// do pedido mais recente do usuário, ou permite solicitar novo acesso para
-// municípios anteriormente rejeitados.
 let usuarioEntidadeCargo = { entidade: '', cargo: '' };
+let cacheMinhasSolicitacoes = [];
 
 async function openRequestMunicipioModal() {
     const { data: sessionData } = await supabaseClient.auth.getSession();
@@ -1206,49 +1306,127 @@ async function openRequestMunicipioModal() {
         .eq('user_id', userId)
         .order('solicitado_em', { ascending: false });
 
-    // Bloqueia apenas municípios que já estão aprovados ou com pedido pendente.
-    // Se o município foi rejeitado, o usuário PODE solicitar novo acesso!
-    const emAnaliseOuAprovados = new Set((minhas || []).filter(m => m.status === 'aprovado' || m.status === 'pendente').map(m => m.municipio_id));
-    
-    // Recupera entidade e cargo atuais
-    const entAtual = homeUserProfile?.entidade || (minhas && minhas[0]?.entidade) || '';
-    const cargoAtual = homeUserProfile?.cargo || (minhas && minhas[0]?.cargo) || '';
-    usuarioEntidadeCargo = { entidade: entAtual, cargo: cargoAtual };
+    cacheMinhasSolicitacoes = minhas || [];
 
-    const ehMunicipal = isEntidadeMunicipal(entAtual);
-    const descEl = document.getElementById('request-municipio-desc');
-    if (descEl) {
-        descEl.textContent = ehMunicipal
-            ? 'Como integrante de Prefeitura Municipal, selecione o seu município de atuação (escolha única). O pedido entra na fila de aprovação do administrador.'
-            : 'Selecione o(s) município(s) que deseja acessar. O pedido entra na fila de aprovação do administrador.';
+    // Carrega entidades cadastradas da tabela entidades_padrao
+    const ents = await getEntidadesPadrao();
+    const entSelect = document.getElementById('request-municipio-entidade');
+    const userEnt = homeUserProfile?.entidade || (cacheMinhasSolicitacoes[0]?.entidade) || 'Prefeitura Municipal';
+
+    if (entSelect) {
+        let optionsHtml = ents.map(e => {
+            const label = e.sigla ? `${e.nome} (${e.sigla})` : e.nome;
+            return `<option value="${e.nome}" data-tipo="${e.tipo}">${label}</option>`;
+        }).join('');
+
+        if (userEnt && !ents.some(e => e.nome.toLowerCase().trim() === userEnt.toLowerCase().trim())) {
+            optionsHtml = `<option value="${userEnt}" data-tipo="${isEntidadeMunicipal(userEnt) ? 'municipal' : 'externo'}">${userEnt}</option>` + optionsHtml;
+        }
+        entSelect.innerHTML = optionsHtml;
+        entSelect.value = userEnt;
     }
 
+    const cargoInp = document.getElementById('request-municipio-cargo');
+    if (cargoInp) {
+        cargoInp.value = homeUserProfile?.cargo || (cacheMinhasSolicitacoes[0]?.cargo) || '';
+    }
+
+    // Carrega municípios ativos
     const { data: todos } = await supabaseClient.from('municipios').select('id, nome, uf').eq('ativo', true).order('nome');
-    const disponiveis = (todos || []).filter(m => !emAnaliseOuAprovados.has(m.id));
+    window.todosMunicipiosCache = todos || [];
 
-    const list = document.getElementById('request-municipio-list');
-    document.getElementById('request-municipio-error').classList.add('hidden');
-
-    const inputType = ehMunicipal ? 'radio' : 'checkbox';
-    const inputName = ehMunicipal ? 'name="solicitar_mun_opcao"' : '';
-
-    list.innerHTML = disponiveis.length > 0
-        ? disponiveis.map(m => {
-            const eraRejeitado = (minhas || []).some(item => item.municipio_id === m.id && item.status === 'rejeitado');
-            return `
-            <label class="flex items-center justify-between gap-2.5 text-sm text-slate-700 dark:text-slate-200 cursor-pointer p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
-                <div class="flex items-center gap-2.5 min-w-0">
-                    <input type="${inputType}" ${inputName} class="request-municipio-input rounded${ehMunicipal ? '-full' : ''} border-slate-300 dark:border-slate-600 text-primary focus:ring-primary w-4 h-4 cursor-pointer" value="${m.id}">
-                    <span class="font-medium truncate text-xs sm:text-sm">${m.nome}${m.uf ? ' - ' + m.uf : ''}</span>
-                </div>
-                ${eraRejeitado ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 shrink-0">Anteriormente Rejeitado</span>' : ''}
-            </label>`;
-        }).join('')
-        : '<div class="text-xs text-slate-400 italic py-3 text-center">Você já possui acesso ou solicitações em análise para todos os municípios cadastrados.</div>';
+    // Ajusta visualização conforme a entidade selecionada (modo radio vs checkbox)
+    onRequestEntidadeChange();
 
     document.getElementById('request-municipio-modal').classList.remove('hidden');
 }
 window.openRequestMunicipioModal = openRequestMunicipioModal;
+
+function onRequestEntidadeChange() {
+    const entSelect = document.getElementById('request-municipio-entidade');
+    if (!entSelect) return;
+
+    const opt = entSelect.options[entSelect.selectedIndex];
+    const entNome = entSelect.value;
+    const tipo = opt ? opt.getAttribute('data-tipo') : (isEntidadeMunicipal(entNome) ? 'municipal' : 'externo');
+    const ehMunicipal = (tipo === 'municipal') || isEntidadeMunicipal(entNome);
+
+    const badgeTipo = document.getElementById('request-entidade-tipo-badge');
+    const badgeRegra = document.getElementById('request-municipio-regra-badge');
+    const descEl = document.getElementById('request-municipio-desc');
+
+    if (badgeTipo) {
+        if (ehMunicipal) {
+            badgeTipo.textContent = 'Ente Municipal';
+            badgeTipo.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30';
+        } else {
+            badgeTipo.textContent = 'Ente Externo / Parceiro';
+            badgeTipo.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30';
+        }
+    }
+
+    if (badgeRegra) {
+        if (ehMunicipal) {
+            badgeRegra.textContent = 'Escolha Única (1 município)';
+            badgeRegra.className = 'text-[10.5px] font-bold text-amber-600 dark:text-amber-400';
+        } else {
+            badgeRegra.textContent = 'Múltipla Escolha (1 ou mais)';
+            badgeRegra.className = 'text-[10.5px] font-bold text-emerald-600 dark:text-emerald-400';
+        }
+    }
+
+    if (descEl) {
+        descEl.textContent = ehMunicipal
+            ? 'Como integrante de Prefeitura Municipal, selecione 1 único município de atuação. O pedido entrará na fila de aprovação do administrador.'
+            : 'Como integrante de Ente Externo / Parceiro, você pode selecionar um ou mais municípios para os quais deseja solicitar atuação / acompanhamento.';
+    }
+
+    renderRequestMunicipiosList(ehMunicipal, entNome);
+}
+window.onRequestEntidadeChange = onRequestEntidadeChange;
+
+function renderRequestMunicipiosList(ehMunicipal, entNome) {
+    const list = document.getElementById('request-municipio-list');
+    if (!list) return;
+
+    const todos = window.todosMunicipiosCache || [];
+    const minhas = cacheMinhasSolicitacoes || [];
+
+    // Municípios onde o usuário já tem acesso APROVADO com ESTA MESMA ENTIDADE não precisam ser re-solicitados
+    const aprovadosNestaEntidade = new Set(
+        minhas.filter(m => m.status === 'aprovado' && (m.entidade || '').toLowerCase().trim() === (entNome || '').toLowerCase().trim())
+              .map(m => m.municipio_id)
+    );
+
+    const disponiveis = todos.filter(m => !aprovadosNestaEntidade.has(m.id));
+    document.getElementById('request-municipio-error')?.classList.add('hidden');
+
+    const inputType = ehMunicipal ? 'radio' : 'checkbox';
+    const inputName = ehMunicipal ? 'name="solicitar_mun_opcao"' : '';
+
+    if (disponiveis.length === 0) {
+        list.innerHTML = '<div class="text-xs text-slate-400 italic py-3 text-center">Você já possui acesso aprovado para todos os municípios cadastrados.</div>';
+        return;
+    }
+
+    list.innerHTML = disponiveis.map(m => {
+        const registroMun = minhas.find(item => item.municipio_id === m.id);
+        const eraRejeitado = registroMun && registroMun.status === 'rejeitado';
+        const pendente = registroMun && registroMun.status === 'pendente' && (registroMun.entidade || '').toLowerCase().trim() === (entNome || '').toLowerCase().trim();
+
+        return `
+        <label class="flex items-center justify-between gap-2.5 text-xs sm:text-sm text-slate-700 dark:text-slate-200 cursor-pointer p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <input type="${inputType}" ${inputName} class="request-municipio-input rounded${ehMunicipal ? '-full' : ''} border-slate-300 dark:border-slate-600 text-primary focus:ring-primary w-4 h-4 cursor-pointer" value="${m.id}" ${pendente ? 'checked' : ''}>
+                <span class="font-medium truncate">${m.nome}${m.uf ? ' - ' + m.uf : ''}</span>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+                ${pendente ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">Em Análise</span>' : ''}
+                ${eraRejeitado ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">Anteriormente Rejeitado</span>' : ''}
+            </div>
+        </label>`;
+    }).join('');
+}
 
 function closeRequestMunicipioModal() {
     document.getElementById('request-municipio-modal').classList.add('hidden');
@@ -1259,16 +1437,28 @@ async function enviarSolicitacoesMunicipio() {
     const errorEl = document.getElementById('request-municipio-error');
     errorEl.classList.add('hidden');
 
+    const entSelect = document.getElementById('request-municipio-entidade');
+    const cargoInp = document.getElementById('request-municipio-cargo');
+
+    const entFinal = entSelect ? entSelect.value.trim() : (homeUserProfile?.entidade || '');
+    const cargoFinal = cargoInp ? cargoInp.value.trim() : (homeUserProfile?.cargo || '');
+
+    if (!entFinal) {
+        errorEl.textContent = 'Por favor, selecione uma Entidade / Órgão.';
+        errorEl.classList.remove('hidden');
+        return;
+    }
+
+    const opt = entSelect ? entSelect.options[entSelect.selectedIndex] : null;
+    const tipo = opt ? opt.getAttribute('data-tipo') : (isEntidadeMunicipal(entFinal) ? 'municipal' : 'externo');
+    const ehMunicipal = (tipo === 'municipal') || isEntidadeMunicipal(entFinal);
+
     const ids = Array.from(document.querySelectorAll('.request-municipio-input:checked')).map(cb => cb.value);
     if (ids.length === 0) {
         errorEl.textContent = 'Selecione ao menos um município.';
         errorEl.classList.remove('hidden');
         return;
     }
-
-    const entFinal = homeUserProfile?.entidade || usuarioEntidadeCargo.entidade || null;
-    const cargoFinal = homeUserProfile?.cargo || usuarioEntidadeCargo.cargo || null;
-    const ehMunicipal = isEntidadeMunicipal(entFinal);
 
     if (ehMunicipal && ids.length > 1) {
         errorEl.textContent = 'Integrantes de Prefeitura Municipal só podem solicitar acesso a um único município.';
@@ -1277,9 +1467,20 @@ async function enviarSolicitacoesMunicipio() {
     }
 
     const { data: sessionData } = await supabaseClient.auth.getSession();
+    if (!sessionData || !sessionData.session) return;
     const userId = sessionData.session.user.id;
 
-    // Busca registros existentes para saber se é UPDATE (re-solicitação) ou INSERT (novo município)
+    // 1. Atualiza dados de entidade e cargo em profiles
+    try {
+        await supabaseClient.from('profiles').update({
+            entidade: entFinal,
+            cargo: cargoFinal || null
+        }).eq('id', userId);
+    } catch (e) {
+        console.warn('Erro ao sincronizar profiles:', e);
+    }
+
+    // 2. Busca registros existentes para saber se é UPDATE (re-solicitação) ou INSERT (novo município)
     const { data: existentes } = await supabaseClient
         .from('municipio_membros')
         .select('id, municipio_id')
@@ -1291,7 +1492,7 @@ async function enviarSolicitacoesMunicipio() {
     const promises = [];
     ids.forEach(municipio_id => {
         if (mapExistentes.has(municipio_id)) {
-            // Re-solicitação de município rejeitado: volta para 'pendente'
+            // Re-solicitação: volta para 'pendente' atualizando entidade e cargo
             const membroId = mapExistentes.get(municipio_id);
             promises.push(
                 supabaseClient.from('municipio_membros').update({
@@ -1328,8 +1529,16 @@ async function enviarSolicitacoesMunicipio() {
         return;
     }
 
+    if (homeUserProfile) {
+        homeUserProfile.entidade = entFinal;
+        homeUserProfile.cargo = cargoFinal;
+    }
+    usuarioEntidadeCargo = { entidade: entFinal, cargo: cargoFinal };
+
     closeRequestMunicipioModal();
-    alert('✨ Nova solicitação enviada com sucesso! Aguarde a aprovação do administrador.');
+    document.getElementById('profile-modal')?.classList.add('hidden');
+
+    alert('✨ Nova solicitação enviada com sucesso para ' + entFinal + '! Aguarde a aprovação do administrador.');
     init();
 }
 window.enviarSolicitacoesMunicipio = enviarSolicitacoesMunicipio;
