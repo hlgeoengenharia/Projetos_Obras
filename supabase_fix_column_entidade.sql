@@ -1,15 +1,12 @@
--- ============================================================
--- FIX DEFINITIVO DE SEGURANÇA E ISOLAMENTO INTERINSTITUCIONAL
--- Previne vazamento e adulteração de dados entre Entes e Municípios.
--- Execute no SQL Editor do Supabase.
--- ============================================================
+-- ====================================================================
+-- CORREÇÃO DO ERRO: column t.entidade does not exist
+-- Execute este script no SQL Editor do seu Supabase Dashboard.
+-- ====================================================================
 
--- 0. Assegura existência da coluna entidade na tabela temas (evita erro de coluna inexistente)
+-- 1. Garante que a coluna entidade exista na tabela temas (evita falhas de schema)
 ALTER TABLE public.temas ADD COLUMN IF NOT EXISTS entidade text;
 
--- 1. FUNÇÃO tem_permissao (Soberania de permissoes_camada e Isolamento Interinstitucional)
--- Garante que o papel 'admin' de um órgão parceiro (ex: SPU, MPF, PF)
--- NUNCA herde poderes sobre camadas de outro ente (ex: Prefeitura).
+-- 2. Atualiza a função tem_permissao para ler a entidade do JSONB metadata com segurança
 CREATE OR REPLACE FUNCTION public.tem_permissao(p_theme_id uuid, p_acao text)
 RETURNS boolean LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
 DECLARE
@@ -31,7 +28,7 @@ BEGIN
     RETURN true;
   END IF;
 
-  -- 2. Busca dados do tema
+  -- 2. Busca dados do tema (lendo de metadata->>'entidade' de forma segura)
   SELECT 
     t.municipio_id,
     COALESCE(NULLIF(t.metadata->>'entidade', ''), 'Prefeitura Municipal')
@@ -115,22 +112,3 @@ BEGIN
   RETURN false;
 END;
 $$;
-
--- 2. POLÍTICA RLS PARA FEICOES
--- Garante que o trigger e as consultas em feicoes usem a nova tem_permissao
-DROP POLICY IF EXISTS feicoes_update_perm ON public.feicoes;
-CREATE POLICY feicoes_update_perm ON public.feicoes
-  FOR UPDATE USING (
-    public.is_super_admin()
-    OR public.tem_permissao(theme_id, 'editar')
-  ) WITH CHECK (
-    public.is_super_admin()
-    OR public.tem_permissao(theme_id, 'editar')
-  );
-
-DROP POLICY IF EXISTS feicoes_delete_perm ON public.feicoes;
-CREATE POLICY feicoes_delete_perm ON public.feicoes
-  FOR DELETE USING (
-    public.is_super_admin()
-    OR public.tem_permissao(theme_id, 'excluir')
-  );
