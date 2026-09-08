@@ -1133,7 +1133,15 @@
         if (subContainer) {
             subContainer.style.opacity = isChecked ? '1' : '0.4';
             subContainer.style.pointerEvents = isChecked ? 'auto' : 'none';
-            if (!isChecked) {
+            if (isChecked) {
+                // Ao habilitar a camada, garante que as sub-abas tenham visualização habilitada por padrão
+                const anyVerChecked = Array.from(subContainer.querySelectorAll('.aba-ver-check')).some(cb => cb.checked);
+                if (!anyVerChecked) {
+                    subContainer.querySelectorAll('.aba-ver-check').forEach(cb => {
+                        if (!cb.disabled) cb.checked = true;
+                    });
+                }
+            } else {
                 subContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
             }
         }

@@ -509,11 +509,24 @@ function showWarningToast(message) {
 
 // --- LEAFLET MAP ---
 function initMap() {
+  let initialCenter = cabedeloCenter;
+  let initialZoom = 16;
+  try {
+    const savedCoords = sessionStorage.getItem('municipio_ativo_coords');
+    if (savedCoords) {
+      const parsed = JSON.parse(savedCoords);
+      if (parsed && typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
+        initialCenter = [parsed.lat, parsed.lng];
+        initialZoom = parsed.zoom || 15;
+      }
+    }
+  } catch(e) {}
+
   map = L.map('map', {
     zoomControl: false, // We use our custom zoom buttons
     maxZoom: 24,
     preferCanvas: true // Fixes html2canvas vector offset issues
-  }).setView(cabedeloCenter, 16);
+  }).setView(initialCenter, initialZoom);
   window.map = map;
 
   // Define Base Layers
@@ -1358,11 +1371,19 @@ function renderThemes() {
     const userSigla = getEntitySigla(userEntidade);
     const isMyEntity = !userEntidade || !themeEntidade || themeEntidade === 'Geral' || (themeSigla === userSigla) || (themeEntidade.toLowerCase() === userEntidade.toLowerCase());
     
-    if (!isSuperAdmin && !isMyEntity && !isSharedActive) {
-        return; // Fica oculta do painel principal, disponível apenas no botão COMPARTILHADO
+    const tid = String(theme.id).toLowerCase().trim();
+    const hasExplicitPerm = !!(currentUserPermissions && (
+        (currentUserPermissions[tid] && (currentUserPermissions[tid].pode_ver === true || currentUserPermissions[tid].pode_ver === 'true')) ||
+        (currentUserPermissions[theme.id] && (currentUserPermissions[theme.id].pode_ver === true || currentUserPermissions[theme.id].pode_ver === 'true'))
+    ));
+
+    // Se o usuário possui permissão explícita concedida pelo administrador para ver esta camada,
+    // ela DEVE aparecer no painel principal, sem depender de ativação manual no localStorage!
+    if (!isSuperAdmin && !isMyEntity && !isSharedActive && !hasExplicitPerm) {
+        return; // Fica oculta apenas se não for da minha entidade, não tiver autorização expressa e não tiver sido ativada
     }
 
-    const isSharedFromOtherEntity = !isSuperAdmin && !isMyEntity && isSharedActive;
+    const isSharedFromOtherEntity = !isSuperAdmin && !isMyEntity;
     const canManageThisEntityLayer = isSuperAdmin || isMyEntity;
     const canEditThisTheme = isSuperAdmin || (!isSharedFromOtherEntity && isAdmin);
     const canAddFeatures = isSuperAdmin || !isSharedFromOtherEntity;
@@ -5065,6 +5086,32 @@ async function ensureAuthenticated() {
     }
     window.currentUserProfile = currentUserProfile;
 
+    // Carrega dados e coordenadas geográficas do município ativo para centralização espacial dinâmica
+    try {
+        const { data: munData } = await supabaseClient
+            .from('municipios')
+            .select('id, nome, latitude, longitude, zoom')
+            .eq('id', activeMunicipioId)
+            .maybeSingle();
+        if (munData) {
+            window.activeMunicipioData = munData;
+            if (munData.latitude && munData.longitude) {
+                const targetCoords = [munData.latitude, munData.longitude];
+                const targetZoom = munData.zoom || 15;
+                sessionStorage.setItem('municipio_ativo_coords', JSON.stringify({
+                    lat: munData.latitude,
+                    lng: munData.longitude,
+                    zoom: targetZoom
+                }));
+                if (typeof map !== 'undefined' && map && typeof map.setView === 'function') {
+                    map.setView(targetCoords, targetZoom);
+                }
+            }
+        }
+    } catch(eMun) {
+        console.warn('Não foi possível obter dados espaciais do município:', eMun);
+    }
+
     // Carrega entidades padrão para listagem no seletor de criação e catálogo
     try {
         const { data: ents } = await supabaseClient.from('entidades_padrao').select('*').order('nome');
@@ -5112,18 +5159,15 @@ function applyPermissionUIGating() {
 
     const homeEl = document.getElementById('drawer-btn-home') || document.getElementById('drawer-btn-ajustes');
     if (homeEl) {
+        homeEl.style.display = '';
         if (isAdmin) {
-            homeEl.style.display = '';
             homeEl.href = 'home.html?view=municipio';
             homeEl.title = 'Voltar ao Painel do Município';
-        } else if (temMultiplosMunicipios) {
-            homeEl.style.display = '';
-            homeEl.href = 'home.html?portal=1';
-            homeEl.title = 'Trocar de Município';
-            const homeLabel = homeEl.querySelector('span:last-child');
-            if (homeLabel) homeLabel.textContent = 'Municípios';
         } else {
-            homeEl.style.display = 'none';
+            homeEl.href = 'home.html';
+            homeEl.title = 'Página Inicial / Municípios';
+            const homeLabel = homeEl.querySelector('span:last-child');
+            if (homeLabel && temMultiplosMunicipios) homeLabel.textContent = 'Municípios';
         }
     }
 
@@ -5157,16 +5201,11 @@ function userCanOnTheme(themeId, acao) {
     const userSigla = typeof getEntitySigla === 'function' ? getEntitySigla(userEntidade) : userEntidade;
     const isOutroEnte = themeEntidade && userEntidade && (themeSigla !== userSigla) && (themeEntidade.toLowerCase() !== 'geral');
 
-    // REGRA DE OURO INTERINSTITUCIONAL:
+    // REGRA SOBERANA INTERINSTITUCIONAL:
     // Se a camada for de outro ente governamental parceiro:
-    // O usuário DEVE ser Ponto Focal (currentUserProfile.ponto_focal === true)
-    // E DEVE ter permissão expressa concedida em permissoes_camada (pc.pode_ver === true).
-    // Usuários sem Ponto Focal (como Klebson) JAMAIS visualizam dados de outros entes!
+    // A autorização concedida pelo Administrador do ente proprietário em permissoes_camada é SOBERANA.
+    // Se pc.pode_ver for verdadeiro, o usuário TEM PERMISSÃO DE VER (independente de flag ponto_focal).
     if (isOutroEnte) {
-        const isPontoFocal = !!(currentUserProfile && currentUserProfile.ponto_focal);
-        if (!isPontoFocal) {
-            return false;
-        }
         if (!pc) {
             return false;
         }
@@ -5239,11 +5278,16 @@ function canSeeFormTab(formId, tabId, options = {}) {
     const perm = window.currentUserAbaPermissions ? (window.currentUserAbaPermissions[key] || window.currentUserAbaPermissions[`${formId}:${tabId}`]) : null;
 
     // REGRA DE OURO INTERINSTITUCIONAL:
-    // Camada compartilhada de OUTRO ente: o usuário NUNCA herda privilégios de Administrador!
-    // Princípio do Menor Privilégio: Só vê o que foi explicitamente concedido pelo Administrador do ente proprietário.
+    // Camada compartilhada de OUTRO ente:
+    // 1. Se há regra explícita de aba (permissoes_aba), respeita-a fielmente.
+    // 2. Se não há regra individual por aba cadastrada, mas o usuário tem permissão de ver a camada,
+    // permite a visualização das abas em modo leitura para evitar bloqueio acidental de formulários.
     if (isOutroEnte) {
-        if (!perm) return false;
-        return perm.pode_ver === true || perm.pode_ver === 'true';
+        if (perm) return perm.pode_ver === true || perm.pode_ver === 'true';
+        if (targetTheme && typeof userCanOnTheme === 'function') {
+            return userCanOnTheme(targetTheme.id, 'ver');
+        }
+        return false;
     }
 
     // Camada da própria entidade:

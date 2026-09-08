@@ -637,7 +637,7 @@
     <h2 id="welcome-municipio-title" class="text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight mb-2">
       Bem-vindo ao GeoGestor
     </h2>
-    <p class="text-xs sm:text-sm text-slate-400 max-w-md mx-auto">
+    <p id="welcome-municipio-subtitle" class="text-xs sm:text-sm text-slate-400 max-w-md mx-auto">
       Selecione uma das abas acima para acessar as ferramentas de gestão ou o mapa interativo deste município.
     </p>
   </section>
@@ -661,19 +661,70 @@ let homeUserProfile = null;
 const SETTINGS_TABS = ['cadastros', 'estatistica', 'layout', 'storage', 'usuarios', 'auditoria'];
 let currentActiveSettingsTab = null;
 
+window.getMunicipioCoordinates = function(nome) {
+    if (!nome) return null;
+    const norm = typeof normMunString === 'function' ? normMunString(nome) : String(nome).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (typeof paraibaFeatureLayers !== 'undefined' && paraibaFeatureLayers && paraibaFeatureLayers[norm]) {
+        try {
+            const bounds = paraibaFeatureLayers[norm].getBounds();
+            const center = bounds.getCenter();
+            return {
+                lat: center.lat,
+                lng: center.lng,
+                zoom: 15,
+                bbox: [bounds.getSouthWest().lng, bounds.getSouthWest().lat, bounds.getNorthEast().lng, bounds.getNorthEast().lat]
+            };
+        } catch(e) {}
+    }
+    if (typeof paraibaGeojsonData !== 'undefined' && paraibaGeojsonData && Array.isArray(paraibaGeojsonData.features)) {
+        try {
+            const feat = paraibaGeojsonData.features.find(f => {
+                const fNorm = typeof normMunString === 'function' ? normMunString(f.properties?.nome) : String(f.properties?.nome || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                return fNorm === norm;
+            });
+            if (feat && typeof L !== 'undefined') {
+                const bounds = L.geoJSON(feat).getBounds();
+                const center = bounds.getCenter();
+                return {
+                    lat: center.lat,
+                    lng: center.lng,
+                    zoom: 15,
+                    bbox: [bounds.getSouthWest().lng, bounds.getSouthWest().lat, bounds.getNorthEast().lng, bounds.getNorthEast().lat]
+                };
+            }
+        } catch(e) {}
+    }
+    return null;
+};
+
+// Ao selecionar um município, TODOS os usuários (administradores ou analistas) entram direto no mapa interativo
 window.abrirMunicipio = function(id, nome, papel) {
     sessionStorage.setItem('municipio_ativo', id);
     sessionStorage.setItem('municipio_ativo_nome', nome);
 
-    const ehAdmin = papel === 'admin' || (homeUserProfile && homeUserProfile.super_admin);
-
-    if (!ehAdmin) {
-        // Usuário comum abre direto o mapa
-        window.location.href = 'index.html';
-        return;
+    // Encontra coordenadas do município (do cache ou do GeoJSON) para enquadramento espacial dinâmico
+    const munObj = (window.municipiosParaMostrarCache || []).find(m => m.id === id);
+    let coords = null;
+    if (munObj && munObj.latitude && munObj.longitude) {
+        coords = { lat: munObj.latitude, lng: munObj.longitude, zoom: munObj.zoom || 15, bbox: munObj.bbox || null };
+    } else if (typeof window.getMunicipioCoordinates === 'function') {
+        coords = window.getMunicipioCoordinates(nome);
+    }
+    if (coords) {
+        sessionStorage.setItem('municipio_ativo_coords', JSON.stringify(coords));
+    } else {
+        sessionStorage.removeItem('municipio_ativo_coords');
     }
 
-    // Administrador entra na visão de gestão do município
+    // Redireciona diretamente para o mapa interativo
+    window.location.href = 'index.html';
+};
+
+// Painel de Gestão e Boas-Vindas do Município (acessado ao clicar em HOME no menu lateral do mapa ou via URL ?view=municipio)
+window.abrirPainelMunicipio = function(id, nome) {
+    if (id) sessionStorage.setItem('municipio_ativo', id);
+    if (nome) sessionStorage.setItem('municipio_ativo_nome', nome);
+
     const portalHeader = document.getElementById('header-portal-view');
     const munHeader = document.getElementById('header-municipio-view');
     if (portalHeader) {
@@ -688,20 +739,34 @@ window.abrirMunicipio = function(id, nome, papel) {
     // Nenhuma aba começa ativa de início
     document.querySelectorAll('#municipio-tabs .tab-btn').forEach(b => b.classList.remove('active'));
 
-    // Configura a mensagem padrão centralizada de boas-vindas e a logo
+    // Identifica se o usuário pertence a órgão externo (MPF, PF, SPU, etc.) ou se é municipal (Prefeitura)
+    const userEnt = ((homeUserProfile && (homeUserProfile.entidade || homeUserProfile.entidade_nome)) || '').trim();
+    const userSigla = typeof getEntitySigla === 'function' ? getEntitySigla(userEnt) : userEnt;
+    const isExternalUser = !!userEnt && userEnt.toLowerCase() !== 'geral' && userSigla !== 'Município' && !userEnt.toLowerCase().includes('prefeitura') && !userEnt.toLowerCase().includes('municip');
+
     const welcomeTitle = document.getElementById('welcome-municipio-title');
-    if (welcomeTitle) {
-        welcomeTitle.textContent = `Bem-vindo ao GeoGestor ${nome}`;
-    }
+    const welcomeSubtitle = document.getElementById('welcome-municipio-subtitle');
     const welcomeLogo = document.getElementById('welcome-municipio-logo');
     const welcomeIcon = document.getElementById('welcome-municipio-icon');
-    const munObj = (window.municipiosParaMostrarCache || []).find(m => m.id === id);
-    if (munObj && munObj.logo_url) {
-        if (welcomeLogo) { welcomeLogo.src = munObj.logo_url; welcomeLogo.classList.remove('hidden'); }
+
+    if (isExternalUser) {
+        // Usuário externo: NÃO mostra a logo do município e a mensagem é estritamente "Bem-vindo ao GeoGestor"
+        if (welcomeTitle) welcomeTitle.textContent = 'Bem-vindo ao GeoGestor';
+        if (welcomeSubtitle) welcomeSubtitle.textContent = 'Selecione uma das abas acima para acessar as ferramentas e cadastros disponíveis.';
+        if (welcomeLogo) { welcomeLogo.src = ''; welcomeLogo.classList.add('hidden'); }
         if (welcomeIcon) { welcomeIcon.classList.add('hidden'); }
     } else {
-        if (welcomeLogo) { welcomeLogo.src = ''; welcomeLogo.classList.add('hidden'); }
-        if (welcomeIcon) { welcomeIcon.classList.remove('hidden'); }
+        // Usuário municipal: mostra a logo e a mensagem com o nome da cidade
+        if (welcomeTitle) welcomeTitle.textContent = `Bem-vindo ao GeoGestor ${nome || ''}`;
+        if (welcomeSubtitle) welcomeSubtitle.textContent = 'Selecione uma das abas acima para gerenciar as configurações, dados, usuários ou arquivos deste município.';
+        const munObj = (window.municipiosParaMostrarCache || []).find(m => m.id === id);
+        if (munObj && munObj.logo_url) {
+            if (welcomeLogo) { welcomeLogo.src = munObj.logo_url; welcomeLogo.classList.remove('hidden'); }
+            if (welcomeIcon) { welcomeIcon.classList.add('hidden'); }
+        } else {
+            if (welcomeLogo) { welcomeLogo.src = ''; welcomeLogo.classList.add('hidden'); }
+            if (welcomeIcon) { welcomeIcon.classList.remove('hidden'); }
+        }
     }
 
     // Fecha qualquer popup aberto no mapa da Paraíba
@@ -1836,16 +1901,26 @@ async function criarMunicipio() {
     let insertPayload = { nome, uf: uf || null };
     if (logoUrl) insertPayload.logo_url = logoUrl;
 
+    // Obtém automaticamente as coordenadas da área urbana pelo GeoJSON oficial da Paraíba
+    const coords = typeof window.getMunicipioCoordinates === 'function' ? window.getMunicipioCoordinates(nome) : null;
+    if (coords) {
+        insertPayload.latitude = coords.lat;
+        insertPayload.longitude = coords.lng;
+        insertPayload.zoom = coords.zoom || 15;
+        if (coords.bbox) insertPayload.bbox = coords.bbox;
+    }
+
     let { error } = await supabaseClient.from('municipios').insert(insertPayload);
 
-    if (error && error.message && error.message.includes('logo_url')) {
-        delete insertPayload.logo_url;
-        const res2 = await supabaseClient.from('municipios').insert(insertPayload);
+    if (error && (error.message.includes('latitude') || error.message.includes('logo_url') || error.message.includes('bbox'))) {
+        let fallbackPayload = { nome, uf: uf || null };
+        if (logoUrl && !error.message.includes('logo_url')) fallbackPayload.logo_url = logoUrl;
+        const res2 = await supabaseClient.from('municipios').insert(fallbackPayload);
         if (res2.error) {
             alert('Erro ao criar município: ' + res2.error.message);
             return;
         }
-        alert('Município cadastrado! Nota: Para persistir a Logo no banco de dados, execute o script SQL "supabase_municipios_logo_setup.sql" no painel do Supabase.');
+        alert('Município cadastrado com sucesso!');
     } else if (error) {
         alert('Erro ao criar município: ' + error.message);
         return;
@@ -2296,7 +2371,7 @@ async function init() {
                 const activeMunId = sessionStorage.getItem('municipio_ativo');
                 const activeMunNome = sessionStorage.getItem('municipio_ativo_nome') || 'Município';
                 if (activeMunId) {
-                    abrirMunicipio(activeMunId, activeMunNome, 'admin');
+                    abrirPainelMunicipio(activeMunId, activeMunNome);
                     const tabBtn = document.querySelector(`#municipio-tabs button[onclick*="'${targetTab}'"]`);
                     if (tabBtn && typeof window.switchMunicipioTab === 'function') {
                         window.switchMunicipioTab(targetTab, tabBtn);
@@ -2307,7 +2382,7 @@ async function init() {
             const activeMunId = sessionStorage.getItem('municipio_ativo');
             const activeMunNome = sessionStorage.getItem('municipio_ativo_nome') || 'Município';
             if (activeMunId) {
-                abrirMunicipio(activeMunId, activeMunNome, 'admin');
+                abrirPainelMunicipio(activeMunId, activeMunNome);
             }
         }
     } catch(e) {}
