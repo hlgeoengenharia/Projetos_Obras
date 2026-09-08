@@ -2560,6 +2560,31 @@ function normMunString(str) {
 }
 
 window.switchMunicipiosViewMode = function(mode) {
+    // Se o usuário estiver em Configurações Globais ou outra seção, retorna imediatamente para a seção de municípios
+    const munSec = document.getElementById('municipios-section');
+    if (munSec && !munSec.classList.contains('active')) {
+        document.querySelectorAll('main > section').forEach(s => s.classList.remove('active'));
+        munSec.classList.add('active');
+
+        const portalHeader = document.getElementById('header-portal-view');
+        const munHeader = document.getElementById('header-municipio-view');
+        if (portalHeader) {
+            portalHeader.classList.remove('hidden');
+            portalHeader.classList.add('flex');
+        }
+        if (munHeader) {
+            munHeader.classList.add('hidden');
+            munHeader.classList.remove('flex');
+        }
+
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('tab');
+            url.searchParams.delete('view');
+            window.history.replaceState({}, '', url.pathname);
+        } catch(e) {}
+    }
+
     const mapContainer = document.getElementById('paraiba-map-container');
     const listContainer = document.getElementById('municipios-list');
     const mapBtn = document.getElementById('view-mode-map-btn');
@@ -2570,25 +2595,31 @@ window.switchMunicipiosViewMode = function(mode) {
         if (listContainer) listContainer.classList.add('hidden');
         
         if (mapBtn) {
-            mapBtn.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-900 text-primary shadow-sm cursor-pointer";
+            mapBtn.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-900 text-primary shadow-sm cursor-pointer";
         }
         if (listBtn) {
-            listBtn.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer";
+            listBtn.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer";
         }
 
         localStorage.setItem('geogestor_home_view_mode', 'map');
         if (paraibaMapInstance) {
-            setTimeout(() => { paraibaMapInstance.invalidateSize(); }, 150);
+            setTimeout(() => { 
+                paraibaMapInstance.invalidateSize(); 
+                const bounds = paraibaGeojsonLayer?.getBounds();
+                if (bounds && bounds.isValid()) {
+                    paraibaMapInstance.fitBounds(bounds, { padding: [20, 20] });
+                }
+            }, 100);
         }
     } else {
         if (mapContainer) mapContainer.classList.add('hidden');
         if (listContainer) listContainer.classList.remove('hidden');
 
         if (listBtn) {
-            listBtn.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-900 text-primary shadow-sm cursor-pointer";
+            listBtn.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-900 text-primary shadow-sm cursor-pointer";
         }
         if (mapBtn) {
-            mapBtn.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer";
+            mapBtn.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer";
         }
 
         localStorage.setItem('geogestor_home_view_mode', 'list');
