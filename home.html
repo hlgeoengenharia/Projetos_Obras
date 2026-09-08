@@ -207,11 +207,11 @@
     <div class="flex items-center gap-2.5 ml-auto">
       <!-- Botões de Alternância: [ 🗺️ Mapa ] [ 📋 Lista ] -->
       <div id="view-mode-toggle-group" class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm">
-        <button id="view-mode-map-btn" type="button" onclick="switchMunicipiosViewMode('map')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-900 text-primary shadow-sm cursor-pointer">
+        <button id="view-mode-map-btn" type="button" onclick="switchMunicipiosViewMode('map', true)" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-900 text-primary shadow-sm cursor-pointer">
           <span class="material-symbols-outlined text-[16px]">map</span>
           <span>Mapa</span>
         </button>
-        <button id="view-mode-list-btn" type="button" onclick="switchMunicipiosViewMode('list')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer">
+        <button id="view-mode-list-btn" type="button" onclick="switchMunicipiosViewMode('list', true)" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer">
           <span class="material-symbols-outlined text-[16px]">format_list_bulleted</span>
           <span>Lista</span>
         </button>
@@ -2529,10 +2529,16 @@ async function init() {
             if (targetTab === 'configuracoes') {
                 abrirConfiguracoesGlobais();
             } else {
-                const activeMunId = sessionStorage.getItem('municipio_ativo');
-                const activeMunNome = sessionStorage.getItem('municipio_ativo_nome') || 'Município';
+                let activeMunId = sessionStorage.getItem('municipio_ativo');
+                let activeMunNome = sessionStorage.getItem('municipio_ativo_nome');
+                if (!activeMunId && municipiosParaMostrar && municipiosParaMostrar.length > 0) {
+                    activeMunId = municipiosParaMostrar[0].id;
+                    activeMunNome = municipiosParaMostrar[0].nome;
+                    sessionStorage.setItem('municipio_ativo', activeMunId);
+                    sessionStorage.setItem('municipio_ativo_nome', activeMunNome);
+                }
                 if (activeMunId) {
-                    abrirPainelMunicipio(activeMunId, activeMunNome);
+                    abrirPainelMunicipio(activeMunId, activeMunNome || 'Município');
                     const tabBtn = document.querySelector(`#municipio-tabs button[onclick*="'${targetTab}'"]`);
                     if (tabBtn && typeof window.switchMunicipioTab === 'function') {
                         window.switchMunicipioTab(targetTab, tabBtn);
@@ -2540,10 +2546,16 @@ async function init() {
                 }
             }
         } else if (targetView === 'municipio' || targetView === 'welcome') {
-            const activeMunId = sessionStorage.getItem('municipio_ativo');
-            const activeMunNome = sessionStorage.getItem('municipio_ativo_nome') || 'Município';
+            let activeMunId = sessionStorage.getItem('municipio_ativo');
+            let activeMunNome = sessionStorage.getItem('municipio_ativo_nome');
+            if (!activeMunId && municipiosParaMostrar && municipiosParaMostrar.length > 0) {
+                activeMunId = municipiosParaMostrar[0].id;
+                activeMunNome = municipiosParaMostrar[0].nome;
+                sessionStorage.setItem('municipio_ativo', activeMunId);
+                sessionStorage.setItem('municipio_ativo_nome', activeMunNome);
+            }
             if (activeMunId) {
-                abrirPainelMunicipio(activeMunId, activeMunNome);
+                abrirPainelMunicipio(activeMunId, activeMunNome || 'Município');
             }
         }
     } catch(e) {}
@@ -2559,30 +2571,32 @@ function normMunString(str) {
     return String(str || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-window.switchMunicipiosViewMode = function(mode) {
-    // Se o usuário estiver em Configurações Globais ou outra seção, retorna imediatamente para a seção de municípios
-    const munSec = document.getElementById('municipios-section');
-    if (munSec && !munSec.classList.contains('active')) {
-        document.querySelectorAll('main > section').forEach(s => s.classList.remove('active'));
-        munSec.classList.add('active');
+window.switchMunicipiosViewMode = function(mode, isUserClick = false) {
+    // Se o clique foi do usuário e ele estiver em Configurações Globais ou outra seção, retorna imediatamente para a seção de municípios
+    if (isUserClick) {
+        const munSec = document.getElementById('municipios-section');
+        if (munSec && !munSec.classList.contains('active')) {
+            document.querySelectorAll('main > section').forEach(s => s.classList.remove('active'));
+            munSec.classList.add('active');
 
-        const portalHeader = document.getElementById('header-portal-view');
-        const munHeader = document.getElementById('header-municipio-view');
-        if (portalHeader) {
-            portalHeader.classList.remove('hidden');
-            portalHeader.classList.add('flex');
-        }
-        if (munHeader) {
-            munHeader.classList.add('hidden');
-            munHeader.classList.remove('flex');
-        }
+            const portalHeader = document.getElementById('header-portal-view');
+            const munHeader = document.getElementById('header-municipio-view');
+            if (portalHeader) {
+                portalHeader.classList.remove('hidden');
+                portalHeader.classList.add('flex');
+            }
+            if (munHeader) {
+                munHeader.classList.add('hidden');
+                munHeader.classList.remove('flex');
+            }
 
-        try {
-            const url = new URL(window.location.href);
-            url.searchParams.delete('tab');
-            url.searchParams.delete('view');
-            window.history.replaceState({}, '', url.pathname);
-        } catch(e) {}
+            try {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('tab');
+                url.searchParams.delete('view');
+                window.history.replaceState({}, '', url.pathname);
+            } catch(e) {}
+        }
     }
 
     const mapContainer = document.getElementById('paraiba-map-container');
@@ -2845,11 +2859,11 @@ window.initParaibaMap = async function(municipiosAutorizados = []) {
         });
 
         const savedView = localStorage.getItem('geogestor_home_view_mode') || 'map';
-        switchMunicipiosViewMode(savedView);
+        switchMunicipiosViewMode(savedView, false);
 
     } catch (e) {
         console.error("Erro ao carregar mapa da Paraíba:", e);
-        switchMunicipiosViewMode('list');
+        switchMunicipiosViewMode('list', false);
     }
 };
 

@@ -5160,15 +5160,8 @@ function applyPermissionUIGating() {
     const homeEl = document.getElementById('drawer-btn-home') || document.getElementById('drawer-btn-ajustes');
     if (homeEl) {
         homeEl.style.display = '';
-        if (isAdmin) {
-            homeEl.href = 'home.html?view=municipio';
-            homeEl.title = 'Voltar ao Painel do Município';
-        } else {
-            homeEl.href = 'home.html';
-            homeEl.title = 'Página Inicial / Municípios';
-            const homeLabel = homeEl.querySelector('span:last-child');
-            if (homeLabel && temMultiplosMunicipios) homeLabel.textContent = 'Municípios';
-        }
+        homeEl.href = 'home.html?view=municipio';
+        homeEl.title = 'Voltar ao Painel do Município';
     }
 
     const importarEl = document.getElementById('drawer-btn-importar');
