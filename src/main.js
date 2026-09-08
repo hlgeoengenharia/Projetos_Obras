@@ -5369,6 +5369,74 @@ window.canEditFormTab = canEditFormTab;
 // 'editor' mapeado só por compatibilidade com linhas antigas.
 const PAPEL_LABELS = { admin: 'Administrador', editor: 'Usuário', visualizador: 'Usuário', externo: 'Acesso Externo' };
 
+async function resolveAndApplyUserEntityLogo(entidadeNome, municipioId = null) {
+    if (!supabaseClient) return;
+    let logoUrl = null;
+    const norm = String(entidadeNome || '').trim().toLowerCase();
+
+    // 1. Se for entidade municipal ou prefeitura: busca logo do município ativo
+    const isMunicipal = !norm || norm.includes('prefeitura') || norm.includes('municip') || norm === 'geral';
+    if (isMunicipal) {
+        const munId = municipioId || sessionStorage.getItem('municipio_ativo');
+        if (munId) {
+            try {
+                const { data: munData } = await supabaseClient
+                    .from('municipios')
+                    .select('logo_url')
+                    .eq('id', munId)
+                    .maybeSingle();
+                if (munData && munData.logo_url) {
+                    logoUrl = munData.logo_url;
+                }
+            } catch(e) {}
+        }
+    }
+
+    // 2. Se for órgão externo (ou se ainda não encontrou logo): busca na tabela entidades_padrao
+    if (!logoUrl && norm) {
+        try {
+            const { data: entData } = await supabaseClient
+                .from('entidades_padrao')
+                .select('nome, sigla, logo_url');
+            if (entData && entData.length > 0) {
+                const found = entData.find(e => 
+                    (e.nome && e.nome.trim().toLowerCase() === norm) ||
+                    (e.sigla && e.sigla.trim().toLowerCase() === norm) ||
+                    (e.nome && norm.includes(e.nome.trim().toLowerCase())) ||
+                    (e.sigla && norm === e.sigla.trim().toLowerCase())
+                );
+                if (found && found.logo_url) {
+                    logoUrl = found.logo_url;
+                }
+            }
+        } catch(e) {}
+    }
+
+    // 3. Fallback se não for externo e houver município ativo:
+    if (!logoUrl) {
+        const munId = municipioId || sessionStorage.getItem('municipio_ativo');
+        if (munId) {
+            try {
+                const { data: munData } = await supabaseClient
+                    .from('municipios')
+                    .select('logo_url')
+                    .eq('id', munId)
+                    .maybeSingle();
+                if (munData && munData.logo_url) {
+                    logoUrl = munData.logo_url;
+                }
+            } catch(e) {}
+        }
+    }
+
+    // 4. Aplica no cabeçalho e modal
+    if (logoUrl) {
+        document.querySelectorAll('.profile-avatar-img, #btn-header-profile img, #profile-modal img[alt="Avatar"], #profile-modal-avatar-img').forEach(img => {
+            img.src = logoUrl;
+        });
+    }
+}
+
 function applyCurrentUserToProfileModal() {
     if (!currentUserProfile) return;
     const nameEl = document.getElementById('profile-user-name');
@@ -5392,6 +5460,9 @@ function applyCurrentUserToProfileModal() {
             pfBadge.classList.add('hidden');
         }
     }
+
+    // Aplica a logo do ente/município nas fotos de perfil
+    resolveAndApplyUserEntityLogo(entNome, currentMunicipioId);
 }
 
 window.handleLogout = async function() {

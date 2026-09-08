@@ -223,8 +223,8 @@
       </button>
 
       <!-- Botão Perfil -->
-      <button id="profile-btn" onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-9 h-9 md:w-10 md:h-10 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors cursor-pointer shadow-sm" title="Perfil do Usuário">
-        <img src="assets/logo.png" alt="Perfil" class="w-full h-full object-cover">
+      <button id="profile-btn" onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-9 h-9 md:w-10 md:h-10 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors cursor-pointer shadow-sm bg-slate-50 dark:bg-slate-800 flex items-center justify-center" title="Perfil do Usuário">
+        <img class="profile-avatar-img w-full h-full object-contain p-0.5" src="assets/logo.png" alt="Perfil">
       </button>
     </div>
   </div>
@@ -278,8 +278,8 @@
       <button id="btn-global-config-mun" onclick="abrirConfiguracoesGlobais()" class="hidden w-9 h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all items-center justify-center cursor-pointer shadow-sm" title="Configurações Globais (Municípios e Entidades)">
         <span class="material-symbols-outlined text-[20px]">settings</span>
       </button>
-      <button onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-9 h-9 md:w-10 md:h-10 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors cursor-pointer shadow-sm" title="Perfil do Usuário">
-        <img src="assets/logo.png" alt="Perfil" class="w-full h-full object-cover">
+      <button onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-9 h-9 md:w-10 md:h-10 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors cursor-pointer shadow-sm bg-slate-50 dark:bg-slate-800 flex items-center justify-center" title="Perfil do Usuário">
+        <img class="profile-avatar-img w-full h-full object-contain p-0.5" src="assets/logo.png" alt="Perfil">
       </button>
     </div>
   </div>
@@ -303,7 +303,7 @@
         <!-- Body -->
         <div class="p-5 sm:p-6 overflow-y-auto flex-1 min-h-0">
             <div class="flex flex-col items-center mb-6">
-                <img src="assets/logo.png" alt="Avatar" class="w-20 h-20 rounded-full border-4 border-slate-100 dark:border-slate-800 shadow-sm object-cover mb-3">
+                <img id="profile-modal-avatar-img" class="profile-avatar-img w-20 h-20 rounded-full border-4 border-slate-100 dark:border-slate-800 shadow-sm object-contain p-1 bg-white dark:bg-slate-800 mb-3" src="assets/logo.png" alt="Avatar">
                 <h4 id="profile-user-name" class="text-base font-bold text-slate-800 dark:text-white">Usuário Logado</h4>
                 <p id="profile-user-role" class="text-sm text-slate-500 dark:text-slate-400">—</p>
                 <p id="profile-user-municipio" class="text-xs text-primary font-semibold mt-0.5"></p>
@@ -1256,6 +1256,9 @@ function applyCurrentUserToProfileModal() {
         }
     }
 
+    // Aplica a logo do ente/município nas fotos de perfil
+    resolveAndApplyUserEntityLogo(entNome, homeUserProfile.municipio_id);
+
     // Servidores de Prefeitura Municipal são restritos a 1 município;
     // Oculta o botão inferior para evitar duplicidade ou confusão.
     const outroMunContainer = document.getElementById('profile-solicitar-outro-municipio-container');
@@ -1265,6 +1268,74 @@ function applyCurrentUserToProfileModal() {
         } else {
             outroMunContainer.classList.remove('hidden');
         }
+    }
+}
+
+async function resolveAndApplyUserEntityLogo(entidadeNome, municipioId = null) {
+    if (!supabaseClient) return;
+    let logoUrl = null;
+    const norm = String(entidadeNome || '').trim().toLowerCase();
+
+    // 1. Se for entidade municipal ou prefeitura: busca logo do município ativo
+    const isMunicipal = !norm || norm.includes('prefeitura') || norm.includes('municip') || norm === 'geral';
+    if (isMunicipal) {
+        const munId = municipioId || sessionStorage.getItem('municipio_ativo');
+        if (munId) {
+            try {
+                const { data: munData } = await supabaseClient
+                    .from('municipios')
+                    .select('logo_url')
+                    .eq('id', munId)
+                    .maybeSingle();
+                if (munData && munData.logo_url) {
+                    logoUrl = munData.logo_url;
+                }
+            } catch(e) {}
+        }
+    }
+
+    // 2. Se for órgão externo (ou se ainda não encontrou logo): busca na tabela entidades_padrao
+    if (!logoUrl && norm) {
+        try {
+            const { data: entData } = await supabaseClient
+                .from('entidades_padrao')
+                .select('nome, sigla, logo_url');
+            if (entData && entData.length > 0) {
+                const found = entData.find(e => 
+                    (e.nome && e.nome.trim().toLowerCase() === norm) ||
+                    (e.sigla && e.sigla.trim().toLowerCase() === norm) ||
+                    (e.nome && norm.includes(e.nome.trim().toLowerCase())) ||
+                    (e.sigla && norm === e.sigla.trim().toLowerCase())
+                );
+                if (found && found.logo_url) {
+                    logoUrl = found.logo_url;
+                }
+            }
+        } catch(e) {}
+    }
+
+    // 3. Fallback se não for externo e houver município ativo:
+    if (!logoUrl) {
+        const munId = municipioId || sessionStorage.getItem('municipio_ativo');
+        if (munId) {
+            try {
+                const { data: munData } = await supabaseClient
+                    .from('municipios')
+                    .select('logo_url')
+                    .eq('id', munId)
+                    .maybeSingle();
+                if (munData && munData.logo_url) {
+                    logoUrl = munData.logo_url;
+                }
+            } catch(e) {}
+        }
+    }
+
+    // 4. Aplica no cabeçalho e modal
+    if (logoUrl) {
+        document.querySelectorAll('.profile-avatar-img').forEach(img => {
+            img.src = logoUrl;
+        });
     }
 }
 
