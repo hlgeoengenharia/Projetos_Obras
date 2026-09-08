@@ -769,19 +769,25 @@ window.abrirPainelMunicipio = function(id, nome) {
     const userSigla = typeof getEntitySigla === 'function' ? getEntitySigla(userEnt) : userEnt;
     const isExternalUser = !!userEnt && userEnt.toLowerCase() !== 'geral' && userSigla !== 'Município' && !userEnt.toLowerCase().includes('prefeitura') && !userEnt.toLowerCase().includes('municip');
 
+    const welcomeSec = document.getElementById('municipio-welcome-section');
     const welcomeTitle = document.getElementById('welcome-municipio-title');
     const welcomeSubtitle = document.getElementById('welcome-municipio-subtitle');
     const welcomeLogo = document.getElementById('welcome-municipio-logo');
     const welcomeIcon = document.getElementById('welcome-municipio-icon');
 
     if (isExternalUser) {
-        // Usuário externo: NÃO mostra a logo do município e a mensagem é estritamente "Bem-vindo ao GeoGestor"
-        if (welcomeTitle) welcomeTitle.textContent = 'Bem-vindo ao GeoGestor';
-        if (welcomeSubtitle) welcomeSubtitle.textContent = 'Selecione uma das abas acima para acessar as ferramentas e cadastros disponíveis.';
-        if (welcomeLogo) { welcomeLogo.src = ''; welcomeLogo.classList.add('hidden'); }
-        if (welcomeIcon) { welcomeIcon.classList.add('hidden'); }
+        // Usuário externo: deixa essa parte abaixo do menu totalmente em branco (oculta mensagem e ícone)
+        if (welcomeSec) {
+            welcomeSec.classList.remove('active');
+            welcomeSec.classList.add('hidden');
+            welcomeSec.style.display = 'none';
+        }
     } else {
-        // Usuário municipal: mostra a logo e a mensagem com o nome da cidade
+        // Usuário municipal: mostra a logo do município e a mensagem com o nome da cidade
+        if (welcomeSec) {
+            welcomeSec.classList.remove('hidden');
+            welcomeSec.style.display = '';
+        }
         if (welcomeTitle) welcomeTitle.textContent = `Bem-vindo ao GeoGestor ${nome || ''}`;
         if (welcomeSubtitle) welcomeSubtitle.textContent = 'Selecione uma das abas acima para gerenciar as configurações, dados, usuários ou arquivos deste município.';
         const munObj = (window.municipiosParaMostrarCache || []).find(m => m.id === id);
@@ -799,13 +805,13 @@ window.abrirPainelMunicipio = function(id, nome) {
         paraibaMapInstance.closePopup();
     }
 
-    // Exibe apenas a tela neutra de boas-vindas (nenhum iframe ou aba aberta)
+    // Exibe apenas a tela neutra de boas-vindas se for usuário municipal (nenhum iframe ou aba aberta)
     document.querySelectorAll('main > section').forEach(s => s.classList.remove('active'));
     const munSec = document.getElementById('municipios-section');
     if (munSec) munSec.classList.remove('active');
-    const welcomeSec = document.getElementById('municipio-welcome-section');
-    if (welcomeSec) {
+    if (!isExternalUser && welcomeSec) {
         welcomeSec.classList.add('active');
+        welcomeSec.style.display = 'flex';
     }
 
     // Limpa o iframe para quando o usuário clicar na aba desejada
