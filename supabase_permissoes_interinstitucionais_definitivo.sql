@@ -5,103 +5,112 @@
 -- de RLS para que qualquer camada compartilhada por um ente com um usuário parceiro
 -- (ex: SPU compartilhando LPM/LTM com MPF, PF ou Prefeitura) seja visualizada e
 -- consultada com 100% de sucesso, sem bloqueios indevidos por flag de ponto focal.
+-- Compatível com todas as assinaturas: (theme_id, acao) e (user_id, theme_id, acao).
 -- ==============================================================================
 
--- 1. Recria a função tem_permissao com a regra de ouro:
--- Concessão explícita em permissoes_camada é soberana para qualquer usuário!
+-- 1. Garante que a coluna entidade exista na tabela temas
+ALTER TABLE public.temas ADD COLUMN IF NOT EXISTS entidade text;
+
+-- 2. Função Central: tem_permissao(p_user_id uuid, p_theme_id uuid, p_acao text)
 CREATE OR REPLACE FUNCTION public.tem_permissao(
   p_user_id uuid,
-  p_theme_id text,
+  p_theme_id uuid,
   p_acao text
 )
 RETURNS boolean
 LANGUAGE plpgsql
+STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_is_superadmin boolean;
+  v_is_super boolean;
+  v_theme_mun_id uuid;
+  v_theme_entidade text;
   v_user_entidade text;
   v_user_papel text;
   v_user_ponto_focal boolean;
-  v_theme_entidade text;
-  v_has_pc boolean;
   v_pc_ver boolean;
   v_pc_editar boolean;
   v_pc_excluir boolean;
+  v_has_pc boolean;
   v_is_outro_ente boolean;
 BEGIN
-  -- 1. SuperAdmin geral tem acesso irrestrito a todas as camadas e ações
+  -- 1. SuperAdmin Geral do sistema tem acesso irrestrito a tudo
   SELECT COALESCE(p.super_admin, false)
-  INTO v_is_superadmin
+  INTO v_is_super
   FROM public.profiles p
   WHERE p.id = p_user_id;
 
-  IF v_is_superadmin THEN
+  IF v_is_super THEN
     RETURN true;
   END IF;
 
-  -- 2. Busca entidade, cargo e ponto focal do usuário
+  -- 2. Busca dados do tema (lendo de metadata->>'entidade' ou coluna entidade)
   SELECT 
-    COALESCE(p.entidade, p.entidade_nome, ''),
-    COALESCE(p.papel, 'visualizador'),
-    COALESCE(p.ponto_focal, false)
-  INTO 
-    v_user_entidade,
-    v_user_papel,
-    v_user_ponto_focal
-  FROM public.profiles p
-  WHERE p.id = p_user_id;
+    t.municipio_id,
+    COALESCE(NULLIF(t.entidade, ''), NULLIF(t.metadata->>'entidade', ''), 'Prefeitura Municipal')
+  INTO v_theme_mun_id, v_theme_entidade
+  FROM public.temas t
+  WHERE t.id = p_theme_id;
 
-  -- Se perfil não possui entidade preenchida, busca no vínculo municipal
-  IF v_user_entidade = '' THEN
-    SELECT COALESCE(mm.entidade, '')
-    INTO v_user_entidade
-    FROM public.municipio_membros mm
-    WHERE mm.user_id = p_user_id
-    LIMIT 1;
-  END IF;
-
-  -- 3. Identifica a entidade proprietária da camada em camadas_geograficas
-  SELECT COALESCE(
-    c.entidade,
-    c.metadata->>'entidade',
-    'Prefeitura Municipal'
-  )
-  INTO v_theme_entidade
-  FROM public.camadas_geograficas c
-  WHERE c.id = p_theme_id
-     OR LOWER(TRIM(c.nome)) = LOWER(TRIM(p_theme_id))
-  LIMIT 1;
-
-  -- Se não constar na tabela de camadas, tenta inferir de feições existentes
-  IF v_theme_entidade IS NULL THEN
-    SELECT COALESCE(f.entidade, 'Prefeitura Municipal')
-    INTO v_theme_entidade
-    FROM public.feicoes f
-    WHERE f.theme_id = p_theme_id
-    LIMIT 1;
+  -- Se não achou na tabela temas, tenta em camadas_geograficas se existir
+  IF v_theme_mun_id IS NULL THEN
+    BEGIN
+      SELECT 
+        c.municipio_id,
+        COALESCE(NULLIF(c.entidade, ''), NULLIF(c.metadata->>'entidade', ''), 'Prefeitura Municipal')
+      INTO v_theme_mun_id, v_theme_entidade
+      FROM public.camadas_geograficas c
+      WHERE c.id::text = p_theme_id::text;
+    EXCEPTION WHEN OTHERS THEN
+      NULL;
+    END;
   END IF;
 
   IF v_theme_entidade IS NULL THEN
     v_theme_entidade := 'Prefeitura Municipal';
   END IF;
 
-  -- 4. Busca registro explícito em permissoes_camada para este usuário e camada
+  -- 3. Busca entidade e perfil do usuário
+  SELECT 
+    COALESCE(NULLIF(p.entidade, ''), NULLIF(p.entidade_nome, ''), ''),
+    COALESCE(p.papel, 'visualizador'),
+    COALESCE(p.ponto_focal, false)
+  INTO v_user_entidade, v_user_papel, v_user_ponto_focal
+  FROM public.profiles p
+  WHERE p.id = p_user_id;
+
+  -- Se o usuário não tem entidade preenchida no profile, busca em municipio_membros
+  IF v_user_entidade = '' AND v_theme_mun_id IS NOT NULL THEN
+    SELECT COALESCE(mm.entidade, '')
+    INTO v_user_entidade
+    FROM public.municipio_membros mm
+    WHERE mm.user_id = p_user_id AND mm.municipio_id = v_theme_mun_id
+    LIMIT 1;
+  END IF;
+
+  -- Busca papel do usuário no município se houver vínculo aprovado
+  IF v_theme_mun_id IS NOT NULL THEN
+    SELECT mm.papel
+    INTO v_user_papel
+    FROM public.municipio_membros mm
+    WHERE mm.user_id = p_user_id
+      AND mm.municipio_id = v_theme_mun_id
+      AND mm.status = 'aprovado'
+    LIMIT 1;
+  END IF;
+
+  -- 4. Busca regras específicas na tabela permissoes_camada
   SELECT 
     true,
     COALESCE(pc.pode_ver, false),
     COALESCE(pc.pode_editar, false),
     COALESCE(pc.pode_excluir, false)
-  INTO
-    v_has_pc,
-    v_pc_ver,
-    v_pc_editar,
-    v_pc_excluir
+  INTO v_has_pc, v_pc_ver, v_pc_editar, v_pc_excluir
   FROM public.permissoes_camada pc
   WHERE pc.user_id = p_user_id
-    AND (pc.theme_id = p_theme_id OR LOWER(TRIM(pc.theme_id)) = LOWER(TRIM(p_theme_id)))
-  LIMIT 1;
+    AND (pc.theme_id::text = p_theme_id::text);
 
   v_has_pc := COALESCE(v_has_pc, false);
 
@@ -116,10 +125,8 @@ BEGIN
   );
 
   -- REGRA SOBERANA PARA CAMADAS DE OUTRO ENTE:
-  -- Se a camada é de outro ente governamental parceiro:
-  -- A concessão concedida pelo administrador na tabela permissoes_camada é SOBERANA!
-  -- Se o usuário tem pode_ver = true, ele PODE ver os dados independentemente de
-  -- qualquer flag de ponto focal.
+  -- Se o administrador do ente proprietário concedeu autorização explícita em permissoes_camada,
+  -- essa autorização é SOBERANA (independente de flag ponto_focal)!
   IF v_is_outro_ente THEN
     IF v_has_pc THEN
       IF p_acao = 'ver' THEN RETURN v_pc_ver; END IF;
@@ -128,7 +135,7 @@ BEGIN
       RETURN false;
     END IF;
 
-    -- Usuário de outro ente sem concessão explícita NUNCA acessa dados de outro órgão
+    -- Usuário de outro ente sem concessão explícita não visualiza dados de outro órgão
     RETURN false;
   END IF;
 
@@ -142,12 +149,12 @@ BEGIN
   END IF;
 
   -- Se o usuário já possui regras personalizadas cadastradas em permissoes_camada,
-  -- camadas não incluídas permanecem restritas
+  -- camadas não listadas ficam bloqueadas por padrão
   IF EXISTS (SELECT 1 FROM public.permissoes_camada WHERE user_id = p_user_id) THEN
     RETURN false;
   END IF;
 
-  -- Administrador da própria entidade sem restrições explícitas cadastradas tem acesso total
+  -- Administrador da própria entidade sem restrições explícitas cadastradas
   IF v_user_papel = 'admin' THEN
     RETURN true;
   END IF;
@@ -166,61 +173,185 @@ BEGIN
 END;
 $$;
 
--- 2. Garantia de RLS para permissoes_camada
+-- 3. Sobrecarga com (uuid, text) -> Usada diretamente pelas políticas RLS: tem_permissao(theme_id, 'ver')
+CREATE OR REPLACE FUNCTION public.tem_permissao(
+  p_theme_id uuid,
+  p_acao text
+)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN public.tem_permissao(auth.uid(), p_theme_id, p_acao);
+END;
+$$;
+
+-- 4. Sobrecarga com (user_id uuid, theme_id text, acao text)
+CREATE OR REPLACE FUNCTION public.tem_permissao(
+  p_user_id uuid,
+  p_theme_id text,
+  p_acao text
+)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_tid uuid;
+BEGIN
+  IF p_theme_id ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' THEN
+    RETURN public.tem_permissao(p_user_id, p_theme_id::uuid, p_acao);
+  ELSE
+    SELECT id INTO v_tid FROM public.temas WHERE LOWER(TRIM(nome)) = LOWER(TRIM(p_theme_id)) LIMIT 1;
+    IF v_tid IS NOT NULL THEN
+      RETURN public.tem_permissao(p_user_id, v_tid, p_acao);
+    END IF;
+    RETURN false;
+  END IF;
+END;
+$$;
+
+-- 5. Sobrecarga com (theme_id text, acao text)
+CREATE OR REPLACE FUNCTION public.tem_permissao(
+  p_theme_id text,
+  p_acao text
+)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN public.tem_permissao(auth.uid(), p_theme_id, p_acao);
+END;
+$$;
+
+-- 6. Garantia de RLS para permissoes_camada
 ALTER TABLE public.permissoes_camada ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Usuários autenticados podem ler suas próprias permissões de camada" ON public.permissoes_camada;
-CREATE POLICY "Usuários autenticados podem ler suas próprias permissões de camada"
-ON public.permissoes_camada FOR SELECT
-TO authenticated
-USING (user_id = auth.uid() OR public.is_admin());
+DROP POLICY IF EXISTS permissoes_camada_select_auth ON public.permissoes_camada;
+CREATE POLICY permissoes_camada_select_auth ON public.permissoes_camada
+  FOR SELECT USING (auth.role() = 'authenticated');
 
-DROP POLICY IF EXISTS "Admins podem gerenciar permissoes_camada" ON public.permissoes_camada;
-CREATE POLICY "Admins podem gerenciar permissoes_camada"
-ON public.permissoes_camada FOR ALL
-TO authenticated
-USING (public.is_admin())
-WITH CHECK (public.is_admin());
+DROP POLICY IF EXISTS permissoes_camada_all_admin ON public.permissoes_camada;
+CREATE POLICY permissoes_camada_all_admin ON public.permissoes_camada
+  FOR ALL USING (
+    public.is_super_admin()
+    OR EXISTS (
+      SELECT 1 FROM public.municipio_membros mm
+      WHERE mm.user_id = auth.uid() AND mm.papel = 'admin' AND mm.status = 'aprovado'
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid() AND (COALESCE(p.super_admin, false) OR COALESCE(p.entidade_admin, false))
+    )
+  ) WITH CHECK (
+    public.is_super_admin()
+    OR EXISTS (
+      SELECT 1 FROM public.municipio_membros mm
+      WHERE mm.user_id = auth.uid() AND mm.papel = 'admin' AND mm.status = 'aprovado'
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid() AND (COALESCE(p.super_admin, false) OR COALESCE(p.entidade_admin, false))
+    )
+  );
 
--- 3. Garantia de RLS para permissoes_aba
+-- 7. Garantia de RLS para permissoes_aba
 ALTER TABLE public.permissoes_aba ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Usuários autenticados podem ler suas próprias permissões de aba" ON public.permissoes_aba;
-CREATE POLICY "Usuários autenticados podem ler suas próprias permissões de aba"
-ON public.permissoes_aba FOR SELECT
-TO authenticated
-USING (user_id = auth.uid() OR public.is_admin());
+DROP POLICY IF EXISTS permissoes_aba_select_auth ON public.permissoes_aba;
+CREATE POLICY permissoes_aba_select_auth ON public.permissoes_aba
+  FOR SELECT USING (auth.role() = 'authenticated');
 
-DROP POLICY IF EXISTS "Admins podem gerenciar permissoes_aba" ON public.permissoes_aba;
-CREATE POLICY "Admins podem gerenciar permissoes_aba"
-ON public.permissoes_aba FOR ALL
-TO authenticated
-USING (public.is_admin())
-WITH CHECK (public.is_admin());
+DROP POLICY IF EXISTS permissoes_aba_all_admin ON public.permissoes_aba;
+CREATE POLICY permissoes_aba_all_admin ON public.permissoes_aba
+  FOR ALL USING (
+    public.is_super_admin()
+    OR EXISTS (
+      SELECT 1 FROM public.municipio_membros mm
+      WHERE mm.user_id = auth.uid() AND mm.papel = 'admin' AND mm.status = 'aprovado'
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid() AND (COALESCE(p.super_admin, false) OR COALESCE(p.entidade_admin, false))
+    )
+  ) WITH CHECK (
+    public.is_super_admin()
+    OR EXISTS (
+      SELECT 1 FROM public.municipio_membros mm
+      WHERE mm.user_id = auth.uid() AND mm.papel = 'admin' AND mm.status = 'aprovado'
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid() AND (COALESCE(p.super_admin, false) OR COALESCE(p.entidade_admin, false))
+    )
+  );
 
--- 4. Garantia de RLS para permissoes_raster
+-- 8. Garantia de RLS para permissoes_raster
 ALTER TABLE public.permissoes_raster ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Usuários autenticados podem ler suas próprias permissões de raster" ON public.permissoes_raster;
-CREATE POLICY "Usuários autenticados podem ler suas próprias permissões de raster"
-ON public.permissoes_raster FOR SELECT
-TO authenticated
-USING (user_id = auth.uid() OR public.is_admin());
+DROP POLICY IF EXISTS permissoes_raster_select_auth ON public.permissoes_raster;
+CREATE POLICY permissoes_raster_select_auth ON public.permissoes_raster
+  FOR SELECT USING (auth.role() = 'authenticated');
 
-DROP POLICY IF EXISTS "Admins podem gerenciar permissoes_raster" ON public.permissoes_raster;
-CREATE POLICY "Admins podem gerenciar permissoes_raster"
-ON public.permissoes_raster FOR ALL
-TO authenticated
-USING (public.is_admin())
-WITH CHECK (public.is_admin());
+DROP POLICY IF EXISTS permissoes_raster_all_admin ON public.permissoes_raster;
+CREATE POLICY permissoes_raster_all_admin ON public.permissoes_raster
+  FOR ALL USING (
+    public.is_super_admin()
+    OR EXISTS (
+      SELECT 1 FROM public.municipio_membros mm
+      WHERE mm.user_id = auth.uid() AND mm.papel = 'admin' AND mm.status = 'aprovado'
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid() AND (COALESCE(p.super_admin, false) OR COALESCE(p.entidade_admin, false))
+    )
+  ) WITH CHECK (
+    public.is_super_admin()
+    OR EXISTS (
+      SELECT 1 FROM public.municipio_membros mm
+      WHERE mm.user_id = auth.uid() AND mm.papel = 'admin' AND mm.status = 'aprovado'
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid() AND (COALESCE(p.super_admin, false) OR COALESCE(p.entidade_admin, false))
+    )
+  );
 
--- 5. Atualização da política de SELECT de feições para usar a função tem_permissao corrigida
+-- 9. Atualização das políticas RLS em feicoes para usar a função tem_permissao corrigida
+ALTER TABLE public.feicoes ENABLE ROW LEVEL SECURITY;
+
 DROP POLICY IF EXISTS "feicoes_select_isolamento" ON public.feicoes;
+DROP POLICY IF EXISTS "feicoes_select_perm" ON public.feicoes;
 CREATE POLICY "feicoes_select_isolamento"
 ON public.feicoes FOR SELECT
 TO authenticated
 USING (
-  public.tem_permissao(auth.uid(), theme_id, 'ver')
+  public.tem_permissao(theme_id, 'ver')
 );
 
-COMMENT ON FUNCTION public.tem_permissao IS 'Valida permissão interinstitucional e municipal sem bloqueios indevidos por flag de ponto focal';
+DROP POLICY IF EXISTS feicoes_update_perm ON public.feicoes;
+CREATE POLICY feicoes_update_perm ON public.feicoes
+  FOR UPDATE USING (
+    public.is_super_admin()
+    OR public.tem_permissao(theme_id, 'editar')
+  ) WITH CHECK (
+    public.is_super_admin()
+    OR public.tem_permissao(theme_id, 'editar')
+  );
+
+DROP POLICY IF EXISTS feicoes_delete_perm ON public.feicoes;
+CREATE POLICY feicoes_delete_perm ON public.feicoes
+  FOR DELETE USING (
+    public.is_super_admin()
+    OR public.tem_permissao(theme_id, 'excluir')
+  );
+
+COMMENT ON FUNCTION public.tem_permissao(uuid, text) IS 'Valida permissão de acesso à camada sem bloqueio indevido por flag de ponto focal';
