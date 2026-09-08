@@ -5462,7 +5462,8 @@ function applyCurrentUserToProfileModal() {
     }
 
     // Aplica a logo do ente/município nas fotos de perfil
-    resolveAndApplyUserEntityLogo(entNome, currentMunicipioId);
+    const munId = (typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : null) || (window.activeMunicipioId) || sessionStorage.getItem('municipio_ativo');
+    resolveAndApplyUserEntityLogo(entNome, munId);
 }
 
 window.handleLogout = async function() {
