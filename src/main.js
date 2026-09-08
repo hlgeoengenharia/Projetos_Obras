@@ -5154,14 +5154,18 @@ async function ensureAuthenticated() {
 // Esconde ações globais (não é por tema — é "Ajustes", "Importar", "Nova Camada")
 function applyPermissionUIGating() {
     const isSuperAdmin = !!(currentUserProfile && currentUserProfile.super_admin);
-    const isAdmin = isSuperAdmin || currentMunicipioPapel === 'admin';
+    const isAdmin = isSuperAdmin || currentMunicipioPapel === 'admin' || !!(currentUserProfile && currentUserProfile.entidade_admin);
     const temMultiplosMunicipios = isSuperAdmin || (window.userTotalMunicipiosAprovados && window.userTotalMunicipiosAprovados > 1);
 
-    const homeEl = document.getElementById('drawer-btn-home') || document.getElementById('drawer-btn-ajustes');
-    if (homeEl) {
-        homeEl.style.display = '';
-        homeEl.href = 'home.html?view=municipio';
-        homeEl.title = 'Voltar ao Painel do Município';
+    const adminSettingsBtn = document.getElementById('profile-admin-settings-btn');
+    if (adminSettingsBtn) {
+        if (isAdmin) {
+            adminSettingsBtn.classList.remove('hidden');
+            adminSettingsBtn.style.display = 'flex';
+        } else {
+            adminSettingsBtn.classList.add('hidden');
+            adminSettingsBtn.style.display = 'none';
+        }
     }
 
     const importarEl = document.getElementById('drawer-btn-importar');
@@ -5458,6 +5462,20 @@ function applyCurrentUserToProfileModal() {
             pfBadge.classList.remove('hidden');
         } else {
             pfBadge.classList.add('hidden');
+        }
+    }
+
+    // Visibilidade do botão de configurações do município no perfil (exclusivo para admins)
+    const isSuperAdmin = !!(currentUserProfile && currentUserProfile.super_admin);
+    const isAdmin = isSuperAdmin || currentMunicipioPapel === 'admin' || !!(currentUserProfile && currentUserProfile.entidade_admin);
+    const adminSettingsBtn = document.getElementById('profile-admin-settings-btn');
+    if (adminSettingsBtn) {
+        if (isAdmin) {
+            adminSettingsBtn.classList.remove('hidden');
+            adminSettingsBtn.style.display = 'flex';
+        } else {
+            adminSettingsBtn.classList.add('hidden');
+            adminSettingsBtn.style.display = 'none';
         }
     }
 

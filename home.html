@@ -291,10 +291,15 @@
     <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm max-h-[88vh] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col my-auto transform transition-all">
         <!-- Header -->
         <div class="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/20 shrink-0">
-            <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <span class="material-symbols-outlined text-primary">person</span>
-                Perfil do Usuário
-            </h3>
+            <div class="flex items-center gap-2">
+                <a id="profile-admin-settings-btn-home" href="home.html?view=municipio" class="hidden w-8 h-8 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-600 dark:text-sky-400 items-center justify-center transition-all shadow-xs cursor-pointer" title="Painel de Gestão do Município">
+                    <span class="material-symbols-outlined text-[19px]">settings</span>
+                </a>
+                <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-primary text-[20px]">person</span>
+                    Perfil do Usuário
+                </h3>
+            </div>
             <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors" title="Fechar">
                 <span class="material-symbols-outlined">close</span>
             </button>
@@ -1259,6 +1264,20 @@ function applyCurrentUserToProfileModal() {
             pfBadge.classList.remove('hidden');
         } else {
             pfBadge.classList.add('hidden');
+        }
+    }
+
+    // Visibilidade do botão de configurações no perfil (exclusivo para admins)
+    const isSuperAdmin = !!(homeUserProfile && homeUserProfile.super_admin);
+    const isAdmin = isSuperAdmin || homeUserProfile.entidade_admin || homeUserProfile.papel === 'admin';
+    const adminBtnHome = document.getElementById('profile-admin-settings-btn-home');
+    if (adminBtnHome) {
+        if (isAdmin) {
+            adminBtnHome.classList.remove('hidden');
+            adminBtnHome.style.display = 'flex';
+        } else {
+            adminBtnHome.classList.add('hidden');
+            adminBtnHome.style.display = 'none';
         }
     }
 
