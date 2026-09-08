@@ -441,6 +441,16 @@
   
   <!-- Raster Layers -->
   <div class="px-3 pb-4 flex flex-col">
+    <div class="flex items-center justify-between px-1 mb-2">
+      <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-400 flex items-center gap-1">
+        <span class="material-symbols-outlined text-[14px] text-emerald-400">layers</span>
+        <span>Ortofotos</span>
+      </span>
+      <button onclick="resetRasterOrderToDate()" class="text-[10px] text-slate-400 hover:text-emerald-400 flex items-center gap-1 transition-colors px-1.5 py-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer" title="Restaurar ordenação por data (Mais recente primeiro)">
+        <span class="material-symbols-outlined text-[13px]">sort</span>
+        <span>Por Data</span>
+      </button>
+    </div>
     <div id="rasters-container" class="flex flex-col gap-3">
       <!-- Raster list items will be dynamically generated here -->
       <div class="text-xs text-slate-400 dark:text-slate-500 italic p-2 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-center">Nenhuma imagem importada.</div>
@@ -1205,8 +1215,26 @@
 <input type="file" id="global-geojson-upload" accept=".geojson,.json" class="hidden">
 <input type="file" id="global-geotiff-upload" accept=".tif,.tiff,.geotiff" class="hidden">
 
-<!-- Stats Dashboard Modal (Floating Side Panel) -->
-<div id="stats-dashboard-modal" style="top: 80px; right: 20px; left: auto; bottom: auto;" class="fixed w-96 md:w-[450px] z-[120] transform scale-95 opacity-0 translate-y-[-20px] transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] pointer-events-none hidden flex flex-col justify-center items-end">
+<!-- Layer Stats Floating Menu (Relação de Estatísticas no Canto Superior Direito) -->
+<div id="layer-stats-menu" style="top: 10px; right: 10px; left: auto; bottom: auto;" class="fixed w-[380px] max-w-[92vw] z-[1000] hidden flex-col bg-[#070b14]/75 backdrop-blur-md rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 overflow-hidden">
+    <div id="layer-stats-menu-header" class="px-4 py-3 border-b border-white/10 flex items-center justify-between bg-slate-900/60 cursor-grab select-none">
+        <div class="flex items-center gap-2 overflow-hidden flex-1 mr-2">
+            <span class="material-symbols-outlined text-cyan-400 text-[20px] shrink-0">pie_chart</span>
+            <h3 id="layer-stats-menu-title" class="text-xs font-bold uppercase tracking-wider text-slate-100 truncate">Camada</h3>
+        </div>
+        <div class="flex items-center gap-1 shrink-0">
+            <button type="button" onclick="closeLayerStatsMenu()" class="p-1.5 hover:bg-white/10 rounded-full text-white/60 hover:text-red-400 transition-colors cursor-pointer" title="Fechar">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+            </button>
+        </div>
+    </div>
+    <div id="layer-stats-menu-items" class="p-3 max-h-[50vh] overflow-y-auto flex flex-col gap-2">
+        <!-- Renderizado dinamicamente via JS -->
+    </div>
+</div>
+
+<!-- Stats Dashboard Modal (Floating Card de Gráfico) -->
+<div id="stats-dashboard-modal" style="top: 10px; right: 10px; left: auto; bottom: auto;" class="fixed w-[380px] max-w-[92vw] z-[1000] transform scale-95 opacity-0 translate-y-[-10px] transition-all duration-300 pointer-events-none hidden flex flex-col">
     <!-- Content (Charts) -->
     <div id="stats-dashboard-content" class="w-full">
         <!-- Charts will be generated here -->
@@ -1694,12 +1722,12 @@
 <script src="src/customFields.js"></script>
 <script src="src/tableJoin.js"></script>
 <script src="src/geo-engine-turbo.js"></script>
-<script src="src/main.js"></script>
+<script src="src/main.js?v=20260908c"></script>
 <script src="src/spatialAnalytics.js"></script>
 <script src="src/measurement.js"></script>
 <script src="src/cesium-integration.js"></script>
 <script src="src/auditLogger.js"></script>
 <script src="src/session-security.js"></script>
-<script src="src/swipe-comparator.js"></script>
+<script src="src/swipe-comparator.js?v=20260908c"></script>
 </body>
 </html>

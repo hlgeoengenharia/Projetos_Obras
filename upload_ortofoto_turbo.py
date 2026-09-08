@@ -87,7 +87,24 @@ def get_municipios():
         print(f"[-] Aviso ao listar municipios: {e}")
     return []
 
-def registrar_camada_raster(municipio_id, nome_camada, tile_url, zoom_min, zoom_max):
+def get_entidades():
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/entidades_padrao?select=id,nome,sigla,tipo&order=nome.asc"
+        req = urllib.request.Request(
+            url,
+            headers={
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status == 200:
+                return json.loads(resp.read().decode('utf-8'))
+    except Exception as e:
+        print(f"[-] Aviso ao listar entidades: {e}")
+    return []
+
+def registrar_camada_raster(municipio_id, nome_camada, tile_url, zoom_min, zoom_max, entidade="Prefeitura Municipal"):
     try:
         url = f"{SUPABASE_URL}/rest/v1/imagens_raster"
         payload = json.dumps({
@@ -99,7 +116,8 @@ def registrar_camada_raster(municipio_id, nome_camada, tile_url, zoom_min, zoom_
             "zoom_min": zoom_min,
             "zoom_max": zoom_max,
             "opacidade": 0.9,
-            "visivel": False
+            "visivel": False,
+            "entidade": entidade or "Prefeitura Municipal"
         }).encode('utf-8')
 
         req = urllib.request.Request(
@@ -138,11 +156,12 @@ try:
         progress_signal = QtCore.pyqtSignal(int, str, str)
         finished_signal = QtCore.pyqtSignal(bool, str)
 
-        def __init__(self, folder_path, municipio_obj, nome_camada):
+        def __init__(self, folder_path, municipio_obj, nome_camada, entidade="Prefeitura Municipal"):
             super().__init__()
             self.folder_path = Path(folder_path)
             self.municipio_obj = municipio_obj
             self.nome_camada = nome_camada
+            self.entidade = entidade
 
         def run(self):
             pasta = self.folder_path
@@ -211,7 +230,7 @@ try:
             tile_template_url = f"{SUPABASE_URL}/storage/v1/object/public/{BUCKET_NAME}/{municipio_pasta}/{pasta.name}/{{z}}/{{x}}/{{y}}.{sample_ext}"
             self.log_signal.emit(f"[+] Registrando camada '{self.nome_camada}' no banco...")
 
-            ok_db = registrar_camada_raster(self.municipio_obj.get('id'), self.nome_camada, tile_template_url, z_min, z_max)
+            ok_db = registrar_camada_raster(self.municipio_obj.get('id'), self.nome_camada, tile_template_url, z_min, z_max, self.entidade)
             if ok_db:
                 self.log_signal.emit("[✓] Camada registrada com sucesso no banco de dados!")
                 self.finished_signal.emit(True, f"Upload concluído com 100% de sucesso!\nA ortofoto já está disponível no mapa para {self.municipio_obj.get('nome')}.")
@@ -272,8 +291,20 @@ try:
             self.combo_municipios = QComboBox()
             layout.addWidget(self.combo_municipios)
 
-            # 3. Nome da Camada
-            layout.addWidget(QLabel("3. NOME DA CAMADA NO MAPA:"))
+            # 3. Ente / Entidade Institucional
+            layout.addWidget(QLabel("3. ENTE / ENTIDADE RESPONSÁVEL PELO UPLOAD:"))
+            self.combo_entidade = QComboBox()
+            self.combo_entidade.addItems([
+                "Prefeitura Municipal",
+                "Polícia Federal",
+                "Superintendência do Patrimônio da União (SPU)",
+                "Ministério Público Federal (MPF)",
+                "Geral"
+            ])
+            layout.addWidget(self.combo_entidade)
+
+            # 4. Nome da Camada
+            layout.addWidget(QLabel("4. NOME DA CAMADA NO MAPA:"))
             self.input_nome = QLineEdit()
             self.input_nome.setPlaceholderText("Ex: Ortofoto Orla Cabedelo 2026")
             if initial_folder:
@@ -307,9 +338,10 @@ try:
             self.btn_enviar.clicked.connect(self.iniciar_upload)
             layout.addWidget(self.btn_enviar)
 
-            self.carregar_municipios()
+            self.carregar_dados()
 
-        def carregar_municipios(self):
+        def carregar_dados(self):
+            # 1. Municípios
             self.municipios = get_municipios()
             self.combo_municipios.clear()
             if self.municipios:
@@ -319,6 +351,27 @@ try:
             else:
                 self.combo_municipios.addItem("Cabedelo - PB", {"id": "ef6bfd13-9e40-4bb4-81d3-e2c839ff500d", "nome": "Cabedelo", "uf": "PB"})
                 self.log_text.append("[!] Usando município padrão (Cabedelo - PB).")
+
+            # 2. Entidades Institucionais dinâmicas do Supabase
+            self.combo_entidade.clear()
+            entidades_db = get_entidades()
+            nomes_adicionados = []
+
+            if entidades_db:
+                for ent in entidades_db:
+                    nome = (ent.get('nome') or '').strip()
+                    sigla = (ent.get('sigla') or '').strip()
+                    label = f"{nome} ({sigla})" if sigla and sigla.lower() not in nome.lower() else nome
+                    if nome and nome not in nomes_adicionados:
+                        nomes_adicionados.append(nome)
+                        self.combo_entidade.addItem(label, nome)
+                self.log_text.append(f"[+] {len(nomes_adicionados)} entidades institucionais carregadas do sistema.")
+
+            # Fallbacks essenciais
+            padroes = ["Prefeitura Municipal", "Polícia Federal", "Superintendência do Patrimônio da União", "Ministério Público Federal", "Geral"]
+            for p in padroes:
+                if not any(p.lower() in x.lower() for x in nomes_adicionados):
+                    self.combo_entidade.addItem(p, p)
 
         def buscar_pasta(self):
             folder = QFileDialog.getExistingDirectory(self, "Selecione a Pasta de Tiles")
@@ -353,7 +406,8 @@ try:
             self.progress_bar.setValue(0)
             self.log_text.clear()
 
-            self.worker = UploadWorkerThread(folder, municipio_obj, nome_camada)
+            entidade = self.combo_entidade.currentData() or self.combo_entidade.currentText().strip()
+            self.worker = UploadWorkerThread(folder, municipio_obj, nome_camada, entidade)
             self.worker.log_signal.connect(self.log_text.append)
             self.worker.progress_signal.connect(self.atualizar_progresso)
             self.worker.finished_signal.connect(self.upload_concluido)

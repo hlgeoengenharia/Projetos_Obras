@@ -80,6 +80,7 @@
         handleEl.addEventListener('pointerup', onPointerUp);
         handleEl.addEventListener('pointercancel', onPointerUp);
     }
+    window.makeElementDraggable = makeElementDraggable;
 
     class SpatialAnalyticsManager {
         constructor() {
@@ -201,6 +202,9 @@
                 if (this.isMenuOpen) {
                     if (typeof window.closeStatsDashboard === 'function') {
                         window.closeStatsDashboard();
+                    }
+                    if (typeof window.closeLayerStatsMenu === 'function') {
+                        window.closeLayerStatsMenu();
                     }
                     this.loadRules();
                     this.renderMenuList();

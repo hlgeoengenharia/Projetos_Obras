@@ -1337,7 +1337,17 @@ function parseDateToTimestamp(val) {
 
 function getLatestRecordAcrossTabs(targetTabs, dateFieldId, sourceFieldId, featureData, sourceFieldLabel) {
     const fData = featureData || window.currentFormFeatureData || {};
-    const allForms = window.currentFormFeatures || [];
+    
+    // Coleta todas as abas conhecidas em formulários ativos
+    let allTabs = [];
+    if (Array.isArray(window.currentFormTabs) && window.currentFormTabs.length > 0) {
+        allTabs = window.currentFormTabs;
+    } else if (Array.isArray(window.allForms)) {
+        window.allForms.forEach(form => {
+            const tabs = form.schema || form.tabs || [];
+            if (Array.isArray(tabs)) allTabs.push(...tabs);
+        });
+    }
     
     let collectedEntries = [];
     
@@ -1345,26 +1355,39 @@ function getLatestRecordAcrossTabs(targetTabs, dateFieldId, sourceFieldId, featu
     if (Array.isArray(targetTabs) && targetTabs.length > 0) {
         tabIdentifiers = targetTabs;
     } else {
-        allForms.forEach(tab => {
-            if (tab.isMultiple) tabIdentifiers.push(tab.id);
+        // Se não houver lista explícita, inclui todas as abas múltiplas (1:N) conhecidas
+        allTabs.forEach(tab => {
+            if (tab && tab.isMultiple && !tabIdentifiers.includes(tab.id)) {
+                tabIdentifiers.push(tab.id);
+            }
+        });
+        // Também inclui qualquer chave em fData que guarde array de vistorias/registros
+        Object.keys(fData).forEach(k => {
+            const val = fData[k];
+            if (Array.isArray(val) || (typeof val === 'string' && val.trim().startsWith('['))) {
+                if (!tabIdentifiers.includes(k)) tabIdentifiers.push(k);
+            }
         });
     }
 
     // Identifica o label de busca
     let targetLabel = sourceFieldLabel ? sourceFieldLabel.toLowerCase().trim() : '';
-    if (!targetLabel && allForms.length > 0 && sourceFieldId) {
-        for (const tab of allForms) {
-            const f = (tab.fields || []).find(fld => fld.id === sourceFieldId);
+    if (!targetLabel && allTabs.length > 0 && sourceFieldId) {
+        for (const tab of allTabs) {
+            const f = (tab.fields || []).find(fld => fld.id === sourceFieldId || fld.name === sourceFieldId);
             if (f && f.label) {
                 targetLabel = f.label.toLowerCase().trim();
                 break;
             }
         }
     }
+    if (!targetLabel && sourceFieldId) {
+        targetLabel = sourceFieldId.toLowerCase().replace(/_/g, ' ').trim();
+    }
 
     tabIdentifiers.forEach(tabIdOrName => {
         let records = [];
-        let tabObj = null;
+        let tabObj = allTabs.find(t => t && (t.id === tabIdOrName || (t.title && t.title.toLowerCase().trim() === String(tabIdOrName).toLowerCase().trim())));
         
         if (fData[tabIdOrName]) {
             try {
@@ -1372,13 +1395,10 @@ function getLatestRecordAcrossTabs(targetTabs, dateFieldId, sourceFieldId, featu
             } catch(e) { records = []; }
         }
         
-        if (allForms.length > 0) {
-            tabObj = allForms.find(t => t.id === tabIdOrName || t.title.toLowerCase().trim() === String(tabIdOrName).toLowerCase().trim());
-            if ((!records || records.length === 0) && tabObj && fData[tabObj.id]) {
-                try {
-                    records = typeof fData[tabObj.id] === 'string' ? JSON.parse(fData[tabObj.id]) : fData[tabObj.id];
-                } catch(e) { records = []; }
-            }
+        if ((!records || records.length === 0) && tabObj && fData[tabObj.id]) {
+            try {
+                records = typeof fData[tabObj.id] === 'string' ? JSON.parse(fData[tabObj.id]) : fData[tabObj.id];
+            } catch(e) { records = []; }
         }
         
         if (!Array.isArray(records)) records = [];
@@ -1386,7 +1406,12 @@ function getLatestRecordAcrossTabs(targetTabs, dateFieldId, sourceFieldId, featu
         // Identifica qual é a chave do campo alvo nesta aba específica
         let fieldKeyForThisTab = sourceFieldId;
         if (tabObj && tabObj.fields && targetLabel) {
-            const matchingFieldInTab = tabObj.fields.find(fld => fld.label && fld.label.toLowerCase().trim() === targetLabel);
+            const matchingFieldInTab = tabObj.fields.find(fld => 
+                (fld.label && fld.label.toLowerCase().trim() === targetLabel) ||
+                (fld.id && fld.id.toLowerCase() === sourceFieldId.toLowerCase()) ||
+                (fld.label && targetLabel.includes('recuo') && fld.label.toLowerCase().includes('recuo')) ||
+                (fld.label && targetLabel.includes('ocupac') && fld.label.toLowerCase().includes('ocupac'))
+            );
             if (matchingFieldInTab) {
                 fieldKeyForThisTab = matchingFieldInTab.id;
             }

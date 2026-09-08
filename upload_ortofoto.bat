@@ -32,8 +32,34 @@ if not defined QGIS_ENV (
     exit /b 1
 )
 
+for %%I in ("%QGIS_ENV%") do set "QGIS_BIN=%%~dpI"
+
+set "QGIS_PYTHON="
+if exist "%QGIS_BIN%python.exe" set "QGIS_PYTHON=%QGIS_BIN%python.exe"
+if not defined QGIS_PYTHON if exist "%QGIS_BIN%python3.exe" set "QGIS_PYTHON=%QGIS_BIN%python3.exe"
+
 call "%QGIS_ENV%" >nul 2>&1
 
-python "%~dp0upload_ortofoto_turbo.py" %*
+set "SCRIPT_PY="
+if exist "%~dp0upload_ortofoto_turbo.py" set "SCRIPT_PY=%~dp0upload_ortofoto_turbo.py"
+if not defined SCRIPT_PY if exist "C:\Users\Windows 11\Documents\Projetos\Projeto_V01\Projetos_Obras\upload_ortofoto_turbo.py" (
+    set "SCRIPT_PY=C:\Users\Windows 11\Documents\Projetos\Projeto_V01\Projetos_Obras\upload_ortofoto_turbo.py"
+)
 
-pause
+if not defined SCRIPT_PY (
+    echo [-] ERRO: Nao foi possivel encontrar o arquivo 'upload_ortofoto_turbo.py'!
+    pause
+    exit /b 1
+)
+
+if defined QGIS_PYTHON (
+    "%QGIS_PYTHON%" "%SCRIPT_PY%" %*
+) else (
+    python "%SCRIPT_PY%" %*
+)
+
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo [-] Ocorreu um erro ao executar o Upload Turbo.
+    pause
+)

@@ -88,35 +88,141 @@ function populateFormSelects() {
 // — precisa do município ativo (sessionStorage) pra filtrar os formulários
 // certos, e isso só existe depois do login confirmado.
 
+// Normalizador universal de valores estatísticos para agrupamentos em gráficos e mapas
+function normalizeStatValue(val, fieldInfo = null) {
+    if (val === undefined || val === null) return 'N/I';
+    
+    let str = String(val).trim();
+    if (str === '' || str === '---' || str === '-' || str === 'null' || str === 'undefined') {
+        return 'N/I';
+    }
+    
+    // Normalizações de valores nulos / não preenchidos
+    const lower = str.toLowerCase();
+    if (str === '0' || lower === 'ni' || lower === 'n/i' || lower === 'n.i.' || lower === 'não informado' || lower === 'nao informado' || lower === 'sem informação' || lower === 'sem informacao') {
+        return 'N/I';
+    }
+
+    const fieldKeyOrLabel = (fieldInfo ? (fieldInfo.id || fieldInfo.key || fieldInfo.label || fieldInfo.name || fieldInfo.title || '') : '').toLowerCase();
+
+    // 1. Regras específicas para "Situação do Recuo" (Não Recuou, Já Recuou, Recuo Parcial)
+    if (fieldKeyOrLabel.includes('recuo') || lower.includes('recuo') || lower.includes('recuou')) {
+        if (lower.includes('não') || lower.includes('nao') || lower.includes('pendente')) {
+            return 'Não Recuou';
+        }
+        if (lower.includes('já') || lower.includes('ja') || lower.includes('recuado') || lower.includes('recuou') || lower === 'sim') {
+            return 'Já Recuou';
+        }
+        if (lower.includes('parcial') || lower.includes('andamento')) {
+            return 'Recuo Parcial';
+        }
+    }
+
+    // 2. Regras específicas para "Situação da Ocupação" (Regular, Irregular)
+    if (fieldKeyOrLabel.includes('ocupac') || lower.includes('ocupac') || lower.includes('regular') || lower.includes('invas')) {
+        if (lower.includes('irreg') || lower.includes('invas') || lower.includes('não conf') || lower.includes('nao conf')) {
+            return 'Irregular';
+        }
+        if (lower.includes('reg') || lower.includes('conf')) {
+            return 'Regular';
+        }
+    }
+
+    // 3. Regra de opções oficiais do campo: se o campo tem options definidas, buscar correspondência case-insensitive
+    if (fieldInfo && fieldInfo.options) {
+        const opts = (typeof fieldInfo.options === 'string' ? fieldInfo.options.split(',') : fieldInfo.options)
+            .map(o => String(o).trim())
+            .filter(o => o);
+        const matched = opts.find(o => o.toLowerCase() === lower);
+        if (matched) return matched;
+    }
+
+    // 4. Padroniza capitalização para evitar duplicidades como "Não recuou" vs "Não Recuou"
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
+window.normalizeStatValue = normalizeStatValue;
+
 function getFeaturePropertyValue(theme, feature, requestedKey) {
-   if (!requestedKey) return undefined;
+   if (!requestedKey || !feature || !feature.properties) return undefined;
    
-   if (feature.properties[requestedKey] !== undefined && feature.properties[requestedKey] !== '') return feature.properties[requestedKey];
-   
+   // 1. Localiza a definição do formulário e campo
+   let form = null;
    if (theme && theme.formId && typeof allForms !== 'undefined') {
-       const form = allForms.find(f => f.id === theme.formId);
-       if (form && (form.schema || form.tabs)) {
-           const schema = form.schema || form.tabs;
-           for (const tab of schema) {
-               if (tab.fields) {
-                   const field = tab.fields.find(f => 
-                       (f.label && f.label.toLowerCase() === requestedKey.toLowerCase()) || 
-                       (f.name && f.name.toLowerCase() === requestedKey.toLowerCase()) ||
-                       f.id === requestedKey
-                   );
-                   if (field && feature.properties[field.id] !== undefined && feature.properties[field.id] !== '') {
-                       return feature.properties[field.id];
-                   }
-               }
+       form = allForms.find(f => f.id === theme.formId);
+   }
+   if (!form && typeof allForms !== 'undefined' && Array.isArray(allForms)) {
+       form = allForms.find(f => {
+           const schema = f.schema || f.tabs || [];
+           return schema.some(tab => (tab.fields || []).some(fld => fld.id === requestedKey || (fld.label && fld.label.toLowerCase() === requestedKey.toLowerCase())));
+       });
+   }
+
+   const schema = form ? (form.schema || form.tabs || []) : [];
+   let targetField = null;
+   let targetTab = null;
+
+   for (const tab of schema) {
+       if (tab.fields) {
+           const field = tab.fields.find(f => 
+               f.id === requestedKey ||
+               (f.label && f.label.toLowerCase() === requestedKey.toLowerCase()) || 
+               (f.name && f.name.toLowerCase() === requestedKey.toLowerCase())
+           );
+           if (field) {
+               targetField = field;
+               targetTab = tab;
+               break;
            }
        }
    }
-   
-   const lowerKey = requestedKey.toLowerCase();
-   for (const p in feature.properties) {
-       if (p.toLowerCase() === lowerKey) return feature.properties[p];
+
+   // 2. Se o campo tiver fórmula configurada (ex: latest_1n da aba MPF):
+   if (targetField && targetField.formulaConfig) {
+       const cfg = targetField.formulaConfig;
+       if (cfg.mode === 'latest_1n' && cfg.latest1nConfig && typeof getLatestRecordAcrossTabs === 'function') {
+           const c = cfg.latest1nConfig;
+           const latestVal = getLatestRecordAcrossTabs(c.targetTabIds, c.dateFieldId, c.sourceFieldId, feature.properties, c.sourceFieldLabel || targetField.label);
+           if (latestVal !== null && latestVal !== undefined && String(latestVal).trim() !== '' && String(latestVal).trim() !== '---') {
+               return latestVal;
+           }
+       }
    }
-   
+
+   // 3. Se for campo de fiscalização/vistoria (ex: recuo, ocupação, área invadida) ou pertencer à aba MPF/consolidada:
+   // busca a informação mais recente das abas parceiras (PF, SPU, Município) que alimentam o MPF
+   const reqLower = requestedKey.toLowerCase();
+   const isMpfOrConsolidated = targetTab && (
+       targetTab.type === 'consolidated_history' || 
+       targetTab.isConsolidatedHistory || 
+       (targetTab.title && targetTab.title.toUpperCase().includes('MPF'))
+   );
+   const isSurveyField = reqLower.includes('recuo') || reqLower.includes('ocupac') || reqLower.includes('area') ||
+                         (targetField && targetField.label && (targetField.label.toLowerCase().includes('recuo') || targetField.label.toLowerCase().includes('ocupac') || targetField.label.toLowerCase().includes('area')));
+
+   if ((isMpfOrConsolidated || isSurveyField) && typeof getLatestRecordAcrossTabs === 'function') {
+       const latestFromTabs = getLatestRecordAcrossTabs(null, 'auto', targetField ? targetField.id : requestedKey, feature.properties, targetField ? targetField.label : requestedKey);
+       if (latestFromTabs !== null && latestFromTabs !== undefined && String(latestFromTabs).trim() !== '' && String(latestFromTabs).trim() !== '---') {
+           return latestFromTabs;
+       }
+   }
+
+   // 4. Valor direto no ID do campo se preenchido
+   if (targetField && feature.properties[targetField.id] !== undefined && feature.properties[targetField.id] !== '' && feature.properties[targetField.id] !== '---') {
+       return feature.properties[targetField.id];
+   }
+
+   // 5. Valor direto pela requestedKey
+   if (feature.properties[requestedKey] !== undefined && feature.properties[requestedKey] !== '' && feature.properties[requestedKey] !== '---') {
+       return feature.properties[requestedKey];
+   }
+
+   // 6. Busca case-insensitive nas propriedades
+   for (const p in feature.properties) {
+       if (p.toLowerCase() === reqLower && feature.properties[p] !== undefined && feature.properties[p] !== '' && feature.properties[p] !== '---') {
+           return feature.properties[p];
+       }
+   }
+
    return undefined;
 }
 
@@ -466,23 +572,39 @@ function initMap() {
       // Preservar classificação temática ativa se o gráfico/dashboard estiver aberto
       if (theme && theme._activeClassification) {
         const { fieldId, colorsMap } = theme._activeClassification;
-        const val = getFeaturePropertyValue(theme, feature, fieldId);
-        const valStr = (val === undefined || val === null || val === '') ? "N/I" : String(val);
+        let fieldInfo = null;
+        if (typeof allForms !== 'undefined' && Array.isArray(allForms)) {
+            for (const form of allForms) {
+                const schema = form.schema || form.tabs || [];
+                for (const tab of schema) {
+                    const fld = (tab.fields || []).find(f => f.id === fieldId || (f.label && f.label.toLowerCase() === fieldId.toLowerCase()));
+                    if (fld) { fieldInfo = fld; break; }
+                }
+                if (fieldInfo) break;
+            }
+        }
+        const rawVal = getFeaturePropertyValue(theme, feature, fieldId);
+        const valStr = typeof normalizeStatValue === 'function' ? normalizeStatValue(rawVal, fieldInfo) : (rawVal || 'N/I');
         
         let classColor = null;
         if (colorsMap[valStr]) {
             classColor = colorsMap[valStr];
         } else {
-            const matchKey = Object.keys(colorsMap).find(k => k.trim().toLowerCase() === valStr.trim().toLowerCase());
+            const matchKey = Object.keys(colorsMap).find(k => {
+                const normK = typeof normalizeStatValue === 'function' ? normalizeStatValue(k, fieldInfo) : k;
+                return normK.toLowerCase() === String(valStr).toLowerCase() || 
+                       k.trim().toLowerCase() === String(valStr).trim().toLowerCase() ||
+                       String(rawVal).trim().toLowerCase() === k.trim().toLowerCase();
+            });
             if (matchKey) classColor = colorsMap[matchKey];
         }
-        if (!classColor && (valStr === 'N/I' || valStr === 'Não Informado' || valStr === '')) {
-            classColor = colorsMap['N/I'] || colorsMap['Não Informado'];
+        if (!classColor && (valStr === 'N/I' || valStr === 'Não Informado' || valStr === '' || rawVal === undefined || rawVal === null)) {
+            classColor = colorsMap['N/I'] || colorsMap['Não Informado'] || colorsMap[''];
         }
         if (classColor && classColor !== 'none') {
             color = classColor;
-            opacity = 0.8;
-            weight = 2;
+            opacity = 0.85;
+            weight = 2.5;
         }
       }
 
@@ -497,18 +619,37 @@ function initMap() {
     },
     pointToLayer: function(feature, latlng) {
       const themeId = feature.properties.themeId;
-      const theme = themes.find(t => t.id === themeId);
+      const theme = themes.find(t => String(t.id) === String(themeId));
       let color = theme ? theme.color : '#0284c7';
       
       // Preservar cor de classificação se ativa
       if (theme && theme._activeClassification) {
           const { fieldId, colorsMap } = theme._activeClassification;
-          const val = getFeaturePropertyValue(theme, feature, fieldId);
-          const valStr = (val === undefined || val === null || val === '') ? "N/I" : String(val);
+          let fieldInfo = null;
+          if (typeof allForms !== 'undefined' && Array.isArray(allForms)) {
+              for (const form of allForms) {
+                  const schema = form.schema || form.tabs || [];
+                  for (const tab of schema) {
+                      const fld = (tab.fields || []).find(f => f.id === fieldId || (f.label && f.label.toLowerCase() === fieldId.toLowerCase()));
+                      if (fld) { fieldInfo = fld; break; }
+                  }
+                  if (fieldInfo) break;
+              }
+          }
+          const rawVal = getFeaturePropertyValue(theme, feature, fieldId);
+          const valStr = typeof normalizeStatValue === 'function' ? normalizeStatValue(rawVal, fieldInfo) : (rawVal || 'N/I');
           if (colorsMap[valStr]) color = colorsMap[valStr];
           else {
-              const matchKey = Object.keys(colorsMap).find(k => k.trim().toLowerCase() === valStr.trim().toLowerCase());
+              const matchKey = Object.keys(colorsMap).find(k => {
+                  const normK = typeof normalizeStatValue === 'function' ? normalizeStatValue(k, fieldInfo) : k;
+                  return normK.toLowerCase() === String(valStr).toLowerCase() || 
+                         k.trim().toLowerCase() === String(valStr).trim().toLowerCase() ||
+                         String(rawVal).trim().toLowerCase() === k.trim().toLowerCase();
+              });
               if (matchKey) color = colorsMap[matchKey];
+          }
+          if (!color && (valStr === 'N/I' || valStr === 'Não Informado' || valStr === '' || rawVal === undefined || rawVal === null)) {
+              color = colorsMap['N/I'] || colorsMap['Não Informado'] || colorsMap[''] || theme.color;
           }
       }
 
@@ -1291,114 +1432,84 @@ function renderThemes() {
         ? `linear-gradient(135deg, ${theme.color}22 0%, rgba(15,23,42,0.75) 100%)` 
         : `rgba(15,23,42,0.55)`;
     
-    let statsListHtml = '';
-    const form = typeof allForms !== 'undefined' ? allForms.find(f => f.id === theme.formId) : null;
-    if (form && form.statsConfig && form.statsConfig.length > 0) {
-        statsListHtml = `<div id="stats-list-${theme.id}" class="hidden flex-col gap-2 mt-2.5 pt-2.5 border-t border-white/10 w-full transition-all">`;
-        form.statsConfig.forEach((widget, idx) => {
-            let iconHtml = widget.type === 'indicator' ? '123' : (widget.type === 'pie' ? 'pie_chart' : 'bar_chart');
-            if (widget.type === 'indicator') {
-                statsListHtml += `
-                    <div class="flex items-center justify-between bg-slate-800/40 hover:bg-slate-700/60 rounded-lg p-2 cursor-pointer transition-all select-none group" onclick="openStatsDashboard('${theme.id}', ${idx})" title="Ver Indicador">
-                        <div class="flex items-center gap-2 text-slate-300 group-hover:text-white transition-colors">
-                            <span class="material-symbols-outlined text-[18px] text-cyan-400">${iconHtml}</span>
-                            <span class="text-xs font-semibold">${widget.title || 'Indicador'}</span>
-                        </div>
-                        <span class="material-symbols-outlined text-[16px] text-slate-500 group-hover:text-cyan-400 transition-colors">open_in_new</span>
-                    </div>
-                `;
-            } else {
-                statsListHtml += `
-                    <label class="flex items-center justify-between bg-slate-800/40 hover:bg-slate-700/60 rounded-lg p-2 cursor-pointer transition-all select-none group" title="Clique para ativar/desativar no mapa">
-                        <div class="flex items-center gap-2 text-slate-300 group-hover:text-white transition-colors">
-                            <span class="material-symbols-outlined text-[18px] text-cyan-400">${iconHtml}</span>
-                            <span class="text-xs font-semibold">${widget.title || 'Gráfico'}</span>
-                        </div>
-                        <div class="relative inline-flex items-center pointer-events-none">
-                            <input type="checkbox" name="layer-stat-toggle" class="sr-only peer layer-stat-toggle-${theme.id}" onchange="handleStatToggle('${theme.id}', ${idx}, this)">
-                            <div class="w-8 h-4 bg-slate-700/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-500 shadow-inner"></div>
-                        </div>
-                    </label>
-                `;
-            }
-        });
-        statsListHtml += `</div>`;
-    }
-
     card.innerHTML = `
-      <div class="px-3.5 pt-2.5 pb-2.5 flex flex-col">
+      <div class="px-3.5 py-3 flex flex-col cursor-pointer select-none" onclick="toggleThemeListAndSelection('${theme.id}')" title="Clique para expandir ferramentas, filtro e lista">
         
         <!-- Header: Icon, Title, and Toggle -->
-        <div class="flex items-center justify-between mb-2">
-          <div class="flex items-center gap-2.5 min-w-0 pr-2 cursor-pointer group" onclick="toggleThemeListAndSelection('${theme.id}')" title="Clique para expandir e isolar seleção no mapa">
-            <div class="w-12 h-12 rounded-xl shrink-0 flex items-center justify-center text-white shadow-lg transition-transform group-hover:scale-105 border border-white/20" style="background-color: ${theme.color}; box-shadow: 0 4px 16px ${theme.color}80;">
-               <span class="material-symbols-outlined text-[24px]">${theme.icon || 'layers'}</span>
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2.5 min-w-0 flex-1">
+            <div class="w-11 h-11 rounded-xl shrink-0 flex items-center justify-center text-white shadow-lg transition-transform hover:scale-105 border border-white/20" style="background-color: ${theme.color}; box-shadow: 0 4px 16px ${theme.color}80;">
+               <span class="material-symbols-outlined text-[22px]">${theme.icon || 'layers'}</span>
             </div>
-            <div class="flex flex-col min-w-0">
+            <div class="flex flex-col min-w-0 flex-1">
               <h3 class="text-xs sm:text-[13px] font-extrabold text-white tracking-wide uppercase drop-shadow-md leading-tight truncate ${!isVisible ? 'opacity-50' : ''}" title="${theme.name}">${theme.name}</h3>
-              ${(isSharedFromOtherEntity || isSuperAdmin || (themeEntidade && themeEntidade.toLowerCase() !== 'geral') || !isCompartilhada) ? `
-                <div class="flex items-center gap-1 mt-0.5 flex-wrap">
+              <div class="flex items-center gap-1.5 mt-1 flex-wrap">
+                ${(isSharedFromOtherEntity || isSuperAdmin || (themeEntidade && themeEntidade.toLowerCase() !== 'geral') || !isCompartilhada) ? `
                   ${themeEntidade ? `
-                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[8.5px] font-bold rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 truncate max-w-[170px]" title="Entidade: ${themeEntidade || 'Público'}">
+                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[8.5px] font-bold rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 truncate max-w-[150px] h-5 leading-none" title="Entidade: ${themeEntidade || 'Público'}">
                       <span class="material-symbols-outlined text-[10px]">hub</span>
                       <span>${getEntitySigla(themeEntidade)}</span>
                     </span>
                   ` : ''}
                   ${!isCompartilhada ? `
-                    <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[8.5px] font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/30" title="Camada Privada: não compartilhada com outros entes">
+                    <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[8.5px] font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 h-5 leading-none" title="Camada Privada: não compartilhada com outros entes">
                       <span class="material-symbols-outlined text-[10px]">lock</span>
                       <span>Privada</span>
                     </span>
                   ` : ''}
+                ` : ''}
+                <div class="text-[9.5px] font-semibold text-slate-300 flex items-center gap-1 h-5 leading-none">
+                  <span id="theme-count-${theme.id}" class="font-bold text-slate-100">${featureCount}</span>
+                  <span class="text-slate-400 font-normal uppercase tracking-wider text-[8.5px]">${featureCount === 1 ? 'registro' : 'registros'}</span>
                 </div>
-              ` : ''}
-              <div class="text-[10px] font-semibold text-slate-300 mt-0.5 flex items-center gap-1">
-                <span id="theme-count-${theme.id}" class="font-bold text-slate-100">${featureCount}</span>
-                <span class="text-slate-400 font-normal uppercase tracking-wider text-[9px]">registros</span>
               </div>
             </div>
           </div>
           
           <!-- iOS-style Neon Toggle -->
-          <label class="relative inline-flex items-center cursor-pointer shrink-0" title="${isVisible ? 'Ocultar' : 'Mostrar'} Camada">
+          <label class="relative inline-flex items-center cursor-pointer shrink-0 ml-1.5" title="${isVisible ? 'Ocultar' : 'Mostrar'} Camada" onclick="event.stopPropagation()">
             <input type="checkbox" id="theme-toggle-${theme.id}" class="sr-only peer" ${isVisible ? 'checked' : ''} onchange="toggleThemeVisibility('${theme.id}', this)">
             <div id="theme-toggle-bg-${theme.id}" class="w-11 h-6 bg-slate-700/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all" style="${isVisible ? `background-color: ${theme.color}; box-shadow: 0 0 12px ${theme.color}90;` : ''}"></div>
           </label>
         </div>
-        
-        <!-- Footer: Actions (Visível apenas para o ente proprietário ou SuperAdmin) -->
-        ${canManageThisEntityLayer ? `
-        <div class="grid grid-flow-col auto-cols-fr gap-1 items-center border-t border-white/20 dark:border-white/10 pt-2 w-full">
-            <button onclick="toggleThemeStatsList('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Painel de Estatísticas">
-              <span class="material-symbols-outlined text-[18px]">pie_chart</span>
-            </button>
-            ${canAddFeatures ? `
-            <button onclick="startEditingTheme('${theme.id}', '${theme.name}', '${theme.color}', '${theme.geomType || ''}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Adicionar Feição">
-              <span class="material-symbols-outlined text-[18px]">add</span>
-            </button>
-            ` : ''}
-            ${canEditThisTheme ? `
-            <button onclick="openEditThemeModal('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Editar Camada">
-              <span class="material-symbols-outlined text-[18px]">settings</span>
-            </button>
-            ` : ''}
-            ${canEditThisTheme && isSuperAdmin ? `
-            <button onclick="triggerUpload('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Importar GeoJSON">
-              <span class="material-symbols-outlined text-[18px]">upload</span>
-            </button>` : ''}
-            <button onclick="downloadGeoJSON('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Exportar">
-              <span class="material-symbols-outlined text-[18px]">download</span>
-            </button>
-            ${canEditThisTheme && isSuperAdmin ? `
-            <button onclick="deleteTheme('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-red-500/15 hover:bg-red-500/30 active:scale-95 rounded-lg tooltip text-red-400 hover:text-red-300 transition-all border border-red-500/20 shadow-xs" title="Excluir">
-              <span class="material-symbols-outlined text-[18px]">delete</span>
-            </button>` : ''}
-        </div>
-        ${statsListHtml}
-        ` : ''}
       </div>
       
-      <div id="list-${theme.id}" class="bg-black/20 dark:bg-black/40 border-t border-white/10 hidden backdrop-blur-md">
+      <!-- Seção Expansível: Barra de Ações + Filtro Avançado + Lista de Feições -->
+      <div id="list-${theme.id}" class="bg-black/20 dark:bg-black/40 border-t border-white/10 ${isActiveSelection ? '' : 'hidden'} backdrop-blur-md transition-all">
+        
+        <!-- Barra de Ações da Camada (Visível ao expandir) -->
+        ${canManageThisEntityLayer ? `
+        <div class="p-2.5 border-b border-white/10 bg-slate-900/40">
+            <div class="grid grid-flow-col auto-cols-fr gap-1.5 items-center w-full">
+                <button onclick="toggleLayerStatsMenu('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Painel de Estatísticas">
+                  <span class="material-symbols-outlined text-[18px]">pie_chart</span>
+                </button>
+                ${canAddFeatures ? `
+                <button onclick="startEditingTheme('${theme.id}', '${theme.name}', '${theme.color}', '${theme.geomType || ''}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Adicionar Feição">
+                  <span class="material-symbols-outlined text-[18px]">add</span>
+                </button>
+                ` : ''}
+                ${canEditThisTheme ? `
+                <button onclick="openEditThemeModal('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Editar Camada">
+                  <span class="material-symbols-outlined text-[18px]">settings</span>
+                </button>
+                ` : ''}
+                ${canEditThisTheme && isSuperAdmin ? `
+                <button onclick="triggerUpload('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Importar GeoJSON">
+                  <span class="material-symbols-outlined text-[18px]">upload</span>
+                </button>` : ''}
+                <button onclick="downloadGeoJSON('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Exportar">
+                  <span class="material-symbols-outlined text-[18px]">download</span>
+                </button>
+                ${canEditThisTheme && isSuperAdmin ? `
+                <button onclick="deleteTheme('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-red-500/15 hover:bg-red-500/30 active:scale-95 rounded-lg tooltip text-red-400 hover:text-red-300 transition-all border border-red-500/20 shadow-xs" title="Excluir">
+                  <span class="material-symbols-outlined text-[18px]">delete</span>
+                </button>` : ''}
+            </div>
+        </div>
+        ` : ''}
+
+        <!-- Filtro Avançado -->
         <div class="p-2 border-b border-white/5 bg-slate-50 dark:bg-slate-900/50">
           <div class="flex items-center justify-between mb-2">
              <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Filtro Avançado</span>
@@ -4910,6 +5021,7 @@ async function ensureAuthenticated() {
     } catch (e) {
         currentUserProfile = { id: data.session.user.id, nome: data.session.user.email, super_admin: false };
     }
+    window.currentUserProfile = currentUserProfile;
 
     // Papel do usuário NO MUNICÍPIO ATIVO (não é mais global) — se o vínculo
     // não existir ou não estiver aprovado (ex: acesso revogado depois que
@@ -4951,6 +5063,7 @@ async function ensureAuthenticated() {
         window.userTotalMunicipiosAprovados = 999;
         window.currentUserEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '';
     }
+    window.currentUserProfile = currentUserProfile;
 
     // Carrega entidades padrão para listagem no seletor de criação e catálogo
     try {
@@ -5967,28 +6080,27 @@ window.printReport = printReport;
 
 window.clearHighlight = clearHighlight;
 
-window.toggleThemeStatsList = function(themeId) {
-    const listEl = document.getElementById(`stats-list-${themeId}`);
-    if (listEl) {
-        listEl.classList.toggle('hidden');
-        listEl.classList.toggle('flex');
+window.activeLayerStatsThemeId = null;
+window.activeLayerStatIndex = null;
+
+window.toggleLayerStatsMenu = function(themeId) {
+    const menu = document.getElementById('layer-stats-menu');
+    if (menu && !menu.classList.contains('hidden') && window.activeLayerStatsThemeId === themeId) {
+        closeLayerStatsMenu();
+    } else {
+        openLayerStatsMenu(themeId);
     }
 };
 
-window.handleStatToggle = function(themeId, chartIndex, checkbox) {
-    // Exclusivity: uncheck all other stats toggles globally
-    const allToggles = document.querySelectorAll('input[name="layer-stat-toggle"]');
-    allToggles.forEach(t => {
-        if (t !== checkbox) t.checked = false;
-    });
-
-    // Fecha o menu de Estatísticas Cruzadas e limpa qualquer análise espacial ativa
+window.openLayerStatsMenu = function(themeId) {
+    // 1. Fechar e limpar Estatísticas Cruzadas se ativas para não colidir no canto superior direito
     if (window.spatialAnalyticsEngine) {
         if (typeof window.spatialAnalyticsEngine.closeMenu === 'function') {
             window.spatialAnalyticsEngine.closeMenu();
         }
         if (typeof window.spatialAnalyticsEngine.clearActiveAnalysis === 'function') {
             window.spatialAnalyticsEngine.clearActiveAnalysis(true);
+            window.spatialAnalyticsEngine.renderMenuList();
         }
     }
     const resCard = document.getElementById('spatial-result-card');
@@ -5996,11 +6108,136 @@ window.handleStatToggle = function(themeId, chartIndex, checkbox) {
     const spatialMenu = document.getElementById('spatial-analytics-menu');
     if (spatialMenu) spatialMenu.classList.add('hidden');
 
-    if (checkbox.checked) {
-        // Open specific chart dashboard
-        openStatsDashboard(themeId, chartIndex);
+    const theme = themes.find(t => t.id === themeId);
+    if (!theme) return;
+
+    if (!theme.formId) {
+        alert("Este tema não possui um formulário (cadastro) associado. Edite a camada e vincule um formulário primeiro.");
+        return;
+    }
+
+    const form = (typeof allForms !== 'undefined' && Array.isArray(allForms)) ? allForms.find(f => f.id === theme.formId) : null;
+    if (!form) {
+        alert("Formulário associado não encontrado.");
+        return;
+    }
+
+    const config = form.statsConfig;
+    if (!config || !Array.isArray(config) || config.length === 0) {
+        alert("Este formulário ainda não possui uma configuração de Dashboard. Vá até as Configurações > Cadastros > Editar, e configure os gráficos manualmente.");
+        return;
+    }
+
+    // Se mudou de camada, fecha a exibição do dashboard anterior
+    if (window.activeLayerStatsThemeId && window.activeLayerStatsThemeId !== themeId) {
+        closeStatsDashboard();
+    }
+
+    window.activeLayerStatsThemeId = themeId;
+
+    const menu = document.getElementById('layer-stats-menu');
+    if (!menu) return;
+
+    const titleEl = document.getElementById('layer-stats-menu-title');
+    if (titleEl) {
+        titleEl.textContent = theme.name;
+        titleEl.title = theme.name;
+    }
+
+    renderLayerStatsMenuItems(themeId);
+
+    // Posicionamento no canto superior direito (top: 10px, right: 10px)
+    menu.style.top = '10px';
+    menu.style.right = '10px';
+    menu.style.left = 'auto';
+    menu.style.bottom = 'auto';
+    menu.classList.remove('hidden');
+
+    // Tornar o card de relação arrastável
+    const header = document.getElementById('layer-stats-menu-header');
+    if (typeof window.makeElementDraggable === 'function' && header) {
+        window.makeElementDraggable(menu, header);
+    }
+};
+
+window.closeLayerStatsMenu = function() {
+    const menu = document.getElementById('layer-stats-menu');
+    if (menu) menu.classList.add('hidden');
+    window.activeLayerStatsThemeId = null;
+    window.activeLayerStatIndex = null;
+    closeStatsDashboard();
+};
+
+window.renderLayerStatsMenuItems = function(themeId) {
+    const container = document.getElementById('layer-stats-menu-items');
+    if (!container) return;
+
+    const theme = themes.find(t => t.id === themeId);
+    if (!theme) return;
+    const form = (typeof allForms !== 'undefined' && Array.isArray(allForms)) ? allForms.find(f => f.id === theme.formId) : null;
+    const config = (form && Array.isArray(form.statsConfig)) ? form.statsConfig : [];
+
+    if (config.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-6 text-slate-400">
+                <span class="material-symbols-outlined text-3xl mb-1 opacity-50">analytics</span>
+                <p class="text-xs">Nenhuma estatística cadastrada para esta camada.</p>
+            </div>
+        `;
+        return;
+    }
+
+    let html = '';
+    config.forEach((widget, idx) => {
+        const isActive = (window.activeLayerStatIndex === idx);
+        let iconHtml = widget.type === 'indicator' ? '123' : (widget.type === 'pie' || widget.type === 'donut' ? 'pie_chart' : 'bar_chart');
+        let typeLabel = widget.type === 'indicator' ? 'Indicador Numérico' : (widget.type === 'pie' ? 'Gráfico de Pizza' : (widget.type === 'donut' ? 'Gráfico de Rosca' : 'Gráfico de Barras'));
+        if (widget.fieldId) {
+            typeLabel += ` • ${widget.fieldId}`;
+        }
+
+        html += `
+            <div class="w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between gap-3 cursor-pointer select-none ${isActive ? 'bg-cyan-500/15 border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.25)]' : 'bg-slate-800/60 border-slate-700/60 hover:border-slate-500 hover:bg-slate-700/60'}" onclick="selectLayerStat('${themeId}', ${idx})">
+                <div class="flex items-center gap-2.5 overflow-hidden flex-1">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isActive ? 'bg-cyan-500/30 text-cyan-300' : 'bg-cyan-500/15 text-cyan-400'}">
+                        <span class="material-symbols-outlined text-[18px]">${iconHtml}</span>
+                    </div>
+                    <div class="truncate">
+                        <h4 class="text-xs font-bold ${isActive ? 'text-white' : 'text-slate-200'} truncate">${widget.title || 'Estatística'}</h4>
+                        <p class="text-[10px] text-slate-400 truncate mt-0.5">${typeLabel}</p>
+                    </div>
+                </div>
+                <div class="shrink-0 flex items-center">
+                    <span class="material-symbols-outlined text-[20px] ${isActive ? 'text-cyan-400' : 'text-slate-500 opacity-60'}">
+                        ${isActive ? 'radio_button_checked' : 'radio_button_unchecked'}
+                    </span>
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+};
+
+window.selectLayerStat = function(themeId, index) {
+    if (window.activeLayerStatIndex === index) {
+        // Já estava ativo: desseleciona e fecha o card de gráfico
+        window.activeLayerStatIndex = null;
+        renderLayerStatsMenuItems(themeId);
+        closeStatsDashboard();
     } else {
-        // Close dashboard and reset
+        window.activeLayerStatIndex = index;
+        renderLayerStatsMenuItems(themeId);
+        openStatsDashboard(themeId, index);
+    }
+};
+
+// Compatibilidade
+window.toggleThemeStatsList = window.toggleLayerStatsMenu;
+window.handleStatToggle = function(themeId, chartIndex, checkbox) {
+    if (checkbox && checkbox.checked) {
+        selectLayerStat(themeId, chartIndex);
+    } else {
         closeStatsDashboard();
     }
 };
@@ -6042,14 +6279,19 @@ async function openStatsDashboard(themeId, specificIndex) {
     }
 
     const modal = document.getElementById('stats-dashboard-modal');
+    if (!modal) return;
     
     // --- Função para tornar o modal arrastável ---
     function makeModalDraggable(modal) {
-        const header = modal.querySelector('.cursor-move');
+        const header = modal.querySelector('.cursor-grab') || modal.querySelector('.cursor-move');
         if (!header) return;
         
+        if (typeof window.makeElementDraggable === 'function') {
+            window.makeElementDraggable(modal, header);
+            return;
+        }
+
         let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-        
         header.onmousedown = dragMouseDown;
 
         function dragMouseDown(e) {
@@ -6083,30 +6325,55 @@ async function openStatsDashboard(themeId, specificIndex) {
         function closeDragElement() {
             document.onmouseup = null;
             document.onmousemove = null;
-            // Restore transitions
             modal.style.transition = '';
         }
     }
 
     modal.dataset.themeId = theme.id;
     
+    // Alinhamento dinâmico: canto superior direito a 10px, logo abaixo do menu de estatísticas da camada se aberto
+    const menu = document.getElementById('layer-stats-menu');
+    let topPos = 10;
+    if (menu && !menu.classList.contains('hidden')) {
+        const rect = menu.getBoundingClientRect();
+        topPos = Math.max(10, Math.round(rect.bottom + 10));
+    }
+    modal.style.top = `${topPos}px`;
+    modal.style.right = '10px';
+    modal.style.left = 'auto';
+    modal.style.bottom = 'auto';
+    
+    // Garante que a camada esteja ativada e visível no mapa
+    if (theme.visible === false) {
+        theme.visible = true;
+        const toggleInput = document.getElementById(`theme-toggle-${theme.id}`);
+        if (toggleInput) toggleInput.checked = true;
+        const toggleBg = document.getElementById(`theme-toggle-bg-${theme.id}`);
+        if (toggleBg) {
+            toggleBg.style.backgroundColor = theme.color;
+            toggleBg.style.boxShadow = `0 0 12px ${theme.color}90`;
+        }
+    }
+
+    if (!theme._propertiesFullyLoaded && typeof loadThemeProperties === 'function') {
+        await loadThemeProperties(theme.id);
+    }
+    
     const features = theme.features || [];
     
-    // Zoom para a camada
-    if (features.length > 0 && typeof L !== 'undefined') {
+    // Zoom para a camada diretamente das feições GeoJSON
+    if (features.length > 0 && typeof L !== 'undefined' && map) {
         try {
-            const bounds = L.latLngBounds();
-            geojsonLayer.eachLayer(layer => {
-                if (layer.feature && layer.feature.properties.themeId === theme.id) {
-                    if (layer.getBounds) bounds.extend(layer.getBounds());
-                    else if (layer.getLatLng) bounds.extend(layer.getLatLng());
-                }
-            });
-            if (bounds.isValid()) {
-                map.flyToBounds(bounds, { paddingRightBottom: [400, 50], paddingTopLeft: [50, 50], duration: 1.5 });
+            const tempLayer = L.geoJSON(features);
+            const bounds = tempLayer.getBounds();
+            if (bounds && bounds.isValid()) {
+                map.flyToBounds(bounds, { paddingRightBottom: [420, 50], paddingTopLeft: [50, 50], duration: 1.2 });
             }
         } catch(e) {}
     }
+
+    // Carrega/re-renderiza feições no mapa
+    loadAllFeaturesToMap();
 
     const container = document.getElementById('stats-dashboard-content');
     container.innerHTML = '';
@@ -6135,17 +6402,17 @@ async function openStatsDashboard(themeId, specificIndex) {
         if (typeof specificIndex !== 'undefined' && chartIndex !== specificIndex) return;
 
         const card = document.createElement('div');
-        // Novo estilo de card (dark glass container)
-        card.className = "bg-[#070b14]/50 backdrop-blur-md rounded-2xl border border-white/10 p-5 flex flex-col flex-shrink-0 min-w-[250px] relative overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.5)]";
+        // Card com mesma estética e largura do Estatística Cruzada
+        card.className = "bg-[#070b14]/75 backdrop-blur-md rounded-2xl border border-white/10 p-5 flex flex-col flex-shrink-0 w-full relative overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.5)]";
         
         const closeBtn = document.createElement('button');
         closeBtn.onclick = closeStatsDashboard;
-        closeBtn.className = "absolute top-3 right-3 p-1.5 hover:bg-white/10 rounded-full text-white/50 hover:text-white transition-colors z-20";
+        closeBtn.className = "absolute top-3 right-3 p-1.5 hover:bg-white/10 rounded-full text-white/50 hover:text-red-400 transition-colors z-20 cursor-pointer";
         closeBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">close</span>';
         card.appendChild(closeBtn);
 
         const headerGroup = document.createElement('div');
-        headerGroup.className = "flex justify-between items-start mb-1 z-10 relative pr-6 cursor-move"; // cursor-move para indicar área de arrasto
+        headerGroup.className = "flex justify-between items-start mb-2 z-10 relative pr-6 cursor-grab select-none"; // cursor-grab para indicar área de arrasto
 
         const titleEl = document.createElement('h4');
         titleEl.className = "text-sm font-bold text-white tracking-wide flex items-center gap-2";
@@ -6178,8 +6445,14 @@ async function openStatsDashboard(themeId, specificIndex) {
                     
                     if (cOp === 'is_filled') return valStr !== '' && valStr !== '[]' && valStr !== '{}';
                     if (cOp === 'is_empty') return valStr === '' || valStr === '[]' || valStr === '{}';
-                    if (cOp === 'equals') return valStr.toLowerCase() === expStr.toLowerCase();
-                    if (cOp === 'not_equals') return valStr.toLowerCase() !== expStr.toLowerCase();
+                    if (cOp === 'equals') {
+                        if (valStr.toLowerCase() === expStr.toLowerCase()) return true;
+                        return typeof normalizeStatValue === 'function' && normalizeStatValue(valStr).toLowerCase() === normalizeStatValue(expStr).toLowerCase();
+                    }
+                    if (cOp === 'not_equals') {
+                        if (valStr.toLowerCase() === expStr.toLowerCase()) return false;
+                        return typeof normalizeStatValue === 'function' ? normalizeStatValue(valStr).toLowerCase() !== normalizeStatValue(expStr).toLowerCase() : true;
+                    }
                     if (cOp === 'contains') return valStr.toLowerCase().includes(expStr.toLowerCase());
                     
                     const numVal = parseFloat(valStr.replace(/[^\d.-]/g, ''));
@@ -6236,17 +6509,33 @@ async function openStatsDashboard(themeId, specificIndex) {
             const fieldId = widget.fieldId;
             if (!fieldId) return;
 
+            // Busca metadados do campo para normalização refinada
+            let fieldInfo = null;
+            if (typeof allForms !== 'undefined' && Array.isArray(allForms)) {
+                for (const form of allForms) {
+                    const schema = form.schema || form.tabs || [];
+                    for (const tab of schema) {
+                        const fld = (tab.fields || []).find(f => f.id === fieldId || (f.label && f.label.toLowerCase() === fieldId.toLowerCase()));
+                        if (fld) { fieldInfo = fld; break; }
+                    }
+                    if (fieldInfo) break;
+                }
+            }
+
             const counts = {};
             features.forEach(f => {
-                let val = getFeaturePropertyValue(theme, f, fieldId);
-                if (val === undefined || val === null || val === '') {
-                    val = "N/I";
-                }
+                let rawVal = getFeaturePropertyValue(theme, f, fieldId);
+                let val = typeof normalizeStatValue === 'function' ? normalizeStatValue(rawVal, fieldInfo) : (rawVal || 'N/I');
                 counts[val] = (counts[val] || 0) + 1;
             });
 
-            const rawLabels = Object.keys(counts);
-            const data = Object.values(counts);
+            // Ordena as categorias: as informadas primeiro em ordem decrescente de contagem, e "N/I" sempre por último
+            const rawLabels = Object.keys(counts).sort((a, b) => {
+                if (a === 'N/I') return 1;
+                if (b === 'N/I') return -1;
+                return counts[b] - counts[a];
+            });
+            const data = rawLabels.map(l => counts[l]);
             
             // Helper seguro para converter qualquer cor para RGBA válido no Chart.js
             function safeChartColor(colorStr, alpha = 0.85) {
@@ -6275,7 +6564,7 @@ async function openStatsDashboard(themeId, specificIndex) {
                 return colorStr;
             }
 
-            // Gerar mapa de cores para cada label com matching resiliente
+            // Gerar mapa de cores para cada label com matching resiliente e normalizado
             const defaultColors = ['#06b6d4', '#3b82f6', '#8b5cf6', '#14b8a6', '#6366f1', '#475569', '#10b981', '#ef4444', '#f59e0b'];
             const colorsMap = {};
             
@@ -6285,7 +6574,10 @@ async function openStatsDashboard(themeId, specificIndex) {
                     if (widget.colorMap[label]) {
                         resolvedColor = widget.colorMap[label];
                     } else {
-                        const matchKey = Object.keys(widget.colorMap).find(k => k.trim().toLowerCase() === label.trim().toLowerCase());
+                        const matchKey = Object.keys(widget.colorMap).find(k => {
+                            const normK = typeof normalizeStatValue === 'function' ? normalizeStatValue(k, fieldInfo) : k;
+                            return normK.toLowerCase() === label.toLowerCase() || k.trim().toLowerCase() === label.trim().toLowerCase();
+                        });
                         if (matchKey) resolvedColor = widget.colorMap[matchKey];
                     }
                     if (!resolvedColor && (label === 'N/I' || label === 'Não Informado' || label === '')) {
@@ -6396,14 +6688,6 @@ window.closeStatsDashboard = function() {
     modal.classList.remove('scale-100', 'opacity-100', 'translate-y-0');
     modal.classList.add('scale-95', 'opacity-0', 'translate-y-[-20px]', 'pointer-events-none');
     
-    // resetar posição do modal para a próxima abertura
-    setTimeout(() => {
-        modal.style.top = '80px';
-        modal.style.right = '20px';
-        modal.style.left = 'auto';
-        modal.style.bottom = 'auto';
-    }, 500);
-    
     const themeId = modal.dataset.themeId;
     if (themeId) {
         resetThemeClassification(themeId);
@@ -6414,7 +6698,13 @@ window.closeStatsDashboard = function() {
         window.spatialAnalyticsEngine.clearActiveAnalysis(true);
     }
 
-    // Uncheck all stats toggles in the layer list
+    // Desmarca seleção no menu flutuante de estatísticas da camada
+    window.activeLayerStatIndex = null;
+    if (window.activeLayerStatsThemeId) {
+        renderLayerStatsMenuItems(window.activeLayerStatsThemeId);
+    }
+
+    // Uncheck legacy toggles if any
     const allToggles = document.querySelectorAll('input[name="layer-stat-toggle"]');
     allToggles.forEach(t => t.checked = false);
     
@@ -6423,67 +6713,110 @@ window.closeStatsDashboard = function() {
         modal.style.display = 'none'; // Garantia absoluta
         content.innerHTML = ''; // Destruir os cards fantasmas
         console.log("Stats dashboard fechado e limpo.");
-    }, 500);
+    }, 300);
 };
 
 
 window.applyThemeClassification = function(themeId, fieldId, colorsJson) {
     try {
-        const theme = themes.find(t => t.id === themeId);
+        const theme = themes.find(t => String(t.id) === String(themeId));
         if (!theme) return;
 
         const colorsMap = JSON.parse(colorsJson);
         // Persistir a classificação ativa no tema para que qualquer re-render espacial mantenha as cores
         theme._activeClassification = { fieldId, colorsMap };
+
+        // Busca metadados do campo
+        let fieldInfo = null;
+        if (typeof allForms !== 'undefined' && Array.isArray(allForms)) {
+            for (const form of allForms) {
+                const schema = form.schema || form.tabs || [];
+                for (const tab of schema) {
+                    const fld = (tab.fields || []).find(f => f.id === fieldId || (f.label && f.label.toLowerCase() === fieldId.toLowerCase()));
+                    if (fld) { fieldInfo = fld; break; }
+                }
+                if (fieldInfo) break;
+            }
+        }
+
+        function resolveColor(rawVal) {
+            const valStr = typeof normalizeStatValue === 'function' ? normalizeStatValue(rawVal, fieldInfo) : (rawVal || 'N/I');
+            if (colorsMap[valStr]) return colorsMap[valStr];
+            const matchKey = Object.keys(colorsMap).find(k => {
+                const normK = typeof normalizeStatValue === 'function' ? normalizeStatValue(k, fieldInfo) : k;
+                return normK.toLowerCase() === String(valStr).toLowerCase() || 
+                       k.trim().toLowerCase() === String(valStr).trim().toLowerCase() ||
+                       String(rawVal).trim().toLowerCase() === k.trim().toLowerCase();
+            });
+            if (matchKey && colorsMap[matchKey]) return colorsMap[matchKey];
+            if (valStr === 'N/I' || valStr === 'Não Informado' || valStr === '' || rawVal === undefined || rawVal === null) {
+                return colorsMap['N/I'] || colorsMap['Não Informado'] || colorsMap[''] || theme.color || '#3388ff';
+            }
+            return theme.color || '#3388ff';
+        }
         
-        geojsonLayer.eachLayer(layer => {
-            if (!layer || !layer.feature || !layer.feature.properties || layer.feature.properties.themeId !== themeId) return;
-            
-            // Salvar estilo original da feição
-            if (!layer.options.originalStyle) {
-                layer.options.originalStyle = {
-                    fillColor: layer.options.fillColor || theme.color || '#3388ff',
-                    color: layer.options.color || theme.color || '#3388ff',
-                    weight: layer.options.weight,
-                    fillOpacity: layer.options.fillOpacity
-                };
-            }
-
-            const val = getFeaturePropertyValue(theme, layer.feature, fieldId);
-            const valStr = (val === undefined || val === null || val === '') ? "N/I" : String(val);
-            
-            let newColor = null;
-            if (colorsMap[valStr]) {
-                newColor = colorsMap[valStr];
-            } else {
-                const matchKey = Object.keys(colorsMap).find(k => k.trim().toLowerCase() === valStr.trim().toLowerCase());
-                if (matchKey) newColor = colorsMap[matchKey];
-            }
-            if (!newColor && (valStr === 'N/I' || valStr === 'Não Informado' || valStr === '')) {
-                newColor = colorsMap['N/I'] || colorsMap['Não Informado'];
-            }
-            if (!newColor) newColor = theme.color || '#3388ff';
-
-            if (newColor === 'none') {
-                if (layer.options.originalStyle && layer.setStyle) {
-                    layer.setStyle({
-                        fillColor: layer.options.originalStyle.fillColor,
-                        color: layer.options.originalStyle.color,
-                        fillOpacity: layer.options.originalStyle.fillOpacity,
-                        weight: layer.options.originalStyle.weight
-                    });
+        if (geojsonLayer) {
+            geojsonLayer.eachLayer(layer => {
+                if (!layer || !layer.feature || !layer.feature.properties) return;
+                if (String(layer.feature.properties.themeId) !== String(themeId)) return;
+                
+                // Salvar estilo original da feição
+                if (!layer.options.originalStyle) {
+                    layer.options.originalStyle = {
+                        fillColor: layer.options.fillColor || theme.color || '#3388ff',
+                        color: layer.options.color || theme.color || '#3388ff',
+                        weight: layer.options.weight || 2,
+                        fillOpacity: layer.options.fillOpacity || 0.4
+                    };
                 }
-            } else {
-                if (layer.setStyle) {
-                    layer.setStyle({
-                        fillColor: newColor,
-                        color: newColor,
-                        fillOpacity: 0.8,
-                        weight: 2
-                    });
+
+                const rawVal = getFeaturePropertyValue(theme, layer.feature, fieldId);
+                const newColor = resolveColor(rawVal);
+
+                if (newColor === 'none') {
+                    if (layer.options.originalStyle && layer.setStyle) {
+                        layer.setStyle({
+                            fillColor: layer.options.originalStyle.fillColor,
+                            color: layer.options.originalStyle.color,
+                            fillOpacity: layer.options.originalStyle.fillOpacity,
+                            weight: layer.options.originalStyle.weight
+                        });
+                    }
+                } else {
+                    if (layer.setStyle) {
+                        layer.setStyle({
+                            fillColor: newColor,
+                            color: newColor,
+                            fillOpacity: 0.85,
+                            weight: 2.5
+                        });
+                    } else if (layer.setIcon) {
+                        const iconName = theme.icon || 'location_on';
+                        const pinHtml = `
+                            <div class="map-pin-3d-marker" style="position: relative; width: 30px; height: 38px; cursor: pointer; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.35)); transition: transform 0.15s ease-out;">
+                              <svg viewBox="0 0 30 38" width="30" height="38" style="display: block; overflow: visible;">
+                                <ellipse cx="15" cy="37" rx="5.5" ry="1.8" fill="rgba(0,0,0,0.25)" />
+                                <path d="M15,1 C7.268,1 1,7.268 1,15 C1,23.8 15,36.5 15,36.5 C15,36.5 29,23.8 29,15 C29,7.268 22.732,1 15,1 Z" 
+                                      fill="${newColor}" 
+                                      stroke="#ffffff" 
+                                      stroke-width="1.8" 
+                                      stroke-linejoin="round" />
+                                <circle cx="15" cy="14" r="8" fill="#ffffff" />
+                              </svg>
+                              <span class="material-symbols-outlined" style="position: absolute; top: 5px; left: 7px; color: ${newColor}; font-size: 15px; font-weight: bold; pointer-events: none;">${iconName === 'circle' ? 'circle' : iconName}</span>
+                            </div>
+                        `;
+                        layer.setIcon(L.divIcon({
+                            html: pinHtml,
+                            className: 'custom-map-pin',
+                            iconSize: [30, 38],
+                            iconAnchor: [15, 38],
+                            popupAnchor: [0, -38]
+                        }));
+                    }
                 }
-            }
-        });
+            });
+        }
     } catch (e) {
         console.error("Erro em applyThemeClassification:", e);
     }
@@ -6491,34 +6824,56 @@ window.applyThemeClassification = function(themeId, fieldId, colorsJson) {
 
 window.resetThemeClassification = function(themeId) {
     try {
-        const theme = themes.find(t => t.id === themeId);
+        const theme = themes.find(t => String(t.id) === String(themeId));
         if (!theme) return;
 
         // Limpar classificação ativa
         delete theme._activeClassification;
 
-        geojsonLayer.eachLayer(layer => {
-            if (!layer || !layer.feature || !layer.feature.properties || layer.feature.properties.themeId !== themeId) return;
-            
-            if (layer.options.originalStyle && layer.setStyle) {
-                layer.setStyle({
-                    fillColor: layer.options.originalStyle.fillColor,
-                    color: layer.options.originalStyle.color,
-                    weight: layer.options.originalStyle.weight,
-                    fillOpacity: layer.options.originalStyle.fillOpacity
-                });
-                delete layer.options.originalStyle;
-            }
-            
-            // Remove pulse effect if any safely
-            if (layer.getElement) {
-                const el = layer.getElement();
-                if (el && el.classList && typeof el.classList.remove === 'function') {
-                    el.classList.remove('animate-pulse', 'z-50');
+        if (geojsonLayer) {
+            geojsonLayer.eachLayer(layer => {
+                if (!layer || !layer.feature || !layer.feature.properties) return;
+                if (String(layer.feature.properties.themeId) !== String(themeId)) return;
+                
+                if (layer.options.originalStyle && layer.setStyle) {
+                    layer.setStyle(layer.options.originalStyle);
+                    delete layer.options.originalStyle;
+                } else if (layer.setStyle) {
+                    layer.setStyle({
+                        fillColor: theme.color || '#3388ff',
+                        color: theme.color || '#3388ff',
+                        weight: theme.weight !== undefined ? theme.weight : 2,
+                        fillOpacity: theme.opacity !== undefined ? theme.opacity : 0.4
+                    });
+                } else if (layer.setIcon) {
+                    const iconName = theme.icon || 'location_on';
+                    const color = theme.color || '#0284c7';
+                    const pinHtml = `
+                        <div class="map-pin-3d-marker" style="position: relative; width: 30px; height: 38px; cursor: pointer; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.35)); transition: transform 0.15s ease-out;">
+                          <svg viewBox="0 0 30 38" width="30" height="38" style="display: block; overflow: visible;">
+                            <ellipse cx="15" cy="37" rx="5.5" ry="1.8" fill="rgba(0,0,0,0.25)" />
+                            <path d="M15,1 C7.268,1 1,7.268 1,15 C1,23.8 15,36.5 15,36.5 C15,36.5 29,23.8 29,15 C29,7.268 22.732,1 15,1 Z" 
+                                  fill="${color}" 
+                                  stroke="#ffffff" 
+                                  stroke-width="1.8" 
+                                  stroke-linejoin="round" />
+                            <circle cx="15" cy="14" r="8" fill="#ffffff" />
+                          </svg>
+                          <span class="material-symbols-outlined" style="position: absolute; top: 5px; left: 7px; color: ${color}; font-size: 15px; font-weight: bold; pointer-events: none;">${iconName === 'circle' ? 'circle' : iconName}</span>
+                        </div>
+                    `;
+                    layer.setIcon(L.divIcon({
+                        html: pinHtml,
+                        className: 'custom-map-pin',
+                        iconSize: [30, 38],
+                        iconAnchor: [15, 38],
+                        popupAnchor: [0, -38]
+                    }));
                 }
-            }
-        });
-    } catch (e) {
+            });
+        }
+        loadAllFeaturesToMap();
+    } catch(e) {
         console.error("Erro em resetThemeClassification:", e);
     }
 };
@@ -6702,19 +7057,34 @@ async function loadRasterLayers() {
             const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
             const userEntidadeRaw = (window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').trim();
             const userSigla = (typeof getEntitySigla === 'function') ? getEntitySigla(userEntidadeRaw) : 'Município';
-            const currentUserId = (currentUserProfile && currentUserProfile.id) || null;
+            
+            // Obtenção robusta do ID do usuário autenticado diretamente da sessão se necessário
+            let currentUserId = (currentUserProfile && currentUserProfile.id) || window.currentUserProfile?.id || null;
+            if (!currentUserId && supabaseClient.auth) {
+                try {
+                    const { data: sessData } = await supabaseClient.auth.getSession();
+                    currentUserId = sessData?.session?.user?.id || null;
+                } catch(eSess) {}
+            }
 
             // Busca permissões explícitas de ortofoto para este usuário
             let myRasterPerms = new Set();
+            let myBlockedRasters = new Set();
             if (currentUserId && !isSuperAdmin) {
                 try {
-                    const { data: prData } = await supabaseClient
+                    const { data: prData, error: prErr } = await supabaseClient
                         .from('permissoes_raster')
-                        .select('raster_id')
-                        .eq('user_id', currentUserId)
-                        .eq('pode_ver', true);
+                        .select('raster_id, pode_ver')
+                        .eq('user_id', currentUserId);
                     if (prData) {
-                        prData.forEach(p => myRasterPerms.add(p.raster_id));
+                        prData.forEach(p => {
+                            const canSee = (p.pode_ver === true || p.pode_ver === 'true' || p.pode_ver === 1);
+                            if (canSee) {
+                                myRasterPerms.add(p.raster_id);
+                            } else {
+                                myBlockedRasters.add(p.raster_id);
+                            }
+                        });
                     }
                 } catch(e) {
                     console.warn('Tabela permissoes_raster indisponível:', e);
@@ -6723,27 +7093,25 @@ async function loadRasterLayers() {
 
             // Filtro de Segurança Institucional de Ortofotos:
             // 1. SuperAdmin vê tudo
-            // 2. Ortofoto da própria entidade do usuário: VÊ
-            // 3. Ortofoto pública/geral: VÊ
-            // 4. Ortofoto de outro ente parceiro: VÊ APENAS se tiver permissão explícita em permissoes_raster!
+            // 2. Bloqueio explícito do admin para este usuário: NÃO VÊ
+            // 3. Liberação explícita do admin para este usuário (independente de ser parceiro ou local): VÊ
+            // 4. Ortofoto da própria entidade do usuário: VÊ (a menos que bloqueado)
+            // 5. Ortofoto pública/geral: VÊ
             const visibleRasters = (data || []).filter(r => {
                 if (isSuperAdmin) return true;
+                if (myBlockedRasters.has(r.id)) return false;
+                if (myRasterPerms.has(r.id)) return true;
+
                 const rEntRaw = (r.entidade || 'Prefeitura Municipal').trim();
                 const rSigla = (typeof getEntitySigla === 'function') ? getEntitySigla(rEntRaw) : 'Município';
 
                 // Ortofoto explicitamente pública / geral
-                if (rSigla === 'Público' || rSigla === 'Geral' || rEntRaw.toLowerCase() === 'geral' || rEntRaw.toLowerCase() === 'público') {
+                if (rSigla === 'Público' || rSigla === 'Geral' || rEntRaw.toLowerCase() === 'geral' || rEntRaw.toLowerCase() === 'público' || rEntRaw.toLowerCase() === 'publico') {
                     return true;
                 }
 
                 // Ortofoto da mesma entidade do usuário
                 if (userSigla && rSigla && userSigla === rSigla) {
-                    return true;
-                }
-
-                // Ortofoto de outro órgão governamental parceiro:
-                // SÓ pode ser visualizada se o Administrador daquele órgão concedeu permissão explícita!
-                if (myRasterPerms.has(r.id)) {
                     return true;
                 }
 
@@ -6756,11 +7124,12 @@ async function loadRasterLayers() {
             });
             // Por padrão as ortofotos iniciam DESLIGADAS — o usuário ativa no switch quando quiser ver
             rasterLayers = visibleRasters.map(r => ({ ...r, visivel: false }));
+            rasterLayers = applyRasterOrder(rasterLayers);
             window.rasterLayers = rasterLayers;
             window.activeMunicipioId = activeMunicipioId;
             
             // Adicionar novos overlays (suporte a XYZ Tiles e ImageOverlay)
-            rasterLayers.forEach(raster => {
+            rasterLayers.forEach((raster, idx) => {
                 if (raster.visivel && map) {
                     const isXYZ = (raster.tipo === 'xyz_tiles') || (raster.url_imagem && raster.url_imagem.includes('{z}'));
                     let overlay = null;
@@ -6773,11 +7142,13 @@ async function loadRasterLayers() {
                             maxNativeZoom: nativeMax,
                             maxZoom: 24,
                             keepBuffer: 16,
+                            zIndex: 300 + (rasterLayers.length - idx),
                             opacity: raster.opacidade !== undefined ? raster.opacidade : 0.9,
                             attribution: raster.nome || 'Ortofoto'
                         });
                     } else if (raster.bbox && Array.isArray(raster.bbox) && raster.bbox.length === 2 && raster.bbox[0] && raster.bbox[0].length === 2) {
                         overlay = L.imageOverlay(raster.url_imagem, raster.bbox, {
+                            zIndex: 300 + (rasterLayers.length - idx),
                             opacity: raster.opacidade !== undefined ? raster.opacidade : 0.8,
                             interactive: false
                         });
@@ -6797,7 +7168,89 @@ async function loadRasterLayers() {
     }
 }
 
-// Renderizar a lista de camadas raster na barra lateral
+// Extrai data ISO (YYYY-MM-DD) de forma padronizada para ordenação precisa
+function getRasterISODate(r) {
+    if (!r) return '1970-01-01';
+    let eff = r.data_imagem || localStorage.getItem(`raster_date_${r.id}`);
+    if (eff) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(eff)) return eff;
+        const dmy = eff.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
+        if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+    }
+    if (r.nome) {
+        const matchFull = r.nome.match(/(\d{2})[-/](\d{2})[-/](\d{4})/);
+        if (matchFull) return `${matchFull[3]}-${matchFull[2]}-${matchFull[1]}`;
+        const matchYear = r.nome.match(/(20\d{2})/);
+        if (matchYear) return `${matchYear[1]}-01-01`;
+    }
+    return '1970-01-01';
+}
+
+// Aplica ordenação salva ou padrão por data (mais recente para mais antiga)
+function applyRasterOrder(rasters) {
+    if (!Array.isArray(rasters) || rasters.length === 0) return rasters || [];
+    const munId = window.activeMunicipioId || sessionStorage.getItem('municipio_ativo') || 'default';
+    const savedOrderJson = localStorage.getItem(`raster_custom_order_${munId}`);
+
+    if (savedOrderJson) {
+        try {
+            const savedIds = JSON.parse(savedOrderJson);
+            if (Array.isArray(savedIds) && savedIds.length > 0) {
+                const mapById = new Map(rasters.map(r => [r.id, r]));
+                const ordered = [];
+                savedIds.forEach(id => {
+                    if (mapById.has(id)) {
+                        ordered.push(mapById.get(id));
+                        mapById.delete(id);
+                    }
+                });
+                const remaining = Array.from(mapById.values()).sort((a, b) => {
+                    return getRasterISODate(b).localeCompare(getRasterISODate(a));
+                });
+                return [...ordered, ...remaining];
+            }
+        } catch(e) {
+            console.warn('Erro ao restaurar ordem customizada de rasters:', e);
+        }
+    }
+
+    // Padrão: Ordena da data mais recente (mais atual) para a mais antiga (descendente)
+    return [...rasters].sort((a, b) => {
+        return getRasterISODate(b).localeCompare(getRasterISODate(a));
+    });
+}
+
+function saveRasterCustomOrder() {
+    const munId = window.activeMunicipioId || sessionStorage.getItem('municipio_ativo') || 'default';
+    const ids = rasterLayers.map(r => r.id);
+    localStorage.setItem(`raster_custom_order_${munId}`, JSON.stringify(ids));
+}
+
+window.resetRasterOrderToDate = function() {
+    const munId = window.activeMunicipioId || sessionStorage.getItem('municipio_ativo') || 'default';
+    localStorage.removeItem(`raster_custom_order_${munId}`);
+    rasterLayers.sort((a, b) => getRasterISODate(b).localeCompare(getRasterISODate(a)));
+    updateRasterMapZIndexes();
+    renderRasterLayersList();
+    if (typeof showStorageToast === 'function') {
+        showStorageToast('Ordem das ortofotos restaurada por data (mais recente no topo).');
+    }
+};
+
+function updateRasterMapZIndexes() {
+    if (!Array.isArray(rasterLayers)) return;
+    const total = rasterLayers.length;
+    rasterLayers.forEach((r, idx) => {
+        const overlay = leafletRasterOverlays[r.id];
+        if (overlay && typeof overlay.setZIndex === 'function') {
+            overlay.setZIndex(300 + (total - idx));
+        }
+    });
+}
+
+let _draggedRasterId = null;
+
+// Renderizar a lista de camadas raster na barra lateral com suporte a Drag-and-Drop
 function renderRasterLayersList() {
     const container = document.getElementById('rasters-container');
     if (!container) return;
@@ -6811,17 +7264,13 @@ function renderRasterLayersList() {
     const isAdmin = !!((typeof currentUserProfile !== 'undefined' && currentUserProfile && currentUserProfile.super_admin) || (typeof currentMunicipioPapel !== 'undefined' && currentMunicipioPapel === 'admin'));
 
     container.innerHTML = '';
-    // Ordena da data mais recente para a mais antiga
-    const sortedRasters = [...rasterLayers].sort((a, b) => {
-        const dateA = a.data_imagem || (a.nome && a.nome.match(/(\d{4})/)?.[1] + '-01-01') || '1970-01-01';
-        const dateB = b.data_imagem || (b.nome && b.nome.match(/(\d{4})/)?.[1] + '-01-01') || '1970-01-01';
-        return dateB.localeCompare(dateA);
-    });
 
-    sortedRasters.forEach(raster => {
+    rasterLayers.forEach((raster, index) => {
         const item = document.createElement('div');
-        item.className = 'flex flex-col rounded-2xl overflow-hidden shadow-md border border-emerald-500/30 transition-all duration-300';
+        item.className = 'raster-card-item flex flex-col rounded-2xl overflow-hidden shadow-md border border-emerald-500/30 transition-all duration-200 relative select-none';
         item.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(15,23,42,0.75) 100%)';
+        item.draggable = true;
+        item.dataset.rasterId = raster.id;
         
         let dateFormatted = '';
         const effDate = raster.data_imagem || localStorage.getItem(`raster_date_${raster.id}`);
@@ -6841,50 +7290,193 @@ function renderRasterLayersList() {
         const canManageRaster = isSuperAdmin || !isFromOtherEntity;
 
         item.innerHTML = `
-            <div class="p-3.5 flex flex-col">
-                <!-- Header: Icon, Title, and Toggle -->
-                <div class="flex items-center justify-between mb-2.5">
-                    <div class="flex items-center gap-2.5 overflow-hidden">
-                        <div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                            <span class="material-symbols-outlined text-[18px] text-emerald-400">satellite</span>
+            <div class="px-3 py-2.5 flex flex-col cursor-pointer" onclick="toggleRasterActions('${raster.id}')" title="Clique para expandir opções da imagem">
+                <!-- Header: Drag Handle, Icon, Title, Badges, and Toggle -->
+                <div class="flex items-center justify-between gap-1.5">
+                    <div class="flex items-center gap-2 min-w-0 flex-1">
+                        <!-- Alça de Arraste (Drag Handle) -->
+                        <div class="raster-drag-handle cursor-grab active:cursor-grabbing text-slate-400 hover:text-emerald-300 p-1 -ml-1 flex items-center justify-center shrink-0 transition-colors" title="Arraste para reordenar esta camada">
+                            <span class="material-symbols-outlined text-[18px]">drag_indicator</span>
                         </div>
-                        <div class="flex flex-col overflow-hidden">
-                            <div class="flex items-center gap-1.5 flex-wrap">
-                                <span class="text-xs font-bold text-white truncate max-w-[150px]" title="${raster.nome}">${raster.nome}</span>
-                                ${(isSuperAdmin || isFromOtherEntity) ? `
-                                    <span class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[8.5px] font-bold rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 truncate" title="Entidade: ${rEnt}">
+                        <div class="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0 text-emerald-400 shadow-md">
+                            <span class="material-symbols-outlined text-[18px]">image</span>
+                        </div>
+                        <div class="flex flex-col min-w-0 flex-1">
+                            <h3 class="text-xs sm:text-[13px] font-extrabold text-white tracking-wide uppercase drop-shadow-md leading-tight truncate" title="${raster.nome}">${raster.nome}</h3>
+                            <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                ${rSigla ? `
+                                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 truncate h-4.5 leading-none" title="Entidade: ${rEnt}">
                                         <span class="material-symbols-outlined text-[10px]">hub</span>
                                         <span>${rSigla}</span>
                                     </span>
                                 ` : ''}
-                                ${dateFormatted ? `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/30 text-indigo-200 border border-indigo-500/40 flex items-center gap-0.5"><span class="material-symbols-outlined text-[10px]">calendar_today</span>${dateFormatted}</span>` : ''}
+                                ${dateFormatted ? `
+                                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded bg-indigo-500/25 text-indigo-200 border border-indigo-500/40 truncate h-4.5 leading-none" title="Data da Imagem: ${dateFormatted}">
+                                        <span class="material-symbols-outlined text-[10px]">calendar_today</span>
+                                        <span>${dateFormatted}</span>
+                                    </span>
+                                ` : ''}
                             </div>
-                            <span class="text-[9px] text-slate-400 font-normal uppercase tracking-wider mt-0.5">${raster.tipo === 'xyz_tiles' ? 'Ortofoto • XYZ Tiles' : 'GeoTIFF • Imagem'}</span>
                         </div>
                     </div>
                     
-                    <!-- iOS-style Toggle -->
-                    <label class="relative inline-flex items-center cursor-pointer shrink-0" title="${raster.visivel ? 'Ocultar' : 'Mostrar'} Imagem">
-                        <input type="checkbox" class="sr-only peer" ${raster.visivel ? 'checked' : ''} onchange="toggleRasterVisibility('${raster.id}', this)">
-                        <div class="w-9 h-5 bg-slate-700/50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                    <!-- iOS-style Neon Toggle (idêntico ao padrão das camadas vetoriais) -->
+                    <label class="relative inline-flex items-center cursor-pointer shrink-0 ml-1.5" title="${raster.visivel ? 'Ocultar' : 'Mostrar'} Imagem" onclick="event.stopPropagation()">
+                        <input type="checkbox" id="raster-toggle-${raster.id}" class="sr-only peer" ${raster.visivel ? 'checked' : ''} onchange="toggleRasterVisibility('${raster.id}', this)">
+                        <div id="raster-toggle-bg-${raster.id}" class="w-11 h-6 bg-slate-700/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500" style="${raster.visivel ? 'background-color: #10b981; box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);' : ''}"></div>
                     </label>
                 </div>
-                
-                ${(isAdmin && canManageRaster) ? `
-                <!-- Footer: Actions -->
-                <div class="flex justify-start items-center border-t border-white/20 dark:border-white/10 pt-3 gap-2 w-full">
-                    <button onclick="openEditRasterModal('${raster.id}')" class="p-1.5 hover:bg-white/30 rounded-lg tooltip text-slate-200 transition-colors" title="Configurações da Imagem">
-                        <span class="material-symbols-outlined text-[18px]">settings</span>
-                    </button>
-                    <button onclick="deleteRasterLayer('${raster.id}')" class="p-1.5 hover:bg-red-500/30 rounded-lg tooltip text-red-500 transition-colors" title="Excluir Imagem">
-                        <span class="material-symbols-outlined text-[18px]">delete</span>
-                    </button>
-                </div>` : ''}
             </div>
+            
+            ${(isAdmin && canManageRaster) ? `
+            <!-- Seção Expansível de Ações da Ortofoto -->
+            <div id="raster-actions-${raster.id}" class="hidden flex justify-start items-center border-t border-white/10 bg-slate-900/40 px-3.5 py-2.5 gap-2 w-full backdrop-blur-md transition-all">
+                <button onclick="openEditRasterModal('${raster.id}')" class="flex items-center justify-center p-1.5 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Configurações da Imagem">
+                    <span class="material-symbols-outlined text-[18px]">settings</span>
+                </button>
+                <button onclick="deleteRasterLayer('${raster.id}')" class="flex items-center justify-center p-1.5 bg-red-500/15 hover:bg-red-500/30 active:scale-95 rounded-lg tooltip text-red-400 hover:text-red-300 transition-all border border-red-500/20 shadow-xs" title="Excluir Imagem">
+                    <span class="material-symbols-outlined text-[18px]">delete</span>
+                </button>
+            </div>` : ''}
         `;
+
+        // Eventos de Drag & Drop HTML5
+        item.addEventListener('dragstart', (e) => {
+            _draggedRasterId = raster.id;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', raster.id);
+            setTimeout(() => {
+                item.classList.add('opacity-40', 'scale-[0.98]', 'ring-2', 'ring-emerald-400');
+            }, 0);
+        });
+
+        item.addEventListener('dragend', () => {
+            _draggedRasterId = null;
+            item.classList.remove('opacity-40', 'scale-[0.98]', 'ring-2', 'ring-emerald-400');
+            container.querySelectorAll('.raster-card-item').forEach(el => {
+                el.classList.remove('border-t-4', 'border-b-4', 'border-cyan-400', 'opacity-40', 'scale-[0.98]', 'ring-2', 'ring-emerald-400');
+            });
+        });
+
+        item.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            if (!_draggedRasterId || _draggedRasterId === raster.id) return;
+
+            const rect = item.getBoundingClientRect();
+            const midY = rect.top + rect.height / 2;
+            if (e.clientY < midY) {
+                item.classList.add('border-t-4', 'border-cyan-400');
+                item.classList.remove('border-b-4');
+            } else {
+                item.classList.add('border-b-4', 'border-cyan-400');
+                item.classList.remove('border-t-4');
+            }
+        });
+
+        item.addEventListener('dragleave', () => {
+            item.classList.remove('border-t-4', 'border-b-4', 'border-cyan-400');
+        });
+
+        item.addEventListener('drop', (e) => {
+            e.preventDefault();
+            item.classList.remove('border-t-4', 'border-b-4', 'border-cyan-400');
+            if (!_draggedRasterId || _draggedRasterId === raster.id) return;
+
+            const fromIdx = rasterLayers.findIndex(r => r.id === _draggedRasterId);
+            const toIdx = rasterLayers.findIndex(r => r.id === raster.id);
+            if (fromIdx < 0 || toIdx < 0) return;
+
+            const rect = item.getBoundingClientRect();
+            const midY = rect.top + rect.height / 2;
+            const insertAfter = (e.clientY >= midY);
+
+            const [movedItem] = rasterLayers.splice(fromIdx, 1);
+            const currentToIdx = rasterLayers.findIndex(r => r.id === raster.id);
+            rasterLayers.splice(insertAfter ? currentToIdx + 1 : currentToIdx, 0, movedItem);
+
+            saveRasterCustomOrder();
+            updateRasterMapZIndexes();
+            renderRasterLayersList();
+        });
+
+        // Suporte a Arraste por Toque (Mobile / Tablets)
+        const handle = item.querySelector('.raster-drag-handle');
+        if (handle) {
+            let currentTargetCard = null;
+
+            handle.addEventListener('touchstart', (e) => {
+                _draggedRasterId = raster.id;
+                item.classList.add('opacity-50', 'ring-2', 'ring-emerald-400');
+            }, { passive: true });
+
+            handle.addEventListener('touchmove', (e) => {
+                if (!_draggedRasterId) return;
+                const touchY = e.touches[0].clientY;
+                const touchX = e.touches[0].clientX;
+                const elemBelow = document.elementFromPoint(touchX, touchY);
+                const cardBelow = elemBelow?.closest('.raster-card-item');
+
+                container.querySelectorAll('.raster-card-item').forEach(el => {
+                    if (el !== cardBelow) el.classList.remove('border-t-4', 'border-b-4', 'border-cyan-400');
+                });
+
+                if (cardBelow && cardBelow.dataset.rasterId !== _draggedRasterId) {
+                    currentTargetCard = cardBelow;
+                    const rect = cardBelow.getBoundingClientRect();
+                    if (touchY < rect.top + rect.height / 2) {
+                        cardBelow.classList.add('border-t-4', 'border-cyan-400');
+                        cardBelow.classList.remove('border-b-4');
+                    } else {
+                        cardBelow.classList.add('border-b-4', 'border-cyan-400');
+                        cardBelow.classList.remove('border-t-4');
+                    }
+                }
+            }, { passive: true });
+
+            handle.addEventListener('touchend', () => {
+                item.classList.remove('opacity-50', 'ring-2', 'ring-emerald-400');
+                if (currentTargetCard && currentTargetCard.dataset.rasterId !== _draggedRasterId) {
+                    const targetId = currentTargetCard.dataset.rasterId;
+                    const fromIdx = rasterLayers.findIndex(r => r.id === _draggedRasterId);
+                    const toIdx = rasterLayers.findIndex(r => r.id === targetId);
+
+                    if (fromIdx >= 0 && toIdx >= 0) {
+                        const isAfter = currentTargetCard.classList.contains('border-b-4');
+                        const [movedItem] = rasterLayers.splice(fromIdx, 1);
+                        const currentToIdx = rasterLayers.findIndex(r => r.id === targetId);
+                        rasterLayers.splice(isAfter ? currentToIdx + 1 : currentToIdx, 0, movedItem);
+
+                        saveRasterCustomOrder();
+                        updateRasterMapZIndexes();
+                    }
+                }
+                _draggedRasterId = null;
+                currentTargetCard = null;
+                renderRasterLayersList();
+            });
+        }
+
         container.appendChild(item);
     });
 }
+
+window.toggleRasterActions = function(rasterId) {
+    const el = document.getElementById(`raster-actions-${rasterId}`);
+    if (!el) return;
+    const isHidden = el.classList.contains('hidden');
+    
+    // Accordion: fechar outras seções de ações de raster
+    document.querySelectorAll('[id^="raster-actions-"]').forEach(other => {
+        if (other !== el) other.classList.add('hidden');
+    });
+    
+    if (isHidden) {
+        el.classList.remove('hidden');
+    } else {
+        el.classList.add('hidden');
+    }
+};
 
 // Alterar opacidade do raster
 window.changeRasterOpacity = async function(rasterId, opacity) {
@@ -6920,12 +7512,30 @@ window.toggleRasterVisibility = async function(rasterId, checkbox) {
             }
         });
 
-        // 2. Desmarca visualmente os switches das outras ortofotos na interface
+        // 2. Desmarca visualmente os switches das outras ortofotos na interface e limpa estilo neon
         document.querySelectorAll('input[onchange*="toggleRasterVisibility"]').forEach(input => {
             if (input !== checkbox) {
                 input.checked = false;
             }
         });
+        document.querySelectorAll('[id^="raster-toggle-bg-"]').forEach(bg => {
+            if (bg.id !== 'raster-toggle-bg-' + rasterId) {
+                bg.style.backgroundColor = '';
+                bg.style.boxShadow = '';
+            }
+        });
+    }
+
+    // Atualiza o background neon do switch da ortofoto atual
+    const bgEl = document.getElementById('raster-toggle-bg-' + rasterId);
+    if (bgEl) {
+        if (isVisible) {
+            bgEl.style.backgroundColor = '#10b981';
+            bgEl.style.boxShadow = '0 0 12px rgba(16, 185, 129, 0.6)';
+        } else {
+            bgEl.style.backgroundColor = '';
+            bgEl.style.boxShadow = '';
+        }
     }
 
     raster.visivel = isVisible;
@@ -7003,29 +7613,45 @@ window.openSelectRasterModal = async function() {
         const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
         const userEntidadeRaw = (window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').trim();
         const userSigla = (typeof getEntitySigla === 'function') ? getEntitySigla(userEntidadeRaw) : 'Município';
-        const currentUserId = (currentUserProfile && currentUserProfile.id) || null;
+        
+        let currentUserId = (currentUserProfile && currentUserProfile.id) || window.currentUserProfile?.id || null;
+        if (!currentUserId && supabaseClient.auth) {
+            try {
+                const { data: sessData } = await supabaseClient.auth.getSession();
+                currentUserId = sessData?.session?.user?.id || null;
+            } catch(eSess) {}
+        }
 
         let myRasterPerms = new Set();
+        let myBlockedRasters = new Set();
         if (currentUserId && !isSuperAdmin) {
             try {
                 const { data: prData } = await supabaseClient
                     .from('permissoes_raster')
-                    .select('raster_id')
-                    .eq('user_id', currentUserId)
-                    .eq('pode_ver', true);
+                    .select('raster_id, pode_ver')
+                    .eq('user_id', currentUserId);
                 if (prData) {
-                    prData.forEach(p => myRasterPerms.add(p.raster_id));
+                    prData.forEach(p => {
+                        const canSee = (p.pode_ver === true || p.pode_ver === 'true' || p.pode_ver === 1);
+                        if (canSee) {
+                            myRasterPerms.add(p.raster_id);
+                        } else {
+                            myBlockedRasters.add(p.raster_id);
+                        }
+                    });
                 }
             } catch(e) {}
         }
 
         rasters = rasters.filter(r => {
             if (isSuperAdmin) return true;
+            if (myBlockedRasters.has(r.id)) return false;
+            if (myRasterPerms.has(r.id)) return true;
+
             const rEntRaw = (r.entidade || 'Prefeitura Municipal').trim();
             const rSigla = (typeof getEntitySigla === 'function') ? getEntitySigla(rEntRaw) : 'Município';
-            if (rSigla === 'Público' || rSigla === 'Geral' || rEntRaw.toLowerCase() === 'geral' || rEntRaw.toLowerCase() === 'público') return true;
+            if (rSigla === 'Público' || rSigla === 'Geral' || rEntRaw.toLowerCase() === 'geral' || rEntRaw.toLowerCase() === 'público' || rEntRaw.toLowerCase() === 'publico') return true;
             if (userSigla && rSigla && userSigla === rSigla) return true;
-            if (myRasterPerms.has(r.id)) return true;
             return false;
         });
 

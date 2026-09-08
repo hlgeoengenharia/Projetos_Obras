@@ -153,12 +153,8 @@
                 const rasterSigla = getEntitySigla(rasterEntidadeRaw);
 
                 const isUserRejeitado = userObj && userObj.status === 'rejeitado';
-                const isPontoFocal = !!(userObj?.ponto_focal || userObj?.profiles?.ponto_focal);
-                const isSuperAdmin = !!_currentUserProfile?.super_admin;
-                // Permissão de raster pertencente a um terceiro ente só é residual se o usuário NÃO for ponto focal e não for o SuperAdmin
-                const isThirdPartyResidual = !isSuperAdmin && !isPontoFocal && rasterSigla && userSigla && (rasterSigla !== userSigla);
-
-                if (isUserRejeitado || isThirdPartyResidual) {
+                // Permissão só é considerada órfã se o usuário foi rejeitado/excluído ou o raster não existe mais no banco
+                if (isUserRejeitado || !rasterObj || !userObj) {
                     orphanRasterIds.push(p.id);
                     return;
                 }
@@ -201,14 +197,10 @@
                 const temaSigla = getEntitySigla(temaEntidadeRaw);
 
                 const isUserRejeitado = userObj && userObj.status === 'rejeitado';
-                const isPontoFocal = !!(userObj?.ponto_focal || userObj?.profiles?.ponto_focal);
-                const isSuperAdmin = !!_currentUserProfile?.super_admin;
-                // Permissão residual de outro ente só existe se o usuário NÃO for ponto focal de integração e não for SuperAdmin
-                const isThirdPartyResidual = !isSuperAdmin && !isPontoFocal && temaSigla && userSigla && (temaSigla !== userSigla);
-
-                if (isUserRejeitado || isThirdPartyResidual) {
+                // Permissão só é considerada órfã se o usuário foi rejeitado/excluído ou a camada não existe mais no banco
+                if (isUserRejeitado || !temaObj || !userObj) {
                     orphanCamadaIds.push(p.id);
-                    return; // Desativa por padrão e agenda remoção do banco
+                    return;
                 }
 
                 _allCamadaPerms[`${p.user_id}:${p.theme_id}`] = p;
@@ -1314,6 +1306,10 @@
                     console.error('Erro ao atualizar permissoes_raster:', rErr);
                     throw new Error('Falha ao salvar permissões de ortofoto: ' + (rErr.message || 'Violação de política RLS no banco de dados.'));
                 }
+                // Atualiza em memória imediatamente para manter a interface consistente
+                rasterRows.forEach(row => {
+                    _allRasterPerms[`${row.user_id}:${row.raster_id}`] = row;
+                });
             }
 
             // 5. Sincroniza Municípios Atribuídos APENAS para usuários locais

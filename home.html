@@ -1070,7 +1070,7 @@ window.switchMunicipioTab = function(sectionOrTab, btn) {
         if (frameSec) frameSec.classList.add('active');
 
         const iframe = document.getElementById('settings-iframe');
-        const targetSrc = `settings.html?tab=${sectionOrTab}&embedded=1`;
+        const targetSrc = `settings.html?tab=${sectionOrTab}&embedded=1&_v=${Date.now()}`;
 
         if (iframe) {
             if (!iframe.src || iframe.src === 'about:blank' || !iframe.src.includes('settings.html')) {
@@ -2633,7 +2633,7 @@ window.filterMunicipiosList = function(query) {
 init();
 </script>
 <script src="src/auditLogger.js"></script>
-<script src="src/usuarios-gestao.js"></script>
+<script src="src/usuarios-gestao.js?v=20260908c"></script>
 <script src="src/session-security.js"></script>
 </body>
 </html>
