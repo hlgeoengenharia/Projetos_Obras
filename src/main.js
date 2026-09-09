@@ -2469,6 +2469,7 @@ async function saveNewTheme() {
 
   const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
   const userEntidade = (window.currentUserEntidade || '').trim();
+  const currentUserId = (currentUserProfile && currentUserProfile.id) || window.currentUserProfile?.id || null;
   const selectedEntidade = isSuperAdmin 
       ? (document.getElementById('theme-entidade-select')?.value || '') 
       : userEntidade;
@@ -2489,7 +2490,8 @@ async function saveNewTheme() {
       disp2Active: false,
       customIcon: customIcon,
       entidade: selectedEntidade,
-      compartilhada: isCompartilhada
+      compartilhada: isCompartilhada,
+      created_by: currentUserId
   };
   
   if (typeof supabaseClient !== 'undefined' && supabaseClient) {
@@ -2500,8 +2502,10 @@ async function saveNewTheme() {
               icone: icon || 'map',
               tipo_geometria: geomType || 'Polygon',
               tipo_cadastro: formId || 'padrao',
-              municipio_id: activeMunicipioId
+              municipio_id: activeMunicipioId,
+              entidade: selectedEntidade
           };
+          if (currentUserId) insertPayload.created_by = currentUserId;
           if (window.supabaseTemasHasMetadata) {
               insertPayload.metadata = metadataPayload;
           }
@@ -2514,6 +2518,24 @@ async function saveNewTheme() {
           }
           if (data && data.length > 0) {
               id = data[0].id;
+          }
+
+          // Concessão imediata de permissão ao criador da camada
+          if (currentUserId && id) {
+              if (!window.currentUserPermissions) window.currentUserPermissions = {};
+              window.currentUserPermissions[id] = { pode_ver: true, pode_editar: true, pode_excluir: true };
+              window.currentUserPermissions[String(id).toLowerCase()] = { pode_ver: true, pode_editar: true, pode_excluir: true };
+              try {
+                  await supabaseClient.from('permissoes_camada').upsert({
+                      user_id: currentUserId,
+                      theme_id: id,
+                      pode_ver: true,
+                      pode_editar: true,
+                      pode_excluir: true
+                  }, { onConflict: 'user_id,theme_id' });
+              } catch(ePerm) {
+                  console.warn('Erro ao registrar permissão inicial do criador:', ePerm);
+              }
           }
       } catch(e) {
           console.error("Erro ao conectar ao Supabase:", e);
@@ -2534,6 +2556,7 @@ async function saveNewTheme() {
       disp2Active: false, 
       entidade: selectedEntidade,
       compartilhada: isCompartilhada,
+      created_by: currentUserId,
       metadata: metadataPayload,
       visible: true, 
       features: [] 
@@ -3948,6 +3971,7 @@ async function confirmGlobalImport() {
   
   const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
   const userEntidade = (window.currentUserEntidade || '').trim();
+  const currentUserId = (currentUserProfile && currentUserProfile.id) || window.currentUserProfile?.id || null;
   const themeEntidade = isSuperAdmin ? '' : userEntidade;
 
   let themeId = 'theme_' + Date.now();
@@ -3960,10 +3984,12 @@ async function confirmGlobalImport() {
               icone: 'map',
               tipo_geometria: 'Polygon',
               tipo_cadastro: formId || 'padrao',
-              municipio_id: activeMunicipioId
+              municipio_id: activeMunicipioId,
+              entidade: themeEntidade
           };
+          if (currentUserId) insertImportPayload.created_by = currentUserId;
           if (window.supabaseTemasHasMetadata) {
-              insertImportPayload.metadata = { entidade: themeEntidade };
+              insertImportPayload.metadata = { entidade: themeEntidade, created_by: currentUserId };
           }
           const { data, error } = await supabaseClient.from('temas').insert(insertImportPayload).select();
           
@@ -3974,6 +4000,24 @@ async function confirmGlobalImport() {
           }
           if (data && data.length > 0) {
               themeId = data[0].id;
+          }
+
+          // Concessão imediata de permissão ao criador da camada importada
+          if (currentUserId && themeId) {
+              if (!window.currentUserPermissions) window.currentUserPermissions = {};
+              window.currentUserPermissions[themeId] = { pode_ver: true, pode_editar: true, pode_excluir: true };
+              window.currentUserPermissions[String(themeId).toLowerCase()] = { pode_ver: true, pode_editar: true, pode_excluir: true };
+              try {
+                  await supabaseClient.from('permissoes_camada').upsert({
+                      user_id: currentUserId,
+                      theme_id: themeId,
+                      pode_ver: true,
+                      pode_editar: true,
+                      pode_excluir: true
+                  }, { onConflict: 'user_id,theme_id' });
+              } catch(ePerm) {
+                  console.warn('Erro ao registrar permissão do criador no tema importado:', ePerm);
+              }
           }
       } catch(e) {
           console.error("Erro ao conectar ao Supabase na importação:", e);
@@ -5197,6 +5241,28 @@ function userCanOnTheme(themeId, acao) {
     const themeSigla = typeof getEntitySigla === 'function' ? getEntitySigla(themeEntidade) : themeEntidade;
     const userSigla = typeof getEntitySigla === 'function' ? getEntitySigla(userEntidade) : userEntidade;
     const isOutroEnte = themeEntidade && userEntidade && (themeSigla !== userSigla) && (themeEntidade.toLowerCase() !== 'geral');
+
+    // 0. CRIADOR DA CAMADA:
+    // Se o usuário atual foi quem criou esta camada, ele possui acesso pleno garantido (ver, editar e excluir)
+    const currentUserId = (currentUserProfile && currentUserProfile.id) || window.currentUserProfile?.id || null;
+    const themeCreator = (targetTheme && targetTheme.metadata && (targetTheme.metadata.created_by || targetTheme.metadata.criador_id)) || (targetTheme && (targetTheme.created_by || targetTheme.criador_id));
+    if (currentUserId && themeCreator && String(themeCreator) === String(currentUserId)) {
+        return true;
+    }
+
+    // 0.1 ADMINISTRADOR DA ENTIDADE:
+    // Se o usuário é Administrador da Entidade (entidade_admin) ou Admin do Município,
+    // ele possui acesso pleno a todas as camadas da SUA PRÓPRIA ENTIDADE (mesmo as recém-criadas)
+    const isEntidadeAdmin = !!(currentUserProfile && (currentUserProfile.entidade_admin || currentUserProfile.super_admin || currentMunicipioPapel === 'admin'));
+    if (isEntidadeAdmin && !isOutroEnte) {
+        if (pc) {
+            if (acao === 'ver') return pc.pode_ver === true || pc.pode_ver === 'true';
+            if (acao === 'editar') return pc.pode_editar === true || pc.pode_editar === 'true';
+            if (acao === 'excluir') return pc.pode_excluir === true || pc.pode_excluir === 'true';
+            return false;
+        }
+        return true;
+    }
 
     // REGRA SOBERANA INTERINSTITUCIONAL:
     // Se a camada for de outro ente governamental parceiro:
@@ -7253,6 +7319,9 @@ async function loadRasterLayers() {
             rasterLayers = visibleRasters.map(r => ({ ...r, visivel: false }));
             rasterLayers = applyRasterOrder(rasterLayers);
             window.rasterLayers = rasterLayers;
+            window.allMunicipioRasters = data || [];
+            window.myRasterPerms = myRasterPerms;
+            window.myBlockedRasters = myBlockedRasters;
             window.activeMunicipioId = activeMunicipioId;
             
             // Adicionar novos overlays (suporte a XYZ Tiles e ImageOverlay)
@@ -8483,41 +8552,67 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
     const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
     const q = (searchQuery || '').toLowerCase().trim();
 
-    // Agrupa temas elegíveis para compartilhamento por Entidade
+    // Agrupa dados elegíveis para compartilhamento por Entidade (temas vetoriais e ortofotos)
     const groups = {};
     let totalEligible = 0;
 
+    // 1. Camadas Vetoriais
     themes.forEach(t => {
         const tEntidade = ((t.metadata && t.metadata.entidade) || t.entidade || '').trim();
         const isCompartilhada = (t.compartilhada !== false && (!t.metadata || t.metadata.compartilhada !== false));
-        
-        // Se a camada NÃO for compartilhada, ela NÃO DEVE APARECER no catálogo compartilhado
         if (!isCompartilhada) return;
 
-        // PRINCÍPIO DE AUTORIZAÇÃO PONTUAL:
-        // Se não for SuperAdmin e a camada pertencer a OUTRA entidade,
-        // o usuário só pode vê-la se tiver autorização explícita (userCanOnTheme(t.id, 'ver') === true)
         const tSigla = getEntitySigla(tEntidade);
         const uSigla = getEntitySigla(userEntidade);
         const isFromOtherEntity = userEntidade && tEntidade && (tSigla !== uSigla) && (tEntidade.toLowerCase() !== 'geral');
         if (!isSuperAdmin && isFromOtherEntity && typeof userCanOnTheme === 'function' && !userCanOnTheme(t.id, 'ver')) {
-            return; // Bloqueado! Não aparece no catálogo de compartilhamento deste usuário.
+            return;
         }
 
-        // Se for SuperAdmin: permite explorar todas as entidades
-        // Se for usuário comum: só lista entidades diferentes da sua própria
         const isEligibleEntity = isSuperAdmin || (tEntidade && tSigla !== uSigla);
-        
         if (!isEligibleEntity) return;
 
-        // Se houver busca, filtra por nome da camada ou nome da entidade
         if (q && !t.name.toLowerCase().includes(q) && !tEntidade.toLowerCase().includes(q)) {
             return;
         }
 
         const groupKey = tEntidade || 'Geral / Pública';
-        if (!groups[groupKey]) groups[groupKey] = [];
-        groups[groupKey].push(t);
+        if (!groups[groupKey]) groups[groupKey] = { themes: [], rasters: [] };
+        groups[groupKey].themes.push(t);
+        totalEligible++;
+    });
+
+    // 2. Ortofotos e Imagens Aéreas
+    const allRasters = (window.allMunicipioRasters && window.allMunicipioRasters.length > 0)
+        ? window.allMunicipioRasters
+        : (Array.isArray(window.rasterLayers) ? window.rasterLayers : []);
+
+    allRasters.forEach(r => {
+        const rEntidade = (r.entidade || 'Prefeitura Municipal').trim();
+        const rSigla = (typeof getEntitySigla === 'function') ? getEntitySigla(rEntidade) : rEntidade;
+        const uSigla = (typeof getEntitySigla === 'function') ? getEntitySigla(userEntidade) : userEntidade;
+        const isFromOtherEntity = userEntidade && rEntidade && (rSigla !== uSigla) && (rEntidade.toLowerCase() !== 'geral');
+
+        // Permissão de Ortofoto:
+        let canSeeRaster = isSuperAdmin;
+        if (!canSeeRaster) {
+            if (window.myBlockedRasters && window.myBlockedRasters.has(r.id)) return;
+            if (window.myRasterPerms && window.myRasterPerms.has(r.id)) canSeeRaster = true;
+            else if (rSigla === 'Público' || rSigla === 'Geral' || rEntidade.toLowerCase() === 'geral' || rEntidade.toLowerCase() === 'público' || rEntidade.toLowerCase() === 'publico') canSeeRaster = true;
+            else if (!isFromOtherEntity) canSeeRaster = true;
+        }
+        if (!canSeeRaster) return;
+
+        const isEligibleRasterEntity = isSuperAdmin || (rEntidade && rSigla !== uSigla);
+        if (!isEligibleRasterEntity) return;
+
+        if (q && !r.nome.toLowerCase().includes(q) && !rEntidade.toLowerCase().includes(q)) {
+            return;
+        }
+
+        const groupKey = rEntidade || 'Geral / Pública';
+        if (!groups[groupKey]) groups[groupKey] = { themes: [], rasters: [] };
+        groups[groupKey].rasters.push(r);
         totalEligible++;
     });
 
@@ -8552,13 +8647,20 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
     const groupKeys = Object.keys(groups).sort();
 
     groupKeys.forEach((entidadeName, gIdx) => {
-        const groupThemes = groups[entidadeName];
+        const groupObj = groups[entidadeName];
+        const groupThemes = groupObj.themes || [];
+        const groupRasters = groupObj.rasters || [];
+        const totalItems = groupThemes.length + groupRasters.length;
         const iconName = getEntityIcon(entidadeName);
-        const activeCount = groupThemes.filter(t => Array.isArray(window.activeSharedLayers) && window.activeSharedLayers.includes(t.id)).length;
+        
+        const activeThemeCount = groupThemes.filter(t => Array.isArray(window.activeSharedLayers) && window.activeSharedLayers.includes(t.id)).length;
+        const activeRasterCount = groupRasters.filter(r => (window.rasterLayers || []).some(rl => rl.id === r.id && rl.visivel)).length;
+        const totalActive = activeThemeCount + activeRasterCount;
+
         const accordionId = `shared-accordion-group-${gIdx}`;
 
         html += `
-            <div class="shared-accordion-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 shadow-xs transition-all">
+            <div class="shared-accordion-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 shadow-xs transition-all mb-3">
                 <!-- Header do Acordeão -->
                 <button type="button" onclick="toggleSharedAccordion(${gIdx})" class="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-slate-800/80 transition-colors cursor-pointer select-none rounded-2xl">
                     <div class="flex items-center gap-3 min-w-0 pr-2">
@@ -8567,7 +8669,10 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
                         </div>
                         <div class="flex flex-col min-w-0">
                             <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${entidadeName}</span>
-                            <span class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">${groupThemes.length} camada${groupThemes.length !== 1 ? 's' : ''} ${activeCount > 0 ? `· <strong class="text-cyan-400 font-bold">${activeCount} ativa${activeCount !== 1 ? 's' : ''}</strong>` : ''}</span>
+                            <span class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                                ${totalItems} item${totalItems !== 1 ? 's' : ''} (${groupThemes.length} vetoriais · ${groupRasters.length} ortofotos)
+                                ${totalActive > 0 ? `· <strong class="text-cyan-400 font-bold">${totalActive} ativo${totalActive !== 1 ? 's' : ''}</strong>` : ''}
+                            </span>
                         </div>
                     </div>
                     <span id="shared-accordion-chevron-${gIdx}" class="shared-accordion-chevron material-symbols-outlined text-[22px] text-slate-400 transition-transform duration-200 ${gIdx === 0 ? 'rotate-180' : ''}">expand_more</span>
@@ -8575,6 +8680,7 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
 
                 <!-- Conteúdo das Camadas da Entidade -->
                 <div id="${accordionId}" class="shared-accordion-body p-3 pt-2 border-t border-slate-200/80 dark:border-slate-700/60 flex flex-col gap-2.5 bg-white/40 dark:bg-slate-900/30 ${gIdx === 0 ? '' : 'hidden'}">
+                    <!-- Camadas Vetoriais -->
                     ${groupThemes.map(t => {
                         const isActive = Array.isArray(window.activeSharedLayers) && window.activeSharedLayers.includes(t.id);
                         const count = t.features ? t.features.length : 0;
@@ -8607,12 +8713,97 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
                             </div>
                         `;
                     }).join('')}
+
+                    <!-- Ortofotos / Imagens Aéreas da Entidade -->
+                    ${groupRasters.length > 0 ? `
+                        <div class="mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/50 flex flex-col gap-2">
+                            <span class="text-[10.5px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 px-1">
+                                <span class="material-symbols-outlined text-[15px]">satellite_alt</span>
+                                Ortofotos / Imagens Aéreas (${groupRasters.length})
+                            </span>
+                            ${groupRasters.map(r => {
+                                const isRasterActive = !!(rasterLayers.find(rl => rl.id === r.id && rl.visivel));
+                                let rDate = '';
+                                if (r.data_imagem) rDate = r.data_imagem.split('-').reverse().join('/');
+                                return `
+                                    <div class="flex items-center justify-between p-3 rounded-xl border ${isRasterActive ? 'border-emerald-500/40 bg-emerald-500/10 shadow-xs' : 'border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-800/90'} hover:border-emerald-400/60 transition-all">
+                                        <div class="flex items-center gap-3 min-w-0 pr-2">
+                                            <div class="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center text-emerald-500 bg-emerald-500/15 shadow-md border border-emerald-500/30">
+                                                <span class="material-symbols-outlined text-[20px]">satellite_alt</span>
+                                            </div>
+                                            <div class="flex flex-col min-w-0">
+                                                <div class="flex items-center gap-2 flex-wrap">
+                                                    <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${r.nome}</span>
+                                                    ${rDate ? `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">${rDate}</span>` : ''}
+                                                </div>
+                                                <span class="text-[10px] text-slate-500 dark:text-slate-400">Ortofoto · ${r.tipo === 'xyz_tiles' ? 'XYZ Tiles' : 'GeoTIFF'}</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="flex items-center gap-3 shrink-0">
+                                            <label class="relative inline-flex items-center cursor-pointer shrink-0" title="${isRasterActive ? 'Ocultar' : 'Mostrar'} Ortofoto">
+                                                <input type="checkbox" id="shared-toggle-raster-${r.id}" class="sr-only peer" ${isRasterActive ? 'checked' : ''} onchange="toggleSharedRaster('${r.id}', this)">
+                                                <div id="shared-toggle-raster-bg-${r.id}" class="w-11 h-6 bg-slate-700/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all shadow-inner" style="${isRasterActive ? 'background-color: #10b981; box-shadow: 0 0 12px #10b98190;' : ''}"></div>
+                                            </label>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    ` : ''}
                 </div>
             </div>
         `;
     });
 
     container.innerHTML = html;
+};
+
+window.toggleSharedRaster = async function(rasterId, inputEl) {
+    let raster = (rasterLayers || []).find(r => r.id === rasterId);
+    if (!raster) {
+        const fromAll = (window.allMunicipioRasters || []).find(r => r.id === rasterId);
+        if (fromAll) {
+            raster = { ...fromAll, visivel: false };
+            rasterLayers.push(raster);
+            window.rasterLayers = rasterLayers;
+        }
+    }
+    if (!raster) return;
+
+    const shouldBeActive = inputEl !== undefined ? inputEl.checked : !raster.visivel;
+
+    const bgEl = document.getElementById('shared-toggle-raster-bg-' + rasterId);
+    if (bgEl) {
+        if (shouldBeActive) {
+            bgEl.style.backgroundColor = '#10b981';
+            bgEl.style.boxShadow = '0 0 12px #10b98190';
+        } else {
+            bgEl.style.backgroundColor = '';
+            bgEl.style.boxShadow = '';
+        }
+    }
+
+    if (typeof toggleRasterVisibility === 'function') {
+        await toggleRasterVisibility(rasterId, { checked: shouldBeActive });
+    } else {
+        raster.visivel = shouldBeActive;
+        const overlay = leafletRasterOverlays[rasterId];
+        if (overlay && map) {
+            if (shouldBeActive) overlay.addTo(map);
+            else map.removeLayer(overlay);
+        }
+    }
+
+    if (typeof renderRasterLayersList === 'function') {
+        renderRasterLayersList();
+    }
+
+    if (shouldBeActive) {
+        showSuccessToast(`Ortofoto "${raster.nome}" ativada no mapa.`);
+    } else {
+        showWarningToast(`Ortofoto "${raster.nome}" desativada.`);
+    }
 };
 
 window.toggleSharedLayer = async function(themeId, inputEl) {

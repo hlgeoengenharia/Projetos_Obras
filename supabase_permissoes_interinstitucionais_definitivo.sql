@@ -355,3 +355,21 @@ CREATE POLICY feicoes_delete_perm ON public.feicoes
   );
 
 COMMENT ON FUNCTION public.tem_permissao(uuid, text) IS 'Valida permissão de acesso à camada sem bloqueio indevido por flag de ponto focal';
+
+-- 10. Garantia de RLS para imagens_raster (Ortofotos)
+-- Permite leitura autenticada para que os usuários possam carregar as ortofotos autorizadas via permissoes_raster
+ALTER TABLE public.imagens_raster ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS imagens_raster_select_authenticated ON public.imagens_raster;
+CREATE POLICY imagens_raster_select_authenticated ON public.imagens_raster
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+-- 11. Permite que o criador de uma camada gerencie suas próprias permissões em permissoes_camada
+DROP POLICY IF EXISTS permissoes_camada_creator ON public.permissoes_camada;
+CREATE POLICY permissoes_camada_creator ON public.permissoes_camada
+  FOR ALL USING (
+    user_id = auth.uid()
+  ) WITH CHECK (
+    user_id = auth.uid()
+  );
+
