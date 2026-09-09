@@ -794,12 +794,9 @@ function initMap() {
         
         const themeIdStr = String(feature.properties.themeId);
         
-        if (!window.activeSelectionThemeId) {
-            showWarningToast("Selecione uma camada no painel lateral clicando nela para poder inspecionar suas feições.");
-            return;
-        } else if (window.activeSelectionThemeId !== themeIdStr) {
-            showWarningToast("Esta feição pertence a outra camada. Selecione a camada correta no painel lateral primeiro.");
-            return;
+        // Sincroniza a seleção ativa com a camada da feição clicada e persiste no mapa
+        if (!window.activeSelectionThemeId || window.activeSelectionThemeId !== themeIdStr) {
+            toggleSelectionTheme(themeIdStr, true);
         }
 
         L.DomEvent.stopPropagation(e);
@@ -1591,7 +1588,7 @@ function loadAllFeaturesToMap() {
               if (!alreadyWarned && typeof showWarningToast === 'function') {
                   showWarningToast(`"${theme.name}": ${toRender.length} feições nesta área — aproxime o zoom para visualizá-las.`);
               }
-              toRender = [];
+              toRender = toRender.slice(0, MAX_FEATURES_PER_VIEW);
           } else {
               theme._tooManyFeaturesInView = null;
           }
@@ -1790,13 +1787,17 @@ function toggleSelectionTheme(themeId, forceState = null) {
         document.head.appendChild(styleTag);
     }
     
+    // Todas as feições visíveis permanecem clicáveis no mapa com cursor pointer.
+    // A camada selecionada ganha prioridade e destaque interativo.
     if (window.activeSelectionThemeId) {
         styleTag.innerHTML = `
-            .theme-feature { pointer-events: none !important; }
-            .theme-${window.activeSelectionThemeId} { pointer-events: auto !important; }
+            .theme-feature { pointer-events: auto !important; cursor: pointer; }
+            .theme-${window.activeSelectionThemeId} { cursor: pointer; stroke-width: 2.5px; }
         `;
     } else {
-        styleTag.innerHTML = '';
+        styleTag.innerHTML = `
+            .theme-feature { pointer-events: auto !important; cursor: pointer; }
+        `;
     }
 }
 
@@ -1823,9 +1824,10 @@ function toggleThemeListAndSelection(themeId) {
         // para que o filtro avançado funcione com todos os campos
         loadThemeProperties(themeId);
     } else {
-        // Closing this layer
+        // Fechamento da sanfona da lista no painel lateral:
+        // Apenas oculta a lista de feições no painel, mas MANTÉM a camada ativa
+        // de seleção no mapa para que o usuário continue interagindo livremente
         listEl.classList.add('hidden');
-        toggleSelectionTheme(themeId, false);
     }
 }
 

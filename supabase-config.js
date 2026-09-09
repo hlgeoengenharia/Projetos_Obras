@@ -6,17 +6,28 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 let supabaseClient = null;
 try {
     if (window.supabase && SUPABASE_URL.startsWith('http')) {
+        // Limpa resíduos legados de sessões antigas que ficaram no localStorage
+        // para garantir que fechar a aba/janela exija novo login ao retornar
+        try {
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                    localStorage.removeItem(key);
+                }
+            });
+        } catch(e) {}
+
         supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
             auth: {
+                storage: window.sessionStorage,
                 persistSession: true,
                 autoRefreshToken: true,
                 detectSessionInUrl: true
             }
         });
-        console.log("Supabase client initialized.");
+        console.log("Supabase client initialized (sessionStorage scoped).");
 
         const currentPath = window.location.pathname;
-        const isPublicPage = currentPath.endsWith('login.html') || currentPath.endsWith('register.html') || currentPath.endsWith('signup.html');
+        const isPublicPage = currentPath.endsWith('login.html') || currentPath.endsWith('register.html') || currentPath.endsWith('signup.html') || currentPath.endsWith('forgot-password.html') || currentPath.endsWith('reset-password.html');
 
         // Monitoramento Proativo de Sessão
         supabaseClient.auth.onAuthStateChange(async (event, session) => {
@@ -26,18 +37,21 @@ try {
             }
         });
 
-        // Verificação de integridade do token no carregamento da página
-        // Evita chamadas repetidas de 400 Bad Request se o refresh token tiver sido revogado
+        // Verificação de integridade e existência de sessão no carregamento da página
         supabaseClient.auth.getSession().then(({ data, error }) => {
-            if (error || (!data.session && !isPublicPage)) {
+            if (error || (!data?.session && !isPublicPage)) {
+                if (!isPublicPage && !data?.session) {
+                    sessionStorage.removeItem('municipio_ativo');
+                    window.location.href = 'login.html';
+                    return;
+                }
                 if (error && (error.status === 400 || error.message?.toLowerCase().includes('refresh') || error.message?.toLowerCase().includes('token'))) {
                     console.warn("Sessão ou Refresh Token inválido. Limpando credenciais locais expiradas...");
                     try {
                         supabaseClient.auth.signOut({ scope: 'local' });
-                        // Limpa resíduos de chaves auth do localStorage
-                        Object.keys(localStorage).forEach(key => {
+                        Object.keys(sessionStorage).forEach(key => {
                             if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
-                                localStorage.removeItem(key);
+                                sessionStorage.removeItem(key);
                             }
                         });
                     } catch(eSignOut) {}
