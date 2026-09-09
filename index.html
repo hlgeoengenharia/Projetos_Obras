@@ -462,24 +462,13 @@
 
 <!-- Barra do Projeto Ativo no Menu Lateral (Layout Slim) -->
 <div class="px-3 pt-2 pb-1 shrink-0">
-  <div id="drawer-active-project-bar" class="px-2.5 py-1.5 rounded-xl bg-slate-100/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800/80 shadow-2xs flex items-center justify-between gap-2 transition-all">
-    <!-- Ícone Indicador -->
-    <div class="flex items-center shrink-0">
-      <span class="material-symbols-outlined text-[17px] text-amber-500 dark:text-amber-400">folder_special</span>
+  <div id="drawer-active-project-bar" class="px-3 py-1.5 rounded-xl bg-slate-100/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800/80 shadow-2xs flex items-center justify-between gap-2 transition-all">
+    <!-- Título do Projeto em Caixa Alta e cor destacada -->
+    <div class="flex-1 min-w-0 pr-2">
+      <span id="drawer-active-project-name" class="text-[11px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 truncate drop-shadow-xs block">MODO LIVRE (SEM PROJETO)</span>
     </div>
 
-    <!-- Título do Projeto Centralizado em Caixa Alta, 2px menor que camadas (text-[11px]) e cor destacada -->
-    <div class="flex-1 flex items-center justify-center gap-1.5 min-w-0 text-center px-1">
-      <span id="drawer-active-project-name" class="text-[11px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 truncate drop-shadow-xs">MODO LIVRE (SEM PROJETO)</span>
-      <button onclick="openRenameProjectModal()" id="drawer-btn-rename-proj" class="hidden p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-amber-500 transition-colors cursor-pointer shrink-0" title="Renomear Projeto">
-        <span class="material-symbols-outlined text-[13px]">edit</span>
-      </button>
-      <button onclick="deleteActiveProject()" id="drawer-btn-delete-proj" class="hidden p-0.5 hover:bg-rose-100 dark:hover:bg-rose-950/40 rounded text-slate-400 hover:text-rose-500 transition-colors cursor-pointer shrink-0" title="Excluir Projeto">
-        <span class="material-symbols-outlined text-[13px]">delete</span>
-      </button>
-    </div>
-
-    <!-- Botão Ajustar com a mesma aparência dos ícones do topo (CATÁLOGO, + CAMADA, FECHAR) -->
+    <!-- Botão Ajustar com a mesma aparência dos ícones do topo -->
     <button onclick="openSharedLayersCatalog()" class="flex items-center gap-1 px-2.5 py-1 rounded-lg text-slate-600 dark:text-slate-400 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/60 transition-all text-[9px] font-semibold tracking-wide uppercase cursor-pointer shrink-0 group shadow-2xs" title="Ajustar Camadas e Ortofotos">
       <span class="material-symbols-outlined text-[15px] group-hover:scale-110 transition-transform">tune</span>
       <span>Ajustar</span>
