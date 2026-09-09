@@ -427,6 +427,21 @@
 </div>
 
 <nav class="flex-1 overflow-y-auto flex flex-col">
+  <!-- Active Project Header in Drawer -->
+  <div id="drawer-active-project-bar" class="px-4 py-2 bg-slate-100/80 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between shrink-0 select-none">
+    <div class="flex items-center gap-2 min-w-0">
+      <span class="material-symbols-outlined text-[17px] text-indigo-500 shrink-0">folder_special</span>
+      <div class="flex flex-col min-w-0">
+        <span class="text-[9px] uppercase font-bold tracking-wider text-slate-400">Projeto Ativo</span>
+        <span id="drawer-project-name" class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">Modo Livre (Sem Projeto)</span>
+      </div>
+    </div>
+    <button onclick="openSharedLayersCatalog()" class="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline flex items-center gap-0.5 shrink-0 cursor-pointer" title="Abrir catálogo para gerenciar projetos ou adicionar camadas">
+      <span>Catálogo</span>
+      <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+    </button>
+  </div>
+
   <!-- Vector Layers -->
   <div class="pt-3 pb-2 flex flex-col" id="themes-container">
     <!-- Themes will be dynamically generated here -->
@@ -935,6 +950,39 @@
       </div>
     </div>
 
+    <!-- Project Selection & Management Bar (Acima dos Ícones dos Entes) -->
+    <div class="px-5 py-2.5 bg-slate-100/90 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700/80 shrink-0 flex flex-wrap items-center justify-between gap-2.5">
+      <div class="flex items-center gap-2.5 flex-1 min-w-[240px]">
+        <div class="w-8 h-8 rounded-lg bg-indigo-500/15 text-indigo-500 flex items-center justify-center shrink-0 border border-indigo-500/20 shadow-2xs">
+          <span class="material-symbols-outlined text-[18px]">folder_special</span>
+        </div>
+        <div class="flex flex-col flex-1 min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Projeto Ativo:</span>
+            <span id="project-active-badge" class="text-[9px] font-extrabold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">0 itens na mesa</span>
+          </div>
+          <div class="relative mt-0.5">
+            <select id="shared-layers-project-select" onchange="onSelectUserProject(this.value)" class="w-full text-xs font-bold text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary shadow-2xs cursor-pointer truncate pr-7">
+              <option value="livre">🌐 Modo Livre (Sem Projeto)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button type="button" onclick="openCreateProjectModal()" class="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1 shadow-xs transition-all cursor-pointer" title="Criar um novo projeto personalizado">
+          <span class="material-symbols-outlined text-[16px]">add</span>
+          <span>Novo Projeto</span>
+        </button>
+        <button type="button" id="btn-rename-project" onclick="openRenameProjectModal()" class="p-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-700 text-xs font-semibold flex items-center shadow-2xs transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed" title="Renomear projeto ativo">
+          <span class="material-symbols-outlined text-[16px]">edit</span>
+        </button>
+        <button type="button" id="btn-delete-project" onclick="deleteActiveProject()" class="p-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-500 border border-slate-300 dark:border-slate-700 text-xs font-semibold flex items-center shadow-2xs transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed" title="Excluir projeto ativo">
+          <span class="material-symbols-outlined text-[16px]">delete</span>
+        </button>
+      </div>
+    </div>
+
     <!-- Entity Tabs Container (Idêntico à Aba USUÁRIOS) -->
     <div class="px-5 py-2 bg-slate-50/80 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800 shrink-0 overflow-x-auto custom-scrollbar">
       <div id="shared-layers-entity-toggle" class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm w-max">
@@ -951,9 +999,40 @@
     <div class="px-5 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 flex items-center justify-between shrink-0">
       <div class="text-[11px] text-slate-400 flex items-center gap-1.5">
         <span class="material-symbols-outlined text-[14px] text-cyan-400">info</span>
-        <span>Camadas ativadas ficam no seu painel lateral até serem desativadas no botão liga/desliga.</span>
+        <span>Camadas adicionadas aparecem na sua mesa de trabalho para você ativar conforme necessário.</span>
       </div>
       <button onclick="closeSharedLayersCatalog()" class="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl font-bold text-xs shadow-md transition-colors cursor-pointer">Concluir</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Criar / Renomear Projeto -->
+<div id="project-modal" class="fixed inset-0 z-[110] bg-black/60 backdrop-blur-xs hidden flex items-center justify-center p-3 sm:p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden transition-all duration-300 transform scale-95 p-5">
+    <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 mb-4">
+      <div class="flex items-center gap-2 text-indigo-500">
+        <span class="material-symbols-outlined text-[22px]">folder_special</span>
+        <h3 id="project-modal-title" class="text-sm font-bold text-slate-900 dark:text-white">Novo Projeto</h3>
+      </div>
+      <button onclick="closeProjectModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+        <span class="material-symbols-outlined text-[20px]">close</span>
+      </button>
+    </div>
+    
+    <div class="flex flex-col gap-3">
+      <div>
+        <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Nome do Projeto *</label>
+        <input id="project-input-name" type="text" placeholder="Ex: Fiscalização Orla 2026" class="w-full text-xs px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-primary focus:outline-none shadow-2xs">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Descrição / Finalidade (opcional)</label>
+        <textarea id="project-input-desc" rows="2" placeholder="Breve nota sobre o objetivo deste projeto..." class="w-full text-xs px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-primary focus:outline-none resize-none shadow-2xs"></textarea>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-2 mt-5 pt-3 border-t border-slate-200 dark:border-slate-800">
+      <button onclick="closeProjectModal()" class="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer">Cancelar</button>
+      <button onclick="saveProjectFromModal()" class="px-4 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-bold shadow-md cursor-pointer">Salvar Projeto</button>
     </div>
   </div>
 </div>

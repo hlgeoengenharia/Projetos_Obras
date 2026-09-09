@@ -951,6 +951,13 @@ function initMap() {
   });
 
   loadThemes().then(async () => {
+    if (typeof window.loadUserProjects === 'function') {
+        try {
+            await window.loadUserProjects();
+        } catch(eProj) {
+            console.warn('Erro ao carregar projetos do usuário:', eProj);
+        }
+    }
     renderThemes(); // mostra os cards já — a contagem preenche conforme carrega
     
     const totalThemes = themes.length;
@@ -1030,6 +1037,738 @@ function updateLabelsVisibility() {
 // Call initMap and setupIconDropdowns on window load since we no longer have a Google Maps callback
 // This is now done at the bottom of the file
 
+// =========================================================================
+// SISTEMA DE PROJETOS E MESA DE TRABALHO DE CAMADAS SOB DEMANDA
+// =========================================================================
+
+window.activeProjectId = null;
+window.userProjects = [];
+window.activeWorkspaceThemes = [];
+window.activeWorkspaceRasters = [];
+window.sharedCatalogSelectedTab = 'todos';
+window.sharedCatalogSearchQuery = '';
+
+window.loadUserProjects = async function() {
+    const munId = typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : (sessionStorage.getItem('activeMunicipioId') || 'default');
+    
+    // Obtém ID do usuário autenticado
+    let currentUserId = (typeof currentUserProfile !== 'undefined' && currentUserProfile && currentUserProfile.id) || null;
+    if (!currentUserId && typeof supabaseClient !== 'undefined' && supabaseClient && supabaseClient.auth) {
+        try {
+            const { data: sessData } = await supabaseClient.auth.getSession();
+            currentUserId = sessData?.session?.user?.id || null;
+        } catch(eAuth) {}
+    }
+
+    // Carrega projetos do Supabase
+    let loadedProjects = [];
+    if (typeof supabaseClient !== 'undefined' && supabaseClient && currentUserId) {
+        try {
+            const { data, error } = await supabaseClient
+                .from('user_projetos')
+                .select('*')
+                .eq('user_id', currentUserId)
+                .eq('municipio_id', munId)
+                .order('created_at', { ascending: false });
+            
+            if (!error && Array.isArray(data)) {
+                loadedProjects = data;
+            }
+        } catch(eSup) {
+            console.warn('[Projetos] Erro ao carregar da nuvem, usando cache local:', eSup);
+        }
+    }
+
+    // Fallback/Cache LocalStorage
+    const localSaved = localStorage.getItem('user_projetos_' + munId);
+    if (loadedProjects.length === 0 && localSaved) {
+        try {
+            loadedProjects = JSON.parse(localSaved);
+        } catch(eJson) {}
+    } else if (loadedProjects.length > 0) {
+        localStorage.setItem('user_projetos_' + munId, JSON.stringify(loadedProjects));
+    }
+    window.userProjects = loadedProjects;
+
+    // Recupera último projeto ou estado ativo
+    const lastActive = localStorage.getItem('last_active_project_' + munId);
+    if (lastActive && lastActive !== 'livre' && window.userProjects.some(p => p.id === lastActive)) {
+        await window.onSelectUserProject(lastActive);
+    } else {
+        // Modo Livre (Sem Projeto)
+        window.activeProjectId = null;
+        try {
+            const savedThemes = localStorage.getItem('workspace_livre_themes_' + munId);
+            window.activeWorkspaceThemes = savedThemes ? JSON.parse(savedThemes) : [];
+        } catch(e) { window.activeWorkspaceThemes = []; }
+
+        try {
+            const savedRasters = localStorage.getItem('workspace_livre_rasters_' + munId);
+            window.activeWorkspaceRasters = savedRasters ? JSON.parse(savedRasters) : [];
+        } catch(e) { window.activeWorkspaceRasters = []; }
+
+        window.updateProjectSelectDropdown();
+        window.updateProjectActiveUI();
+    }
+};
+
+window.updateProjectSelectDropdown = function() {
+    const sel = document.getElementById('shared-layers-project-select');
+    if (!sel) return;
+
+    let html = '<option value="livre">🌐 Modo Livre (Sem Projeto)</option>';
+    if (Array.isArray(window.userProjects)) {
+        window.userProjects.forEach(proj => {
+            const totalCount = (proj.camadas_ids ? proj.camadas_ids.length : 0) + (proj.rasters_ids ? proj.rasters_ids.length : 0);
+            html += `<option value="${proj.id}">📁 ${proj.nome} (${totalCount})</option>`;
+        });
+    }
+    sel.innerHTML = html;
+    sel.value = window.activeProjectId || 'livre';
+};
+
+window.updateProjectActiveUI = function() {
+    const isProjectActive = !!window.activeProjectId;
+    const proj = isProjectActive ? (window.userProjects || []).find(p => p.id === window.activeProjectId) : null;
+    
+    // Atualiza nome na barra de topo do menu lateral (Drawer)
+    const drawerNameEl = document.getElementById('drawer-project-name');
+    if (drawerNameEl) {
+        drawerNameEl.textContent = proj ? proj.nome : 'Modo Livre (Sem Projeto)';
+        drawerNameEl.title = proj ? (proj.descricao || proj.nome) : 'Camadas avulsas na mesa de trabalho';
+    }
+
+    // Atualiza badge de contagem de itens
+    const totalItems = (window.activeWorkspaceThemes ? window.activeWorkspaceThemes.length : 0) + (window.activeWorkspaceRasters ? window.activeWorkspaceRasters.length : 0);
+    const badgeEl = document.getElementById('project-active-badge');
+    if (badgeEl) {
+        badgeEl.textContent = `${totalItems} ${totalItems === 1 ? 'item na mesa' : 'itens na mesa'}`;
+    }
+
+    // Habilita / desabilita botões de editar e excluir projeto
+    const btnRename = document.getElementById('btn-rename-project');
+    const btnDelete = document.getElementById('btn-delete-project');
+    if (btnRename) btnRename.disabled = !isProjectActive;
+    if (btnDelete) btnDelete.disabled = !isProjectActive;
+};
+
+window.onSelectUserProject = async function(val) {
+    const munId = typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : (sessionStorage.getItem('activeMunicipioId') || 'default');
+
+    if (!val || val === 'livre') {
+        // Alternar para Modo Livre (Sem Projeto)
+        window.activeProjectId = null;
+        localStorage.setItem('last_active_project_' + munId, 'livre');
+
+        try {
+            const savedThemes = localStorage.getItem('workspace_livre_themes_' + munId);
+            window.activeWorkspaceThemes = savedThemes ? JSON.parse(savedThemes) : [];
+        } catch(e) { window.activeWorkspaceThemes = []; }
+
+        try {
+            const savedRasters = localStorage.getItem('workspace_livre_rasters_' + munId);
+            window.activeWorkspaceRasters = savedRasters ? JSON.parse(savedRasters) : [];
+        } catch(e) { window.activeWorkspaceRasters = []; }
+    } else {
+        const proj = (window.userProjects || []).find(p => p.id === val);
+        if (proj) {
+            window.activeProjectId = proj.id;
+            localStorage.setItem('last_active_project_' + munId, proj.id);
+
+            window.activeWorkspaceThemes = Array.isArray(proj.camadas_ids) ? [...proj.camadas_ids] : [];
+            window.activeWorkspaceRasters = Array.isArray(proj.rasters_ids) ? [...proj.rasters_ids] : [];
+
+            // Aplica estado de visibilidade salvo do projeto (se houver, senão desativado por padrão)
+            const visiveis = Array.isArray(proj.camadas_visiveis) ? proj.camadas_visiveis : [];
+            themes.forEach(t => {
+                if (window.activeWorkspaceThemes.includes(t.id)) {
+                    t.visible = visiveis.includes(t.id);
+                } else {
+                    t.visible = false;
+                }
+            });
+            saveThemes();
+        }
+    }
+
+    window.updateProjectSelectDropdown();
+    window.updateProjectActiveUI();
+    renderThemes();
+    renderRasterLayersList();
+    loadAllFeaturesToMap();
+
+    // Se o modal do catálogo estiver aberto, atualiza os botões
+    const catalogModal = document.getElementById('shared-layers-modal');
+    if (catalogModal && !catalogModal.classList.contains('hidden')) {
+        window.renderSharedLayersCatalog();
+    }
+};
+
+window.openCreateProjectModal = function() {
+    window._editingProjectId = null;
+    const modal = document.getElementById('project-modal');
+    const titleEl = document.getElementById('project-modal-title');
+    const nameInput = document.getElementById('project-input-name');
+    const descInput = document.getElementById('project-input-desc');
+    if (!modal) return;
+
+    if (titleEl) titleEl.textContent = 'Novo Projeto';
+    if (nameInput) nameInput.value = '';
+    if (descInput) descInput.value = '';
+
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        modal.firstElementChild?.classList.remove('scale-95');
+        if (nameInput) nameInput.focus();
+    }, 20);
+};
+
+window.openRenameProjectModal = function() {
+    if (!window.activeProjectId) {
+        if (typeof showToastAlert === 'function') showToastAlert('Selecione um projeto para renomear.', 'warning');
+        return;
+    }
+    const proj = (window.userProjects || []).find(p => p.id === window.activeProjectId);
+    if (!proj) return;
+
+    window._editingProjectId = proj.id;
+    const modal = document.getElementById('project-modal');
+    const titleEl = document.getElementById('project-modal-title');
+    const nameInput = document.getElementById('project-input-name');
+    const descInput = document.getElementById('project-input-desc');
+    if (!modal) return;
+
+    if (titleEl) titleEl.textContent = `Renomear Projeto`;
+    if (nameInput) nameInput.value = proj.nome || '';
+    if (descInput) descInput.value = proj.descricao || '';
+
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        modal.firstElementChild?.classList.remove('scale-95');
+        if (nameInput) nameInput.focus();
+    }, 20);
+};
+
+window.closeProjectModal = function() {
+    const modal = document.getElementById('project-modal');
+    if (modal) {
+        modal.firstElementChild?.classList.add('scale-95');
+        setTimeout(() => modal.classList.add('hidden'), 150);
+    }
+    window._editingProjectId = null;
+};
+
+window.saveProjectFromModal = async function() {
+    const nameInput = document.getElementById('project-input-name');
+    const descInput = document.getElementById('project-input-desc');
+    const nome = (nameInput?.value || '').trim();
+    const descricao = (descInput?.value || '').trim();
+
+    if (!nome) {
+        if (typeof showToastAlert === 'function') showToastAlert('Por favor, informe um nome para o projeto.', 'error');
+        else alert('Por favor, informe um nome para o projeto.');
+        nameInput?.focus();
+        return;
+    }
+
+    const munId = typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : (sessionStorage.getItem('activeMunicipioId') || 'default');
+    let currentUserId = (typeof currentUserProfile !== 'undefined' && currentUserProfile && currentUserProfile.id) || null;
+    if (!currentUserId && typeof supabaseClient !== 'undefined' && supabaseClient && supabaseClient.auth) {
+        try {
+            const { data: sessData } = await supabaseClient.auth.getSession();
+            currentUserId = sessData?.session?.user?.id || null;
+        } catch(eAuth) {}
+    }
+
+    if (window._editingProjectId) {
+        // Editando projeto existente
+        const proj = (window.userProjects || []).find(p => p.id === window._editingProjectId);
+        if (proj) {
+            proj.nome = nome;
+            proj.descricao = descricao;
+            proj.updated_at = new Date().toISOString();
+
+            if (typeof supabaseClient !== 'undefined' && supabaseClient && currentUserId) {
+                try {
+                    await supabaseClient.from('user_projetos').update({ nome, descricao, updated_at: proj.updated_at }).eq('id', proj.id);
+                } catch(eUp) { console.warn('Erro ao atualizar projeto na nuvem:', eUp); }
+            }
+            localStorage.setItem('user_projetos_' + munId, JSON.stringify(window.userProjects));
+            if (typeof showToastAlert === 'function') showToastAlert(`Projeto "${nome}" renomeado com sucesso!`, 'success');
+        }
+    } else {
+        // Criando novo projeto
+        const newProj = {
+            id: 'proj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+            user_id: currentUserId,
+            municipio_id: munId,
+            nome: nome,
+            descricao: descricao,
+            camadas_ids: [],
+            rasters_ids: [],
+            camadas_visiveis: [],
+            raster_ativo_id: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        };
+
+        if (typeof supabaseClient !== 'undefined' && supabaseClient && currentUserId) {
+            try {
+                const { data, error } = await supabaseClient.from('user_projetos').insert({
+                    id: newProj.id,
+                    user_id: currentUserId,
+                    municipio_id: munId,
+                    nome: nome,
+                    descricao: descricao,
+                    camadas_ids: [],
+                    rasters_ids: [],
+                    camadas_visiveis: []
+                }).select().single();
+                if (!error && data) {
+                    newProj.id = data.id;
+                }
+            } catch(eIns) { console.warn('Erro ao salvar projeto no Supabase, mantendo local:', eIns); }
+        }
+
+        window.userProjects.unshift(newProj);
+        localStorage.setItem('user_projetos_' + munId, JSON.stringify(window.userProjects));
+        if (typeof showToastAlert === 'function') showToastAlert(`Projeto "${nome}" criado com sucesso!`, 'success');
+
+        // Seleciona automaticamente o novo projeto criado
+        window.closeProjectModal();
+        await window.onSelectUserProject(newProj.id);
+        return;
+    }
+
+    window.closeProjectModal();
+    window.updateProjectSelectDropdown();
+    window.updateProjectActiveUI();
+};
+
+window.deleteActiveProject = async function() {
+    if (!window.activeProjectId) return;
+    const proj = (window.userProjects || []).find(p => p.id === window.activeProjectId);
+    if (!proj) return;
+
+    const confirmed = confirm(`Tem certeza que deseja excluir o projeto "${proj.nome}"?\n\nSuas camadas e ortofotos NÃO serão apagadas, apenas o agrupamento deste projeto.`);
+    if (!confirmed) return;
+
+    const munId = typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : (sessionStorage.getItem('activeMunicipioId') || 'default');
+    
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        try {
+            await supabaseClient.from('user_projetos').delete().eq('id', proj.id);
+        } catch(eDel) { console.warn('Erro ao excluir projeto do Supabase:', eDel); }
+    }
+
+    window.userProjects = window.userProjects.filter(p => p.id !== proj.id);
+    localStorage.setItem('user_projetos_' + munId, JSON.stringify(window.userProjects));
+
+    if (typeof showToastAlert === 'function') showToastAlert(`Projeto "${proj.nome}" excluído.`, 'info');
+    
+    // Retorna para Modo Livre
+    await window.onSelectUserProject('livre');
+};
+
+window.toggleItemInWorkspace = async function(type, id) {
+    if (type === 'theme') {
+        const idx = window.activeWorkspaceThemes.indexOf(id);
+        if (idx >= 0) {
+            window.activeWorkspaceThemes.splice(idx, 1);
+            const t = themes.find(x => x.id === id);
+            if (t) t.visible = false;
+        } else {
+            window.activeWorkspaceThemes.push(id);
+            // Ao selecionar no catálogo, entra desativada na mesa de trabalho para que o usuário ative sob demanda
+            const t = themes.find(x => x.id === id);
+            if (t) t.visible = false;
+        }
+        saveThemes();
+    } else if (type === 'raster') {
+        const idx = window.activeWorkspaceRasters.indexOf(id);
+        if (idx >= 0) {
+            window.activeWorkspaceRasters.splice(idx, 1);
+            const r = rasterLayers.find(x => x.id === id);
+            if (r) {
+                r.visivel = false;
+                if (leafletRasterOverlays[id] && map) map.removeLayer(leafletRasterOverlays[id]);
+            }
+        } else {
+            window.activeWorkspaceRasters.push(id);
+            const r = rasterLayers.find(x => x.id === id);
+            if (r) r.visivel = false;
+        }
+    }
+
+    await window.saveCurrentWorkspaceState();
+    renderThemes();
+    renderRasterLayersList();
+    loadAllFeaturesToMap();
+    window.renderSharedLayersCatalog();
+};
+
+window.removeThemeFromWorkspace = async function(themeId) {
+    window.activeWorkspaceThemes = window.activeWorkspaceThemes.filter(id => id !== themeId);
+    const t = themes.find(x => x.id === themeId);
+    if (t) t.visible = false;
+    saveThemes();
+
+    await window.saveCurrentWorkspaceState();
+    renderThemes();
+    loadAllFeaturesToMap();
+
+    const catalogModal = document.getElementById('shared-layers-modal');
+    if (catalogModal && !catalogModal.classList.contains('hidden')) {
+        window.renderSharedLayersCatalog();
+    }
+};
+
+window.removeRasterFromWorkspace = async function(rasterId) {
+    window.activeWorkspaceRasters = window.activeWorkspaceRasters.filter(id => id !== rasterId);
+    const r = rasterLayers.find(x => x.id === rasterId);
+    if (r) {
+        r.visivel = false;
+        if (leafletRasterOverlays[rasterId] && map) map.removeLayer(leafletRasterOverlays[rasterId]);
+    }
+
+    await window.saveCurrentWorkspaceState();
+    renderRasterLayersList();
+
+    const catalogModal = document.getElementById('shared-layers-modal');
+    if (catalogModal && !catalogModal.classList.contains('hidden')) {
+        window.renderSharedLayersCatalog();
+    }
+};
+
+window.saveCurrentWorkspaceState = async function() {
+    const munId = typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : (sessionStorage.getItem('activeMunicipioId') || 'default');
+
+    if (window.activeProjectId) {
+        const proj = (window.userProjects || []).find(p => p.id === window.activeProjectId);
+        if (proj) {
+            proj.camadas_ids = [...window.activeWorkspaceThemes];
+            proj.rasters_ids = [...window.activeWorkspaceRasters];
+            proj.camadas_visiveis = themes.filter(t => window.activeWorkspaceThemes.includes(t.id) && t.visible).map(t => t.id);
+            proj.updated_at = new Date().toISOString();
+
+            if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+                try {
+                    await supabaseClient.from('user_projetos').update({
+                        camadas_ids: proj.camadas_ids,
+                        rasters_ids: proj.rasters_ids,
+                        camadas_visiveis: proj.camadas_visiveis,
+                        updated_at: proj.updated_at
+                    }).eq('id', proj.id);
+                } catch(eUp) {}
+            }
+            localStorage.setItem('user_projetos_' + munId, JSON.stringify(window.userProjects));
+        }
+    } else {
+        localStorage.setItem('workspace_livre_themes_' + munId, JSON.stringify(window.activeWorkspaceThemes));
+        localStorage.setItem('workspace_livre_rasters_' + munId, JSON.stringify(window.activeWorkspaceRasters));
+    }
+
+    window.updateProjectActiveUI();
+    window.updateProjectSelectDropdown();
+};
+
+// =========================================================================
+// CATÁLOGO DE CAMADAS COMPARTILHADAS & PRÓPRIAS (HUB GERAL)
+// =========================================================================
+
+window.openSharedLayersCatalog = async function() {
+    const modal = document.getElementById('shared-layers-modal');
+    if (!modal) return;
+
+    modal.classList.remove('hidden');
+    setTimeout(() => modal.firstElementChild?.classList.remove('scale-95'), 20);
+
+    window.renderSharedLayersEntityTabs();
+    window.renderSharedLayersCatalog();
+};
+
+window.closeSharedLayersCatalog = function() {
+    const modal = document.getElementById('shared-layers-modal');
+    if (modal) {
+        modal.firstElementChild?.classList.add('scale-95');
+        setTimeout(() => modal.classList.add('hidden'), 150);
+    }
+};
+
+window.onFilterSharedLayers = function(query) {
+    window.sharedCatalogSearchQuery = (query || '').toLowerCase().trim();
+    window.renderSharedLayersCatalog();
+};
+
+window.selectSharedLayersTab = function(sigla) {
+    window.sharedCatalogSelectedTab = sigla;
+    window.renderSharedLayersEntityTabs();
+    window.renderSharedLayersCatalog();
+};
+
+window.renderSharedLayersEntityTabs = function() {
+    const container = document.getElementById('shared-layers-entity-toggle');
+    if (!container) return;
+
+    // Constrói lista de siglas de todas as entidades cadastradas e presentes nas camadas/rasters
+    const entityMap = new Map();
+
+    // 1. Entidades da lista oficial (window.allEntidadesList)
+    if (Array.isArray(window.allEntidadesList)) {
+        window.allEntidadesList.forEach(e => {
+            const sigla = (e.sigla || e.nome || '').trim();
+            if (sigla && sigla.toLowerCase() !== 'outros' && !entityMap.has(sigla)) {
+                entityMap.set(sigla, {
+                    sigla: sigla,
+                    nome: e.nome || sigla,
+                    icone: e.icone || 'hub',
+                    cor: e.cor || '#0284c7'
+                });
+            }
+        });
+    }
+
+    // 2. Entidades presentes nos temas vetoriais
+    themes.forEach(t => {
+        if (typeof userCanOnTheme === 'function' && !userCanOnTheme(t.id, 'ver')) return;
+        const raw = ((t.metadata && t.metadata.entidade) || t.entidade || '').trim();
+        const sigla = getEntitySigla(raw);
+        if (sigla && sigla.toLowerCase() !== 'outros' && !entityMap.has(sigla)) {
+            entityMap.set(sigla, {
+                sigla: sigla,
+                nome: raw || sigla,
+                icone: 'layers',
+                cor: '#3b82f6'
+            });
+        }
+    });
+
+    // 3. Entidades presentes nos rasters
+    rasterLayers.forEach(r => {
+        const raw = (r.entidade || '').trim();
+        const sigla = getEntitySigla(raw);
+        if (sigla && sigla.toLowerCase() !== 'outros' && !entityMap.has(sigla)) {
+            entityMap.set(sigla, {
+                sigla: sigla,
+                nome: raw || sigla,
+                icone: 'image',
+                cor: '#10b981'
+            });
+        }
+    });
+
+    // Filtra para remover categoricamente qualquer "OUTROS"
+    const allowedEntities = Array.from(entityMap.values()).filter(ent => {
+        const s = ent.sigla.toLowerCase();
+        return s !== 'outros' && s !== 'outro';
+    });
+
+    const isAll = (window.sharedCatalogSelectedTab === 'todos');
+
+    let html = `
+        <button type="button" onclick="selectSharedLayersTab('todos')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${isAll ? 'bg-primary text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}">
+            <span class="material-symbols-outlined text-[15px]">apps</span>
+            <span>Todas</span>
+        </button>
+    `;
+
+    allowedEntities.forEach(ent => {
+        const isSelected = (window.sharedCatalogSelectedTab === ent.sigla);
+        let iconName = ent.icone || 'hub';
+        if (ent.sigla === 'Município' || ent.sigla === 'Prefeitura') iconName = 'location_city';
+        else if (ent.sigla === 'MPF') iconName = 'balance';
+        else if (ent.sigla === 'PF') iconName = 'local_police';
+        else if (ent.sigla === 'SPU') iconName = 'account_balance';
+
+        html += `
+            <button type="button" onclick="selectSharedLayersTab('${ent.sigla}')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${isSelected ? 'bg-primary text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}">
+                <span class="material-symbols-outlined text-[15px]">${iconName}</span>
+                <span>${ent.sigla}</span>
+            </button>
+        `;
+    });
+
+    container.innerHTML = html;
+};
+
+window.renderSharedLayersCatalog = function() {
+    const listEl = document.getElementById('shared-layers-list');
+    const totalCountEl = document.getElementById('shared-layers-total-count');
+    if (!listEl) return;
+
+    const query = window.sharedCatalogSearchQuery || '';
+    const selectedTab = window.sharedCatalogSelectedTab || 'todos';
+
+    // 1. Filtra camadas vetoriais (inclui próprias + compartilhadas com permissão de visualização)
+    const filteredThemes = themes.filter(t => {
+        if (typeof userCanOnTheme === 'function' && !userCanOnTheme(t.id, 'ver')) return false;
+
+        const tEnt = ((t.metadata && t.metadata.entidade) || t.entidade || '').trim();
+        const tSigla = getEntitySigla(tEnt);
+
+        // Se a aba selecionada não for 'todos', bate com a sigla da entidade
+        if (selectedTab !== 'todos' && tSigla !== selectedTab) return false;
+
+        // Se houver busca por texto
+        if (query) {
+            const matchName = (t.name || '').toLowerCase().includes(query);
+            const matchEnt = tEnt.toLowerCase().includes(query) || tSigla.toLowerCase().includes(query);
+            if (!matchName && !matchEnt) return false;
+        }
+
+        return true;
+    });
+
+    // 2. Filtra ortofotos / rasters
+    const filteredRasters = rasterLayers.filter(r => {
+        const rEnt = (r.entidade || 'Prefeitura Municipal').trim();
+        const rSigla = getEntitySigla(rEnt);
+
+        if (selectedTab !== 'todos' && rSigla !== selectedTab) return false;
+
+        if (query) {
+            const matchName = (r.nome || '').toLowerCase().includes(query);
+            const matchEnt = rEnt.toLowerCase().includes(query) || rSigla.toLowerCase().includes(query);
+            if (!matchName && !matchEnt) return false;
+        }
+
+        return true;
+    });
+
+    const totalAvailable = filteredThemes.length + filteredRasters.length;
+    if (totalCountEl) totalCountEl.textContent = `${totalAvailable} disponíveis`;
+
+    if (totalAvailable === 0) {
+        listEl.innerHTML = `
+            <div class="col-span-full py-12 text-center text-slate-400">
+                <span class="material-symbols-outlined text-[40px] opacity-30 mb-2">layers_clear</span>
+                <p class="text-sm font-semibold">Nenhuma camada ou ortofoto encontrada.</p>
+                <p class="text-xs opacity-70 mt-0.5">Tente mudar o filtro de entidade ou a busca por texto.</p>
+            </div>
+        `;
+        return;
+    }
+
+    listEl.innerHTML = '';
+
+    // Renderiza Camadas Vetoriais
+    filteredThemes.forEach(theme => {
+        const tEnt = ((theme.metadata && theme.metadata.entidade) || theme.entidade || 'Prefeitura Municipal').trim();
+        const tSigla = getEntitySigla(tEnt);
+        const inWorkspace = Array.isArray(window.activeWorkspaceThemes) && window.activeWorkspaceThemes.includes(theme.id);
+        const count = (theme.features || []).length;
+
+        let iconName = 'layers';
+        if (theme.geomType === 'Point' || theme.geomType === 'MultiPoint') iconName = 'pin_drop';
+        else if (theme.geomType === 'LineString' || theme.geomType === 'MultiLineString') iconName = 'timeline';
+        else if (theme.geomType === 'Polygon' || theme.geomType === 'MultiPolygon') iconName = 'polyline';
+
+        const card = document.createElement('div');
+        card.className = `p-3.5 rounded-xl border transition-all duration-200 flex flex-col justify-between gap-3 ${
+            inWorkspace 
+                ? 'bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-300 dark:border-indigo-700/60 shadow-xs' 
+                : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600'
+        }`;
+
+        card.innerHTML = `
+            <div class="flex items-start gap-2.5">
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-2xs" style="background-color: ${theme.color}25; color: ${theme.color}; border: 1px solid ${theme.color}40;">
+                    <span class="material-symbols-outlined text-[18px]">${iconName}</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <h4 class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate" title="${theme.name}">${theme.name}</h4>
+                    <div class="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30">
+                            <span class="material-symbols-outlined text-[10px]">hub</span>
+                            <span>${tSigla}</span>
+                        </span>
+                        <span class="text-[10px] text-slate-400 font-medium">
+                            ${count} ${count === 1 ? 'registro' : 'registros'}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60">
+                <span class="text-[10px] font-medium ${inWorkspace ? 'text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1' : 'text-slate-400'}">
+                    ${inWorkspace ? '<span class="material-symbols-outlined text-[13px]">check_circle</span> Na Mesa de Trabalho' : 'Não adicionada'}
+                </span>
+                <button type="button" 
+                        onclick="toggleItemInWorkspace('theme', '${theme.id}')"
+                        class="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                            inWorkspace
+                                ? 'bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                                : 'bg-primary hover:bg-primary/90 text-white shadow-xs'
+                        }">
+                    <span class="material-symbols-outlined text-[15px]">${inWorkspace ? 'remove' : 'add'}</span>
+                    <span>${inWorkspace ? 'Remover' : 'Adicionar'}</span>
+                </button>
+            </div>
+        `;
+        listEl.appendChild(card);
+    });
+
+    // Renderiza Ortofotos / Rasters
+    filteredRasters.forEach(raster => {
+        const rEnt = (raster.entidade || 'Prefeitura Municipal').trim();
+        const rSigla = getEntitySigla(rEnt);
+        const inWorkspace = Array.isArray(window.activeWorkspaceRasters) && window.activeWorkspaceRasters.includes(raster.id);
+
+        let dateFormatted = '';
+        const effDate = raster.data_imagem || localStorage.getItem(`raster_date_${raster.id}`);
+        if (effDate) dateFormatted = effDate.split('-').reverse().join('/');
+
+        const card = document.createElement('div');
+        card.className = `p-3.5 rounded-xl border transition-all duration-200 flex flex-col justify-between gap-3 ${
+            inWorkspace 
+                ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-700/60 shadow-xs' 
+                : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600'
+        }`;
+
+        card.innerHTML = `
+            <div class="flex items-start gap-2.5">
+                <div class="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 flex items-center justify-center shrink-0 shadow-2xs">
+                    <span class="material-symbols-outlined text-[18px]">image</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1.5">
+                        <h4 class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate" title="${raster.nome}">${raster.nome}</h4>
+                        <span class="text-[8px] bg-emerald-500 text-white px-1 py-0.2 rounded font-bold uppercase tracking-wider">Raster</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30">
+                            <span class="material-symbols-outlined text-[10px]">hub</span>
+                            <span>${rSigla}</span>
+                        </span>
+                        ${dateFormatted ? `
+                            <span class="text-[10px] text-slate-400 font-medium flex items-center gap-0.5">
+                                <span class="material-symbols-outlined text-[10px]">calendar_today</span>
+                                <span>${dateFormatted}</span>
+                            </span>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60">
+                <span class="text-[10px] font-medium ${inWorkspace ? 'text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1' : 'text-slate-400'}">
+                    ${inWorkspace ? '<span class="material-symbols-outlined text-[13px]">check_circle</span> Na Mesa de Trabalho' : 'Não adicionada'}
+                </span>
+                <button type="button" 
+                        onclick="toggleItemInWorkspace('raster', '${raster.id}')"
+                        class="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                            inWorkspace
+                                ? 'bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                                : 'bg-primary hover:bg-primary/90 text-white shadow-xs'
+                        }">
+                    <span class="material-symbols-outlined text-[15px]">${inWorkspace ? 'remove' : 'add'}</span>
+                    <span>${inWorkspace ? 'Remover' : 'Adicionar'}</span>
+                </button>
+            </div>
+        `;
+        listEl.appendChild(card);
+    });
+};
 
 function loadAllFeaturesToMap() {
   if (!geojsonLayer) return;
@@ -1359,30 +2098,18 @@ function renderThemes() {
         return;
     }
 
-    const themeEntidade = ((theme.metadata && theme.metadata.entidade) || theme.entidade || '').trim();
-    const isSharedActive = Array.isArray(window.activeSharedLayers) && window.activeSharedLayers.includes(theme.id);
-    const isCompartilhada = theme.compartilhada !== false && (!theme.metadata || theme.metadata.compartilhada !== false);
+    // Regra da Mesa de Trabalho / Projetos:
+    // Apenas camadas que o usuário incluiu na mesa de trabalho ou projeto ativo são exibidas no menu lateral!
+    const inWorkspace = Array.isArray(window.activeWorkspaceThemes) && window.activeWorkspaceThemes.includes(theme.id);
+    if (!inWorkspace) {
+        return;
+    }
 
-    // Regra de Exibição no Painel Principal:
-    // 1. SuperAdmin vê todas as camadas
-    // 2. Camada da própria entidade do usuário: MOSTRA (Minha Camada)
-    // 3. Camada Geral / Sem Entidade (pública): MOSTRA
+    const themeEntidade = ((theme.metadata && theme.metadata.entidade) || theme.entidade || '').trim();
+    const isCompartilhada = theme.compartilhada !== false && (!theme.metadata || theme.metadata.compartilhada !== false);
     const themeSigla = getEntitySigla(themeEntidade);
     const userSigla = getEntitySigla(userEntidade);
     const isMyEntity = !userEntidade || !themeEntidade || themeEntidade === 'Geral' || (themeSigla === userSigla) || (themeEntidade.toLowerCase() === userEntidade.toLowerCase());
-    
-    const tid = String(theme.id).toLowerCase().trim();
-    const hasExplicitPerm = !!(currentUserPermissions && (
-        (currentUserPermissions[tid] && (currentUserPermissions[tid].pode_ver === true || currentUserPermissions[tid].pode_ver === 'true')) ||
-        (currentUserPermissions[theme.id] && (currentUserPermissions[theme.id].pode_ver === true || currentUserPermissions[theme.id].pode_ver === 'true'))
-    ));
-
-    // Se o usuário possui permissão explícita concedida pelo administrador para ver esta camada,
-    // ela DEVE aparecer no painel principal, sem depender de ativação manual no localStorage!
-    if (!isSuperAdmin && !isMyEntity && !isSharedActive && !hasExplicitPerm) {
-        return; // Fica oculta apenas se não for da minha entidade, não tiver autorização expressa e não tiver sido ativada
-    }
-
     const isSharedFromOtherEntity = !isSuperAdmin && !isMyEntity;
     const canManageThisEntityLayer = isSuperAdmin || isMyEntity;
     const canEditThisTheme = isSuperAdmin || (!isSharedFromOtherEntity && isAdmin);
@@ -1472,12 +2199,6 @@ function renderThemes() {
                       <span>${getEntitySigla(themeEntidade)}</span>
                     </span>
                   ` : ''}
-                  ${!isCompartilhada ? `
-                    <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[8.5px] font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 h-5 leading-none" title="Camada Privada: não compartilhada com outros entes">
-                      <span class="material-symbols-outlined text-[10px]">lock</span>
-                      <span>Privada</span>
-                    </span>
-                  ` : ''}
                 ` : ''}
                 <div class="text-[9.5px] font-semibold text-slate-300 flex items-center gap-1 h-5 leading-none">
                   <span id="theme-count-${theme.id}" class="font-bold text-slate-100">${featureCount}</span>
@@ -1487,11 +2208,18 @@ function renderThemes() {
             </div>
           </div>
           
-          <!-- iOS-style Neon Toggle -->
-          <label class="relative inline-flex items-center cursor-pointer shrink-0 ml-1.5" title="${isVisible ? 'Ocultar' : 'Mostrar'} Camada" onclick="event.stopPropagation()">
-            <input type="checkbox" id="theme-toggle-${theme.id}" class="sr-only peer" ${isVisible ? 'checked' : ''} onchange="toggleThemeVisibility('${theme.id}', this)">
-            <div id="theme-toggle-bg-${theme.id}" class="w-11 h-6 bg-slate-700/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all" style="${isVisible ? `background-color: ${theme.color}; box-shadow: 0 0 12px ${theme.color}90;` : ''}"></div>
-          </label>
+          <div class="flex items-center gap-1.5 shrink-0 ml-1.5">
+            <!-- Botão Remover da Mesa de Trabalho / Projeto -->
+            <button type="button" onclick="event.stopPropagation(); window.removeThemeFromWorkspace('${theme.id}')" class="w-7 h-7 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/15 active:scale-95 transition-all flex items-center justify-center cursor-pointer shrink-0" title="Remover da mesa de trabalho (a camada continuará salva)">
+              <span class="material-symbols-outlined text-[17px]">close</span>
+            </button>
+
+            <!-- iOS-style Neon Toggle -->
+            <label class="relative inline-flex items-center cursor-pointer shrink-0" title="${isVisible ? 'Ocultar' : 'Mostrar'} Camada" onclick="event.stopPropagation()">
+              <input type="checkbox" id="theme-toggle-${theme.id}" class="sr-only peer" ${isVisible ? 'checked' : ''} onchange="toggleThemeVisibility('${theme.id}', this)">
+              <div id="theme-toggle-bg-${theme.id}" class="w-11 h-6 bg-slate-700/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all" style="${isVisible ? `background-color: ${theme.color}; box-shadow: 0 0 12px ${theme.color}90;` : ''}"></div>
+            </label>
+          </div>
         </div>
       </div>
       
@@ -1511,42 +2239,34 @@ function renderThemes() {
                 </button>
                 ` : ''}
                 ${canEditThisTheme ? `
-                <button onclick="openEditThemeModal('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Editar Camada">
+                <button onclick="openEditThemeModal('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Configurações da Camada">
                   <span class="material-symbols-outlined text-[18px]">settings</span>
                 </button>
                 ` : ''}
-                ${canEditThisTheme && isSuperAdmin ? `
-                <button onclick="triggerUpload('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Importar GeoJSON">
-                  <span class="material-symbols-outlined text-[18px]">upload</span>
-                </button>` : ''}
-                <button onclick="downloadGeoJSON('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Exportar">
-                  <span class="material-symbols-outlined text-[18px]">download</span>
-                </button>
-                ${canEditThisTheme && isSuperAdmin ? `
-                <button onclick="deleteTheme('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-red-500/15 hover:bg-red-500/30 active:scale-95 rounded-lg tooltip text-red-400 hover:text-red-300 transition-all border border-red-500/20 shadow-xs" title="Excluir">
+                ${canEditThisTheme ? `
+                <button onclick="deleteTheme('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-red-500/15 hover:bg-red-500/30 active:scale-95 rounded-lg tooltip text-red-400 hover:text-red-300 transition-all border border-red-500/20 shadow-xs" title="Excluir Camada">
                   <span class="material-symbols-outlined text-[18px]">delete</span>
-                </button>` : ''}
+                </button>
+                ` : ''}
             </div>
         </div>
         ` : ''}
 
-        <!-- Filtro Avançado -->
-        <div class="p-2 border-b border-white/5 bg-slate-50 dark:bg-slate-900/50">
-          <div class="flex items-center justify-between mb-2">
-             <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Filtro Avançado</span>
-             <div class="flex items-center gap-1">
-                 <button onclick="clearAllFilters('${theme.id}')" class="text-[10px] bg-white/50 dark:bg-white/10 text-slate-700 dark:text-slate-200 px-1.5 py-1 rounded hover:bg-white/80 dark:hover:bg-white/20 transition-colors flex items-center justify-center tooltip" title="Limpar Filtro">
-                    <span class="material-symbols-outlined text-[14px]">close</span>
-                 </button>
-                 <button onclick="addFilterRow('${theme.id}')" class="text-[10px] bg-white/50 dark:bg-white/10 text-slate-700 dark:text-slate-200 px-2 py-1 rounded hover:bg-white/80 dark:hover:bg-white/20 transition-colors flex items-center gap-1">
-                    <span class="material-symbols-outlined text-[12px]">add</span> Condição
-                 </button>
+        <!-- Filtro Rápido Inteligente por Qualquer Coluna da Camada -->
+        <div class="p-2 border-b border-white/10 bg-slate-900/30">
+          <div class="flex flex-col gap-1.5">
+             <div class="flex items-center justify-between">
+                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                   <span class="material-symbols-outlined text-[12px] text-cyan-400">filter_alt</span>
+                   Filtrar Registros
+                </span>
+                <button onclick="clearSearch('${theme.id}')" class="text-[9px] text-cyan-400 hover:underline cursor-pointer flex items-center gap-0.5">
+                   <span class="material-symbols-outlined text-[10px]">close</span> Limpar
+                </button>
              </div>
-          </div>
-          <div id="filters-container-${theme.id}" class="flex flex-col gap-1.5">
-             <div class="filter-row flex gap-1">
-                <select class="filter-field w-1/3 text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-1 py-1 text-slate-700 dark:text-slate-300" onchange="updateFilterValueInput(this, '${theme.id}')">
-                   <option value="ALL">Qualquer Campo</option>
+             <div class="flex gap-1">
+                <select class="filter-col w-1/3 text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-1.5 py-1 text-slate-700 dark:text-slate-300 truncate" onchange="executeSearch('${theme.id}')">
+                   <option value="_all">Tudo</option>
                    ${getThemeFieldsOptions(theme)}
                 </select>
                 <div class="flex w-2/3 gap-1 filter-value-container">
@@ -1562,6 +2282,28 @@ function renderThemes() {
     `;
     container.appendChild(card);
   });
+
+  if (container.children.length === 0) {
+      const isProjectActive = !!window.activeProjectId;
+      const projObj = isProjectActive ? (window.userProjects || []).find(p => p.id === window.activeProjectId) : null;
+      container.innerHTML = `
+          <div class="mx-3 my-4 p-5 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-100/50 dark:bg-slate-800/30 text-center flex flex-col items-center gap-3">
+              <div class="w-12 h-12 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center border border-cyan-500/20 shadow-xs">
+                  <span class="material-symbols-outlined text-[28px]">folder_open</span>
+              </div>
+              <div>
+                  <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200">${isProjectActive ? `Projeto "${projObj ? projObj.nome : 'Ativo'}" Vazio` : 'Mesa de Trabalho Vazia'}</h4>
+                  <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                      ${isProjectActive ? 'Este projeto ainda não possui camadas adicionadas.' : 'Nenhuma camada selecionada no momento.'} Abra o catálogo para escolher camadas e ortofotos ou criar um novo projeto.
+                  </p>
+              </div>
+              <button type="button" onclick="window.openSharedLayersCatalog()" class="mt-1 px-4 py-2 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-sky-500/20 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer">
+                  <span class="material-symbols-outlined text-[16px]">hub</span>
+                  <span>Explorar Camadas e Projetos</span>
+              </button>
+          </div>
+      `;
+  }
 }
 
 function toggleThemeVisibility(themeId, inputEl) {
@@ -1571,27 +2313,11 @@ function toggleThemeVisibility(themeId, inputEl) {
   const isChecked = inputEl ? inputEl.checked : (theme.visible === false);
   theme.visible = isChecked;
   saveThemes();
-
-  // Se for camada compartilhada de outra entidade e o usuário desativou o switch:
-  if (!isChecked && Array.isArray(window.activeSharedLayers) && window.activeSharedLayers.includes(themeId)) {
-      window.activeSharedLayers = window.activeSharedLayers.filter(id => id !== themeId);
-      localStorage.setItem('shared_layers_' + activeMunicipioId, JSON.stringify(window.activeSharedLayers));
-      if (typeof updateSharedLayersBadge === 'function') updateSharedLayersBadge();
-      
-      const cardEl = document.getElementById('theme-card-' + themeId);
-      if (cardEl) {
-          cardEl.style.transition = 'all 0.25s ease';
-          cardEl.style.opacity = '0';
-          cardEl.style.transform = 'scale(0.95)';
-          setTimeout(() => {
-              renderThemes();
-              loadAllFeaturesToMap();
-          }, 250);
-          return;
-      }
+  if (typeof window.saveCurrentWorkspaceState === 'function') {
+      window.saveCurrentWorkspaceState();
   }
 
-  // Resposta visual imediata no background do switch (muda de cor na hora para a cor do tema)
+  // Resposta visual imediata no background do switch
   const bgEl = document.getElementById('theme-toggle-bg-' + themeId);
   if (bgEl) {
       if (isChecked) {
@@ -1603,11 +2329,6 @@ function toggleThemeVisibility(themeId, inputEl) {
       }
   }
 
-  const listEl = document.getElementById('feature-list-' + themeId);
-  if (listEl) {
-      if (isChecked) listEl.classList.remove('opacity-50');
-      else listEl.classList.add('opacity-50');
-  }
 
   // Atualização em background (não bloqueia a thread de cliques)
   setTimeout(async () => {
@@ -2562,6 +3283,12 @@ async function saveNewTheme() {
       features: [] 
   });
   
+  // Inclui automaticamente a nova camada criada na mesa de trabalho / projeto atual com switch ligado
+  if (Array.isArray(window.activeWorkspaceThemes) && !window.activeWorkspaceThemes.includes(id)) {
+      window.activeWorkspaceThemes.push(id);
+      if (typeof window.saveCurrentWorkspaceState === 'function') window.saveCurrentWorkspaceState();
+  }
+
   saveThemes();
   renderThemes();
   closeNewThemeModal();
@@ -4223,6 +4950,12 @@ async function confirmGlobalImport() {
       visible: true,
       features: [] 
   });
+
+  // Inclui automaticamente a camada importada na mesa de trabalho / projeto atual com switch ligado
+  if (Array.isArray(window.activeWorkspaceThemes) && !window.activeWorkspaceThemes.includes(themeId)) {
+      window.activeWorkspaceThemes.push(themeId);
+      if (typeof window.saveCurrentWorkspaceState === 'function') window.saveCurrentWorkspaceState();
+  }
 
   updateImportProgress(`Renderizando ${pendingGlobalGeoJSON.features.length.toLocaleString('pt-BR')} feições no mapa...`);
   await new Promise(r => setTimeout(r, 20));
@@ -7451,17 +8184,16 @@ function renderRasterLayersList() {
     const container = document.getElementById('rasters-container');
     if (!container) return;
 
-    if (rasterLayers.length === 0) {
-        container.innerHTML = `<div class="text-xs text-slate-400 dark:text-slate-500 italic p-2 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-center">Nenhuma imagem importada.</div>`;
-        return;
-    }
-
     const isSuperAdmin = !!((typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin')));
     const isAdmin = !!((typeof currentUserProfile !== 'undefined' && currentUserProfile && currentUserProfile.super_admin) || (typeof currentMunicipioPapel !== 'undefined' && currentMunicipioPapel === 'admin'));
 
     container.innerHTML = '';
 
     rasterLayers.forEach((raster, index) => {
+        // Exibe apenas ortofotos que o usuário incluiu na mesa de trabalho / projeto atual
+        const inWorkspace = Array.isArray(window.activeWorkspaceRasters) && window.activeWorkspaceRasters.includes(raster.id);
+        if (!inWorkspace) return;
+
         const item = document.createElement('div');
         item.className = 'raster-card-item flex flex-col rounded-2xl overflow-hidden shadow-md border border-emerald-500/30 transition-all duration-200 relative select-none';
         item.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(15,23,42,0.75) 100%)';
@@ -7526,6 +8258,14 @@ function renderRasterLayersList() {
                     </div>
                     
                     <div class="flex items-center gap-1.5 shrink-0 ml-1.5">
+                        <!-- Botão Remover da Mesa de Trabalho -->
+                        <button type="button" 
+                                onclick="event.stopPropagation(); window.removeRasterFromWorkspace('${raster.id}')" 
+                                class="w-7 h-7 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/15 active:scale-95 transition-all flex items-center justify-center cursor-pointer shrink-0" 
+                                title="Remover da mesa de trabalho">
+                            <span class="material-symbols-outlined text-[17px]">close</span>
+                        </button>
+
                         <!-- Botão/Ícone "i" de Informações da Ortofoto (Observação e Link Anexo) -->
                         <button type="button" 
                                 onclick="event.stopPropagation(); window.openRasterInfoModal('${raster.id}')" 
@@ -7674,6 +8414,14 @@ function renderRasterLayersList() {
 
         container.appendChild(item);
     });
+
+    if (container.children.length === 0) {
+        container.innerHTML = `
+            <div class="text-xs text-slate-400 dark:text-slate-500 italic p-3 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-center flex flex-col items-center gap-1.5">
+                <span>Nenhuma ortofoto adicionada à mesa.</span>
+                <button type="button" onclick="window.openSharedLayersCatalog()" class="text-emerald-500 hover:text-emerald-400 text-[11px] font-bold underline cursor-pointer">Adicionar Ortofoto do Catálogo</button>
+            </div>`;
+    }
 }
 
 window.toggleRasterActions = function(rasterId) {
@@ -7791,6 +8539,10 @@ window.toggleRasterVisibility = async function(rasterId, checkbox) {
         try {
             await supabaseClient.from('imagens_raster').update({ visivel: isVisible }).eq('id', rasterId);
         } catch(e) {}
+    }
+
+    if (typeof window.saveCurrentWorkspaceState === 'function') {
+        window.saveCurrentWorkspaceState();
     }
 };
 
@@ -8010,6 +8762,11 @@ window.activateRasterFromModal = async function(rasterId) {
         if (!rasterLayers.some(r => r.id === raster.id)) {
             raster.visivel = true;
             rasterLayers.push(raster);
+
+            if (Array.isArray(window.activeWorkspaceRasters) && !window.activeWorkspaceRasters.includes(raster.id)) {
+                window.activeWorkspaceRasters.push(raster.id);
+                if (typeof window.saveCurrentWorkspaceState === 'function') window.saveCurrentWorkspaceState();
+            }
 
             // Adiciona ao mapa
             if (map) {
