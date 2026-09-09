@@ -487,10 +487,10 @@ function showWarningToast(message) {
     
     const toast = document.createElement('div');
     toast.id = 'warning-toast';
-    toast.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md text-white px-6 py-4 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-primary/30 z-[9999] flex items-center gap-3 transition-all duration-300 transform translate-y-10 opacity-0';
+    toast.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white px-6 py-4 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.6)] border border-amber-500/40 z-[9999] flex items-center gap-3 transition-all duration-300 transform translate-y-10 opacity-0 pointer-events-none select-none';
     toast.innerHTML = `
-        <span class="material-symbols-outlined text-primary text-2xl">info</span>
-        <span class="font-medium tracking-wide">${message}</span>
+        <span class="material-symbols-outlined text-amber-400 text-2xl animate-pulse">warning</span>
+        <span class="font-medium text-sm tracking-wide text-slate-100">${message}</span>
     `;
     
     document.body.appendChild(toast);
@@ -500,11 +500,11 @@ function showWarningToast(message) {
         toast.classList.remove('translate-y-10', 'opacity-0');
     }, 10);
     
-    // Remove after 3s
+    // Remove after 3.5s
     setTimeout(() => {
         toast.classList.add('translate-y-10', 'opacity-0');
         setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    }, 3500);
 }
 
 // --- LEAFLET MAP ---
@@ -794,13 +794,18 @@ function initMap() {
         
         const themeIdStr = String(feature.properties.themeId);
         
-        // Bloqueia se nenhuma camada foi selecionada no menu lateral
+        // Bloqueia e avisa se nenhuma camada foi selecionada no menu lateral
         if (!window.activeSelectionThemeId) {
-            showWarningToast("Selecione a camada no menu lateral primeiro para poder inspecionar suas feições.");
+            L.DomEvent.stopPropagation(e);
+            showWarningToast("Selecione uma camada no menu lateral para que as feições sejam selecionadas.");
             return;
         }
-        // Bloqueia feições pertencentes a outras camadas que não a selecionada no menu lateral
+        // Bloqueia e avisa se a feição clicada pertence a outra camada que não a selecionada no menu lateral
         if (window.activeSelectionThemeId !== themeIdStr) {
+            L.DomEvent.stopPropagation(e);
+            const currentTheme = themes.find(t => String(t.id) === themeIdStr);
+            const themeName = currentTheme ? currentTheme.name : "outra camada";
+            showWarningToast(`Esta feição pertence à camada "${themeName}". Selecione-a no menu lateral para que suas feições sejam selecionadas.`);
             return;
         }
 
