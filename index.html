@@ -415,8 +415,13 @@
   </button>
 </div>
 
-<!-- Canto Direito: Perfil do Usuário -->
-<div class="flex items-center justify-end shrink-0">
+<!-- Canto Direito: Painel de Gestão do Município e Perfil do Usuário -->
+<div class="flex items-center justify-end gap-2 shrink-0">
+  <!-- Botão de Configurações / Gerenciador (Exclusivo para Admins) -->
+  <a id="profile-admin-settings-btn" href="home.html?view=municipio" class="hidden w-9 h-9 md:w-10 md:h-10 rounded-full bg-white/90 dark:bg-slate-900/90 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 hover:text-primary dark:hover:text-sky-400 items-center justify-center transition-all shadow-sm tooltip tooltip-bottom" title="Gerenciador">
+    <span class="material-symbols-outlined text-[20px]">settings</span>
+  </a>
+
   <button id="btn-header-profile" onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-9 h-9 md:w-10 md:h-10 rounded-full hover:ring-2 hover:ring-primary dark:hover:ring-sky-400 transition-all flex items-center justify-center overflow-hidden border border-slate-200/80 dark:border-slate-700/80 shadow-sm tooltip tooltip-bottom" title="Perfil do Usuário">
     <img class="profile-avatar-img w-full h-full object-contain p-0.5" src="assets/logo.png" alt="Avatar">
   </button>
@@ -728,21 +733,6 @@
         </select>
       </div>
 
-      <!-- Entidade Proprietária (Exibido para SuperAdmin) -->
-      <div id="edit-theme-entidade-container" class="hidden mb-3 p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/30">
-          <div class="flex items-center justify-between mb-1">
-              <label class="block text-xs font-bold text-cyan-500 dark:text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <span class="material-symbols-outlined text-[16px]">domain</span>
-                  <span>Entidade Proprietária</span>
-              </label>
-              <span class="text-[9px] bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border border-cyan-500/30">SuperAdmin</span>
-          </div>
-          <p class="text-[11px] text-slate-500 dark:text-slate-400 mb-2">Defina a qual entidade pertence esta camada vetorial:</p>
-          <select id="edit-theme-entidade-select" class="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-cyan-500/40 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 text-slate-900 dark:text-white text-xs font-medium">
-              <option value="">🌐 Geral / Compartilhada (Todas as Entidades)</option>
-          </select>
-      </div>
-
       <div>
         <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Título Principal da Feição</label>
         <select id="edit-theme-main-title" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm">
@@ -774,12 +764,6 @@
             <!-- Injected by JS -->
           </select>
         </div>
-      </div>
-      <div class="pt-2 border-t border-slate-200 dark:border-slate-800">
-        <button type="button" onclick="openRemapAttributesModal()" class="w-full py-2.5 px-3 bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-700 hover:to-cyan-700 text-white rounded-lg font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2">
-          <span class="material-symbols-outlined text-[18px]">sync_alt</span>
-          Reconectar / Mapear Atributos (De-Para)
-        </button>
       </div>
     </div>
 
@@ -952,30 +936,104 @@
         </div>
       </div>
 
-      <!-- Bloco 2: Gestão das Camadas Existentes -->
+      <!-- Bloco 2: Gestão das Camadas Existentes & Ortofotos -->
       <div class="pt-2">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100 dark:border-slate-800">
-          <div class="flex items-center gap-2">
-            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-              <span class="material-symbols-outlined text-[17px] text-cyan-500">folder_managed</span>
-              <span>Camadas sob sua Gestão</span>
-            </h4>
-            <span id="admin-layers-count" class="text-[10px] font-bold px-2 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">0</span>
+        <div class="flex flex-col gap-2.5 pb-2.5 border-b border-slate-100 dark:border-slate-800">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[17px] text-cyan-500">folder_managed</span>
+                <span>Camadas sob sua Gestão</span>
+              </h4>
+              <span id="admin-layers-count" class="text-[10px] font-bold px-2 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">0</span>
+            </div>
+
+            <!-- Busca rápida de camada na central -->
+            <div class="relative w-full sm:w-64">
+              <span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[16px]">search</span>
+              <input type="text" id="admin-layers-search" oninput="window.filterAdminLayersManagementList(this.value)" placeholder="Buscar camada ou ortofoto..." class="w-full text-xs pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500">
+            </div>
           </div>
 
-          <!-- Busca rápida de camada na central -->
-          <div class="relative w-full sm:w-64">
-            <span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[16px]">search</span>
-            <input type="text" id="admin-layers-search" oninput="window.filterAdminLayersManagementList(this.value)" placeholder="Buscar camada..." class="w-full text-xs pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500">
+          <!-- Abas de Filtro: Todas / Vetoriais / Ortofotos e Filtro de Autoria (SuperAdmin) -->
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <!-- Abas de Tipo -->
+            <div class="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60 text-xs">
+              <button type="button" id="admin-tab-all" onclick="window.setAdminLayersFilterTab('todas')" class="px-3 py-1 font-bold rounded-lg transition-all text-white bg-cyan-500 shadow-xs">
+                Todas <span id="admin-tab-count-all" class="opacity-80 text-[10px]">(0)</span>
+              </button>
+              <button type="button" id="admin-tab-vetoriais" onclick="window.setAdminLayersFilterTab('vetoriais')" class="px-3 py-1 font-semibold rounded-lg transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+                Vetoriais <span id="admin-tab-count-vetoriais" class="opacity-80 text-[10px]">(0)</span>
+              </button>
+              <button type="button" id="admin-tab-rasters" onclick="window.setAdminLayersFilterTab('rasters')" class="px-3 py-1 font-semibold rounded-lg transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+                Ortofotos <span id="admin-tab-count-rasters" class="opacity-80 text-[10px]">(0)</span>
+              </button>
+            </div>
+
+            <!-- Seletor de Autoria (Exibido para SuperAdmin) -->
+            <div id="admin-author-filter-container" class="hidden items-center gap-1.5 bg-cyan-500/10 dark:bg-cyan-950/40 px-2.5 py-1 rounded-xl border border-cyan-500/20 text-xs">
+              <span class="text-[10px] font-bold text-cyan-500 dark:text-cyan-400 uppercase tracking-wider flex items-center gap-1">
+                <span class="material-symbols-outlined text-[13px]">person</span>
+                Autor:
+              </span>
+              <div class="inline-flex rounded-lg overflow-hidden border border-cyan-500/30">
+                <button type="button" id="admin-author-mine" onclick="window.setAdminLayersAuthorFilter('minhas')" class="px-2 py-0.5 text-[11px] font-bold bg-cyan-500 text-white transition-all">
+                  Criadas por Mim
+                </button>
+                <button type="button" id="admin-author-all" onclick="window.setAdminLayersAuthorFilter('todas')" class="px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:bg-cyan-500/20 transition-all">
+                  Todas
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- Lista de Camadas para Gerenciamento -->
-        <div id="admin-layers-management-list" class="flex flex-col gap-2 mt-3 min-h-[140px]">
+        <div id="admin-layers-management-list" class="flex flex-col gap-2.5 mt-3 min-h-[160px]">
           <!-- Preenchido dinamicamente via renderAdminLayersManagementList() -->
-          <div class="text-center py-6 text-xs text-slate-400 italic">Carregando camadas...</div>
+          <div class="text-center py-8 text-xs text-slate-400 italic">Carregando camadas...</div>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Definir Entidade Proprietária (Exclusivo SuperAdmin) -->
+<div id="set-entity-modal" class="fixed inset-0 z-[120] bg-black/60 backdrop-blur-xs hidden flex items-center justify-center p-3 sm:p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-5 w-full max-w-md border border-slate-200 dark:border-slate-800 flex flex-col transition-all duration-300 transform scale-95 overflow-hidden">
+    <div class="flex justify-between items-center pb-3 mb-3 border-b border-slate-100 dark:border-slate-800">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-500">
+          <span class="material-symbols-outlined text-[18px]">domain</span>
+        </div>
+        <div>
+          <h4 class="text-sm font-bold text-slate-900 dark:text-white">Definir Entidade Proprietária</h4>
+          <span class="text-[9px] bg-cyan-500/20 text-cyan-400 px-1.5 py-0.2 rounded font-bold uppercase tracking-wider border border-cyan-500/30">SuperAdmin</span>
+        </div>
+      </div>
+      <button onclick="closeSetEntityModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
+        <span class="material-symbols-outlined text-[18px]">close</span>
+      </button>
+    </div>
+    
+    <div class="space-y-3">
+      <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
+        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Camada / Ortofoto selecionada:</span>
+        <p id="set-entity-target-name" class="text-xs text-slate-800 dark:text-slate-100 font-bold truncate"></p>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Selecione o Órgão / Entidade Proprietária:</label>
+        <select id="set-entity-select" class="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-cyan-500/40 rounded-lg text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-400 font-medium">
+          <option value="">🌐 Geral / Compartilhada (Todas as Entidades)</option>
+        </select>
+        <p class="text-[10.5px] text-slate-400 mt-1">Essa definição ditará o isolamento e controle de compartilhamento interinstitucional.</p>
+      </div>
+    </div>
+
+    <div class="flex justify-end gap-2 mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+      <button onclick="closeSetEntityModal()" class="px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg font-medium">Cancelar</button>
+      <button onclick="saveThemeOrRasterEntity()" class="px-4 py-1.5 text-xs bg-cyan-500 hover:bg-cyan-600 text-white font-bold rounded-lg shadow-sm">Salvar Entidade</button>
     </div>
   </div>
 </div>
@@ -1817,15 +1875,10 @@
     <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col transform transition-all">
         <!-- Header -->
         <div class="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/20">
-            <div class="flex items-center gap-2">
-                <a id="profile-admin-settings-btn" href="home.html?view=municipio" class="hidden w-8 h-8 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-600 dark:text-sky-400 items-center justify-center transition-all shadow-xs cursor-pointer" title="Painel de Gestão do Município">
-                    <span class="material-symbols-outlined text-[19px]">settings</span>
-                </a>
-                <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-primary text-[20px]">person</span>
-                    Perfil do Usuário
-                </h3>
-            </div>
+            <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-primary text-[20px]">person</span>
+                Perfil do Usuário
+            </h3>
             <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors" title="Fechar">
                 <span class="material-symbols-outlined">close</span>
             </button>

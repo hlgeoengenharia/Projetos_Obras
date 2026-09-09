@@ -232,50 +232,21 @@
   <!-- VISÃO 2: Painel do Município Ativo (ao clicar em ABRIR em um município) -->
   <div id="header-municipio-view" class="hidden items-center justify-between w-full h-full gap-2 sm:gap-4">
     <!-- Esquerda: Seta Voltar circular (mesmo estilo e tamanho do perfil) -->
-    <button onclick="voltarParaMunicipios()" class="w-9 h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all flex items-center justify-center cursor-pointer shadow-sm shrink-0" title="Voltar aos Municípios">
+    <button onclick="voltarParaMunicipios()" class="w-9 h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all flex items-center justify-center cursor-pointer shadow-sm shrink-0" title="Voltar">
       <span class="material-symbols-outlined text-[20px]">arrow_back</span>
     </button>
 
-    <!-- Centro: Abas do Município (com rolagem horizontal para telas menores) -->
-    <div id="municipio-tabs" class="flex-1 min-w-0 flex items-center justify-start md:justify-center gap-0.5 sm:gap-1 h-full overflow-x-auto no-scrollbar px-1 sm:px-2">
-      <button class="tab-btn h-full px-2 sm:px-3 shrink-0 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="window.location.href='index.html'" title="Abrir Mapa Interativo">
-        <span class="material-symbols-outlined text-[20px] text-primary">map</span>
-        <span class="text-[9px] font-medium uppercase tracking-wide">Mapa</span>
-      </button>
-      <button id="tab-btn-cadastros" class="tab-btn h-full px-2 sm:px-3 shrink-0 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchMunicipioTab('cadastros', this)" title="Cadastros e Formulários Dinâmicos">
-        <span class="material-symbols-outlined text-[20px]">assignment</span>
-        <span class="text-[9px] font-medium uppercase tracking-wide">Cadastros</span>
-      </button>
-      <button id="tab-btn-estatistica" class="tab-btn h-full px-2 sm:px-3 shrink-0 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchMunicipioTab('estatistica', this)" title="Geoestatística Espacial">
-        <span class="material-symbols-outlined text-[20px]">hub</span>
-        <span class="text-[9px] font-medium uppercase tracking-wide">Estatística</span>
-      </button>
-      <button id="tab-btn-layout" class="tab-btn h-full px-2 sm:px-3 shrink-0 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchMunicipioTab('layout', this)" title="Layout de Impressão">
-        <span class="material-symbols-outlined text-[20px]">palette</span>
-        <span class="text-[9px] font-medium uppercase tracking-wide">Layout</span>
-      </button>
-      <button id="tab-btn-storage" class="tab-btn h-full px-2 sm:px-3 shrink-0 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchMunicipioTab('storage', this)" title="Arquivos na Nuvem">
-        <span class="material-symbols-outlined text-[20px]">cloud_upload</span>
-        <span class="text-[9px] font-medium uppercase tracking-wide">Arquivos</span>
-      </button>
-      <button id="tab-btn-usuarios" class="tab-btn h-full px-2 sm:px-3 shrink-0 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchMunicipioTab('usuarios', this)" title="Usuários e Permissões">
-        <span class="material-symbols-outlined text-[20px]">group</span>
-        <span class="text-[9px] font-medium uppercase tracking-wide">Usuários</span>
-      </button>
-      <button id="tab-btn-pendentes" class="relative tab-btn h-full px-2 sm:px-3 shrink-0 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchMunicipioTab('pending-section', this)" title="Solicitações">
-        <span class="material-symbols-outlined text-[20px]">pending_actions</span>
-        <span class="text-[9px] font-medium uppercase tracking-wide">Solicitações</span>
-        <span id="pending-badge" class="hidden absolute top-2 right-2 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center"></span>
-      </button>
-      <button id="tab-btn-auditoria" class="tab-btn h-full px-2 sm:px-3 shrink-0 flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60" onclick="switchMunicipioTab('auditoria', this)" title="Auditoria e Logs de Atividades">
-        <span class="material-symbols-outlined text-[20px]">manage_history</span>
-        <span class="text-[9px] font-medium uppercase tracking-wide">Auditoria</span>
-      </button>
+    <!-- Centro: Espaçador flexível (limpo para manter foco exclusivo nos cards) -->
+    <div class="flex-1 min-w-0">
+      <span id="header-municipio-nome" class="hidden"></span>
     </div>
 
-    <!-- Direita: Configurações Globais (SuperAdmin) + Perfil (fixo) -->
+    <!-- Container de compatibilidade para abas (oculto) -->
+    <div id="municipio-tabs" class="hidden"></div>
+
+    <!-- Direita: Gerenciador (SuperAdmin) + Perfil (fixo) -->
     <div class="shrink-0 ml-auto flex items-center gap-2">
-      <button id="btn-global-config-mun" onclick="abrirConfiguracoesGlobais()" class="hidden w-9 h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all items-center justify-center cursor-pointer shadow-sm" title="Configurações Globais (Municípios e Entidades)">
+      <button id="btn-global-config-mun" onclick="abrirConfiguracoesGlobais()" class="hidden w-9 h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all items-center justify-center cursor-pointer shadow-sm tooltip tooltip-bottom" title="Gerenciador">
         <span class="material-symbols-outlined text-[20px]">settings</span>
       </button>
       <button onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-9 h-9 md:w-10 md:h-10 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors cursor-pointer shadow-sm bg-slate-50 dark:bg-slate-800 flex items-center justify-center" title="Perfil do Usuário">
@@ -291,15 +262,10 @@
     <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm max-h-[88vh] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col my-auto transform transition-all">
         <!-- Header -->
         <div class="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/20 shrink-0">
-            <div class="flex items-center gap-2">
-                <a id="profile-admin-settings-btn-home" href="home.html?view=municipio" class="hidden w-8 h-8 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-600 dark:text-sky-400 items-center justify-center transition-all shadow-xs cursor-pointer" title="Painel de Gestão do Município">
-                    <span class="material-symbols-outlined text-[19px]">settings</span>
-                </a>
-                <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-primary text-[20px]">person</span>
-                    Perfil do Usuário
-                </h3>
-            </div>
+            <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-primary text-[20px]">person</span>
+                Perfil do Usuário
+            </h3>
             <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors" title="Fechar">
                 <span class="material-symbols-outlined">close</span>
             </button>
@@ -658,18 +624,125 @@
     </div>
   </section>
 
-  <!-- Tela Padrão de Boas-Vindas ao Entrar no Município (nenhuma aba aberta inicialmente) -->
-  <section id="municipio-welcome-section" class="tab-content flex-col items-center justify-center min-h-[55vh] text-center px-4 py-20">
-    <div class="w-16 h-16 rounded-3xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-5 shadow-sm mx-auto overflow-hidden p-2">
-      <img id="welcome-municipio-logo" class="w-full h-full object-contain hidden" alt="Logo">
-      <span id="welcome-municipio-icon" class="material-symbols-outlined text-primary text-[36px]">location_city</span>
+  <!-- Tela de Gestão do Município em Cards (Ênfase Total nos Cards) -->
+  <section id="municipio-welcome-section" class="tab-content flex-col items-center justify-center min-h-[calc(100vh-6rem)] px-4 py-6 sm:py-10 max-w-5xl mx-auto w-full">
+    <!-- Grid de Cards Retangulares com Bordas Arredondadas (3 cards por linha, último centralizado) -->
+    <div class="flex flex-wrap justify-center gap-4 sm:gap-6 w-full my-auto">
+      <!-- Card 1: MAPA -->
+      <button onclick="window.location.href='index.html'" class="group relative flex items-center gap-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-sky-500/60 dark:hover:border-sky-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
+        <div class="w-12 h-12 rounded-xl bg-sky-500/10 dark:bg-sky-500/20 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+          <span class="material-symbols-outlined text-[26px]">map</span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between gap-1">
+            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors uppercase tracking-wider">Mapa</h3>
+            <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-sky-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
+          </div>
+          <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Mapa interativo e camadas</p>
+        </div>
+      </button>
+
+      <!-- Card 2: CADASTROS -->
+      <button onclick="switchMunicipioTab('cadastros')" class="group relative flex items-center gap-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-emerald-500/60 dark:hover:border-emerald-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
+        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+          <span class="material-symbols-outlined text-[26px]">assignment</span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between gap-1">
+            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors uppercase tracking-wider">Cadastros</h3>
+            <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-emerald-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
+          </div>
+          <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Formulários e atributos</p>
+        </div>
+      </button>
+
+      <!-- Card 3: ESTATÍSTICA -->
+      <button onclick="switchMunicipioTab('estatistica')" class="group relative flex items-center gap-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-cyan-500/60 dark:hover:border-cyan-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
+        <div class="w-12 h-12 rounded-xl bg-cyan-500/10 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+          <span class="material-symbols-outlined text-[26px]">hub</span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between gap-1">
+            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors uppercase tracking-wider">Estatística</h3>
+            <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-cyan-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
+          </div>
+          <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Geoestatística espacial</p>
+        </div>
+      </button>
+
+      <!-- Card 4: LAYOUT -->
+      <button onclick="switchMunicipioTab('layout')" class="group relative flex items-center gap-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-purple-500/60 dark:hover:border-purple-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
+        <div class="w-12 h-12 rounded-xl bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+          <span class="material-symbols-outlined text-[26px]">palette</span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between gap-1">
+            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors uppercase tracking-wider">Layout</h3>
+            <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-purple-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
+          </div>
+          <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Pranchas de impressão</p>
+        </div>
+      </button>
+
+      <!-- Card 5: ARQUIVOS -->
+      <button onclick="switchMunicipioTab('storage')" class="group relative flex items-center gap-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-amber-500/60 dark:hover:border-amber-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
+        <div class="w-12 h-12 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+          <span class="material-symbols-outlined text-[26px]">cloud_upload</span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between gap-1">
+            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors uppercase tracking-wider">Arquivos</h3>
+            <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-amber-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
+          </div>
+          <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Nuvem e documentos</p>
+        </div>
+      </button>
+
+      <!-- Card 6: USUÁRIOS -->
+      <button onclick="switchMunicipioTab('usuarios')" class="group relative flex items-center gap-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-indigo-500/60 dark:hover:border-indigo-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
+        <div class="w-12 h-12 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+          <span class="material-symbols-outlined text-[26px]">group</span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between gap-1">
+            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors uppercase tracking-wider">Usuários</h3>
+            <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
+          </div>
+          <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Membros e permissões</p>
+        </div>
+      </button>
+
+      <!-- Card 7: SOLICITAÇÕES -->
+      <button onclick="switchMunicipioTab('pending-section')" class="group relative flex items-center gap-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-rose-500/60 dark:hover:border-rose-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
+        <div class="w-12 h-12 rounded-xl bg-rose-500/10 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+          <span class="material-symbols-outlined text-[26px]">pending_actions</span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between gap-1">
+            <div class="flex items-center gap-1.5">
+              <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors uppercase tracking-wider">Solicitações</h3>
+              <span id="pending-badge-card" class="hidden px-2 py-0.5 text-[10px] font-extrabold bg-rose-500 text-white rounded-full"></span>
+            </div>
+            <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-rose-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
+          </div>
+          <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Aprovações de novos acessos</p>
+        </div>
+      </button>
+
+      <!-- Card 8: AUDITORIA -->
+      <button onclick="switchMunicipioTab('auditoria')" class="group relative flex items-center gap-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-teal-500/60 dark:hover:border-teal-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
+        <div class="w-12 h-12 rounded-xl bg-teal-500/10 dark:bg-teal-500/20 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+          <span class="material-symbols-outlined text-[26px]">manage_history</span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between gap-1">
+            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors uppercase tracking-wider">Auditoria</h3>
+            <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-teal-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
+          </div>
+          <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Registros e logs de ações</p>
+        </div>
+      </button>
     </div>
-    <h2 id="welcome-municipio-title" class="text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight mb-2">
-      Bem-vindo ao GeoGestor
-    </h2>
-    <p id="welcome-municipio-subtitle" class="text-xs sm:text-sm text-slate-400 max-w-md mx-auto">
-      Selecione uma das abas acima para acessar as ferramentas de gestão ou o mapa interativo deste município.
-    </p>
   </section>
 
   <!-- Container Embutido das Ferramentas de Gestão (Cadastros, Estatística, Layout, Arquivos, Auditoria) -->
@@ -778,6 +851,9 @@ window.abrirPainelMunicipio = function(id, nome) {
         munHeader.classList.add('flex');
     }
 
+    const headerTitle = document.getElementById('header-municipio-nome');
+    if (headerTitle) headerTitle.textContent = '';
+
     // Nenhuma aba começa ativa de início
     document.querySelectorAll('#municipio-tabs .tab-btn').forEach(b => b.classList.remove('active'));
 
@@ -787,33 +863,19 @@ window.abrirPainelMunicipio = function(id, nome) {
     const isExternalUser = !!userEnt && userEnt.toLowerCase() !== 'geral' && userSigla !== 'Município' && !userEnt.toLowerCase().includes('prefeitura') && !userEnt.toLowerCase().includes('municip');
 
     const welcomeSec = document.getElementById('municipio-welcome-section');
-    const welcomeTitle = document.getElementById('welcome-municipio-title');
-    const welcomeSubtitle = document.getElementById('welcome-municipio-subtitle');
-    const welcomeLogo = document.getElementById('welcome-municipio-logo');
-    const welcomeIcon = document.getElementById('welcome-municipio-icon');
 
     if (isExternalUser) {
-        // Usuário externo: deixa essa parte abaixo do menu totalmente em branco (oculta mensagem e ícone)
+        // Usuário externo: oculta seção de gestão municipal
         if (welcomeSec) {
             welcomeSec.classList.remove('active');
             welcomeSec.classList.add('hidden');
             welcomeSec.style.display = 'none';
         }
     } else {
-        // Usuário municipal: mostra a logo do município e a mensagem com o nome da cidade
+        // Usuário municipal: exibe os cards com ênfase total
         if (welcomeSec) {
             welcomeSec.classList.remove('hidden');
             welcomeSec.style.display = '';
-        }
-        if (welcomeTitle) welcomeTitle.textContent = `Bem-vindo ao GeoGestor ${nome || ''}`;
-        if (welcomeSubtitle) welcomeSubtitle.textContent = 'Selecione uma das abas acima para gerenciar as configurações, dados, usuários ou arquivos deste município.';
-        const munObj = (window.municipiosParaMostrarCache || []).find(m => m.id === id);
-        if (munObj && munObj.logo_url) {
-            if (welcomeLogo) { welcomeLogo.src = munObj.logo_url; welcomeLogo.classList.remove('hidden'); }
-            if (welcomeIcon) { welcomeIcon.classList.add('hidden'); }
-        } else {
-            if (welcomeLogo) { welcomeLogo.src = ''; welcomeLogo.classList.add('hidden'); }
-            if (welcomeIcon) { welcomeIcon.classList.remove('hidden'); }
         }
     }
 
@@ -839,6 +901,21 @@ window.abrirPainelMunicipio = function(id, nome) {
 };
 
 window.voltarParaMunicipios = function() {
+    const frameSec = document.getElementById('settings-frame-section');
+    const pendingSec = document.getElementById('pending-section');
+    const configSec = document.getElementById('configuracoes-section');
+    const isInsideTool = (frameSec && frameSec.classList.contains('active')) || 
+                         (pendingSec && pendingSec.classList.contains('active')) ||
+                         (configSec && configSec.classList.contains('active'));
+    
+    // Se estiver dentro de algum módulo aberto, voltar para a tela de cards do município
+    if (isInsideTool) {
+        const munId = sessionStorage.getItem('municipio_ativo');
+        const munNome = sessionStorage.getItem('municipio_ativo_nome');
+        abrirPainelMunicipio(munId, munNome);
+        return;
+    }
+
     const portalHeader = document.getElementById('header-portal-view');
     const munHeader = document.getElementById('header-municipio-view');
     if (portalHeader) {
@@ -849,6 +926,9 @@ window.voltarParaMunicipios = function() {
         munHeader.classList.add('hidden');
         munHeader.classList.remove('flex');
     }
+
+    const headerTitle = document.getElementById('header-municipio-nome');
+    if (headerTitle) headerTitle.textContent = '';
 
     // Esconde seções de gestão e boas-vindas, e mostra a lista/mapa de municípios
     document.querySelectorAll('main > section').forEach(s => s.classList.remove('active'));
@@ -1194,6 +1274,22 @@ window.toggleMunicipioAtivo = async function(id, ativo) {
 window.switchMunicipioTab = function(sectionOrTab, btn) {
     document.querySelectorAll('#municipio-tabs .tab-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
+
+    const TAB_NAMES = {
+        'cadastros': 'Cadastros',
+        'estatistica': 'Estatística',
+        'layout': 'Layout',
+        'storage': 'Arquivos',
+        'usuarios': 'Usuários',
+        'auditoria': 'Auditoria',
+        'pending-section': 'Solicitações'
+    };
+    const titleEl = document.getElementById('header-municipio-nome');
+    const munNome = sessionStorage.getItem('municipio_ativo_nome') || '';
+    if (titleEl) {
+        const tabLabel = TAB_NAMES[sectionOrTab] || '';
+        titleEl.textContent = tabLabel ? (munNome ? `${munNome} • ${tabLabel}` : tabLabel) : munNome;
+    }
 
     const SETTINGS_TABS = ['cadastros', 'estatistica', 'layout', 'storage', 'usuarios', 'auditoria'];
 
@@ -2360,13 +2456,15 @@ async function init() {
 
         const userIds = Object.keys(usuariosPendentesMap);
 
-        // Atualiza o Badge da Aba Solicitações (contagem de usuários aguardando aprovação)
+        // Atualiza o Badge da Aba/Card Solicitações (contagem de usuários aguardando aprovação)
         const badge = document.getElementById('pending-badge');
+        const badgeCard = document.getElementById('pending-badge-card');
         if (userIds.length > 0) {
-            badge.textContent = userIds.length;
-            badge.classList.remove('hidden');
+            if (badge) { badge.textContent = userIds.length; badge.classList.remove('hidden'); }
+            if (badgeCard) { badgeCard.textContent = userIds.length; badgeCard.classList.remove('hidden'); }
         } else {
-            badge.classList.add('hidden');
+            if (badge) badge.classList.add('hidden');
+            if (badgeCard) badgeCard.classList.add('hidden');
         }
 
         // 4. Busca vínculos existentes (aprovados ou outros) desses usuários

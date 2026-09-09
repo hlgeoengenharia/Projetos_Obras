@@ -347,6 +347,7 @@ async function loadThemes() {
                       disp2Active: tMeta.disp2Active !== false,
                       entidade: tMeta.entidade || t.entidade || '',
                       compartilhada: tMeta.compartilhada !== undefined ? !!tMeta.compartilhada : (t.compartilhada !== undefined ? !!t.compartilhada : true),
+                      created_by: t.created_by || (tMeta && (tMeta.created_by || tMeta.criador_id)) || null,
                       metadata: tMeta,
                       // Por padrão TODAS as camadas começam DESLIGADAS — o usuário ativa no switch sob demanda
                       visible: false,
@@ -1246,6 +1247,18 @@ window.onSelectUserProject = async function(val) {
         }
     }
 
+    // Remove do mapa overlays de ortofoto que não estão no projeto/mesa selecionado
+    if (Array.isArray(rasterLayers)) {
+        rasterLayers.forEach(r => {
+            if (!window.activeWorkspaceRasters.includes(r.id)) {
+                r.visivel = false;
+                if (leafletRasterOverlays && leafletRasterOverlays[r.id] && map) {
+                    map.removeLayer(leafletRasterOverlays[r.id]);
+                }
+            }
+        });
+    }
+
     window.updateProjectSelectDropdown();
     window.updateProjectActiveUI();
     renderThemes();
@@ -2016,9 +2029,6 @@ function renderThemes() {
                   <span class="material-symbols-outlined text-[18px]">settings</span>
                 </button>
                 ` : ''}
-                <button onclick="downloadGeoJSON('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Exportar Dados (GeoJSON)">
-                  <span class="material-symbols-outlined text-[18px]">download</span>
-                </button>
             </div>
         </div>
         ` : ''}
@@ -8005,10 +8015,6 @@ function renderRasterLayersList() {
                 <!-- Header: Drag Handle, Icon, Title, Badges, Info Button and Toggle -->
                 <div class="flex items-center justify-between gap-1.5">
                     <div class="flex items-center gap-2 min-w-0 flex-1">
-                        <!-- Alça de Arraste (Drag Handle) -->
-                        <div class="raster-drag-handle cursor-grab active:cursor-grabbing text-slate-400 hover:text-emerald-300 p-1 -ml-1 flex items-center justify-center shrink-0 transition-colors" title="Arraste para reordenar esta camada">
-                            <span class="material-symbols-outlined text-[18px]">drag_indicator</span>
-                        </div>
                         <div class="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0 text-emerald-400 shadow-md">
                             <span class="material-symbols-outlined text-[18px]">image</span>
                         </div>
@@ -8059,9 +8065,6 @@ function renderRasterLayersList() {
             <div id="raster-actions-${raster.id}" class="hidden flex justify-start items-center border-t border-white/10 bg-slate-900/40 px-3.5 py-2.5 gap-2 w-full backdrop-blur-md transition-all">
                 <button onclick="openEditRasterModal('${raster.id}')" class="flex items-center justify-center p-1.5 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Configurações da Imagem">
                     <span class="material-symbols-outlined text-[18px]">settings</span>
-                </button>
-                <button onclick="deleteRasterLayer('${raster.id}')" class="flex items-center justify-center p-1.5 bg-red-500/15 hover:bg-red-500/30 active:scale-95 rounded-lg tooltip text-red-400 hover:text-red-300 transition-all border border-red-500/20 shadow-xs" title="Excluir Imagem">
-                    <span class="material-symbols-outlined text-[18px]">delete</span>
                 </button>
             </div>` : ''}
         `;
@@ -8971,8 +8974,11 @@ window.saveEditedRaster = async function() {
 };
 
 // =========================================================================
-// CAMADAS COMPARTILHADAS POR ENTIDADE E AÇÕES UNIFICADAS
+// CENTRAL DE GESTÃO DE CAMADAS E ORTOFOTOS
 // =========================================================================
+
+window.adminLayersFilterTab = 'todas'; // 'todas' | 'vetoriais' | 'rasters'
+window.adminLayersAuthorFilter = 'minhas'; // 'minhas' | 'todas'
 
 window.openAddLayerModal = function() {
     const modal = document.getElementById('add-layer-modal');
@@ -8980,6 +8986,9 @@ window.openAddLayerModal = function() {
         modal.classList.remove('hidden');
         setTimeout(() => modal.firstElementChild?.classList.remove('scale-95'), 10);
     }
+    const searchInput = document.getElementById('admin-layers-search');
+    if (searchInput) searchInput.value = '';
+    window.renderAdminLayersManagementList('');
 };
 
 window.closeAddLayerModal = function() {
@@ -8987,6 +8996,418 @@ window.closeAddLayerModal = function() {
     if (modal) {
         modal.firstElementChild?.classList.add('scale-95');
         setTimeout(() => modal.classList.add('hidden'), 150);
+    }
+};
+
+window.setAdminLayersFilterTab = function(tab) {
+    window.adminLayersFilterTab = tab;
+    const btnAll = document.getElementById('admin-tab-all');
+    const btnVet = document.getElementById('admin-tab-vetoriais');
+    const btnRas = document.getElementById('admin-tab-rasters');
+
+    [btnAll, btnVet, btnRas].forEach(b => {
+        if (b) b.className = "px-3 py-1 font-semibold rounded-lg transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white";
+    });
+
+    if (tab === 'todas' && btnAll) {
+        btnAll.className = "px-3 py-1 font-bold rounded-lg transition-all text-white bg-cyan-500 shadow-xs";
+    } else if (tab === 'vetoriais' && btnVet) {
+        btnVet.className = "px-3 py-1 font-bold rounded-lg transition-all text-white bg-cyan-500 shadow-xs";
+    } else if (tab === 'rasters' && btnRas) {
+        btnRas.className = "px-3 py-1 font-bold rounded-lg transition-all text-white bg-cyan-500 shadow-xs";
+    }
+
+    window.renderAdminLayersManagementList(document.getElementById('admin-layers-search')?.value || '');
+};
+
+window.setAdminLayersAuthorFilter = function(author) {
+    window.adminLayersAuthorFilter = author;
+    const btnMine = document.getElementById('admin-author-mine');
+    const btnAll = document.getElementById('admin-author-all');
+
+    if (btnMine && btnAll) {
+        if (author === 'minhas') {
+            btnMine.className = "px-2 py-0.5 text-[11px] font-bold bg-cyan-500 text-white transition-all";
+            btnAll.className = "px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:bg-cyan-500/20 transition-all";
+        } else {
+            btnMine.className = "px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:bg-cyan-500/20 transition-all";
+            btnAll.className = "px-2 py-0.5 text-[11px] font-bold bg-cyan-500 text-white transition-all";
+        }
+    }
+
+    window.renderAdminLayersManagementList(document.getElementById('admin-layers-search')?.value || '');
+};
+
+window.filterAdminLayersManagementList = function(query) {
+    window.renderAdminLayersManagementList(query);
+};
+
+window.renderAdminLayersManagementList = function(searchQuery = '') {
+    const container = document.getElementById('admin-layers-management-list');
+    if (!container) return;
+
+    const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
+    const currentUserId = (typeof currentUserProfile !== 'undefined' && currentUserProfile && currentUserProfile.id) || null;
+    const userEntidade = (window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').trim().toLowerCase();
+
+    // Exibe ou oculta o seletor de autoria se for SuperAdmin
+    const authorFilterContainer = document.getElementById('admin-author-filter-container');
+    if (authorFilterContainer) {
+        if (isSuperAdmin) {
+            authorFilterContainer.classList.remove('hidden');
+            authorFilterContainer.classList.add('flex');
+        } else {
+            authorFilterContainer.classList.add('hidden');
+            authorFilterContainer.classList.remove('flex');
+        }
+    }
+
+    const q = (searchQuery || '').toLowerCase().trim();
+
+    // 1. Filtra Camadas Vetoriais elegíveis para o usuário
+    const eligibleThemes = (themes || []).filter(t => {
+        const creator = (t.metadata && (t.metadata.created_by || t.metadata.criador_id)) || t.created_by || t.criador_id;
+        const isCreatedByMe = !!(currentUserId && creator && String(creator) === String(currentUserId));
+        const tEnt = ((t.metadata && t.metadata.entidade) || t.entidade || 'Prefeitura Municipal').trim().toLowerCase();
+        const isOwnEntity = !!(userEntidade && (tEnt === userEntidade || tEnt === 'geral'));
+
+        if (isSuperAdmin) {
+            if (window.adminLayersAuthorFilter === 'minhas') return isCreatedByMe;
+            return true;
+        } else {
+            return isCreatedByMe || isOwnEntity;
+        }
+    });
+
+    // 2. Filtra Ortofotos (Rasters) elegíveis para o usuário
+    const eligibleRasters = (rasterLayers || []).filter(r => {
+        const creator = r.created_by;
+        const isCreatedByMe = !!(currentUserId && creator && String(creator) === String(currentUserId));
+        const rEnt = (r.entidade || 'Prefeitura Municipal').trim().toLowerCase();
+        const isOwnEntity = !!(userEntidade && (rEnt === userEntidade || rEnt === 'geral'));
+
+        if (isSuperAdmin) {
+            if (window.adminLayersAuthorFilter === 'minhas') return isCreatedByMe;
+            return true;
+        } else {
+            return isCreatedByMe || isOwnEntity;
+        }
+    });
+
+    // Atualiza contadores nas abas
+    const countAllEl = document.getElementById('admin-tab-count-all');
+    const countVetEl = document.getElementById('admin-tab-count-vetoriais');
+    const countRasEl = document.getElementById('admin-tab-count-rasters');
+    const countTotalBadge = document.getElementById('admin-layers-count');
+
+    const totalCount = eligibleThemes.length + eligibleRasters.length;
+    if (countAllEl) countAllEl.textContent = `(${totalCount})`;
+    if (countVetEl) countVetEl.textContent = `(${eligibleThemes.length})`;
+    if (countRasEl) countRasEl.textContent = `(${eligibleRasters.length})`;
+    if (countTotalBadge) countTotalBadge.textContent = totalCount;
+
+    // 3. Aplica busca por texto
+    const searchedThemes = eligibleThemes.filter(t => {
+        if (!q) return true;
+        const name = (t.name || '').toLowerCase();
+        const ent = ((t.metadata && t.metadata.entidade) || t.entidade || '').toLowerCase();
+        const geom = (t.tipo_geometria || t.geometryType || '').toLowerCase();
+        return name.includes(q) || ent.includes(q) || geom.includes(q);
+    });
+
+    const searchedRasters = eligibleRasters.filter(r => {
+        if (!q) return true;
+        const name = (r.nome || '').toLowerCase();
+        const ent = (r.entidade || '').toLowerCase();
+        const obs = (r.observacao || '').toLowerCase();
+        return name.includes(q) || ent.includes(q) || obs.includes(q);
+    });
+
+    // 4. Seleciona itens baseado na aba ativa
+    let showThemes = (window.adminLayersFilterTab === 'todas' || window.adminLayersFilterTab === 'vetoriais');
+    let showRasters = (window.adminLayersFilterTab === 'todas' || window.adminLayersFilterTab === 'rasters');
+
+    let html = '';
+
+    const itemsToRender = (showThemes ? searchedThemes.length : 0) + (showRasters ? searchedRasters.length : 0);
+
+    if (itemsToRender === 0) {
+        let msgEmpty = 'Nenhuma camada ou ortofoto encontrada nesta seleção.';
+        if (isSuperAdmin && window.adminLayersAuthorFilter === 'minhas') {
+            msgEmpty = `
+                <div class="flex flex-col items-center justify-center py-10 px-4 text-center">
+                    <div class="w-12 h-12 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-500 mb-3 shadow-sm">
+                        <span class="material-symbols-outlined text-[26px]">person_search</span>
+                    </div>
+                    <h5 class="text-xs font-bold text-slate-700 dark:text-slate-200">Nenhuma camada criada por você até o momento</h5>
+                    <p class="text-[11px] text-slate-400 mt-1 max-w-sm">Você pode alternar o seletor acima para <strong class="text-cyan-500 cursor-pointer underline" onclick="window.setAdminLayersAuthorFilter('todas')">Todas as Camadas</strong> para gerenciar todo o acervo do município ou criar uma nova camada no bloco superior.</p>
+                </div>
+            `;
+        } else {
+            msgEmpty = `
+                <div class="flex flex-col items-center justify-center py-10 px-4 text-center">
+                    <span class="material-symbols-outlined text-[32px] text-slate-300 dark:text-slate-600 mb-2">layers_clear</span>
+                    <p class="text-xs text-slate-400">Nenhuma camada ou ortofoto encontrada.</p>
+                </div>
+            `;
+        }
+        container.innerHTML = msgEmpty;
+        return;
+    }
+
+    // Renderiza Camadas Vetoriais
+    if (showThemes && searchedThemes.length > 0) {
+        html += searchedThemes.map(t => {
+            const count = t.features ? t.features.length : 0;
+            const geomType = t.tipo_geometria || t.geometryType || 'Polígono';
+            const tEnt = ((t.metadata && t.metadata.entidade) || t.entidade || 'Prefeitura Municipal').trim();
+            const tSigla = typeof getEntitySigla === 'function' ? getEntitySigla(tEnt) : tEnt;
+
+            const creator = (t.metadata && (t.metadata.created_by || t.metadata.criador_id)) || t.created_by || t.criador_id;
+            const isCreatedByMe = !!(currentUserId && creator && String(creator) === String(currentUserId));
+
+            return `
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/90 hover:border-cyan-500/50 transition-all shadow-2xs gap-3">
+                    <div class="flex items-center gap-3 min-w-0 flex-1">
+                        <div class="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center text-white shadow-sm" style="background-color: ${t.color || '#0284c7'};">
+                            <span class="material-symbols-outlined text-[20px]">${t.icon || 'layers'}</span>
+                        </div>
+                        <div class="flex flex-col min-w-0">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">${t.name}</span>
+                                ${isCreatedByMe ? `
+                                    <span class="inline-flex items-center gap-0.5 px-1.5 py-0.2 text-[9px] font-bold rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30">
+                                        <span class="material-symbols-outlined text-[10px]">person</span>
+                                        Sua
+                                    </span>
+                                ` : ''}
+                            </div>
+                            <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                <span class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[9px] font-bold rounded bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30 truncate max-w-[150px]" title="Entidade: ${tEnt}">
+                                    <span class="material-symbols-outlined text-[10px]">hub</span>
+                                    <span>${tSigla}</span>
+                                </span>
+                                <span class="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">
+                                    ${count} registro${count !== 1 ? 's' : ''} · ${geomType}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Barra de Ações Rápidas de Gestão -->
+                    <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                        <!-- Mapear Atributos (De-Para) -->
+                        <button type="button" onclick="closeAddLayerModal(); openRemapAttributesModal('${t.id}')" class="h-8 px-2.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/30 text-sky-600 dark:text-sky-300 border border-sky-500/30 transition-all flex items-center gap-1.5 text-xs font-semibold cursor-pointer shadow-2xs" title="Reconectar / Mapear Atributos (De-Para)">
+                            <span class="material-symbols-outlined text-[16px]">sync_alt</span>
+                            <span class="hidden md:inline">Mapear</span>
+                        </button>
+
+                        <!-- Exportar GeoJSON -->
+                        <button type="button" onclick="downloadGeoJSON('${t.id}')" class="h-8 px-2.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30 transition-all flex items-center gap-1.5 text-xs font-semibold cursor-pointer shadow-2xs" title="Exportar Dados (GeoJSON)">
+                            <span class="material-symbols-outlined text-[16px]">download</span>
+                            <span class="hidden md:inline">Exportar</span>
+                        </button>
+
+                        ${isSuperAdmin ? `
+                        <!-- Definir Entidade Proprietária (SuperAdmin) -->
+                        <button type="button" onclick="openSetEntityModal('${t.id}', 'theme')" class="h-8 w-8 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/30 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30 transition-all flex items-center justify-center cursor-pointer shadow-2xs" title="Definir Entidade Proprietária (SuperAdmin)">
+                            <span class="material-symbols-outlined text-[16px]">domain</span>
+                        </button>
+                        ` : ''}
+
+                        <!-- Configurações de Estilo/Camada -->
+                        <button type="button" onclick="closeAddLayerModal(); openEditThemeModal('${t.id}')" class="h-8 w-8 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300/60 dark:border-slate-700 transition-all flex items-center justify-center cursor-pointer shadow-2xs" title="Configurações da Camada">
+                            <span class="material-symbols-outlined text-[16px]">settings</span>
+                        </button>
+
+                        <!-- Excluir Camada -->
+                        <button type="button" onclick="deleteTheme('${t.id}')" class="h-8 w-8 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-600 dark:text-rose-400 border border-rose-500/30 transition-all flex items-center justify-center cursor-pointer shadow-2xs" title="Excluir Camada Permanentemente">
+                            <span class="material-symbols-outlined text-[16px]">delete</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // Renderiza Ortofotos (Rasters)
+    if (showRasters && searchedRasters.length > 0) {
+        html += searchedRasters.map(r => {
+            const rEnt = (r.entidade || 'Prefeitura Municipal').trim();
+            const rSigla = typeof getEntitySigla === 'function' ? getEntitySigla(rEnt) : rEnt;
+            let rDate = '';
+            if (r.data_imagem) rDate = r.data_imagem.split('-').reverse().join('/');
+
+            const creator = r.created_by;
+            const isCreatedByMe = !!(currentUserId && creator && String(creator) === String(currentUserId));
+
+            const hasObs = !!(r.observacao);
+            const hasAnexo = !!(r.anexo_url);
+
+            return `
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl border border-emerald-500/30 bg-white/95 dark:bg-slate-900/90 hover:border-emerald-400/60 transition-all shadow-2xs gap-3">
+                    <div class="flex items-center gap-3 min-w-0 flex-1">
+                        <div class="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center text-emerald-500 bg-emerald-500/15 shadow-sm border border-emerald-500/30">
+                            <span class="material-symbols-outlined text-[20px]">satellite_alt</span>
+                        </div>
+                        <div class="flex flex-col min-w-0">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">${r.nome}</span>
+                                ${isCreatedByMe ? `
+                                    <span class="inline-flex items-center gap-0.5 px-1.5 py-0.2 text-[9px] font-bold rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30">
+                                        <span class="material-symbols-outlined text-[10px]">person</span>
+                                        Sua
+                                    </span>
+                                ` : ''}
+                                ${rDate ? `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">${rDate}</span>` : ''}
+                                ${hasAnexo ? `<span class="text-[9px] font-bold px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-0.5" title="Possui anexo vinculado"><span class="material-symbols-outlined text-[10px]">attachment</span>Anexo</span>` : ''}
+                            </div>
+                            <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                <span class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[9px] font-bold rounded bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30 truncate max-w-[150px]" title="Entidade: ${rEnt}">
+                                    <span class="material-symbols-outlined text-[10px]">hub</span>
+                                    <span>${rSigla}</span>
+                                </span>
+                                <span class="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">
+                                    Ortofoto · ${r.tipo === 'xyz_tiles' ? 'XYZ Tiles' : 'GeoTIFF'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Barra de Ações Rápidas de Gestão da Ortofoto -->
+                    <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                        <!-- Ver Informações e Link do Processo Anexo -->
+                        <button type="button" onclick="openRasterInfoModal('${r.id}')" class="h-8 px-2.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/30 text-sky-600 dark:text-sky-300 border border-sky-500/30 transition-all flex items-center gap-1.5 text-xs font-semibold cursor-pointer shadow-2xs" title="Ver Informações e Link do Processo Anexo">
+                            <span class="material-symbols-outlined text-[16px]">info</span>
+                            <span class="hidden md:inline">Info</span>
+                        </button>
+
+                        ${isSuperAdmin ? `
+                        <!-- Definir Entidade Proprietária (SuperAdmin) -->
+                        <button type="button" onclick="openSetEntityModal('${r.id}', 'raster')" class="h-8 w-8 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/30 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30 transition-all flex items-center justify-center cursor-pointer shadow-2xs" title="Definir Entidade Proprietária (SuperAdmin)">
+                            <span class="material-symbols-outlined text-[16px]">domain</span>
+                        </button>
+                        ` : ''}
+
+                        <!-- Configurações da Imagem -->
+                        <button type="button" onclick="closeAddLayerModal(); openEditRasterModal('${r.id}')" class="h-8 w-8 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300/60 dark:border-slate-700 transition-all flex items-center justify-center cursor-pointer shadow-2xs" title="Configurações da Imagem">
+                            <span class="material-symbols-outlined text-[16px]">settings</span>
+                        </button>
+
+                        <!-- Excluir Ortofoto -->
+                        <button type="button" onclick="deleteRasterLayer('${r.id}')" class="h-8 w-8 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-600 dark:text-rose-400 border border-rose-500/30 transition-all flex items-center justify-center cursor-pointer shadow-2xs" title="Excluir Imagem Permanentemente">
+                            <span class="material-symbols-outlined text-[16px]">delete</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    container.innerHTML = html;
+};
+
+// =========================================================================
+// MODAL DEFINIR ENTIDADE PROPRIETÁRIA (SUPERADMIN)
+// =========================================================================
+
+window._entityModalTarget = null; // { id, type: 'theme' | 'raster' }
+
+window.openSetEntityModal = function(id, type) {
+    window._entityModalTarget = { id, type };
+    const modal = document.getElementById('set-entity-modal');
+    const nameEl = document.getElementById('set-entity-target-name');
+    const selectEl = document.getElementById('set-entity-select');
+    if (!modal) return;
+
+    let currentEntity = '';
+    let targetName = '';
+
+    if (type === 'theme') {
+        const t = (themes || []).find(x => x.id === id);
+        if (t) {
+            targetName = `Camada Vetorial: ${t.name}`;
+            currentEntity = t.entidade || (t.metadata && t.metadata.entidade) || '';
+        }
+    } else {
+        const r = (rasterLayers || []).find(x => x.id === id);
+        if (r) {
+            targetName = `Ortofoto: ${r.nome}`;
+            currentEntity = r.entidade || '';
+        }
+    }
+
+    if (nameEl) nameEl.textContent = targetName;
+
+    // Popula dropdown de entidades
+    if (selectEl) {
+        let opts = '<option value="">🌐 Geral / Compartilhada (Todas as Entidades)</option>';
+        (window.allEntidadesList || []).forEach(e => {
+            opts += `<option value="${e.nome}">${e.sigla ? '[' + e.sigla + '] ' : ''}${e.nome}</option>`;
+        });
+        selectEl.innerHTML = opts;
+        selectEl.value = currentEntity;
+    }
+
+    modal.classList.remove('hidden');
+    setTimeout(() => modal.firstElementChild?.classList.remove('scale-95'), 10);
+};
+
+window.closeSetEntityModal = function() {
+    const modal = document.getElementById('set-entity-modal');
+    if (modal) {
+        modal.firstElementChild?.classList.add('scale-95');
+        setTimeout(() => modal.classList.add('hidden'), 150);
+    }
+    window._entityModalTarget = null;
+};
+
+window.saveThemeOrRasterEntity = async function() {
+    if (!window._entityModalTarget) return;
+    const { id, type } = window._entityModalTarget;
+    const selectEl = document.getElementById('set-entity-select');
+    const newEntidade = selectEl ? selectEl.value : '';
+
+    if (type === 'theme') {
+        const t = (themes || []).find(x => x.id === id);
+        if (t) {
+            t.entidade = newEntidade;
+            if (!t.metadata) t.metadata = {};
+            t.metadata.entidade = newEntidade;
+
+            if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+                try {
+                    await supabaseClient.from('temas').update({
+                        entidade: newEntidade,
+                        ...(window.supabaseTemasHasMetadata ? { metadata: t.metadata } : {})
+                    }).eq('id', id);
+                } catch(e) { console.error('Erro ao atualizar entidade do tema:', e); }
+            }
+            saveThemes();
+            renderThemes();
+        }
+    } else {
+        const r = (rasterLayers || []).find(x => x.id === id);
+        if (r) {
+            r.entidade = newEntidade;
+            if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+                try {
+                    await supabaseClient.from('imagens_raster').update({
+                        entidade: newEntidade
+                    }).eq('id', id);
+                } catch(e) { console.error('Erro ao atualizar entidade da ortofoto:', e); }
+            }
+            renderRasterLayersList();
+        }
+    }
+
+    window.closeSetEntityModal();
+    if (typeof showToastAlert === 'function') {
+        showToastAlert(`Entidade proprietária atualizada para "${newEntidade || 'Geral'}".`, 'success');
+    }
+    window.renderAdminLayersManagementList(document.getElementById('admin-layers-search')?.value || '');
+    if (typeof window.renderSharedLayersCatalog === 'function') {
+        window.renderSharedLayersCatalog();
     }
 };
 
@@ -9365,13 +9786,6 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
                                 </div>
 
                                 <div class="flex items-center gap-3 shrink-0">
-                                    ${isSuperAdmin ? `
-                                    <button type="button" onclick="closeSharedLayersCatalog(); openEditThemeModal('${t.id}', 'entidade')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-cyan-500/20 dark:bg-slate-700/60 dark:hover:bg-cyan-500/20 text-slate-700 dark:text-slate-300 hover:text-cyan-400 border border-slate-300/60 dark:border-slate-600/60 hover:border-cyan-500/40 transition-colors cursor-pointer flex items-center gap-1.5 text-[11px] font-semibold" title="Definir Entidade Proprietária desta camada (SuperAdmin)">
-                                        <span class="material-symbols-outlined text-[15px] text-cyan-400">edit</span>
-                                        <span class="hidden sm:inline">Definir Entidade</span>
-                                    </button>
-                                    ` : ''}
-
                                     <!-- Switch iOS Neon para Adicionar à Mesa / Projeto -->
                                     <label class="relative inline-flex items-center cursor-pointer shrink-0" title="${isActive ? 'Remover da Mesa' : 'Inserir na Mesa / Projeto'}">
                                         <input type="checkbox" id="shared-toggle-${t.id}" class="sr-only peer" ${isActive ? 'checked' : ''} onchange="toggleSharedLayer('${t.id}', this)">
