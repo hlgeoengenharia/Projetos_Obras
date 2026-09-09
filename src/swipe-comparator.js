@@ -32,6 +32,7 @@
 
     function getDateFormatted(r) {
         if (!r) return '';
+        if (r.id === 'base_satellite_leaflet' || r.is_base_satellite) return 'Satélite Base';
         const effDate = r.data_imagem || localStorage.getItem(`raster_date_${r.id}`);
         if (effDate) return effDate.split('-').reverse().join('/');
         const matchDate = r.nome?.match(/(\d{2})[-/](\d{2})[-/](\d{4})/);
@@ -42,6 +43,7 @@
     }
 
     function getEffectiveDate(r) {
+        if (r && (r.id === 'base_satellite_leaflet' || r.is_base_satellite)) return '9999-12-31';
         return r.data_imagem || localStorage.getItem(`raster_date_${r.id}`) || (r.nome && r.nome.match(/(\d{4})/)?.[1] + '-01-01') || '1970-01-01';
     }
 
@@ -563,7 +565,7 @@
             const nativeMax = raster.zoom_max || 22;
             const lyr = L.tileLayer(raster.url_imagem, {
                 minZoom: 1,
-                minNativeZoom: raster.zoom_min || 14,
+                minNativeZoom: (raster.zoom_min !== undefined && raster.zoom_min !== null) ? raster.zoom_min : 14,
                 maxNativeZoom: nativeMax,
                 maxZoom: 24,
                 keepBuffer: 16,
@@ -666,23 +668,26 @@
             }
         }
 
-        // Filtra as marcadas para swipe
-        let available = rasters.filter(r => {
-            const cachedSwipe = localStorage.getItem(`raster_swipe_${r.id}`);
-            return cachedSwipe !== null ? (cachedSwipe === 'true') : (r.usar_no_swipe !== false);
+        // Identifica estritamente as ortofotos carregadas no menu lateral das camadas (workspace)
+        let activeDrawerIds = new Set();
+        if (Array.isArray(window.activeWorkspaceRasters)) {
+            window.activeWorkspaceRasters.forEach(id => activeDrawerIds.add(String(id)));
+        }
+        const drawerRasterCards = document.querySelectorAll('#rasters-container [data-raster-id]');
+        drawerRasterCards.forEach(c => {
+            if (c.dataset && c.dataset.rasterId) {
+                activeDrawerIds.add(String(c.dataset.rasterId));
+            }
         });
 
-        if (available.length < 2 && rasters.length >= 2) {
-            available = [...rasters];
-        }
+        // Filtra para exibir APENAS as ortofotos que estão no menu lateral
+        let available = rasters.filter(r => activeDrawerIds.has(String(r.id)));
 
-        _availableRasters = available;
-
-        if (_availableRasters.length < 2) {
-            const msg = _availableRasters.length === 0 
-                ? 'Você não possui ortofotos habilitadas para visualização neste município.'
-                : 'Você possui apenas 1 ortofoto habilitada. São necessárias pelo menos 2 ortofotos liberadas para comparação temporal.';
-            if (typeof showStorageToast === 'function') {
+        if (available.length === 0) {
+            const msg = 'Nenhuma ortofoto carregada no menu lateral. Adicione pelo menos 1 ortofoto no menu lateral (+ CAMADA) para comparar.';
+            if (typeof showWarningToast === 'function') {
+                showWarningToast(msg);
+            } else if (typeof showStorageToast === 'function') {
                 showStorageToast(msg);
             } else {
                 alert(msg);
@@ -690,11 +695,35 @@
             return;
         }
 
-        // Ordena cronologicamente: 1ª = mais antiga (esquerda), última = mais recente (direita)
-        _availableRasters.sort((a, b) => getEffectiveDate(a).localeCompare(getEffectiveDate(b)));
+        // Camada virtual de Satélite Base (Leaflet) para permitir comparação mesmo com apenas 1 ortofoto no menu lateral
+        const SATELLITE_BASE_RASTER = {
+            id: 'base_satellite_leaflet',
+            nome: 'Satélite Base',
+            tipo: 'xyz_tiles',
+            url_imagem: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            zoom_min: 1,
+            zoom_max: 19,
+            data_imagem: '9999-12-31',
+            is_base_satellite: true
+        };
 
-        _leftRasterObj = _availableRasters[0];
-        _rightRasterObj = _availableRasters[_availableRasters.length - 1];
+        // Ordena cronologicamente as ortofotos do drawer
+        available.sort((a, b) => getEffectiveDate(a).localeCompare(getEffectiveDate(b)));
+
+        if (available.length === 1) {
+            // Caso exista apenas 1 ortofoto no menu lateral: compara diretamente com o Satélite Base do Leaflet
+            _leftRasterObj = available[0];
+            _rightRasterObj = SATELLITE_BASE_RASTER;
+            available.push(SATELLITE_BASE_RASTER);
+        } else {
+            // Caso existam 2 ou mais ortofotos: compara as próprias ortofotos do menu lateral (mais antiga vs mais recente)
+            _leftRasterObj = available[0];
+            _rightRasterObj = available[available.length - 1];
+            // Também disponibiliza o Satélite Base no seletor de datas para comparação opcional
+            available.push(SATELLITE_BASE_RASTER);
+        }
+
+        _availableRasters = available;
 
         // Desativa overlays normais do mapa para não sobrepor
         if (window.leafletRasterOverlays) {
