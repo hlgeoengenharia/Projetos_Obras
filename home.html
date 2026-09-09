@@ -750,6 +750,18 @@ window.abrirMunicipio = function(id, nome, papel) {
     window.location.href = 'index.html';
 };
 
+// Ao selecionar um município com um projeto específico (ou sem projeto / modo livre)
+window.abrirMunicipioComProjeto = function(id, nome, papel, projetoId = null) {
+    if (id) sessionStorage.setItem('municipio_ativo', id);
+    if (nome) sessionStorage.setItem('municipio_ativo_nome', nome);
+    if (projetoId) {
+        localStorage.setItem('last_active_project_' + id, projetoId);
+    } else {
+        localStorage.setItem('last_active_project_' + id, 'livre');
+    }
+    abrirMunicipio(id, nome, papel);
+};
+
 // Painel de Gestão e Boas-Vindas do Município (acessado ao clicar em HOME no menu lateral do mapa ou via URL ?view=municipio)
 window.abrirPainelMunicipio = function(id, nome) {
     if (id) sessionStorage.setItem('municipio_ativo', id);
@@ -1356,12 +1368,14 @@ async function resolveAndApplyUserEntityLogo(entidadeNome, municipioId = null) {
         }
     }
 
-    // 4. Aplica no cabeçalho e modal
+    // 4. Aplica no cabeçalho e modal e disponibiliza para os popups do mapa
     if (logoUrl) {
+        window.currentUserEntityLogoUrl = logoUrl;
         document.querySelectorAll('.profile-avatar-img').forEach(img => {
             img.src = logoUrl;
         });
     }
+    return logoUrl;
 }
 
 let cachedEntidadesPadrao = null;
@@ -1497,6 +1511,23 @@ function selectMunicipio(id, nome) {
     sessionStorage.setItem('municipio_ativo_nome', nome);
     window.location.href = 'index.html';
 }
+window.selectMunicipio = selectMunicipio;
+
+window.abrirMunicipio = function(id, nome, papel) {
+    if (papel) sessionStorage.setItem('municipio_ativo_papel', papel);
+    selectMunicipio(id, nome);
+};
+
+window.abrirMunicipioComProjeto = function(id, nome, papel, projetoId) {
+    if (id) {
+        if (projetoId) {
+            localStorage.setItem('last_active_project_' + id, projetoId);
+        } else {
+            localStorage.setItem('last_active_project_' + id, 'livre');
+        }
+        window.abrirMunicipio(id, nome, papel);
+    }
+};
 
 let usuarioEntidadeCargo = { entidade: '', cargo: '' };
 let cacheMinhasSolicitacoes = [];
@@ -2503,9 +2534,6 @@ async function init() {
             return `
             <div class="card rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-primary/40 transition-all border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm" data-nome="${(m.nome || '').toLowerCase()}" data-uf="${(m.uf || '').toLowerCase()}">
                 <div class="flex items-center gap-3.5 min-w-0">
-                    <div class="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden p-1.5">
-                        ${m.logo_url ? `<img src="${m.logo_url}" class="w-full h-full object-contain" alt="${m.nome}">` : `<span class="material-symbols-outlined text-primary text-[26px]">location_city</span>`}
-                    </div>
                     <div class="min-w-0">
                         <div class="flex items-center gap-2 flex-wrap">
                             <h3 class="text-base font-bold text-slate-800 dark:text-slate-100">${m.nome}${m.uf ? ' - ' + m.uf : ''}</h3>
@@ -2788,6 +2816,104 @@ window.initParaibaMap = async function(municipiosAutorizados = []) {
 
         paraibaFeatureLayers = {};
 
+        async function getMunicipioPopupHtml(authData) {
+            const ehAdmin = authData.papel === 'admin' || (homeUserProfile && homeUserProfile.super_admin);
+            const papelLabel = (typeof PAPEL_LABELS !== 'undefined' && PAPEL_LABELS[authData.papel]) || authData.papel;
+            const logoEnte = window.currentUserEntityLogoUrl || authData.logo_url;
+
+            // Busca projetos do usuário neste município
+            let userProjects = [];
+            try {
+                const local = localStorage.getItem('user_projetos_' + authData.id);
+                if (local) {
+                    try { userProjects = JSON.parse(local) || []; } catch(e) {}
+                }
+                if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+                    const session = (await supabaseClient.auth.getSession())?.data?.session;
+                    if (session?.user?.id) {
+                        const { data } = await supabaseClient
+                            .from('user_projetos')
+                            .select('id, nome, descricao, camadas_ids, rasters_ids')
+                            .eq('user_id', session.user.id)
+                            .eq('municipio_id', authData.id)
+                            .order('created_at', { ascending: false });
+                        if (Array.isArray(data)) {
+                            userProjects = data;
+                            localStorage.setItem('user_projetos_' + authData.id, JSON.stringify(data));
+                        }
+                    }
+                }
+            } catch(errProj) {
+                console.warn('[Popup] Erro ao carregar projetos do município:', errProj);
+            }
+
+            const hasProjects = Array.isArray(userProjects) && userProjects.length > 0;
+            const count = hasProjects ? userProjects.length : 0;
+
+            let projectsContentHtml = '';
+            if (!hasProjects) {
+                projectsContentHtml = `
+                    <div class="bg-slate-800/50 rounded-xl p-2.5 border border-slate-700/60 text-center">
+                        <p class="text-[11px] text-slate-300 leading-tight">Você ainda não tem nenhum projeto criado neste município.</p>
+                    </div>
+                    <button onclick="abrirMunicipioComProjeto('${authData.id}', '${(authData.nome || '').replace(/'/g, "\\'")}', '${authData.papel}', null)" class="w-full py-2.5 px-3 text-xs font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer">
+                        <span>Abrir Município</span>
+                        <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+                    </button>
+                `;
+            } else {
+                const listItems = userProjects.map(p => {
+                    const qtdItens = (p.camadas_ids ? p.camadas_ids.length : 0) + (p.rasters_ids ? p.rasters_ids.length : 0);
+                    return `
+                        <button onclick="abrirMunicipioComProjeto('${authData.id}', '${(authData.nome || '').replace(/'/g, "\\'")}', '${authData.papel}', '${p.id}')" class="w-full text-left p-2 rounded-xl bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700 hover:border-cyan-500/60 transition-all flex items-center justify-between group cursor-pointer shadow-xs" title="Abrir projeto ${p.nome}">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <span class="material-symbols-outlined text-cyan-400 text-[18px] shrink-0 group-hover:scale-110 transition-transform">folder_open</span>
+                                <div class="min-w-0">
+                                    <div class="text-xs font-bold text-white group-hover:text-cyan-300 truncate">${p.nome}</div>
+                                    <div class="text-[10px] text-slate-400">${qtdItens} item(ns) incluído(s)</div>
+                                </div>
+                            </div>
+                            <span class="material-symbols-outlined text-slate-400 group-hover:text-cyan-400 text-[16px] shrink-0">arrow_forward</span>
+                        </button>
+                    `;
+                }).join('');
+
+                projectsContentHtml = `
+                    <div class="flex items-center justify-between pt-0.5">
+                        <span class="text-[11px] font-bold text-cyan-400 flex items-center gap-1">
+                            <span class="material-symbols-outlined text-[15px]">folder_shared</span>
+                            Você tem ${count} projeto${count > 1 ? 's' : ''} criado${count > 1 ? 's' : ''}:
+                        </span>
+                    </div>
+                    <div class="max-h-36 overflow-y-auto space-y-1.5 pr-0.5 custom-scrollbar">
+                        ${listItems}
+                    </div>
+                    <button onclick="abrirMunicipioComProjeto('${authData.id}', '${(authData.nome || '').replace(/'/g, "\\'")}', '${authData.papel}', null)" class="w-full py-1.5 px-3 text-[11px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 rounded-xl transition-all border border-slate-700/80 flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer mt-0.5">
+                        <span>Abrir sem projeto (Modo Livre)</span>
+                        <span class="material-symbols-outlined text-[14px]">open_in_new</span>
+                    </button>
+                `;
+            }
+
+            return `
+            <div class="p-3.5 min-w-[260px] max-w-[310px] flex flex-col gap-2.5">
+                <div class="flex items-center gap-3">
+                    <div class="w-11 h-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shrink-0 overflow-hidden p-1">
+                        ${logoEnte 
+                            ? `<img src="${logoEnte}" class="w-full h-full object-contain" alt="Logo Ente">` 
+                            : `<span class="material-symbols-outlined text-cyan-400 text-[24px]">location_city</span>`}
+                    </div>
+                    <div class="min-w-0">
+                        <h4 class="text-sm font-bold text-white tracking-wide truncate">${authData.nome} - PB</h4>
+                        <span class="inline-block text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${ehAdmin ? 'bg-indigo-950/80 text-indigo-300 border border-indigo-700/60' : 'bg-slate-800 text-slate-300 border border-slate-700'} mt-0.5">
+                            ${papelLabel}
+                        </span>
+                    </div>
+                </div>
+                ${projectsContentHtml}
+            </div>`;
+        }
+
         paraibaGeojsonLayer = L.geoJSON(paraibaGeojsonData, {
             style: (feature) => {
                 const munNome = feature.properties?.nome || '';
@@ -2821,13 +2947,15 @@ window.initParaibaMap = async function(municipiosAutorizados = []) {
                 if (authData) {
                     const ehAdmin = authData.papel === 'admin' || (homeUserProfile && homeUserProfile.super_admin);
                     const papelLabel = (typeof PAPEL_LABELS !== 'undefined' && PAPEL_LABELS[authData.papel]) || authData.papel;
+                    const logoEnte = window.currentUserEntityLogoUrl || authData.logo_url;
 
-                    const popupHtml = `
-                    <div class="p-3.5 min-w-[230px] flex flex-col gap-3">
+                    // Fallback rápido inicial enquanto carrega
+                    const initialPopupHtml = `
+                    <div class="p-3.5 min-w-[260px] max-w-[310px] flex flex-col gap-2.5">
                         <div class="flex items-center gap-3">
                             <div class="w-11 h-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shrink-0 overflow-hidden p-1">
-                                ${authData.logo_url 
-                                    ? `<img src="${authData.logo_url}" class="w-full h-full object-contain" alt="${authData.nome}">` 
+                                ${logoEnte 
+                                    ? `<img src="${logoEnte}" class="w-full h-full object-contain" alt="Logo Ente">` 
                                     : `<span class="material-symbols-outlined text-cyan-400 text-[24px]">location_city</span>`}
                             </div>
                             <div class="min-w-0">
@@ -2837,21 +2965,17 @@ window.initParaibaMap = async function(municipiosAutorizados = []) {
                                 </span>
                             </div>
                         </div>
-                        <p class="text-[11px] text-slate-400 leading-tight">Acesso autorizado para consulta e operações espaciais.</p>
-                        <button onclick="abrirMunicipio('${authData.id}', '${authData.nome.replace(/'/g, "\\'")}', '${authData.papel}')" class="w-full py-2 px-3 text-xs font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer">
-                            <span>Abrir Município</span>
-                            <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
-                        </button>
+                        <div class="text-center py-2 text-xs text-slate-400 italic">Carregando projetos...</div>
                     </div>`;
 
-                    layer.bindPopup(popupHtml, { 
-                        maxWidth: 280,
+                    layer.bindPopup(initialPopupHtml, { 
+                        maxWidth: 320,
                         autoPan: false,
                         closeButton: true
                     });
 
                     layer.on({
-                        click: (e) => {
+                        click: async (e) => {
                             if (e && e.originalEvent) {
                                 L.DomEvent.stopPropagation(e);
                             }
@@ -2861,6 +2985,14 @@ window.initParaibaMap = async function(municipiosAutorizados = []) {
                                 duration: 0.6,
                                 padding: [70, 70]
                             });
+
+                            try {
+                                const fullPopupHtml = await getMunicipioPopupHtml(authData);
+                                layer.setPopupContent(fullPopupHtml);
+                            } catch(errPopup) {
+                                console.warn('[Popup] Erro ao renderizar popup:', errPopup);
+                            }
+
                             setTimeout(() => {
                                 layer.openPopup(center);
                             }, 150);
@@ -2937,9 +3069,32 @@ window.initParaibaMap = async function(municipiosAutorizados = []) {
         paraibaMapInstance.on('zoomend', updateMapZoomClasses);
         updateMapZoomClasses();
 
-        const bounds = paraibaGeojsonLayer.getBounds();
-        if (bounds.isValid()) {
-            paraibaMapInstance.fitBounds(bounds, { padding: [20, 20] });
+        // Centralização dinâmica nos municípios cadastrados na base
+        let targetBounds = null;
+        if (municipiosAutorizados && municipiosAutorizados.length > 0) {
+            const authBounds = L.latLngBounds([]);
+            let hasValidAuth = false;
+            municipiosAutorizados.forEach(m => {
+                const norm = normMunString(m.nome);
+                const l = paraibaFeatureLayers[norm];
+                if (l && l.getBounds && l.getBounds().isValid()) {
+                    authBounds.extend(l.getBounds());
+                    hasValidAuth = true;
+                }
+            });
+            if (hasValidAuth && authBounds.isValid()) {
+                targetBounds = authBounds;
+            }
+        }
+
+        if (!targetBounds || !targetBounds.isValid()) {
+            targetBounds = paraibaGeojsonLayer.getBounds();
+        }
+
+        window.paraibaTargetBounds = targetBounds;
+
+        if (targetBounds && targetBounds.isValid()) {
+            paraibaMapInstance.fitBounds(targetBounds, { padding: [40, 40], maxZoom: 11 });
         }
 
         // Garante sincronização perfeita do tamanho do container contra saltos de clique
@@ -2970,8 +3125,9 @@ window.onSearchMunicipios = function(query) {
 
     const clean = normMunString(query);
     if (!clean) {
-        if (paraibaGeojsonLayer) {
-            paraibaMapInstance.fitBounds(paraibaGeojsonLayer.getBounds(), { padding: [20, 20], duration: 0.8 });
+        const resetBounds = window.paraibaTargetBounds || (paraibaGeojsonLayer ? paraibaGeojsonLayer.getBounds() : null);
+        if (resetBounds && resetBounds.isValid()) {
+            paraibaMapInstance.fitBounds(resetBounds, { padding: [40, 40], duration: 0.8, maxZoom: 11 });
         }
         return;
     }
