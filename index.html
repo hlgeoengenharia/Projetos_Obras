@@ -893,60 +893,89 @@
   </div>
 </div>
 
-<!-- Modal Unificado de Adicionar Camada (Criar ou Importar) -->
-<div id="add-layer-modal" class="fixed inset-0 z-[100] bg-black/60 backdrop-blur-xs hidden flex items-center justify-center p-4">
-  <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 w-full max-w-md border border-slate-200 dark:border-slate-800 flex flex-col transition-all duration-300 transform scale-95">
-    <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
-      <div class="flex items-center gap-2.5">
-        <div class="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center text-primary">
-          <span class="material-symbols-outlined text-[22px]">add_circle</span>
+<!-- Modal da Central de Gestão de Camadas (Opção 1) -->
+<div id="add-layer-modal" class="fixed inset-0 z-[100] bg-black/60 backdrop-blur-xs hidden flex items-center justify-center p-3 sm:p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-5 sm:p-6 w-full max-w-3xl max-h-[92vh] border border-slate-200 dark:border-slate-800 flex flex-col transition-all duration-300 transform scale-95 overflow-hidden">
+    <!-- Cabeçalho -->
+    <div class="flex justify-between items-center pb-3 mb-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-600 dark:text-cyan-400 shrink-0 shadow-sm">
+          <span class="material-symbols-outlined text-[24px]">dataset</span>
         </div>
         <div>
-          <h3 class="text-base font-bold text-slate-900 dark:text-white">Adicionar Camada</h3>
-          <p class="text-xs text-slate-500 dark:text-slate-400">Escolha como deseja adicionar uma nova camada</p>
+          <h3 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <span>Central de Gestão de Camadas</span>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 uppercase tracking-wider">Admin</span>
+          </h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Crie, importe dados, exporte arquivos e gerencie as camadas sob responsabilidade do seu órgão</p>
         </div>
       </div>
-      <button onclick="closeAddLayerModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+      <button onclick="closeAddLayerModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer" title="Fechar">
         <span class="material-symbols-outlined text-[20px]">close</span>
       </button>
     </div>
-    
-    <div class="flex flex-col gap-3">
-      <!-- Opção 1: Criar Camada Vetorial em Branco -->
-      <button onclick="closeAddLayerModal(); openNewThemeModal()" class="flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-primary dark:hover:border-sky-500 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-left transition-all duration-200 group cursor-pointer">
-        <div class="w-11 h-11 rounded-xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-          <span class="material-symbols-outlined text-[26px]">edit_square</span>
-        </div>
-        <div class="flex-1">
-          <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200 group-hover:text-primary dark:group-hover:text-sky-400 transition-colors">Criar Camada em Branco</h4>
-          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Defina nome, cor e geometria para desenhar e cadastrar feições manualmente no mapa.</p>
-        </div>
-      </button>
 
-      <!-- Opção 2: Importar Arquivo Vetorial (GeoJSON) -->
-      <button onclick="closeAddLayerModal(); triggerGeoJSONImport()" class="flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-primary dark:hover:border-sky-500 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-left transition-all duration-200 group cursor-pointer">
-        <div class="w-11 h-11 rounded-xl bg-sky-500/15 text-primary dark:text-sky-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-          <span class="material-symbols-outlined text-[26px]">upload_file</span>
-        </div>
-        <div class="flex-1">
-          <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200 group-hover:text-primary dark:group-hover:text-sky-400 transition-colors">Importar Camada Vetorial (GeoJSON)</h4>
-          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Carregue feições espaciais prontas a partir de arquivos GeoJSON.</p>
-        </div>
-      </button>
+    <div class="flex-1 overflow-y-auto space-y-5 pr-1 custom-scrollbar">
+      <!-- Bloco 1: Ações Rápidas de Criação e Importação de Nova Camada -->
+      <div>
+        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2.5 flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[16px] text-cyan-500">add_box</span>
+          <span>Criar ou Iniciar Nova Camada</span>
+        </h4>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <!-- Opção 1: Criar Camada Vetorial em Branco -->
+          <button onclick="closeAddLayerModal(); openNewThemeModal()" class="flex flex-col p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-emerald-500 dark:hover:border-emerald-500 hover:bg-emerald-500/5 text-left transition-all duration-200 group cursor-pointer shadow-2xs">
+            <div class="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-500 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+              <span class="material-symbols-outlined text-[20px]">edit_square</span>
+            </div>
+            <h5 class="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-emerald-500 transition-colors">Criar em Branco</h5>
+            <p class="text-[11px] text-slate-400 mt-0.5 leading-tight">Desenhe feições manualmente no mapa.</p>
+          </button>
 
-      <!-- Opção 3: Ortofoto Fatiada (XYZ Tiles Turbo) -->
-      <button onclick="closeAddLayerModal(); openSelectRasterModal()" class="flex items-start gap-4 p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500 hover:bg-emerald-500/10 text-left transition-all duration-200 group cursor-pointer">
-        <div class="w-11 h-11 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-          <span class="material-symbols-outlined text-[26px]">satellite_alt</span>
+          <!-- Opção 2: Importar Novo Arquivo Vetorial (GeoJSON) -->
+          <button onclick="closeAddLayerModal(); triggerGeoJSONImport()" class="flex flex-col p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-sky-500 dark:hover:border-sky-500 hover:bg-sky-500/5 text-left transition-all duration-200 group cursor-pointer shadow-2xs">
+            <div class="w-8 h-8 rounded-lg bg-sky-500/15 text-sky-500 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+              <span class="material-symbols-outlined text-[20px]">upload_file</span>
+            </div>
+            <h5 class="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-sky-500 transition-colors">Importar Nova Camada</h5>
+            <p class="text-[11px] text-slate-400 mt-0.5 leading-tight">Crie camada a partir de arquivo GeoJSON.</p>
+          </button>
+
+          <!-- Opção 3: Ortofoto Fatiada (XYZ Tiles Turbo) -->
+          <button onclick="closeAddLayerModal(); openSelectRasterModal()" class="flex flex-col p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-cyan-500 dark:hover:border-cyan-500 hover:bg-cyan-500/5 text-left transition-all duration-200 group cursor-pointer shadow-2xs">
+            <div class="w-8 h-8 rounded-lg bg-cyan-500/15 text-cyan-400 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+              <span class="material-symbols-outlined text-[20px]">satellite_alt</span>
+            </div>
+            <h5 class="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-cyan-400 transition-colors">Adicionar Ortofoto</h5>
+            <p class="text-[11px] text-slate-400 mt-0.5 leading-tight">Vincule imagens processadas (Tiles XYZ).</p>
+          </button>
         </div>
-        <div class="flex-1">
-          <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-            Ortofoto de Drone (Tiles XYZ)
-            <span class="text-[9px] bg-emerald-500 text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Raster</span>
-          </h4>
-          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Selecione uma ortofoto já processada para exibir como camada base raster.</p>
+      </div>
+
+      <!-- Bloco 2: Gestão das Camadas Existentes -->
+      <div class="pt-2">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100 dark:border-slate-800">
+          <div class="flex items-center gap-2">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[17px] text-cyan-500">folder_managed</span>
+              <span>Camadas sob sua Gestão</span>
+            </h4>
+            <span id="admin-layers-count" class="text-[10px] font-bold px-2 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">0</span>
+          </div>
+
+          <!-- Busca rápida de camada na central -->
+          <div class="relative w-full sm:w-64">
+            <span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[16px]">search</span>
+            <input type="text" id="admin-layers-search" oninput="window.filterAdminLayersManagementList(this.value)" placeholder="Buscar camada..." class="w-full text-xs pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500">
+          </div>
         </div>
-      </button>
+
+        <!-- Lista de Camadas para Gerenciamento -->
+        <div id="admin-layers-management-list" class="flex flex-col gap-2 mt-3 min-h-[140px]">
+          <!-- Preenchido dinamicamente via renderAdminLayersManagementList() -->
+          <div class="text-center py-6 text-xs text-slate-400 italic">Carregando camadas...</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>

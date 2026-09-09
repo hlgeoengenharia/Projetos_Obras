@@ -2016,11 +2016,9 @@ function renderThemes() {
                   <span class="material-symbols-outlined text-[18px]">settings</span>
                 </button>
                 ` : ''}
-                ${canEditThisTheme ? `
-                <button onclick="deleteTheme('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-red-500/15 hover:bg-red-500/30 active:scale-95 rounded-lg tooltip text-red-400 hover:text-red-300 transition-all border border-red-500/20 shadow-xs" title="Excluir Camada">
-                  <span class="material-symbols-outlined text-[18px]">delete</span>
+                <button onclick="downloadGeoJSON('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Exportar Dados (GeoJSON)">
+                  <span class="material-symbols-outlined text-[18px]">download</span>
                 </button>
-                ` : ''}
             </div>
         </div>
         ` : ''}
@@ -3647,15 +3645,16 @@ function hideLoadingOverlay() {
 }
 
 async function deleteTheme(themeId) {
-  if (!confirm("Tem certeza que deseja excluir esta camada e todos os seus dados?")) return;
+  const targetTheme = (themes || []).find(t => t.id === themeId);
+  const themeName = targetTheme ? targetTheme.name : 'esta camada';
+  const featCount = targetTheme && targetTheme.features ? targetTheme.features.length : 0;
+  
+  if (!confirm(`ATENÇÃO - EXCLUSÃO DEFINITIVA:\n\nDeseja realmente excluir permanentemente a camada "${themeName}" e todos os seus ${featCount} registros do banco de dados?\n\nEsta ação apagará os dados definitivamente.`)) return;
 
   if (typeof supabaseClient !== 'undefined' && supabaseClient) {
       showLoadingOverlay('Excluindo camada...');
       try {
-          // Exclui em lotes DENTRO do banco (RPC) — enviar uma lista de
-          // milhares de IDs pelo .in() vira uma URL enorme e estoura o
-          // limite de tamanho de requisição do servidor. Com a função,
-          // o navegador só manda theme_id + tamanho do lote, sempre curto.
+          // Exclui em lotes DENTRO do banco (RPC)
           let deletedInBatch = 0;
           let totalDeleted = 0;
           do {
@@ -3692,13 +3691,20 @@ async function deleteTheme(themeId) {
       }
   }
 
-  // Só mexe no estado local depois de confirmar que a exclusão no banco deu certo
-  // — antes, o card sumia da tela mesmo quando a exclusão falhava, e voltava
-  // ao atualizar a página.
   themes = themes.filter(t => t.id !== themeId);
+  window.activeWorkspaceThemes = (window.activeWorkspaceThemes || []).filter(id => id !== themeId);
   saveThemes();
+  if (typeof window.saveCurrentWorkspaceState === 'function') {
+      await window.saveCurrentWorkspaceState();
+  }
   loadAllFeaturesToMap();
   renderThemes();
+  if (typeof window.renderAdminLayersManagementList === 'function') {
+      window.renderAdminLayersManagementList();
+  }
+  if (typeof showToastAlert === 'function') {
+      showToastAlert(`Camada "${themeName}" excluída permanentemente.`, 'info');
+  }
 }
 
 // --- FERRAMENTAS DE DESENHO E ADERÊNCIA ---
