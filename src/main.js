@@ -9013,13 +9013,6 @@ window.openSharedLayersCatalog = function() {
     if (modal) {
         modal.classList.remove('hidden');
         setTimeout(() => modal.firstElementChild?.classList.remove('scale-95'), 10);
-        if (typeof L !== 'undefined' && L.DomEvent && L.DomEvent.disableScrollPropagation) {
-            L.DomEvent.disableScrollPropagation(modal);
-        }
-    }
-    const accordionEl = document.getElementById('shared-layers-accordion');
-    if (accordionEl) {
-        accordionEl.onwheel = (e) => e.stopPropagation();
     }
     if (typeof window.updateProjectSelectDropdown === 'function') {
         window.updateProjectSelectDropdown();
@@ -9031,6 +9024,18 @@ window.openSharedLayersCatalog = function() {
         renderSharedLayersCatalog();
     } catch (err) {
         console.error('Erro ao renderizar catálogo compartilhado:', err);
+    }
+
+    // Configuração de rolagem por mouse wheel garantida:
+    const modalDialog = document.querySelector('#shared-layers-modal > div');
+    const accordionEl = document.getElementById('shared-layers-accordion');
+    if (modalDialog && accordionEl) {
+        modalDialog.onwheel = function(e) {
+            if (accordionEl.scrollHeight > accordionEl.clientHeight) {
+                accordionEl.scrollTop += e.deltaY;
+                e.preventDefault();
+            }
+        };
     }
 };
 
@@ -9097,7 +9102,7 @@ window.toggleSharedAccordion = function(selectedIndex) {
 };
 
 window.renderSharedLayersCatalog = function(searchQuery = '') {
-    const container = document.getElementById('shared-layers-accordion');
+    const container = document.getElementById('shared-layers-accordion-list') || document.getElementById('shared-layers-accordion');
     if (!container) return;
 
     const userEntidade = (window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').trim();
@@ -9332,7 +9337,7 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
                 </button>
 
                 <!-- Corpo do Acordeão -->
-                <div id="shared-accordion-group-${index}" class="shared-accordion-body px-3 pb-3 pt-1 border-t border-slate-100 dark:border-slate-800/80 space-y-2 max-h-[60vh] overflow-y-auto custom-scrollbar ${isOpenByDefault ? '' : 'hidden'}">
+                <div id="shared-accordion-group-${index}" class="shared-accordion-body px-3 pb-3 pt-1 border-t border-slate-100 dark:border-slate-800/80 space-y-2 ${isOpenByDefault ? '' : 'hidden'}">
                     <!-- Camadas Vetoriais da Entidade -->
                     ${groupThemes.map(t => {
                         const isActive = Array.isArray(window.activeWorkspaceThemes) && window.activeWorkspaceThemes.includes(t.id);

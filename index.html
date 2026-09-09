@@ -320,6 +320,26 @@
       .custom-scrollbar::-webkit-scrollbar-thumb:hover {
         background-color: rgba(14, 165, 233, 0.8);
       }
+      /* Barra de rolagem destacada no Catálogo de Camadas */
+      #shared-layers-accordion::-webkit-scrollbar {
+        width: 10px;
+      }
+      #shared-layers-accordion::-webkit-scrollbar-track {
+        background: rgba(15, 23, 42, 0.08);
+        border-radius: 8px;
+      }
+      .dark #shared-layers-accordion::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.08);
+      }
+      #shared-layers-accordion::-webkit-scrollbar-thumb {
+        background-color: #0284c7;
+        border-radius: 8px;
+        border: 2px solid transparent;
+        background-clip: content-box;
+      }
+      #shared-layers-accordion::-webkit-scrollbar-thumb:hover {
+        background-color: #0369a1;
+      }
     </style>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
@@ -1021,28 +1041,6 @@
       </div>
     </div>
 
-    <!-- Instruções Visuais e Intuitivas para Projetos e Camadas -->
-    <div class="px-5 py-2.5 bg-gradient-to-r from-indigo-50/90 via-sky-50/90 to-emerald-50/90 dark:from-indigo-950/40 dark:via-sky-950/40 dark:to-emerald-950/40 border-b border-indigo-100/80 dark:border-indigo-900/40 shrink-0">
-      <div class="flex items-center gap-1.5 mb-1.5">
-        <span class="material-symbols-outlined text-[16px] text-indigo-600 dark:text-indigo-400">lightbulb</span>
-        <span class="text-xs font-bold text-slate-800 dark:text-slate-100">Como montar seu Projeto de Camadas:</span>
-      </div>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
-        <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/80 dark:bg-slate-900/70 border border-indigo-200/60 dark:border-indigo-800/50 shadow-2xs">
-          <span class="w-5 h-5 rounded-full bg-indigo-600 text-white font-black text-[10px] flex items-center justify-center shrink-0">1</span>
-          <span class="text-slate-700 dark:text-slate-200 leading-snug">Selecione o Projeto acima ou clique em <b>+ Novo Projeto</b>.</span>
-        </div>
-        <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/80 dark:bg-slate-900/70 border border-sky-200/60 dark:border-sky-800/50 shadow-2xs">
-          <span class="w-5 h-5 rounded-full bg-sky-600 text-white font-black text-[10px] flex items-center justify-center shrink-0">2</span>
-          <span class="text-slate-700 dark:text-slate-200 leading-snug">Ative a chave <span class="inline-block w-5 h-3 bg-sky-500 rounded-full align-middle relative mx-0.5"><span class="w-2 h-2 bg-white rounded-full absolute right-0.5 top-0.5"></span></span> das camadas e ortofotos que desejar.</span>
-        </div>
-        <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/80 dark:bg-slate-900/70 border border-emerald-200/60 dark:border-emerald-800/50 shadow-2xs">
-          <span class="w-5 h-5 rounded-full bg-emerald-600 text-white font-black text-[10px] flex items-center justify-center shrink-0">3</span>
-          <span class="text-slate-700 dark:text-slate-200 leading-snug">Tudo fica salvo no projeto e disponível no seu menu lateral!</span>
-        </div>
-      </div>
-    </div>
-
     <!-- Entity Tabs Container (Idêntico à Aba USUÁRIOS) -->
     <div class="px-5 py-2 bg-slate-50/80 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800 shrink-0 overflow-x-auto custom-scrollbar">
       <div id="shared-layers-entity-toggle" class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm w-max">
@@ -1050,9 +1048,32 @@
       </div>
     </div>
 
-    <!-- Accordion Body (Com min-h-0 e overflow-y-auto garantindo rolagem 100% funcional) -->
-    <div id="shared-layers-accordion" class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 flex flex-col gap-3.5 custom-scrollbar" style="overflow-y: auto !important; -webkit-overflow-scrolling: touch;">
-      <!-- Injected by JS -->
+    <!-- Accordion Body (Com rolagem suave e 100% garantida via mouse e barra) -->
+    <div id="shared-layers-accordion" class="min-h-0 flex-1 overflow-y-scroll p-4 sm:p-5 flex flex-col gap-3.5 custom-scrollbar" style="overflow-y: scroll !important; -webkit-overflow-scrolling: touch; scroll-behavior: smooth;">
+      <!-- Instruções Visuais no Topo da Área Rolável (Não consom espaço fixo) -->
+      <div class="p-3 bg-gradient-to-r from-indigo-50/90 via-sky-50/90 to-emerald-50/90 dark:from-indigo-950/40 dark:via-sky-950/40 dark:to-emerald-950/40 rounded-xl border border-indigo-100/80 dark:border-indigo-900/40 shrink-0 mb-1">
+        <div class="flex items-center gap-1.5 mb-1.5">
+          <span class="material-symbols-outlined text-[15px] text-indigo-600 dark:text-indigo-400">lightbulb</span>
+          <span class="text-[11.5px] font-bold text-slate-800 dark:text-slate-100">Como montar seu Projeto de Camadas:</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[10.5px]">
+          <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/80 dark:bg-slate-900/70 border border-indigo-200/60 dark:border-indigo-800/50 shadow-2xs">
+            <span class="w-4 h-4 rounded-full bg-indigo-600 text-white font-black text-[9px] flex items-center justify-center shrink-0">1</span>
+            <span class="text-slate-700 dark:text-slate-200 leading-snug">Selecione o Projeto acima ou clique em <b>+ Novo Projeto</b>.</span>
+          </div>
+          <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/80 dark:bg-slate-900/70 border border-sky-200/60 dark:border-sky-800/50 shadow-2xs">
+            <span class="w-4 h-4 rounded-full bg-sky-600 text-white font-black text-[9px] flex items-center justify-center shrink-0">2</span>
+            <span class="text-slate-700 dark:text-slate-200 leading-snug">Ative o switch das camadas e ortofotos que desejar.</span>
+          </div>
+          <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/80 dark:bg-slate-900/70 border border-emerald-200/60 dark:border-emerald-800/50 shadow-2xs">
+            <span class="w-4 h-4 rounded-full bg-emerald-600 text-white font-black text-[9px] flex items-center justify-center shrink-0">3</span>
+            <span class="text-slate-700 dark:text-slate-200 leading-snug">Tudo fica salvo no projeto e disponível no menu lateral!</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Container de Acordeões Injetado pelo JS -->
+      <div id="shared-layers-accordion-list" class="flex flex-col gap-3.5"></div>
     </div>
 
     <!-- Sticky Footer -->
