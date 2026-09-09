@@ -794,9 +794,14 @@ function initMap() {
         
         const themeIdStr = String(feature.properties.themeId);
         
-        // Sincroniza a seleção ativa com a camada da feição clicada e persiste no mapa
-        if (!window.activeSelectionThemeId || window.activeSelectionThemeId !== themeIdStr) {
-            toggleSelectionTheme(themeIdStr, true);
+        // Bloqueia se nenhuma camada foi selecionada no menu lateral
+        if (!window.activeSelectionThemeId) {
+            showWarningToast("Selecione a camada no menu lateral primeiro para poder inspecionar suas feições.");
+            return;
+        }
+        // Bloqueia feições pertencentes a outras camadas que não a selecionada no menu lateral
+        if (window.activeSelectionThemeId !== themeIdStr) {
+            return;
         }
 
         L.DomEvent.stopPropagation(e);
@@ -1787,16 +1792,16 @@ function toggleSelectionTheme(themeId, forceState = null) {
         document.head.appendChild(styleTag);
     }
     
-    // Todas as feições visíveis permanecem clicáveis no mapa com cursor pointer.
-    // A camada selecionada ganha prioridade e destaque interativo.
+    // Exclusividade de interação: apenas a camada selecionada no menu lateral
+    // tem feições clicáveis no mapa. Sem camada selecionada, nenhuma feição é clicável.
     if (window.activeSelectionThemeId) {
         styleTag.innerHTML = `
-            .theme-feature { pointer-events: auto !important; cursor: pointer; }
-            .theme-${window.activeSelectionThemeId} { cursor: pointer; stroke-width: 2.5px; }
+            .theme-feature { pointer-events: none !important; cursor: default; }
+            .theme-${window.activeSelectionThemeId} { pointer-events: auto !important; cursor: pointer; stroke-width: 2.5px; }
         `;
     } else {
         styleTag.innerHTML = `
-            .theme-feature { pointer-events: auto !important; cursor: pointer; }
+            .theme-feature { pointer-events: none !important; cursor: default; }
         `;
     }
 }
