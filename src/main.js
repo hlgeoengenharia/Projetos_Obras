@@ -7416,9 +7416,13 @@ function renderRasterLayersList() {
         const isFromOtherEntity = userEntidade && rEnt.toLowerCase() !== userEntidade && rEnt.toLowerCase() !== 'geral';
         const canManageRaster = isSuperAdmin || !isFromOtherEntity;
 
+        const obsVal = raster.observacao || localStorage.getItem(`raster_obs_${raster.id}`) || '';
+        const anexoVal = raster.anexo_url || localStorage.getItem(`raster_anexo_${raster.id}`) || '';
+        const hasInfo = !!(obsVal || anexoVal);
+
         item.innerHTML = `
             <div class="px-3 py-2.5 flex flex-col cursor-pointer" onclick="toggleRasterActions('${raster.id}')" title="Clique para expandir opções da imagem">
-                <!-- Header: Drag Handle, Icon, Title, Badges, and Toggle -->
+                <!-- Header: Drag Handle, Icon, Title, Badges, Info Button and Toggle -->
                 <div class="flex items-center justify-between gap-1.5">
                     <div class="flex items-center gap-2 min-w-0 flex-1">
                         <!-- Alça de Arraste (Drag Handle) -->
@@ -7443,15 +7447,30 @@ function renderRasterLayersList() {
                                         <span>${dateFormatted}</span>
                                     </span>
                                 ` : ''}
+                                ${anexoVal ? `
+                                    <span class="inline-flex items-center gap-0.5 px-1 py-0.5 text-[8.5px] font-bold rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 truncate h-4.5 leading-none" title="Possui anexo vinculado">
+                                        <span class="material-symbols-outlined text-[10px]">attachment</span>
+                                    </span>
+                                ` : ''}
                             </div>
                         </div>
                     </div>
                     
-                    <!-- iOS-style Neon Toggle (idêntico ao padrão das camadas vetoriais) -->
-                    <label class="relative inline-flex items-center cursor-pointer shrink-0 ml-1.5" title="${raster.visivel ? 'Ocultar' : 'Mostrar'} Imagem" onclick="event.stopPropagation()">
-                        <input type="checkbox" id="raster-toggle-${raster.id}" class="sr-only peer" ${raster.visivel ? 'checked' : ''} onchange="toggleRasterVisibility('${raster.id}', this)">
-                        <div id="raster-toggle-bg-${raster.id}" class="w-11 h-6 bg-slate-700/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500" style="${raster.visivel ? 'background-color: #10b981; box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);' : ''}"></div>
-                    </label>
+                    <div class="flex items-center gap-1.5 shrink-0 ml-1.5">
+                        <!-- Botão/Ícone "i" de Informações da Ortofoto (Observação e Link Anexo) -->
+                        <button type="button" 
+                                onclick="event.stopPropagation(); window.openRasterInfoModal('${raster.id}')" 
+                                class="w-7 h-7 rounded-lg flex items-center justify-center transition-all shrink-0 cursor-pointer ${hasInfo ? 'bg-sky-500/20 text-sky-300 hover:bg-sky-500/35 border border-sky-500/40 shadow-xs' : 'bg-white/10 text-slate-400 hover:text-white hover:bg-white/20'}" 
+                                title="${obsVal ? `Observação: ${obsVal}` : (anexoVal ? 'Possui link do documento anexo. Clique para ver.' : 'Clique para ver informações desta ortofoto')}">
+                            <span class="material-symbols-outlined text-[16px]">info</span>
+                        </button>
+                        
+                        <!-- iOS-style Neon Toggle (idêntico ao padrão das camadas vetoriais) -->
+                        <label class="relative inline-flex items-center cursor-pointer shrink-0" title="${raster.visivel ? 'Ocultar' : 'Mostrar'} Imagem" onclick="event.stopPropagation()">
+                            <input type="checkbox" id="raster-toggle-${raster.id}" class="sr-only peer" ${raster.visivel ? 'checked' : ''} onchange="toggleRasterVisibility('${raster.id}', this)">
+                            <div id="raster-toggle-bg-${raster.id}" class="w-11 h-6 bg-slate-700/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500" style="${raster.visivel ? 'background-color: #10b981; box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);' : ''}"></div>
+                        </label>
+                    </div>
                 </div>
             </div>
             
@@ -7844,6 +7863,67 @@ window.closeSelectRasterModal = function() {
         modal.classList.add('scale-95');
         setTimeout(() => modal.classList.add('hidden'), 150);
     }
+};
+
+window.openRasterInfoModal = function(rasterId) {
+    if (!rasterId) return;
+    const raster = (rasterLayers || []).find(r => r.id === rasterId) || {};
+    
+    const obsVal = raster.observacao || localStorage.getItem(`raster_obs_${rasterId}`) || '';
+    const anexoVal = raster.anexo_url || localStorage.getItem(`raster_anexo_${rasterId}`) || '';
+
+    let dateFormatted = '';
+    const dateVal = raster.data_imagem || localStorage.getItem(`raster_date_${rasterId}`);
+    if (dateVal) {
+        dateFormatted = dateVal.split('-').reverse().join('/');
+    } else if (raster.nome) {
+        const matchDate = raster.nome.match(/(\d{2})[-_](\d{2})[-_](\d{4})/);
+        const matchYear = raster.nome.match(/(20\d{2})/);
+        if (matchDate) dateFormatted = `${matchDate[1]}/${matchDate[2]}/${matchDate[3]}`;
+        else if (matchYear) dateFormatted = matchYear[1];
+    }
+
+    const rEnt = (raster.entidade || 'Prefeitura Municipal').trim();
+    const rSigla = (typeof getEntitySigla === 'function') ? getEntitySigla(rEnt) : rEnt;
+
+    const nomeEl = document.getElementById('raster-info-nome');
+    const entEl = document.getElementById('raster-info-entidade');
+    const dataEl = document.getElementById('raster-info-data');
+    const obsEl = document.getElementById('raster-info-obs');
+    const anexoContainer = document.getElementById('raster-info-anexo-container');
+    const anexoLink = document.getElementById('raster-info-anexo-link');
+    const modal = document.getElementById('raster-info-modal');
+
+    if (nomeEl) nomeEl.textContent = raster.nome || 'Ortofoto';
+    if (entEl) {
+        entEl.innerHTML = `<span class="material-symbols-outlined text-[13px]">hub</span><span>${rSigla}</span>`;
+        entEl.title = `Entidade: ${rEnt}`;
+    }
+    if (dataEl) {
+        dataEl.innerHTML = `<span class="material-symbols-outlined text-[13px]">calendar_today</span><span>${dateFormatted || 'Data não informada'}</span>`;
+    }
+    if (obsEl) {
+        obsEl.textContent = obsVal || 'Nenhuma observação ou finalidade foi informada para esta ortofoto.';
+    }
+
+    if (anexoContainer && anexoLink) {
+        if (anexoVal) {
+            anexoContainer.classList.remove('hidden');
+            anexoLink.href = anexoVal;
+        } else {
+            anexoContainer.classList.add('hidden');
+            anexoLink.href = '#';
+        }
+    }
+
+    if (modal) {
+        modal.classList.remove('hidden');
+    }
+};
+
+window.closeRasterInfoModal = function() {
+    const modal = document.getElementById('raster-info-modal');
+    if (modal) modal.classList.add('hidden');
 };
 
 window.activateRasterFromModal = async function(rasterId) {
