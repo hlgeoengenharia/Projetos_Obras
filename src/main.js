@@ -1843,6 +1843,22 @@ function toggleThemeListAndSelection(themeId) {
         // Make this the active selection
         toggleSelectionTheme(themeId, true);
 
+        const theme = themes.find(t => t.id === themeId);
+        if (theme) {
+            const featureListEl = document.getElementById('feature-list-' + themeId);
+            if (featureListEl && (!theme._activeFilterFids || theme._activeFilterFids.size === 0)) {
+                if (theme.features && theme.features.length > 0 && (featureListEl.innerHTML.includes('Nenhuma feição adicionada') || !featureListEl.innerHTML.trim())) {
+                    featureListEl.innerHTML = renderFeatureListItems(theme);
+                }
+            }
+            const selectEl = listEl.querySelector('.filter-field, .filter-col');
+            if (selectEl && selectEl.options.length <= 1 && theme.features && theme.features.length > 0) {
+                const currentVal = selectEl.value;
+                selectEl.innerHTML = `<option value="ALL">Tudo</option>` + getThemeFieldsOptions(theme);
+                if (currentVal) selectEl.value = currentVal;
+            }
+        }
+
         // Lazy load: carrega propriedades completas em background ao abrir a lista
         // para que o filtro avançado funcione com todos os campos
         loadThemeProperties(themeId);
@@ -2034,25 +2050,29 @@ function renderThemes() {
         ` : ''}
 
         <!-- Filtro Rápido Inteligente por Qualquer Coluna da Camada -->
-        <div class="p-2 border-b border-white/10 bg-slate-900/30">
+        <div class="p-2 border-b border-white/10 bg-slate-900/30" id="filters-container-${theme.id}">
           <div class="flex flex-col gap-1.5">
-             <div class="flex items-center justify-between">
-                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                   <span class="material-symbols-outlined text-[12px] text-cyan-400">filter_alt</span>
-                   Filtrar Registros
+             <div class="flex items-center justify-between gap-2">
+                <span class="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 min-w-0">
+                   <span class="material-symbols-outlined text-[13px] text-cyan-400 shrink-0">filter_alt</span>
+                   <span class="truncate">Filtrar Registros</span>
+                   <span id="filter-badge-${theme.id}" class="hidden ml-1 px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shrink-0"></span>
                 </span>
-                <button onclick="clearSearch('${theme.id}')" class="text-[9px] text-cyan-400 hover:underline cursor-pointer flex items-center gap-0.5">
-                   <span class="material-symbols-outlined text-[10px]">close</span> Limpar
+                <button type="button" onclick="clearSearch('${theme.id}')" class="px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 active:scale-95 text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 transition-all border border-cyan-500/25 flex items-center gap-1 cursor-pointer shrink-0 shadow-xs" title="Limpar filtro e mostrar todos os registros">
+                   <span class="material-symbols-outlined text-[15px]">close</span>
+                   <span>Limpar</span>
                 </button>
              </div>
-             <div class="flex gap-1">
-                <select class="filter-col w-1/3 text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-1.5 py-1 text-slate-700 dark:text-slate-300 truncate" onchange="executeSearch('${theme.id}')">
-                   <option value="_all">Tudo</option>
-                   ${getThemeFieldsOptions(theme)}
-                </select>
-                <div class="flex w-2/3 gap-1 filter-value-container">
-                   <input type="text" class="filter-value w-full text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300" placeholder="Contém..." onkeyup="executeSearch('${theme.id}')">
-                </div>
+             <div class="filter-rows-wrapper flex flex-col gap-1" id="filter-rows-${theme.id}">
+               <div class="filter-row flex gap-1">
+                  <select class="filter-field filter-col w-1/3 text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-1.5 py-1 text-slate-700 dark:text-slate-300 truncate" onchange="updateFilterValueInput(this, '${theme.id}')">
+                     <option value="ALL">Tudo</option>
+                     ${getThemeFieldsOptions(theme)}
+                  </select>
+                  <div class="flex w-2/3 gap-1 filter-value-container">
+                     <input type="text" class="filter-value w-full text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300" placeholder="Contém..." onkeyup="executeSearch('${theme.id}')" oninput="executeSearch('${theme.id}')">
+                  </div>
+               </div>
              </div>
           </div>
         </div>
@@ -2177,15 +2197,24 @@ async function loadThemeProperties(themeId) {
         const countEl = document.getElementById('theme-count-' + themeId);
         if (countEl) countEl.textContent = theme.features.length;
 
+        const featureListEl = document.getElementById('feature-list-' + themeId);
+        if (featureListEl && (!theme._activeFilterFids || theme._activeFilterFids.size === 0)) {
+            featureListEl.innerHTML = renderFeatureListItems(theme);
+        }
+
         const listEl = document.getElementById('list-' + themeId);
-        if (listEl && !listEl.classList.contains('hidden')) {
-            const featureListEl = document.getElementById('feature-list-' + themeId);
-            if (featureListEl) featureListEl.innerHTML = renderFeatureListItems(theme);
-            if (!isRefreshingDropdowns) {
-                isRefreshingDropdowns = true;
-                try { refreshFilterDropdownOptions(themeId); }
-                finally { isRefreshingDropdowns = false; }
+        if (listEl) {
+            const selectEl = listEl.querySelector('.filter-field, .filter-col');
+            if (selectEl && selectEl.options.length <= 1) {
+                const currentVal = selectEl.value;
+                selectEl.innerHTML = `<option value="ALL">Tudo</option>` + getThemeFieldsOptions(theme);
+                if (currentVal) selectEl.value = currentVal;
             }
+        }
+        if (!isRefreshingDropdowns) {
+            isRefreshingDropdowns = true;
+            try { refreshFilterDropdownOptions(themeId); }
+            finally { isRefreshingDropdowns = false; }
         }
         return; // Cache 100% válido e sincronizado!
     }
@@ -2281,17 +2310,24 @@ async function loadThemeProperties(themeId) {
         const countEl = document.getElementById('theme-count-' + themeId);
         if (countEl) countEl.textContent = theme.features.length;
 
+        const featureListEl = document.getElementById('feature-list-' + themeId);
+        if (featureListEl && (!theme._activeFilterFids || theme._activeFilterFids.size === 0)) {
+            featureListEl.innerHTML = renderFeatureListItems(theme);
+        }
+
         const listEl = document.getElementById('list-' + themeId);
-        if (listEl && !listEl.classList.contains('hidden')) {
-            const featureListEl = document.getElementById('feature-list-' + themeId);
-            if (featureListEl) {
-                featureListEl.innerHTML = renderFeatureListItems(theme);
+        if (listEl) {
+            const selectEl = listEl.querySelector('.filter-field, .filter-col');
+            if (selectEl && selectEl.options.length <= 1) {
+                const currentVal = selectEl.value;
+                selectEl.innerHTML = `<option value="ALL">Tudo</option>` + getThemeFieldsOptions(theme);
+                if (currentVal) selectEl.value = currentVal;
             }
-            if (!isRefreshingDropdowns) {
-                isRefreshingDropdowns = true;
-                try { refreshFilterDropdownOptions(themeId); }
-                finally { isRefreshingDropdowns = false; }
-            }
+        }
+        if (!isRefreshingDropdowns) {
+            isRefreshingDropdowns = true;
+            try { refreshFilterDropdownOptions(themeId); }
+            finally { isRefreshingDropdowns = false; }
         }
     } catch(e) {
         console.error('[LazyLoad] Erro ao carregar propriedades:', e);
@@ -2406,32 +2442,67 @@ function renderFeatureListItems(theme) {
 
 
 function getThemeFieldsOptions(theme) {
+    const seen = new Set();
     let optionsHtml = '';
-    if (theme.formId && typeof allForms !== 'undefined') {
+
+    // 1. Campos do formulário associado se houver
+    if (theme && theme.formId && typeof allForms !== 'undefined') {
         const form = allForms.find(f => f.id === theme.formId);
         if (form && (form.schema || form.tabs)) {
             const schema = form.schema || form.tabs;
             schema.forEach(tab => {
                 if (tab.fields) {
                     tab.fields.forEach(f => {
-                        optionsHtml += `<option value="${f.id}">${f.label}</option>`;
+                        const key = f.id || f.name || f.label;
+                        if (key && !seen.has(String(key).toLowerCase())) {
+                            seen.add(String(key).toLowerCase());
+                            optionsHtml += `<option value="${f.id}">${f.label || f.name || f.id}</option>`;
+                        }
                     });
                 }
             });
-            return optionsHtml;
         }
     }
-    // Fallback: extract properties from first feature
-    if (theme.features && theme.features.length > 0) {
-        const props = theme.features[0].properties;
-        for (let key in props) {
-            if (!key.startsWith('_') && key !== 'themeId') {
-                optionsHtml += `<option value="${key}">${key}</option>`;
+
+    // 2. Extrai propriedades reais das feições já carregadas (amostragem inteligente)
+    if (theme && theme.features && theme.features.length > 0) {
+        const sampleSize = Math.min(30, theme.features.length);
+        for (let i = 0; i < sampleSize; i++) {
+            const props = theme.features[i].properties;
+            if (props) {
+                for (let key in props) {
+                    if (!key.startsWith('_') && key !== 'themeId' && key !== 'id_banco') {
+                        if (!seen.has(String(key).toLowerCase())) {
+                            seen.add(String(key).toLowerCase());
+                            const label = getThemeFieldLabel(theme, key) || key;
+                            optionsHtml += `<option value="${key}">${label}</option>`;
+                        }
+                    }
+                }
             }
         }
     }
+
     return optionsHtml;
 }
+
+function clearSearch(themeId) {
+    const container = document.getElementById('filters-container-' + themeId);
+    if (container) {
+        const fieldSelect = container.querySelector('.filter-field') || container.querySelector('.filter-col');
+        const valInput = container.querySelector('.filter-value');
+        if (valInput) valInput.value = '';
+        if (fieldSelect) {
+            fieldSelect.value = 'ALL';
+            updateFilterValueInput(fieldSelect, themeId);
+        }
+        const badge = document.getElementById('filter-badge-' + themeId);
+        if (badge) badge.classList.add('hidden');
+    }
+    executeSearch(themeId);
+}
+window.clearSearch = clearSearch;
+window.clearAllFilters = clearSearch;
 
 function addFilterRow(themeId) {
     const theme = themes.find(t => t.id === themeId);
@@ -2452,7 +2523,8 @@ function addFilterRow(themeId) {
         return;
     }
     
-    const container = document.getElementById('filters-container-' + themeId);
+    const container = document.getElementById('filter-rows-' + themeId) || document.getElementById('filters-container-' + themeId);
+    if (!container) return;
     const row = document.createElement('div');
     row.className = "filter-row flex gap-1";
     row.innerHTML = `
@@ -2461,7 +2533,7 @@ function addFilterRow(themeId) {
            ${getThemeFieldsOptions(theme)}
         </select>
         <div class="flex w-2/3 gap-1 filter-value-container">
-           <input type="text" class="filter-value w-full text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300" placeholder="Contém..." onkeyup="executeSearch('${theme.id}')">
+           <input type="text" class="filter-value w-full text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300" placeholder="Contém..." onkeyup="executeSearch('${theme.id}')" oninput="executeSearch('${theme.id}')">
            <button onclick="this.parentElement.parentElement.remove(); executeSearch('${theme.id}')" class="text-red-500 hover:text-red-700 px-1"><span class="material-symbols-outlined text-[14px]">remove_circle</span></button>
         </div>
     `;
@@ -2469,23 +2541,7 @@ function addFilterRow(themeId) {
 }
 
 function clearAllFilters(themeId) {
-    const theme = themes.find(t => t.id === themeId);
-    if (!theme) return;
-    const container = document.getElementById('filters-container-' + themeId);
-    if (!container) return;
-    
-    container.innerHTML = `
-         <div class="filter-row flex gap-1">
-            <select class="filter-field w-1/3 text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-1 py-1 text-slate-700 dark:text-slate-300" onchange="updateFilterValueInput(this, '${theme.id}')">
-               <option value="ALL">Qualquer Campo</option>
-               ${getThemeFieldsOptions(theme)}
-            </select>
-            <div class="flex w-2/3 gap-1 filter-value-container">
-               <input type="text" class="filter-value w-full text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300" placeholder="Contém..." onkeyup="executeSearch('${theme.id}')">
-            </div>
-         </div>
-    `;
-    executeSearch(themeId);
+    clearSearch(themeId);
 }
 function getThemeField(theme, key) {
     if (!key) return null;
@@ -2522,37 +2578,45 @@ function updateFilterValueInput(selectEl, themeId) {
     if (!theme) return;
     
     const container = selectEl.closest('.filter-row');
+    if (!container) return;
     const valueContainer = container.querySelector('.filter-value-container');
+    if (!valueContainer) return;
     const fieldId = selectEl.value;
     
+    const prevInput = valueContainer.querySelector('.filter-value');
+    const prevVal = prevInput ? prevInput.value : '';
+    const safePrevVal = String(prevVal || '').replace(/"/g, '&quot;');
+
     const hasRemoveBtn = valueContainer.innerHTML.includes('remove_circle');
     const btnHtml = hasRemoveBtn ? `<button onclick="this.parentElement.parentElement.remove(); executeSearch('${theme.id}')" class="text-red-500 hover:text-red-700 px-1"><span class="material-symbols-outlined text-[14px]">remove_circle</span></button>` : '';
     
-    if (fieldId === 'ALL') {
-        valueContainer.innerHTML = `<input type="text" class="filter-value w-full text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300" placeholder="Contém..." onkeyup="executeSearch('${theme.id}')">` + btnHtml;
+    if (fieldId === 'ALL' || fieldId === '_all') {
+        valueContainer.innerHTML = `<input type="text" class="filter-value w-full text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300" placeholder="Contém..." value="${safePrevVal}" onkeyup="executeSearch('${theme.id}')" oninput="executeSearch('${theme.id}')">` + btnHtml;
     } else {
         const uniqueValues = new Set();
         if (theme.features) {
             theme.features.forEach(f => {
                 let val = getFeaturePropertyValue(theme, f, fieldId);
+                if (val === undefined || val === null || val === '') {
+                    val = f.properties ? f.properties[fieldId] : '';
+                }
                 if (val !== undefined && val !== null && val !== '') {
                     val = formatFilterValue(theme, fieldId, val);
-                    if (val) uniqueValues.add(val);
+                    if (val) uniqueValues.add(String(val).trim());
                 }
             });
         }
         
-        // Campo de texto com autocomplete (datalist) em vez de <select>: com
-        // milhares de valores possíveis, rolar uma lista fixa é inviável —
-        // digitar e ver só os que combinam é bem mais rápido.
+        // Campo de texto com autocomplete (datalist) em vez de <select>
         const datalistId = `filter-values-${theme.id}-${fieldId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
-        const optionsHtml = Array.from(uniqueValues).sort().map(v => `<option value="${String(v).replace(/"/g, '&quot;')}"></option>`).join('');
+        const optionsHtml = Array.from(uniqueValues).sort().slice(0, 500).map(v => `<option value="${String(v).replace(/"/g, '&quot;')}"></option>`).join('');
 
-        valueContainer.innerHTML = `<input type="text" list="${datalistId}" class="filter-value w-full text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300" placeholder="Digite ou selecione..." onkeyup="executeSearch('${theme.id}')" onchange="executeSearch('${theme.id}')">
+        valueContainer.innerHTML = `<input type="text" list="${datalistId}" class="filter-value w-full text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300" placeholder="Digite ou selecione..." value="${safePrevVal}" onkeyup="executeSearch('${theme.id}')" oninput="executeSearch('${theme.id}')" onchange="executeSearch('${theme.id}')">
             <datalist id="${datalistId}">${optionsHtml}</datalist>` + btnHtml;
     }
     executeSearch(theme.id);
 }
+window.updateFilterValueInput = updateFilterValueInput;
 
 let currentHighlightData = null;
 
@@ -2679,45 +2743,69 @@ async function zoomToFeature(fid) {
 // Debounce para o executeSearch (evita rodar a cada tecla com 20k itens)
 const _searchDebounce = {};
 
+function normalizeSearchText(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
 function executeSearch(themeId) {
   clearTimeout(_searchDebounce[themeId]);
-  _searchDebounce[themeId] = setTimeout(() => _executeSearchNow(themeId), 150);
+  _searchDebounce[themeId] = setTimeout(() => _executeSearchNow(themeId), 120);
 }
+window.executeSearch = executeSearch;
 
 async function _executeSearchNow(themeId) {
   var filterContainer = document.getElementById('filters-container-' + themeId);
   if (!filterContainer) return;
 
-  var rules = [];
-  filterContainer.querySelectorAll('.filter-row').forEach(function(row) {
-      var field = row.querySelector('.filter-field').value;
-      var value = row.querySelector('.filter-value').value.toLowerCase().trim();
-      if (value !== '') rules.push({ field: field, value: value });
-  });
-
   var theme = themes.find(function(t) { return t.id === themeId; });
   if (!theme) return;
+
+  // Se propriedades ainda não terminaram de carregar, aguarda para filtrar com dados reais
+  if ((!theme.features || theme.features.length === 0) && !theme._propertiesFullyLoaded) {
+    if (typeof loadThemeProperties === 'function') {
+      await loadThemeProperties(themeId);
+    }
+  }
+
+  var rules = [];
+  filterContainer.querySelectorAll('.filter-row').forEach(function(row) {
+      var fieldSelect = row.querySelector('.filter-field') || row.querySelector('.filter-col');
+      var valueInput = row.querySelector('.filter-value');
+      if (!fieldSelect || !valueInput) return;
+      var field = fieldSelect.value;
+      var value = valueInput.value.trim();
+      if (value !== '') rules.push({ field: field, value: value });
+  });
 
   var listContainer = document.getElementById('feature-list-' + themeId);
   if (!listContainer) return;
 
   var hasAnyFilter = rules.length > 0;
   var visibleFids = new Set();
+  var filterBadge = document.getElementById('filter-badge-' + themeId);
 
-  // Buscar implica em querer ver o resultado no mapa — liga a camada se
-  // estiver desligada (padrão do sistema), em vez de filtrar "no vazio".
-  // Não chama renderThemes() aqui de propósito: isso re-renderiza a sidebar
-  // inteira e fecharia o próprio painel de filtro que o usuário está usando
-  // (ele volta a ficar visualmente sincronizado no próximo render natural).
+  // Buscar implica em querer ver o resultado no mapa — liga a camada se estiver desligada
   if (hasAnyFilter && theme.visible === false) {
     theme.visible = true;
     saveThemes();
+    const toggleInput = document.getElementById('theme-toggle-' + themeId);
+    if (toggleInput) toggleInput.checked = true;
+    const bgEl = document.getElementById('theme-toggle-bg-' + themeId);
+    if (bgEl) {
+        bgEl.style.backgroundColor = theme.color;
+        bgEl.style.boxShadow = `0 0 12px ${theme.color}90`;
+    }
   }
 
   if (!hasAnyFilter) {
-    // Sem filtro: restaura a lista paginada normal e volta pra renderização
-    // normal por viewport (some com a exceção de "sempre mostra os resultados")
+    // Sem filtro: restaura a lista paginada normal e mapa
     theme._activeFilterFids = null;
+    if (filterBadge) filterBadge.classList.add('hidden');
     listContainer.innerHTML = renderFeatureListItems(theme);
     loadAllFeaturesToMap();
     return;
@@ -2725,20 +2813,54 @@ async function _executeSearchNow(themeId) {
 
   // Com filtro: garante _tempId em todas as feições
   (theme.features || []).forEach(function(f) {
+    if (!f.properties) f.properties = {};
     if (!f.properties._tempId) f.properties._tempId = 'feat_' + Math.random().toString(36).substr(2, 9);
   });
 
-  // Filtra em TODOS os theme.features (não apenas os 100 no DOM)
+  // Filtra em TODOS os theme.features com normalização de acentos, dígitos e case-insensitive
   var matchedFeatures = (theme.features || []).filter(function(f) {
     for (var ri = 0; ri < rules.length; ri++) {
       var rule = rules[ri];
-      if (rule.field === 'ALL') {
-        var searchData = Object.values(f.properties || {}).join(' ').toLowerCase();
-        if (!searchData.includes(rule.value)) return false;
+      var ruleValue = rule.value;
+      if (!ruleValue) continue;
+
+      var ruleNorm = normalizeSearchText(ruleValue);
+      var ruleDigits = String(ruleValue).replace(/\D/g, '');
+
+      if (rule.field === 'ALL' || rule.field === '_all') {
+        var allValues = [];
+        if (f.properties) {
+          for (var k in f.properties) {
+            if (k.startsWith('_') || k === 'themeId' || k === 'id_banco') continue;
+            var v = f.properties[k];
+            if (v !== null && v !== undefined && v !== '') {
+              allValues.push(typeof v === 'object' ? JSON.stringify(v) : String(v));
+            }
+          }
+        }
+        var searchStr = normalizeSearchText(allValues.join(' '));
+        var matches = searchStr.includes(ruleNorm);
+        if (!matches && ruleDigits.length >= 3) {
+          matches = searchStr.replace(/\D/g, '').includes(ruleDigits);
+        }
+        if (!matches) return false;
       } else {
-        var val = getFeaturePropertyValue(theme, f, rule.field) || '';
-        val = formatFilterValue(theme, rule.field, val);
-        if (!val.toLowerCase().includes(rule.value)) return false;
+        var val = getFeaturePropertyValue(theme, f, rule.field);
+        if (val === undefined || val === null || val === '') {
+          val = f.properties ? f.properties[rule.field] : '';
+        }
+        if (val === undefined || val === null) val = '';
+        var formatted = formatFilterValue(theme, rule.field, val);
+        var valNorm = normalizeSearchText(val);
+        var formattedNorm = normalizeSearchText(formatted);
+
+        var matches = valNorm.includes(ruleNorm) || formattedNorm.includes(ruleNorm);
+        if (!matches && ruleDigits.length >= 3) {
+          var digitsVal = String(val).replace(/\D/g, '');
+          var digitsFmt = String(formatted).replace(/\D/g, '');
+          matches = digitsVal.includes(ruleDigits) || digitsFmt.includes(ruleDigits);
+        }
+        if (!matches) return false;
       }
     }
     return true;
@@ -2746,12 +2868,13 @@ async function _executeSearchNow(themeId) {
 
   matchedFeatures.forEach(function(f) { visibleFids.add(f.properties._tempId); });
 
-  // Busca (filtro) tem prioridade sobre o limite de densidade de renderização
-  // — ver loadAllFeaturesToMap(). Isso garante que o resultado sempre apareça
-  // no mapa, mesmo que a camada esteja "capada" por excesso de feições na
-  // área visível atual.
   theme._activeFilterFids = visibleFids;
   loadAllFeaturesToMap();
+
+  if (filterBadge) {
+    filterBadge.textContent = `${matchedFeatures.length} de ${(theme.features || []).length}`;
+    filterBadge.classList.remove('hidden');
+  }
 
   // Re-renderiza a lista com apenas os resultados filtrados
   var PAGE = 100;
@@ -2760,17 +2883,14 @@ async function _executeSearchNow(themeId) {
     html += _buildFeatureItemHtml(theme, matchedFeatures[i]);
   }
   if (matchedFeatures.length === 0) {
-    html = '<div class="px-4 py-3 text-xs text-slate-400 italic">Nenhum resultado encontrado.</div>';
+    html = '<div class="px-4 py-3 text-xs text-slate-400 italic text-center">Nenhum registro encontrado para este filtro.</div>';
   } else if (matchedFeatures.length > PAGE) {
-    html += '<div class="px-3 py-2 text-[10px] text-slate-500 border-t border-white/5">'
+    html += '<div class="px-3 py-2 text-[10px] text-slate-500 border-t border-white/5 text-center">'
       + matchedFeatures.length + ' resultados — exibindo os primeiros ' + PAGE + '. Refine o filtro para ver mais.'
       + '</div>';
   }
   listContainer.innerHTML = html;
 
-  // loadAllFeaturesToMap() já desenhou exatamente os resultados casados
-  // (via theme._activeFilterFids) — só falta calcular os limites pra dar
-  // fitBounds, de forma diferida pra não bloquear a UI.
   setTimeout(function() {
     var bounds = L.latLngBounds();
     var hasVisibleFeatures = false;
@@ -2789,7 +2909,6 @@ async function _executeSearchNow(themeId) {
       }
     }
 
-    // Atualizar dinamicamente os valores de outros dropdowns de filtro (cascata)
     if (!isRefreshingDropdowns) {
       isRefreshingDropdowns = true;
       try { refreshFilterDropdownOptions(themeId); }
@@ -2811,12 +2930,12 @@ function refreshFilterDropdownOptions(themeId) {
     let anyValueReset = false;
     
     rows.forEach((currentRow, currentIndex) => {
-        const fieldSelect = currentRow.querySelector('.filter-field');
+        const fieldSelect = currentRow.querySelector('.filter-field') || currentRow.querySelector('.filter-col');
         const valueInput = currentRow.querySelector('.filter-value');
         if (!fieldSelect || !valueInput) return;
 
         const currentFieldId = fieldSelect.value;
-        if (currentFieldId === 'ALL') return; // "Qualquer Campo" não tem lista de valores fixa
+        if (currentFieldId === 'ALL' || currentFieldId === '_all') return; // "Qualquer Campo" não tem lista de valores fixa
 
         // Campo de texto com datalist (autocomplete) — atualiza as sugestões
         const datalistId = valueInput.getAttribute('list');
@@ -2827,9 +2946,9 @@ function refreshFilterDropdownOptions(themeId) {
         const otherRules = [];
         rows.forEach((row, idx) => {
             if (idx !== currentIndex) {
-                const fSelect = row.querySelector('.filter-field');
+                const fSelect = row.querySelector('.filter-field') || row.querySelector('.filter-col');
                 const vInput = row.querySelector('.filter-value');
-                if (fSelect && vInput && fSelect.value !== 'ALL' && vInput.value !== '') {
+                if (fSelect && vInput && fSelect.value !== 'ALL' && fSelect.value !== '_all' && vInput.value !== '') {
                     otherRules.push({ field: fSelect.value, value: vInput.value.toLowerCase().trim() });
                 }
             }
