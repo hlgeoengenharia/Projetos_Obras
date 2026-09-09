@@ -1035,18 +1035,26 @@ function updateLabelsVisibility() {
 }
 
 // Call initMap and setupIconDropdowns on window load since we no longer have a Google Maps callback
-// This is now done at the bottom of the file
-
-// =========================================================================
-// SISTEMA DE PROJETOS E MESA DE TRABALHO DE CAMADAS SOB DEMANDA
-// =========================================================================
-
 window.activeProjectId = null;
 window.userProjects = [];
 window.activeWorkspaceThemes = [];
 window.activeWorkspaceRasters = [];
 window.sharedCatalogSelectedTab = 'todos';
 window.sharedCatalogSearchQuery = '';
+
+function generateProjectUUID() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
+function isValidUUID(str) {
+    return typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+}
 
 window.loadUserProjects = async function() {
     const munId = typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : (sessionStorage.getItem('activeMunicipioId') || 'default');
@@ -1064,13 +1072,17 @@ window.loadUserProjects = async function() {
     let loadedProjects = [];
     if (typeof supabaseClient !== 'undefined' && supabaseClient && currentUserId) {
         try {
-            const { data, error } = await supabaseClient
+            let query = supabaseClient
                 .from('user_projetos')
                 .select('*')
-                .eq('user_id', currentUserId)
-                .eq('municipio_id', munId)
-                .order('created_at', { ascending: false });
+                .eq('user_id', currentUserId);
             
+            // Somente filtra por municipio_id se for um UUID válido do Postgres
+            if (isValidUUID(munId)) {
+                query = query.eq('municipio_id', munId);
+            }
+
+            const { data, error } = await query.order('created_at', { ascending: false });
             if (!error && Array.isArray(data)) {
                 loadedProjects = data;
             }
@@ -1085,7 +1097,26 @@ window.loadUserProjects = async function() {
         try {
             loadedProjects = JSON.parse(localSaved);
         } catch(eJson) {}
-    } else if (loadedProjects.length > 0) {
+    }
+
+    // Valida e migra IDs legados (ex: proj_1788...) para UUIDs válidos para evitar erro 400 no Supabase
+    let hasMigrated = false;
+    (loadedProjects || []).forEach(p => {
+        if (!isValidUUID(p.id)) {
+            const oldId = p.id;
+            p.id = generateProjectUUID();
+            hasMigrated = true;
+            const lastActiveStored = localStorage.getItem('last_active_project_' + munId);
+            if (lastActiveStored === oldId) {
+                localStorage.setItem('last_active_project_' + munId, p.id);
+            }
+            if (window.activeProjectId === oldId) {
+                window.activeProjectId = p.id;
+            }
+        }
+    });
+
+    if (loadedProjects.length > 0 || hasMigrated) {
         localStorage.setItem('user_projetos_' + munId, JSON.stringify(loadedProjects));
     }
     window.userProjects = loadedProjects;
@@ -1128,15 +1159,19 @@ window.updateProjectSelectDropdown = function() {
 };
 
 window.updateProjectActiveUI = function() {
-    const isProjectActive = !!window.activeProjectId;
+    const isProjectActive = !!(window.activeProjectId && window.activeProjectId !== 'livre');
     const proj = isProjectActive ? (window.userProjects || []).find(p => p.id === window.activeProjectId) : null;
     
-    // Atualiza nome na barra de topo do menu lateral (Drawer)
-    const drawerNameEl = document.getElementById('drawer-project-name');
+    // Atualiza nome e botões no menu lateral (Drawer)
+    const drawerNameEl = document.getElementById('drawer-active-project-name');
+    const drawerBtnRename = document.getElementById('drawer-btn-rename-proj');
+    const drawerBtnDelete = document.getElementById('drawer-btn-delete-proj');
     if (drawerNameEl) {
         drawerNameEl.textContent = proj ? proj.nome : 'Modo Livre (Sem Projeto)';
         drawerNameEl.title = proj ? (proj.descricao || proj.nome) : 'Camadas avulsas na mesa de trabalho';
     }
+    if (drawerBtnRename) drawerBtnRename.classList.toggle('hidden', !isProjectActive);
+    if (drawerBtnDelete) drawerBtnDelete.classList.toggle('hidden', !isProjectActive);
 
     // Atualiza badge de contagem de itens
     const totalItems = (window.activeWorkspaceThemes ? window.activeWorkspaceThemes.length : 0) + (window.activeWorkspaceRasters ? window.activeWorkspaceRasters.length : 0);
@@ -1145,11 +1180,19 @@ window.updateProjectActiveUI = function() {
         badgeEl.textContent = `${totalItems} ${totalItems === 1 ? 'item na mesa' : 'itens na mesa'}`;
     }
 
-    // Habilita / desabilita botões de editar e excluir projeto
+    // Habilita / desabilita botões de editar e excluir projeto no card do Catálogo
     const btnRename = document.getElementById('btn-rename-project');
     const btnDelete = document.getElementById('btn-delete-project');
-    if (btnRename) btnRename.disabled = !isProjectActive;
-    if (btnDelete) btnDelete.disabled = !isProjectActive;
+    if (btnRename) {
+        btnRename.disabled = !isProjectActive;
+        btnRename.classList.toggle('opacity-20', !isProjectActive);
+        btnRename.classList.toggle('cursor-not-allowed', !isProjectActive);
+    }
+    if (btnDelete) {
+        btnDelete.disabled = !isProjectActive;
+        btnDelete.classList.toggle('opacity-20', !isProjectActive);
+        btnDelete.classList.toggle('cursor-not-allowed', !isProjectActive);
+    }
 };
 
 window.onSelectUserProject = async function(val) {
@@ -1251,27 +1294,25 @@ window.openRenameProjectModal = function() {
 
 window.closeProjectModal = function() {
     const modal = document.getElementById('project-modal');
-    if (modal) {
-        modal.firstElementChild?.classList.add('scale-95');
-        setTimeout(() => modal.classList.add('hidden'), 150);
-    }
+    if (!modal) return;
+    modal.firstElementChild?.classList.add('scale-95');
+    setTimeout(() => modal.classList.add('hidden'), 150);
     window._editingProjectId = null;
 };
 
 window.saveProjectFromModal = async function() {
     const nameInput = document.getElementById('project-input-name');
     const descInput = document.getElementById('project-input-desc');
-    const nome = (nameInput?.value || '').trim();
-    const descricao = (descInput?.value || '').trim();
+    const nome = nameInput?.value?.trim();
+    const descricao = descInput?.value?.trim() || '';
 
     if (!nome) {
-        if (typeof showToastAlert === 'function') showToastAlert('Por favor, informe um nome para o projeto.', 'error');
-        else alert('Por favor, informe um nome para o projeto.');
-        nameInput?.focus();
+        if (typeof showToastAlert === 'function') showToastAlert('Informe um nome para o projeto.', 'warning');
         return;
     }
 
     const munId = typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : (sessionStorage.getItem('activeMunicipioId') || 'default');
+    
     let currentUserId = (typeof currentUserProfile !== 'undefined' && currentUserProfile && currentUserProfile.id) || null;
     if (!currentUserId && typeof supabaseClient !== 'undefined' && supabaseClient && supabaseClient.auth) {
         try {
@@ -1288,7 +1329,7 @@ window.saveProjectFromModal = async function() {
             proj.descricao = descricao;
             proj.updated_at = new Date().toISOString();
 
-            if (typeof supabaseClient !== 'undefined' && supabaseClient && currentUserId) {
+            if (typeof supabaseClient !== 'undefined' && supabaseClient && currentUserId && isValidUUID(proj.id)) {
                 try {
                     await supabaseClient.from('user_projetos').update({ nome, descricao, updated_at: proj.updated_at }).eq('id', proj.id);
                 } catch(eUp) { console.warn('Erro ao atualizar projeto na nuvem:', eUp); }
@@ -1297,11 +1338,12 @@ window.saveProjectFromModal = async function() {
             if (typeof showToastAlert === 'function') showToastAlert(`Projeto "${nome}" renomeado com sucesso!`, 'success');
         }
     } else {
-        // Criando novo projeto
+        // Criando novo projeto com UUID válido
+        const newProjId = generateProjectUUID();
         const newProj = {
-            id: 'proj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+            id: newProjId,
             user_id: currentUserId,
-            municipio_id: munId,
+            municipio_id: isValidUUID(munId) ? munId : null,
             nome: nome,
             descricao: descricao,
             camadas_ids: [],
@@ -1314,17 +1356,19 @@ window.saveProjectFromModal = async function() {
 
         if (typeof supabaseClient !== 'undefined' && supabaseClient && currentUserId) {
             try {
-                const { data, error } = await supabaseClient.from('user_projetos').insert({
+                const insertPayload = {
                     id: newProj.id,
                     user_id: currentUserId,
-                    municipio_id: munId,
                     nome: nome,
                     descricao: descricao,
                     camadas_ids: [],
                     rasters_ids: [],
                     camadas_visiveis: []
-                }).select().single();
-                if (!error && data) {
+                };
+                if (isValidUUID(munId)) insertPayload.municipio_id = munId;
+
+                const { data, error } = await supabaseClient.from('user_projetos').insert(insertPayload).select().single();
+                if (!error && data && data.id) {
                     newProj.id = data.id;
                 }
             } catch(eIns) { console.warn('Erro ao salvar projeto no Supabase, mantendo local:', eIns); }
@@ -1355,7 +1399,7 @@ window.deleteActiveProject = async function() {
 
     const munId = typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : (sessionStorage.getItem('activeMunicipioId') || 'default');
     
-    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+    if (typeof supabaseClient !== 'undefined' && supabaseClient && isValidUUID(proj.id)) {
         try {
             await supabaseClient.from('user_projetos').delete().eq('id', proj.id);
         } catch(eDel) { console.warn('Erro ao excluir projeto do Supabase:', eDel); }
@@ -1451,15 +1495,30 @@ window.saveCurrentWorkspaceState = async function() {
             proj.camadas_visiveis = themes.filter(t => window.activeWorkspaceThemes.includes(t.id) && t.visible).map(t => t.id);
             proj.updated_at = new Date().toISOString();
 
-            if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            if (typeof supabaseClient !== 'undefined' && supabaseClient && isValidUUID(proj.id)) {
                 try {
-                    await supabaseClient.from('user_projetos').update({
+                    let currentUserId = (typeof currentUserProfile !== 'undefined' && currentUserProfile && currentUserProfile.id) || null;
+                    if (!currentUserId && supabaseClient.auth) {
+                        const { data: sessData } = await supabaseClient.auth.getSession();
+                        currentUserId = sessData?.session?.user?.id || null;
+                    }
+
+                    const upsertData = {
+                        id: proj.id,
+                        nome: proj.nome,
+                        descricao: proj.descricao || '',
                         camadas_ids: proj.camadas_ids,
                         rasters_ids: proj.rasters_ids,
                         camadas_visiveis: proj.camadas_visiveis,
                         updated_at: proj.updated_at
-                    }).eq('id', proj.id);
-                } catch(eUp) {}
+                    };
+                    if (currentUserId) upsertData.user_id = currentUserId;
+                    if (isValidUUID(munId)) upsertData.municipio_id = munId;
+
+                    await supabaseClient.from('user_projetos').upsert(upsertData, { onConflict: 'id' });
+                } catch(eUp) {
+                    console.warn('[Projetos] Aviso ao sincronizar com Supabase:', eUp);
+                }
             }
             localStorage.setItem('user_projetos_' + munId, JSON.stringify(window.userProjects));
         }
