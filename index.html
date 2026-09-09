@@ -411,9 +411,9 @@
 <!-- NavigationDrawer -->
 <aside class="fixed top-0 left-0 md:top-[4.5rem] md:left-4 z-[60] flex flex-col h-[100dvh] md:h-[calc(100vh-5.5rem)] w-full md:w-80 lg:w-96 bg-white/50 dark:bg-[#070b14]/50 backdrop-blur-md rounded-none md:rounded-2xl border-0 md:border border-slate-200/50 dark:border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-out -translate-x-[120%] overflow-hidden" id="side-drawer">
 <div class="p-0 border-b border-slate-200 dark:border-slate-800 flex items-center justify-center">
-    <button id="drawer-btn-compartilhado" onclick="openSharedLayersCatalog()" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-cyan-400 dark:hover:text-cyan-400 relative cursor-pointer group" title="Catálogo de Camadas Compartilhadas de outras Entidades">
-        <span class="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">hub</span>
-        <span class="text-[9px] font-semibold tracking-wide uppercase">Compartilhado</span>
+    <button id="drawer-btn-compartilhado" onclick="openSharedLayersCatalog()" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-cyan-400 dark:hover:text-cyan-400 relative cursor-pointer group" title="Abrir Catálogo de Camadas e Projetos">
+        <span class="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">folder_open</span>
+        <span class="text-[9px] font-semibold tracking-wide uppercase">Catálogo</span>
         <span id="shared-layers-badge" class="hidden absolute top-2 right-2 w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee] animate-pulse"></span>
     </button>
     <button id="drawer-btn-adicionar" onclick="openAddLayerModal()" class="flex-1 h-16 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-sky-400 border-l border-slate-200/50 dark:border-slate-800/50 cursor-pointer group" title="Adicionar Nova Camada (Criar ou Importar)">
@@ -427,20 +427,6 @@
 </div>
 
 <nav class="flex-1 overflow-y-auto flex flex-col">
-  <!-- Active Project Header in Drawer -->
-  <div id="drawer-active-project-bar" class="px-4 py-2 bg-slate-100/80 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between shrink-0 select-none">
-    <div class="flex items-center gap-2 min-w-0">
-      <span class="material-symbols-outlined text-[17px] text-indigo-500 shrink-0">folder_special</span>
-      <div class="flex flex-col min-w-0">
-        <span class="text-[9px] uppercase font-bold tracking-wider text-slate-400">Projeto Ativo</span>
-        <span id="drawer-project-name" class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">Modo Livre (Sem Projeto)</span>
-      </div>
-    </div>
-    <button onclick="openSharedLayersCatalog()" class="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline flex items-center gap-0.5 shrink-0 cursor-pointer" title="Abrir catálogo para gerenciar projetos ou adicionar camadas">
-      <span>Catálogo</span>
-      <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
-    </button>
-  </div>
 
   <!-- Vector Layers -->
   <div class="pt-3 pb-2 flex flex-col" id="themes-container">

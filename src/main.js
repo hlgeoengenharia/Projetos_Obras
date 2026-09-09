@@ -2298,8 +2298,8 @@ function renderThemes() {
                   </p>
               </div>
               <button type="button" onclick="window.openSharedLayersCatalog()" class="mt-1 px-4 py-2 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-sky-500/20 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer">
-                  <span class="material-symbols-outlined text-[16px]">hub</span>
-                  <span>Explorar Camadas e Projetos</span>
+                  <span class="material-symbols-outlined text-[16px]">folder_open</span>
+                  <span>Abrir Catálogo de Camadas</span>
               </button>
           </div>
       `;
