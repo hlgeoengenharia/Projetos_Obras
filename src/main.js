@@ -9240,8 +9240,7 @@ window.focusOnThemeCard = function(themeId) {
 window.updateSharedLayersBadge = function() {
     const badge = document.getElementById('shared-layers-badge');
     if (badge) {
-        const hasActive = Array.isArray(window.activeSharedLayers) && window.activeSharedLayers.length > 0;
-        badge.classList.toggle('hidden', !hasActive);
+        badge.classList.add('hidden');
     }
 };
 
@@ -9253,6 +9252,12 @@ window.openSharedLayersCatalog = function() {
     if (modal) {
         modal.classList.remove('hidden');
         setTimeout(() => modal.firstElementChild?.classList.remove('scale-95'), 10);
+    }
+    if (typeof window.updateProjectSelectDropdown === 'function') {
+        window.updateProjectSelectDropdown();
+    }
+    if (typeof window.updateProjectActiveUI === 'function') {
+        window.updateProjectActiveUI();
     }
     try {
         renderSharedLayersCatalog();
@@ -9308,7 +9313,6 @@ window.toggleSharedAccordion = function(selectedIndex) {
 
 window.renderSharedLayersCatalog = function(searchQuery = '') {
     const container = document.getElementById('shared-layers-accordion');
-    const totalCountEl = document.getElementById('shared-layers-total-count');
     if (!container) return;
 
     const userEntidade = (window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').trim();
@@ -9325,15 +9329,9 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
         const isCompartilhada = (t.compartilhada !== false && (!t.metadata || t.metadata.compartilhada !== false));
         if (!isCompartilhada) return;
 
-        const tSigla = getEntitySigla(tEntidade);
-        const uSigla = getEntitySigla(userEntidade);
-        const isFromOtherEntity = userEntidade && tEntidade && (tSigla !== uSigla) && (tEntidade.toLowerCase() !== 'geral');
-        if (!isSuperAdmin && isFromOtherEntity && typeof userCanOnTheme === 'function' && !userCanOnTheme(t.id, 'ver')) {
+        if (typeof userCanOnTheme === 'function' && !userCanOnTheme(t.id, 'ver')) {
             return;
         }
-
-        const isEligibleEntity = isSuperAdmin || (tEntidade && tSigla !== uSigla);
-        if (!isEligibleEntity) return;
 
         if (q && !t.name.toLowerCase().includes(q) && !tEntidade.toLowerCase().includes(q)) {
             return;
@@ -9366,9 +9364,6 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
         }
         if (!canSeeRaster) return;
 
-        const isEligibleRasterEntity = isSuperAdmin || (rEntidade && rSigla !== uSigla);
-        if (!isEligibleRasterEntity) return;
-
         if (q && !r.nome.toLowerCase().includes(q) && !rEntidade.toLowerCase().includes(q)) {
             return;
         }
@@ -9379,11 +9374,7 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
         totalEligible++;
     });
 
-    if (totalCountEl) {
-        totalCountEl.textContent = `${totalEligible} disponível${totalEligible !== 1 ? 'is' : ''}`;
-    }
-
-    // 3. Mapeamento de Metadados e Ícones das Entidades (idêntico à aba USUÁRIOS)
+    // 3. Mapeamento de Metadados e Ícones das Entidades
     function getEntityMeta(nameOrSigla) {
         const s = getEntitySigla(nameOrSigla);
         if (s === 'Município') {
@@ -9398,7 +9389,7 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
         if (s === 'PF') {
             return { sigla: 'PF', label: 'PF', icone: 'security', color: 'text-amber-500 bg-amber-500/15 border-amber-500/30' };
         }
-        return { sigla: s || 'Outros', label: s || 'Outros', icone: 'handshake', color: 'text-purple-500 bg-purple-500/15 border-purple-500/30' };
+        return { sigla: s || 'Público', label: s || 'Público', icone: 'layers', color: 'text-purple-500 bg-purple-500/15 border-purple-500/30' };
     }
 
     const minhaSigla = getEntitySigla(userEntidade);
@@ -9411,23 +9402,18 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
     Object.entries(groups).forEach(([entidadeName, groupObj]) => {
         const s = getEntitySigla(entidadeName);
         const count = (groupObj.themes?.length || 0) + (groupObj.rasters?.length || 0);
-        if (s === 'Município' || s === 'MPF' || s === 'SPU' || s === 'PF') {
-            countsBySigla[s] = (countsBySigla[s] || 0) + count;
-        } else {
-            countsBySigla['Outros'] = (countsBySigla['Outros'] || 0) + count;
-        }
+        countsBySigla[s] = (countsBySigla[s] || 0) + count;
     });
 
-    // 4. Renderiza a Barra Horizontal de Entidades (Idêntica à Aba USUÁRIOS)
+    // 4. Renderiza a Barra Horizontal de Entidades
     const toggleContainer = document.getElementById('shared-layers-entity-toggle');
     if (toggleContainer) {
         const tabsList = [
             { sigla: 'Município', label: 'Município', icone: 'location_city', count: countsBySigla['Município'] || 0, isLocal: minhaSigla === 'Município' },
-            { sigla: 'Outros', label: 'Outros', icone: 'handshake', count: countsBySigla['Outros'] || 0, isLocal: false },
             { sigla: 'MPF', label: 'MPF', icone: 'gavel', count: countsBySigla['MPF'] || 0, isLocal: minhaSigla === 'MPF' },
             { sigla: 'SPU', label: 'SPU', icone: 'account_balance', count: countsBySigla['SPU'] || 0, isLocal: minhaSigla === 'SPU' },
             { sigla: 'PF', label: 'PF', icone: 'security', count: countsBySigla['PF'] || 0, isLocal: minhaSigla === 'PF' },
-            { sigla: 'Todos', label: 'Todos', icone: 'hub', count: totalEligible, isLocal: false }
+            { sigla: 'Todos', label: 'Todos', icone: 'apps', count: totalEligible, isLocal: false }
         ];
 
         toggleContainer.innerHTML = tabsList.map(tab => {
@@ -9480,9 +9466,6 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
             return true;
         }
         const s = getEntitySigla(entidadeName);
-        if (window.selectedSharedEntityFilter === 'Outros') {
-            return s !== 'Município' && s !== 'MPF' && s !== 'SPU' && s !== 'PF';
-        }
         return s === window.selectedSharedEntityFilter;
     });
 
@@ -9491,7 +9474,7 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
         container.innerHTML = `
             <div class="flex flex-col items-center justify-center py-12 text-center text-slate-400">
                 <span class="material-symbols-outlined text-[44px] text-slate-500 mb-2">folder_off</span>
-                <p class="text-sm font-semibold">Nenhuma camada compartilhada por ${filterName}.</p>
+                <p class="text-sm font-semibold">Nenhuma camada encontrada para ${filterName}.</p>
                 <p class="text-xs text-slate-500 mt-1 max-w-sm">
                     Assim que ${filterName} disponibilizar dados para você, eles aparecerão organizados aqui.
                 </p>
@@ -9503,50 +9486,67 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
     let html = '';
     const isFilteredByEntity = (window.selectedSharedEntityFilter && window.selectedSharedEntityFilter !== 'Todos');
 
-    groupKeys.forEach((entidadeName, gIdx) => {
-        const groupObj = groups[entidadeName];
-        const groupThemes = groupObj.themes || [];
-        const groupRasters = groupObj.rasters || [];
-        const totalItems = groupThemes.length + groupRasters.length;
-        const meta = getEntityMeta(entidadeName);
-        
-        const activeThemeCount = groupThemes.filter(t => Array.isArray(window.activeSharedLayers) && window.activeSharedLayers.includes(t.id)).length;
-        const activeRasterCount = groupRasters.filter(r => (window.rasterLayers || []).some(rl => rl.id === r.id && rl.visivel)).length;
-        const totalActive = activeThemeCount + activeRasterCount;
+    groupKeys.forEach((entidadeName, index) => {
+        const group = groups[entidadeName];
+        const groupThemes = group.themes || [];
+        const groupRasters = group.rasters || [];
+        const groupTotal = groupThemes.length + groupRasters.length;
+        if (groupTotal === 0) return;
 
-        // Se o usuário selecionou uma entidade específica na aba, ela já abre expandida mostrando tudo!
-        const isInitiallyOpen = isFilteredByEntity || (gIdx === 0);
-        const accordionId = `shared-accordion-group-${gIdx}`;
+        const groupSigla = getEntitySigla(entidadeName);
+        const meta = getEntityMeta(entidadeName);
+        const isMinhaEntidade = (groupSigla === minhaSigla);
+
+        // Conta quantos itens deste grupo estão adicionados à mesa
+        const activeThemesInGroup = groupThemes.filter(t => Array.isArray(window.activeWorkspaceThemes) && window.activeWorkspaceThemes.includes(t.id)).length;
+        const activeRastersInGroup = groupRasters.filter(r => Array.isArray(window.activeWorkspaceRasters) && window.activeWorkspaceRasters.includes(r.id)).length;
+        const totalActiveInGroup = activeThemesInGroup + activeRastersInGroup;
+
+        // O primeiro grupo abre por padrão (ou o filtrado)
+        const isOpenByDefault = (isFilteredByEntity || index === 0);
 
         html += `
-            <div class="shared-accordion-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 shadow-xs transition-all mb-3">
-                <!-- Header do Acordeão com Ícone e Cor da Entidade -->
-                <button type="button" onclick="toggleSharedAccordion(${gIdx})" class="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-slate-800/80 transition-colors cursor-pointer select-none rounded-2xl">
-                    <div class="flex items-center gap-3 min-w-0 pr-2">
-                        <div class="w-9 h-9 rounded-xl ${meta.color} flex items-center justify-center shrink-0 shadow-xs border">
-                            <span class="material-symbols-outlined text-[20px]">${meta.icone}</span>
+            <div class="shared-accordion-card rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 backdrop-blur-md overflow-hidden transition-all shadow-sm">
+                <!-- Cabeçalho do Acordeão -->
+                <button type="button" 
+                    onclick="window.toggleSharedAccordion(${index})"
+                    class="w-full px-4 py-3.5 flex items-center justify-between gap-3 text-left hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors cursor-pointer select-none">
+                    
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center font-bold text-xs border ${meta.color}">
+                            <span class="material-symbols-outlined text-[18px]">${meta.icone}</span>
                         </div>
                         <div class="flex flex-col min-w-0">
-                            <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${entidadeName}</span>
-                            <span class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                                ${totalItems} item${totalItems !== 1 ? 's' : ''} (${groupThemes.length} vetoriais · ${groupRasters.length} ortofotos)
-                                ${totalActive > 0 ? `· <strong class="text-cyan-400 font-bold">${totalActive} ativo${totalActive !== 1 ? 's' : ''}</strong>` : ''}
-                            </span>
+                            <div class="flex items-center gap-2">
+                                <h4 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 truncate">${entidadeName}</h4>
+                                ${isMinhaEntidade ? `
+                                    <span class="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30">Minha Entidade</span>
+                                ` : ''}
+                            </div>
+                            <div class="flex items-center gap-2 text-[10.5px] text-slate-500 dark:text-slate-400">
+                                <span>${groupTotal} item${groupTotal !== 1 ? 's' : ''} (${groupThemes.length} vetoriais · ${groupRasters.length} ortofotos)</span>
+                                ${totalActiveInGroup > 0 ? `
+                                    <span class="text-cyan-500 dark:text-cyan-400 font-bold">· ${totalActiveInGroup} na mesa</span>
+                                ` : ''}
+                            </div>
                         </div>
                     </div>
-                    <span id="shared-accordion-chevron-${gIdx}" class="shared-accordion-chevron material-symbols-outlined text-[22px] text-slate-400 transition-transform duration-200 ${isInitiallyOpen ? 'rotate-180' : ''}">expand_more</span>
+
+                    <div class="flex items-center gap-2 shrink-0">
+                        <span id="shared-accordion-chevron-${index}" class="material-symbols-outlined text-[20px] text-slate-400 transition-transform duration-200 ${isOpenByDefault ? 'rotate-180' : ''}">expand_more</span>
+                    </div>
                 </button>
 
-                <!-- Conteúdo das Camadas e Ortofotos da Entidade -->
-                <div id="${accordionId}" class="shared-accordion-body p-3 pt-2 border-t border-slate-200/80 dark:border-slate-700/60 flex flex-col gap-2.5 bg-white/40 dark:bg-slate-900/30 ${isInitiallyOpen ? '' : 'hidden'}">
-                    <!-- Camadas Vetoriais -->
+                <!-- Corpo do Acordeão -->
+                <div id="shared-accordion-group-${index}" class="shared-accordion-body px-3 pb-3 pt-1 border-t border-slate-100 dark:border-slate-800/80 space-y-2 ${isOpenByDefault ? '' : 'hidden'}">
+                    <!-- Camadas Vetoriais da Entidade -->
                     ${groupThemes.map(t => {
-                        const isActive = Array.isArray(window.activeSharedLayers) && window.activeSharedLayers.includes(t.id);
-                        const count = t.features ? t.features.length : 0;
+                        const isActive = Array.isArray(window.activeWorkspaceThemes) && window.activeWorkspaceThemes.includes(t.id);
+                        const count = Array.isArray(t.features) ? t.features.length : 0;
                         return `
                             <div class="flex items-center justify-between p-3 rounded-xl border ${isActive ? 'border-cyan-500/40 bg-cyan-500/10 shadow-xs' : 'border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-800/90'} hover:border-cyan-400/60 transition-all">
                                 <div class="flex items-center gap-3 min-w-0 pr-2">
-                                    <div class="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center text-white shadow-md border border-white/20" style="background-color: ${t.color}; box-shadow: 0 4px 12px ${t.color}40;">
+                                    <div class="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center text-white shadow-md" style="background-color: ${t.color || '#0284c7'};">
                                         <span class="material-symbols-outlined text-[20px]">${t.icon || 'layers'}</span>
                                     </div>
                                     <div class="flex flex-col min-w-0">
@@ -9563,10 +9563,10 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
                                     </button>
                                     ` : ''}
 
-                                    <!-- Switch iOS Neon idêntico ao da Camada Principal -->
-                                    <label class="relative inline-flex items-center cursor-pointer shrink-0" title="${isActive ? 'Ocultar' : 'Mostrar'} Camada">
+                                    <!-- Switch iOS Neon para Adicionar à Mesa / Projeto -->
+                                    <label class="relative inline-flex items-center cursor-pointer shrink-0" title="${isActive ? 'Remover da Mesa' : 'Inserir na Mesa / Projeto'}">
                                         <input type="checkbox" id="shared-toggle-${t.id}" class="sr-only peer" ${isActive ? 'checked' : ''} onchange="toggleSharedLayer('${t.id}', this)">
-                                        <div id="shared-toggle-bg-${t.id}" class="w-11 h-6 bg-slate-700/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all shadow-inner" style="${isActive ? `background-color: ${t.color}; box-shadow: 0 0 12px ${t.color}90;` : ''}"></div>
+                                        <div id="shared-toggle-bg-${t.id}" class="w-11 h-6 bg-slate-700/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all shadow-inner" style="${isActive ? `background-color: ${t.color || '#0284c7'}; box-shadow: 0 0 12px ${t.color || '#0284c7'}90;` : ''}"></div>
                                     </label>
                                 </div>
                             </div>
@@ -9581,7 +9581,7 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
                                 Ortofotos / Imagens Aéreas (${groupRasters.length})
                             </span>
                             ${groupRasters.map(r => {
-                                const isRasterActive = !!(rasterLayers.find(rl => rl.id === r.id && rl.visivel));
+                                const isRasterActive = Array.isArray(window.activeWorkspaceRasters) && window.activeWorkspaceRasters.includes(r.id);
                                 let rDate = '';
                                 if (r.data_imagem) rDate = r.data_imagem.split('-').reverse().join('/');
                                 return `
@@ -9600,7 +9600,7 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
                                         </div>
 
                                         <div class="flex items-center gap-3 shrink-0">
-                                            <label class="relative inline-flex items-center cursor-pointer shrink-0" title="${isRasterActive ? 'Ocultar' : 'Mostrar'} Ortofoto">
+                                            <label class="relative inline-flex items-center cursor-pointer shrink-0" title="${isRasterActive ? 'Remover da Mesa' : 'Inserir na Mesa / Projeto'}">
                                                 <input type="checkbox" id="shared-toggle-raster-${r.id}" class="sr-only peer" ${isRasterActive ? 'checked' : ''} onchange="toggleSharedRaster('${r.id}', this)">
                                                 <div id="shared-toggle-raster-bg-${r.id}" class="w-11 h-6 bg-slate-700/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all shadow-inner" style="${isRasterActive ? 'background-color: #10b981; box-shadow: 0 0 12px #10b98190;' : ''}"></div>
                                             </label>
@@ -9619,6 +9619,7 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
 };
 
 window.toggleSharedRaster = async function(rasterId, inputEl) {
+    if (!Array.isArray(window.activeWorkspaceRasters)) window.activeWorkspaceRasters = [];
     let raster = (rasterLayers || []).find(r => r.id === rasterId);
     if (!raster) {
         const fromAll = (window.allMunicipioRasters || []).find(r => r.id === rasterId);
@@ -9630,7 +9631,8 @@ window.toggleSharedRaster = async function(rasterId, inputEl) {
     }
     if (!raster) return;
 
-    const shouldBeActive = inputEl !== undefined ? inputEl.checked : !raster.visivel;
+    const isCurrentlyActive = window.activeWorkspaceRasters.includes(rasterId);
+    const shouldBeActive = inputEl !== undefined ? inputEl.checked : !isCurrentlyActive;
 
     const bgEl = document.getElementById('shared-toggle-raster-bg-' + rasterId);
     if (bgEl) {
@@ -9643,42 +9645,46 @@ window.toggleSharedRaster = async function(rasterId, inputEl) {
         }
     }
 
-    if (typeof toggleRasterVisibility === 'function') {
-        await toggleRasterVisibility(rasterId, { checked: shouldBeActive });
-    } else {
-        raster.visivel = shouldBeActive;
+    if (!shouldBeActive) {
+        window.activeWorkspaceRasters = window.activeWorkspaceRasters.filter(id => id !== rasterId);
+        raster.visivel = false;
         const overlay = leafletRasterOverlays[rasterId];
         if (overlay && map) {
-            if (shouldBeActive) overlay.addTo(map);
-            else map.removeLayer(overlay);
+            map.removeLayer(overlay);
+        }
+        if (typeof showWarningToast === 'function') {
+            showWarningToast(`Ortofoto "${raster.nome}" removida da mesa.`);
+        }
+    } else {
+        if (!window.activeWorkspaceRasters.includes(rasterId)) {
+            window.activeWorkspaceRasters.push(rasterId);
+        }
+        raster.visivel = false;
+        if (typeof showSuccessToast === 'function') {
+            showSuccessToast(`Ortofoto "${raster.nome}" adicionada ao menu lateral!`);
         }
     }
 
+    await window.saveCurrentWorkspaceState();
     if (typeof renderRasterLayersList === 'function') {
         renderRasterLayersList();
-    }
-
-    if (shouldBeActive) {
-        showSuccessToast(`Ortofoto "${raster.nome}" ativada no mapa.`);
-    } else {
-        showWarningToast(`Ortofoto "${raster.nome}" desativada.`);
     }
 };
 
 window.toggleSharedLayer = async function(themeId, inputEl) {
-    if (!Array.isArray(window.activeSharedLayers)) window.activeSharedLayers = [];
+    if (!Array.isArray(window.activeWorkspaceThemes)) window.activeWorkspaceThemes = [];
     const theme = themes.find(t => t.id === themeId);
     if (!theme) return;
     
-    const isCurrentlyActive = window.activeSharedLayers.includes(themeId);
+    const isCurrentlyActive = window.activeWorkspaceThemes.includes(themeId);
     const shouldBeActive = inputEl !== undefined ? inputEl.checked : !isCurrentlyActive;
     
     // Resposta visual instantânea no background do switch
     const bgEl = document.getElementById('shared-toggle-bg-' + themeId);
     if (bgEl) {
         if (shouldBeActive) {
-            bgEl.style.backgroundColor = theme.color;
-            bgEl.style.boxShadow = `0 0 12px ${theme.color}90`;
+            bgEl.style.backgroundColor = theme.color || '#0284c7';
+            bgEl.style.boxShadow = `0 0 12px ${theme.color || '#0284c7'}90`;
         } else {
             bgEl.style.backgroundColor = '';
             bgEl.style.boxShadow = '';
@@ -9686,30 +9692,26 @@ window.toggleSharedLayer = async function(themeId, inputEl) {
     }
 
     if (!shouldBeActive) {
-        window.activeSharedLayers = window.activeSharedLayers.filter(id => id !== themeId);
+        window.activeWorkspaceThemes = window.activeWorkspaceThemes.filter(id => id !== themeId);
         theme.visible = false;
-        showWarningToast(`Camada "${theme.name}" desativada.`);
-    } else {
-        if (!window.activeSharedLayers.includes(themeId)) {
-            window.activeSharedLayers.push(themeId);
+        if (typeof showWarningToast === 'function') {
+            showWarningToast(`Camada "${theme.name}" removida da mesa.`);
         }
-        theme.visible = true;
-        showWarningToast(`Camada "${theme.name}" ativada no seu painel!`);
+    } else {
+        if (!window.activeWorkspaceThemes.includes(themeId)) {
+            window.activeWorkspaceThemes.push(themeId);
+        }
+        // Ao ativar no catálogo, entra na mesa de trabalho / menu lateral desativada inicialmente (para ligar sob demanda)
+        theme.visible = false;
+        if (typeof showSuccessToast === 'function') {
+            showSuccessToast(`Camada "${theme.name}" adicionada ao menu lateral!`);
+        }
     }
     
-    localStorage.setItem('shared_layers_' + activeMunicipioId, JSON.stringify(window.activeSharedLayers));
     saveThemes();
+    await window.saveCurrentWorkspaceState();
     renderThemes();
-    updateSharedLayersBadge();
-    
-    if (theme.visible) {
-        if (!theme._propertiesFullyLoaded) {
-            await loadThemeProperties(theme.id);
-        }
-        loadAllFeaturesToMap();
-    } else {
-        loadAllFeaturesToMap();
-    }
+    loadAllFeaturesToMap();
 };
 
 // Modal de Gestão de Acessos Externos para Camada Vetorial (Pontos Focais de outros órgãos parceiros)
