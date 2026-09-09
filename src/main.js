@@ -8489,6 +8489,7 @@ window.updateSharedLayersBadge = function() {
 };
 
 window.openSharedLayersCatalog = function() {
+    window.selectedSharedEntityFilter = 'Todos';
     const searchInput = document.getElementById('shared-layers-search');
     if (searchInput) searchInput.value = '';
     const modal = document.getElementById('shared-layers-modal');
@@ -8509,6 +8510,11 @@ window.closeSharedLayersCatalog = function() {
         modal.firstElementChild?.classList.add('scale-95');
         setTimeout(() => modal.classList.add('hidden'), 150);
     }
+};
+
+window.selectSharedEntityFilter = function(sigla) {
+    window.selectedSharedEntityFilter = sigla;
+    renderSharedLayersCatalog(document.getElementById('shared-layers-search')?.value || '');
 };
 
 window.onFilterSharedLayers = function(query) {
@@ -8548,7 +8554,7 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
     const totalCountEl = document.getElementById('shared-layers-total-count');
     if (!container) return;
 
-    const userEntidade = (window.currentUserEntidade || '').trim();
+    const userEntidade = (window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').trim();
     const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
     const q = (searchQuery || '').toLowerCase().trim();
 
@@ -8620,6 +8626,83 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
         totalCountEl.textContent = `${totalEligible} disponível${totalEligible !== 1 ? 'is' : ''}`;
     }
 
+    // 3. Mapeamento de Metadados e Ícones das Entidades (idêntico à aba USUÁRIOS)
+    function getEntityMeta(nameOrSigla) {
+        const s = getEntitySigla(nameOrSigla);
+        if (s === 'Município') {
+            return { sigla: 'Município', label: 'Município', icone: 'location_city', color: 'text-sky-500 bg-sky-500/15 border-sky-500/30' };
+        }
+        if (s === 'MPF') {
+            return { sigla: 'MPF', label: 'MPF', icone: 'gavel', color: 'text-indigo-500 bg-indigo-500/15 border-indigo-500/30' };
+        }
+        if (s === 'SPU') {
+            return { sigla: 'SPU', label: 'SPU', icone: 'account_balance', color: 'text-teal-500 bg-teal-500/15 border-teal-500/30' };
+        }
+        if (s === 'PF') {
+            return { sigla: 'PF', label: 'PF', icone: 'security', color: 'text-amber-500 bg-amber-500/15 border-amber-500/30' };
+        }
+        return { sigla: s || 'Outros', label: s || 'Outros', icone: 'handshake', color: 'text-purple-500 bg-purple-500/15 border-purple-500/30' };
+    }
+
+    const minhaSigla = getEntitySigla(userEntidade);
+    if (!window.selectedSharedEntityFilter) {
+        window.selectedSharedEntityFilter = 'Todos';
+    }
+
+    // Calcula contagem de itens por sigla
+    const countsBySigla = {};
+    Object.entries(groups).forEach(([entidadeName, groupObj]) => {
+        const s = getEntitySigla(entidadeName);
+        const count = (groupObj.themes?.length || 0) + (groupObj.rasters?.length || 0);
+        if (s === 'Município' || s === 'MPF' || s === 'SPU' || s === 'PF') {
+            countsBySigla[s] = (countsBySigla[s] || 0) + count;
+        } else {
+            countsBySigla['Outros'] = (countsBySigla['Outros'] || 0) + count;
+        }
+    });
+
+    // 4. Renderiza a Barra Horizontal de Entidades (Idêntica à Aba USUÁRIOS)
+    const toggleContainer = document.getElementById('shared-layers-entity-toggle');
+    if (toggleContainer) {
+        const tabsList = [
+            { sigla: 'Município', label: 'Município', icone: 'location_city', count: countsBySigla['Município'] || 0, isLocal: minhaSigla === 'Município' },
+            { sigla: 'Outros', label: 'Outros', icone: 'handshake', count: countsBySigla['Outros'] || 0, isLocal: false },
+            { sigla: 'MPF', label: 'MPF', icone: 'gavel', count: countsBySigla['MPF'] || 0, isLocal: minhaSigla === 'MPF' },
+            { sigla: 'SPU', label: 'SPU', icone: 'account_balance', count: countsBySigla['SPU'] || 0, isLocal: minhaSigla === 'SPU' },
+            { sigla: 'PF', label: 'PF', icone: 'security', count: countsBySigla['PF'] || 0, isLocal: minhaSigla === 'PF' },
+            { sigla: 'Todos', label: 'Todos', icone: 'hub', count: totalEligible, isLocal: false }
+        ];
+
+        toggleContainer.innerHTML = tabsList.map(tab => {
+            const isActive = (window.selectedSharedEntityFilter === tab.sigla);
+
+            let activeClass = "bg-white dark:bg-slate-900 text-sky-600 dark:text-sky-400 shadow-sm border border-slate-200/80 dark:border-slate-700 font-bold";
+            let inactiveClass = "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 font-bold hover:bg-slate-200/50 dark:hover:bg-slate-700/50";
+
+            if (tab.isLocal && isActive) {
+                activeClass = "bg-gradient-to-r from-sky-600 to-indigo-600 text-white shadow-md shadow-sky-500/25 ring-2 ring-sky-400/40 font-extrabold";
+            }
+
+            let badgeHtml = '';
+            if (tab.isLocal) {
+                badgeHtml = `<span class="ml-1 px-1.5 py-0.2 text-[9px] font-extrabold rounded-full ${isActive ? 'bg-white/25 text-white' : 'bg-sky-200 dark:bg-sky-800 text-sky-800 dark:text-sky-200'}">Minha Entidade</span>`;
+            } else if (tab.count > 0) {
+                badgeHtml = `<span class="ml-1 px-1.5 py-0.2 text-[9px] font-bold rounded-full ${isActive ? 'bg-sky-100 dark:bg-sky-900/60 text-sky-700 dark:text-sky-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}">${tab.count}</span>`;
+            }
+
+            return `
+                <button type="button" 
+                    onclick="window.selectSharedEntityFilter('${tab.sigla}')" 
+                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap select-none ${isActive ? activeClass : inactiveClass}"
+                    title="Filtrar por ${tab.label}">
+                    <span class="material-symbols-outlined text-[16px]">${tab.icone}</span>
+                    <span>${tab.label}</span>
+                    ${badgeHtml}
+                </button>
+            `;
+        }).join('');
+    }
+
     if (totalEligible === 0) {
         container.innerHTML = `
             <div class="flex flex-col items-center justify-center py-12 text-center text-slate-400">
@@ -8633,39 +8716,58 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
         return;
     }
 
-    // Ícones temáticos por tipo de entidade
-    function getEntityIcon(name) {
-        const lower = name.toLowerCase();
-        if (lower.includes('prefeitura') || lower.includes('municipal')) return 'apartment';
-        if (lower.includes('público') || lower.includes('mpf') || lower.includes('mpe')) return 'balance';
-        if (lower.includes('polícia') || lower.includes('pf') || lower.includes('segurança')) return 'shield';
-        if (lower.includes('união') || lower.includes('spu') || lower.includes('federal')) return 'account_balance';
-        return 'domain';
+    // 5. Filtra grupos conforme a aba de Entidade selecionada
+    const allGroupKeys = Object.keys(groups).sort();
+    const groupKeys = allGroupKeys.filter(entidadeName => {
+        if (!window.selectedSharedEntityFilter || window.selectedSharedEntityFilter === 'Todos') {
+            return true;
+        }
+        const s = getEntitySigla(entidadeName);
+        if (window.selectedSharedEntityFilter === 'Outros') {
+            return s !== 'Município' && s !== 'MPF' && s !== 'SPU' && s !== 'PF';
+        }
+        return s === window.selectedSharedEntityFilter;
+    });
+
+    if (groupKeys.length === 0) {
+        const filterName = window.selectedSharedEntityFilter;
+        container.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-12 text-center text-slate-400">
+                <span class="material-symbols-outlined text-[44px] text-slate-500 mb-2">folder_off</span>
+                <p class="text-sm font-semibold">Nenhuma camada compartilhada por ${filterName}.</p>
+                <p class="text-xs text-slate-500 mt-1 max-w-sm">
+                    Assim que ${filterName} disponibilizar dados para você, eles aparecerão organizados aqui.
+                </p>
+            </div>
+        `;
+        return;
     }
 
     let html = '';
-    const groupKeys = Object.keys(groups).sort();
+    const isFilteredByEntity = (window.selectedSharedEntityFilter && window.selectedSharedEntityFilter !== 'Todos');
 
     groupKeys.forEach((entidadeName, gIdx) => {
         const groupObj = groups[entidadeName];
         const groupThemes = groupObj.themes || [];
         const groupRasters = groupObj.rasters || [];
         const totalItems = groupThemes.length + groupRasters.length;
-        const iconName = getEntityIcon(entidadeName);
+        const meta = getEntityMeta(entidadeName);
         
         const activeThemeCount = groupThemes.filter(t => Array.isArray(window.activeSharedLayers) && window.activeSharedLayers.includes(t.id)).length;
         const activeRasterCount = groupRasters.filter(r => (window.rasterLayers || []).some(rl => rl.id === r.id && rl.visivel)).length;
         const totalActive = activeThemeCount + activeRasterCount;
 
+        // Se o usuário selecionou uma entidade específica na aba, ela já abre expandida mostrando tudo!
+        const isInitiallyOpen = isFilteredByEntity || (gIdx === 0);
         const accordionId = `shared-accordion-group-${gIdx}`;
 
         html += `
             <div class="shared-accordion-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 shadow-xs transition-all mb-3">
-                <!-- Header do Acordeão -->
+                <!-- Header do Acordeão com Ícone e Cor da Entidade -->
                 <button type="button" onclick="toggleSharedAccordion(${gIdx})" class="w-full px-4 py-3.5 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-slate-800/80 transition-colors cursor-pointer select-none rounded-2xl">
                     <div class="flex items-center gap-3 min-w-0 pr-2">
-                        <div class="w-9 h-9 rounded-xl bg-cyan-500/15 text-cyan-400 flex items-center justify-center shrink-0 shadow-xs border border-cyan-500/20">
-                            <span class="material-symbols-outlined text-[20px]">${iconName}</span>
+                        <div class="w-9 h-9 rounded-xl ${meta.color} flex items-center justify-center shrink-0 shadow-xs border">
+                            <span class="material-symbols-outlined text-[20px]">${meta.icone}</span>
                         </div>
                         <div class="flex flex-col min-w-0">
                             <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${entidadeName}</span>
@@ -8675,11 +8777,11 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
                             </span>
                         </div>
                     </div>
-                    <span id="shared-accordion-chevron-${gIdx}" class="shared-accordion-chevron material-symbols-outlined text-[22px] text-slate-400 transition-transform duration-200 ${gIdx === 0 ? 'rotate-180' : ''}">expand_more</span>
+                    <span id="shared-accordion-chevron-${gIdx}" class="shared-accordion-chevron material-symbols-outlined text-[22px] text-slate-400 transition-transform duration-200 ${isInitiallyOpen ? 'rotate-180' : ''}">expand_more</span>
                 </button>
 
-                <!-- Conteúdo das Camadas da Entidade -->
-                <div id="${accordionId}" class="shared-accordion-body p-3 pt-2 border-t border-slate-200/80 dark:border-slate-700/60 flex flex-col gap-2.5 bg-white/40 dark:bg-slate-900/30 ${gIdx === 0 ? '' : 'hidden'}">
+                <!-- Conteúdo das Camadas e Ortofotos da Entidade -->
+                <div id="${accordionId}" class="shared-accordion-body p-3 pt-2 border-t border-slate-200/80 dark:border-slate-700/60 flex flex-col gap-2.5 bg-white/40 dark:bg-slate-900/30 ${isInitiallyOpen ? '' : 'hidden'}">
                     <!-- Camadas Vetoriais -->
                     ${groupThemes.map(t => {
                         const isActive = Array.isArray(window.activeSharedLayers) && window.activeSharedLayers.includes(t.id);
