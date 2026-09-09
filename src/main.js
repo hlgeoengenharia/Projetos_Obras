@@ -1167,8 +1167,13 @@ window.updateProjectActiveUI = function() {
     const drawerBtnRename = document.getElementById('drawer-btn-rename-proj');
     const drawerBtnDelete = document.getElementById('drawer-btn-delete-proj');
     if (drawerNameEl) {
-        drawerNameEl.textContent = proj ? proj.nome : 'Modo Livre (Sem Projeto)';
+        drawerNameEl.textContent = proj ? (proj.nome || '').toUpperCase() : 'MODO LIVRE (SEM PROJETO)';
         drawerNameEl.title = proj ? (proj.descricao || proj.nome) : 'Camadas avulsas na mesa de trabalho';
+        if (isProjectActive) {
+            drawerNameEl.className = 'text-[11px] font-black uppercase tracking-wider text-amber-500 dark:text-amber-400 truncate drop-shadow-xs';
+        } else {
+            drawerNameEl.className = 'text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate';
+        }
     }
     if (drawerBtnRename) drawerBtnRename.classList.toggle('hidden', !isProjectActive);
     if (drawerBtnDelete) drawerBtnDelete.classList.toggle('hidden', !isProjectActive);
@@ -1970,11 +1975,6 @@ function renderThemes() {
           </div>
           
           <div class="flex items-center gap-1.5 shrink-0 ml-1.5">
-            <!-- Botão Remover da Mesa de Trabalho / Projeto -->
-            <button type="button" onclick="event.stopPropagation(); window.removeThemeFromWorkspace('${theme.id}')" class="w-7 h-7 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/15 active:scale-95 transition-all flex items-center justify-center cursor-pointer shrink-0" title="Remover da mesa de trabalho (a camada continuará salva)">
-              <span class="material-symbols-outlined text-[17px]">close</span>
-            </button>
-
             <!-- iOS-style Neon Toggle -->
             <label class="relative inline-flex items-center cursor-pointer shrink-0" title="${isVisible ? 'Ocultar' : 'Mostrar'} Camada" onclick="event.stopPropagation()">
               <input type="checkbox" id="theme-toggle-${theme.id}" class="sr-only peer" ${isVisible ? 'checked' : ''} onchange="toggleThemeVisibility('${theme.id}', this)">
@@ -8019,14 +8019,6 @@ function renderRasterLayersList() {
                     </div>
                     
                     <div class="flex items-center gap-1.5 shrink-0 ml-1.5">
-                        <!-- Botão Remover da Mesa de Trabalho -->
-                        <button type="button" 
-                                onclick="event.stopPropagation(); window.removeRasterFromWorkspace('${raster.id}')" 
-                                class="w-7 h-7 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/15 active:scale-95 transition-all flex items-center justify-center cursor-pointer shrink-0" 
-                                title="Remover da mesa de trabalho">
-                            <span class="material-symbols-outlined text-[17px]">close</span>
-                        </button>
-
                         <!-- Botão/Ícone "i" de Informações da Ortofoto (Observação e Link Anexo) -->
                         <button type="button" 
                                 onclick="event.stopPropagation(); window.openRasterInfoModal('${raster.id}')" 

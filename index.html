@@ -460,30 +460,31 @@
     </button>
 </div>
 
-<!-- Barra do Projeto Ativo no Menu Lateral -->
-<div id="drawer-active-project-bar" class="px-3.5 py-2.5 bg-indigo-50/90 dark:bg-indigo-950/40 border-b border-indigo-100 dark:border-indigo-900/50 flex items-center justify-between gap-2 shrink-0">
-  <div class="flex items-center gap-2 min-w-0 flex-1">
-    <div class="w-7 h-7 rounded-lg bg-indigo-500/15 text-indigo-500 flex items-center justify-center shrink-0 border border-indigo-500/20 shadow-2xs">
-      <span class="material-symbols-outlined text-[16px]">folder_special</span>
+<!-- Barra do Projeto Ativo no Menu Lateral (Layout Slim) -->
+<div class="px-3 pt-2 pb-1 shrink-0">
+  <div id="drawer-active-project-bar" class="px-2.5 py-1.5 rounded-xl bg-slate-100/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800/80 shadow-2xs flex items-center justify-between gap-2 transition-all">
+    <!-- Ícone Indicador -->
+    <div class="flex items-center shrink-0">
+      <span class="material-symbols-outlined text-[17px] text-amber-500 dark:text-amber-400">folder_special</span>
     </div>
-    <div class="flex flex-col min-w-0 flex-1">
-      <span class="text-[9px] uppercase font-bold text-slate-400 dark:text-slate-400 tracking-wider">Projeto Ativo</span>
-      <div class="flex items-center gap-1.5">
-        <span id="drawer-active-project-name" class="text-xs font-extrabold text-indigo-600 dark:text-indigo-400 truncate">Modo Livre (Sem Projeto)</span>
-        <!-- Ícones Lápis e Lixeira dentro do card do projeto -->
-        <button onclick="openRenameProjectModal()" id="drawer-btn-rename-proj" class="hidden p-0.5 hover:bg-indigo-200/50 dark:hover:bg-indigo-900/60 rounded text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer" title="Renomear Projeto">
-          <span class="material-symbols-outlined text-[14px]">edit</span>
-        </button>
-        <button onclick="deleteActiveProject()" id="drawer-btn-delete-proj" class="hidden p-0.5 hover:bg-rose-100 dark:hover:bg-rose-900/60 rounded text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer" title="Excluir Projeto">
-          <span class="material-symbols-outlined text-[14px]">delete</span>
-        </button>
-      </div>
+
+    <!-- Título do Projeto Centralizado em Caixa Alta, 2px menor que camadas (text-[11px]) e cor destacada -->
+    <div class="flex-1 flex items-center justify-center gap-1.5 min-w-0 text-center px-1">
+      <span id="drawer-active-project-name" class="text-[11px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 truncate drop-shadow-xs">MODO LIVRE (SEM PROJETO)</span>
+      <button onclick="openRenameProjectModal()" id="drawer-btn-rename-proj" class="hidden p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-amber-500 transition-colors cursor-pointer shrink-0" title="Renomear Projeto">
+        <span class="material-symbols-outlined text-[13px]">edit</span>
+      </button>
+      <button onclick="deleteActiveProject()" id="drawer-btn-delete-proj" class="hidden p-0.5 hover:bg-rose-100 dark:hover:bg-rose-950/40 rounded text-slate-400 hover:text-rose-500 transition-colors cursor-pointer shrink-0" title="Excluir Projeto">
+        <span class="material-symbols-outlined text-[13px]">delete</span>
+      </button>
     </div>
+
+    <!-- Botão Ajustar com a mesma aparência dos ícones do topo (CATÁLOGO, + CAMADA, FECHAR) -->
+    <button onclick="openSharedLayersCatalog()" class="flex items-center gap-1 px-2.5 py-1 rounded-lg text-slate-600 dark:text-slate-400 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/60 transition-all text-[9px] font-semibold tracking-wide uppercase cursor-pointer shrink-0 group shadow-2xs" title="Ajustar Camadas e Ortofotos">
+      <span class="material-symbols-outlined text-[15px] group-hover:scale-110 transition-transform">tune</span>
+      <span>Ajustar</span>
+    </button>
   </div>
-  <button onclick="openSharedLayersCatalog()" class="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-bold shadow-xs transition-colors cursor-pointer flex items-center gap-1 shrink-0" title="Abrir Catálogo / Gerenciar Camadas">
-    <span class="material-symbols-outlined text-[13px]">tune</span>
-    <span>Ajustar</span>
-  </button>
 </div>
 
 <nav class="flex-1 overflow-y-auto flex flex-col">
