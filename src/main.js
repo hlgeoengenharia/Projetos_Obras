@@ -1531,304 +1531,6 @@ window.saveCurrentWorkspaceState = async function() {
     window.updateProjectSelectDropdown();
 };
 
-// =========================================================================
-// CATÁLOGO DE CAMADAS COMPARTILHADAS & PRÓPRIAS (HUB GERAL)
-// =========================================================================
-
-window.openSharedLayersCatalog = async function() {
-    const modal = document.getElementById('shared-layers-modal');
-    if (!modal) return;
-
-    modal.classList.remove('hidden');
-    setTimeout(() => modal.firstElementChild?.classList.remove('scale-95'), 20);
-
-    window.renderSharedLayersEntityTabs();
-    window.renderSharedLayersCatalog();
-};
-
-window.closeSharedLayersCatalog = function() {
-    const modal = document.getElementById('shared-layers-modal');
-    if (modal) {
-        modal.firstElementChild?.classList.add('scale-95');
-        setTimeout(() => modal.classList.add('hidden'), 150);
-    }
-};
-
-window.onFilterSharedLayers = function(query) {
-    window.sharedCatalogSearchQuery = (query || '').toLowerCase().trim();
-    window.renderSharedLayersCatalog();
-};
-
-window.selectSharedLayersTab = function(sigla) {
-    window.sharedCatalogSelectedTab = sigla;
-    window.renderSharedLayersEntityTabs();
-    window.renderSharedLayersCatalog();
-};
-
-window.renderSharedLayersEntityTabs = function() {
-    const container = document.getElementById('shared-layers-entity-toggle');
-    if (!container) return;
-
-    // Constrói lista de siglas de todas as entidades cadastradas e presentes nas camadas/rasters
-    const entityMap = new Map();
-
-    // 1. Entidades da lista oficial (window.allEntidadesList)
-    if (Array.isArray(window.allEntidadesList)) {
-        window.allEntidadesList.forEach(e => {
-            const sigla = (e.sigla || e.nome || '').trim();
-            if (sigla && sigla.toLowerCase() !== 'outros' && !entityMap.has(sigla)) {
-                entityMap.set(sigla, {
-                    sigla: sigla,
-                    nome: e.nome || sigla,
-                    icone: e.icone || 'hub',
-                    cor: e.cor || '#0284c7'
-                });
-            }
-        });
-    }
-
-    // 2. Entidades presentes nos temas vetoriais
-    themes.forEach(t => {
-        if (typeof userCanOnTheme === 'function' && !userCanOnTheme(t.id, 'ver')) return;
-        const raw = ((t.metadata && t.metadata.entidade) || t.entidade || '').trim();
-        const sigla = getEntitySigla(raw);
-        if (sigla && sigla.toLowerCase() !== 'outros' && !entityMap.has(sigla)) {
-            entityMap.set(sigla, {
-                sigla: sigla,
-                nome: raw || sigla,
-                icone: 'layers',
-                cor: '#3b82f6'
-            });
-        }
-    });
-
-    // 3. Entidades presentes nos rasters
-    rasterLayers.forEach(r => {
-        const raw = (r.entidade || '').trim();
-        const sigla = getEntitySigla(raw);
-        if (sigla && sigla.toLowerCase() !== 'outros' && !entityMap.has(sigla)) {
-            entityMap.set(sigla, {
-                sigla: sigla,
-                nome: raw || sigla,
-                icone: 'image',
-                cor: '#10b981'
-            });
-        }
-    });
-
-    // Filtra para remover categoricamente qualquer "OUTROS"
-    const allowedEntities = Array.from(entityMap.values()).filter(ent => {
-        const s = ent.sigla.toLowerCase();
-        return s !== 'outros' && s !== 'outro';
-    });
-
-    const isAll = (window.sharedCatalogSelectedTab === 'todos');
-
-    let html = `
-        <button type="button" onclick="selectSharedLayersTab('todos')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${isAll ? 'bg-primary text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}">
-            <span class="material-symbols-outlined text-[15px]">apps</span>
-            <span>Todas</span>
-        </button>
-    `;
-
-    allowedEntities.forEach(ent => {
-        const isSelected = (window.sharedCatalogSelectedTab === ent.sigla);
-        let iconName = ent.icone || 'hub';
-        if (ent.sigla === 'Município' || ent.sigla === 'Prefeitura') iconName = 'location_city';
-        else if (ent.sigla === 'MPF') iconName = 'balance';
-        else if (ent.sigla === 'PF') iconName = 'local_police';
-        else if (ent.sigla === 'SPU') iconName = 'account_balance';
-
-        html += `
-            <button type="button" onclick="selectSharedLayersTab('${ent.sigla}')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${isSelected ? 'bg-primary text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}">
-                <span class="material-symbols-outlined text-[15px]">${iconName}</span>
-                <span>${ent.sigla}</span>
-            </button>
-        `;
-    });
-
-    container.innerHTML = html;
-};
-
-window.renderSharedLayersCatalog = function() {
-    const listEl = document.getElementById('shared-layers-list');
-    const totalCountEl = document.getElementById('shared-layers-total-count');
-    if (!listEl) return;
-
-    const query = window.sharedCatalogSearchQuery || '';
-    const selectedTab = window.sharedCatalogSelectedTab || 'todos';
-
-    // 1. Filtra camadas vetoriais (inclui próprias + compartilhadas com permissão de visualização)
-    const filteredThemes = themes.filter(t => {
-        if (typeof userCanOnTheme === 'function' && !userCanOnTheme(t.id, 'ver')) return false;
-
-        const tEnt = ((t.metadata && t.metadata.entidade) || t.entidade || '').trim();
-        const tSigla = getEntitySigla(tEnt);
-
-        // Se a aba selecionada não for 'todos', bate com a sigla da entidade
-        if (selectedTab !== 'todos' && tSigla !== selectedTab) return false;
-
-        // Se houver busca por texto
-        if (query) {
-            const matchName = (t.name || '').toLowerCase().includes(query);
-            const matchEnt = tEnt.toLowerCase().includes(query) || tSigla.toLowerCase().includes(query);
-            if (!matchName && !matchEnt) return false;
-        }
-
-        return true;
-    });
-
-    // 2. Filtra ortofotos / rasters
-    const filteredRasters = rasterLayers.filter(r => {
-        const rEnt = (r.entidade || 'Prefeitura Municipal').trim();
-        const rSigla = getEntitySigla(rEnt);
-
-        if (selectedTab !== 'todos' && rSigla !== selectedTab) return false;
-
-        if (query) {
-            const matchName = (r.nome || '').toLowerCase().includes(query);
-            const matchEnt = rEnt.toLowerCase().includes(query) || rSigla.toLowerCase().includes(query);
-            if (!matchName && !matchEnt) return false;
-        }
-
-        return true;
-    });
-
-    const totalAvailable = filteredThemes.length + filteredRasters.length;
-    if (totalCountEl) totalCountEl.textContent = `${totalAvailable} disponíveis`;
-
-    if (totalAvailable === 0) {
-        listEl.innerHTML = `
-            <div class="col-span-full py-12 text-center text-slate-400">
-                <span class="material-symbols-outlined text-[40px] opacity-30 mb-2">layers_clear</span>
-                <p class="text-sm font-semibold">Nenhuma camada ou ortofoto encontrada.</p>
-                <p class="text-xs opacity-70 mt-0.5">Tente mudar o filtro de entidade ou a busca por texto.</p>
-            </div>
-        `;
-        return;
-    }
-
-    listEl.innerHTML = '';
-
-    // Renderiza Camadas Vetoriais
-    filteredThemes.forEach(theme => {
-        const tEnt = ((theme.metadata && theme.metadata.entidade) || theme.entidade || 'Prefeitura Municipal').trim();
-        const tSigla = getEntitySigla(tEnt);
-        const inWorkspace = Array.isArray(window.activeWorkspaceThemes) && window.activeWorkspaceThemes.includes(theme.id);
-        const count = (theme.features || []).length;
-
-        let iconName = 'layers';
-        if (theme.geomType === 'Point' || theme.geomType === 'MultiPoint') iconName = 'pin_drop';
-        else if (theme.geomType === 'LineString' || theme.geomType === 'MultiLineString') iconName = 'timeline';
-        else if (theme.geomType === 'Polygon' || theme.geomType === 'MultiPolygon') iconName = 'polyline';
-
-        const card = document.createElement('div');
-        card.className = `p-3.5 rounded-xl border transition-all duration-200 flex flex-col justify-between gap-3 ${
-            inWorkspace 
-                ? 'bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-300 dark:border-indigo-700/60 shadow-xs' 
-                : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600'
-        }`;
-
-        card.innerHTML = `
-            <div class="flex items-start gap-2.5">
-                <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-2xs" style="background-color: ${theme.color}25; color: ${theme.color}; border: 1px solid ${theme.color}40;">
-                    <span class="material-symbols-outlined text-[18px]">${iconName}</span>
-                </div>
-                <div class="flex-1 min-w-0">
-                    <h4 class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate" title="${theme.name}">${theme.name}</h4>
-                    <div class="flex items-center gap-1.5 mt-1 flex-wrap">
-                        <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30">
-                            <span class="material-symbols-outlined text-[10px]">hub</span>
-                            <span>${tSigla}</span>
-                        </span>
-                        <span class="text-[10px] text-slate-400 font-medium">
-                            ${count} ${count === 1 ? 'registro' : 'registros'}
-                        </span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60">
-                <span class="text-[10px] font-medium ${inWorkspace ? 'text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1' : 'text-slate-400'}">
-                    ${inWorkspace ? '<span class="material-symbols-outlined text-[13px]">check_circle</span> Na Mesa de Trabalho' : 'Não adicionada'}
-                </span>
-                <button type="button" 
-                        onclick="toggleItemInWorkspace('theme', '${theme.id}')"
-                        class="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                            inWorkspace
-                                ? 'bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
-                                : 'bg-primary hover:bg-primary/90 text-white shadow-xs'
-                        }">
-                    <span class="material-symbols-outlined text-[15px]">${inWorkspace ? 'remove' : 'add'}</span>
-                    <span>${inWorkspace ? 'Remover' : 'Adicionar'}</span>
-                </button>
-            </div>
-        `;
-        listEl.appendChild(card);
-    });
-
-    // Renderiza Ortofotos / Rasters
-    filteredRasters.forEach(raster => {
-        const rEnt = (raster.entidade || 'Prefeitura Municipal').trim();
-        const rSigla = getEntitySigla(rEnt);
-        const inWorkspace = Array.isArray(window.activeWorkspaceRasters) && window.activeWorkspaceRasters.includes(raster.id);
-
-        let dateFormatted = '';
-        const effDate = raster.data_imagem || localStorage.getItem(`raster_date_${raster.id}`);
-        if (effDate) dateFormatted = effDate.split('-').reverse().join('/');
-
-        const card = document.createElement('div');
-        card.className = `p-3.5 rounded-xl border transition-all duration-200 flex flex-col justify-between gap-3 ${
-            inWorkspace 
-                ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-700/60 shadow-xs' 
-                : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600'
-        }`;
-
-        card.innerHTML = `
-            <div class="flex items-start gap-2.5">
-                <div class="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 flex items-center justify-center shrink-0 shadow-2xs">
-                    <span class="material-symbols-outlined text-[18px]">image</span>
-                </div>
-                <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-1.5">
-                        <h4 class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate" title="${raster.nome}">${raster.nome}</h4>
-                        <span class="text-[8px] bg-emerald-500 text-white px-1 py-0.2 rounded font-bold uppercase tracking-wider">Raster</span>
-                    </div>
-                    <div class="flex items-center gap-1.5 mt-1 flex-wrap">
-                        <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30">
-                            <span class="material-symbols-outlined text-[10px]">hub</span>
-                            <span>${rSigla}</span>
-                        </span>
-                        ${dateFormatted ? `
-                            <span class="text-[10px] text-slate-400 font-medium flex items-center gap-0.5">
-                                <span class="material-symbols-outlined text-[10px]">calendar_today</span>
-                                <span>${dateFormatted}</span>
-                            </span>
-                        ` : ''}
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60">
-                <span class="text-[10px] font-medium ${inWorkspace ? 'text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1' : 'text-slate-400'}">
-                    ${inWorkspace ? '<span class="material-symbols-outlined text-[13px]">check_circle</span> Na Mesa de Trabalho' : 'Não adicionada'}
-                </span>
-                <button type="button" 
-                        onclick="toggleItemInWorkspace('raster', '${raster.id}')"
-                        class="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                            inWorkspace
-                                ? 'bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
-                                : 'bg-primary hover:bg-primary/90 text-white shadow-xs'
-                        }">
-                    <span class="material-symbols-outlined text-[15px]">${inWorkspace ? 'remove' : 'add'}</span>
-                    <span>${inWorkspace ? 'Remover' : 'Adicionar'}</span>
-                </button>
-            </div>
-        `;
-        listEl.appendChild(card);
-    });
-};
-
 function loadAllFeaturesToMap() {
   if (!geojsonLayer) return;
 
@@ -9311,6 +9013,13 @@ window.openSharedLayersCatalog = function() {
     if (modal) {
         modal.classList.remove('hidden');
         setTimeout(() => modal.firstElementChild?.classList.remove('scale-95'), 10);
+        if (typeof L !== 'undefined' && L.DomEvent && L.DomEvent.disableScrollPropagation) {
+            L.DomEvent.disableScrollPropagation(modal);
+        }
+    }
+    const accordionEl = document.getElementById('shared-layers-accordion');
+    if (accordionEl) {
+        accordionEl.onwheel = (e) => e.stopPropagation();
     }
     if (typeof window.updateProjectSelectDropdown === 'function') {
         window.updateProjectSelectDropdown();
@@ -9322,6 +9031,23 @@ window.openSharedLayersCatalog = function() {
         renderSharedLayersCatalog();
     } catch (err) {
         console.error('Erro ao renderizar catálogo compartilhado:', err);
+    }
+};
+
+window.toggleExpandSharedModal = function() {
+    const modalContent = document.querySelector('#shared-layers-modal > div');
+    const iconEl = document.getElementById('btn-expand-shared-icon');
+    if (!modalContent) return;
+
+    const isExpanded = modalContent.classList.contains('is-modal-expanded');
+    if (isExpanded) {
+        modalContent.classList.remove('is-modal-expanded', 'max-w-[96vw]', 'w-[96vw]', 'h-[95vh]', 'max-h-[95vh]');
+        modalContent.classList.add('max-w-2xl', 'h-[88vh]', 'max-h-[92vh]');
+        if (iconEl) iconEl.textContent = 'open_in_full';
+    } else {
+        modalContent.classList.add('is-modal-expanded', 'max-w-[96vw]', 'w-[96vw]', 'h-[95vh]', 'max-h-[95vh]');
+        modalContent.classList.remove('max-w-2xl', 'h-[88vh]', 'max-h-[92vh]');
+        if (iconEl) iconEl.textContent = 'close_fullscreen';
     }
 };
 
@@ -9464,6 +9190,15 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
         countsBySigla[s] = (countsBySigla[s] || 0) + count;
     });
 
+    // Atualiza o contador e ícone de disponíveis no cabeçalho do modal
+    const totalCountEl = document.getElementById('shared-layers-total-count');
+    if (totalCountEl) {
+        totalCountEl.innerHTML = `
+            <span class="material-symbols-outlined text-[13px]">layers</span>
+            <span>${totalEligible} ${totalEligible === 1 ? 'disponível' : 'disponíveis'}</span>
+        `;
+    }
+
     // 4. Renderiza a Barra Horizontal de Entidades
     const toggleContainer = document.getElementById('shared-layers-entity-toggle');
     if (toggleContainer) {
@@ -9597,7 +9332,7 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
                 </button>
 
                 <!-- Corpo do Acordeão -->
-                <div id="shared-accordion-group-${index}" class="shared-accordion-body px-3 pb-3 pt-1 border-t border-slate-100 dark:border-slate-800/80 space-y-2 ${isOpenByDefault ? '' : 'hidden'}">
+                <div id="shared-accordion-group-${index}" class="shared-accordion-body px-3 pb-3 pt-1 border-t border-slate-100 dark:border-slate-800/80 space-y-2 max-h-[60vh] overflow-y-auto custom-scrollbar ${isOpenByDefault ? '' : 'hidden'}">
                     <!-- Camadas Vetoriais da Entidade -->
                     ${groupThemes.map(t => {
                         const isActive = Array.isArray(window.activeWorkspaceThemes) && window.activeWorkspaceThemes.includes(t.id);
