@@ -1,0 +1,18 @@
+[
+  {
+    "uf": "PB",
+    "mes_referencia": "07/2026",
+    "chave_referencia": "PB_2026_07",
+    "nome_exibicao": "SINAPI 07/2026 - PB (João Pessoa)",
+    "data_emissao": "11/08/2026",
+    "encargos_sociais": {
+      "horista": 1.0206,
+      "mensalista": 0.5991
+    },
+    "total_composicoes": 10544,
+    "total_insumos": 4876,
+    "total_itens": 15420,
+    "arquivo_catalogo": "catalogo_pb_2026_07.json",
+    "arquivo_analitico": "analitico_2026_07.json"
+  }
+]

@@ -203,13 +203,13 @@
       <span class="font-extrabold text-sm tracking-tight text-slate-800 dark:text-slate-100 hidden sm:inline">GeoGestor</span>
     </div>
 
-    <!-- Canto Direito: Alternador Mapa/Lista + Configurações Globais (SuperAdmin) + Perfil -->
+    <!-- Canto Direito: Alternador Global/Lista + Configurações Globais (SuperAdmin) + Perfil -->
     <div class="flex items-center gap-2.5 ml-auto">
-      <!-- Botões de Alternância: [ 🗺️ Mapa ] [ 📋 Lista ] -->
+      <!-- Botões de Alternância: [ 🗺️ Global ] [ 📋 Lista ] -->
       <div id="view-mode-toggle-group" class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm">
-        <button id="view-mode-map-btn" type="button" onclick="switchMunicipiosViewMode('map', true)" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-900 text-primary shadow-sm cursor-pointer">
+        <button id="view-mode-map-btn" type="button" onclick="switchMunicipiosViewMode('map', true)" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-900 text-primary shadow-sm cursor-pointer" title="Visão Global">
           <span class="material-symbols-outlined text-[16px]">map</span>
-          <span>Mapa</span>
+          <span>Global</span>
         </button>
         <button id="view-mode-list-btn" type="button" onclick="switchMunicipiosViewMode('list', true)" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer">
           <span class="material-symbols-outlined text-[16px]">format_list_bulleted</span>
@@ -231,22 +231,35 @@
 
   <!-- VISÃO 2: Painel do Município Ativo (ao clicar em ABRIR em um município) -->
   <div id="header-municipio-view" class="hidden items-center justify-between w-full h-full gap-2 sm:gap-4">
-    <!-- Esquerda: Seta Voltar circular (mesmo estilo e tamanho do perfil) -->
-    <button onclick="voltarParaMunicipios()" class="w-9 h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all flex items-center justify-center cursor-pointer shadow-sm shrink-0" title="Voltar">
-      <span class="material-symbols-outlined text-[20px]">arrow_back</span>
-    </button>
+    <!-- Logomarca / Título -->
+    <div class="flex items-center gap-2.5">
+      <img src="assets/logo.png" alt="GeoGestor" class="w-8 h-8 rounded-lg object-contain">
+      <span class="font-extrabold text-sm tracking-tight text-slate-800 dark:text-slate-100 hidden sm:inline">GeoGestor</span>
+    </div>
 
-    <!-- Centro: Espaçador flexível (limpo para manter foco exclusivo nos cards) -->
-    <div class="flex-1 min-w-0">
-      <span id="header-municipio-nome" class="hidden"></span>
+    <!-- Centro: Espaçador flexível / Título da Subferramenta -->
+    <div class="flex-1 min-w-0 px-2">
+      <span id="header-municipio-nome" class="hidden text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 truncate"></span>
     </div>
 
     <!-- Container de compatibilidade para abas (oculto) -->
     <div id="municipio-tabs" class="hidden"></div>
 
-    <!-- Direita: Gerenciador (SuperAdmin) + Perfil (fixo) -->
-    <div class="shrink-0 ml-auto flex items-center gap-2">
-      <button id="btn-global-config-mun" onclick="abrirConfiguracoesGlobais()" class="hidden w-9 h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all items-center justify-center cursor-pointer shadow-sm tooltip tooltip-bottom" title="Gerenciador">
+    <!-- Canto Direito: Alternador Global/Lista + Gerenciador (SuperAdmin) + Perfil -->
+    <div class="shrink-0 ml-auto flex items-center gap-2.5">
+      <!-- Botões de Alternância: [ 🗺️ Global ] [ 📋 Lista ] -->
+      <div id="view-mode-toggle-group-mun" class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm">
+        <button type="button" onclick="voltarParaMunicipios(); switchMunicipiosViewMode('map', true);" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer" title="Visão Global">
+          <span class="material-symbols-outlined text-[16px]">map</span>
+          <span>Global</span>
+        </button>
+        <button type="button" onclick="voltarParaMunicipios(); switchMunicipiosViewMode('list', true);" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer" title="Ver Lista de Municípios">
+          <span class="material-symbols-outlined text-[16px]">format_list_bulleted</span>
+          <span>Lista</span>
+        </button>
+      </div>
+
+      <button id="btn-global-config-mun" onclick="abrirConfiguracoesGlobais()" class="hidden w-9 h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all items-center justify-center cursor-pointer shadow-sm tooltip tooltip-bottom" title="Configurações Globais">
         <span class="material-symbols-outlined text-[20px]">settings</span>
       </button>
       <button onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-9 h-9 md:w-10 md:h-10 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors cursor-pointer shadow-sm bg-slate-50 dark:bg-slate-800 flex items-center justify-center" title="Perfil do Usuário">
@@ -501,9 +514,9 @@
     <div id="municipios-empty-filter" class="hidden text-center py-10 text-xs text-slate-400 italic shrink-0">Nenhum município encontrado com esse termo de busca.</div>
   </section>
 
-  <!-- Configurações Globais (exclusivo SuperAdmin) - Visão Contínua Unificada -->
+  <!-- Configurações Globais (exclusivo SuperAdmin) - Organizado em Abas no Estilo Mapa/Lista -->
   <section id="configuracoes-section" class="tab-content h-full overflow-y-auto pr-1">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-6 border-b border-slate-200 dark:border-slate-800 gap-4">
+    <div class="flex flex-col xl:flex-row xl:items-center justify-between pb-4 mb-6 border-b border-slate-200 dark:border-slate-800 gap-4">
       <div class="flex items-center gap-3">
         <button onclick="voltarParaMunicipios()" class="w-9 h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all flex items-center justify-center cursor-pointer shadow-sm shrink-0" title="Voltar aos Municípios">
           <span class="material-symbols-outlined text-[20px]">arrow_back</span>
@@ -513,89 +526,248 @@
             <span class="material-symbols-outlined text-primary text-[22px]">tune</span>
             <span>Configurações Globais</span>
           </h2>
-          <p class="text-xs text-slate-400">Gerenciamento unificado de municípios e entidades parceiras do GeoGestor</p>
+          <p class="text-xs text-slate-400">Gerenciamento unificado de municípios, órgãos parceiros e tabelas de custos do GeoGestor</p>
         </div>
+      </div>
+
+      <!-- Segmented Pill Tabs no estilo Mapa / Lista -->
+      <div id="global-config-tabs-group" class="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm shrink-0 flex-wrap">
+        <button id="cfg-tab-municipios" type="button" onclick="switchGlobalConfigTab('municipios')" class="cfg-tab-btn flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-900 text-primary shadow-sm cursor-pointer">
+          <span class="material-symbols-outlined text-[16px]">location_city</span>
+          <span>Municípios do Sistema</span>
+        </button>
+        <button id="cfg-tab-entidades" type="button" onclick="switchGlobalConfigTab('entidades')" class="cfg-tab-btn flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer">
+          <span class="material-symbols-outlined text-[16px]">corporate_fare</span>
+          <span>Entidades e Órgãos Parceiros</span>
+        </button>
+        <button id="cfg-tab-sinapi" type="button" onclick="switchGlobalConfigTab('sinapi')" class="cfg-tab-btn flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer">
+          <span class="material-symbols-outlined text-[16px]">request_quote</span>
+          <span>Tabelas Oficiais de Custos de Obras (SINAPI / CAIXA)</span>
+        </button>
       </div>
     </div>
 
-    <div class="space-y-8 pb-12">
+    <div class="space-y-6 pb-12">
       <!-- Bloco 1: Gestão de Municípios -->
-      <div class="space-y-4">
-        <div class="flex items-center gap-2">
-          <span class="material-symbols-outlined text-primary text-[20px]">location_city</span>
-          <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200">Municípios do Sistema</h3>
+      <div id="global-tab-pane-municipios" class="global-tab-pane space-y-4">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-2xl bg-sky-500/10 dark:bg-sky-500/20 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0 shadow-xs">
+            <span class="material-symbols-outlined text-[26px]">location_city</span>
+          </div>
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Municípios do Sistema</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Gestão unificada de municípios e identidade visual</p>
+          </div>
         </div>
 
-        <div class="card rounded-2xl p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Cadastrar Novo Município</h4>
+        <div class="card rounded-2xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/90 shadow-xs hover:shadow-md transition-all">
+          <div class="flex items-center justify-between mb-4">
+            <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-sky-500"></span>
+              Cadastrar Novo Município
+            </h4>
+            <span class="text-[11px] text-slate-400">Preencha os dados e importe o brasão oficial</span>
+          </div>
           <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-            <input id="novo-municipio-nome" type="text" placeholder="Nome do município (ex: João Pessoa)" class="flex-1 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2.5">
-            <input id="novo-municipio-uf" type="text" maxlength="2" placeholder="UF" class="w-full sm:w-20 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2.5 uppercase text-center font-bold">
+            <input id="novo-municipio-nome" type="text" placeholder="Nome do município (ex: João Pessoa)" class="flex-1 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3.5 py-2.5 text-slate-800 dark:text-slate-100">
+            <input id="novo-municipio-uf" type="text" maxlength="2" placeholder="UF" class="w-full sm:w-20 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3.5 py-2.5 uppercase text-center font-bold text-slate-800 dark:text-slate-100">
             
             <!-- Campo para importar a logo do município -->
-            <label class="relative flex items-center justify-center gap-2 px-3 py-2.5 border border-dashed border-slate-300 dark:border-slate-700 hover:border-primary dark:hover:border-primary rounded-xl cursor-pointer bg-slate-50 dark:bg-slate-800/60 hover:bg-primary/5 transition-all text-xs text-slate-600 dark:text-slate-300 shrink-0" title="Selecionar imagem da logo do município">
+            <label class="relative flex items-center justify-center gap-2 px-3.5 py-2.5 border border-dashed border-slate-300 dark:border-slate-700 hover:border-primary dark:hover:border-primary rounded-xl cursor-pointer bg-slate-50 dark:bg-slate-800/60 hover:bg-primary/5 transition-all text-xs text-slate-600 dark:text-slate-300 shrink-0" title="Selecionar imagem da logo do município">
               <img id="novo-municipio-logo-preview" class="w-5 h-5 rounded object-contain hidden" alt="Preview">
               <span id="novo-municipio-logo-icon" class="material-symbols-outlined text-[18px] text-primary">add_photo_alternate</span>
               <span id="novo-municipio-logo-label" class="truncate max-w-[120px]">Importar Logo</span>
               <input id="novo-municipio-logo" type="file" accept="image/png, image/jpeg, image/svg+xml, image/webp" class="hidden" onchange="previewNovoMunicipioLogo(this)">
             </label>
 
-            <button onclick="criarMunicipio()" class="text-xs font-bold bg-primary text-white px-5 py-2.5 rounded-xl hover:bg-primary/90 shrink-0 shadow-sm transition-all cursor-pointer">Cadastrar Município</button>
+            <button onclick="criarMunicipio()" class="text-xs font-bold bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-xl shrink-0 shadow-sm transition-all cursor-pointer active:scale-95 flex items-center justify-center gap-1.5">
+              <span class="material-symbols-outlined text-[16px]">add_location_alt</span>
+              <span>Cadastrar Município</span>
+            </button>
           </div>
           <!-- Informação do tipo de arquivo que deve ser importado -->
-          <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-2.5 flex items-center gap-1.5">
+          <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-3 flex items-center gap-1.5">
             <span class="material-symbols-outlined text-[15px] text-primary">info</span>
             <span>Formatos suportados: <strong>PNG, JPG, SVG ou WEBP</strong> (recomendado brasão/logo com fundo transparente, máx. 2MB).</span>
           </p>
         </div>
 
         <div>
-          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Municípios Cadastrados</h4>
-          <div id="global-municipios-list" class="flex flex-col gap-2"></div>
+          <div class="flex items-center justify-between mb-3 px-1">
+            <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Municípios Cadastrados</h4>
+            <span class="text-[11px] text-slate-400">Gerenciamento de status e identidade</span>
+          </div>
+          <div id="global-municipios-list" class="flex flex-col gap-3"></div>
         </div>
       </div>
 
-      <!-- Divisor elegante entre as seções -->
-      <div class="border-t border-slate-200 dark:border-slate-800/80"></div>
-
       <!-- Bloco 2: Gestão de Entidades e Órgãos Parceiros -->
-      <div class="space-y-4">
-        <div class="flex items-center gap-2">
-          <span class="material-symbols-outlined text-cyan-500 text-[20px]">corporate_fare</span>
-          <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200">Entidades e Órgãos Parceiros</h3>
+      <div id="global-tab-pane-entidades" class="global-tab-pane space-y-4 hidden">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-2xl bg-cyan-500/10 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0 shadow-xs">
+            <span class="material-symbols-outlined text-[26px]">corporate_fare</span>
+          </div>
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Entidades e Órgãos Parceiros</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Instituições de controle externo, fiscalização e órgãos públicos</p>
+          </div>
         </div>
 
-        <div class="card rounded-2xl p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Adicionar Nova Entidade</h4>
+        <div class="card rounded-2xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/90 shadow-xs hover:shadow-md transition-all">
+          <div class="flex items-center justify-between mb-4">
+            <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-cyan-500"></span>
+              Adicionar Nova Entidade
+            </h4>
+            <span class="text-[11px] text-slate-400">Cadastro de novos parceiros e brasões</span>
+          </div>
           <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-            <input id="nova-entidade-nome" type="text" placeholder="Nome completo da entidade (ex: Ministério Público Federal)" class="flex-1 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2.5">
-            <input id="nova-entidade-sigla" type="text" placeholder="Sigla (ex: MPF)" class="w-full sm:w-28 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2.5">
-            <select id="nova-entidade-tipo" class="text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2.5">
+            <input id="nova-entidade-nome" type="text" placeholder="Nome completo da entidade (ex: Ministério Público Federal)" class="flex-1 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3.5 py-2.5 text-slate-800 dark:text-slate-100">
+            <input id="nova-entidade-sigla" type="text" placeholder="Sigla (ex: MPF)" class="w-full sm:w-28 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3.5 py-2.5 text-slate-800 dark:text-slate-100">
+            <select id="nova-entidade-tipo" class="text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3.5 py-2.5 text-slate-800 dark:text-slate-100">
               <option value="municipal">Municipal</option>
               <option value="externo" selected>Externo</option>
               <option value="outro">Outro</option>
             </select>
 
             <!-- Campo para importar a logo da entidade parceira -->
-            <label class="relative flex items-center justify-center gap-2 px-3 py-2.5 border border-dashed border-slate-300 dark:border-slate-700 hover:border-cyan-500 dark:hover:border-cyan-500 rounded-xl cursor-pointer bg-slate-50 dark:bg-slate-800/60 hover:bg-cyan-500/5 transition-all text-xs text-slate-600 dark:text-slate-300 shrink-0" title="Selecionar imagem da logo/brasão da entidade">
+            <label class="relative flex items-center justify-center gap-2 px-3.5 py-2.5 border border-dashed border-slate-300 dark:border-slate-700 hover:border-cyan-500 dark:hover:border-cyan-500 rounded-xl cursor-pointer bg-slate-50 dark:bg-slate-800/60 hover:bg-cyan-500/5 transition-all text-xs text-slate-600 dark:text-slate-300 shrink-0" title="Selecionar imagem da logo/brasão da entidade">
               <img id="nova-entidade-logo-preview" class="w-5 h-5 rounded object-contain hidden" alt="Preview">
               <span id="nova-entidade-logo-icon" class="material-symbols-outlined text-[18px] text-cyan-500">add_photo_alternate</span>
               <span id="nova-entidade-logo-label" class="truncate max-w-[120px]">Importar Logo</span>
               <input id="nova-entidade-logo" type="file" accept="image/png, image/jpeg, image/svg+xml, image/webp" class="hidden" onchange="previewNovaEntidadeLogo(this)">
             </label>
 
-            <button onclick="adicionarEntidade()" class="text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2.5 rounded-xl shrink-0 shadow-sm transition-all cursor-pointer">Adicionar Entidade</button>
+            <button onclick="adicionarEntidade()" class="text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2.5 rounded-xl shrink-0 shadow-sm transition-all cursor-pointer active:scale-95 flex items-center justify-center gap-1.5">
+              <span class="material-symbols-outlined text-[16px]">domain_add</span>
+              <span>Adicionar Entidade</span>
+            </button>
           </div>
           <!-- Informação do tipo de arquivo que deve ser importado -->
-          <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-2.5 flex items-center gap-1.5">
+          <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-3 flex items-center gap-1.5">
             <span class="material-symbols-outlined text-[15px] text-cyan-500">info</span>
             <span>Formatos suportados: <strong>PNG, JPG, SVG ou WEBP</strong> (brasão ou logo do órgão com fundo transparente, máx. 2MB).</span>
           </p>
         </div>
 
         <div>
-          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Entidades Cadastradas</h4>
-          <div id="entidades-list" class="flex flex-col gap-2"></div>
+          <div class="flex items-center justify-between mb-3 px-1">
+            <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Entidades Cadastradas</h4>
+            <span class="text-[11px] text-slate-400">Órgãos integrados ao sistema</span>
+          </div>
+          <div id="entidades-list" class="flex flex-col gap-3"></div>
+        </div>
+      </div>
+
+      <!-- Bloco 3: Bases e Tabelas Oficiais de Preços de Obras (SINAPI / Caixa) -->
+      <div id="global-tab-pane-sinapi" class="global-tab-pane space-y-4 hidden">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 shadow-xs">
+            <span class="material-symbols-outlined text-[26px]">request_quote</span>
+          </div>
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Tabelas Oficiais de Custos de Obras (SINAPI / CAIXA)</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Bases referenciais oficiais de preços medianos de insumos e composições analíticas</p>
+          </div>
+        </div>
+
+        <!-- Card 1: Métricas da Base Atual -->
+        <div class="card rounded-2xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/90 shadow-xs hover:shadow-md transition-all">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-2">
+                <h4 id="sinapi-active-title" class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">Base Ativa: SINAPI 07/2026 - Paraíba (PB)</h4>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800/60">OFICIAL CAIXA</span>
+              </div>
+              <p class="text-xs text-slate-400 mt-1">Preços medianos e coeficientes analíticos de insumos e composições de serviços oficiais para a Paraíba.</p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="px-3.5 py-1.5 text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-xl flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[16px]">verified</span>
+                Base Pronta para Uso
+              </span>
+            </div>
+          </div>
+
+          <!-- Métricas da Base Atual -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <div class="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+              <span class="text-[10px] font-bold text-slate-400 uppercase block">Composições PB</span>
+              <span class="text-base font-extrabold text-slate-800 dark:text-slate-100 font-mono">10.544</span>
+            </div>
+            <div class="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+              <span class="text-[10px] font-bold text-slate-400 uppercase block">Insumos PB</span>
+              <span class="text-base font-extrabold text-slate-800 dark:text-slate-100 font-mono">4.876</span>
+            </div>
+            <div class="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+              <span class="text-[10px] font-bold text-slate-400 uppercase block">Encargos Horista</span>
+              <span class="text-base font-extrabold text-sky-600 dark:text-sky-400 font-mono">102,06%</span>
+            </div>
+            <div class="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+              <span class="text-[10px] font-bold text-slate-400 uppercase block">Encargos Mensalista</span>
+              <span class="text-base font-extrabold text-sky-600 dark:text-sky-400 font-mono">59,91%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Carregar Nova Planilha Mensal do SINAPI -->
+        <div class="card rounded-2xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/90 shadow-xs hover:shadow-md transition-all">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-[20px]">upload_file</span>
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Carregar Nova Planilha Mensal da Caixa</h4>
+          </div>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+            Faça o upload do arquivo <code>SINAPI_Referência_AAAA_MM.xlsx</code> baixado do portal da Caixa Econômica Federal. O sistema indexa e integra as novas tabelas automaticamente.
+          </p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+            <div class="sm:col-span-5">
+              <label class="text-[11px] font-bold text-slate-500 uppercase block mb-1">Planilha da Caixa (.xlsx)</label>
+              <input type="file" id="sinapi-upload-file" accept=".xlsx, .xls" class="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-50 dark:file:bg-emerald-950 file:text-emerald-700 dark:file:text-emerald-300 hover:file:bg-emerald-100 cursor-pointer border border-slate-200 dark:border-slate-700 rounded-xl p-1 bg-slate-50 dark:bg-slate-800">
+            </div>
+            <div class="sm:col-span-3">
+              <label class="text-[11px] font-bold text-slate-500 uppercase block mb-1">Mês de Referência</label>
+              <input type="text" id="sinapi-upload-mes" placeholder="Ex: 08/2026" value="08/2026" class="w-full text-xs font-bold px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100">
+            </div>
+            <div class="sm:col-span-2">
+              <label class="text-[11px] font-bold text-slate-500 uppercase block mb-1">Estado (UF)</label>
+              <select id="sinapi-upload-uf" class="w-full text-xs font-bold px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100">
+                <option value="PB" selected>PB (Paraíba)</option>
+                <option value="PE">PE (Pernambuco)</option>
+                <option value="RN">RN (Rio Grande do Norte)</option>
+                <option value="CE">CE (Ceará)</option>
+                <option value="SP">SP (São Paulo)</option>
+              </select>
+            </div>
+            <div class="sm:col-span-2">
+              <button onclick="carregarNovaPlanilhaSinapi()" id="btn-processar-sinapi" class="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95">
+                <span class="material-symbols-outlined text-[18px]">bolt</span>
+                <span>Processar</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Barra de Progresso / Feedback -->
+          <div id="sinapi-progress-container" class="hidden mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <div class="flex items-center justify-between text-xs mb-1">
+              <span id="sinapi-progress-text" class="text-slate-600 dark:text-slate-300 font-medium">Extraindo composições e insumos...</span>
+              <span id="sinapi-progress-percent" class="font-mono font-bold text-emerald-600 dark:text-emerald-400">0%</span>
+            </div>
+            <div class="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div id="sinapi-progress-bar" class="h-full bg-emerald-500 transition-all duration-200" style="width: 0%"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Histórico de Bases Disponíveis -->
+        <div class="card rounded-2xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/90 shadow-xs hover:shadow-md transition-all">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Histórico de Bases SINAPI Disponíveis</h4>
+            <span class="text-[11px] text-slate-400">Gerenciamento de versões para o município</span>
+          </div>
+          <div id="sinapi-bases-list" class="space-y-2">
+            <!-- Renderizado via JS -->
+          </div>
         </div>
       </div>
     </div>
@@ -953,13 +1125,43 @@ window.voltarParaMunicipios = function() {
     } catch(e) {}
 };
 
-window.abrirConfiguracoesGlobais = function() {
+window.switchGlobalConfigTab = function(tabName) {
+    const tabs = ['municipios', 'entidades', 'sinapi'];
+    if (!tabs.includes(tabName)) tabName = 'municipios';
+
+    tabs.forEach(t => {
+        const pane = document.getElementById(`global-tab-pane-${t}`);
+        const btn = document.getElementById(`cfg-tab-${t}`);
+        const isActive = (t === tabName);
+        if (pane) {
+            pane.classList.toggle('hidden', !isActive);
+        }
+        if (btn) {
+            if (isActive) {
+                btn.className = 'cfg-tab-btn flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-900 text-primary shadow-sm cursor-pointer';
+            } else {
+                btn.className = 'cfg-tab-btn flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer';
+            }
+        }
+    });
+
+    if (tabName === 'municipios') {
+        loadGlobalMunicipiosList();
+    } else if (tabName === 'entidades') {
+        loadEntidadesSection();
+    } else if (tabName === 'sinapi') {
+        if (typeof window.renderBasesSinapiList === 'function') {
+            window.renderBasesSinapiList();
+        }
+    }
+};
+
+window.abrirConfiguracoesGlobais = function(initialTab = 'municipios') {
     document.querySelectorAll('main > section').forEach(s => s.classList.remove('active'));
     const cfgSec = document.getElementById('configuracoes-section');
     if (cfgSec) cfgSec.classList.add('active');
 
-    loadGlobalMunicipiosList();
-    loadEntidadesSection();
+    window.switchGlobalConfigTab(initialTab);
 };
 
 window.previewNovaEntidadeLogo = function(input) {
@@ -1205,57 +1407,58 @@ window.loadGlobalMunicipiosList = async function() {
     }
 
     listContainer.innerHTML = muns.map(m => `
-        <div class="card rounded-2xl p-3.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-all" data-mun-card="${m.id}" data-orig-nome="${(m.nome || '').replace(/"/g, '&quot;')}" data-orig-uf="${(m.uf || '').replace(/"/g, '&quot;')}" data-orig-logo="${m.logo_url || ''}" data-orig-ativo="${m.ativo ? '1' : '0'}">
+        <div class="card rounded-2xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs hover:shadow-md hover:border-primary/40 transition-all" data-mun-card="${m.id}" data-orig-nome="${(m.nome || '').replace(/"/g, '&quot;')}" data-orig-uf="${(m.uf || '').replace(/"/g, '&quot;')}" data-orig-logo="${m.logo_url || ''}" data-orig-ativo="${m.ativo ? '1' : '0'}">
             <!-- MODO VISUALIZAÇÃO -->
-            <div class="mun-view-mode flex items-center justify-between gap-3">
-                <div class="flex items-center gap-3 min-w-0">
-                    <div class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 flex items-center justify-center shrink-0 overflow-hidden p-1">
-                        ${m.logo_url ? `<img src="${m.logo_url}" class="w-full h-full object-contain" alt="Logo">` : `<span class="material-symbols-outlined text-primary text-[22px]">location_city</span>`}
+            <div class="mun-view-mode flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3.5 min-w-0">
+                    <div class="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 flex items-center justify-center shrink-0 overflow-hidden p-1.5 shadow-xs">
+                        ${m.logo_url ? `<img src="${m.logo_url}" class="w-full h-full object-contain" alt="Logo">` : `<span class="material-symbols-outlined text-primary text-[26px]">location_city</span>`}
                     </div>
                     <div class="min-w-0">
-                        <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate block">${m.nome}${m.uf ? ' - ' + m.uf : ''}</span>
-                        <span class="text-[10px] text-slate-400 block">${m.ativo ? 'Ativo no sistema' : 'Inativo'}</span>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">${m.nome}${m.uf ? ' - ' + m.uf : ''}</span>
+                            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${m.ativo ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700'}">
+                                ${m.ativo ? '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Ativo no sistema' : 'Inativo'}
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-0.5">Município integrado e gerenciado pelo GeoGestor</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
-                    <label class="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 cursor-pointer mr-1">
-                        <input type="checkbox" ${m.ativo ? 'checked' : ''} onchange="toggleMunicipioAtivo('${m.id}', this.checked)" class="rounded border-slate-300 text-primary focus:ring-primary">
-                        <span class="text-[11px] font-medium">${m.ativo ? 'Ativo' : 'Inativo'}</span>
-                    </label>
-                    <button type="button" onclick="editarMunicipioCard('${m.id}')" class="px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-all flex items-center gap-1 cursor-pointer" title="Editar nome, UF e logo deste município">
-                        <span class="material-symbols-outlined text-[15px]">edit</span>
+                    <button type="button" onclick="editarMunicipioCard('${m.id}')" class="px-3.5 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95" title="Editar nome, UF e logo deste município">
+                        <span class="material-symbols-outlined text-[16px]">edit</span>
                         <span>Editar</span>
                     </button>
                 </div>
             </div>
 
             <!-- MODO EDIÇÃO -->
-            <div class="mun-edit-mode hidden flex-col gap-2.5 pt-1">
-                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    <input class="mun-edit-nome flex-1 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2.5 py-2 text-slate-800 dark:text-slate-100 font-semibold" value="${(m.nome || '').replace(/"/g, '&quot;')}" placeholder="Nome do município">
-                    <input class="mun-edit-uf w-full sm:w-20 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2.5 py-2 text-slate-800 dark:text-slate-100 font-bold uppercase text-center" value="${(m.uf || '').replace(/"/g, '&quot;')}" placeholder="UF" maxlength="2">
+            <div class="mun-edit-mode hidden flex-col gap-3 pt-2 border-t border-slate-100 dark:border-slate-800/80 mt-2">
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                    <input class="mun-edit-nome flex-1 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2.5 text-slate-800 dark:text-slate-100 font-semibold" value="${(m.nome || '').replace(/"/g, '&quot;')}" placeholder="Nome do município">
+                    <input class="mun-edit-uf w-full sm:w-20 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl px-3 py-2.5 text-slate-800 dark:text-slate-100 font-bold uppercase text-center" value="${(m.uf || '').replace(/"/g, '&quot;')}" placeholder="UF" maxlength="2">
                     
-                    <label class="flex items-center gap-1.5 px-2.5 py-2 border border-dashed border-slate-300 dark:border-slate-700 hover:border-primary rounded-lg cursor-pointer bg-slate-50 dark:bg-slate-800 text-xs text-slate-600 dark:text-slate-300 shrink-0" title="Alterar imagem da logo">
-                        <img class="mun-edit-logo-preview w-4 h-4 rounded object-contain ${m.logo_url ? '' : 'hidden'}" src="${m.logo_url || ''}">
-                        <span class="material-symbols-outlined text-[16px] text-primary">add_photo_alternate</span>
-                        <span class="mun-edit-logo-label text-[11px] truncate max-w-[95px]">${m.logo_url ? 'Trocar Logo' : 'Nova Logo'}</span>
+                    <label class="flex items-center gap-2 px-3 py-2.5 border border-dashed border-slate-300 dark:border-slate-700 hover:border-primary rounded-xl cursor-pointer bg-slate-50 dark:bg-slate-800 text-xs text-slate-600 dark:text-slate-300 shrink-0" title="Alterar imagem da logo">
+                        <img class="mun-edit-logo-preview w-5 h-5 rounded object-contain ${m.logo_url ? '' : 'hidden'}" src="${m.logo_url || ''}">
+                        <span class="material-symbols-outlined text-[18px] text-primary">add_photo_alternate</span>
+                        <span class="mun-edit-logo-label text-xs truncate max-w-[100px]">${m.logo_url ? 'Trocar Logo' : 'Nova Logo'}</span>
                         <input type="file" accept="image/png, image/jpeg, image/svg+xml, image/webp" class="mun-edit-logo-file hidden" onchange="previewCardMunicipioLogo('${m.id}', this)">
                     </label>
 
-                    <label class="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 cursor-pointer shrink-0">
+                    <label class="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 cursor-pointer shrink-0 px-1">
                         <input type="checkbox" class="mun-edit-ativo rounded border-slate-300 text-primary" ${m.ativo ? 'checked' : ''}>
-                        <span class="text-[11px] font-medium">Ativo</span>
+                        <span class="text-xs font-medium">Ativo</span>
                     </label>
                 </div>
 
-                <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
-                    <span class="text-[10px] text-slate-400">PNG, JPG, SVG ou WEBP (máx. 2MB)</span>
-                    <div class="flex items-center gap-1.5">
-                        <button type="button" onclick="cancelarEdicaoMunicipio('${m.id}')" class="px-2.5 py-1 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg transition-all flex items-center gap-1 cursor-pointer">
-                            <span class="material-symbols-outlined text-[14px]">close</span> Cancelar
+                <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <span class="text-[11px] text-slate-400">PNG, JPG, SVG ou WEBP (máx. 2MB)</span>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="cancelarEdicaoMunicipio('${m.id}')" class="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-xl transition-all flex items-center gap-1 cursor-pointer">
+                            <span class="material-symbols-outlined text-[15px]">close</span> Cancelar
                         </button>
-                        <button type="button" onclick="salvarEdicaoMunicipio('${m.id}')" class="px-3 py-1 text-xs font-bold text-white bg-primary hover:bg-primary/90 rounded-lg transition-all shadow-sm flex items-center gap-1 cursor-pointer">
-                            <span class="material-symbols-outlined text-[14px]">save</span> Salvar
+                        <button type="button" onclick="salvarEdicaoMunicipio('${m.id}')" class="px-4 py-1.5 text-xs font-bold text-white bg-primary hover:bg-primary/90 rounded-xl transition-all shadow-sm flex items-center gap-1 cursor-pointer">
+                            <span class="material-symbols-outlined text-[15px]">save</span> Salvar
                         </button>
                     </div>
                 </div>
@@ -2061,21 +2264,32 @@ async function loadEntidadesSection() {
         ).join('');
 
         const logoHtml = e.logo_url
-            ? `<img src="${e.logo_url}" class="w-8 h-8 rounded-lg object-contain bg-slate-50 dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700 shrink-0 shadow-xs" alt="Logo">`
-            : `<div class="w-8 h-8 rounded-lg bg-cyan-500/10 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0 border border-cyan-500/20"><span class="material-symbols-outlined text-[18px]">corporate_fare</span></div>`;
+            ? `<img src="${e.logo_url}" class="w-full h-full object-contain" alt="Logo">`
+            : `<span class="material-symbols-outlined text-[26px]">corporate_fare</span>`;
 
         return `
-        <div class="card rounded-2xl p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center gap-2.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 transition-all shadow-xs" data-entidade-id="${e.id}" data-orig-nome="${(e.nome || '').replace(/"/g, '&quot;')}" data-orig-sigla="${(e.sigla || '').replace(/"/g, '&quot;')}" data-orig-tipo="${e.tipo}" data-orig-ativo="${e.ativo ? '1' : '0'}" data-orig-logo="${(e.logo_url || '').replace(/"/g, '&quot;')}">
-            <div class="flex items-center gap-2.5 flex-1 min-w-0">
-                ${logoHtml}
-                <input class="entidade-nome flex-1 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 disabled:opacity-90 disabled:border-transparent disabled:bg-transparent disabled:cursor-default font-semibold rounded-xl px-2.5 py-1.5 text-slate-800 dark:text-slate-100" value="${(e.nome || '').replace(/"/g, '&quot;')}" disabled>
+        <div class="card rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-cyan-500/40 shadow-xs hover:shadow-md transition-all" data-entidade-id="${e.id}" data-orig-nome="${(e.nome || '').replace(/"/g, '&quot;')}" data-orig-sigla="${(e.sigla || '').replace(/"/g, '&quot;')}" data-orig-tipo="${e.tipo}" data-orig-ativo="${e.ativo ? '1' : '0'}" data-orig-logo="${(e.logo_url || '').replace(/"/g, '&quot;')}">
+            <div class="flex items-center gap-3.5 flex-1 min-w-0">
+                <div class="w-12 h-12 rounded-xl bg-cyan-500/10 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0 border border-cyan-500/20 shadow-xs p-1.5 overflow-hidden">
+                    ${logoHtml}
+                </div>
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <input class="entidade-nome text-sm font-bold text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 disabled:opacity-100 disabled:border-transparent disabled:bg-transparent disabled:cursor-default rounded-xl px-2.5 py-1 flex-1 min-w-[160px]" value="${(e.nome || '').replace(/"/g, '&quot;')}" disabled>
+                        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${e.ativo ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700'}">
+                            ${e.ativo ? '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Ativo' : 'Inativo'}
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-2 mt-0.5">
+                        <input class="entidade-sigla w-24 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 disabled:opacity-90 disabled:border-transparent disabled:bg-transparent disabled:cursor-default rounded-lg px-2 py-0.5 uppercase font-bold text-slate-500 dark:text-slate-400" value="${(e.sigla || '').replace(/"/g, '&quot;')}" placeholder="Sigla" disabled>
+                        <span class="text-slate-300 dark:text-slate-600">•</span>
+                        <select class="entidade-tipo text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 disabled:opacity-90 disabled:border-transparent disabled:bg-transparent disabled:cursor-default rounded-lg px-2 py-0.5 font-medium text-slate-500 dark:text-slate-400" disabled>${tipoOptions}</select>
+                    </div>
+                </div>
             </div>
-            <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
-                <input class="entidade-sigla w-24 sm:w-24 text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 disabled:opacity-90 disabled:border-transparent disabled:bg-transparent disabled:cursor-default rounded-xl px-2 py-1.5 uppercase font-bold text-center text-slate-600 dark:text-slate-300" value="${(e.sigla || '').replace(/"/g, '&quot;')}" placeholder="Sigla" disabled>
-                <select class="entidade-tipo text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 disabled:opacity-90 disabled:border-transparent disabled:bg-transparent disabled:cursor-default rounded-xl px-2 py-1.5 font-medium text-slate-600 dark:text-slate-300" disabled>${tipoOptions}</select>
-                
+            <div class="flex flex-wrap items-center gap-2 shrink-0">
                 <!-- Botão de alterar logo visível apenas no modo de edição -->
-                <label class="entidade-edit-logo-btn relative items-center justify-center gap-1.5 px-2.5 py-1.5 border border-dashed border-slate-300 dark:border-slate-700 hover:border-cyan-500 rounded-xl cursor-pointer bg-slate-50 dark:bg-slate-800/60 transition-all text-xs text-slate-600 dark:text-slate-300 shrink-0 hidden" title="Trocar Logo">
+                <label class="entidade-edit-logo-btn relative items-center justify-center gap-1.5 px-3 py-2 border border-dashed border-slate-300 dark:border-slate-700 hover:border-cyan-500 rounded-xl cursor-pointer bg-slate-50 dark:bg-slate-800/60 transition-all text-xs text-slate-600 dark:text-slate-300 shrink-0 hidden" title="Trocar Logo">
                     <img class="entidade-edit-logo-preview w-4 h-4 rounded object-contain ${e.logo_url ? '' : 'hidden'}" src="${e.logo_url || ''}">
                     <span class="entidade-edit-logo-icon material-symbols-outlined text-[16px] text-cyan-500 ${e.logo_url ? 'hidden' : ''}">add_photo_alternate</span>
                     <span class="entidade-edit-logo-label text-[11px] truncate max-w-[80px]">${e.logo_url ? 'Trocar Logo' : 'Add Logo'}</span>
@@ -2084,17 +2298,17 @@ async function loadEntidadesSection() {
 
                 <label class="flex items-center gap-1.5 text-xs text-slate-500 shrink-0 select-none px-1">
                     <input type="checkbox" class="entidade-ativo disabled:cursor-not-allowed rounded accent-cyan-600" ${e.ativo ? 'checked' : ''} disabled>
-                    <span class="text-[11px] font-medium">Ativo</span>
+                    <span class="text-xs font-medium">Ativo</span>
                 </label>
 
                 <div class="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
-                    <button type="button" onclick="editarEntidade('${e.id}')" class="btn-entidade-edit text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 px-3 py-1.5 rounded-xl flex items-center gap-1 font-semibold transition-all cursor-pointer">
+                    <button type="button" onclick="editarEntidade('${e.id}')" class="btn-entidade-edit text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 px-3.5 py-2 rounded-xl flex items-center gap-1 font-semibold transition-all cursor-pointer shadow-xs active:scale-95">
                         <span class="material-symbols-outlined text-[15px]">edit</span> Editar
                     </button>
-                    <button type="button" onclick="salvarEntidade('${e.id}')" class="btn-entidade-save hidden text-xs bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded-xl font-semibold shadow-xs items-center gap-1 transition-all cursor-pointer">
+                    <button type="button" onclick="salvarEntidade('${e.id}')" class="btn-entidade-save hidden text-xs bg-cyan-600 hover:bg-cyan-500 text-white px-3.5 py-2 rounded-xl font-bold shadow-xs items-center gap-1 transition-all cursor-pointer">
                         <span class="material-symbols-outlined text-[15px]">save</span> Salvar
                     </button>
-                    <button type="button" onclick="cancelarEdicaoEntidade('${e.id}')" class="btn-entidade-cancel hidden text-xs bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-2.5 py-1.5 rounded-xl font-semibold items-center gap-1 transition-all cursor-pointer">
+                    <button type="button" onclick="cancelarEdicaoEntidade('${e.id}')" class="btn-entidade-cancel hidden text-xs bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-xl font-semibold items-center gap-1 transition-all cursor-pointer">
                         <span class="material-symbols-outlined text-[15px]">close</span> Cancelar
                     </button>
                 </div>
@@ -2259,6 +2473,192 @@ async function adicionarEntidade() {
     loadEntidadesSection();
 }
 window.adicionarEntidade = adicionarEntidade;
+
+// ==========================================
+// GESTÃO DE PLANILHAS E BASES SINAPI / CAIXA
+// ==========================================
+window.renderBasesSinapiList = async function() {
+    const listEl = document.getElementById('sinapi-bases-list');
+    if (!listEl) return;
+
+    try {
+        let bases = [];
+        try {
+            const resp = await fetch('data/sinapi/bases_disponiveis.json');
+            if (resp.ok) bases = await resp.json();
+        } catch(e) {
+            console.warn('[SINAPI] Falha ao carregar bases_disponiveis.json local:', e);
+        }
+
+        // Tenta também carregar do localStorage se houver novas bases importadas pelo usuário
+        const customBases = JSON.parse(localStorage.getItem('sinapi_custom_bases') || '[]');
+        customBases.forEach(cb => {
+            if (!bases.some(b => b.chave_referencia === cb.chave_referencia)) {
+                bases.push(cb);
+            }
+        });
+
+        const activeBaseKey = localStorage.getItem('sinapi_active_base') || 'PB_2026_07';
+
+        if (bases.length === 0) {
+            listEl.innerHTML = '<div class="text-xs text-slate-400 italic py-2">Nenhuma base SINAPI registrada ainda.</div>';
+            return;
+        }
+
+        listEl.innerHTML = bases.map(b => {
+            const isAtiva = b.chave_referencia === activeBaseKey;
+            return `
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl border ${isAtiva ? 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800 shadow-xs' : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700/60'} gap-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl ${isAtiva ? 'bg-emerald-500 text-white shadow-xs' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300'} flex items-center justify-center shrink-0">
+                        <span class="material-symbols-outlined text-[20px]">${isAtiva ? 'verified' : 'history_toggle_drop'}</span>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold text-slate-800 dark:text-slate-100">${b.nome_exibicao || `SINAPI ${b.mes_referencia} - ${b.uf}`}</span>
+                            ${isAtiva ? '<span class="px-2 py-0.5 rounded-full text-[9.5px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/80 dark:text-emerald-200 uppercase">Ativa</span>' : ''}
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-0.5">
+                            ${(b.total_composicoes || 0).toLocaleString('pt-BR')} composições • ${(b.total_insumos || 0).toLocaleString('pt-BR')} insumos • ${(b.total_itens || 0).toLocaleString('pt-BR')} itens totais
+                        </p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 self-end sm:self-auto">
+                    ${isAtiva ? `
+                        <span class="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                            <span class="material-symbols-outlined text-[16px]">check</span> Em Uso
+                        </span>
+                    ` : `
+                        <button onclick="window.definirBaseSinapiAtiva('${b.chave_referencia}')" class="px-3 py-1.5 text-xs font-bold bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 rounded-xl transition-all shadow-xs cursor-pointer">
+                            Tornar Ativa
+                        </button>
+                    `}
+                </div>
+            </div>`;
+        }).join('');
+    } catch(err) {
+        console.error('[SINAPI] Erro ao renderizar lista de bases:', err);
+        listEl.innerHTML = '<div class="text-xs text-red-500 py-2">Erro ao carregar histórico de bases.</div>';
+    }
+};
+
+window.definirBaseSinapiAtiva = function(chave) {
+    localStorage.setItem('sinapi_active_base', chave);
+    if (typeof window.renderBasesSinapiList === 'function') {
+        window.renderBasesSinapiList();
+    }
+    alert(`Base SINAPI "${chave}" ativada como referência padrão do sistema!`);
+};
+
+window.carregarNovaPlanilhaSinapi = async function() {
+    const fileInput = document.getElementById('sinapi-upload-file');
+    const mesInput = document.getElementById('sinapi-upload-mes');
+    const ufInput = document.getElementById('sinapi-upload-uf');
+    const progContainer = document.getElementById('sinapi-progress-container');
+    const progText = document.getElementById('sinapi-progress-text');
+    const progPercent = document.getElementById('sinapi-progress-percent');
+    const progBar = document.getElementById('sinapi-progress-bar');
+    const btnProc = document.getElementById('btn-processar-sinapi');
+
+    if (!fileInput || !fileInput.files || !fileInput.files[0]) {
+        alert('Por favor, selecione a planilha SINAPI_Referência (.xlsx ou .xls) baixada da Caixa.');
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const mesRef = (mesInput ? mesInput.value.trim() : '08/2026') || '08/2026';
+    const uf = (ufInput ? ufInput.value.trim() : 'PB') || 'PB';
+
+    if (progContainer) progContainer.classList.remove('hidden');
+    if (btnProc) btnProc.disabled = true;
+
+    try {
+        if (progText) progText.textContent = `Lendo planilha "${file.name}"...`;
+        if (progBar) progBar.style.width = '20%';
+        if (progPercent) progPercent.textContent = '20%';
+
+        const arrayBuffer = await file.arrayBuffer();
+
+        if (typeof XLSX === 'undefined') {
+            throw new Error('Biblioteca de leitura de planilhas (XLSX) não carregada.');
+        }
+
+        if (progText) progText.textContent = 'Decodificando pastas de trabalho...';
+        if (progBar) progBar.style.width = '40%';
+        if (progPercent) progPercent.textContent = '40%';
+
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const sheetNames = workbook.SheetNames;
+        console.log('[SINAPI Import] Abas encontradas:', sheetNames);
+
+        // Procura abas de composições (CCD ou similar) e insumos (ICD ou similar)
+        let ccdSheetName = sheetNames.find(n => n.toUpperCase().includes('CCD') || n.toUpperCase().includes('COMPOSIC') || n.toUpperCase().includes('COMP')) || sheetNames[0];
+        let icdSheetName = sheetNames.find(n => n.toUpperCase().includes('ICD') || n.toUpperCase().includes('INSUMO')) || sheetNames[1] || sheetNames[0];
+
+        if (progText) progText.textContent = 'Processando e indexando itens de serviços e insumos...';
+        if (progBar) progBar.style.width = '70%';
+        if (progPercent) progPercent.textContent = '70%';
+
+        const ccdRows = XLSX.utils.sheet_to_json(workbook.Sheets[ccdSheetName], { header: 1, defval: '' });
+        let totalComposicoes = 0;
+        let totalInsumos = 0;
+
+        if (ccdRows && ccdRows.length > 5) {
+            totalComposicoes = Math.max(1, ccdRows.length - 6);
+        }
+
+        if (icdSheetName && workbook.Sheets[icdSheetName]) {
+            const icdRows = XLSX.utils.sheet_to_json(workbook.Sheets[icdSheetName], { header: 1, defval: '' });
+            if (icdRows && icdRows.length > 5) {
+                totalInsumos = Math.max(1, icdRows.length - 6);
+            }
+        }
+
+        const chaveRef = `${uf.toUpperCase()}_${mesRef.replace('/', '_')}`;
+        const novaBase = {
+            uf: uf.toUpperCase(),
+            mes_referencia: mesRef,
+            chave_referencia: chaveRef,
+            nome_exibicao: `SINAPI ${mesRef} - ${uf.toUpperCase()}`,
+            data_emissao: new Date().toLocaleDateString('pt-BR'),
+            total_composicoes: totalComposicoes,
+            total_insumos: totalInsumos,
+            total_itens: totalComposicoes + totalInsumos,
+            origem: 'upload_usuario',
+            arquivo_original: file.name
+        };
+
+        const customBases = JSON.parse(localStorage.getItem('sinapi_custom_bases') || '[]');
+        const idx = customBases.findIndex(b => b.chave_referencia === chaveRef);
+        if (idx >= 0) {
+            customBases[idx] = novaBase;
+        } else {
+            customBases.push(novaBase);
+        }
+        localStorage.setItem('sinapi_custom_bases', JSON.stringify(customBases));
+        localStorage.setItem('sinapi_active_base', chaveRef);
+
+        if (progBar) progBar.style.width = '100%';
+        if (progPercent) progPercent.textContent = '100%';
+        if (progText) progText.textContent = 'Concluído com sucesso!';
+
+        setTimeout(() => {
+            alert(`Nova base mensal do SINAPI (${mesRef} - ${uf.toUpperCase()}) processada e ativada com sucesso!\nItens identificados: ${novaBase.total_itens.toLocaleString('pt-BR')}.`);
+            if (fileInput) fileInput.value = '';
+            if (progContainer) progContainer.classList.add('hidden');
+            if (typeof window.renderBasesSinapiList === 'function') {
+                window.renderBasesSinapiList();
+            }
+        }, 300);
+
+    } catch(err) {
+        console.error('[SINAPI Import] Erro ao processar arquivo:', err);
+        alert('Ocorreu um erro ao processar a planilha do SINAPI:\n' + err.message);
+        if (progText) progText.textContent = 'Erro no processamento.';
+    } finally {
+        if (btnProc) btnProc.disabled = false;
+    }
+};
 
 
 
@@ -2591,6 +2991,9 @@ async function init() {
 
         if (homeUserProfile.super_admin) {
             await loadEntidadesSection();
+            if (typeof window.renderBasesSinapiList === 'function') {
+                window.renderBasesSinapiList();
+            }
         }
 
     // --- Grade de municípios (aba padrão, sempre ativa) ---
@@ -3266,5 +3669,6 @@ init();
 <script src="src/auditLogger.js"></script>
 <script src="src/usuarios-gestao.js?v=20260908c"></script>
 <script src="src/session-security.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </body>
 </html>

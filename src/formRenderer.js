@@ -66,12 +66,14 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
             }
         }
         
+        const isOrcamento = (tab.id === 'orcamento_obra' || tab.tabType === 'orcamento_nativo');
+
         html += `
             <div class="border-b last:border-b-0 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 transition-all accordion-section ${isPrimary ? 'border-l-4 border-l-sky-500 shadow-inner' : ''}" id="acc-section-${tab.id}" ${(tab.condition && tab.condition.enabled && tab.condition.fieldId) ? `data-condition-field="${tab.condition.fieldId}" data-condition-operator="${tab.condition.operator}" data-condition-value="${(tab.condition.value || '').toLowerCase()}"` : ''}>
                 <button type="button" onclick="switchDynamicTab('${tab.id}')" class="group w-full px-3 py-3 sm:px-4 sm:py-3.5 flex items-center justify-center ${isPrimary ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold' : 'bg-slate-50 dark:bg-slate-900/40 text-slate-700 dark:text-slate-300'} hover:bg-blue-600 dark:hover:bg-blue-600 active:bg-blue-700 dark:active:bg-blue-700 active:scale-95 hover:shadow-[0_0_25px_rgba(59,130,246,0.6)] hover:z-10 relative transition-all duration-300 ease-out overflow-hidden">
                     <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-150%] group-hover:translate-x-[150%] transition-transform duration-1000 ease-in-out"></div>
                     <h3 class="text-sm font-bold uppercase tracking-wider flex items-center gap-2 text-center transition-all duration-300 group-hover:scale-105 group-hover:tracking-widest relative z-10">
-                        ${isPrimary ? '<span class="material-symbols-outlined text-amber-500 group-hover:text-yellow-300 group-hover:drop-shadow-[0_0_8px_rgba(253,224,71,0.8)] transition-all text-[18px]">star</span>' : ''}
+                        ${isOrcamento ? '<span class="material-symbols-outlined text-emerald-500 text-[18px]">request_quote</span>' : (isPrimary ? '<span class="material-symbols-outlined text-amber-500 group-hover:text-yellow-300 group-hover:drop-shadow-[0_0_8px_rgba(253,224,71,0.8)] transition-all text-[18px]">star</span>' : '')}
                         ${tab.title}
                         ${recordCountHtml}
                     </h3>
@@ -97,8 +99,27 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
                                tab.title.toUpperCase().includes('HISTÓRICO CONSOLIDADO') ||
                                tab.title.toUpperCase().includes('HISTORICO CONSOLIDADO');
 
-        // Render Edit button inside the tab if we are NOT in edit mode (não renderizar em abas de Histórico Consolidado)
-        if (!isEditMode && canEditThisTab && !isConsolidated) {
+        // Se for a aba nativa de Orçamento de Obras, renderiza o card oficial de cálculo e acesso à planilha
+        if (isOrcamento) {
+            const valorTotal = featureData['Valor Total da Obra (R$)'] || featureData['valor_total_obra'] || featureData['Valor Total'] || '0,00';
+            html += `
+            <div class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-emerald-500/30 flex flex-col gap-3 shadow-xs mb-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Valor Total Estimado:</span>
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">SINAPI OFICIAL</span>
+                </div>
+                <div class="text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400">
+                    R$ ${valorTotal}
+                </div>
+                <button type="button" onclick="if (typeof openOrcamentoModal === 'function' && typeof activeFeatureLayer !== 'undefined') openOrcamentoModal(activeFeatureLayer); else if (typeof window.openOrcamentoModal === 'function') window.openOrcamentoModal();" class="w-full mt-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-emerald-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all">
+                    <span class="material-symbols-outlined text-[19px]">calculate</span>
+                    Abrir / Editar Planilha Orçamentária
+                </button>
+            </div>`;
+        }
+
+        // Render Edit button inside the tab if we are NOT in edit mode (não renderizar em abas de Histórico Consolidado e em aba de orçamento sem campos customizados)
+        if (!isEditMode && canEditThisTab && !isConsolidated && (!isOrcamento || (tab.fields && tab.fields.length > 0))) {
             html += `
             <div class="flex justify-center mb-4">
                 <button type="button" onclick="toggleFeatureEditMode('${tab.id}')" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto text-sm">

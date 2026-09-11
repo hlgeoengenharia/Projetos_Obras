@@ -72,15 +72,23 @@ async function fetchDynamicForm() {
     }
 }
 function populateFormSelects() {
-    const selects = ['theme-cadastro-type', 'edit-theme-cadastro-type', 'global-import-cadastro-type'];
+    const selects = ['theme-cadastro-type', 'edit-theme-cadastro-type', 'global-import-cadastro-type', 'remap-cadastro-type'];
     selects.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
+            const currentVal = el.value;
             let html = '<option value="">Padrão Genérico</option>';
-            allForms.forEach(f => {
-                html += `<option value="${f.id}">${f.title || f.name}</option>`;
-            });
+            html += '<option value="orcamento_obra">🏗️ Orçamento de Obra (SINAPI / Caixa)</option>';
+            if (typeof allForms !== 'undefined' && Array.isArray(allForms)) {
+                allForms.forEach(f => {
+                    const isOrc = (f.id === 'orcamento_obra' || f.id === '00000000-0000-4000-8000-000000000001' || (f.name && f.name.toLowerCase().includes('orçamento de obra')));
+                    if (!isOrc) {
+                        html += `<option value="${f.id}">${f.title || f.name}</option>`;
+                    }
+                });
+            }
             el.innerHTML = html;
+            if (currentVal) el.value = currentVal;
         }
     });
 }
@@ -2058,10 +2066,16 @@ function renderThemes() {
                    <span class="truncate">Filtrar Registros</span>
                    <span id="filter-badge-${theme.id}" class="hidden ml-1 px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shrink-0"></span>
                 </span>
-                <button type="button" onclick="clearSearch('${theme.id}')" class="px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 active:scale-95 text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 transition-all border border-cyan-500/25 flex items-center gap-1 cursor-pointer shrink-0 shadow-xs" title="Limpar filtro e mostrar todos os registros">
-                   <span class="material-symbols-outlined text-[15px]">close</span>
-                   <span>Limpar</span>
-                </button>
+                <div class="flex items-center gap-1.5 shrink-0">
+                   <button type="button" onclick="addFilterRow('${theme.id}')" class="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 text-[11px] font-semibold text-slate-200 hover:text-white transition-all border border-white/15 flex items-center gap-1 cursor-pointer shadow-xs" title="Adicionar campo em cascata (+ Condição)">
+                      <span class="material-symbols-outlined text-[15px] text-cyan-400">add</span>
+                      <span>Condição</span>
+                   </button>
+                   <button type="button" onclick="clearSearch('${theme.id}')" class="px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 active:scale-95 text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 transition-all border border-cyan-500/25 flex items-center gap-1 cursor-pointer shadow-xs" title="Limpar filtro e mostrar todos os registros">
+                      <span class="material-symbols-outlined text-[15px]">close</span>
+                      <span>Limpar</span>
+                   </button>
+                </div>
              </div>
              <div class="filter-rows-wrapper flex flex-col gap-1" id="filter-rows-${theme.id}">
                <div class="filter-row flex gap-1">
@@ -2487,14 +2501,30 @@ function getThemeFieldsOptions(theme) {
 }
 
 function clearSearch(themeId) {
+    const theme = themes.find(t => t.id === themeId);
     const container = document.getElementById('filters-container-' + themeId);
     if (container) {
-        const fieldSelect = container.querySelector('.filter-field') || container.querySelector('.filter-col');
-        const valInput = container.querySelector('.filter-value');
-        if (valInput) valInput.value = '';
-        if (fieldSelect) {
-            fieldSelect.value = 'ALL';
-            updateFilterValueInput(fieldSelect, themeId);
+        const rowsWrapper = document.getElementById('filter-rows-' + themeId);
+        if (rowsWrapper && theme) {
+            rowsWrapper.innerHTML = `
+               <div class="filter-row flex gap-1 items-center">
+                  <select class="filter-field filter-col w-1/3 text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-1.5 py-1 text-slate-700 dark:text-slate-300 truncate" onchange="updateFilterValueInput(this, '${theme.id}')">
+                     <option value="ALL">Tudo</option>
+                     ${getThemeFieldsOptions(theme)}
+                  </select>
+                  <div class="flex w-2/3 gap-1 filter-value-container items-center">
+                     <input type="text" class="filter-value w-full text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300" placeholder="Contém..." onkeyup="executeSearch('${theme.id}')" oninput="executeSearch('${theme.id}')">
+                  </div>
+               </div>
+            `;
+        } else {
+            const valInput = container.querySelector('.filter-value');
+            if (valInput) valInput.value = '';
+            const fieldSelect = container.querySelector('.filter-field, .filter-col');
+            if (fieldSelect) {
+                fieldSelect.value = 'ALL';
+                updateFilterValueInput(fieldSelect, themeId);
+            }
         }
         const badge = document.getElementById('filter-badge-' + themeId);
         if (badge) badge.classList.add('hidden');
@@ -2508,37 +2538,28 @@ function addFilterRow(themeId) {
     const theme = themes.find(t => t.id === themeId);
     if (!theme) return;
 
-    const themeEntidade = ((theme.metadata && theme.metadata.entidade) || theme.entidade || '').trim();
-    const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
-    const themeSigla = getEntitySigla(themeEntidade);
-    const userSigla = getEntitySigla(userEntidade);
-    const isMyEntity = !themeEntidade || themeEntidade === 'Geral' || (themeSigla === userSigla) || (userEntidade && themeEntidade.toLowerCase() === userEntidade.toLowerCase());
-
-    if (!isSuperAdmin && !isMyEntity) {
-        if (typeof showWarningToast === 'function') {
-            showWarningToast('Acesso restrito: Estatísticas exclusivas da entidade proprietária desta camada.');
-        } else {
-            alert('Acesso restrito: Estatísticas exclusivas da entidade proprietária desta camada.');
-        }
-        return;
-    }
-    
     const container = document.getElementById('filter-rows-' + themeId) || document.getElementById('filters-container-' + themeId);
     if (!container) return;
     const row = document.createElement('div');
-    row.className = "filter-row flex gap-1";
+    row.className = "filter-row flex gap-1 items-center";
     row.innerHTML = `
-        <select class="filter-field w-1/3 text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-1 py-1 text-slate-700 dark:text-slate-300" onchange="updateFilterValueInput(this, '${theme.id}')">
-           <option value="ALL">Qualquer Campo</option>
+        <select class="filter-field filter-col w-1/3 text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-1.5 py-1 text-slate-700 dark:text-slate-300 truncate" onchange="updateFilterValueInput(this, '${theme.id}')">
+           <option value="ALL">Tudo</option>
            ${getThemeFieldsOptions(theme)}
         </select>
-        <div class="flex w-2/3 gap-1 filter-value-container">
+        <div class="flex w-2/3 gap-1 filter-value-container items-center">
            <input type="text" class="filter-value w-full text-[10px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300" placeholder="Contém..." onkeyup="executeSearch('${theme.id}')" oninput="executeSearch('${theme.id}')">
-           <button onclick="this.parentElement.parentElement.remove(); executeSearch('${theme.id}')" class="text-red-500 hover:text-red-700 px-1"><span class="material-symbols-outlined text-[14px]">remove_circle</span></button>
+           <button type="button" onclick="this.closest('.filter-row').remove(); executeSearch('${theme.id}')" class="p-1 text-rose-400 hover:text-rose-300 active:scale-95 transition-all flex items-center justify-center shrink-0" title="Remover condição">
+              <span class="material-symbols-outlined text-[16px]">remove_circle</span>
+           </button>
         </div>
     `;
     container.appendChild(row);
+    if (typeof refreshFilterDropdownOptions === 'function') {
+        refreshFilterDropdownOptions(themeId);
+    }
 }
+window.addFilterRow = addFilterRow;
 
 function clearAllFilters(themeId) {
     clearSearch(themeId);
@@ -3218,7 +3239,8 @@ function openEditThemeModal(themeId, focusField = null) {
   
   const formSelect = document.getElementById('edit-theme-cadastro-type');
   if (formSelect) {
-      formSelect.value = theme.formId || '';
+      formSelect.value = theme.formId || theme.cadastroType || theme.tipo_cadastro || '';
+      if (typeof updateEditThemeFields === 'function') updateEditThemeFields();
   }
 
   // Configura toggle de compartilhamento
@@ -3296,7 +3318,12 @@ function updateEditThemeFields() {
     
     let optionsHtml = '<option value="">-- Automático / Padrão --</option>';
     
-    if (formId && typeof allForms !== 'undefined') {
+    if (formId === 'orcamento_obra') {
+        const camposObra = ["Nome da Obra", "Local", "Responsável Técnico", "Data Base SINAPI", "Regime", "BDI (%)", "Valor Total da Obra (R$)", "Status"];
+        camposObra.forEach(c => {
+            optionsHtml += `<option value="${c}">${c}</option>`;
+        });
+    } else if (formId && typeof allForms !== 'undefined') {
         const form = allForms.find(f => f.id === formId);
         if (form) {
             const schema = form.schema || form.tabs;
@@ -4972,11 +4999,62 @@ function renderFeatureInfo() {
   const properties = activeFeatureLayer.feature.properties;
     const themeId = properties.themeId;
     const theme = themes.find(t => t.id === themeId);
+
+    // Controle de visibilidade do botão "Orçamento da Obra" conforme o Tipo de Cadastro
+    const isOrcamentoObra = !!(theme && (theme.formId === 'orcamento_obra' || theme.formId === '00000000-0000-4000-8000-000000000001' || theme.cadastroType === 'orcamento_obra' || theme.tipo_cadastro === 'orcamento_obra'));
+    const btnOrcamento = document.getElementById('btn-open-orcamento');
+    if (btnOrcamento) {
+        btnOrcamento.classList.add('hidden');
+    }
+
+    if (isOrcamentoObra) {
+        if (!properties['Nome da Obra']) properties['Nome da Obra'] = properties['Nome'] || properties['Descrição'] || 'Nova Obra Pública';
+        if (!properties['Local']) properties['Local'] = 'Cabedelo - PB';
+        if (!properties['Data Base SINAPI']) properties['Data Base SINAPI'] = '07/2026';
+        if (!properties['Regime']) properties['Regime'] = 'Desonerado';
+        if (!properties['BDI (%)']) properties['BDI (%)'] = '24,80%';
+        if (!properties['Valor Total da Obra (R$)']) properties['Valor Total da Obra (R$)'] = '0,00';
+        if (!properties['Status']) properties['Status'] = 'Planejada';
+    }
     
     let dynamicFormSchema = null;
-    if (theme && theme.formId) {
-        const form = allForms.find(f => f.id === theme.formId);
-        if (form) dynamicFormSchema = form.schema || form.tabs;
+    if (theme && (theme.formId || isOrcamentoObra)) {
+        const targetFormId = (theme.formId && theme.formId !== 'orcamento_obra') ? theme.formId : 'orcamento_obra';
+        let form = (typeof allForms !== 'undefined' && Array.isArray(allForms))
+            ? allForms.find(f => f.id === targetFormId || (isOrcamentoObra && (f.id === 'orcamento_obra' || f.id === '00000000-0000-4000-8000-000000000001')))
+            : null;
+        
+        if (!form) {
+            try {
+                const saved = JSON.parse(localStorage.getItem('constructive_forms') || '[]');
+                form = saved.find(f => f.id === targetFormId || (isOrcamentoObra && (f.id === 'orcamento_obra' || f.id === '00000000-0000-4000-8000-000000000001')));
+            } catch(e) {}
+        }
+        
+        if (form) {
+            dynamicFormSchema = JSON.parse(JSON.stringify(form.schema || form.tabs || []));
+        }
+
+        // Se for Orçamento de Obra, garante que a aba nativa do SINAPI existe no schema
+        if (isOrcamentoObra) {
+            if (!dynamicFormSchema || !Array.isArray(dynamicFormSchema) || dynamicFormSchema.length === 0) {
+                dynamicFormSchema = [
+                    { id: 'orcamento_obra', title: 'Orçamento da Obra', isPrimary: true, isNative: true, tabType: 'orcamento_nativo', fields: [] }
+                ];
+            } else {
+                const hasNativeTab = dynamicFormSchema.some(t => t.id === 'orcamento_obra' || t.tabType === 'orcamento_nativo');
+                if (!hasNativeTab) {
+                    dynamicFormSchema.unshift({
+                        id: 'orcamento_obra',
+                        title: 'Orçamento da Obra',
+                        isPrimary: false,
+                        isNative: true,
+                        tabType: 'orcamento_nativo',
+                        fields: []
+                    });
+                }
+            }
+        }
     }
 
   const geomType = activeFeatureLayer.feature.geometry.type;
@@ -4993,8 +5071,8 @@ function renderFeatureInfo() {
           window.renderDynamicForm(dynamicFormSchema, properties, isFeatureEditMode, 'feature-info-content', { 
               activeTabId: window.currentActiveTabId, 
               editTabId: window.activeFeatureEditTabId || null, 
-              formId: theme.formId,
-              themeId: theme.id,
+              formId: (theme && theme.formId) || (isOrcamentoObra ? 'orcamento_obra' : null),
+              themeId: theme ? theme.id : null,
               theme: theme 
           });
           return;
@@ -5045,8 +5123,7 @@ function renderFeatureInfo() {
           }
        });
     } else {
-       // Point or Polygon complex form
-       const fields = [
+        const fields = [
            {key: "Descrição", type: "text"},
            {key: "Situação", type: "select", options: ["Regular", "Irregular"]},
            {key: "Tipo de estrutura", type: "select", options: ["Alvenaria", "Madeira", "Palafita", "Trailer", "Container", "Barraco", "Taipa", "Não se aplica", "Outros"]},
@@ -5165,8 +5242,8 @@ function renderFeatureInfo() {
                   </div>
                `;
            }
-       }
-    }
+        }
+     }
     container.innerHTML = html;
   }
 }

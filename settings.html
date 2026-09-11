@@ -2396,6 +2396,54 @@
         return 'Geral';
     }
 
+    const ORCAMENTO_OBRA_FORM_ID = '00000000-0000-4000-8000-000000000001';
+
+    function isOrcamentoForm(formOrId) {
+      if (!formOrId) return false;
+      const id = typeof formOrId === 'string' ? formOrId : formOrId.id;
+      return id === 'orcamento_obra' || id === ORCAMENTO_OBRA_FORM_ID;
+    }
+
+    function ensureOrcamentoObraTemplate() {
+      let orcForm = forms.find(f => isOrcamentoForm(f));
+      if (!orcForm) {
+        orcForm = {
+          id: ORCAMENTO_OBRA_FORM_ID,
+          name: 'Orçamento de Obra (SINAPI / Caixa)',
+          isNativeTemplate: true,
+          entidade: 'Geral',
+          tabs: [
+            {
+              id: 'orcamento_obra',
+              title: 'Orçamento da Obra',
+              isPrimary: true,
+              isNative: true,
+              tabType: 'orcamento_nativo',
+              fields: []
+            }
+          ]
+        };
+        forms.unshift(orcForm);
+      } else {
+        if (!orcForm.tabs || !Array.isArray(orcForm.tabs)) orcForm.tabs = [];
+        let nativeTab = orcForm.tabs.find(t => t.id === 'orcamento_obra' || t.tabType === 'orcamento_nativo');
+        if (!nativeTab) {
+          nativeTab = {
+            id: 'orcamento_obra',
+            title: 'Orçamento da Obra',
+            isPrimary: (orcForm.tabs.length === 0),
+            isNative: true,
+            tabType: 'orcamento_nativo',
+            fields: []
+          };
+          orcForm.tabs.unshift(nativeTab);
+        } else {
+          nativeTab.isNative = true;
+          nativeTab.tabType = 'orcamento_nativo';
+        }
+      }
+    }
+
     async function loadForms() {
       if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         try {
@@ -2417,6 +2465,7 @@
                     statsConfig: statsConfig
                 };
             });
+            ensureOrcamentoObraTemplate();
             renderFormsList();
             return;
           }
@@ -2449,6 +2498,7 @@
           return f;
         });
       }
+      ensureOrcamentoObraTemplate();
       renderFormsList();
     }
 
@@ -2465,8 +2515,10 @@
     async function saveFormsToStorage() {
       // Garantir que todos os IDs de formulários sejam UUID válidos
       forms.forEach(form => {
-        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(form.id)) {
-           form.id = generateUUID();
+        if (isOrcamentoForm(form)) {
+          form.id = ORCAMENTO_OBRA_FORM_ID;
+        } else if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(form.id)) {
+          form.id = generateUUID();
         }
       });
       localStorage.setItem('constructive_forms', JSON.stringify(forms));
@@ -2502,6 +2554,7 @@
 
       const visibleForms = forms.filter(form => {
         if (isSuperAdmin) return true;
+        if (isOrcamentoForm(form)) return true;
         const fEnt = getFormEntity(form);
         if (!fEnt || fEnt === 'Geral' || fEnt.toLowerCase() === 'público' || fEnt.toLowerCase() === 'publico') return true;
         if (!userEntidade) return true;
@@ -2517,19 +2570,21 @@
       visibleForms.forEach(form => {
         let fieldCount = 0;
         if(form.tabs) {
-           form.tabs.forEach(t => fieldCount += t.fields.length);
+           form.tabs.forEach(t => fieldCount += (t.fields ? t.fields.length : 0));
         }
         const fEnt = getFormEntity(form);
         const sigla = getEntitySigla(fEnt);
+        const isOrcamento = isOrcamentoForm(form);
         
         html += `
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-5 bg-white dark:bg-slate-800 rounded-xl border ${isOrcamento ? 'border-emerald-300/80 dark:border-emerald-800/80 bg-emerald-50/10' : 'border-slate-200 dark:border-slate-700'} shadow-sm hover:shadow-md transition-shadow">
             <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 flex-wrap">
                 <h3 class="font-bold text-slate-900 dark:text-white uppercase tracking-wide text-sm sm:text-base truncate">${form.name}</h3>
+                ${isOrcamento ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 text-[9.5px] font-extrabold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 shadow-2xs"><span class="material-symbols-outlined text-[13px]">request_quote</span><span>SINAPI / CAIXA</span></span>` : ''}
                 ${sigla ? `<span class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[9px] font-bold rounded bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 truncate max-w-[120px]" title="Entidade: ${fEnt}"><span class="material-symbols-outlined text-[11px]">hub</span><span>${sigla}</span></span>` : ''}
               </div>
-              <p class="text-xs sm:text-sm text-slate-500 mt-0.5">${fieldCount} campo(s) distribuído(s) em ${form.tabs ? form.tabs.length : 0} aba(s)</p>
+              <p class="text-xs sm:text-sm text-slate-500 mt-0.5">${fieldCount} campo(s) personalizado(s) em ${form.tabs ? form.tabs.length : 0} aba(s) ${isOrcamento ? '• Inclui Aba Nativa de Cálculo SINAPI' : ''}</p>
             </div>
             <div class="flex items-center gap-1 sm:gap-1.5 self-end sm:self-auto bg-slate-50 dark:bg-slate-900/60 sm:bg-transparent p-1 sm:p-0 rounded-xl border border-slate-100 dark:border-slate-800 sm:border-0 shrink-0">
               <button onclick="previewForm('${form.id}')" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-700/60 rounded-lg transition-colors tooltip" title="Visualizar">
@@ -2538,9 +2593,11 @@
               <button onclick="editForm('${form.id}')" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-700/60 rounded-lg transition-colors tooltip" title="Editar">
                 <span class="material-symbols-outlined text-[19px] sm:text-[20px]">edit</span>
               </button>
+              ${isOrcamento ? '' : `
               <button onclick="deleteForm('${form.id}')" class="p-2 text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-slate-700/60 rounded-lg transition-colors tooltip" title="Excluir">
                 <span class="material-symbols-outlined text-[19px] sm:text-[20px]">delete</span>
               </button>
+              `}
             </div>
           </div>
         `;
@@ -2573,6 +2630,10 @@
     
     function deleteBuilderTab(tabId) {
        const tab = builderTabs.find(t => t.id === tabId);
+       if (tab && (tab.isNative || tab.id === 'orcamento_obra' || tab.tabType === 'orcamento_nativo')) {
+          alert('A aba nativa de Orçamento da Obra não pode ser excluída, pois é a aba oficial de cálculo do SINAPI.');
+          return;
+       }
        const tabName = tab ? tab.title : 'esta aba';
        const msg = `⚠️ ATENÇÃO: A exclusão da aba "${tabName}" e de todos os seus campos pode causar PERDA PERMANENTE de todas as informações cadastradas nos registros existentes.\n\nDeseja realmente excluir permanentemente?`;
        if (!confirm(msg)) return;
@@ -2630,6 +2691,7 @@
        
        builderTabs.forEach(tab => {
          const isActive = tab.id === activeBuilderTabId;
+         const isNativeTab = (tab.tabType === 'orcamento_nativo' || tab.isNative || tab.id === 'orcamento_obra');
          const btn = document.createElement('button');
          btn.draggable = true;
          btn.ondragstart = (e) => {
@@ -2658,15 +2720,17 @@
          btn.className = `flex items-center gap-1.5 px-4 py-2 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${isActive ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 cursor-grab active:cursor-grabbing'}`;
          
          let badgeHtml = '';
-         if (tab.tabType === 'consolidated' || tab.isConsolidated || tab.title.toUpperCase().includes('HISTÓRICO DE OCUPAÇÃO') || tab.title.toUpperCase().includes('HISTORICO DE OCUPACAO')) {
+         if (isNativeTab) {
+            badgeHtml = '<span class="ml-1 text-[9px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 px-1.5 py-0.5 rounded uppercase font-bold border border-emerald-300 dark:border-emerald-800 shadow-2xs">SINAPI / CAIXA</span>';
+         } else if (tab.tabType === 'consolidated' || tab.isConsolidated || tab.title.toUpperCase().includes('HISTÓRICO DE OCUPAÇÃO') || tab.title.toUpperCase().includes('HISTORICO DE OCUPACAO')) {
             badgeHtml = '<span class="ml-1 text-[9px] bg-indigo-100 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 px-1.5 py-0.5 rounded uppercase font-bold">CONSOLIDADO</span>';
          } else if (tab.isMultiple) {
             badgeHtml = '<span class="ml-1 text-[9px] bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-1.5 py-0.5 rounded uppercase font-bold">1:N</span>';
          }
 
-         btn.innerHTML = `${tab.isPrimary ? '<span class="material-symbols-outlined text-[16px] text-amber-500">star</span>' : ''} ${tab.title} 
+         btn.innerHTML = `${isNativeTab ? '<span class="material-symbols-outlined text-[16px] text-emerald-500">request_quote</span>' : (tab.isPrimary ? '<span class="material-symbols-outlined text-[16px] text-amber-500">star</span>' : '')} ${tab.title} 
             ${badgeHtml}
-            ${builderTabs.length > 1 ? `<span class="material-symbols-outlined text-[16px] ml-2 text-slate-400 hover:text-red-500 cursor-pointer" onclick="event.stopPropagation(); deleteBuilderTab('${tab.id}')">close</span>` : ''}`;
+            ${(!isNativeTab && builderTabs.length > 1) ? `<span class="material-symbols-outlined text-[16px] ml-2 text-slate-400 hover:text-red-500 cursor-pointer" onclick="event.stopPropagation(); deleteBuilderTab('${tab.id}')">close</span>` : ''}`;
          tabsContainer.appendChild(btn);
        });
        
@@ -3232,6 +3296,18 @@
           if (fieldsContainer) {
               fieldsContainer.innerHTML = '';
               if (activeTab) {
+                 if (activeTab.tabType === 'orcamento_nativo' || activeTab.isNative || activeTab.id === 'orcamento_obra') {
+                     const notice = document.createElement('div');
+                     notice.className = 'mb-4 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200 flex items-start gap-3 shadow-xs';
+                     notice.innerHTML = `
+                         <span class="material-symbols-outlined text-[24px] text-emerald-600 dark:text-emerald-400 shrink-0">request_quote</span>
+                         <div>
+                             <strong class="font-bold text-sm block mb-0.5">Aba Padrão do Sistema (Oficial SINAPI / Caixa)</strong>
+                             <p class="text-slate-600 dark:text-slate-300">Esta aba já vem pronta com a integração ao SINAPI e o cálculo dinâmico do <strong>Valor Total Estimado</strong> da obra. Você também pode adicionar campos personalizados complementares abaixo se desejar, ou criar <strong>novas abas</strong> no botão "+ Adicionar Aba".</p>
+                         </div>
+                     `;
+                     fieldsContainer.appendChild(notice);
+                 }
                  activeTab.fields.forEach(f => {
                     renderFieldInBuilder(f);
                  });
@@ -3300,12 +3376,12 @@
     }
 
     function editForm(id) {
-      const form = forms.find(f => f.id === id);
+      const form = forms.find(f => f.id === id || (isOrcamentoForm(id) && isOrcamentoForm(f)));
       if (!form) return;
       
-      currentFormId = form.id;
+      currentFormId = isOrcamentoForm(form) ? ORCAMENTO_OBRA_FORM_ID : form.id;
       document.getElementById('form-name').value = form.name;
-      document.getElementById('builder-title').innerText = 'Editar Formulário';
+      document.getElementById('builder-title').innerText = isOrcamentoForm(form) ? 'Configurar Template: Orçamento de Obra (SINAPI / Caixa)' : 'Editar Formulário';
       
       builderTabs = JSON.parse(JSON.stringify(form.tabs || []));
       if (builderTabs.length === 0) {
@@ -3327,6 +3403,10 @@
     }
 
     function deleteForm(id) {
+      if (isOrcamentoForm(id)) {
+        alert('O template oficial de Orçamento de Obra (SINAPI / Caixa) é padrão do sistema e não pode ser excluído.');
+        return;
+      }
       const form = forms.find(f => f.id === id);
       const formName = form ? (form.name || form.title) : 'este formulário';
       const msg = `⚠️ ATENÇÃO: A exclusão do formulário "${formName}" pode causar PERDA PERMANENTE de todas as abas, campos e dados vinculados às camadas.\n\nDeseja realmente excluir permanentemente?`;
@@ -3706,12 +3786,17 @@
         alert('Preencha o nome de todos os campos que você adicionou.');
         return;
       }
-      if (totalFields === 0) {
+      const isOrcamento = isOrcamentoForm(currentFormId);
+      if (totalFields === 0 && !isOrcamento) {
         alert('Adicione pelo menos um campo ao formulário.');
         return;
       }
 
-      const existingIndex = forms.findIndex(f => f.id === currentFormId);
+      if (isOrcamento) {
+        currentFormId = ORCAMENTO_OBRA_FORM_ID;
+      }
+
+      const existingIndex = forms.findIndex(f => f.id === currentFormId || (isOrcamento && isOrcamentoForm(f)));
       const existingForm = existingIndex >= 0 ? forms[existingIndex] : null;
       const userEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome) || '').trim();
       const formEntidade = (existingForm && (existingForm.entidade || getFormEntity(existingForm))) || userEntidade || 'Geral';

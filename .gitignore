@@ -39,3 +39,9 @@ Ortotofo_*
 ortofoto_*
 *.webp
 *.mbtiles
+
+# Vídeos e mídias pesadas
+*.mp4
+*.mov
+*.avi
+video_orcamento/
