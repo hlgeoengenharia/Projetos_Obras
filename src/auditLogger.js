@@ -134,7 +134,11 @@
                     .order('created_at', { ascending: false })
                     .limit(filters.limit || 200);
 
-                if (filters.userId) query = query.eq('user_id', filters.userId);
+                if (filters.userId) {
+                    query = query.eq('user_id', filters.userId);
+                } else if (filters.allowedUserIds && Array.isArray(filters.allowedUserIds)) {
+                    query = query.in('user_id', filters.allowedUserIds);
+                }
                 if (filters.tipoAcao && filters.tipoAcao !== 'TODAS') query = query.eq('tipo_acao', filters.tipoAcao);
                 if (filters.entidadeId) query = query.eq('entidade_id', filters.entidadeId);
                 if (filters.municipioId) query = query.eq('municipio_id', filters.municipioId);

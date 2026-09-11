@@ -189,81 +189,109 @@
   .leaflet-container.zoom-close .mun-center-label {
     display: block !important;
   }
+
+  /* Card padronizado de cabeçalho (idêntico ao index.html) */
+  .header-glass-card {
+    background: rgba(255, 255, 255, 0.40) !important;
+    backdrop-filter: blur(14px) !important;
+    -webkit-backdrop-filter: blur(14px) !important;
+    border: 1px solid rgba(226, 232, 240, 0.9) !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04) !important;
+  }
+  html.dark .header-glass-card {
+    background: rgba(15, 23, 42, 0.40) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3) !important;
+  }
 </style>
 </head>
 <body class="font-sans h-screen flex flex-col overflow-hidden">
 
-<header class="h-16 bg-white/70 dark:bg-[#070b14]/75 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 shadow-sm flex items-center px-4 md:px-8 gap-4 justify-between">
+<header class="h-14 sm:h-16 bg-white/70 dark:bg-[#070b14]/75 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 shadow-sm flex items-center px-2.5 sm:px-4 md:px-8 gap-2 sm:gap-4 justify-between select-none">
 
   <!-- VISÃO 1: Portal Geral (Lista de Municípios / Configurações Globais) -->
   <div id="header-portal-view" class="flex items-center justify-between w-full">
-    <!-- Logomarca / Título -->
-    <div class="flex items-center gap-2.5">
-      <img src="assets/logo.png" alt="GeoGestor" class="w-8 h-8 rounded-lg object-contain">
-      <span class="font-extrabold text-sm tracking-tight text-slate-800 dark:text-slate-100 hidden sm:inline">GeoGestor</span>
-    </div>
+    <!-- Card do Globo igual ao da index.html apontando para o início (mapa do estado) -->
+    <a id="header-portal-card" href="home.html" onclick="if(window.voltarParaMunicipios){ event.preventDefault(); window.voltarParaMunicipios(true); }" class="header-glass-card flex w-9 h-9 sm:w-10 sm:h-10 rounded-2xl text-primary dark:text-sky-400 items-center justify-center hover:bg-white/40 dark:hover:bg-white/10 transition-all cursor-pointer shadow-xs shrink-0" title="Início / Mapa do Estado">
+      <span class="material-symbols-outlined text-[20px] sm:text-[22px]">public</span>
+    </a>
 
-    <!-- Canto Direito: Alternador Global/Lista + Configurações Globais (SuperAdmin) + Perfil -->
-    <div class="flex items-center gap-2.5 ml-auto">
-      <!-- Botões de Alternância: [ 🗺️ Global ] [ 📋 Lista ] -->
-      <div id="view-mode-toggle-group" class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm">
-        <button id="view-mode-map-btn" type="button" onclick="switchMunicipiosViewMode('map', true)" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-900 text-primary shadow-sm cursor-pointer" title="Visão Global">
-          <span class="material-symbols-outlined text-[16px]">map</span>
-          <span>Global</span>
-        </button>
-        <button id="view-mode-list-btn" type="button" onclick="switchMunicipiosViewMode('list', true)" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer">
-          <span class="material-symbols-outlined text-[16px]">format_list_bulleted</span>
-          <span>Lista</span>
-        </button>
+    <!-- Canto Direito: [ Nome + Ente ] [ Perfil ] [ Configurações Globais ] -->
+    <div class="flex items-center gap-1.5 sm:gap-2.5 ml-auto shrink-0">
+      <!-- Nome e Entidade do Usuário (à esquerda do perfil) -->
+      <div class="hidden sm:flex flex-col items-end text-right min-w-0 select-none mr-0.5">
+        <span class="header-user-display-name text-xs md:text-sm font-bold text-slate-800 dark:text-slate-100 leading-tight truncate max-w-[130px] md:max-w-[190px]"></span>
+        <span class="header-user-display-entidade text-[10px] md:text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-tight truncate max-w-[130px] md:max-w-[190px]"></span>
       </div>
 
-      <!-- Botão CONFIGURAÇÕES (exclusivo SuperAdmin, estilo circular idêntico ao perfil) -->
-      <button id="btn-global-config" onclick="abrirConfiguracoesGlobais()" class="hidden w-9 h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all items-center justify-center cursor-pointer shadow-sm" title="Configurações Globais (Entidades e Novo Município)">
-        <span class="material-symbols-outlined text-[20px]">settings</span>
+      <!-- Botão Perfil -->
+      <button id="profile-btn" onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors cursor-pointer shadow-sm bg-slate-50 dark:bg-slate-800 flex items-center justify-center shrink-0" title="Perfil do Usuário">
+        <img class="profile-avatar-img w-full h-full object-contain p-0.5" src="assets/logo.png" alt="Perfil">
       </button>
 
-      <!-- Botão Perfil -->
-      <button id="profile-btn" onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-9 h-9 md:w-10 md:h-10 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors cursor-pointer shadow-sm bg-slate-50 dark:bg-slate-800 flex items-center justify-center" title="Perfil do Usuário">
-        <img class="profile-avatar-img w-full h-full object-contain p-0.5" src="assets/logo.png" alt="Perfil">
+      <!-- Botão CONFIGURAÇÕES (exclusivo SuperAdmin, estilo circular idêntico ao perfil, à DIREITA do perfil) -->
+      <button id="btn-global-config" onclick="abrirConfiguracoesGlobais()" class="hidden w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all items-center justify-center cursor-pointer shadow-sm shrink-0 tooltip tooltip-bottom" title="Configurações Globais (Entidades e Novo Município)">
+        <span class="material-symbols-outlined text-[18px] sm:text-[20px]">settings</span>
       </button>
     </div>
   </div>
 
-  <!-- VISÃO 2: Painel do Município Ativo (ao clicar em ABRIR em um município) -->
-  <div id="header-municipio-view" class="hidden items-center justify-between w-full h-full gap-2 sm:gap-4">
-    <!-- Logomarca / Título -->
-    <div class="flex items-center gap-2.5">
-      <img src="assets/logo.png" alt="GeoGestor" class="w-8 h-8 rounded-lg object-contain">
-      <span class="font-extrabold text-sm tracking-tight text-slate-800 dark:text-slate-100 hidden sm:inline">GeoGestor</span>
+  <!-- VISÃO 2: Painel do Município Ativo -->
+  <div id="header-municipio-view" class="hidden items-center justify-between w-full h-full gap-1.5 sm:gap-4">
+    <!-- Canto Esquerdo: Card do Município (Estado Padrão OU Card Envolvendo os 3) -->
+    <div class="flex items-center shrink-0">
+      
+      <!-- ESTADO PADRÃO (vendo os 8 cards): Apenas o Globo apontando para o início (mapa do estado) -->
+      <a id="header-mun-default-card" href="home.html" onclick="if(window.voltarParaMunicipios){ event.preventDefault(); window.voltarParaMunicipios(true); }" class="header-glass-card flex w-9 h-9 sm:w-10 sm:h-10 rounded-2xl text-primary dark:text-sky-400 items-center justify-center hover:bg-white/40 dark:hover:bg-white/10 transition-all cursor-pointer shadow-xs shrink-0" title="Início / Mapa do Estado">
+        <span class="material-symbols-outlined text-[20px] sm:text-[22px]">public</span>
+      </a>
+
+      <!-- ESTADO COM CARD ACESSADO: Card Envolvendo os 3 (O Globo, O Nome do Card Acessado e A Seta de Retorno) -->
+      <div id="header-mun-card-active-box" class="hidden header-glass-card items-center p-0.5 md:p-1 rounded-2xl gap-2 sm:gap-2.5 px-2.5 md:px-3 shadow-xs select-none">
+        <!-- 1. O Globo apontando para o início (mapa do estado) -->
+        <a href="home.html" onclick="if(window.voltarParaMunicipios){ event.preventDefault(); window.voltarParaMunicipios(true); }" class="flex w-8 h-8 md:w-9 md:h-9 rounded-xl hover:bg-white/30 dark:hover:bg-white/10 text-primary dark:text-sky-400 items-center justify-center transition-all cursor-pointer shrink-0" title="Início / Mapa do Estado">
+          <span class="material-symbols-outlined text-[20px] md:text-[22px]">public</span>
+        </a>
+
+        <!-- Divisor vertical sutil -->
+        <div class="w-[1px] h-4 bg-slate-300 dark:bg-slate-700/60 my-auto"></div>
+
+        <!-- 2. O Nome do Card Acessado -->
+        <span id="header-mun-card-active-title" class="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-slate-800 dark:text-slate-100 truncate max-w-[140px] sm:max-w-[240px]">ESTATÍSTICA</span>
+
+        <!-- Divisor vertical sutil -->
+        <div class="w-[1px] h-4 bg-slate-300 dark:bg-slate-700/60 my-auto"></div>
+
+        <!-- 3. A Seta de Retorno -->
+        <button type="button" id="btn-voltar-cards-municipio" onclick="voltarParaCardsMunicipio()" class="flex w-7 h-7 sm:w-8 sm:h-8 rounded-xl hover:bg-slate-200/80 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-sky-600 dark:hover:text-sky-400 items-center justify-center transition-all cursor-pointer active:scale-95 shrink-0" title="Voltar aos Cards">
+          <span class="material-symbols-outlined text-[18px] sm:text-[20px]">arrow_back</span>
+        </button>
+      </div>
+
     </div>
 
-    <!-- Centro: Espaçador flexível / Título da Subferramenta -->
-    <div class="flex-1 min-w-0 px-2">
-      <span id="header-municipio-nome" class="hidden text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 truncate"></span>
-    </div>
+    <!-- Centro: Totalmente limpo / vazio -->
+    <div class="flex-1"></div>
 
     <!-- Container de compatibilidade para abas (oculto) -->
     <div id="municipio-tabs" class="hidden"></div>
 
-    <!-- Canto Direito: Alternador Global/Lista + Gerenciador (SuperAdmin) + Perfil -->
-    <div class="shrink-0 ml-auto flex items-center gap-2.5">
-      <!-- Botões de Alternância: [ 🗺️ Global ] [ 📋 Lista ] -->
-      <div id="view-mode-toggle-group-mun" class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm">
-        <button type="button" onclick="voltarParaMunicipios(); switchMunicipiosViewMode('map', true);" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer" title="Visão Global">
-          <span class="material-symbols-outlined text-[16px]">map</span>
-          <span>Global</span>
-        </button>
-        <button type="button" onclick="voltarParaMunicipios(); switchMunicipiosViewMode('list', true);" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer" title="Ver Lista de Municípios">
-          <span class="material-symbols-outlined text-[16px]">format_list_bulleted</span>
-          <span>Lista</span>
-        </button>
+    <!-- Canto Direito: [ Nome + Ente ] [ Perfil ] [ Configurações Globais ] -->
+    <div class="shrink-0 ml-auto flex items-center gap-1.5 sm:gap-2.5">
+      <!-- Nome e Entidade do Usuário (à esquerda do perfil) -->
+      <div class="hidden sm:flex flex-col items-end text-right min-w-0 select-none mr-0.5">
+        <span class="header-user-display-name text-xs md:text-sm font-bold text-slate-800 dark:text-slate-100 leading-tight truncate max-w-[130px] md:max-w-[190px]"></span>
+        <span class="header-user-display-entidade text-[10px] md:text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-tight truncate max-w-[130px] md:max-w-[190px]"></span>
       </div>
 
-      <button id="btn-global-config-mun" onclick="abrirConfiguracoesGlobais()" class="hidden w-9 h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all items-center justify-center cursor-pointer shadow-sm tooltip tooltip-bottom" title="Configurações Globais">
-        <span class="material-symbols-outlined text-[20px]">settings</span>
-      </button>
-      <button onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-9 h-9 md:w-10 md:h-10 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors cursor-pointer shadow-sm bg-slate-50 dark:bg-slate-800 flex items-center justify-center" title="Perfil do Usuário">
+      <!-- Botão Perfil -->
+      <button onclick="document.getElementById('profile-modal').classList.remove('hidden')" class="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors cursor-pointer shadow-sm bg-slate-50 dark:bg-slate-800 flex items-center justify-center shrink-0" title="Perfil do Usuário">
         <img class="profile-avatar-img w-full h-full object-contain p-0.5" src="assets/logo.png" alt="Perfil">
+      </button>
+
+      <!-- Botão CONFIGURAÇÕES (exclusivo SuperAdmin, estilo circular idêntico ao perfil, à DIREITA do perfil) -->
+      <button id="btn-global-config-mun" onclick="abrirConfiguracoesGlobais()" class="hidden w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all items-center justify-center cursor-pointer shadow-sm tooltip tooltip-bottom shrink-0" title="Configurações Globais">
+        <span class="material-symbols-outlined text-[18px] sm:text-[20px]">settings</span>
       </button>
     </div>
   </div>
@@ -320,12 +348,12 @@
                 </div>
             </div>
 
-            <!-- Dados Institucionais (Entidade / Cargo com Edição) -->
+            <!-- Dados Cadastrais e Institucionais (Nome, E-mail, Entidade e Cargo com Edição) -->
             <div class="border-t border-slate-200 dark:border-slate-800 pt-4">
                 <div class="flex items-center justify-between mb-2">
                     <h4 class="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                        <span class="material-symbols-outlined text-[16px] text-cyan-500">domain</span>
-                        Dados Institucionais
+                        <span class="material-symbols-outlined text-[16px] text-cyan-500">badge</span>
+                        Dados Cadastrais
                     </h4>
                     <button type="button" id="btn-toggle-edit-perfil" onclick="toggleEditPerfilModal()" class="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer">
                         <span class="material-symbols-outlined text-[13px]">edit</span>
@@ -336,17 +364,29 @@
                 <!-- Modo Visualização -->
                 <div id="perfil-dados-view" class="space-y-1.5 text-xs">
                     <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
+                        <span class="text-slate-400">Nome:</span>
+                        <span id="perfil-view-nome" class="font-bold text-slate-700 dark:text-slate-200 text-right truncate max-w-[200px]">—</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
+                        <span class="text-slate-400">E-mail:</span>
+                        <span id="perfil-view-email" class="font-medium text-slate-600 dark:text-slate-300 text-right truncate max-w-[200px]">—</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
                         <span class="text-slate-400">Entidade:</span>
-                        <span id="perfil-view-entidade" class="font-bold text-slate-700 dark:text-slate-200">—</span>
+                        <span id="perfil-view-entidade" class="font-semibold text-slate-700 dark:text-slate-200 text-right truncate max-w-[200px]">—</span>
                     </div>
                     <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
                         <span class="text-slate-400">Cargo:</span>
-                        <span id="perfil-view-cargo" class="font-semibold text-slate-700 dark:text-slate-200">—</span>
+                        <span id="perfil-view-cargo" class="font-semibold text-slate-700 dark:text-slate-200 text-right truncate max-w-[200px]">—</span>
                     </div>
                 </div>
 
                 <!-- Modo Edição -->
                 <div id="perfil-dados-edit" class="hidden space-y-2.5 mt-2 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">Nome Completo</label>
+                        <input id="perfil-edit-nome" type="text" placeholder="Seu nome completo" class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none">
+                    </div>
                     <div>
                         <div class="flex items-center justify-between mb-1">
                             <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300">Entidade / Órgão</label>
@@ -362,7 +402,7 @@
                     </div>
                     <div class="flex items-center justify-end gap-2 pt-1">
                         <button type="button" onclick="cancelEditPerfilModal()" class="px-2.5 py-1 text-xs rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 transition-colors cursor-pointer">Cancelar</button>
-                        <button type="button" onclick="salvarPerfilModal()" class="px-3 py-1 text-xs font-bold rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors shadow-sm flex items-center gap-1 cursor-pointer">
+                        <button type="button" id="btn-salvar-perfil" onclick="salvarPerfilModal()" class="px-3 py-1 text-xs font-bold rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors shadow-sm flex items-center gap-1 cursor-pointer">
                             <span class="material-symbols-outlined text-[14px]">check</span> Salvar
                         </button>
                     </div>
@@ -796,18 +836,18 @@
     </div>
   </section>
 
-  <!-- Tela de Gestão do Município em Cards (Ênfase Total nos Cards) -->
-  <section id="municipio-welcome-section" class="tab-content flex-col items-center justify-center min-h-[calc(100vh-6rem)] px-4 py-6 sm:py-10 max-w-5xl mx-auto w-full">
-    <!-- Grid de Cards Retangulares com Bordas Arredondadas (3 cards por linha, último centralizado) -->
-    <div class="flex flex-wrap justify-center gap-4 sm:gap-6 w-full my-auto">
+  <!-- Tela de Gestão do Município em Cards (Ênfase Total nos Cards, com scroll seguro para telas pequenas) -->
+  <section id="municipio-welcome-section" class="tab-content flex-col items-center justify-start sm:justify-center h-full overflow-y-auto px-3 sm:px-6 py-4 sm:py-8 max-w-5xl mx-auto w-full">
+    <!-- Grid de Cards Retangulares com Bordas Arredondadas (3 cards por linha no desktop, 2 no tablet, 1 no mobile) -->
+    <div class="flex flex-wrap justify-center gap-3 sm:gap-4 md:gap-5 w-full my-auto py-2">
       <!-- Card 1: MAPA -->
-      <button onclick="window.location.href='index.html'" class="group relative flex items-center gap-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-sky-500/60 dark:hover:border-sky-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
-        <div class="w-12 h-12 rounded-xl bg-sky-500/10 dark:bg-sky-500/20 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-          <span class="material-symbols-outlined text-[26px]">map</span>
+      <button onclick="window.abrirMapaMunicipioAtivo()" class="group relative flex items-center gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-sky-500/60 dark:hover:border-sky-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.6rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
+        <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-sky-500/10 dark:bg-sky-500/20 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <span class="material-symbols-outlined text-[24px] sm:text-[26px]">map</span>
         </div>
         <div class="flex-1 min-w-0">
           <div class="flex items-center justify-between gap-1">
-            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors uppercase tracking-wider">Mapa</h3>
+            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors uppercase tracking-wider truncate">Mapa</h3>
             <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-sky-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
           </div>
           <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Mapa interativo e camadas</p>
@@ -815,13 +855,13 @@
       </button>
 
       <!-- Card 2: CADASTROS -->
-      <button onclick="switchMunicipioTab('cadastros')" class="group relative flex items-center gap-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-emerald-500/60 dark:hover:border-emerald-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
-        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-          <span class="material-symbols-outlined text-[26px]">assignment</span>
+      <button onclick="switchMunicipioTab('cadastros')" class="group relative flex items-center gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-emerald-500/60 dark:hover:border-emerald-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.6rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
+        <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <span class="material-symbols-outlined text-[24px] sm:text-[26px]">assignment</span>
         </div>
         <div class="flex-1 min-w-0">
           <div class="flex items-center justify-between gap-1">
-            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors uppercase tracking-wider">Cadastros</h3>
+            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors uppercase tracking-wider truncate">Cadastros</h3>
             <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-emerald-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
           </div>
           <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Formulários e atributos</p>
@@ -829,13 +869,13 @@
       </button>
 
       <!-- Card 3: ESTATÍSTICA -->
-      <button onclick="switchMunicipioTab('estatistica')" class="group relative flex items-center gap-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-cyan-500/60 dark:hover:border-cyan-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
-        <div class="w-12 h-12 rounded-xl bg-cyan-500/10 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-          <span class="material-symbols-outlined text-[26px]">hub</span>
+      <button onclick="switchMunicipioTab('estatistica')" class="group relative flex items-center gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-cyan-500/60 dark:hover:border-cyan-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.6rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
+        <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-cyan-500/10 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <span class="material-symbols-outlined text-[24px] sm:text-[26px]">hub</span>
         </div>
         <div class="flex-1 min-w-0">
           <div class="flex items-center justify-between gap-1">
-            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors uppercase tracking-wider">Estatística</h3>
+            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors uppercase tracking-wider truncate">Estatística</h3>
             <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-cyan-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
           </div>
           <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Geoestatística espacial</p>
@@ -843,13 +883,13 @@
       </button>
 
       <!-- Card 4: LAYOUT -->
-      <button onclick="switchMunicipioTab('layout')" class="group relative flex items-center gap-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-purple-500/60 dark:hover:border-purple-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
-        <div class="w-12 h-12 rounded-xl bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-          <span class="material-symbols-outlined text-[26px]">palette</span>
+      <button onclick="switchMunicipioTab('layout')" class="group relative flex items-center gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-purple-500/60 dark:hover:border-purple-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.6rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
+        <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <span class="material-symbols-outlined text-[24px] sm:text-[26px]">palette</span>
         </div>
         <div class="flex-1 min-w-0">
           <div class="flex items-center justify-between gap-1">
-            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors uppercase tracking-wider">Layout</h3>
+            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors uppercase tracking-wider truncate">Layout</h3>
             <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-purple-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
           </div>
           <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Pranchas de impressão</p>
@@ -857,13 +897,13 @@
       </button>
 
       <!-- Card 5: ARQUIVOS -->
-      <button onclick="switchMunicipioTab('storage')" class="group relative flex items-center gap-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-amber-500/60 dark:hover:border-amber-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
-        <div class="w-12 h-12 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-          <span class="material-symbols-outlined text-[26px]">cloud_upload</span>
+      <button onclick="switchMunicipioTab('storage')" class="group relative flex items-center gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-amber-500/60 dark:hover:border-amber-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.6rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
+        <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <span class="material-symbols-outlined text-[24px] sm:text-[26px]">cloud_upload</span>
         </div>
         <div class="flex-1 min-w-0">
           <div class="flex items-center justify-between gap-1">
-            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors uppercase tracking-wider">Arquivos</h3>
+            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors uppercase tracking-wider truncate">Arquivos</h3>
             <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-amber-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
           </div>
           <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Nuvem e documentos</p>
@@ -871,13 +911,13 @@
       </button>
 
       <!-- Card 6: USUÁRIOS -->
-      <button onclick="switchMunicipioTab('usuarios')" class="group relative flex items-center gap-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-indigo-500/60 dark:hover:border-indigo-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
-        <div class="w-12 h-12 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-          <span class="material-symbols-outlined text-[26px]">group</span>
+      <button onclick="switchMunicipioTab('usuarios')" class="group relative flex items-center gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-indigo-500/60 dark:hover:border-indigo-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.6rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
+        <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <span class="material-symbols-outlined text-[24px] sm:text-[26px]">group</span>
         </div>
         <div class="flex-1 min-w-0">
           <div class="flex items-center justify-between gap-1">
-            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors uppercase tracking-wider">Usuários</h3>
+            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors uppercase tracking-wider truncate">Usuários</h3>
             <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
           </div>
           <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Membros e permissões</p>
@@ -885,14 +925,14 @@
       </button>
 
       <!-- Card 7: SOLICITAÇÕES -->
-      <button onclick="switchMunicipioTab('pending-section')" class="group relative flex items-center gap-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-rose-500/60 dark:hover:border-rose-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
-        <div class="w-12 h-12 rounded-xl bg-rose-500/10 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-          <span class="material-symbols-outlined text-[26px]">pending_actions</span>
+      <button onclick="switchMunicipioTab('pending-section')" class="group relative flex items-center gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-rose-500/60 dark:hover:border-rose-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.6rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
+        <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-rose-500/10 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <span class="material-symbols-outlined text-[24px] sm:text-[26px]">pending_actions</span>
         </div>
         <div class="flex-1 min-w-0">
           <div class="flex items-center justify-between gap-1">
             <div class="flex items-center gap-1.5">
-              <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors uppercase tracking-wider">Solicitações</h3>
+              <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors uppercase tracking-wider truncate">Solicitações</h3>
               <span id="pending-badge-card" class="hidden px-2 py-0.5 text-[10px] font-extrabold bg-rose-500 text-white rounded-full"></span>
             </div>
             <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-rose-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
@@ -902,13 +942,13 @@
       </button>
 
       <!-- Card 8: AUDITORIA -->
-      <button onclick="switchMunicipioTab('auditoria')" class="group relative flex items-center gap-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-teal-500/60 dark:hover:border-teal-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
-        <div class="w-12 h-12 rounded-xl bg-teal-500/10 dark:bg-teal-500/20 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-          <span class="material-symbols-outlined text-[26px]">manage_history</span>
+      <button onclick="switchMunicipioTab('auditoria')" class="group relative flex items-center gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-teal-500/60 dark:hover:border-teal-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.6rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
+        <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-teal-500/10 dark:bg-teal-500/20 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <span class="material-symbols-outlined text-[24px] sm:text-[26px]">manage_history</span>
         </div>
         <div class="flex-1 min-w-0">
           <div class="flex items-center justify-between gap-1">
-            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors uppercase tracking-wider">Auditoria</h3>
+            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors uppercase tracking-wider truncate">Auditoria</h3>
             <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-teal-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
           </div>
           <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Registros e logs de ações</p>
@@ -918,8 +958,8 @@
   </section>
 
   <!-- Container Embutido das Ferramentas de Gestão (Cadastros, Estatística, Layout, Arquivos, Auditoria) -->
-  <section id="settings-frame-section" class="tab-content -mx-4 md:-mx-8 -my-6">
-    <iframe id="settings-iframe" src="about:blank" class="w-full h-[calc(100vh-4rem)] border-0 bg-transparent" allowtransparency="true"></iframe>
+  <section id="settings-frame-section" class="tab-content -mx-2.5 sm:-mx-6 -my-2.5 sm:-my-3 h-full flex-1">
+    <iframe id="settings-iframe" src="about:blank" class="w-full h-[calc(100vh-3.5rem)] sm:h-[calc(100vh-4rem)] border-0 bg-transparent" allowtransparency="true"></iframe>
   </section>
 
   <div id="loading-section" class="text-center py-16 text-sm text-slate-400 italic">Carregando...</div>
@@ -936,9 +976,38 @@ let homeUserProfile = null;
 const SETTINGS_TABS = ['cadastros', 'estatistica', 'layout', 'storage', 'usuarios', 'auditoria'];
 let currentActiveSettingsTab = null;
 
+// Dicionário oficial de sedes urbanas (centros urbanos) dos municípios para enquadramento espacial instantâneo
+const CENTROS_URBANOS_MUNICIPIOS = {
+    'cabedelo': { lat: -6.9811, lng: -34.8339, zoom: 16 },
+    'conde': { lat: -7.2597, lng: -34.9075, zoom: 15 },
+    'lucena': { lat: -6.9036, lng: -34.8728, zoom: 15 },
+    'joao pessoa': { lat: -7.1150, lng: -34.8631, zoom: 14 },
+    'santa rita': { lat: -7.1139, lng: -34.9780, zoom: 14 },
+    'bayeux': { lat: -7.1250, lng: -34.9322, zoom: 14 },
+    'campina grande': { lat: -7.2247, lng: -35.8866, zoom: 14 },
+    'pitimbu': { lat: -7.4706, lng: -34.8086, zoom: 15 },
+    'alhandra': { lat: -7.4294, lng: -34.9089, zoom: 15 },
+    'caapora': { lat: -7.5139, lng: -34.9028, zoom: 15 },
+    'rio tinto': { lat: -6.8042, lng: -35.0800, zoom: 15 },
+    'marcacao': { lat: -6.7056, lng: -34.9986, zoom: 15 },
+    'baia da traicao': { lat: -6.6872, lng: -34.9347, zoom: 15 },
+    'mataraca': { lat: -6.5056, lng: -34.9817, zoom: 15 },
+    'mamanguape': { lat: -6.8389, lng: -35.1256, zoom: 15 },
+    'pedras de fogo': { lat: -7.4019, lng: -35.1167, zoom: 15 }
+};
+window.CENTROS_URBANOS_MUNICIPIOS = CENTROS_URBANOS_MUNICIPIOS;
+
 window.getMunicipioCoordinates = function(nome) {
     if (!nome) return null;
-    const norm = typeof normMunString === 'function' ? normMunString(nome) : String(nome).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const cleanNorm = String(nome).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[-_].*$/, '').trim();
+    if (CENTROS_URBANOS_MUNICIPIOS[cleanNorm]) {
+        return {
+            lat: CENTROS_URBANOS_MUNICIPIOS[cleanNorm].lat,
+            lng: CENTROS_URBANOS_MUNICIPIOS[cleanNorm].lng,
+            zoom: CENTROS_URBANOS_MUNICIPIOS[cleanNorm].zoom || 15
+        };
+    }
+    const norm = typeof normMunString === 'function' ? normMunString(nome) : cleanNorm;
     if (typeof paraibaFeatureLayers !== 'undefined' && paraibaFeatureLayers && paraibaFeatureLayers[norm]) {
         try {
             const bounds = paraibaFeatureLayers[norm].getBounds();
@@ -955,7 +1024,7 @@ window.getMunicipioCoordinates = function(nome) {
         try {
             const feat = paraibaGeojsonData.features.find(f => {
                 const fNorm = typeof normMunString === 'function' ? normMunString(f.properties?.nome) : String(f.properties?.nome || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                return fNorm === norm;
+                return fNorm === norm || fNorm.includes(cleanNorm) || cleanNorm.includes(fNorm);
             });
             if (feat && typeof L !== 'undefined') {
                 const bounds = L.geoJSON(feat).getBounds();
@@ -974,15 +1043,26 @@ window.getMunicipioCoordinates = function(nome) {
 
 // Ao selecionar um município, TODOS os usuários (administradores ou analistas) entram direto no mapa interativo
 window.abrirMunicipio = function(id, nome, papel) {
-    sessionStorage.setItem('municipio_ativo', id);
-    sessionStorage.setItem('municipio_ativo_nome', nome);
+    if (id) sessionStorage.setItem('municipio_ativo', id);
+    if (nome) sessionStorage.setItem('municipio_ativo_nome', nome);
+    if (papel) sessionStorage.setItem('municipio_ativo_papel', papel);
 
-    // Encontra coordenadas do município (do cache ou do GeoJSON) para enquadramento espacial dinâmico
+    // Encontra coordenadas e UF do município (do cache ou do GeoJSON) para enquadramento espacial dinâmico
     const munObj = (window.municipiosParaMostrarCache || []).find(m => m.id === id);
+    if (munObj && munObj.uf) {
+        sessionStorage.setItem('municipio_ativo_uf', munObj.uf);
+    } else if (nome && nome.includes('-')) {
+        const parts = nome.split('-');
+        sessionStorage.setItem('municipio_ativo_uf', parts[parts.length - 1].trim().toUpperCase());
+    } else {
+        sessionStorage.setItem('municipio_ativo_uf', 'PB');
+    }
+
     let coords = null;
     if (munObj && munObj.latitude && munObj.longitude) {
         coords = { lat: munObj.latitude, lng: munObj.longitude, zoom: munObj.zoom || 15, bbox: munObj.bbox || null };
-    } else if (typeof window.getMunicipioCoordinates === 'function') {
+    }
+    if (!coords && typeof window.getMunicipioCoordinates === 'function') {
         coords = window.getMunicipioCoordinates(nome);
     }
     if (coords) {
@@ -993,6 +1073,18 @@ window.abrirMunicipio = function(id, nome, papel) {
 
     // Redireciona diretamente para o mapa interativo
     window.location.href = 'index.html';
+};
+
+// Abre o mapa do município atualmente ativo a partir do card MAPA da tela de gestão
+window.abrirMapaMunicipioAtivo = function() {
+    const id = sessionStorage.getItem('municipio_ativo');
+    const nome = sessionStorage.getItem('municipio_ativo_nome') || 'Cabedelo';
+    const papel = sessionStorage.getItem('municipio_ativo_papel') || 'admin';
+    if (id && typeof window.abrirMunicipio === 'function') {
+        window.abrirMunicipio(id, nome, papel);
+    } else {
+        window.location.href = 'index.html';
+    }
 };
 
 // Ao selecionar um município com um projeto específico (ou sem projeto / modo livre)
@@ -1023,28 +1115,55 @@ window.abrirPainelMunicipio = function(id, nome) {
         munHeader.classList.add('flex');
     }
 
+    // Exibe card padrão do município (Globo + Nome + Base Territorial)
+    const defaultCard = document.getElementById('header-mun-default-card');
+    const activeBox = document.getElementById('header-mun-card-active-box');
+    if (defaultCard) defaultCard.classList.remove('hidden');
+    if (activeBox) {
+        activeBox.classList.add('hidden');
+        activeBox.classList.remove('inline-flex');
+    }
+
     const headerTitle = document.getElementById('header-municipio-nome');
-    if (headerTitle) headerTitle.textContent = '';
+    if (headerTitle) {
+        headerTitle.textContent = '';
+    }
+
+    const badgeEl = document.getElementById('header-municipio-card-badge');
+    if (badgeEl) {
+        badgeEl.classList.add('hidden');
+        badgeEl.classList.remove('flex');
+    }
+
+    const btnVoltarCards = document.getElementById('btn-voltar-cards-municipio');
+    if (btnVoltarCards) {
+        btnVoltarCards.classList.add('hidden');
+        btnVoltarCards.classList.remove('flex');
+    }
 
     // Nenhuma aba começa ativa de início
     document.querySelectorAll('#municipio-tabs .tab-btn').forEach(b => b.classList.remove('active'));
 
-    // Identifica se o usuário pertence a órgão externo (MPF, PF, SPU, etc.) ou se é municipal (Prefeitura)
+    // Identifica se o usuário é administrador do município ou superadmin
+    const munObj = (window.municipiosParaMostrarCache || []).find(m => m.id === id);
+    const isMunAdmin = !!(homeUserProfile && (homeUserProfile.super_admin || homeUserProfile.papel === 'admin')) || (munObj && munObj.papel === 'admin');
+
+    // Identifica se o usuário pertence a órgão externo apenas se NÃO for administrador
     const userEnt = ((homeUserProfile && (homeUserProfile.entidade || homeUserProfile.entidade_nome)) || '').trim();
     const userSigla = typeof getEntitySigla === 'function' ? getEntitySigla(userEnt) : userEnt;
-    const isExternalUser = !!userEnt && userEnt.toLowerCase() !== 'geral' && userSigla !== 'Município' && !userEnt.toLowerCase().includes('prefeitura') && !userEnt.toLowerCase().includes('municip');
+    const isExternalRestricted = !isMunAdmin && !!userEnt && userEnt.toLowerCase() !== 'geral' && userSigla !== 'Município' && !userEnt.toLowerCase().includes('prefeitura') && !userEnt.toLowerCase().includes('municip');
 
     const welcomeSec = document.getElementById('municipio-welcome-section');
 
-    if (isExternalUser) {
-        // Usuário externo: oculta seção de gestão municipal
+    if (isExternalRestricted) {
+        // Usuário externo restrito (não-admin): oculta seção de gestão municipal
         if (welcomeSec) {
             welcomeSec.classList.remove('active');
             welcomeSec.classList.add('hidden');
             welcomeSec.style.display = 'none';
         }
     } else {
-        // Usuário municipal: exibe os cards com ênfase total
+        // Administrador ou usuário municipal: exibe os cards com ênfase total
         if (welcomeSec) {
             welcomeSec.classList.remove('hidden');
             welcomeSec.style.display = '';
@@ -1060,7 +1179,7 @@ window.abrirPainelMunicipio = function(id, nome) {
     document.querySelectorAll('main > section').forEach(s => s.classList.remove('active'));
     const munSec = document.getElementById('municipios-section');
     if (munSec) munSec.classList.remove('active');
-    if (!isExternalUser && welcomeSec) {
+    if (!isExternalRestricted && welcomeSec) {
         welcomeSec.classList.add('active');
         welcomeSec.style.display = 'flex';
     }
@@ -1072,21 +1191,37 @@ window.abrirPainelMunicipio = function(id, nome) {
     }
 };
 
-window.voltarParaMunicipios = function() {
+window.voltarParaCardsMunicipio = function() {
+    const munId = sessionStorage.getItem('municipio_ativo');
+    const munNome = sessionStorage.getItem('municipio_ativo_nome');
+    if (typeof abrirPainelMunicipio === 'function') {
+        abrirPainelMunicipio(munId, munNome);
+    }
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('view', 'municipio');
+        url.searchParams.delete('tab');
+        window.history.replaceState({}, '', url.toString());
+    } catch(e) {}
+};
+
+window.voltarParaMunicipios = function(forcePortal = false) {
     const frameSec = document.getElementById('settings-frame-section');
     const pendingSec = document.getElementById('pending-section');
     const configSec = document.getElementById('configuracoes-section');
-    const isInsideTool = (frameSec && frameSec.classList.contains('active')) || 
+    const isInsideTool = !forcePortal && ((frameSec && frameSec.classList.contains('active')) || 
                          (pendingSec && pendingSec.classList.contains('active')) ||
-                         (configSec && configSec.classList.contains('active'));
+                         (configSec && configSec.classList.contains('active')));
     
-    // Se estiver dentro de algum módulo aberto, voltar para a tela de cards do município
+    // Se estiver dentro de algum módulo aberto e não forçado retorno ao portal, voltar para a tela de cards do município
     if (isInsideTool) {
         const munId = sessionStorage.getItem('municipio_ativo');
         const munNome = sessionStorage.getItem('municipio_ativo_nome');
         abrirPainelMunicipio(munId, munNome);
         return;
     }
+
+    window._userForcedPortal = true;
 
     const portalHeader = document.getElementById('header-portal-view');
     const munHeader = document.getElementById('header-municipio-view');
@@ -1120,6 +1255,7 @@ window.voltarParaMunicipios = function() {
 
     try {
         const url = new URL(window.location.href);
+        url.searchParams.delete('view');
         url.searchParams.delete('tab');
         window.history.replaceState({}, '', url.pathname);
     } catch(e) {}
@@ -1487,11 +1623,36 @@ window.switchMunicipioTab = function(sectionOrTab, btn) {
         'auditoria': 'Auditoria',
         'pending-section': 'Solicitações'
     };
+    const tabLabel = (TAB_NAMES[sectionOrTab] || sectionOrTab).toUpperCase();
+
+    // Ativa card unificado envolvendo os 3: Globo + Nome do Card + Seta de Retorno
+    const defaultCard = document.getElementById('header-mun-default-card');
+    const activeBox = document.getElementById('header-mun-card-active-box');
+    const activeTitle = document.getElementById('header-mun-card-active-title');
+
+    if (defaultCard) defaultCard.classList.add('hidden');
+    if (activeBox) {
+        activeBox.classList.remove('hidden');
+        activeBox.classList.add('inline-flex');
+    }
+    if (activeTitle) {
+        activeTitle.textContent = tabLabel;
+    }
+
+    const btnVoltarCards = document.getElementById('btn-voltar-cards-municipio');
+    if (btnVoltarCards) {
+        btnVoltarCards.classList.remove('hidden');
+        btnVoltarCards.classList.add('flex');
+    }
+
     const titleEl = document.getElementById('header-municipio-nome');
-    const munNome = sessionStorage.getItem('municipio_ativo_nome') || '';
+    const badgeEl = document.getElementById('header-municipio-card-badge');
     if (titleEl) {
-        const tabLabel = TAB_NAMES[sectionOrTab] || '';
-        titleEl.textContent = tabLabel ? (munNome ? `${munNome} • ${tabLabel}` : tabLabel) : munNome;
+        titleEl.textContent = tabLabel;
+    }
+    if (badgeEl) {
+        badgeEl.classList.add('hidden');
+        badgeEl.classList.remove('flex');
     }
 
     const SETTINGS_TABS = ['cadastros', 'estatistica', 'layout', 'storage', 'usuarios', 'auditoria'];
@@ -1502,22 +1663,11 @@ window.switchMunicipioTab = function(sectionOrTab, btn) {
         if (frameSec) frameSec.classList.add('active');
 
         const iframe = document.getElementById('settings-iframe');
-        const targetSrc = `settings.html?tab=${sectionOrTab}&embedded=1&_v=${Date.now()}`;
+        const myEnt = (homeUserProfile && (homeUserProfile.entidade || homeUserProfile.entidade_nome)) || '';
+        const targetSrc = `settings.html?tab=${sectionOrTab}&entidade=${encodeURIComponent(myEnt)}&embedded=1&_v=${Date.now()}`;
 
         if (iframe) {
-            if (!iframe.src || iframe.src === 'about:blank' || !iframe.src.includes('settings.html')) {
-                iframe.src = targetSrc;
-            } else {
-                try {
-                    if (iframe.contentWindow && typeof iframe.contentWindow.switchTab === 'function') {
-                        iframe.contentWindow.switchTab(sectionOrTab);
-                    } else {
-                        iframe.src = targetSrc;
-                    }
-                } catch(e) {
-                    iframe.src = targetSrc;
-                }
-            }
+            iframe.src = targetSrc;
         }
     } else {
         const frameSec = document.getElementById('settings-frame-section');
@@ -1553,13 +1703,21 @@ function applyCurrentUserToProfileModal() {
     if (!homeUserProfile) return;
     const nameEl = document.getElementById('profile-user-name');
     const roleEl = document.getElementById('profile-user-role');
-    const themeSelect = document.getElementById('profile-theme-select');
+    const munEl = document.getElementById('profile-user-municipio');
     const entEl = document.getElementById('profile-user-entidade');
     const pfBadge = document.getElementById('profile-user-ponto-focal-badge');
+    const themeSelect = document.getElementById('profile-theme-select');
+    const viewNome = document.getElementById('perfil-view-nome');
+    const viewEmail = document.getElementById('perfil-view-email');
     const viewEnt = document.getElementById('perfil-view-entidade');
     const viewCargo = document.getElementById('perfil-view-cargo');
 
-    if (nameEl) nameEl.textContent = homeUserProfile.nome || homeUserProfile.email || 'Usuário';
+    if (munEl) munEl.textContent = sessionStorage.getItem('municipio_ativo_nome') || '';
+    const rawNome = homeUserProfile.nome_cadastro || homeUserProfile.nome || homeUserProfile.email || 'Usuário';
+    if (nameEl) nameEl.textContent = rawNome;
+    if (viewNome) viewNome.textContent = rawNome;
+    if (viewEmail) viewEmail.textContent = homeUserProfile.email || '—';
+
     if (roleEl) roleEl.textContent = homeUserProfile.super_admin
         ? 'Administrador Geral'
         : (homeUserProfile.entidade_admin ? `Administrador — ${homeUserProfile.entidade || 'entidade'}` : (homeUserProfile.papel === 'admin' ? 'Administrador' : 'Usuário'));
@@ -1569,6 +1727,33 @@ function applyCurrentUserToProfileModal() {
     if (entEl) entEl.textContent = entNome;
     if (viewEnt) viewEnt.textContent = entNome;
     if (viewCargo) viewCargo.textContent = homeUserProfile.cargo || 'Não informado';
+
+    // Formata o 1º e 2º nome do usuário (ex: "Helton Leite") e o ente para o cabeçalho
+    const formatUserFirstAndSecondName = (fullName) => {
+        if (!fullName || typeof fullName !== 'string') return '';
+        const allWords = fullName.trim().split(/\s+/).filter(Boolean);
+        if (allWords.length === 0) return '';
+        if (allWords.length === 1) {
+            return allWords[0].charAt(0).toUpperCase() + allWords[0].slice(1).toLowerCase();
+        }
+        const preposicoes = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'd']);
+        let filteredWords = allWords.filter((w, idx) => idx === 0 || !preposicoes.has(w.toLowerCase()));
+        if (filteredWords.length < 2) {
+            filteredWords = allWords;
+        }
+        const selected = filteredWords.slice(0, 2);
+        return selected.map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+    };
+
+    const formattedHeaderName = formatUserFirstAndSecondName(rawNome);
+    document.querySelectorAll('.header-user-display-name').forEach(el => {
+        el.textContent = formattedHeaderName;
+        el.title = rawNome;
+    });
+    document.querySelectorAll('.header-user-display-entidade').forEach(el => {
+        el.textContent = entNome;
+        el.title = entNome;
+    });
 
     if (pfBadge) {
         if (homeUserProfile.ponto_focal) {
@@ -1730,6 +1915,10 @@ window.toggleEditPerfilModal = async function() {
             onPerfilEntidadeChange();
         }
 
+        const nomeInput = document.getElementById('perfil-edit-nome');
+        if (nomeInput) {
+            nomeInput.value = (homeUserProfile && (homeUserProfile.nome_cadastro || homeUserProfile.nome)) || '';
+        }
         document.getElementById('perfil-edit-cargo').value = homeUserProfile?.cargo || '';
         viewDiv.classList.add('hidden');
         editDiv.classList.remove('hidden');
@@ -1765,37 +1954,78 @@ window.cancelEditPerfilModal = function() {
 };
 
 window.salvarPerfilModal = async function() {
+    const nomeInput = document.getElementById('perfil-edit-nome');
     const entSelect = document.getElementById('perfil-edit-entidade');
+    const cargoInput = document.getElementById('perfil-edit-cargo');
+
+    const novoNome = nomeInput ? nomeInput.value.trim() : '';
     const novaEntidade = entSelect ? entSelect.value.trim() : '';
-    const novoCargo = document.getElementById('perfil-edit-cargo').value.trim();
+    const novoCargo = cargoInput ? cargoInput.value.trim() : '';
+
+    if (!novoNome) {
+        alert('Por favor, informe o seu Nome Completo.');
+        return;
+    }
     if (!novaEntidade) {
         alert('Por favor, informe a Entidade / Órgão.');
         return;
     }
 
-    const { data: sessionData } = await supabaseClient.auth.getSession();
-    if (!sessionData || !sessionData.session) return;
-    const uid = sessionData.session.user.id;
-
-    const { error } = await supabaseClient.from('profiles').update({
-        entidade: novaEntidade,
-        cargo: novoCargo || null
-    }).eq('id', uid);
-
-    if (error) {
-        alert('Erro ao atualizar perfil: ' + error.message);
-        return;
+    const saveBtn = document.getElementById('btn-salvar-perfil');
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="animate-spin material-symbols-outlined text-[14px]">progress_activity</span> Salvando...';
     }
 
-    if (homeUserProfile) {
-        homeUserProfile.entidade = novaEntidade;
-        homeUserProfile.cargo = novoCargo;
-    }
-    usuarioEntidadeCargo = { entidade: novaEntidade, cargo: novoCargo };
+    try {
+        const { data: sessionData } = await supabaseClient.auth.getSession();
+        if (!sessionData || !sessionData.session) return;
+        const uid = sessionData.session.user.id;
 
-    applyCurrentUserToProfileModal();
-    cancelEditPerfilModal();
-    alert('✅ Dados institucionais atualizados com sucesso!');
+        const { error } = await supabaseClient.from('profiles').update({
+            nome: novoNome,
+            entidade: novaEntidade,
+            cargo: novoCargo || null
+        }).eq('id', uid);
+
+        if (error) {
+            alert('Erro ao atualizar perfil: ' + error.message);
+            return;
+        }
+
+        if (supabaseClient.auth && typeof supabaseClient.auth.updateUser === 'function') {
+            try {
+                await supabaseClient.auth.updateUser({
+                    data: {
+                        nome: novoNome,
+                        entidade: novaEntidade,
+                        cargo: novoCargo || null
+                    }
+                });
+            } catch(eAuth) {
+                console.warn('Falha ao atualizar user_metadata:', eAuth);
+            }
+        }
+
+        if (homeUserProfile) {
+            homeUserProfile.nome = novoNome;
+            homeUserProfile.nome_cadastro = novoNome;
+            homeUserProfile.entidade = novaEntidade;
+            homeUserProfile.cargo = novoCargo;
+        }
+        usuarioEntidadeCargo = { entidade: novaEntidade, cargo: novoCargo };
+
+        applyCurrentUserToProfileModal();
+        cancelEditPerfilModal();
+        alert('✅ Dados do perfil atualizados com sucesso!');
+    } catch(err) {
+        alert('Erro ao salvar alterações: ' + (err.message || err));
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<span class="material-symbols-outlined text-[14px]">check</span> Salvar';
+        }
+    }
 };
 
 window.handleLogout = async function() {
@@ -1806,27 +2036,16 @@ window.handleLogout = async function() {
 };
 
 function selectMunicipio(id, nome) {
-    sessionStorage.setItem('municipio_ativo', id);
-    sessionStorage.setItem('municipio_ativo_nome', nome);
-    window.location.href = 'index.html';
+    if (typeof window.abrirMunicipio === 'function') {
+        window.abrirMunicipio(id, nome);
+    } else {
+        sessionStorage.setItem('municipio_ativo', id);
+        sessionStorage.setItem('municipio_ativo_nome', nome);
+        window.location.href = 'index.html';
+    }
 }
 window.selectMunicipio = selectMunicipio;
 
-window.abrirMunicipio = function(id, nome, papel) {
-    if (papel) sessionStorage.setItem('municipio_ativo_papel', papel);
-    selectMunicipio(id, nome);
-};
-
-window.abrirMunicipioComProjeto = function(id, nome, papel, projetoId) {
-    if (id) {
-        if (projetoId) {
-            localStorage.setItem('last_active_project_' + id, projetoId);
-        } else {
-            localStorage.setItem('last_active_project_' + id, 'livre');
-        }
-        window.abrirMunicipio(id, nome, papel);
-    }
-};
 
 let usuarioEntidadeCargo = { entidade: '', cargo: '' };
 let cacheMinhasSolicitacoes = [];
@@ -2737,8 +2956,23 @@ async function init() {
     }
     const userId = sessionData.session.user.id;
 
+    const authUser = sessionData.session.user;
+    let userMetaNome = '';
+    if (authUser && authUser.user_metadata) {
+        const meta = authUser.user_metadata;
+        userMetaNome = (meta.nome || meta.nome_completo || meta.full_name || meta.name || '').trim();
+    }
+
     const { data: profile } = await supabaseClient.from('profiles').select('*').eq('id', userId).single();
-    homeUserProfile = profile || { nome: sessionData.session.user.email, super_admin: false };
+    homeUserProfile = profile || { id: userId, super_admin: false };
+    if (userMetaNome) {
+        homeUserProfile.nome_cadastro = userMetaNome;
+        if (!homeUserProfile.nome || homeUserProfile.nome.includes('@') || homeUserProfile.nome === authUser.email) {
+            homeUserProfile.nome = userMetaNome;
+        }
+    } else if (!homeUserProfile.nome) {
+        homeUserProfile.nome = authUser.email;
+    }
     if (!homeUserProfile.entidade) {
         const { data: mData } = await supabaseClient.from('municipio_membros').select('entidade').eq('user_id', userId).limit(1);
         if (mData && mData[0] && mData[0].entidade) {
@@ -2832,15 +3066,32 @@ async function init() {
             .order('solicitado_em', { ascending: true });
         if (pendentesError) console.error('Erro ao buscar solicitações pendentes:', pendentesError);
 
+        const isSuperAdmin = !!(homeUserProfile && homeUserProfile.super_admin);
+        const myEntidade = (homeUserProfile?.entidade || '').trim();
+        const mySigla = typeof getEntitySigla === 'function' ? getEntitySigla(myEntidade) : myEntidade;
+        const isMunicipalAdmin = isEntidadeMunicipal(myEntidade);
+
         // Municípios que este Admin tem poder de conceder/aprovar
         const meusMunicipioIds = (meusMunicipiosAdmin || []).map(m => m.municipio_id);
-        const adminMunicipiosAcessiveis = homeUserProfile.super_admin
+        const adminMunicipiosAcessiveis = isSuperAdmin
             ? (todosMunicipios || [])
             : (todosMunicipios || []).filter(m => meusMunicipioIds.includes(m.id));
 
+        // Isolamento de solicitações: Admin de órgão externo só vê solicitações da sua própria entidade
+        const pendentesFiltrados = (pendentes || []).filter(p => {
+            if (isSuperAdmin) return true;
+            const pEnt = (p.entidade || '').trim();
+            const pSigla = typeof getEntitySigla === 'function' ? getEntitySigla(pEnt) : pEnt;
+            if (isMunicipalAdmin) {
+                return isEntidadeMunicipal(pEnt) && meusMunicipioIds.includes(p.municipio_id);
+            } else {
+                return pSigla === mySigla || (pEnt && myEntidade && pEnt.toLowerCase() === myEntidade.toLowerCase());
+            }
+        });
+
         // 4. Agrupa as solicitações pendentes por usuário (user_id)
         const usuariosPendentesMap = {};
-        (pendentes || []).forEach(p => {
+        pendentesFiltrados.forEach(p => {
             if (!usuariosPendentesMap[p.user_id]) {
                 usuariosPendentesMap[p.user_id] = {
                     user_id: p.user_id,
@@ -3014,12 +3265,13 @@ async function init() {
     window.municipiosParaMostrarCache = municipiosParaMostrar;
 
     // Se o usuário tiver um único município aprovado e não for SuperAdmin:
-    // Admin Municipal: abre direto na tela de boas-vindas/gestão do município
-    // Usuário Comum: abre direto o mapa interativo
+    // Se a URL pedir ?view=municipio ou ?tab=..., deixa seguir para abrir o painel de gestão!
     const urlParams = new URLSearchParams(window.location.search);
-    const forcandoLista = urlParams.get('lista') === '1' || urlParams.get('portal') === '1';
+    const forcandoLista = urlParams.get('lista') === '1' || urlParams.get('portal') === '1' || !!window._userForcedPortal;
+    const targetView = urlParams.get('view');
+    const targetTab = urlParams.get('tab') || window.location.hash.replace('#', '');
 
-    if (!forcandoLista && !homeUserProfile.super_admin && municipiosParaMostrar.length === 1) {
+    if (!forcandoLista && !targetView && !targetTab && !homeUserProfile.super_admin && municipiosParaMostrar.length === 1) {
         const unicoMun = municipiosParaMostrar[0];
         abrirMunicipio(unicoMun.id, unicoMun.nome, unicoMun.papel);
         return;
@@ -3164,9 +3416,8 @@ async function init() {
                 }
                 if (activeMunId) {
                     abrirPainelMunicipio(activeMunId, activeMunNome || 'Município');
-                    const tabBtn = document.querySelector(`#municipio-tabs button[onclick*="'${targetTab}'"]`);
-                    if (tabBtn && typeof window.switchMunicipioTab === 'function') {
-                        window.switchMunicipioTab(targetTab, tabBtn);
+                    if (typeof window.switchMunicipioTab === 'function') {
+                        window.switchMunicipioTab(targetTab);
                     }
                 }
             }

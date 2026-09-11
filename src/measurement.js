@@ -21,6 +21,50 @@ window.toggleMeasurementSnapping = function() {
     }
 };
 
+window.toggleMeasurementMenu = function(e) {
+    if (e) e.stopPropagation();
+    const menu = document.getElementById('measurement-menu-dropdown');
+    if (!menu) return;
+    const isHidden = menu.classList.contains('hidden');
+    document.querySelectorAll('.app-dropdown-menu').forEach(m => m.classList.add('hidden'));
+    if (isHidden) {
+        menu.classList.remove('hidden');
+    } else {
+        menu.classList.add('hidden');
+    }
+};
+
+window.selectMeasurementOption = function(type) {
+    const menu = document.getElementById('measurement-menu-dropdown');
+    if (menu) menu.classList.add('hidden');
+
+    if (type === '3D') {
+        if (typeof openCesiumModal === 'function') {
+            openCesiumModal();
+        }
+        return;
+    }
+
+    const panel = document.getElementById('measurement-panel');
+    if (panel && panel.classList.contains('hidden')) {
+        toggleMeasurementPanel();
+    }
+
+    if (typeof startMeasurementDraw === 'function') {
+        startMeasurementDraw(type);
+    }
+};
+
+document.addEventListener('click', (e) => {
+    const menu = document.getElementById('measurement-menu-dropdown');
+    const btn = document.getElementById('btn-measurement-menu');
+    if (menu && !menu.classList.contains('hidden')) {
+        if (!menu.contains(e.target) && (!btn || !btn.contains(e.target))) {
+            menu.classList.add('hidden');
+        }
+    }
+});
+
 function toggleMeasurementPanel() {
     const panel = document.getElementById('measurement-panel');
     if (panel.classList.contains('hidden')) {

@@ -250,6 +250,25 @@ function getThemeFieldLabel(theme, key) {
     }
     return key;
 }
+const CENTROS_URBANOS_MUNICIPIOS = {
+    'cabedelo': { lat: -6.9811, lng: -34.8339, zoom: 16 },
+    'conde': { lat: -7.2597, lng: -34.9075, zoom: 15 },
+    'lucena': { lat: -6.9036, lng: -34.8728, zoom: 15 },
+    'joao pessoa': { lat: -7.1150, lng: -34.8631, zoom: 14 },
+    'santa rita': { lat: -7.1139, lng: -34.9780, zoom: 14 },
+    'bayeux': { lat: -7.1250, lng: -34.9322, zoom: 14 },
+    'campina grande': { lat: -7.2247, lng: -35.8866, zoom: 14 },
+    'pitimbu': { lat: -7.4706, lng: -34.8086, zoom: 15 },
+    'alhandra': { lat: -7.4294, lng: -34.9089, zoom: 15 },
+    'caapora': { lat: -7.5139, lng: -34.9028, zoom: 15 },
+    'rio tinto': { lat: -6.8042, lng: -35.0800, zoom: 15 },
+    'marcacao': { lat: -6.7056, lng: -34.9986, zoom: 15 },
+    'baia da traicao': { lat: -6.6872, lng: -34.9347, zoom: 15 },
+    'mataraca': { lat: -6.5056, lng: -34.9817, zoom: 15 },
+    'mamanguape': { lat: -6.8389, lng: -35.1256, zoom: 15 },
+    'pedras de fogo': { lat: -7.4019, lng: -35.1167, zoom: 15 }
+};
+window.CENTROS_URBANOS_MUNICIPIOS = CENTROS_URBANOS_MUNICIPIOS;
 const cabedeloCenter = [-7.0182, -34.8336];
 
 let map;
@@ -528,6 +547,15 @@ function initMap() {
         initialCenter = [parsed.lat, parsed.lng];
         initialZoom = parsed.zoom || 15;
       }
+    } else {
+      const munNome = sessionStorage.getItem('municipio_ativo_nome');
+      if (munNome) {
+        const cleanNorm = String(munNome).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[-_].*$/, '').trim();
+        if (CENTROS_URBANOS_MUNICIPIOS[cleanNorm]) {
+          initialCenter = [CENTROS_URBANOS_MUNICIPIOS[cleanNorm].lat, CENTROS_URBANOS_MUNICIPIOS[cleanNorm].lng];
+          initialZoom = CENTROS_URBANOS_MUNICIPIOS[cleanNorm].zoom || 15;
+        }
+      }
     }
   } catch(e) {}
 
@@ -537,6 +565,18 @@ function initMap() {
     preferCanvas: true // Fixes html2canvas vector offset issues
   }).setView(initialCenter, initialZoom);
   window.map = map;
+
+  // Prevenir que cliques ou rolagem dentro do menu lateral vazem para o mapa Leaflet
+  const sideDrawerEl = document.getElementById('side-drawer');
+  if (sideDrawerEl && window.L && L.DomEvent) {
+    L.DomEvent.disableClickPropagation(sideDrawerEl);
+    L.DomEvent.disableScrollPropagation(sideDrawerEl);
+  }
+  const btnDrawerEl = document.getElementById('btn-floating-drawer-toggle');
+  if (btnDrawerEl && window.L && L.DomEvent) {
+    L.DomEvent.disableClickPropagation(btnDrawerEl);
+    L.DomEvent.disableScrollPropagation(btnDrawerEl);
+  }
 
   // Define Base Layers
   baseLayers['Mapa'] = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -799,6 +839,11 @@ function initMap() {
       layer.on('click', async function(e) {
         if (window.isSelectingStreetViewCoordinate) {
             return; // bubble to map click
+        }
+        
+        // Se a ferramenta de medição estiver ativa ou em modo de desenho, permite o clique livre em qualquer ponto ou camada sem interceptar e sem exibir avisos
+        if (window.isMeasurementActive || (typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode) || (typeof map !== 'undefined' && map && map.pm && map.pm.Draw && map.pm.Draw.isActive())) {
+            return; // bubble para a ferramenta de medição (Leaflet-Geoman PM)
         }
         
         const themeIdStr = String(feature.properties.themeId);
@@ -1166,8 +1211,7 @@ window.updateProjectSelectDropdown = function() {
     let html = '<option value="livre">🌐 Modo Livre (Sem Projeto)</option>';
     if (Array.isArray(window.userProjects)) {
         window.userProjects.forEach(proj => {
-            const totalCount = (proj.camadas_ids ? proj.camadas_ids.length : 0) + (proj.rasters_ids ? proj.rasters_ids.length : 0);
-            html += `<option value="${proj.id}">📁 ${proj.nome} (${totalCount})</option>`;
+            html += `<option value="${proj.id}">📁 ${proj.nome}</option>`;
         });
     }
     sel.innerHTML = html;
@@ -1198,7 +1242,7 @@ window.updateProjectActiveUI = function() {
     const totalItems = (window.activeWorkspaceThemes ? window.activeWorkspaceThemes.length : 0) + (window.activeWorkspaceRasters ? window.activeWorkspaceRasters.length : 0);
     const badgeEl = document.getElementById('project-active-badge');
     if (badgeEl) {
-        badgeEl.textContent = `${totalItems} ${totalItems === 1 ? 'item na mesa' : 'itens na mesa'}`;
+        badgeEl.textContent = `${totalItems} ${totalItems === 1 ? 'item vinculado' : 'itens vinculados'}`;
     }
 
     // Habilita / desabilita botões de editar e excluir projeto no card do Catálogo
@@ -1214,7 +1258,146 @@ window.updateProjectActiveUI = function() {
         btnDelete.classList.toggle('opacity-20', !isProjectActive);
         btnDelete.classList.toggle('cursor-not-allowed', !isProjectActive);
     }
+
+    if (typeof window.renderDrawerProjectsDropdown === 'function') {
+        window.renderDrawerProjectsDropdown();
+    }
 };
+
+window.openSideDrawer = function() {
+    const drawer = document.getElementById('side-drawer');
+    if (drawer) {
+        drawer.classList.remove('-translate-x-[120%]');
+        if (window.L && L.DomEvent) {
+            try {
+                L.DomEvent.disableClickPropagation(drawer);
+                L.DomEvent.disableScrollPropagation(drawer);
+            } catch(e) {}
+        }
+    }
+    const overlay = document.getElementById('drawer-overlay');
+    if (overlay) {
+        overlay.classList.add('hidden');
+    }
+};
+
+window.closeSideDrawer = function() {
+    const drawer = document.getElementById('side-drawer');
+    if (drawer) {
+        drawer.classList.add('-translate-x-[120%]');
+    }
+    const overlay = document.getElementById('drawer-overlay');
+    if (overlay) {
+        overlay.classList.add('hidden');
+    }
+    const dropdown = document.getElementById('drawer-projects-dropdown');
+    if (dropdown && !dropdown.classList.contains('hidden')) {
+        dropdown.classList.add('hidden');
+        const chevron = document.getElementById('drawer-project-chevron');
+        if (chevron) chevron.classList.remove('rotate-180');
+    }
+};
+
+window.toggleSideDrawer = function() {
+    const drawer = document.getElementById('side-drawer');
+    if (!drawer) return;
+    const isClosed = drawer.classList.contains('-translate-x-[120%]');
+    if (isClosed) {
+        window.openSideDrawer();
+    } else {
+        window.closeSideDrawer();
+    }
+};
+
+window.openEstatisticasObrasModal = function() {
+    if (window.spatialAnalyticsEngine && typeof window.spatialAnalyticsEngine.toggleMenu === 'function') {
+        window.spatialAnalyticsEngine.toggleMenu();
+    } else {
+        setTimeout(() => {
+            if (window.spatialAnalyticsEngine && typeof window.spatialAnalyticsEngine.toggleMenu === 'function') {
+                window.spatialAnalyticsEngine.toggleMenu();
+            }
+        }, 150);
+    }
+};
+
+window.toggleDrawerProjectsMenu = function(ev) {
+    if (ev) ev.stopPropagation();
+    const dropdown = document.getElementById('drawer-projects-dropdown');
+    const chevron = document.getElementById('drawer-project-chevron');
+    if (!dropdown) return;
+    const isHidden = dropdown.classList.contains('hidden');
+    if (isHidden) {
+        window.renderDrawerProjectsDropdown();
+        dropdown.classList.remove('hidden');
+        if (chevron) chevron.classList.add('rotate-180');
+    } else {
+        dropdown.classList.add('hidden');
+        if (chevron) chevron.classList.remove('rotate-180');
+    }
+};
+
+window.renderDrawerProjectsDropdown = function() {
+    const container = document.getElementById('drawer-projects-dropdown-items');
+    if (!container) return;
+    const isLivre = !window.activeProjectId || window.activeProjectId === 'livre';
+
+    let html = `
+        <button type="button" onclick="window.onSelectUserProject('livre'); window.toggleDrawerProjectsMenu();" class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-left transition-colors cursor-pointer ${isLivre ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold' : 'hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-medium'} text-xs">
+            <span class="truncate uppercase text-[11px] tracking-wide">MODO LIVRE (SEM PROJETO)</span>
+            ${isLivre ? '<span class="material-symbols-outlined text-[16px] text-amber-500 shrink-0 ml-2">check</span>' : ''}
+        </button>
+    `;
+
+    if (Array.isArray(window.userProjects) && window.userProjects.length > 0) {
+        window.userProjects.forEach(p => {
+            const isActive = window.activeProjectId === p.id;
+            html += `
+                <button type="button" onclick="window.onSelectUserProject('${p.id}'); window.toggleDrawerProjectsMenu();" class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-left transition-colors cursor-pointer ${isActive ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold' : 'hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-medium'} text-xs">
+                    <span class="truncate uppercase text-[11px] tracking-wide">${(p.nome || 'Projeto').toUpperCase()}</span>
+                    ${isActive ? '<span class="material-symbols-outlined text-[16px] text-amber-500 shrink-0 ml-2">check</span>' : ''}
+                </button>
+            `;
+        });
+    }
+
+    container.innerHTML = html;
+};
+
+// Toggle do Menu de Visualizações do Mapa no Cabeçalho (Alternar Mapa, Comparador, Street View)
+window.toggleMapViewsMenu = function(e) {
+    if (e) e.stopPropagation();
+    const menu = document.getElementById('map-views-dropdown');
+    if (!menu) return;
+    const isHidden = menu.classList.contains('hidden');
+    document.querySelectorAll('.app-dropdown-menu').forEach(m => m.classList.add('hidden'));
+    if (isHidden) {
+        menu.classList.remove('hidden');
+    } else {
+        menu.classList.add('hidden');
+    }
+};
+
+// Fecha o dropdown expansível de projetos e de visualizações do mapa se o usuário clicar fora
+document.addEventListener('click', (e) => {
+    const dropdown = document.getElementById('drawer-projects-dropdown');
+    const bar = document.getElementById('drawer-active-project-bar');
+    if (dropdown && !dropdown.classList.contains('hidden')) {
+        if (!dropdown.contains(e.target) && !bar.contains(e.target)) {
+            dropdown.classList.add('hidden');
+            const chevron = document.getElementById('drawer-project-chevron');
+            if (chevron) chevron.classList.remove('rotate-180');
+        }
+    }
+
+    const viewsMenu = document.getElementById('map-views-dropdown');
+    const viewsBtn = document.getElementById('btn-map-views-menu');
+    if (viewsMenu && !viewsMenu.classList.contains('hidden')) {
+        if (!viewsMenu.contains(e.target) && (!viewsBtn || !viewsBtn.contains(e.target))) {
+            viewsMenu.classList.add('hidden');
+        }
+    }
+});
 
 window.onSelectUserProject = async function(val) {
     const munId = typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : (sessionStorage.getItem('activeMunicipioId') || 'default');
@@ -2156,15 +2339,15 @@ function toggleThemeVisibility(themeId, inputEl) {
 }
 
 // Carrega propriedades completas de todas as feições de uma camada
-async function loadThemeProperties(themeId) {
+async function loadThemeProperties(themeId, forceReload = false) {
     if (typeof userCanOnTheme === 'function' && !userCanOnTheme(themeId, 'ver')) return;
     const theme = themes.find(t => t.id === themeId);
-    if (!theme || theme._propertiesFullyLoaded) return;
+    if (!theme || (theme._propertiesFullyLoaded && !forceReload)) return;
 
     let cached = null;
 
-    // 1. TENTA RECUPERAR DO CACHE PERSISTENTE INDEXED DB
-    if (window.GeoTurboDB && typeof window.GeoTurboDB.getThemeData === 'function') {
+    // 1. TENTA RECUPERAR DO CACHE PERSISTENTE INDEXED DB (ignora se forçar recarga)
+    if (!forceReload && window.GeoTurboDB && typeof window.GeoTurboDB.getThemeData === 'function') {
         try {
             cached = await window.GeoTurboDB.getThemeData(themeId);
         } catch(eCache) {
@@ -2233,8 +2416,8 @@ async function loadThemeProperties(themeId) {
         return; // Cache 100% válido e sincronizado!
     }
 
-    // Se o cache estava desatualizado (feições foram excluídas/criadas por outro usuário), limpa os dados antigos
-    if (shouldInvalidateCache) {
+    // Se o cache estava desatualizado ou forceReload ativo, limpa os dados antigos
+    if (shouldInvalidateCache || forceReload) {
         theme.features = [];
     }
 
@@ -2753,12 +2936,6 @@ async function zoomToFeature(fid) {
     loadAllFeaturesToMap();
     highlightFeature(fid, true);
   }, 300);
-
-  // Fechar menu lateral em telas menores
-  if (window.innerWidth < 768) {
-    document.getElementById('side-drawer').classList.add('-translate-x-[120%]');
-    document.getElementById('drawer-overlay').classList.add('hidden');
-  }
 }
 
 // Debounce para o executeSearch (evita rodar a cada tecla com 20k itens)
@@ -5794,15 +5971,56 @@ async function ensureAuthenticated() {
         return false;
     }
 
+    const authUser = data.session.user;
+    let userMetaNome = '';
+    if (authUser && authUser.user_metadata) {
+        const meta = authUser.user_metadata;
+        userMetaNome = (meta.nome || meta.nome_completo || meta.full_name || meta.name || '').trim();
+        if (!userMetaNome && (meta.given_name || meta.family_name)) {
+            userMetaNome = `${meta.given_name || ''} ${meta.family_name || ''}`.trim();
+        }
+    }
+    if (!userMetaNome && supabaseClient.auth && typeof supabaseClient.auth.getUser === 'function') {
+        try {
+            const { data: freshUserResp } = await supabaseClient.auth.getUser();
+            if (freshUserResp && freshUserResp.user && freshUserResp.user.user_metadata) {
+                const freshMeta = freshUserResp.user.user_metadata;
+                userMetaNome = (freshMeta.nome || freshMeta.nome_completo || freshMeta.full_name || freshMeta.name || '').trim();
+                if (!userMetaNome && (freshMeta.given_name || freshMeta.family_name)) {
+                    userMetaNome = `${freshMeta.given_name || ''} ${freshMeta.family_name || ''}`.trim();
+                }
+            }
+        } catch (eMeta) {}
+    }
+
     try {
         const { data: profile } = await supabaseClient
             .from('profiles')
             .select('*')
-            .eq('id', data.session.user.id)
+            .eq('id', authUser.id)
             .single();
-        currentUserProfile = profile || { id: data.session.user.id, nome: data.session.user.email, super_admin: false };
+        currentUserProfile = profile || { id: authUser.id, super_admin: false };
     } catch (e) {
-        currentUserProfile = { id: data.session.user.id, nome: data.session.user.email, super_admin: false };
+        currentUserProfile = { id: authUser.id, super_admin: false };
+    }
+
+    if (userMetaNome) {
+        currentUserProfile.nome_cadastro = userMetaNome;
+    }
+
+    const emailPrefix = (authUser.email || '').split('@')[0].toLowerCase();
+    const isProfileNomeEmail = !currentUserProfile.nome || 
+        currentUserProfile.nome.includes('@') || 
+        currentUserProfile.nome.toLowerCase() === (authUser.email || '').toLowerCase() ||
+        currentUserProfile.nome.toLowerCase().replace(/[._-]/g, '') === emailPrefix.replace(/[._-]/g, '');
+
+    if (userMetaNome && isProfileNomeEmail) {
+        currentUserProfile.nome = userMetaNome;
+        try {
+            supabaseClient.from('profiles').update({ nome: userMetaNome }).eq('id', authUser.id).then(() => {});
+        } catch (eSync) {}
+    } else if (!currentUserProfile.nome) {
+        currentUserProfile.nome = userMetaNome || authUser.email;
     }
     window.currentUserProfile = currentUserProfile;
 
@@ -5847,22 +6065,74 @@ async function ensureAuthenticated() {
         window.currentUserEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '';
     }
     window.currentUserProfile = currentUserProfile;
+    if (window.spatialAnalyticsEngine && typeof window.spatialAnalyticsEngine.updateBadge === 'function') {
+        window.spatialAnalyticsEngine.updateBadge();
+    }
+
+    // Formata o nome do município sempre seguido de sua UF em caixa alta (ex: CABEDELO-PB)
+    window.formatMunicipioComUF = function(nome, uf) {
+        if (!nome) return '';
+        let cleanNome = String(nome).trim();
+        let state = (uf || sessionStorage.getItem('municipio_ativo_uf') || '').trim().toUpperCase();
+
+        // Se o nome contiver hífen (ex: "Cabedelo - PB" ou "CABEDELO-PB")
+        const parts = cleanNome.split('-');
+        if (parts.length > 1) {
+            cleanNome = parts[0].trim();
+            if (!state) {
+                state = parts[1].trim().toUpperCase();
+            }
+        }
+
+        cleanNome = cleanNome.toUpperCase();
+        if (!state) state = 'PB';
+        return `${cleanNome}-${state}`;
+    };
 
     // Carrega dados e coordenadas geográficas do município ativo para centralização espacial dinâmica
     try {
         const { data: munData } = await supabaseClient
             .from('municipios')
-            .select('id, nome, latitude, longitude, zoom')
+            .select('id, nome, uf, latitude, longitude, zoom')
             .eq('id', activeMunicipioId)
             .maybeSingle();
         if (munData) {
             window.activeMunicipioData = munData;
+            if (munData.nome) {
+                sessionStorage.setItem('municipio_ativo_nome', munData.nome);
+                if (munData.uf) sessionStorage.setItem('municipio_ativo_uf', munData.uf);
+                const headerMunNameEl = document.getElementById('header-municipio-display-name');
+                if (headerMunNameEl) {
+                    headerMunNameEl.textContent = window.formatMunicipioComUF(munData.nome, munData.uf);
+                    headerMunNameEl.title = `${munData.nome}${munData.uf ? ' - ' + munData.uf : ''}`;
+                }
+            }
+            let targetCoords = null;
+            let targetZoom = munData.zoom || 15;
             if (munData.latitude && munData.longitude) {
-                const targetCoords = [munData.latitude, munData.longitude];
-                const targetZoom = munData.zoom || 15;
+                targetCoords = [munData.latitude, munData.longitude];
+            } else if (munData.nome) {
+                const cleanNorm = String(munData.nome).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[-_].*$/, '').trim();
+                if (CENTROS_URBANOS_MUNICIPIOS[cleanNorm]) {
+                    targetCoords = [CENTROS_URBANOS_MUNICIPIOS[cleanNorm].lat, CENTROS_URBANOS_MUNICIPIOS[cleanNorm].lng];
+                    targetZoom = CENTROS_URBANOS_MUNICIPIOS[cleanNorm].zoom || 15;
+                    // Persiste no banco com o usuário autenticado para garantir os dados
+                    try {
+                        supabaseClient.from('municipios').update({
+                            latitude: targetCoords[0],
+                            longitude: targetCoords[1],
+                            zoom: targetZoom
+                        }).eq('id', munData.id).then(() => {
+                            console.log(`[Município] Coordenadas urbanas de ${munData.nome} salvas no banco com sucesso.`);
+                        });
+                    } catch(eSaveCoord) {}
+                }
+            }
+
+            if (targetCoords) {
                 sessionStorage.setItem('municipio_ativo_coords', JSON.stringify({
-                    lat: munData.latitude,
-                    lng: munData.longitude,
+                    lat: targetCoords[0],
+                    lng: targetCoords[1],
                     zoom: targetZoom
                 }));
                 if (typeof map !== 'undefined' && map && typeof map.setView === 'function') {
@@ -5927,6 +6197,18 @@ function applyPermissionUIGating() {
         } else {
             adminSettingsBtn.classList.add('hidden');
             adminSettingsBtn.style.display = 'none';
+        }
+    }
+
+    // Botão de acesso ao Mapa Global na barra superior (visível apenas para Admins com acesso a mais de um município)
+    const btnGlobalMap = document.getElementById('btn-global-map');
+    if (btnGlobalMap) {
+        if (isAdmin && temMultiplosMunicipios) {
+            btnGlobalMap.classList.remove('hidden');
+            btnGlobalMap.style.display = 'flex';
+        } else {
+            btnGlobalMap.classList.add('hidden');
+            btnGlobalMap.style.display = 'none';
         }
     }
 
@@ -6234,12 +6516,50 @@ function applyCurrentUserToProfileModal() {
     const pfBadge = document.getElementById('profile-user-ponto-focal-badge');
 
     if (munEl) munEl.textContent = sessionStorage.getItem('municipio_ativo_nome') || '';
-    if (nameEl) nameEl.textContent = currentUserProfile.nome || 'Usuário';
+    const rawFullName = currentUserProfile.nome_cadastro || currentUserProfile.nome || '';
+    if (nameEl) nameEl.textContent = rawFullName || 'Usuário';
     const papelExibido = currentUserProfile.super_admin ? 'Administrador Geral' : (PAPEL_LABELS[currentMunicipioPapel] || currentMunicipioPapel || '—');
     if (roleEl) roleEl.textContent = papelExibido;
 
     const entNome = window.currentUserEntidade || currentUserProfile.entidade || 'Prefeitura Municipal';
     if (entEl) entEl.textContent = entNome;
+
+    // Formata primeiro e segundo nome com as iniciais maiúsculas e as demais minúsculas (conforme cadastro em NOME COMPLETO)
+    const formatUserFirstAndSecondName = (fullName) => {
+        if (!fullName) return '';
+        let cleanName = String(fullName).trim();
+        if (cleanName.includes('@')) {
+            cleanName = cleanName.split('@')[0];
+        }
+        // Converte pontuações, hifens e separadores em espaço
+        cleanName = cleanName.replace(/[._\-–—,;:/\\]/g, ' ');
+        const allWords = cleanName.split(/\s+/).filter(Boolean);
+        if (allWords.length === 0) return '';
+        if (allWords.length === 1) {
+            return allWords[0].charAt(0).toUpperCase() + allWords[0].slice(1).toLowerCase();
+        }
+
+        // Ignora preposições ao selecionar o 1º e 2º nome para evitar cortes como "João Da" ou "Maria De"
+        const preposicoes = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'd']);
+        let filteredWords = allWords.filter((w, idx) => idx === 0 || !preposicoes.has(w.toLowerCase()));
+        if (filteredWords.length < 2) {
+            filteredWords = allWords;
+        }
+
+        const selected = filteredWords.slice(0, 2);
+        return selected.map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+    };
+
+    const headerNameEl = document.getElementById('header-user-display-name');
+    const headerEntEl = document.getElementById('header-user-display-entidade');
+    if (headerNameEl) {
+        headerNameEl.textContent = formatUserFirstAndSecondName(rawFullName);
+        headerNameEl.title = rawFullName || '';
+    }
+    if (headerEntEl) {
+        headerEntEl.textContent = entNome || '';
+        headerEntEl.title = entNome || '';
+    }
 
     if (pfBadge) {
         if (currentUserProfile.ponto_focal) {
@@ -6252,6 +6572,8 @@ function applyCurrentUserToProfileModal() {
     // Visibilidade do botão de configurações do município no perfil (exclusivo para admins)
     const isSuperAdmin = !!(currentUserProfile && currentUserProfile.super_admin);
     const isAdmin = isSuperAdmin || currentMunicipioPapel === 'admin' || !!(currentUserProfile && currentUserProfile.entidade_admin);
+    const temMultiplosMunicipios = isSuperAdmin || (window.userTotalMunicipiosAprovados && window.userTotalMunicipiosAprovados > 1);
+
     const adminSettingsBtn = document.getElementById('profile-admin-settings-btn');
     if (adminSettingsBtn) {
         if (isAdmin) {
@@ -6263,10 +6585,231 @@ function applyCurrentUserToProfileModal() {
         }
     }
 
+    // Botão do Mapa Global (Globo) - Exclusivo para Admins com acesso a mais de um município
+    const btnGlobalMap = document.getElementById('btn-global-map');
+    if (btnGlobalMap) {
+        if (isAdmin && temMultiplosMunicipios) {
+            btnGlobalMap.classList.remove('hidden');
+            btnGlobalMap.style.display = 'flex';
+        } else {
+            btnGlobalMap.classList.add('hidden');
+            btnGlobalMap.style.display = 'none';
+        }
+    }
+
+    // Atualiza nome da Base Municipal no cabeçalho em caixa alta com UF (ex: CABEDELO-PB)
+    const rawMunNome = sessionStorage.getItem('municipio_ativo_nome') || (window.activeMunicipioData && window.activeMunicipioData.nome) || '';
+    const rawMunUf = sessionStorage.getItem('municipio_ativo_uf') || (window.activeMunicipioData && window.activeMunicipioData.uf) || '';
+    const headerMunNameEl = document.getElementById('header-municipio-display-name');
+    if (headerMunNameEl && rawMunNome) {
+        headerMunNameEl.textContent = (typeof window.formatMunicipioComUF === 'function')
+            ? window.formatMunicipioComUF(rawMunNome, rawMunUf)
+            : `${rawMunNome.split('-')[0].trim().toUpperCase()}-${(rawMunUf || 'PB').trim().toUpperCase()}`;
+        headerMunNameEl.title = `${rawMunNome}${rawMunUf ? ' - ' + rawMunUf : ''}`;
+    }
+
+    const viewNome = document.getElementById('perfil-view-nome');
+    const viewEmail = document.getElementById('perfil-view-email');
+    const viewEnt = document.getElementById('perfil-view-entidade');
+    const viewCargo = document.getElementById('perfil-view-cargo');
+
+    if (viewNome) viewNome.textContent = rawFullName || '—';
+    if (viewEmail) viewEmail.textContent = (currentUserProfile && currentUserProfile.email) || sessionStorage.getItem('user_email') || '—';
+    if (viewEnt) viewEnt.textContent = entNome;
+    if (viewCargo) viewCargo.textContent = (currentUserProfile && currentUserProfile.cargo) || 'Não informado';
+
+    const themeSelect = document.getElementById('profile-theme-select');
+    if (themeSelect) themeSelect.value = localStorage.getItem('constructive_theme') || 'Claro';
+
     // Aplica a logo do ente/município nas fotos de perfil
     const munId = (typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : null) || (window.activeMunicipioId) || sessionStorage.getItem('municipio_ativo');
     resolveAndApplyUserEntityLogo(entNome, munId);
 }
+
+// Funções para Edição Unificada do Perfil (Nome, Entidade, Cargo)
+window.isEntidadeMunicipal = function(entidade) {
+    if (!entidade) return false;
+    const e = entidade.toLowerCase().trim();
+    return e.includes('prefeitura') || e.includes('municipal') || e.includes('município') || e.includes('municipio');
+};
+
+let cachedEntidadesPadrao = null;
+window.getEntidadesPadrao = async function() {
+    if (cachedEntidadesPadrao && cachedEntidadesPadrao.length > 0) return cachedEntidadesPadrao;
+    try {
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            const { data, error } = await supabaseClient
+                .from('entidades_padrao')
+                .select('id, nome, sigla, tipo, ativo')
+                .eq('ativo', true)
+                .order('created_at');
+            if (!error && data && data.length > 0) {
+                cachedEntidadesPadrao = data;
+                return cachedEntidadesPadrao;
+            }
+        }
+    } catch (e) {
+        console.warn('Erro ao consultar entidades_padrao:', e);
+    }
+    cachedEntidadesPadrao = [
+        { id: '1', nome: 'Prefeitura Municipal', sigla: 'Município', tipo: 'municipal', ativo: true },
+        { id: '2', nome: 'Ministério Público Federal', sigla: 'MPF', tipo: 'externo', ativo: true },
+        { id: '3', nome: 'Polícia Federal', sigla: 'PF', tipo: 'externo', ativo: true },
+        { id: '4', nome: 'Secretaria do Patrimônio da União', sigla: 'SPU', tipo: 'externo', ativo: true }
+    ];
+    return cachedEntidadesPadrao;
+};
+
+window.toggleEditPerfilModal = async function() {
+    const viewDiv = document.getElementById('perfil-dados-view');
+    const editDiv = document.getElementById('perfil-dados-edit');
+    if (!editDiv || !viewDiv) return;
+    const isHidden = editDiv.classList.contains('hidden');
+    if (isHidden) {
+        const ents = await getEntidadesPadrao();
+        const entSelect = document.getElementById('perfil-edit-entidade');
+        const userEnt = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || window.currentUserEntidade || '';
+        
+        if (entSelect) {
+            let optionsHtml = ents.map(e => {
+                const label = e.sigla ? `${e.nome} (${e.sigla})` : e.nome;
+                return `<option value="${e.nome}" data-tipo="${e.tipo}">${label}</option>`;
+            }).join('');
+            
+            if (userEnt && !ents.some(e => e.nome.toLowerCase().trim() === userEnt.toLowerCase().trim())) {
+                optionsHtml = `<option value="${userEnt}" data-tipo="${isEntidadeMunicipal(userEnt) ? 'municipal' : 'externo'}">${userEnt}</option>` + optionsHtml;
+            }
+            entSelect.innerHTML = optionsHtml;
+            entSelect.value = userEnt || (ents[0]?.nome || 'Prefeitura Municipal');
+            onPerfilEntidadeChange();
+        }
+
+        const nomeInput = document.getElementById('perfil-edit-nome');
+        if (nomeInput) {
+            nomeInput.value = (currentUserProfile && (currentUserProfile.nome_cadastro || currentUserProfile.nome)) || '';
+        }
+        const cargoInput = document.getElementById('perfil-edit-cargo');
+        if (cargoInput) {
+            cargoInput.value = (currentUserProfile && currentUserProfile.cargo) || '';
+        }
+
+        viewDiv.classList.add('hidden');
+        editDiv.classList.remove('hidden');
+        const txt = document.getElementById('btn-toggle-edit-perfil-text');
+        if (txt) txt.textContent = 'Fechar';
+    } else {
+        cancelEditPerfilModal();
+    }
+};
+
+window.onPerfilEntidadeChange = function() {
+    const entSelect = document.getElementById('perfil-edit-entidade');
+    const badge = document.getElementById('perfil-edit-tipo-badge');
+    if (!entSelect || !badge) return;
+    const opt = entSelect.options[entSelect.selectedIndex];
+    const tipo = opt ? opt.getAttribute('data-tipo') : (isEntidadeMunicipal(entSelect.value) ? 'municipal' : 'externo');
+    if (tipo === 'municipal') {
+        badge.textContent = 'Municipal';
+        badge.className = 'text-[9.5px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30';
+    } else {
+        badge.textContent = 'Externo';
+        badge.className = 'text-[9.5px] font-bold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30';
+    }
+};
+
+window.cancelEditPerfilModal = function() {
+    const viewDiv = document.getElementById('perfil-dados-view');
+    const editDiv = document.getElementById('perfil-dados-edit');
+    if (viewDiv) viewDiv.classList.remove('hidden');
+    if (editDiv) editDiv.classList.add('hidden');
+    const txt = document.getElementById('btn-toggle-edit-perfil-text');
+    if (txt) txt.textContent = 'Editar';
+};
+
+window.salvarPerfilModal = async function() {
+    const nomeInput = document.getElementById('perfil-edit-nome');
+    const entSelect = document.getElementById('perfil-edit-entidade');
+    const cargoInput = document.getElementById('perfil-edit-cargo');
+
+    const novoNome = nomeInput ? nomeInput.value.trim() : '';
+    const novaEntidade = entSelect ? entSelect.value.trim() : '';
+    const novoCargo = cargoInput ? cargoInput.value.trim() : '';
+
+    if (!novoNome) {
+        alert('Por favor, informe seu Nome Completo.');
+        return;
+    }
+    if (!novaEntidade) {
+        alert('Por favor, selecione sua Entidade / Órgão.');
+        return;
+    }
+
+    const saveBtn = document.getElementById('btn-salvar-perfil');
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="animate-spin material-symbols-outlined text-[14px]">progress_activity</span> Salvando...';
+    }
+
+    try {
+        const { data: sessionData } = await supabaseClient.auth.getSession();
+        if (!sessionData || !sessionData.session) return;
+        const uid = sessionData.session.user.id;
+
+        const { error } = await supabaseClient.from('profiles').update({
+            nome: novoNome,
+            entidade: novaEntidade,
+            cargo: novoCargo || null
+        }).eq('id', uid);
+
+        if (error) {
+            alert('Erro ao atualizar perfil: ' + error.message);
+            return;
+        }
+
+        if (supabaseClient.auth && typeof supabaseClient.auth.updateUser === 'function') {
+            try {
+                await supabaseClient.auth.updateUser({
+                    data: {
+                        nome: novoNome,
+                        entidade: novaEntidade,
+                        cargo: novoCargo || null
+                    }
+                });
+            } catch(eAuth) {
+                console.warn('Falha ao atualizar user_metadata:', eAuth);
+            }
+        }
+
+        const munId = (typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : null) || sessionStorage.getItem('municipio_ativo');
+        if (munId) {
+            try {
+                await supabaseClient.from('municipio_membros').update({
+                    entidade: novaEntidade,
+                    cargo: novoCargo || null
+                }).eq('user_id', uid).eq('municipio_id', munId);
+            } catch(eMem) {}
+        }
+
+        if (currentUserProfile) {
+            currentUserProfile.nome = novoNome;
+            currentUserProfile.nome_cadastro = novoNome;
+            currentUserProfile.entidade = novaEntidade;
+            currentUserProfile.cargo = novoCargo;
+        }
+        window.currentUserEntidade = novaEntidade;
+
+        applyCurrentUserToProfileModal();
+        cancelEditPerfilModal();
+        alert('✅ Dados do perfil atualizados com sucesso!');
+    } catch(err) {
+        alert('Erro ao salvar alterações: ' + (err.message || err));
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<span class="material-symbols-outlined text-[14px]">check</span> Salvar';
+        }
+    }
+};
 
 window.handleLogout = async function() {
     if (supabaseClient) {
@@ -7057,6 +7600,18 @@ window.openLayerStatsMenu = function(themeId) {
 
     renderLayerStatsMenuItems(themeId);
 
+    // Dispara recarga assíncrona para garantir dados frescos do Supabase
+    if (typeof loadThemeProperties === 'function') {
+        loadThemeProperties(themeId, true).then(() => {
+            if (window.activeLayerStatsThemeId === themeId) {
+                renderLayerStatsMenuItems(themeId);
+                if (window.activeLayerStatIndex !== null && window.activeLayerStatIndex !== undefined) {
+                    openStatsDashboard(themeId, window.activeLayerStatIndex);
+                }
+            }
+        }).catch(e => console.warn('Erro ao atualizar estatísticas em segundo plano:', e));
+    }
+
     // Posicionamento no canto superior direito (top: 10px, right: 10px)
     menu.style.top = '10px';
     menu.style.right = '10px';
@@ -7150,6 +7705,27 @@ window.handleStatToggle = function(themeId, chartIndex, checkbox) {
         selectLayerStat(themeId, chartIndex);
     } else {
         closeStatsDashboard();
+    }
+};
+
+window.refreshActiveLayerStats = async function() {
+    const themeId = window.activeLayerStatsThemeId;
+    if (!themeId) return;
+    const btn = document.getElementById('layer-stats-refresh-btn');
+    const icon = btn ? btn.querySelector('span') : null;
+    if (icon) icon.classList.add('animate-spin');
+    try {
+        if (typeof loadThemeProperties === 'function') {
+            await loadThemeProperties(themeId, true);
+        }
+        renderLayerStatsMenuItems(themeId);
+        if (window.activeLayerStatIndex !== null && window.activeLayerStatIndex !== undefined) {
+            await openStatsDashboard(themeId, window.activeLayerStatIndex);
+        }
+    } catch(e) {
+        console.error('Erro ao recarregar estatísticas:', e);
+    } finally {
+        if (icon) icon.classList.remove('animate-spin');
     }
 };
 
@@ -7266,8 +7842,8 @@ async function openStatsDashboard(themeId, specificIndex) {
         }
     }
 
-    if (!theme._propertiesFullyLoaded && typeof loadThemeProperties === 'function') {
-        await loadThemeProperties(theme.id);
+    if (typeof loadThemeProperties === 'function') {
+        await loadThemeProperties(theme.id, true);
     }
     
     const features = theme.features || [];
@@ -9608,10 +10184,12 @@ window.saveThemeOrRasterEntity = async function() {
 };
 
 window.focusOnThemeCard = function(themeId) {
-    const drawer = document.getElementById('side-drawer');
-    const overlay = document.getElementById('drawer-overlay');
-    if (drawer) drawer.classList.remove('-translate-x-[120%]');
-    if (overlay) overlay.classList.remove('hidden');
+    if (typeof window.openSideDrawer === 'function') {
+        window.openSideDrawer();
+    } else {
+        const drawer = document.getElementById('side-drawer');
+        if (drawer) drawer.classList.remove('-translate-x-[120%]');
+    }
     
     setTimeout(() => {
         const cardEl = document.getElementById('theme-card-' + themeId);
@@ -9633,9 +10211,10 @@ window.updateSharedLayersBadge = function() {
 };
 
 window.openSharedLayersCatalog = function() {
-    window.selectedSharedEntityFilter = 'Todos';
-    const searchInput = document.getElementById('shared-layers-search');
-    if (searchInput) searchInput.value = '';
+    const projectItemsCount = (window.activeWorkspaceThemes?.length || 0) + (window.activeWorkspaceRasters?.length || 0);
+    if (!window.selectedSharedEntityFilter || window.selectedSharedEntityFilter === 'Todos') {
+        window.selectedSharedEntityFilter = projectItemsCount > 0 ? 'deste-projeto' : 'Município';
+    }
     const modal = document.getElementById('shared-layers-modal');
     if (modal) {
         modal.classList.remove('hidden');
@@ -9693,11 +10272,11 @@ window.closeSharedLayersCatalog = function() {
 
 window.selectSharedEntityFilter = function(sigla) {
     window.selectedSharedEntityFilter = sigla;
-    renderSharedLayersCatalog(document.getElementById('shared-layers-search')?.value || '');
+    renderSharedLayersCatalog();
 };
 
 window.onFilterSharedLayers = function(query) {
-    renderSharedLayersCatalog(query);
+    renderSharedLayersCatalog();
 };
 
 window.toggleSharedAccordion = function(selectedIndex) {
@@ -9728,13 +10307,12 @@ window.toggleSharedAccordion = function(selectedIndex) {
     }
 };
 
-window.renderSharedLayersCatalog = function(searchQuery = '') {
+window.renderSharedLayersCatalog = function() {
     const container = document.getElementById('shared-layers-accordion-list') || document.getElementById('shared-layers-accordion');
     if (!container) return;
 
     const userEntidade = (window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').trim();
     const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
-    const q = (searchQuery || '').toLowerCase().trim();
 
     // Agrupa dados elegíveis para compartilhamento por Entidade (temas vetoriais e ortofotos)
     const groups = {};
@@ -9747,10 +10325,6 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
         if (!isCompartilhada) return;
 
         if (typeof userCanOnTheme === 'function' && !userCanOnTheme(t.id, 'ver')) {
-            return;
-        }
-
-        if (q && !t.name.toLowerCase().includes(q) && !tEntidade.toLowerCase().includes(q)) {
             return;
         }
 
@@ -9781,10 +10355,6 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
         }
         if (!canSeeRaster) return;
 
-        if (q && !r.nome.toLowerCase().includes(q) && !rEntidade.toLowerCase().includes(q)) {
-            return;
-        }
-
         const groupKey = rEntidade || 'Geral / Pública';
         if (!groups[groupKey]) groups[groupKey] = { themes: [], rasters: [] };
         groups[groupKey].rasters.push(r);
@@ -9810,11 +10380,13 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
     }
 
     const minhaSigla = getEntitySigla(userEntidade);
-    if (!window.selectedSharedEntityFilter) {
-        window.selectedSharedEntityFilter = 'Todos';
-    }
 
-    // Calcula contagem de itens por sigla
+    // Contagem de itens no projeto ativo atual
+    const projectThemes = (themes || []).filter(t => Array.isArray(window.activeWorkspaceThemes) && window.activeWorkspaceThemes.includes(t.id));
+    const projectRasters = (allRasters || []).filter(r => Array.isArray(window.activeWorkspaceRasters) && window.activeWorkspaceRasters.includes(r.id));
+    const projectItemsCount = projectThemes.length + projectRasters.length;
+
+    // Calcula contagem de itens por sigla de entidade
     const countsBySigla = {};
     Object.entries(groups).forEach(([entidadeName, groupObj]) => {
         const s = getEntitySigla(entidadeName);
@@ -9822,39 +10394,50 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
         countsBySigla[s] = (countsBySigla[s] || 0) + count;
     });
 
-    // Atualiza o contador e ícone de disponíveis no cabeçalho do modal
-    const totalCountEl = document.getElementById('shared-layers-total-count');
-    if (totalCountEl) {
-        totalCountEl.innerHTML = `
-            <span class="material-symbols-outlined text-[13px]">layers</span>
-            <span>${totalEligible} ${totalEligible === 1 ? 'disponível' : 'disponíveis'}</span>
-        `;
+    if (!window.selectedSharedEntityFilter || window.selectedSharedEntityFilter === 'Todos') {
+        window.selectedSharedEntityFilter = projectItemsCount > 0 ? 'deste-projeto' : 'Município';
     }
-
-    // 4. Renderiza a Barra Horizontal de Entidades
     const toggleContainer = document.getElementById('shared-layers-entity-toggle');
     if (toggleContainer) {
+        const activeProjObj = window.activeProjectId ? (window.userProjects || []).find(p => p.id === window.activeProjectId) : null;
+        const projectTabLabel = activeProjObj ? activeProjObj.nome : 'Modo Livre (Sem Projeto)';
+
         const tabsList = [
+            { sigla: 'deste-projeto', label: projectTabLabel, icone: 'folder_special', count: projectItemsCount, isProjectTab: true },
             { sigla: 'Município', label: 'Município', icone: 'location_city', count: countsBySigla['Município'] || 0, isLocal: minhaSigla === 'Município' },
             { sigla: 'MPF', label: 'MPF', icone: 'gavel', count: countsBySigla['MPF'] || 0, isLocal: minhaSigla === 'MPF' },
             { sigla: 'SPU', label: 'SPU', icone: 'account_balance', count: countsBySigla['SPU'] || 0, isLocal: minhaSigla === 'SPU' },
-            { sigla: 'PF', label: 'PF', icone: 'security', count: countsBySigla['PF'] || 0, isLocal: minhaSigla === 'PF' },
-            { sigla: 'Todos', label: 'Todos', icone: 'apps', count: totalEligible, isLocal: false }
+            { sigla: 'PF', label: 'PF', icone: 'security', count: countsBySigla['PF'] || 0, isLocal: minhaSigla === 'PF' }
         ];
 
         toggleContainer.innerHTML = tabsList.map(tab => {
             const isActive = (window.selectedSharedEntityFilter === tab.sigla);
 
-            let activeClass = "bg-white dark:bg-slate-900 text-sky-600 dark:text-sky-400 shadow-sm border border-slate-200/80 dark:border-slate-700 font-bold";
-            let inactiveClass = "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 font-bold hover:bg-slate-200/50 dark:hover:bg-slate-700/50";
+            let activeClass = "bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 shadow-sm border border-slate-300 dark:border-slate-700 font-bold";
+            let inactiveClass = "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 font-medium hover:bg-slate-200/50 dark:hover:bg-slate-700/50";
 
-            if (tab.isLocal && isActive) {
-                activeClass = "bg-gradient-to-r from-sky-600 to-indigo-600 text-white shadow-md shadow-sky-500/25 ring-2 ring-sky-400/40 font-extrabold";
+            // Destaque visual diferenciado mesmo quando inativas para a aba do Projeto e do Ente do Usuário
+            if (tab.isProjectTab) {
+                if (isActive) {
+                    activeClass = "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-md shadow-indigo-500/30 ring-2 ring-indigo-400/50 font-extrabold";
+                } else {
+                    activeClass = "";
+                    inactiveClass = "bg-indigo-50/90 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-2 border-indigo-400/80 dark:border-indigo-600/80 font-extrabold shadow-xs hover:bg-indigo-100/80 dark:hover:bg-indigo-900/60";
+                }
+            } else if (tab.isLocal) {
+                if (isActive) {
+                    activeClass = "bg-gradient-to-r from-sky-600 to-indigo-600 text-white shadow-md shadow-sky-500/30 ring-2 ring-sky-400/50 font-extrabold";
+                } else {
+                    activeClass = "";
+                    inactiveClass = "bg-sky-50/90 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border-2 border-sky-400/80 dark:border-sky-600/80 font-extrabold shadow-xs hover:bg-sky-100/80 dark:hover:bg-sky-900/60";
+                }
             }
 
             let badgeHtml = '';
-            if (tab.isLocal) {
-                badgeHtml = `<span class="ml-1 px-1.5 py-0.2 text-[9px] font-extrabold rounded-full ${isActive ? 'bg-white/25 text-white' : 'bg-sky-200 dark:bg-sky-800 text-sky-800 dark:text-sky-200'}">Minha Entidade</span>`;
+            if (tab.isProjectTab) {
+                badgeHtml = `<span class="ml-1 px-1.5 py-0.2 text-[9px] font-extrabold rounded-full ${isActive ? 'bg-white/25 text-white' : 'bg-indigo-200 dark:bg-indigo-900/80 text-indigo-800 dark:text-indigo-200'}">${tab.count}</span>`;
+            } else if (tab.isLocal) {
+                badgeHtml = `<span class="ml-1 px-1.5 py-0.2 text-[9px] font-extrabold rounded-full ${isActive ? 'bg-white/25 text-white' : 'bg-sky-200 dark:bg-sky-900/80 text-sky-800 dark:text-sky-200'}">Minha Entidade</span>`;
             } else if (tab.count > 0) {
                 badgeHtml = `<span class="ml-1 px-1.5 py-0.2 text-[9px] font-bold rounded-full ${isActive ? 'bg-sky-100 dark:bg-sky-900/60 text-sky-700 dark:text-sky-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}">${tab.count}</span>`;
             }
@@ -9863,7 +10446,7 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
                 <button type="button" 
                     onclick="window.selectSharedEntityFilter('${tab.sigla}')" 
                     class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap select-none ${isActive ? activeClass : inactiveClass}"
-                    title="Filtrar por ${tab.label}">
+                    title="Exibir ${tab.label}">
                     <span class="material-symbols-outlined text-[16px]">${tab.icone}</span>
                     <span>${tab.label}</span>
                     ${badgeHtml}
@@ -9872,25 +10455,113 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
         }).join('');
     }
 
-    if (totalEligible === 0) {
-        container.innerHTML = `
-            <div class="flex flex-col items-center justify-center py-12 text-center text-slate-400">
-                <span class="material-symbols-outlined text-[44px] text-slate-500 mb-2">folder_off</span>
-                <p class="text-sm font-semibold">Nenhuma camada compartilhada encontrada.</p>
-                <p class="text-xs text-slate-500 mt-1 max-w-sm">
-                    ${q ? 'Nenhum resultado corresponde à sua pesquisa.' : 'As camadas criadas por outras entidades aparecerão organizadas aqui para consulta.'}
-                </p>
+    // 5. RENDERIZAÇÃO DO CONTEÚDO
+
+    // CENÁRIO A: ABA DO PROJETO CRIADO SELECIONADA
+    if (window.selectedSharedEntityFilter === 'deste-projeto') {
+        const activeProjObj = window.activeProjectId ? (window.userProjects || []).find(p => p.id === window.activeProjectId) : null;
+        const projNome = activeProjObj ? activeProjObj.nome : 'Modo Livre (Sem Projeto)';
+
+        if (projectItemsCount === 0) {
+            container.innerHTML = `
+                <div class="flex flex-col items-center justify-center py-12 px-4 text-center">
+                    <div class="w-14 h-14 rounded-2xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center mb-3 border border-indigo-500/20 shadow-2xs">
+                        <span class="material-symbols-outlined text-[32px]">folder_open</span>
+                    </div>
+                    <h4 class="text-sm font-bold text-slate-800 dark:text-slate-100">Nenhum item associado ao projeto "${projNome}"</h4>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md leading-relaxed">
+                        Navegue pelas abas ao lado (<b>Município</b>, <b>MPF</b>, <b>SPU</b>, <b>PF</b>) e ative o switch nas camadas e ortofotos que desejar incluir neste projeto.
+                    </p>
+                </div>
+            `;
+            return;
+        }
+
+        let projHtml = `
+            <div class="p-3 bg-indigo-50/70 dark:bg-indigo-950/30 rounded-xl border border-indigo-200/60 dark:border-indigo-800/50 flex items-center justify-between gap-3 mb-1">
+                <div class="flex items-center gap-2.5">
+                    <span class="material-symbols-outlined text-[18px] text-indigo-600 dark:text-indigo-400">inventory_2</span>
+                    <span class="text-xs font-bold text-slate-800 dark:text-slate-200">Itens vinculados a: <b class="text-indigo-600 dark:text-indigo-400">${projNome}</b></span>
+                </div>
+                <span class="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-600 text-white shadow-2xs">${projectItemsCount} ${projectItemsCount === 1 ? 'item' : 'itens'}</span>
             </div>
+            <div class="flex flex-col gap-2.5">
         `;
+
+        // Renderiza camadas vetoriais do projeto
+        if (projectThemes.length > 0) {
+            projectThemes.forEach(t => {
+                const tEntidade = ((t.metadata && t.metadata.entidade) || t.entidade || 'Município').trim();
+                const tSigla = getEntitySigla(tEntidade);
+                const count = Array.isArray(t.features) ? t.features.length : 0;
+                projHtml += `
+                    <div class="flex items-center justify-between p-3 rounded-xl border border-emerald-500/30 bg-white/90 dark:bg-slate-800/90 hover:border-emerald-500/60 shadow-2xs transition-all">
+                        <div class="flex items-center gap-3 min-w-0 pr-2">
+                            <div class="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center text-white shadow-md" style="background-color: ${t.color || '#0284c7'};">
+                                <span class="material-symbols-outlined text-[20px]">${t.icon || 'layers'}</span>
+                            </div>
+                            <div class="flex flex-col min-w-0">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${t.name}</span>
+                                    <span class="px-1.5 py-0.2 rounded text-[9.5px] font-extrabold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30">${tSigla}</span>
+                                </div>
+                                <span class="text-[10px] text-slate-500 dark:text-slate-400">Camada Vetorial · ${count} registro${count !== 1 ? 's' : ''} · ${t.tipo_geometria || t.geometryType || 'Polígono'}</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2 shrink-0">
+                            <button type="button" onclick="toggleSharedLayer('${t.id}')" class="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs" title="Remover deste projeto">
+                                <span class="material-symbols-outlined text-[16px]">remove_circle</span>
+                                <span>Remover</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // Renderiza ortofotos do projeto
+        if (projectRasters.length > 0) {
+            projectRasters.forEach(r => {
+                const rEntidade = (r.entidade || 'Prefeitura Municipal').trim();
+                const rSigla = getEntitySigla(rEntidade);
+                let rDate = '';
+                if (r.data_imagem) rDate = r.data_imagem.split('-').reverse().join('/');
+                projHtml += `
+                    <div class="flex items-center justify-between p-3 rounded-xl border border-emerald-500/30 bg-white/90 dark:bg-slate-800/90 hover:border-emerald-500/60 shadow-2xs transition-all">
+                        <div class="flex items-center gap-3 min-w-0 pr-2">
+                            <div class="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center text-emerald-500 bg-emerald-500/15 shadow-md border border-emerald-500/30">
+                                <span class="material-symbols-outlined text-[20px]">satellite_alt</span>
+                            </div>
+                            <div class="flex flex-col min-w-0">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${r.nome}</span>
+                                    <span class="px-1.5 py-0.2 rounded text-[9.5px] font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">${rSigla}</span>
+                                    ${rDate ? `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">${rDate}</span>` : ''}
+                                </div>
+                                <span class="text-[10px] text-slate-500 dark:text-slate-400">Ortofoto · Imagem Aérea</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2 shrink-0">
+                            <button type="button" onclick="toggleSharedRaster('${r.id}')" class="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs" title="Remover deste projeto">
+                                <span class="material-symbols-outlined text-[16px]">remove_circle</span>
+                                <span>Remover</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        projHtml += `</div>`;
+        container.innerHTML = projHtml;
         return;
     }
 
-    // 5. Filtra grupos conforme a aba de Entidade selecionada
+    // CENÁRIO B: ABA DE UMA ENTIDADE SELECIONADA (Município, MPF, SPU, PF)
     const allGroupKeys = Object.keys(groups).sort();
     const groupKeys = allGroupKeys.filter(entidadeName => {
-        if (!window.selectedSharedEntityFilter || window.selectedSharedEntityFilter === 'Todos') {
-            return true;
-        }
         const s = getEntitySigla(entidadeName);
         return s === window.selectedSharedEntityFilter;
     });
@@ -9910,8 +10581,6 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
     }
 
     let html = '';
-    const isFilteredByEntity = (window.selectedSharedEntityFilter && window.selectedSharedEntityFilter !== 'Todos');
-
     groupKeys.forEach((entidadeName, index) => {
         const group = groups[entidadeName];
         const groupThemes = group.themes || [];
@@ -9923,13 +10592,12 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
         const meta = getEntityMeta(entidadeName);
         const isMinhaEntidade = (groupSigla === minhaSigla);
 
-        // Conta quantos itens deste grupo estão adicionados à mesa
         const activeThemesInGroup = groupThemes.filter(t => Array.isArray(window.activeWorkspaceThemes) && window.activeWorkspaceThemes.includes(t.id)).length;
         const activeRastersInGroup = groupRasters.filter(r => Array.isArray(window.activeWorkspaceRasters) && window.activeWorkspaceRasters.includes(r.id)).length;
         const totalActiveInGroup = activeThemesInGroup + activeRastersInGroup;
 
-        // O primeiro grupo abre por padrão (ou o filtrado)
-        const isOpenByDefault = (isFilteredByEntity || index === 0);
+        // Por estar filtrado na aba da entidade, sempre abre o conteúdo
+        const isOpenByDefault = true;
 
         html += `
             <div class="shared-accordion-card rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 backdrop-blur-md overflow-hidden transition-all shadow-sm">
@@ -9952,7 +10620,7 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
                             <div class="flex items-center gap-2 text-[10.5px] text-slate-500 dark:text-slate-400">
                                 <span>${groupTotal} item${groupTotal !== 1 ? 's' : ''} (${groupThemes.length} vetoriais · ${groupRasters.length} ortofotos)</span>
                                 ${totalActiveInGroup > 0 ? `
-                                    <span class="text-cyan-500 dark:text-cyan-400 font-bold">· ${totalActiveInGroup} na mesa</span>
+                                    <span class="text-cyan-500 dark:text-cyan-400 font-bold">· ${totalActiveInGroup} no projeto</span>
                                 ` : ''}
                             </div>
                         </div>
@@ -9965,7 +10633,7 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
 
                 <!-- Corpo do Acordeão -->
                 <div id="shared-accordion-group-${index}" class="shared-accordion-body px-3 pb-3 pt-1 border-t border-slate-100 dark:border-slate-800/80 space-y-2 ${isOpenByDefault ? '' : 'hidden'}">
-                    <!-- Camadas Vetoriais da Entidade -->
+                    <!-- Camadas Vetoriais da Entidade (Ativador/Desativador Switch) -->
                     ${groupThemes.map(t => {
                         const isActive = Array.isArray(window.activeWorkspaceThemes) && window.activeWorkspaceThemes.includes(t.id);
                         const count = Array.isArray(t.features) ? t.features.length : 0;
@@ -9982,19 +10650,19 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
                                 </div>
 
                                 <div class="flex items-center gap-3 shrink-0">
-                                    <!-- Switch iOS Neon para Adicionar à Mesa / Projeto -->
-                                    <label class="relative inline-flex items-center cursor-pointer shrink-0" title="${isActive ? 'Remover da Mesa' : 'Inserir na Mesa / Projeto'}">
+                                    <!-- Ativador/Desativador Switch iOS Neon -->
+                                    <label class="relative inline-flex items-center cursor-pointer shrink-0" title="${isActive ? 'Remover deste projeto' : 'Adicionar a este projeto'}">
                                         <input type="checkbox" id="shared-toggle-${t.id}" class="sr-only peer" ${isActive ? 'checked' : ''} onchange="toggleSharedLayer('${t.id}', this)">
-                                        <div id="shared-toggle-bg-${t.id}" class="w-11 h-6 bg-slate-700/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all shadow-inner" style="${isActive ? `background-color: ${t.color || '#0284c7'}; box-shadow: 0 0 12px ${t.color || '#0284c7'}90;` : ''}"></div>
+                                        <div id="shared-toggle-bg-${t.id}" class="w-11 h-6 bg-slate-300 dark:bg-slate-700/80 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all shadow-inner" style="${isActive ? `background-color: ${t.color || '#0284c7'}; box-shadow: 0 0 12px ${t.color || '#0284c7'}90;` : ''}"></div>
                                     </label>
                                 </div>
                             </div>
                         `;
                     }).join('')}
 
-                    <!-- Ortofotos / Imagens Aéreas da Entidade -->
+                    <!-- Ortofotos / Imagens Aéreas da Entidade (Ativador/Desativador Switch) -->
                     ${groupRasters.length > 0 ? `
-                        <div class="mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/50 flex flex-col gap-2">
+                        <div class="mt-3 pt-2.5 border-t border-slate-200/60 dark:border-slate-700/50 flex flex-col gap-2">
                             <span class="text-[10.5px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 px-1">
                                 <span class="material-symbols-outlined text-[15px]">satellite_alt</span>
                                 Ortofotos / Imagens Aéreas (${groupRasters.length})
@@ -10012,6 +10680,7 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
                                             <div class="flex flex-col min-w-0">
                                                 <div class="flex items-center gap-2 flex-wrap">
                                                     <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${r.nome}</span>
+                                                    <span class="px-1.5 py-0.2 rounded text-[9.5px] font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">${groupSigla}</span>
                                                     ${rDate ? `<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">${rDate}</span>` : ''}
                                                 </div>
                                                 <span class="text-[10px] text-slate-500 dark:text-slate-400">Ortofoto · ${r.tipo === 'xyz_tiles' ? 'XYZ Tiles' : 'GeoTIFF'}</span>
@@ -10019,9 +10688,10 @@ window.renderSharedLayersCatalog = function(searchQuery = '') {
                                         </div>
 
                                         <div class="flex items-center gap-3 shrink-0">
-                                            <label class="relative inline-flex items-center cursor-pointer shrink-0" title="${isRasterActive ? 'Remover da Mesa' : 'Inserir na Mesa / Projeto'}">
+                                            <!-- Ativador/Desativador Switch iOS Neon para Ortofoto -->
+                                            <label class="relative inline-flex items-center cursor-pointer shrink-0" title="${isRasterActive ? 'Remover deste projeto' : 'Adicionar a este projeto'}">
                                                 <input type="checkbox" id="shared-toggle-raster-${r.id}" class="sr-only peer" ${isRasterActive ? 'checked' : ''} onchange="toggleSharedRaster('${r.id}', this)">
-                                                <div id="shared-toggle-raster-bg-${r.id}" class="w-11 h-6 bg-slate-700/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all shadow-inner" style="${isRasterActive ? 'background-color: #10b981; box-shadow: 0 0 12px #10b98190;' : ''}"></div>
+                                                <div id="shared-toggle-raster-bg-${r.id}" class="w-11 h-6 bg-slate-300 dark:bg-slate-700/80 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all shadow-inner" style="${isRasterActive ? 'background-color: #10b981; box-shadow: 0 0 12px #10b98190;' : ''}"></div>
                                             </label>
                                         </div>
                                     </div>
@@ -10072,7 +10742,7 @@ window.toggleSharedRaster = async function(rasterId, inputEl) {
             map.removeLayer(overlay);
         }
         if (typeof showWarningToast === 'function') {
-            showWarningToast(`Ortofoto "${raster.nome}" removida da mesa.`);
+            showWarningToast(`Ortofoto "${raster.nome}" removida do projeto.`);
         }
     } else {
         if (!window.activeWorkspaceRasters.includes(rasterId)) {
@@ -10080,13 +10750,20 @@ window.toggleSharedRaster = async function(rasterId, inputEl) {
         }
         raster.visivel = false;
         if (typeof showSuccessToast === 'function') {
-            showSuccessToast(`Ortofoto "${raster.nome}" adicionada ao menu lateral!`);
+            showSuccessToast(`Ortofoto "${raster.nome}" adicionada ao projeto!`);
         }
     }
 
     await window.saveCurrentWorkspaceState();
     if (typeof renderRasterLayersList === 'function') {
         renderRasterLayersList();
+    }
+    if (typeof window.updateProjectActiveUI === 'function') {
+        window.updateProjectActiveUI();
+    }
+    const catalogModal = document.getElementById('shared-layers-modal');
+    if (catalogModal && !catalogModal.classList.contains('hidden')) {
+        window.renderSharedLayersCatalog();
     }
 };
 
@@ -10097,8 +10774,7 @@ window.toggleSharedLayer = async function(themeId, inputEl) {
     
     const isCurrentlyActive = window.activeWorkspaceThemes.includes(themeId);
     const shouldBeActive = inputEl !== undefined ? inputEl.checked : !isCurrentlyActive;
-    
-    // Resposta visual instantânea no background do switch
+
     const bgEl = document.getElementById('shared-toggle-bg-' + themeId);
     if (bgEl) {
         if (shouldBeActive) {
@@ -10114,16 +10790,15 @@ window.toggleSharedLayer = async function(themeId, inputEl) {
         window.activeWorkspaceThemes = window.activeWorkspaceThemes.filter(id => id !== themeId);
         theme.visible = false;
         if (typeof showWarningToast === 'function') {
-            showWarningToast(`Camada "${theme.name}" removida da mesa.`);
+            showWarningToast(`Camada "${theme.name}" removida do projeto.`);
         }
     } else {
         if (!window.activeWorkspaceThemes.includes(themeId)) {
             window.activeWorkspaceThemes.push(themeId);
         }
-        // Ao ativar no catálogo, entra na mesa de trabalho / menu lateral desativada inicialmente (para ligar sob demanda)
         theme.visible = false;
         if (typeof showSuccessToast === 'function') {
-            showSuccessToast(`Camada "${theme.name}" adicionada ao menu lateral!`);
+            showSuccessToast(`Camada "${theme.name}" adicionada ao projeto!`);
         }
     }
     
@@ -10131,6 +10806,13 @@ window.toggleSharedLayer = async function(themeId, inputEl) {
     await window.saveCurrentWorkspaceState();
     renderThemes();
     loadAllFeaturesToMap();
+    if (typeof window.updateProjectActiveUI === 'function') {
+        window.updateProjectActiveUI();
+    }
+    const catalogModal = document.getElementById('shared-layers-modal');
+    if (catalogModal && !catalogModal.classList.contains('hidden')) {
+        window.renderSharedLayersCatalog();
+    }
 };
 
 // Modal de Gestão de Acessos Externos para Camada Vetorial (Pontos Focais de outros órgãos parceiros)

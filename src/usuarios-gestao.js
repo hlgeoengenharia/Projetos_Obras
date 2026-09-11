@@ -133,9 +133,20 @@
             _allMunicipios = munRes.data || [];
             _allEntidadesPadrao = entidadesRes.data || [];
             _allRasters = rastersRes.data || [];
-            // Inicializa filtro de entidade (padrão: minha entidade)
+
+            const isSuperAdmin = !!(_currentUserProfile && (_currentUserProfile.super_admin || _currentUserProfile.is_superadmin));
             const minhaEntidade = (_currentUserProfile?.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
             const minhaSigla = getEntitySigla(minhaEntidade);
+
+            // Isolamento estrito por ente: Admin de Ente só carrega dados da sua própria entidade
+            if (!isSuperAdmin) {
+                _allMembros = _allMembros.filter(m => {
+                    const uEnt = (m.entidade || m.profiles?.entidade || '').trim();
+                    const uSigla = getEntitySigla(uEnt);
+                    return uSigla === minhaSigla || (uEnt && minhaEntidade && uEnt.toLowerCase() === minhaEntidade.toLowerCase());
+                });
+            }
+
             if (!_selectedEntidadeFiltro) {
                 _selectedEntidadeFiltro = minhaSigla;
             }
@@ -291,6 +302,19 @@
 
         const minhaEntidade = (_currentUserProfile?.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
         const minhaSigla = getEntitySigla(minhaEntidade);
+
+        const isSuperAdmin = !!(_currentUserProfile && (_currentUserProfile.super_admin || _currentUserProfile.is_superadmin));
+        if (!isSuperAdmin) {
+            _selectedEntidadeFiltro = minhaSigla;
+            container.innerHTML = `
+                <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 text-white font-extrabold text-xs shadow-sm">
+                    <span class="material-symbols-outlined text-[17px]">${minhaSigla === 'Município' ? 'domain' : 'account_balance'}</span>
+                    <span>${minhaEntidade}</span>
+                    <span class="ml-1.5 px-2 py-0.5 text-[9.5px] font-bold rounded-full bg-white/20 text-white uppercase tracking-wider">Membros da Minha Entidade</span>
+                </div>
+            `;
+            return;
+        }
 
         if (!_selectedEntidadeFiltro) {
             _selectedEntidadeFiltro = minhaSigla;

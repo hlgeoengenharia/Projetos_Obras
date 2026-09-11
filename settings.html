@@ -34,7 +34,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <style>
   html.is-embedded header { display: none !important; }
-  html.is-embedded main { padding-top: 1rem !important; }
+  html.is-embedded main { padding-top: 0.75rem !important; padding-bottom: 2rem !important; }
+  @media (max-width: 640px) {
+    html.is-embedded main { padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
+  }
   html.is-embedded body { background-color: transparent !important; }
   /* Suporte a rolagem horizontal no mobile sem barra de rolagem nativa */
   .no-scrollbar::-webkit-scrollbar {
@@ -864,6 +867,19 @@
     color: #38bdf8 !important;
     border-bottom: 2px solid #38bdf8 !important;
   }
+  /* Card padronizado de cabeçalho (idêntico ao index.html) */
+  .header-glass-card {
+    background: rgba(255, 255, 255, 0.40) !important;
+    backdrop-filter: blur(14px) !important;
+    -webkit-backdrop-filter: blur(14px) !important;
+    border: 1px solid rgba(226, 232, 240, 0.9) !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04) !important;
+  }
+  html.dark .header-glass-card {
+    background: rgba(15, 23, 42, 0.40) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3) !important;
+  }
 </style>
   <!-- Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -877,11 +893,16 @@
 <!-- TopAppBar Removed -->
 
 <header class="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-[#070b14]/85 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 shadow-md z-50 flex items-center justify-between px-2 sm:px-4">
-  <!-- Seta no canto esquerdo -->
-  <a href="index.html" class="h-full px-2.5 sm:px-4 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors flex flex-col items-center justify-center gap-0.5 sm:gap-1 text-slate-600 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 border-r border-slate-200/50 dark:border-slate-800/50 min-w-[50px] sm:min-w-[65px] shrink-0" title="Voltar ao Mapa">
-      <span class="material-symbols-outlined text-[20px] sm:text-[22px]">arrow_back</span>
-      <span class="text-[8px] sm:text-[9px] font-medium tracking-wide uppercase">Voltar</span>
-  </a>
+  <!-- Card com Globo e Seta de Retorno -->
+  <div class="header-glass-card inline-flex items-center p-0.5 md:p-1 rounded-2xl gap-1.5 px-2 md:px-2.5 ml-1 select-none">
+    <a href="home.html" class="flex w-8 h-8 md:w-9 md:h-9 rounded-xl hover:bg-white/30 dark:hover:bg-white/10 text-primary dark:text-sky-400 items-center justify-center transition-all cursor-pointer tooltip tooltip-bottom shrink-0" title="Início / Mapa do Estado">
+      <span class="material-symbols-outlined text-[20px] md:text-[22px]">public</span>
+    </a>
+    <div class="w-[1px] h-4 bg-slate-300 dark:bg-slate-700/60 my-auto"></div>
+    <a href="home.html?view=municipio" class="flex w-7 h-7 sm:w-8 sm:h-8 rounded-xl hover:bg-slate-200/80 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-sky-600 dark:hover:text-sky-400 items-center justify-center transition-all cursor-pointer active:scale-95 shrink-0" title="Voltar ao Painel de Cards">
+      <span class="material-symbols-outlined text-[18px] sm:text-[20px]">arrow_back</span>
+    </a>
+  </div>
   
   <!-- Abas centralizadas com suporte a swipe/scroll no mobile -->
   <div class="flex items-center h-full flex-1 overflow-x-auto no-scrollbar scroll-smooth mx-1 sm:mx-2 justify-start md:justify-center">
@@ -919,23 +940,23 @@
   </div>
 </header>
 
-<div id="profile-modal" class="fixed inset-0 bg-black/60 z-[200] hidden flex items-center justify-center backdrop-blur-sm px-4">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col transform transition-all">
+<div id="profile-modal" class="fixed inset-0 bg-black/60 z-[200] hidden flex items-center justify-center backdrop-blur-sm px-4 py-4 sm:py-6 overflow-hidden">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm max-h-[88vh] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col my-auto transform transition-all">
         <!-- Header -->
-        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/20">
-            <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <span class="material-symbols-outlined text-primary">person</span>
+        <div class="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/20 shrink-0">
+            <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-primary text-[20px]">person</span>
                 Perfil do Usuário
             </h3>
-            <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
+            <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors" title="Fechar">
                 <span class="material-symbols-outlined">close</span>
             </button>
         </div>
-
+        
         <!-- Body -->
-        <div class="p-6 overflow-y-auto">
+        <div class="p-5 sm:p-6 overflow-y-auto flex-1 min-h-0">
             <div class="flex flex-col items-center mb-6">
-                <img src="assets/logo.png" alt="Avatar" class="w-20 h-20 rounded-full border-4 border-slate-100 dark:border-slate-800 shadow-sm object-cover mb-3">
+                <img id="profile-modal-avatar-img" class="profile-avatar-img w-20 h-20 rounded-full border-4 border-slate-100 dark:border-slate-800 shadow-sm object-contain p-1 bg-white dark:bg-slate-800 mb-3" src="assets/logo.png" alt="Avatar">
                 <h4 id="profile-user-name" class="text-base font-bold text-slate-800 dark:text-white">Usuário Logado</h4>
                 <p id="profile-user-role" class="text-sm text-slate-500 dark:text-slate-400">—</p>
                 <p id="profile-user-municipio" class="text-xs text-primary font-semibold mt-0.5"></p>
@@ -948,10 +969,71 @@
                     <span>Ponto Focal Interinstitucional</span>
                 </div>
             </div>
+            
+            <!-- Dados Cadastrais e Institucionais (Nome, E-mail, Entidade e Cargo com Edição) -->
+            <div class="border-t border-slate-200 dark:border-slate-800 pt-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h4 class="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[16px] text-cyan-500">badge</span>
+                        Dados Cadastrais
+                    </h4>
+                    <button type="button" id="btn-toggle-edit-perfil" onclick="toggleEditPerfilModal()" class="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer">
+                        <span class="material-symbols-outlined text-[13px]">edit</span>
+                        <span id="btn-toggle-edit-perfil-text">Editar</span>
+                    </button>
+                </div>
 
-            <div class="border-t border-slate-200 dark:border-slate-800 pt-5">
-                <h4 class="text-sm font-bold text-slate-800 dark:text-white mb-4 uppercase tracking-wider">Configurações Gerais</h4>
+                <!-- Modo Visualização -->
+                <div id="perfil-dados-view" class="space-y-1.5 text-xs">
+                    <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
+                        <span class="text-slate-400">Nome:</span>
+                        <span id="perfil-view-nome" class="font-bold text-slate-700 dark:text-slate-200 text-right truncate max-w-[200px]">—</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
+                        <span class="text-slate-400">E-mail:</span>
+                        <span id="perfil-view-email" class="font-medium text-slate-600 dark:text-slate-300 text-right truncate max-w-[200px]">—</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
+                        <span class="text-slate-400">Entidade:</span>
+                        <span id="perfil-view-entidade" class="font-semibold text-slate-700 dark:text-slate-200 text-right truncate max-w-[200px]">—</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
+                        <span class="text-slate-400">Cargo:</span>
+                        <span id="perfil-view-cargo" class="font-semibold text-slate-700 dark:text-slate-200 text-right truncate max-w-[200px]">—</span>
+                    </div>
+                </div>
 
+                <!-- Modo Edição -->
+                <div id="perfil-dados-edit" class="hidden space-y-2.5 mt-2 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">Nome Completo</label>
+                        <input id="perfil-edit-nome" type="text" placeholder="Seu nome completo" class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none">
+                    </div>
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300">Entidade / Órgão</label>
+                            <span id="perfil-edit-tipo-badge" class="text-[9.5px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30">Municipal</span>
+                        </div>
+                        <select id="perfil-edit-entidade" onchange="onPerfilEntidadeChange()" class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer">
+                            <option value="">Carregando entidades...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">Cargo / Função</label>
+                        <input id="perfil-edit-cargo" type="text" placeholder="Ex: Analista, Engenheiro, Auditor..." class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none">
+                    </div>
+                    <div class="flex items-center justify-end gap-2 pt-1">
+                        <button type="button" onclick="cancelEditPerfilModal()" class="px-2.5 py-1 text-xs rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 transition-colors cursor-pointer">Cancelar</button>
+                        <button type="button" id="btn-salvar-perfil" onclick="salvarPerfilModal()" class="px-3 py-1 text-xs font-bold rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors shadow-sm flex items-center gap-1 cursor-pointer">
+                            <span class="material-symbols-outlined text-[14px]">check</span> Salvar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="border-t border-slate-200 dark:border-slate-800 pt-4 mt-4">
+                <h4 class="text-sm font-bold text-slate-800 dark:text-white mb-3 uppercase tracking-wider">Configurações Gerais</h4>
+                
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Tema do Sistema</label>
@@ -968,18 +1050,18 @@
                 </div>
             </div>
         </div>
-
+        
         <!-- Footer -->
-        <div class="px-5 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 flex flex-col gap-2">
+        <div class="px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/20 flex flex-col gap-2 shrink-0">
             <div class="flex gap-2">
-                <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="flex-1 px-5 py-2 text-sm font-medium bg-primary text-white hover:bg-primary/90 rounded-lg transition-colors shadow-sm">
+                <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="flex-1 px-5 py-2 text-sm font-medium bg-primary text-white hover:bg-primary/90 rounded-lg transition-colors shadow-sm cursor-pointer">
                     Pronto
                 </button>
-                <button onclick="window.handleLogout()" class="px-4 py-2 text-sm font-medium bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1.5">
+                <button onclick="window.handleLogout()" class="px-4 py-2 text-sm font-medium bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer">
                     <span class="material-symbols-outlined text-[18px]">logout</span> Sair
                 </button>
             </div>
-            <button onclick="window.location.href='home.html'" class="w-full px-4 py-2 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-primary transition-colors flex items-center justify-center gap-1.5">
+            <button onclick="window.location.href='home.html'" class="w-full px-4 py-2 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-primary transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
                 <span class="material-symbols-outlined text-[16px]">swap_horiz</span> Trocar Município
             </button>
         </div>
@@ -1340,6 +1422,53 @@
 
   <!-- Tab Content: Layout -->
   <div id="layout" class="tab-content">
+    <!-- Card: Identidade Visual da Entidade (Logomarca do Ente) -->
+    <div class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700 mb-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 border-b border-slate-200 dark:border-slate-700 pb-4">
+        <div>
+          <h2 class="text-lg font-bold flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary text-[22px]">badge</span>
+            Identidade Visual da Entidade
+          </h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm">Configure a logomarca da sua instituição para exibição nos cabeçalhos, relatórios e perfis do sistema.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="entity-branding-badge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-primary/10 text-primary border border-primary/20">
+            <span class="material-symbols-outlined text-[14px]">account_balance</span>
+            <span id="entity-branding-name">Carregando ente...</span>
+          </span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+        <!-- Preview da Logo Atual -->
+        <div class="flex flex-col items-center justify-center p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Logomarca Atual</span>
+          <div class="w-32 h-32 flex items-center justify-center bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-2 shadow-inner overflow-hidden">
+            <img id="entity-logo-preview" src="assets/logo.png" alt="Logomarca do Ente" class="max-h-full max-w-full object-contain" />
+          </div>
+          <span id="entity-logo-filename" class="text-[11px] text-slate-400 mt-2 truncate max-w-[200px]">Padrão do Sistema</span>
+        </div>
+
+        <!-- Seletor de Arquivo e Ações -->
+        <div class="md:col-span-2 space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">Upload de Nova Logomarca</label>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mb-2">Recomendado formato PNG transparente ou SVG, resolução mínima de 300x300px.</p>
+            <input type="file" id="entity-logo-input" accept="image/*" class="w-full text-sm text-slate-500 file:mr-4 file:py-2.5 file:px-5 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer border border-slate-200 dark:border-slate-700 rounded-xl p-1 bg-white dark:bg-slate-900" onchange="handleEntityLogoFileSelect(this)">
+          </div>
+
+          <div class="flex items-center gap-3 pt-2">
+            <button id="btn-save-entity-logo" onclick="salvarLogomarcaEntidade()" disabled class="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-sky-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-all shadow-md shadow-primary/20">
+              <span class="material-symbols-outlined text-[18px]">cloud_upload</span> Salvar Logomarca do Ente
+            </button>
+            <span id="entity-logo-status" class="text-xs font-medium text-slate-500 hidden"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Layout de Impressão -->
     <div class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 border-b border-slate-200 dark:border-slate-700 pb-4">
         <div>
@@ -2017,15 +2146,60 @@
         return false;
       }
 
+      const authUser = data.session.user;
+      let userMetaNome = '';
+      if (authUser && authUser.user_metadata) {
+        const meta = authUser.user_metadata;
+        userMetaNome = (meta.nome || meta.nome_completo || meta.full_name || meta.name || '').trim();
+      }
+
       const { data: profile } = await supabaseClient
         .from('profiles')
         .select('*')
-        .eq('id', data.session.user.id)
+        .eq('id', authUser.id)
         .single();
 
-      currentUserProfile = profile || { id: data.session.user.id, nome: data.session.user.email, super_admin: false };
+      currentUserProfile = profile || { id: authUser.id, super_admin: false };
+      if (userMetaNome) {
+        currentUserProfile.nome_cadastro = userMetaNome;
+        if (!currentUserProfile.nome || currentUserProfile.nome.includes('@') || currentUserProfile.nome === authUser.email) {
+          currentUserProfile.nome = userMetaNome;
+        }
+      } else if (!currentUserProfile.nome) {
+        currentUserProfile.nome = authUser.email;
+      }
 
-      if (currentUserProfile.super_admin) return true;
+      // IMPORTANTE: Se a entidade não estiver na tabela profiles, busca do parent, da URL ou de municipio_membros
+      if (!currentUserProfile.entidade) {
+        try {
+          if (window.parent && window.parent !== window && window.parent.homeUserProfile && window.parent.homeUserProfile.entidade) {
+            currentUserProfile.entidade = window.parent.homeUserProfile.entidade;
+          }
+        } catch(e) {}
+      }
+      if (!currentUserProfile.entidade) {
+        const urlEnt = new URLSearchParams(window.location.search).get('entidade');
+        if (urlEnt) currentUserProfile.entidade = urlEnt;
+      }
+      if (!currentUserProfile.entidade) {
+        try {
+          const { data: mData } = await supabaseClient
+            .from('municipio_membros')
+            .select('entidade')
+            .eq('user_id', authUser.id)
+            .limit(1);
+          if (mData && mData[0] && mData[0].entidade) {
+            currentUserProfile.entidade = mData[0].entidade;
+          }
+        } catch(e) {}
+      }
+
+      if (currentUserProfile.super_admin) {
+        if (typeof renderFormsList === 'function') renderFormsList();
+        if (typeof renderSpatialRulesList === 'function') renderSpatialRulesList();
+        if (typeof loadLayoutSettings === 'function') loadLayoutSettings();
+        return true;
+      }
 
       const { data: membro } = await supabaseClient
         .from('municipio_membros')
@@ -2036,11 +2210,20 @@
         .maybeSingle();
 
       if (!membro || membro.papel !== 'admin') {
-        if (window.self !== window.top) return false;
+        if (window.self !== window.top) {
+          if (typeof renderFormsList === 'function') renderFormsList();
+          if (typeof renderSpatialRulesList === 'function') renderSpatialRulesList();
+          if (typeof loadLayoutSettings === 'function') loadLayoutSettings();
+          return true;
+        }
         alert('Esta área é restrita ao administrador deste município.');
         window.location.href = 'home.html';
         return false;
       }
+
+      if (typeof renderFormsList === 'function') renderFormsList();
+      if (typeof renderSpatialRulesList === 'function') renderSpatialRulesList();
+      if (typeof loadLayoutSettings === 'function') loadLayoutSettings();
       return true;
     }
 
@@ -2054,13 +2237,25 @@
         const munEl = document.getElementById('profile-user-municipio');
         const entEl = document.getElementById('profile-user-entidade');
         const pfBadge = document.getElementById('profile-user-ponto-focal-badge');
+        const themeSelect = document.getElementById('profile-theme-select');
 
+        const viewNome = document.getElementById('perfil-view-nome');
+        const viewEmail = document.getElementById('perfil-view-email');
+        const viewEnt = document.getElementById('perfil-view-entidade');
+        const viewCargo = document.getElementById('perfil-view-cargo');
+
+        const rawFullName = currentUserProfile.nome_cadastro || currentUserProfile.nome || '';
         if (munEl) munEl.textContent = sessionStorage.getItem('municipio_ativo_nome') || '';
-        if (nameEl) nameEl.textContent = currentUserProfile.nome || 'Usuário';
+        if (nameEl) nameEl.textContent = rawFullName || 'Usuário';
+        if (viewNome) viewNome.textContent = rawFullName || '—';
+        if (viewEmail) viewEmail.textContent = currentUserProfile.email || sessionStorage.getItem('user_email') || '—';
         if (roleEl) roleEl.textContent = currentUserProfile.super_admin ? 'Administrador Geral' : 'Administrador';
+        if (themeSelect) themeSelect.value = localStorage.getItem('constructive_theme') || 'Claro';
 
         const entNome = currentUserProfile.entidade || sessionStorage.getItem('user_entidade') || 'Prefeitura Municipal';
         if (entEl) entEl.textContent = entNome;
+        if (viewEnt) viewEnt.textContent = entNome;
+        if (viewCargo) viewCargo.textContent = currentUserProfile.cargo || 'Não informado';
 
         if (pfBadge) {
             if (currentUserProfile.ponto_focal) {
@@ -2070,6 +2265,190 @@
             }
         }
     }
+
+    // Funções para Edição Unificada do Perfil (Nome, Entidade, Cargo)
+    window.isEntidadeMunicipal = function(entidade) {
+        if (!entidade) return false;
+        const e = entidade.toLowerCase().trim();
+        return e.includes('prefeitura') || e.includes('municipal') || e.includes('município') || e.includes('municipio');
+    };
+
+    let cachedEntidadesPadrao = null;
+    window.getEntidadesPadrao = async function() {
+        if (cachedEntidadesPadrao && cachedEntidadesPadrao.length > 0) return cachedEntidadesPadrao;
+        try {
+            if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+                const { data, error } = await supabaseClient
+                    .from('entidades_padrao')
+                    .select('id, nome, sigla, tipo, ativo')
+                    .eq('ativo', true)
+                    .order('created_at');
+                if (!error && data && data.length > 0) {
+                    cachedEntidadesPadrao = data;
+                    return cachedEntidadesPadrao;
+                }
+            }
+        } catch (e) {
+            console.warn('Erro ao consultar entidades_padrao:', e);
+        }
+        cachedEntidadesPadrao = [
+            { id: '1', nome: 'Prefeitura Municipal', sigla: 'Município', tipo: 'municipal', ativo: true },
+            { id: '2', nome: 'Ministério Público Federal', sigla: 'MPF', tipo: 'externo', ativo: true },
+            { id: '3', nome: 'Polícia Federal', sigla: 'PF', tipo: 'externo', ativo: true },
+            { id: '4', nome: 'Secretaria do Patrimônio da União', sigla: 'SPU', tipo: 'externo', ativo: true }
+        ];
+        return cachedEntidadesPadrao;
+    };
+
+    window.toggleEditPerfilModal = async function() {
+        const viewDiv = document.getElementById('perfil-dados-view');
+        const editDiv = document.getElementById('perfil-dados-edit');
+        if (!editDiv || !viewDiv) return;
+        const isHidden = editDiv.classList.contains('hidden');
+        if (isHidden) {
+            const ents = await getEntidadesPadrao();
+            const entSelect = document.getElementById('perfil-edit-entidade');
+            const userEnt = currentUserProfile?.entidade || sessionStorage.getItem('user_entidade') || '';
+            
+            if (entSelect) {
+                let optionsHtml = ents.map(e => {
+                    const label = e.sigla ? `${e.nome} (${e.sigla})` : e.nome;
+                    return `<option value="${e.nome}" data-tipo="${e.tipo}">${label}</option>`;
+                }).join('');
+                
+                if (userEnt && !ents.some(e => e.nome.toLowerCase().trim() === userEnt.toLowerCase().trim())) {
+                    optionsHtml = `<option value="${userEnt}" data-tipo="${isEntidadeMunicipal(userEnt) ? 'municipal' : 'externo'}">${userEnt}</option>` + optionsHtml;
+                }
+                entSelect.innerHTML = optionsHtml;
+                entSelect.value = userEnt || (ents[0]?.nome || 'Prefeitura Municipal');
+                onPerfilEntidadeChange();
+            }
+
+            const nomeInput = document.getElementById('perfil-edit-nome');
+            if (nomeInput) {
+                nomeInput.value = (currentUserProfile && (currentUserProfile.nome_cadastro || currentUserProfile.nome)) || '';
+            }
+            const cargoInput = document.getElementById('perfil-edit-cargo');
+            if (cargoInput) {
+                cargoInput.value = (currentUserProfile && currentUserProfile.cargo) || '';
+            }
+
+            viewDiv.classList.add('hidden');
+            editDiv.classList.remove('hidden');
+            const txt = document.getElementById('btn-toggle-edit-perfil-text');
+            if (txt) txt.textContent = 'Fechar';
+        } else {
+            cancelEditPerfilModal();
+        }
+    };
+
+    window.onPerfilEntidadeChange = function() {
+        const entSelect = document.getElementById('perfil-edit-entidade');
+        const badge = document.getElementById('perfil-edit-tipo-badge');
+        if (!entSelect || !badge) return;
+        const opt = entSelect.options[entSelect.selectedIndex];
+        const tipo = opt ? opt.getAttribute('data-tipo') : (isEntidadeMunicipal(entSelect.value) ? 'municipal' : 'externo');
+        if (tipo === 'municipal') {
+            badge.textContent = 'Municipal';
+            badge.className = 'text-[9.5px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30';
+        } else {
+            badge.textContent = 'Externo';
+            badge.className = 'text-[9.5px] font-bold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30';
+        }
+    };
+
+    window.cancelEditPerfilModal = function() {
+        const viewDiv = document.getElementById('perfil-dados-view');
+        const editDiv = document.getElementById('perfil-dados-edit');
+        if (viewDiv) viewDiv.classList.remove('hidden');
+        if (editDiv) editDiv.classList.add('hidden');
+        const txt = document.getElementById('btn-toggle-edit-perfil-text');
+        if (txt) txt.textContent = 'Editar';
+    };
+
+    window.salvarPerfilModal = async function() {
+        const nomeInput = document.getElementById('perfil-edit-nome');
+        const entSelect = document.getElementById('perfil-edit-entidade');
+        const cargoInput = document.getElementById('perfil-edit-cargo');
+
+        const novoNome = nomeInput ? nomeInput.value.trim() : '';
+        const novaEntidade = entSelect ? entSelect.value.trim() : '';
+        const novoCargo = cargoInput ? cargoInput.value.trim() : '';
+
+        if (!novoNome) {
+            alert('Por favor, informe seu Nome Completo.');
+            return;
+        }
+        if (!novaEntidade) {
+            alert('Por favor, selecione sua Entidade / Órgão.');
+            return;
+        }
+
+        const saveBtn = document.getElementById('btn-salvar-perfil');
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="animate-spin material-symbols-outlined text-[14px]">progress_activity</span> Salvando...';
+        }
+
+        try {
+            const { data: sessionData } = await supabaseClient.auth.getSession();
+            if (!sessionData || !sessionData.session) return;
+            const uid = sessionData.session.user.id;
+
+            const { error } = await supabaseClient.from('profiles').update({
+                nome: novoNome,
+                entidade: novaEntidade,
+                cargo: novoCargo || null
+            }).eq('id', uid);
+
+            if (error) {
+                alert('Erro ao atualizar perfil: ' + error.message);
+                return;
+            }
+
+            if (supabaseClient.auth && typeof supabaseClient.auth.updateUser === 'function') {
+                try {
+                    await supabaseClient.auth.updateUser({
+                        data: {
+                            nome: novoNome,
+                            entidade: novaEntidade,
+                            cargo: novoCargo || null
+                        }
+                    });
+                } catch(eAuth) {
+                    console.warn('Falha ao atualizar user_metadata:', eAuth);
+                }
+            }
+
+            const munId = (typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : null) || sessionStorage.getItem('municipio_ativo');
+            if (munId) {
+                try {
+                    await supabaseClient.from('municipio_membros').update({
+                        entidade: novaEntidade,
+                        cargo: novoCargo || null
+                    }).eq('user_id', uid).eq('municipio_id', munId);
+                } catch(eMem) {}
+            }
+
+            if (currentUserProfile) {
+                currentUserProfile.nome = novoNome;
+                currentUserProfile.nome_cadastro = novoNome;
+                currentUserProfile.entidade = novaEntidade;
+                currentUserProfile.cargo = novoCargo;
+            }
+
+            applyCurrentUserToProfileModal();
+            cancelEditPerfilModal();
+            alert('✅ Dados do perfil atualizados com sucesso!');
+        } catch(err) {
+            alert('Erro ao salvar alterações: ' + (err.message || err));
+        } finally {
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '<span class="material-symbols-outlined text-[14px]">check</span> Salvar';
+            }
+        }
+    };
 
     window.changeTheme = function(theme) {
         localStorage.setItem('constructive_theme', theme);
@@ -2093,6 +2472,7 @@
     window.addEventListener('DOMContentLoaded', async () => {
       const ok = await ensureAdminAccess();
       if (!ok) return;
+      applyCurrentUserToProfileModal();
 
       const savedTheme = localStorage.getItem('constructive_theme') || 'Claro';
       const themeSelect = document.getElementById('theme-select');
@@ -2139,6 +2519,179 @@
         }
     }
 
+    // === IDENTIDADE VISUAL DA ENTIDADE (CARD LAYOUT) ===
+    let _selectedEntityLogoFile = null;
+    let _selectedEntityLogoDataUrl = null;
+
+    function handleEntityLogoFileSelect(input) {
+        if (input.files && input.files[0]) {
+            const file = input.files[0];
+            _selectedEntityLogoFile = file;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                _selectedEntityLogoDataUrl = e.target.result;
+                const previewImg = document.getElementById('entity-logo-preview');
+                if (previewImg) previewImg.src = _selectedEntityLogoDataUrl;
+                const filenameEl = document.getElementById('entity-logo-filename');
+                if (filenameEl) filenameEl.textContent = file.name;
+                const btnSave = document.getElementById('btn-save-entity-logo');
+                if (btnSave) btnSave.disabled = false;
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+    window.handleEntityLogoFileSelect = handleEntityLogoFileSelect;
+
+    async function carregarLogomarcaEntidade() {
+        try {
+            const profile = currentUserProfile || (window.parent && window.parent.homeUserProfile);
+            const userEntidadeRaw = (profile && (profile.entidade || profile.entidade_nome)) || new URLSearchParams(window.location.search).get('entidade') || '';
+            const userSigla = (typeof getEntitySigla === 'function' && userEntidadeRaw) ? getEntitySigla(userEntidadeRaw) : '';
+
+            const nameBadge = document.getElementById('entity-branding-name');
+            if (nameBadge) nameBadge.textContent = userSigla ? `${userSigla} • ${userEntidadeRaw}` : 'Carregando ente...';
+
+            let logoUrl = null;
+
+            // 1. Se for órgão externo (SPU, MPF, PF), busca na tabela entidades_padrao
+            if (userSigla === 'SPU' || userSigla === 'MPF' || userSigla === 'PF') {
+                if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+                    const { data } = await supabaseClient.from('entidades_padrao').select('logo_url').ilike('sigla', userSigla).maybeSingle();
+                    if (data && data.logo_url) logoUrl = data.logo_url;
+                }
+            } else if (activeMunicipioId) {
+                // 2. Se for municipal, busca no município ativo
+                if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+                    const { data } = await supabaseClient.from('municipios').select('logo_url').eq('id', activeMunicipioId).maybeSingle();
+                    if (data && data.logo_url) logoUrl = data.logo_url;
+                }
+            }
+
+            if (!logoUrl && profile && profile.avatar_url) {
+                logoUrl = profile.avatar_url;
+            }
+
+            const previewImg = document.getElementById('entity-logo-preview');
+            const filenameEl = document.getElementById('entity-logo-filename');
+            if (logoUrl) {
+                if (previewImg) previewImg.src = logoUrl;
+                if (filenameEl) filenameEl.textContent = `Logomarca de ${userSigla}`;
+            } else {
+                if (previewImg) previewImg.src = 'assets/logo.png';
+                if (filenameEl) filenameEl.textContent = 'Padrão do Sistema';
+            }
+        } catch(e) {
+            console.warn('Erro ao carregar logomarca da entidade:', e);
+        }
+    }
+    window.carregarLogomarcaEntidade = carregarLogomarcaEntidade;
+
+    async function salvarLogomarcaEntidade() {
+        if (!_selectedEntityLogoFile && !_selectedEntityLogoDataUrl) {
+            alert('Selecione uma imagem para salvar.');
+            return;
+        }
+
+        const btnSave = document.getElementById('btn-save-entity-logo');
+        const statusEl = document.getElementById('entity-logo-status');
+        if (btnSave) {
+            btnSave.disabled = true;
+            btnSave.innerHTML = '<span class="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin inline-block mr-1"></span> Salvando...';
+        }
+        if (statusEl) {
+            statusEl.classList.remove('hidden');
+            statusEl.textContent = 'Enviando imagem...';
+        }
+
+        try {
+            const profile = currentUserProfile || (window.parent && window.parent.homeUserProfile);
+            const userEntidadeRaw = (profile && (profile.entidade || profile.entidade_nome)) || new URLSearchParams(window.location.search).get('entidade') || 'Prefeitura Municipal';
+            const userSigla = (typeof getEntitySigla === 'function') ? getEntitySigla(userEntidadeRaw) : userEntidadeRaw;
+
+            let finalLogoUrl = _selectedEntityLogoDataUrl;
+
+            // Tenta upload para o Supabase Storage
+            if (_selectedEntityLogoFile && typeof supabaseClient !== 'undefined' && supabaseClient.storage) {
+                const ext = _selectedEntityLogoFile.name.split('.').pop() || 'png';
+                const cleanSigla = userSigla.toLowerCase().replace(/[^a-z0-9]/g, '_');
+                const filePath = `logos_entidades/${cleanSigla}_logo_${Date.now()}.${ext}`;
+
+                let uploadRes = await supabaseClient.storage.from('obras_arquivos').upload(filePath, _selectedEntityLogoFile, { upsert: true });
+                let bucketName = 'obras_arquivos';
+                if (uploadRes.error) {
+                    uploadRes = await supabaseClient.storage.from('arquivos-obras').upload(filePath, _selectedEntityLogoFile, { upsert: true });
+                    bucketName = 'arquivos-obras';
+                }
+
+                if (!uploadRes.error) {
+                    const { data: publicUrlData } = supabaseClient.storage.from(bucketName).getPublicUrl(filePath);
+                    if (publicUrlData && publicUrlData.publicUrl) {
+                        finalLogoUrl = publicUrlData.publicUrl;
+                    }
+                }
+            }
+
+            // Atualiza na base de dados
+            if (userSigla === 'SPU' || userSigla === 'MPF' || userSigla === 'PF') {
+                await supabaseClient.from('entidades_padrao').update({ logo_url: finalLogoUrl }).ilike('sigla', userSigla);
+            } else if (activeMunicipioId) {
+                await supabaseClient.from('municipios').update({ logo_url: finalLogoUrl }).eq('id', activeMunicipioId);
+            }
+
+            // Atualiza profile do usuário
+            if (currentUserProfile && currentUserProfile.id) {
+                currentUserProfile.avatar_url = finalLogoUrl;
+                await supabaseClient.from('profiles').update({ avatar_url: finalLogoUrl }).eq('id', currentUserProfile.id);
+            }
+
+            // Atualiza avatares locais e na janela pai
+            document.querySelectorAll('.profile-avatar-img').forEach(img => { img.src = finalLogoUrl; });
+            try {
+                if (window.parent && window.parent !== window && window.parent.document) {
+                    window.parent.document.querySelectorAll('.profile-avatar-img').forEach(img => { img.src = finalLogoUrl; });
+                    if (typeof window.parent.loadUserEntityLogo === 'function') {
+                        window.parent.loadUserEntityLogo();
+                    }
+                }
+            } catch(e) {}
+
+            if (statusEl) {
+                statusEl.textContent = 'Salvo com sucesso!';
+                statusEl.className = 'text-xs font-medium text-emerald-600';
+            }
+
+            if (typeof showStorageToast === 'function') {
+                showStorageToast('Logomarca da entidade atualizada com sucesso!');
+            } else {
+                alert('Logomarca da entidade atualizada com sucesso!');
+            }
+
+            if (window.auditLogger && typeof window.auditLogger.log === 'function') {
+                window.auditLogger.log('ATUALIZAR_LAYOUT', `Logomarca da entidade ${userSigla} atualizada`);
+            }
+        } catch(err) {
+            console.error('Erro ao salvar logomarca:', err);
+            alert('Ocorreu um erro ao salvar a logomarca da entidade.');
+        } finally {
+            if (btnSave) {
+                btnSave.disabled = false;
+                btnSave.innerHTML = '<span class="material-symbols-outlined text-[18px]">cloud_upload</span> Salvar Logomarca do Ente';
+            }
+        }
+    }
+    window.salvarLogomarcaEntidade = salvarLogomarcaEntidade;
+
+    function getLayoutStorageKey() {
+        const profile = currentUserProfile || (window.parent && window.parent.homeUserProfile);
+        const userEntidadeRaw = (profile && (profile.entidade || profile.entidade_nome)) || new URLSearchParams(window.location.search).get('entidade') || '';
+        const userSigla = (typeof getEntitySigla === 'function' && userEntidadeRaw) ? getEntitySigla(userEntidadeRaw) : '';
+        const munId = activeMunicipioId || 'global';
+        if (userSigla && userSigla !== 'Público') {
+            return `layout_settings_${userSigla}_${munId}`;
+        }
+        return `layout_settings_${munId}`;
+    }
+
     function saveLayoutSettings() {
        const settings = {
            marginTop: document.getElementById('layout-mt').value,
@@ -2149,27 +2702,51 @@
            footerImg: document.getElementById('preview-footer').src,
            texts: simulatorTexts
        };
-       localStorage.setItem('layout_settings', JSON.stringify(settings));
+       const key = getLayoutStorageKey();
+       localStorage.setItem(key, JSON.stringify(settings));
        alert("Configurações de Layout salvas com sucesso!");
     }
 
     function loadLayoutSettings() {
-       const saved = localStorage.getItem('layout_settings');
+       // Limpa o estado visual antes de carregar para não vazar de outro ente
+       const mtEl = document.getElementById('layout-mt');
+       if (mtEl) mtEl.value = 20;
+       const mbEl = document.getElementById('layout-mb');
+       if (mbEl) mbEl.value = 20;
+       const mlEl = document.getElementById('layout-ml');
+       if (mlEl) mlEl.value = 20;
+       const mrEl = document.getElementById('layout-mr');
+       if (mrEl) mrEl.value = 20;
+
+       const prevHeader = document.getElementById('preview-header');
+       const prevHeaderCont = document.getElementById('preview-header-container');
+       if (prevHeader) prevHeader.src = '';
+       if (prevHeaderCont) prevHeaderCont.classList.add('hidden');
+
+       const prevFooter = document.getElementById('preview-footer');
+       const prevFooterCont = document.getElementById('preview-footer-container');
+       if (prevFooter) prevFooter.src = '';
+       if (prevFooterCont) prevFooterCont.classList.add('hidden');
+
+       simulatorTexts = [];
+
+       const key = getLayoutStorageKey();
+       const saved = localStorage.getItem(key); // NUNCA faz fallback para 'layout_settings' genérico
        if (saved) {
            try {
                const settings = JSON.parse(saved);
-               if(settings.marginTop) document.getElementById('layout-mt').value = settings.marginTop;
-               if(settings.marginBottom) document.getElementById('layout-mb').value = settings.marginBottom;
-               if(settings.marginLeft) document.getElementById('layout-ml').value = settings.marginLeft;
-               if(settings.marginRight) document.getElementById('layout-mr').value = settings.marginRight;
+               if(settings.marginTop && mtEl) mtEl.value = settings.marginTop;
+               if(settings.marginBottom && mbEl) mbEl.value = settings.marginBottom;
+               if(settings.marginLeft && mlEl) mlEl.value = settings.marginLeft;
+               if(settings.marginRight && mrEl) mrEl.value = settings.marginRight;
                
                if(settings.headerImg && settings.headerImg.startsWith('data:image')) {
-                  document.getElementById('preview-header').src = settings.headerImg;
-                  document.getElementById('preview-header-container').classList.remove('hidden');
+                  if (prevHeader) prevHeader.src = settings.headerImg;
+                  if (prevHeaderCont) prevHeaderCont.classList.remove('hidden');
                }
                if(settings.footerImg && settings.footerImg.startsWith('data:image')) {
-                  document.getElementById('preview-footer').src = settings.footerImg;
-                  document.getElementById('preview-footer-container').classList.remove('hidden');
+                  if (prevFooter) prevFooter.src = settings.footerImg;
+                  if (prevFooterCont) prevFooterCont.classList.remove('hidden');
                }
 
                if(settings.texts && Array.isArray(settings.texts)) {
@@ -2177,6 +2754,7 @@
                }
            } catch(e) { console.error("Error loading layout settings", e); }
        }
+       carregarLogomarcaEntidade();
     }
 
     function openSimulator() {
@@ -2454,15 +3032,18 @@
             forms = data.map(row => {
                 let tabs = row.schema;
                 let statsConfig = null;
-                if (row.schema && !Array.isArray(row.schema) && row.schema.tabs) {
-                    tabs = row.schema.tabs;
+                let entidade = null;
+                if (row.schema && !Array.isArray(row.schema)) {
+                    if (row.schema.tabs) tabs = row.schema.tabs;
                     statsConfig = row.schema.statsConfig;
+                    entidade = row.schema.entidade || row.entidade;
                 }
                 return {
                     id: row.id,
                     name: row.title,
                     tabs: tabs,
-                    statsConfig: statsConfig
+                    statsConfig: statsConfig,
+                    entidade: entidade || row.entidade || null
                 };
             });
             ensureOrcamentoObraTemplate();
@@ -2525,13 +3106,14 @@
       
       if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         try {
+          const userEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || 'Prefeitura Municipal';
           for (const form of forms) {
             const { error } = await supabaseClient
               .from('forms')
               .upsert({
                 id: form.id,
                 title: form.name,
-                schema: { tabs: form.tabs, statsConfig: form.statsConfig },
+                schema: { tabs: form.tabs, statsConfig: form.statsConfig, entidade: form.entidade || userEntidade },
                 municipio_id: activeMunicipioId
               });
             if (error) console.error('Erro ao salvar no Supabase:', error);
@@ -2549,20 +3131,30 @@
         return;
       }
       
-      const isSuperAdmin = !!(currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin));
-      const userEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome) || '').trim();
+      const profile = currentUserProfile || (window.parent && window.parent.homeUserProfile);
+      const isSuperAdmin = !!(profile && (profile.super_admin || profile.is_superadmin));
+      const userEntidade = (profile && (profile.entidade || profile.entidade_nome)) || new URLSearchParams(window.location.search).get('entidade') || '';
+      const userSigla = (typeof getEntitySigla === 'function' && userEntidade) ? getEntitySigla(userEntidade) : '';
 
       const visibleForms = forms.filter(form => {
         if (isSuperAdmin) return true;
-        if (isOrcamentoForm(form)) return true;
+        if (!userSigla || userSigla === 'Público') return false;
         const fEnt = getFormEntity(form);
-        if (!fEnt || fEnt === 'Geral' || fEnt.toLowerCase() === 'público' || fEnt.toLowerCase() === 'publico') return true;
-        if (!userEntidade) return true;
-        return fEnt.toLowerCase() === userEntidade.toLowerCase();
+        const formSigla = (typeof getEntitySigla === 'function' && fEnt) ? getEntitySigla(fEnt) : '';
+        return formSigla === userSigla;
       });
 
       if (visibleForms.length === 0) {
-        container.innerHTML = '<div class="text-slate-500 text-sm py-4">Nenhum formulário cadastrado para a sua entidade.</div>';
+        container.innerHTML = `
+          <div class="text-center py-10 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50/50 dark:bg-slate-900/30">
+            <span class="material-symbols-outlined text-4xl text-slate-400 mb-2">description</span>
+            <h4 class="text-sm font-bold text-slate-700 dark:text-slate-300">Nenhum formulário cadastrado para ${userSigla ? userSigla : 'a sua entidade'}</h4>
+            <p class="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">Cada ente cria e mantém seus próprios formulários personalizados para coleta de dados em campo.</p>
+            <button onclick="openNewFormModal()" class="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-sky-600 transition-colors shadow-sm">
+              <span class="material-symbols-outlined text-[16px]">add</span> Criar Novo Formulário
+            </button>
+          </div>
+        `;
         return;
       }
       
@@ -5001,13 +5593,16 @@
             }
 
             const isSuperAdmin = !!(currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin));
-            const userEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome) || '').trim().toLowerCase();
+            const userEntidadeRaw = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome) || '').trim();
+            const userSigla = (typeof getEntitySigla === 'function') ? getEntitySigla(userEntidadeRaw) : userEntidadeRaw;
 
-            // Filtro de Segurança Institucional: Ente comum só vê as suas ortofotos ou ortofotos públicas/gerais
-            if (!isSuperAdmin && userEntidade) {
+            // Filtro de Segurança Institucional: Cada ente só vê suas próprias ortofotos ou ortofotos expressamente compartilhadas
+            if (!isSuperAdmin && userSigla) {
                 dbRasters = dbRasters.filter(r => {
-                    const rEnt = (r.entidade || 'Prefeitura Municipal').trim().toLowerCase();
-                    return rEnt === userEntidade || rEnt === 'geral' || rEnt === 'público' || rEnt === 'publico';
+                    if (r.compartilhada === true) return true;
+                    const rEnt = r.entidade || 'Prefeitura Municipal';
+                    const rSigla = (typeof getEntitySigla === 'function') ? getEntitySigla(rEnt) : rEnt;
+                    return rSigla === userSigla;
                 });
             }
 
@@ -5649,11 +6244,19 @@
         const container = document.getElementById('spatial-rules-list');
         if (!container) return;
 
-        const isSuperAdmin = !!(currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin));
-        const userEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome) || '').trim();
+        const profile = currentUserProfile || (window.parent && window.parent.homeUserProfile);
+        const isSuperAdmin = !!(profile && (profile.super_admin || profile.is_superadmin));
+        const userEntidade = (profile && (profile.entidade || profile.entidade_nome)) || new URLSearchParams(window.location.search).get('entidade') || '';
+        const userSigla = (typeof getEntitySigla === 'function' && userEntidade) ? getEntitySigla(userEntidade) : '';
 
         function getRuleEntityLocal(rule) {
             if (rule && rule.entidade) return rule.entidade;
+            const text = `${rule?.name || ''} ${rule?.targetLayerName || ''} ${rule?.refLayerName || ''}`.toLowerCase();
+            if (text.includes('spu') || text.includes('patrimônio da união') || text.includes('patrimonio da uniao')) return 'SPU';
+            if (text.includes('mpf') || text.includes('ministério público') || text.includes('ministerio publico')) return 'MPF';
+            if (text.includes('pf') || text.includes('polícia federal') || text.includes('policia federal')) return 'PF';
+            if (text.includes('prefeitura') || text.includes('municipal')) return 'Prefeitura Municipal';
+
             let themesList = [];
             try {
                 const saved = localStorage.getItem('constructive_themes');
@@ -5666,23 +6269,26 @@
                     if (ent) return ent;
                 }
             }
-            return 'Geral';
+            return 'Público';
         }
 
         const visibleRules = (spatialRules || []).filter(rule => {
             if (isSuperAdmin) return true;
+            if (!userSigla || userSigla === 'Público') return false;
             const rEnt = getRuleEntityLocal(rule);
-            if (!rEnt || rEnt === 'Geral' || rEnt.toLowerCase() === 'público' || rEnt.toLowerCase() === 'publico') return true;
-            if (!userEntidade) return true;
-            return rEnt.toLowerCase() === userEntidade.toLowerCase();
+            const rSigla = (typeof getEntitySigla === 'function') ? getEntitySigla(rEnt) : rEnt;
+            return rSigla === userSigla;
         });
 
         if (visibleRules.length === 0) {
             container.innerHTML = `
                 <div class="col-span-1 md:col-span-2 text-center py-10 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50/50 dark:bg-slate-900/30">
                     <span class="material-symbols-outlined text-4xl text-slate-400 mb-2">hub</span>
-                    <h4 class="text-sm font-bold text-slate-700 dark:text-slate-300">Nenhuma Análise Espacial Cadastrada para a sua Entidade</h4>
-                    <p class="text-xs text-slate-500 max-w-sm mx-auto mt-1">Crie cruzamentos espaciais entre camadas para detectar sobreposições e confrontações no mapa.</p>
+                    <h4 class="text-sm font-bold text-slate-700 dark:text-slate-300">Nenhuma Análise Espacial Cadastrada para ${userSigla || 'a sua entidade'}</h4>
+                    <p class="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">Crie cruzamentos espaciais entre camadas para detectar sobreposições e confrontações no mapa.</p>
+                    <button onclick="openSpatialRuleModal()" class="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-xs font-bold rounded-lg hover:from-cyan-500 hover:to-blue-500 transition-all shadow-md">
+                      <span class="material-symbols-outlined text-[16px]">add_location_alt</span> Nova Análise Espacial
+                    </button>
                 </div>
             `;
             return;
@@ -5802,6 +6408,11 @@
                 loadUsersPanel();
             } else if (tabId === 'estatistica') {
                 loadSpatialAnalyticsRules();
+            } else if (tabId === 'layout') {
+                if (typeof loadLayoutSettings === 'function') loadLayoutSettings();
+                if (typeof carregarLogomarcaEntidade === 'function') carregarLogomarcaEntidade();
+            } else if (tabId === 'cadastros') {
+                if (typeof renderFormsList === 'function') renderFormsList();
             } else if (tabId === 'auditoria') {
                 if (typeof window.initAuditoriaTab === 'function') window.initAuditoriaTab();
             }

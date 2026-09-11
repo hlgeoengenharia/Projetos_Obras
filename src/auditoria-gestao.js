@@ -126,6 +126,9 @@
         if (countBadge) countBadge.textContent = 'Aguardando busca';
     }
 
+    let currentAdminProfile = null;
+    let allowedEntityUserIds = null; // null = SuperAdmin (vê tudo); Array = lista de IDs restritos à entidade
+
     async function checkAuditoriaAccess() {
         try {
             if (typeof supabaseClient === 'undefined' || !supabaseClient) return true;
@@ -138,20 +141,50 @@
                 .eq('id', user.id)
                 .maybeSingle();
 
-            if (profile?.super_admin || profile?.is_superadmin || profile?.papel === 'superadmin' || profile?.papel === 'admin') {
+            currentAdminProfile = profile;
+
+            if (profile?.super_admin || profile?.is_superadmin || profile?.papel === 'superadmin') {
+                allowedEntityUserIds = null; // SuperAdmin vê todas as entidades
                 return true;
             }
 
-            // Checa também se é admin em municipio_membros
+            // Checa se é admin em municipio_membros ou admin de entidade
             const { data: membro } = await supabaseClient
                 .from('municipio_membros')
-                .select('papel, status')
+                .select('papel, status, entidade')
                 .eq('user_id', user.id)
                 .eq('status', 'aprovado')
                 .eq('papel', 'admin')
                 .limit(1);
 
-            return (membro && membro.length > 0);
+            const isMunAdmin = (membro && membro.length > 0);
+            const isEntityAdmin = profile?.papel === 'admin' || isMunAdmin;
+
+            if (isEntityAdmin) {
+                // Identifica a entidade do administrador logado
+                const userEntidade = (profile?.entidade || (membro && membro[0]?.entidade) || '').trim();
+                const userSigla = typeof getEntitySigla === 'function' ? getEntitySigla(userEntidade) : userEntidade;
+
+                // Busca todos os membros que pertencem à mesma entidade
+                const { data: membrosEntidade } = await supabaseClient
+                    .from('municipio_membros')
+                    .select('user_id, entidade, profiles!user_id(id, entidade)');
+
+                const ids = new Set();
+                ids.add(user.id); // Inclui o próprio admin
+                (membrosEntidade || []).forEach(m => {
+                    const ent = (m.entidade || m.profiles?.entidade || '').trim();
+                    const sigla = typeof getEntitySigla === 'function' ? getEntitySigla(ent) : ent;
+                    if (sigla === userSigla || (ent && userEntidade && ent.toLowerCase() === userEntidade.toLowerCase())) {
+                        if (m.user_id) ids.add(m.user_id);
+                    }
+                });
+
+                allowedEntityUserIds = Array.from(ids);
+                return true;
+            }
+
+            return false;
         } catch(e) {
             return false;
         }
@@ -186,12 +219,16 @@
             }
         }
 
-        // 2. Busca Usuários Online
-        const onlineUsers = await window.auditLogger.getOnlineUsers();
+        // 2. Busca Usuários Online da entidade
+        let onlineUsers = await window.auditLogger.getOnlineUsers();
+        if (allowedEntityUserIds !== null) {
+            onlineUsers = (onlineUsers || []).filter(u => allowedEntityUserIds.includes(u.id));
+        }
 
         // 3. Busca Logs filtrados no Supabase
         currentLogs = await window.auditLogger.fetchLogs({
             userId: currentFilters.userId,
+            allowedUserIds: allowedEntityUserIds,
             tipoAcao: currentFilters.tipoAcao,
             startDate: startDate,
             endDate: endDate,
@@ -256,7 +293,11 @@
 
         try {
             if (typeof supabaseClient !== 'undefined' && supabaseClient) {
-                const { data: users } = await supabaseClient.from('profiles').select('id, nome, email').order('nome');
+                let query = supabaseClient.from('profiles').select('id, nome, email').order('nome');
+                if (allowedEntityUserIds !== null) {
+                    query = query.in('id', allowedEntityUserIds);
+                }
+                const { data: users } = await query;
                 if (users) {
                     let html = '<option value="">-- Todos os Usuários --</option>';
                     users.forEach(u => {

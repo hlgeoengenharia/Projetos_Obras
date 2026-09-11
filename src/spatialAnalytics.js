@@ -118,6 +118,12 @@
 
         getRuleEntity(rule) {
             if (rule && rule.entidade) return rule.entidade;
+            const text = `${rule?.name || ''} ${rule?.targetLayerName || ''} ${rule?.refLayerName || ''}`.toLowerCase();
+            if (text.includes('spu') || text.includes('patrimônio da união') || text.includes('patrimonio da uniao')) return 'SPU';
+            if (text.includes('mpf') || text.includes('ministério público') || text.includes('ministerio publico')) return 'MPF';
+            if (text.includes('pf') || text.includes('polícia federal') || text.includes('policia federal')) return 'PF';
+            if (text.includes('prefeitura') || text.includes('municipal')) return 'Prefeitura Municipal';
+
             const allThemes = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes : (window.themes || []);
             if (rule && rule.targetLayer) {
                 const targetTheme = allThemes.find(t => String(t.id) === String(rule.targetLayer));
@@ -133,26 +139,42 @@
                     if (ent) return ent;
                 }
             }
-            return 'Geral';
+            return 'Público';
+        }
+
+        getVisibleRules() {
+            const profile = (typeof currentUserProfile !== 'undefined' && currentUserProfile) || (window.parent && window.parent.currentUserProfile) || (window.parent && window.parent.homeUserProfile);
+            const isSuperAdmin = !!(profile && (profile.super_admin || profile.is_superadmin || profile.papel === 'superadmin'));
+            const userEntidade = (window.currentUserEntidade || (profile && (profile.entidade || profile.entidade_nome)) || '').trim();
+            const getSigla = (typeof window.getEntitySigla === 'function') ? window.getEntitySigla : (name => {
+                if (!name) return 'Município';
+                const lower = String(name).trim().toLowerCase();
+                if (lower.includes('patrimônio da união') || lower.includes('patrimonio da uniao') || lower === 'spu') return 'SPU';
+                if (lower.includes('ministério público') || lower.includes('ministerio publico') || lower === 'mpf') return 'MPF';
+                if (lower.includes('polícia federal') || lower.includes('policia federal') || lower === 'pf') return 'PF';
+                if (lower.includes('prefeitura') || lower.includes('municipal') || lower.includes('município')) return 'Município';
+                return name;
+            });
+            const userSigla = getSigla(userEntidade);
+
+            return (this.rules || []).filter(rule => {
+                if (isSuperAdmin) return true;
+                if (!userSigla || userSigla === 'Público') return false;
+                const rEnt = (rule.entidade || this.getRuleEntity(rule) || '').trim();
+                const rSigla = getSigla(rEnt);
+                return rSigla === userSigla;
+            });
         }
 
         updateBadge() {
             const badge = document.getElementById('spatial-rules-badge');
             if (badge) {
-                const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
-                const userEntidade = (window.currentUserEntidade || '').trim();
-                const visibleRules = (this.rules || []).filter(rule => {
-                    if (isSuperAdmin) return true;
-                    const rEnt = (rule.entidade || this.getRuleEntity(rule)).trim();
-                    if (!rEnt || rEnt === 'Geral' || rEnt.toLowerCase() === 'público' || rEnt.toLowerCase() === 'publico') return true;
-                    if (!userEntidade) return true;
-                    return rEnt.toLowerCase() === userEntidade.toLowerCase();
-                });
-
+                const visibleRules = this.getVisibleRules();
                 if (visibleRules.length > 0) {
                     badge.textContent = visibleRules.length;
                     badge.classList.remove('hidden');
                 } else {
+                    badge.textContent = '0';
                     badge.classList.add('hidden');
                 }
             }
@@ -208,8 +230,8 @@
                     }
                     this.loadRules();
                     this.renderMenuList();
-                    menu.style.top = '10px';
-                    menu.style.right = '10px';
+                    menu.style.top = '72px';
+                    menu.style.right = '16px';
                     menu.style.left = 'auto';
                     menu.style.bottom = 'auto';
                     menu.classList.remove('hidden');
@@ -230,8 +252,8 @@
 
             const menu = document.createElement('div');
             menu.id = 'spatial-analytics-menu';
-            // Posicionamento no canto superior direito a 10px com largura fixa de 380px e mesma transparência
-            menu.className = 'fixed top-[10px] right-[10px] z-[1000] hidden flex flex-col w-[380px] max-w-[92vw] bg-[#070b14]/75 backdrop-blur-md rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 overflow-hidden';
+            // Posicionamento abaixo do cabeçalho com largura fixa de 380px
+            menu.className = 'fixed top-[72px] right-[16px] z-[1000] hidden flex flex-col w-[380px] max-w-[92vw] bg-white/90 dark:bg-[#070b14]/85 backdrop-blur-md rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-slate-200/50 dark:border-white/10 overflow-hidden';
             
             menu.innerHTML = `
                 <div id="spatial-menu-header" class="px-4 py-3 border-b border-white/10 flex items-center justify-between bg-slate-900/60 cursor-grab select-none">
@@ -240,7 +262,7 @@
                         <h3 class="text-xs font-bold uppercase tracking-wider text-slate-100">Estatísticas Cruzadas</h3>
                     </div>
                     <div class="flex items-center gap-1">
-                        <button type="button" onclick="window.location.href='home.html?tab=estatistica'" class="p-1.5 hover:bg-white/10 rounded-full text-white/60 hover:text-cyan-400 transition-colors mr-1 cursor-pointer" title="Configurar em Ajustes">
+                        <button type="button" onclick="window.location.href='home.html?view=municipio&tab=estatistica'" class="p-1.5 hover:bg-white/10 rounded-full text-white/60 hover:text-cyan-400 transition-colors mr-1 cursor-pointer" title="Configurar no Card de Estatística">
                             <span class="material-symbols-outlined text-[18px]">settings</span>
                         </button>
                         <button type="button" onclick="window.spatialAnalyticsEngine.closeMenu()" class="p-1.5 hover:bg-white/10 rounded-full text-white/60 hover:text-red-400 transition-colors cursor-pointer" title="Fechar">
@@ -262,23 +284,27 @@
             const container = document.getElementById('spatial-menu-items');
             if (!container) return;
 
-            const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
-            const userEntidade = (window.currentUserEntidade || '').trim();
-
-            const visibleRules = (this.rules || []).filter(rule => {
-                if (isSuperAdmin) return true;
-                const rEnt = (rule.entidade || this.getRuleEntity(rule)).trim();
-                if (!rEnt || rEnt === 'Geral' || rEnt.toLowerCase() === 'público' || rEnt.toLowerCase() === 'publico') return true;
-                if (!userEntidade) return true;
-                return rEnt.toLowerCase() === userEntidade.toLowerCase();
-            });
+            const visibleRules = this.getVisibleRules();
 
             if (visibleRules.length === 0) {
+                const profile = (typeof currentUserProfile !== 'undefined' && currentUserProfile) || (window.parent && window.parent.currentUserProfile) || (window.parent && window.parent.homeUserProfile);
+                const userEntidade = (window.currentUserEntidade || (profile && (profile.entidade || profile.entidade_nome)) || '').trim();
+                const getSigla = (typeof window.getEntitySigla === 'function') ? window.getEntitySigla : (name => {
+                    if (!name) return 'Município';
+                    const lower = String(name).trim().toLowerCase();
+                    if (lower.includes('patrimônio da união') || lower.includes('patrimonio da uniao') || lower === 'spu') return 'SPU';
+                    if (lower.includes('ministério público') || lower.includes('ministerio publico') || lower === 'mpf') return 'MPF';
+                    if (lower.includes('polícia federal') || lower.includes('policia federal') || lower === 'pf') return 'PF';
+                    if (lower.includes('prefeitura') || lower.includes('municipal') || lower.includes('município')) return 'Município';
+                    return name;
+                });
+                const userSigla = getSigla(userEntidade);
+
                 container.innerHTML = `
                     <div class="text-center py-6 text-slate-400">
                         <span class="material-symbols-outlined text-3xl mb-1 opacity-50">hub</span>
-                        <p class="text-xs">Nenhuma regra de estatística cadastrada para sua entidade.</p>
-                        <button type="button" onclick="window.openSpatialRuleModal()" class="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 rounded-lg text-xs font-bold text-cyan-600 dark:text-cyan-400 transition-colors cursor-pointer">
+                        <p class="text-xs">Nenhuma regra de estatística cadastrada para ${userSigla || 'sua entidade'}.</p>
+                        <button type="button" onclick="window.location.href='home.html?view=municipio&tab=estatistica'" class="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 rounded-lg text-xs font-bold text-cyan-600 dark:text-cyan-400 transition-colors cursor-pointer">
                             <span class="material-symbols-outlined text-[15px]">add_circle</span> Configurar Análise Espacial
                         </button>
                     </div>
@@ -2521,9 +2547,11 @@
         const existingEditingId = window.currentEditingSpatialRuleId || (document.getElementById('spatial-rule-id')?.value);
         const execId = (existingEditingId && !existingEditingId.startsWith('temp_exec_')) ? existingEditingId : ('temp_exec_' + Date.now());
 
+        const userEntidade = (window.currentUserEntidade || (typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || 'Prefeitura Municipal').trim();
         const ruleData = {
             id: execId,
             name: nameInput?.value.trim() || 'Consulta Espacial Direta',
+            entidade: userEntidade,
             targetLayer: targetSel.value,
             targetLayerName: targetSel.options[targetSel.selectedIndex]?.text,
             targetAttrField: targetAttrField?.value || '',
@@ -2942,9 +2970,9 @@
             ruleId = 'rule_' + Date.now();
         }
 
-        const userEntidade = (window.currentUserEntidade || '').trim();
+        const userEntidade = (window.currentUserEntidade || (typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || 'Prefeitura Municipal').trim();
         const existingRule = currentRules.find(r => r.id === ruleId);
-        const ruleEntidade = (existingRule && existingRule.entidade) || userEntidade || 'Geral';
+        const ruleEntidade = (existingRule && existingRule.entidade) || userEntidade || 'Prefeitura Municipal';
 
         const savedRule = {
             id: ruleId,
@@ -3107,4 +3135,11 @@
     document.addEventListener('DOMContentLoaded', () => {
         window.spatialAnalyticsEngine.init();
     });
+
+    window.openEstatisticasObrasModal = function() {
+        if (window.spatialAnalyticsEngine && typeof window.spatialAnalyticsEngine.toggleMenu === 'function') {
+            window.spatialAnalyticsEngine.toggleMenu();
+        }
+    };
+    window.toggleSpatialAnalyticsMenu = window.openEstatisticasObrasModal;
 })();
