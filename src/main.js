@@ -842,7 +842,11 @@ function initMap() {
         }
         
         // Se a ferramenta de medição estiver ativa ou em modo de desenho, permite o clique livre em qualquer ponto ou camada sem interceptar e sem exibir avisos
-        if (window.isMeasurementActive || (typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode) || (typeof map !== 'undefined' && map && map.pm && map.pm.Draw && map.pm.Draw.isActive())) {
+        const isPmDrawing = typeof map !== 'undefined' && map && map.pm && (
+            (typeof map.pm.globalDrawModeEnabled === 'function' && map.pm.globalDrawModeEnabled()) ||
+            (map.pm.Draw && typeof map.pm.Draw.isActive === 'function' && map.pm.Draw.isActive())
+        );
+        if (window.isMeasurementActive || (typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode) || isPmDrawing) {
             return; // bubble para a ferramenta de medição (Leaflet-Geoman PM)
         }
         
