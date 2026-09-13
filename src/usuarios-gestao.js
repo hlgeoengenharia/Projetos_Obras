@@ -172,31 +172,9 @@
 
             // Mapeia e sanitiza permissões de raster
             _allRasterPerms = {};
-            const orphanRasterIds = [];
             (permsRasterRes?.data || []).forEach(p => {
-                const userObj = _allMembros.find(m => m.user_id === p.user_id);
-                const userEntidadeRaw = (userObj?.entidade || userObj?.profiles?.entidade || '').trim();
-                const userSigla = getEntitySigla(userEntidadeRaw);
-
-                const rasterObj = _allRasters.find(r => r.id === p.raster_id);
-                const rasterEntidadeRaw = (rasterObj?.entidade || '').trim();
-                const rasterSigla = getEntitySigla(rasterEntidadeRaw);
-
-                const isUserRejeitado = userObj && userObj.status === 'rejeitado';
-                // Permissão só é considerada órfã se o usuário foi rejeitado/excluído ou o raster não existe mais no banco
-                if (isUserRejeitado || !rasterObj || !userObj) {
-                    orphanRasterIds.push(p.id);
-                    return;
-                }
-
                 _allRasterPerms[`${p.user_id}:${p.raster_id}`] = p;
             });
-
-            if (orphanRasterIds.length > 0) {
-                supabaseClient.from('permissoes_raster').delete().in('id', orphanRasterIds).then(() => {
-                    console.log(`[UsuariosManager] ${orphanRasterIds.length} permissões de raster residuais excluídas.`);
-                }).catch(e => console.warn('Erro ao deletar permissões de raster residuais:', e));
-            }
 
             // Mapeia tipos de entidades
             _entidadesTipos = {};
@@ -213,34 +191,10 @@
             });
 
             // Mapeia permissões por camada (user_id:theme_id -> record)
-            // Sanitização: usuários novos ou aceitos em outro ente começam com todas as camadas desativadas por padrão
             _allCamadaPerms = {};
-            const orphanCamadaIds = [];
-
             (permsCamadaRes.data || []).forEach(p => {
-                const userObj = _allMembros.find(m => m.user_id === p.user_id);
-                const userEntidadeRaw = (userObj?.entidade || userObj?.profiles?.entidade || '').trim();
-                const userSigla = getEntitySigla(userEntidadeRaw);
-
-                const temaObj = _allTemas.find(t => t.id === p.theme_id);
-                const temaEntidadeRaw = temaObj ? ((temaObj.metadata && temaObj.metadata.entidade) || temaObj.entidade || '').trim() : '';
-                const temaSigla = getEntitySigla(temaEntidadeRaw);
-
-                const isUserRejeitado = userObj && userObj.status === 'rejeitado';
-                // Permissão só é considerada órfã se o usuário foi rejeitado/excluído ou a camada não existe mais no banco
-                if (isUserRejeitado || !temaObj || !userObj) {
-                    orphanCamadaIds.push(p.id);
-                    return;
-                }
-
                 _allCamadaPerms[`${p.user_id}:${p.theme_id}`] = p;
             });
-
-            if (orphanCamadaIds.length > 0) {
-                supabaseClient.from('permissoes_camada').delete().in('id', orphanCamadaIds).then(() => {
-                    console.log(`[UsuariosManager] ${orphanCamadaIds.length} permissões residuais órfãs de outros entes excluídas com sucesso.`);
-                }).catch(e => console.warn('Erro ao deletar permissões órfãs:', e));
-            }
 
             // Mapeia permissões por aba (user_id:form_id:tab_id -> record)
             _allAbaPerms = {};
@@ -1159,6 +1113,8 @@
             const tEntRaw = getThemeEntity(t);
             const tSigla = getEntitySigla(tEntRaw);
 
+            if (_currentUserProfile?.super_admin) return true;
+
             if (isPartnerPontoFocal) {
                 // Camadas da entidade do Administrador disponíveis para compartilhar com este Ponto Focal
                 return tSigla === minhaSigla;
@@ -1175,14 +1131,25 @@
         });
 
         const camadasHtml = temasDoMunicipio.map(tema => {
+            const formVinculado = (tema.tipo_cadastro && tema.tipo_cadastro !== 'padrao') ? _allForms[tema.tipo_cadastro] : null;
+            const numAbas = (formVinculado && formVinculado.tabs) ? formVinculado.tabs.length : 0;
+
             const userCamadaPerm = _allCamadaPerms[`${userId}:${tema.id}`] || { pode_ver: false, pode_editar: false, pode_excluir: false };
             const adminCeiling = getAdminCeiling(tema.id);
 
-            const podeVerCamada = !!userCamadaPerm.pode_ver;
-            const podeExcluirCamada = !!userCamadaPerm.pode_excluir;
+            // AUTO-HEAL DE HIERARQUIA:
+            // Se o usuário possui qualquer sub-aba liberada no banco, a camada pai obrigatoriamente
+            // deve ser tratada como liberada para visualização!
+            let hasAnySubAbaVer = false;
+            if (numAbas > 0) {
+                hasAnySubAbaVer = formVinculado.tabs.some(tab => {
+                    const ap = _allAbaPerms[`${userId}:${formVinculado.id}:${tab.id}`];
+                    return !!(ap && (ap.pode_ver || ap.pode_editar));
+                });
+            }
 
-            const formVinculado = (tema.tipo_cadastro && tema.tipo_cadastro !== 'padrao') ? _allForms[tema.tipo_cadastro] : null;
-            const numAbas = (formVinculado && formVinculado.tabs) ? formVinculado.tabs.length : 0;
+            const podeVerCamada = !!userCamadaPerm.pode_ver || hasAnySubAbaVer;
+            const podeExcluirCamada = !!userCamadaPerm.pode_excluir;
 
             const tEntRaw = getThemeEntity(tema);
             const tSigla = getEntitySigla(tEntRaw);
@@ -1191,7 +1158,7 @@
             let abasHtml = '';
             if (numAbas > 0) {
                 abasHtml = `
-                    <div id="camada-sub-abas-${userId}-${tema.id}" class="camada-sub-abas hidden ml-3 pl-3 border-l-2 border-slate-300 dark:border-slate-600 mt-2 space-y-2 sub-abas-container transition-all" data-theme-id="${tema.id}">
+                    <div id="camada-sub-abas-${userId}-${tema.id}" class="camada-sub-abas hidden ml-3 pl-3 border-l-2 border-slate-300 dark:border-slate-600 mt-2 space-y-2 sub-abas-container transition-all" data-theme-id="${tema.id}" style="opacity: ${podeVerCamada ? '1' : '0.4'}; pointer-events: ${podeVerCamada ? 'auto' : 'none'};">
                         <div class="text-[11px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400 mb-1.5 flex items-center gap-1">
                             <span class="material-symbols-outlined text-[14px]">article</span> Abas do Formulário: ${formVinculado.title || ''}
                         </div>
@@ -1199,18 +1166,22 @@
                             const userAbaPerm = _allAbaPerms[`${userId}:${formVinculado.id}:${tab.id}`] || { pode_ver: false, pode_editar: false };
                             const abaCeiling = getAdminCeiling(tema.id, formVinculado.id, tab.id);
 
-                            const verDisabled = (!isEditing || !abaCeiling.podeVer) ? 'disabled' : '';
-                            const editDisabled = (!isEditing || !abaCeiling.podeEditar) ? 'disabled' : '';
+                            // Respeito estrito à hierarquia: se a camada pai estiver desmarcada, a aba fica desmarcada
+                            const isAbaVerChecked = podeVerCamada && !!userAbaPerm.pode_ver;
+                            const isAbaEditarChecked = podeVerCamada && !!userAbaPerm.pode_editar;
+
+                            const verDisabled = (!isEditing || !abaCeiling.podeVer || !podeVerCamada) ? 'disabled' : '';
+                            const editDisabled = (!isEditing || !abaCeiling.podeEditar || !podeVerCamada) ? 'disabled' : '';
 
                             return `
                                 <div class="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600/80 rounded-lg px-3 py-2 text-xs shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors" data-form-id="${formVinculado.id}" data-tab-id="${tab.id}">
                                     <span class="text-slate-900 dark:text-slate-100 font-semibold truncate">${tab.title}</span>
                                     <div class="flex items-center gap-4 shrink-0">
                                         <label class="flex items-center gap-1.5 ${isEditing ? 'cursor-pointer' : 'cursor-default'} text-xs font-medium text-slate-700 dark:text-slate-300">
-                                            <input type="checkbox" class="aba-ver-check rounded border-slate-400 dark:border-slate-500 text-sky-600 focus:ring-sky-500 w-3.5 h-3.5" ${userAbaPerm.pode_ver ? 'checked' : ''} ${verDisabled}> Ver
+                                            <input type="checkbox" class="aba-ver-check rounded border-slate-400 dark:border-slate-500 text-sky-600 focus:ring-sky-500 w-3.5 h-3.5" ${isAbaVerChecked ? 'checked' : ''} ${verDisabled} onchange="window.UsuariosManager.onSubAbaChange(this, '${userId}', '${tema.id}', 'ver')"> Ver
                                         </label>
                                         <label class="flex items-center gap-1.5 ${isEditing ? 'cursor-pointer' : 'cursor-default'} text-xs font-medium text-slate-700 dark:text-slate-300">
-                                            <input type="checkbox" class="aba-editar-check rounded border-slate-400 dark:border-slate-500 text-sky-600 focus:ring-sky-500 w-3.5 h-3.5" ${userAbaPerm.pode_editar ? 'checked' : ''} ${editDisabled}> Editar
+                                            <input type="checkbox" class="aba-editar-check rounded border-slate-400 dark:border-slate-500 text-sky-600 focus:ring-sky-500 w-3.5 h-3.5" ${isAbaEditarChecked ? 'checked' : ''} ${editDisabled} onchange="window.UsuariosManager.onSubAbaChange(this, '${userId}', '${tema.id}', 'editar')"> Editar
                                         </label>
                                     </div>
                                 </div>
@@ -1750,15 +1721,59 @@
             subContainer.style.opacity = isChecked ? '1' : '0.4';
             subContainer.style.pointerEvents = isChecked ? 'auto' : 'none';
             if (isChecked) {
-                // Ao habilitar a camada, garante que as sub-abas tenham visualização habilitada por padrão
+                // Ao habilitar a camada, reabilita os inputs e garante que 'Ver' venha checado por padrão se nada estiver checado
+                subContainer.querySelectorAll('.aba-ver-check, .aba-editar-check').forEach(cb => {
+                    cb.disabled = false;
+                });
                 const anyVerChecked = Array.from(subContainer.querySelectorAll('.aba-ver-check')).some(cb => cb.checked);
                 if (!anyVerChecked) {
                     subContainer.querySelectorAll('.aba-ver-check').forEach(cb => {
-                        if (!cb.disabled) cb.checked = true;
+                        cb.checked = true;
                     });
                 }
             } else {
-                subContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+                // Ao desabilitar a camada, desmarca e desabilita todas as sub-abas imediatamente
+                subContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                    cb.checked = false;
+                    cb.disabled = true;
+                });
+            }
+        }
+    }
+
+    function onSubAbaChange(abaCheckbox, userId, themeId, actionType) {
+        const subContainer = document.getElementById(`camada-sub-abas-${userId}-${themeId}`);
+        const card = document.querySelector(`[data-user-card="${userId}"]`);
+        const camadaCard = card ? card.querySelector(`[data-camada-id="${themeId}"]`) : null;
+        const camadaCheckbox = camadaCard ? camadaCard.querySelector('.camada-ver-check') : null;
+
+        // Se uma aba foi marcada (Ver ou Editar), garante que a camada pai fique marcada!
+        if (abaCheckbox.checked && camadaCheckbox && !camadaCheckbox.checked) {
+            camadaCheckbox.checked = true;
+            if (subContainer) {
+                subContainer.style.opacity = '1';
+                subContainer.style.pointerEvents = 'auto';
+                subContainer.querySelectorAll('.aba-ver-check, .aba-editar-check').forEach(cb => {
+                    cb.disabled = false;
+                });
+            }
+        }
+
+        // Se marcou 'Editar', obrigatoriamente precisa ter 'Ver' marcado
+        if (actionType === 'editar' && abaCheckbox.checked) {
+            const row = abaCheckbox.closest('[data-form-id][data-tab-id]');
+            if (row) {
+                const verCb = row.querySelector('.aba-ver-check');
+                if (verCb) verCb.checked = true;
+            }
+        }
+
+        // Se desmarcou 'Ver', obrigatoriamente desmarca 'Editar'
+        if (actionType === 'ver' && !abaCheckbox.checked) {
+            const row = abaCheckbox.closest('[data-form-id][data-tab-id]');
+            if (row) {
+                const editCb = row.querySelector('.aba-editar-check');
+                if (editCb) editCb.checked = false;
             }
         }
     }
@@ -1810,7 +1825,7 @@
 
             camadaCards.forEach(cCard => {
                 const themeId = cCard.getAttribute('data-camada-id');
-                const podeVer = !!cCard.querySelector('.camada-ver-check')?.checked;
+                let podeVer = !!cCard.querySelector('.camada-ver-check')?.checked;
                 const podeExcluir = !!cCard.querySelector('.camada-excluir-check')?.checked;
 
                 const abaEls = cCard.querySelectorAll('[data-form-id][data-tab-id]');
@@ -1822,6 +1837,10 @@
                     const podeVerAba = !!aEl.querySelector('.aba-ver-check')?.checked;
                     const podeEditarAba = !!aEl.querySelector('.aba-editar-check')?.checked;
 
+                    // Se qualquer aba estiver marcada, a camada pai obrigatoriamente deve ser verdadeira
+                    if (podeVerAba || podeEditarAba) {
+                        podeVer = true;
+                    }
                     if (podeEditarAba) podeEditarCamada = true;
 
                     abaRows.push({
@@ -1851,6 +1870,10 @@
                     console.error('Erro ao atualizar permissoes_camada:', cErr);
                     throw new Error('Falha ao salvar permissões de camada: ' + (cErr.message || 'Violação de política RLS no banco de dados.'));
                 }
+                // Atualiza cache em memória imediatamente
+                camadaRows.forEach(row => {
+                    _allCamadaPerms[`${row.user_id}:${row.theme_id}`] = row;
+                });
             }
 
             // 4. Salva permissoes_aba
@@ -1862,6 +1885,10 @@
                     console.error('Erro ao atualizar permissoes_aba:', aErr);
                     throw new Error('Falha ao salvar permissões de aba: ' + (aErr.message || 'Violação de política RLS no banco de dados.'));
                 }
+                // Atualiza cache em memória imediatamente
+                abaRows.forEach(row => {
+                    _allAbaPerms[`${row.user_id}:${row.form_id}:${row.tab_id}`] = row;
+                });
             }
 
             // 4.1 Salva ponto_focal, entidade, cargo, unidade, setor e delegações em profiles e municipio_membros APENAS se for usuário local
@@ -2114,6 +2141,7 @@
         salvarUsuario,
         removerAcesso,
         toggleCamadaSubAbas,
+        onSubAbaChange,
         selectEntidadeFiltro,
         switchMainTab,
         selectCompartilhadoFiltro,

@@ -247,6 +247,19 @@ const sqlProjetos = fs.readFileSync('supabase_projetos_setup.sql', 'utf8');
 const hasGrantAuth = sqlProjetos.includes('GRANT ALL ON TABLE public.user_projetos TO authenticated;');
 assertTest('Script supabase_projetos_setup.sql contém GRANT para authenticated', hasGrantAuth);
 
+// 6. Integridade de Hierarquia de Camadas e Sub-Abas
+const hasAutoHealHierarchy = usuariosGestaoCode.includes('hasAnySubAbaVer') && usuariosGestaoCode.includes('podeVerCamada = !!userCamadaPerm.pode_ver || hasAnySubAbaVer');
+assertTest('Hierarquia Camada/Abas: Auto-Heal ativo (se há abas liberadas, a camada pai é ativada)', hasAutoHealHierarchy);
+
+const hasOnSubAbaChange = usuariosGestaoCode.includes('function onSubAbaChange') && usuariosGestaoCode.includes('onSubAbaChange,');
+assertTest('Hierarquia Camada/Abas: onSubAbaChange implementada e exposta em UsuariosManager', hasOnSubAbaChange);
+
+const hasMemoryCacheSync = usuariosGestaoCode.includes('_allCamadaPerms[`${row.user_id}:${row.theme_id}`] = row;') && usuariosGestaoCode.includes('_allAbaPerms[`${row.user_id}:${row.form_id}:${row.tab_id}`] = row;');
+assertTest('Sincronização: Cache em memória de _allCamadaPerms e _allAbaPerms atualizado ao salvar', hasMemoryCacheSync);
+
+const noDestructiveOrphanDeletion = !usuariosGestaoCode.includes("supabaseClient.from('permissoes_camada').delete().in('id', orphanCamadaIds)");
+assertTest('Segurança de Dados: Ausência de rotina destrutiva que deletava permissões no carregamento', noDestructiveOrphanDeletion);
+
 // ------------------------------------------------------------------------------
 // RELATÓRIO FINAL
 // ------------------------------------------------------------------------------
