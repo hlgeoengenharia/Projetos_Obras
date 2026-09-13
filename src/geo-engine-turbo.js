@@ -472,6 +472,10 @@
             return tree;
         },
 
+        indexTheme(themeId, features) {
+            return this.indexThemeFeatures(themeId, features);
+        },
+
         // Busca feições visíveis no viewport em O(log N) - Microssegundos
         queryViewport(themeId, bounds) {
             const tree = themeTrees.get(themeId);

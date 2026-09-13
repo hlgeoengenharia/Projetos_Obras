@@ -556,6 +556,14 @@
     </button>
 </div>
 
+<!-- Ações Delegadas para Usuários Autorizados (Criar Camadas) -->
+<div id="drawer-delegated-actions" class="hidden px-3.5 pt-3 pb-1 shrink-0 select-none">
+  <button type="button" id="btn-delegated-add-camada" onclick="openDelegatedNewLayerModal()" class="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-emerald-700/20 hover:shadow-lg transition-all cursor-pointer">
+    <span class="material-symbols-outlined text-[18px]">add_circle</span>
+    <span>Criar Nova Camada</span>
+  </button>
+</div>
+
 <!-- Barra do Projeto Ativo no Menu Lateral (Expansível para alternar entre projetos e modo livre) -->
 <div class="relative px-3.5 pt-3.5 pb-2 shrink-0 select-none">
   <button type="button" id="drawer-active-project-bar" onclick="window.toggleDrawerProjectsMenu(event)" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100/90 dark:bg-slate-900/90 hover:bg-slate-200/80 dark:hover:bg-slate-800/90 border border-slate-200/80 dark:border-slate-800/80 shadow-2xs flex items-center justify-between gap-2 transition-all cursor-pointer group text-left" title="Clique para alternar entre projetos">
@@ -1996,6 +2004,14 @@
                         <span class="text-slate-400">Cargo:</span>
                         <span id="perfil-view-cargo" class="font-semibold text-slate-700 dark:text-slate-200 text-right truncate max-w-[200px]">—</span>
                     </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
+                        <span class="text-slate-400">Unidade:</span>
+                        <span id="perfil-view-unidade" class="font-semibold text-slate-700 dark:text-slate-200 text-right truncate max-w-[200px]">—</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
+                        <span class="text-slate-400">Setor:</span>
+                        <span id="perfil-view-setor" class="font-semibold text-slate-700 dark:text-slate-200 text-right truncate max-w-[200px]">—</span>
+                    </div>
                 </div>
 
                 <!-- Modo Edição -->
@@ -2016,6 +2032,16 @@
                     <div>
                         <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">Cargo / Função</label>
                         <input id="perfil-edit-cargo" type="text" placeholder="Ex: Analista, Engenheiro, Auditor..." class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">Unidade</label>
+                            <input id="perfil-edit-unidade" type="text" placeholder="Ex: Sede, Regional..." class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">Setor</label>
+                            <input id="perfil-edit-setor" type="text" placeholder="Ex: Cadastro, Fiscalização..." class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none">
+                        </div>
                     </div>
                     <div class="flex items-center justify-end gap-2 pt-1">
                         <button type="button" onclick="cancelEditPerfilModal()" class="px-2.5 py-1 text-xs rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 transition-colors cursor-pointer">Cancelar</button>
@@ -2226,11 +2252,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.1/dist-browser/geotiff.js"></script>
-<script src="src/formRenderer.js"></script>
-<script src="src/customFields.js"></script>
+<script src="src/formRenderer.js?v=20260913_epol_rip"></script>
+<script src="src/customFields.js?v=20260913_epol_rip"></script>
 <script src="src/tableJoin.js"></script>
 <script src="src/geo-engine-turbo.js"></script>
-<script src="src/main.js?v=20260911b"></script>
+<script src="src/main.js?v=20260913_fix_sync"></script>
 <script src="src/spatialAnalytics.js?v=20260911b"></script>
 <script src="src/measurement.js"></script>
 <script src="src/cesium-integration.js"></script>

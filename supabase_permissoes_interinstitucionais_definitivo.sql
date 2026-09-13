@@ -8,8 +8,9 @@
 -- Compatível com todas as assinaturas: (theme_id, acao) e (user_id, theme_id, acao).
 -- ==============================================================================
 
--- 1. Garante que a coluna entidade exista na tabela temas
+-- 1. Garante que as colunas entidade existam nas tabelas temas e profiles
 ALTER TABLE public.temas ADD COLUMN IF NOT EXISTS entidade text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS entidade_nome text;
 
 -- 2. Função Central: tem_permissao(p_user_id uuid, p_theme_id uuid, p_acao text)
 CREATE OR REPLACE FUNCTION public.tem_permissao(
@@ -74,7 +75,7 @@ BEGIN
 
   -- 3. Busca entidade e perfil do usuário
   SELECT 
-    COALESCE(NULLIF(p.entidade, ''), NULLIF(p.entidade_nome, ''), ''),
+    COALESCE(NULLIF(p.entidade, ''), ''),
     COALESCE(p.papel, 'visualizador'),
     COALESCE(p.ponto_focal, false)
   INTO v_user_entidade, v_user_papel, v_user_ponto_focal

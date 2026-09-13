@@ -4,6 +4,15 @@
 function generateFeatureInputHtml(f, value, isFeatureEditMode) {
     if (!value) value = '';
     
+    const fieldType = (f && f.type ? String(f.type).toLowerCase().trim() : 'text');
+    const fieldName = (f && f.name ? String(f.name).toLowerCase().trim() : '');
+    const fieldLabel = (f && f.label ? String(f.label).toLowerCase().trim() : '');
+
+    const isEpol = fieldType === 'epol' || (fieldType === 'text' && (fieldName === 'epol' || fieldLabel === 'epol'));
+    const isEpol1n = fieldType === 'epol_1n' || (fieldType === 'text' && (fieldName === 'epol_1n' || fieldLabel === 'epol (1:n)'));
+    const isRip = fieldType === 'rip' || (fieldType === 'text' && (fieldName === 'rip' || fieldLabel === 'rip'));
+    const isRip1n = fieldType === 'rip_1n' || (fieldType === 'text' && (fieldName === 'rip_1n' || fieldLabel === 'rip (1:n)'));
+
     const hasFormula = f.formulaConfig && (
         (f.formulaConfig.mode === 'latest_1n' && f.formulaConfig.latest1nConfig && f.formulaConfig.latest1nConfig.sourceFieldId) ||
         (f.formulaConfig.mode === 'custom_script' && f.formulaConfig.customScript) ||
@@ -126,6 +135,48 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
                 formattedVal = cnj.replace(/(\d{7})(\d{2})(\d{4})(\d{1})(\d{2})(\d{4})/, "$1-$2.$3.$4.$5.$6");
             }
             return `<div class="text-xs font-mono text-slate-700 dark:text-slate-300 break-words">${formattedVal || '<span class="text-slate-400 opacity-50 tracking-widest">---</span>'}</div>`;
+        } else if (isEpol) {
+            let formattedVal = maskEpol(value || '');
+            return `<div class="text-xs font-mono font-semibold text-slate-700 dark:text-slate-200 break-words flex items-center gap-1.5">
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30">EPOL</span>
+                <span>${formattedVal || '<span class="text-slate-400 opacity-50 tracking-widest font-normal">---</span>'}</span>
+            </div>`;
+        } else if (isEpol1n) {
+            let items = [];
+            try { items = typeof value === 'string' && value.startsWith('[') ? JSON.parse(value) : (value ? [value] : []); } catch(e){}
+            if (!Array.isArray(items)) items = [];
+            if (items.length === 0) {
+                return `<div class="text-xs text-slate-700 dark:text-slate-300 break-words"><span class="text-slate-400 opacity-50 tracking-widest">---</span></div>`;
+            }
+            return `
+            <div class="flex flex-wrap gap-1.5 w-full">
+                ${items.map(item => `
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-mono font-bold bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 shadow-xs">
+                        <span class="text-[9px] font-extrabold text-cyan-500">EPOL</span> ${maskEpol(String(item))}
+                    </span>
+                `).join('')}
+            </div>`;
+        } else if (isRip) {
+            let formattedVal = maskRip(value || '');
+            return `<div class="text-xs font-mono font-semibold text-slate-700 dark:text-slate-200 break-words flex items-center gap-1.5">
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">RIP</span>
+                <span>${formattedVal || '<span class="text-slate-400 opacity-50 tracking-widest font-normal">---</span>'}</span>
+            </div>`;
+        } else if (isRip1n) {
+            let items = [];
+            try { items = typeof value === 'string' && value.startsWith('[') ? JSON.parse(value) : (value ? [value] : []); } catch(e){}
+            if (!Array.isArray(items)) items = [];
+            if (items.length === 0) {
+                return `<div class="text-xs text-slate-700 dark:text-slate-300 break-words"><span class="text-slate-400 opacity-50 tracking-widest">---</span></div>`;
+            }
+            return `
+            <div class="flex flex-wrap gap-1.5 w-full">
+                ${items.map(item => `
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-mono font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shadow-xs">
+                        <span class="text-[9px] font-extrabold text-indigo-500">RIP</span> ${maskRip(String(item))}
+                    </span>
+                `).join('')}
+            </div>`;
         } else if (f.type === 'insc_imob_cabedelo') {
             let cleanVal = (value || '').replace(/\D/g, '');
             let formattedVal = value;
@@ -430,6 +481,68 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
           <div class="relative">
               <input type="text" data-key="${f.id}" id="ipl-input-${f.id}" value="${displayVal}" class="feature-data-input w-full px-3 py-2 ${calcBgClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white font-mono transition-colors pr-10" placeholder="0000000-00.0000.0.00.0000" maxlength="25" oninput="maskIpl(this)" ${calcReadonly} ${formulaAttr} />
           </div>
+        `;
+    } else if (isEpol) {
+        let displayVal = maskEpol(value || '');
+        html += `
+          <div class="relative">
+              <input type="text" data-key="${f.id}" id="epol-input-${f.id}" value="${displayVal}" class="feature-data-input w-full px-3 py-2 ${calcBgClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/50 text-sm dark:text-white font-mono transition-colors pr-16" placeholder="2023.1234567" maxlength="12" inputmode="numeric" oninput="maskEpol(this)" onblur="maskEpol(this)" ${calcReadonly} ${formulaAttr} />
+              <span class="absolute right-2.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 pointer-events-none">EPOL</span>
+          </div>
+        `;
+    } else if (isEpol1n) {
+        let items = [];
+        try { items = typeof value === 'string' && value.startsWith('[') ? JSON.parse(value) : (value ? [value] : []); } catch(e){}
+        if (!Array.isArray(items)) items = [];
+        
+        let listHtml = items.map((it, idx) => window.renderEpol1nItem ? window.renderEpol1nItem(it, f.id, idx) : '').join('');
+
+        html += `
+        <div class="flex flex-col w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-3">
+            <div class="flex gap-2 mb-2">
+                <div class="relative flex-1">
+                    <input type="text" id="epol1n-input-${f.id}" placeholder="2023.1234567" maxlength="12" inputmode="numeric" oninput="maskEpol(this)" onblur="maskEpol(this)" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm font-mono dark:text-white" onkeydown="if(event.key==='Enter'){event.preventDefault();addEpol1n('${f.id}')}">
+                </div>
+                <button type="button" onclick="addEpol1n('${f.id}')" class="px-3.5 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-md text-xs font-bold transition-colors flex items-center gap-1 shrink-0 cursor-pointer shadow-xs">
+                    <span class="material-symbols-outlined text-[16px]">add</span> Adicionar
+                </button>
+            </div>
+            <div id="epol1n-list-${f.id}" class="flex flex-wrap gap-1.5 empty:hidden pt-1">
+                ${listHtml}
+            </div>
+            <input type="hidden" data-key="${f.id}" id="input-epol1n-${f.id}" class="feature-data-input" value="${value ? String(value).replace(/"/g, '&quot;') : '[]'}">
+        </div>
+        `;
+    } else if (isRip) {
+        let displayVal = maskRip(value || '');
+        html += `
+          <div class="relative">
+              <input type="text" data-key="${f.id}" id="rip-input-${f.id}" value="${displayVal}" class="feature-data-input w-full px-3 py-2 ${calcBgClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm dark:text-white font-mono transition-colors pr-14" placeholder="19650001155-06" maxlength="14" inputmode="numeric" oninput="maskRip(this)" onblur="maskRip(this)" ${calcReadonly} ${formulaAttr} />
+              <span class="absolute right-2.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 pointer-events-none">RIP</span>
+          </div>
+        `;
+    } else if (isRip1n) {
+        let items = [];
+        try { items = typeof value === 'string' && value.startsWith('[') ? JSON.parse(value) : (value ? [value] : []); } catch(e){}
+        if (!Array.isArray(items)) items = [];
+        
+        let listHtml = items.map((it, idx) => window.renderRip1nItem ? window.renderRip1nItem(it, f.id, idx) : '').join('');
+
+        html += `
+        <div class="flex flex-col w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-3">
+            <div class="flex gap-2 mb-2">
+                <div class="relative flex-1">
+                    <input type="text" id="rip1n-input-${f.id}" placeholder="19650001155-06" maxlength="14" inputmode="numeric" oninput="maskRip(this)" onblur="maskRip(this)" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-mono dark:text-white" onkeydown="if(event.key==='Enter'){event.preventDefault();addRip1n('${f.id}')}">
+                </div>
+                <button type="button" onclick="addRip1n('${f.id}')" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-bold transition-colors flex items-center gap-1 shrink-0 cursor-pointer shadow-xs">
+                    <span class="material-symbols-outlined text-[16px]">add</span> Adicionar
+                </button>
+            </div>
+            <div id="rip1n-list-${f.id}" class="flex flex-wrap gap-1.5 empty:hidden pt-1">
+                ${listHtml}
+            </div>
+            <input type="hidden" data-key="${f.id}" id="input-rip1n-${f.id}" class="feature-data-input" value="${value ? String(value).replace(/"/g, '&quot;') : '[]'}">
+        </div>
         `;
     } else if (f.type === 'insc_imob_cabedelo') {
         html += `
@@ -917,6 +1030,38 @@ function maskIpf(input) {
     maskIpl(input);
 }
 
+function maskEpol(input) {
+    let v = (typeof input === 'string' ? input : (input ? input.value : '')).replace(/\D/g, "");
+    if (v.length > 11) v = v.substring(0, 11);
+    let res = "";
+    if (v.length > 0) {
+        res += v.substring(0, Math.min(4, v.length));
+    }
+    if (v.length > 4) {
+        res += "." + v.substring(4, 11);
+    }
+    if (typeof input === 'object' && input !== null && 'value' in input) {
+        input.value = res;
+    }
+    return res;
+}
+
+function maskRip(input) {
+    let v = (typeof input === 'string' ? input : (input ? input.value : '')).replace(/\D/g, "");
+    if (v.length > 13) v = v.substring(0, 13);
+    let res = "";
+    if (v.length > 0) {
+        res += v.substring(0, Math.min(11, v.length));
+    }
+    if (v.length > 11) {
+        res += "-" + v.substring(11, 13);
+    }
+    if (typeof input === 'object' && input !== null && 'value' in input) {
+        input.value = res;
+    }
+    return res;
+}
+
 function maskInscImobCabedelo(input) {
     let v = input.value.replace(/\D/g, "");
     if (v.length > 0) {
@@ -1045,6 +1190,8 @@ window.maskCpfCnpj = maskCpfCnpj;
 window.validateCpfCnpj = validateCpfCnpj;
 window.maskIpf = maskIpf;
 window.maskIpl = maskIpl;
+window.maskEpol = maskEpol;
+window.maskRip = maskRip;
 window.maskInscImobCabedelo = maskInscImobCabedelo;
 window.updateGeolocation = updateGeolocation;
 window.maskPaAnppAp = maskPaAnppAp;
@@ -1223,6 +1370,90 @@ window.editHiperlink1n = function(fieldId, idx) {
     
     // Focus the URL input
     document.getElementById(`hiperlink1n-url-${fieldId}`).focus();
+};
+
+window.renderEpol1nItem = function(item, fieldId, idx) {
+    const formatted = maskEpol(String(item));
+    return `
+    <span class="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-lg text-xs font-mono font-bold bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30">
+        <span>${formatted}</span>
+        <button type="button" onclick="removeEpol1n('${fieldId}', ${idx})" class="text-cyan-600 hover:text-red-500 p-0.5 rounded transition-colors cursor-pointer" title="Remover">
+            <span class="material-symbols-outlined text-[15px]">close</span>
+        </button>
+    </span>`;
+};
+
+window.addEpol1n = function(fieldId) {
+    const input = document.getElementById(`epol1n-input-${fieldId}`);
+    const hiddenInput = document.getElementById(`input-epol1n-${fieldId}`);
+    const listContainer = document.getElementById(`epol1n-list-${fieldId}`);
+    if (!input || !input.value.trim()) return;
+
+    let items = [];
+    try { items = JSON.parse(hiddenInput.value); } catch(e){}
+    if (!Array.isArray(items)) items = [];
+
+    const val = maskEpol(input.value.trim());
+    if (val && !items.includes(val)) {
+        items.push(val);
+    }
+    hiddenInput.value = JSON.stringify(items);
+    listContainer.innerHTML = items.map((it, idx) => window.renderEpol1nItem(it, fieldId, idx)).join('');
+    input.value = '';
+    input.focus();
+};
+
+window.removeEpol1n = function(fieldId, idx) {
+    const hiddenInput = document.getElementById(`input-epol1n-${fieldId}`);
+    const listContainer = document.getElementById(`epol1n-list-${fieldId}`);
+    let items = [];
+    try { items = JSON.parse(hiddenInput.value); } catch(e){}
+    if (!Array.isArray(items)) items = [];
+    items.splice(idx, 1);
+    hiddenInput.value = JSON.stringify(items);
+    listContainer.innerHTML = items.map((it, i) => window.renderEpol1nItem(it, fieldId, i)).join('');
+};
+
+window.renderRip1nItem = function(item, fieldId, idx) {
+    const formatted = maskRip(String(item));
+    return `
+    <span class="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-lg text-xs font-mono font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
+        <span>${formatted}</span>
+        <button type="button" onclick="removeRip1n('${fieldId}', ${idx})" class="text-indigo-600 hover:text-red-500 p-0.5 rounded transition-colors cursor-pointer" title="Remover">
+            <span class="material-symbols-outlined text-[15px]">close</span>
+        </button>
+    </span>`;
+};
+
+window.addRip1n = function(fieldId) {
+    const input = document.getElementById(`rip1n-input-${fieldId}`);
+    const hiddenInput = document.getElementById(`input-rip1n-${fieldId}`);
+    const listContainer = document.getElementById(`rip1n-list-${fieldId}`);
+    if (!input || !input.value.trim()) return;
+
+    let items = [];
+    try { items = JSON.parse(hiddenInput.value); } catch(e){}
+    if (!Array.isArray(items)) items = [];
+
+    const val = maskRip(input.value.trim());
+    if (val && !items.includes(val)) {
+        items.push(val);
+    }
+    hiddenInput.value = JSON.stringify(items);
+    listContainer.innerHTML = items.map((it, idx) => window.renderRip1nItem(it, fieldId, idx)).join('');
+    input.value = '';
+    input.focus();
+};
+
+window.removeRip1n = function(fieldId, idx) {
+    const hiddenInput = document.getElementById(`input-rip1n-${fieldId}`);
+    const listContainer = document.getElementById(`rip1n-list-${fieldId}`);
+    let items = [];
+    try { items = JSON.parse(hiddenInput.value); } catch(e){}
+    if (!Array.isArray(items)) items = [];
+    items.splice(idx, 1);
+    hiddenInput.value = JSON.stringify(items);
+    listContainer.innerHTML = items.map((it, i) => window.renderRip1nItem(it, fieldId, i)).join('');
 };
 
 // --- CLIENT-SIDE DYNAMIC FORMULA CALCULATOR ENGINE ---

@@ -28,8 +28,8 @@
   }
 </script>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<script src="/src/customFields.js"></script>
-<script src="/src/formRenderer.js"></script>
+<script src="/src/customFields.js?v=20260913_epol_rip"></script>
+<script src="/src/formRenderer.js?v=20260913_epol_rip"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <style>
@@ -163,16 +163,53 @@
         });
     }
 
-    function openFormulaModal(fieldId) {
+    function openFormulaModal(fieldId, ev) {
+       if (ev) {
+           try {
+               ev.preventDefault();
+               ev.stopPropagation();
+           } catch(e) {}
+       }
        currentFormulaFieldId = fieldId;
        
-       const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+       // Sincronizar campos DOM com a aba antes de abrir
+       syncActiveTabFields();
+       
+       let activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+       if (!activeTab && builderTabs.length > 0) {
+           activeTab = builderTabs[0];
+           activeBuilderTabId = activeTab.id;
+       }
        if (!activeTab) return;
        
-       const field = activeTab.fields.find(f => f.id === fieldId);
-       if (!field) return;
+       let field = (activeTab.fields || []).find(f => f.id === fieldId);
+       if (!field) {
+           for (const t of builderTabs) {
+               field = (t.fields || []).find(f => f.id === fieldId);
+               if (field) {
+                   activeTab = t;
+                   activeBuilderTabId = t.id;
+                   break;
+               }
+           }
+       }
+       if (!field) {
+           const el = document.querySelector(`.field-item[data-id="${fieldId}"]`);
+           if (el) {
+               const label = el.querySelector('.field-label')?.value || 'Campo Sem Nome';
+               const type = el.querySelector('.field-type')?.value || 'text';
+               field = { id: fieldId, label, type, options: '' };
+               if (!activeTab.fields) activeTab.fields = [];
+               activeTab.fields.push(field);
+           }
+       }
+       if (!field) {
+           console.warn("Campo não encontrado para fórmula:", fieldId);
+           return;
+       }
        
-       document.getElementById('formula-modal-title').innerText = `Configurar Fórmulas & Sincronização: ${field.label || 'Campo Sem Nome'}`;
+       const titleEl = document.getElementById('formula-modal-title');
+       if (titleEl) titleEl.innerText = `Configurar Fórmulas & Sincronização: ${field.label || 'Campo Sem Nome'}`;
        
        // Clone config to avoid modifying directly
        currentFormulaConfig = field.formulaConfig ? JSON.parse(JSON.stringify(field.formulaConfig)) : { mode: 'rules', rules: [], fallbackFormula: '' };
@@ -193,9 +230,21 @@
            };
        }
 
-       renderFormulaRules();
-       renderFallbackAction();
-       renderLatest1nOptions(field);
+       try {
+           renderFormulaRules();
+       } catch (err) {
+           console.error("Erro ao renderizar regras de fórmula:", err);
+       }
+       try {
+           renderFallbackAction();
+       } catch (err) {
+           console.error("Erro ao renderizar ação padrão:", err);
+       }
+       try {
+           renderLatest1nOptions(field);
+       } catch (err) {
+           console.error("Erro ao renderizar opções 1:N:", err);
+       }
        
        const scriptArea = document.getElementById('formula-custom-script');
        if (scriptArea) {
@@ -205,9 +254,12 @@
        switchFormulaMode(currentFormulaConfig.mode || 'rules');
        
        const modal = document.getElementById('formula-modal');
-       modal.classList.remove('hidden');
-       modal.classList.add('flex');
+       if (modal) {
+           modal.classList.remove('hidden');
+           modal.classList.add('flex');
+       }
     }
+    window.openFormulaModal = openFormulaModal;
 
     function closeFormulaModal() {
        const modal = document.getElementById('formula-modal');
@@ -249,8 +301,8 @@
         // Campos de Data
         let dateOptionsHtml = '<option value="auto">⚡ Detectar campo de Data automaticamente</option>';
         builderTabs.forEach(tab => {
-            tab.fields.forEach(f => {
-                if (f.type === 'date' || f.id.includes('data') || f.label.toLowerCase().includes('data')) {
+            (tab.fields || []).forEach(f => {
+                if (f.type === 'date' || (f.id && f.id.includes('data')) || (f.label && f.label.toLowerCase().includes('data'))) {
                     dateOptionsHtml += `<option value="${f.id}" ${cfg.dateFieldId === f.id ? 'selected' : ''}>[${tab.title}] ${f.label}</option>`;
                 }
             });
@@ -279,8 +331,8 @@
         const checkboxes = Array.from(document.querySelectorAll('.latest1n-tab-checkbox:checked'));
         const checkedTabIds = checkboxes.map(cb => cb.value);
 
-        const currentActiveField = currentField || (builderTabs.find(t => t.id === activeBuilderTabId)?.fields.find(f => f.id === currentFormulaFieldId));
-        const currentFieldLabel = currentActiveField ? currentActiveField.label.toLowerCase().trim() : '';
+        const currentActiveField = currentField || ((builderTabs.find(t => t.id === activeBuilderTabId)?.fields || []).find(f => f.id === currentFormulaFieldId));
+        const currentFieldLabel = currentActiveField ? (currentActiveField.label || '').toLowerCase().trim() : '';
         const savedSourceId = currentFormulaConfig.latest1nConfig?.sourceFieldId || '';
         const savedSourceLabel = currentFormulaConfig.latest1nConfig?.sourceFieldLabel || '';
 
@@ -289,7 +341,7 @@
         
         builderTabs.forEach(tab => {
             if (checkedTabIds.length === 0 || checkedTabIds.includes(tab.id)) {
-                tab.fields.forEach(f => {
+                (tab.fields || []).forEach(f => {
                     if (f.id !== currentFormulaFieldId && f.label && f.label.trim() !== '') {
                         const trimmedLabel = f.label.trim();
                         const key = trimmedLabel.toLowerCase();
@@ -501,8 +553,8 @@
     function getFormFieldsOptionsForRules(selectedValue) {
        let optionsHtml = '<option value="">Escolha um campo...</option>';
        builderTabs.forEach(tab => {
-          tab.fields.forEach(f => {
-             if (f.id !== currentFormulaFieldId && f.label.trim() !== '') {
+          (tab.fields || []).forEach(f => {
+             if (f.id !== currentFormulaFieldId && f.label && f.label.trim() !== '') {
                  optionsHtml += `<option value="${f.id}" ${f.id === selectedValue ? 'selected' : ''}>[${tab.title}] ${f.label}</option>`;
              }
           });
@@ -515,7 +567,7 @@
        let fieldOptions = [];
        
        builderTabs.forEach(tab => {
-          tab.fields.forEach(f => {
+          (tab.fields || []).forEach(f => {
              if (f.id === cond.fieldId) {
                  fieldType = f.type;
                  if (f.type === 'select' && f.options) {
@@ -630,10 +682,18 @@
     }
 
     function saveFormulaConfig() {
-       const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
-       if (!activeTab) return;
-       
-       const field = activeTab.fields.find(f => f.id === currentFormulaFieldId);
+       syncActiveTabFields();
+       let activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+       let field = (activeTab?.fields || []).find(f => f.id === currentFormulaFieldId);
+       if (!field) {
+           for (const tab of builderTabs) {
+               field = (tab.fields || []).find(f => f.id === currentFormulaFieldId);
+               if (field) {
+                   activeTab = tab;
+                   break;
+               }
+           }
+       }
        if (!field) return;
 
        currentFormulaConfig.mode = currentFormulaMode || 'rules';
@@ -998,6 +1058,14 @@
                         <span id="perfil-view-entidade" class="font-semibold text-slate-700 dark:text-slate-200 text-right truncate max-w-[200px]">—</span>
                     </div>
                     <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
+                        <span class="text-slate-400">Unidade:</span>
+                        <span id="perfil-view-unidade" class="font-semibold text-slate-700 dark:text-slate-200 text-right truncate max-w-[200px]">—</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
+                        <span class="text-slate-400">Setor:</span>
+                        <span id="perfil-view-setor" class="font-semibold text-slate-700 dark:text-slate-200 text-right truncate max-w-[200px]">—</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
                         <span class="text-slate-400">Cargo:</span>
                         <span id="perfil-view-cargo" class="font-semibold text-slate-700 dark:text-slate-200 text-right truncate max-w-[200px]">—</span>
                     </div>
@@ -1017,6 +1085,16 @@
                         <select id="perfil-edit-entidade" onchange="onPerfilEntidadeChange()" class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer">
                             <option value="">Carregando entidades...</option>
                         </select>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">Unidade Administrativa</label>
+                            <input id="perfil-edit-unidade" type="text" placeholder="Ex: Gerência Regional, Diretoria..." class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">Setor Interno</label>
+                            <input id="perfil-edit-setor" type="text" placeholder="Ex: Fiscalização, Cartografia..." class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none">
+                        </div>
                     </div>
                     <div>
                         <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">Cargo / Função</label>
@@ -1648,33 +1726,42 @@
 
   <!-- Tab Content: Usuários e Permissões -->
   <div id="usuarios" class="tab-content">
-    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-4">
+    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-5 gap-4">
       <div>
-        <h2 id="usuarios-header-title" class="text-lg font-bold">Usuários e Permissões</h2>
-        <p class="text-sm text-slate-500 dark:text-slate-400">Defina o papel de cada usuário e quais camadas cada um pode ver, editar ou excluir.</p>
-      </div>
-      <div class="flex items-center gap-2.5 flex-wrap shrink-0">
-        <!-- Alternador em Pílulas estilo Mapa/Lista dos Entes Externos e Pontos Focais -->
-        <div id="usuarios-entidades-toggle" class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm">
-        </div>
-        <button onclick="loadUsersPanel()" class="flex items-center gap-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors shrink-0">
-          <span class="material-symbols-outlined text-[18px]">refresh</span> Atualizar
-        </button>
+        <h2 id="usuarios-header-title" class="text-lg font-bold">Central de Usuários e Compartilhamento</h2>
+        <p id="usuarios-header-subtitle" class="text-sm text-slate-500 dark:text-slate-400">Gerencie as permissões da sua equipe, libere camadas para órgãos parceiros e veja o que compartilharam com você.</p>
       </div>
     </div>
 
-    <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3 mb-5 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+    <!-- Abas Principais: Minhas Camadas Criadas | Compartilhados Comigo | Usuários em Compartilhamento -->
+    <div id="usuarios-main-tabs" class="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 mb-5 overflow-x-auto pb-1">
+    </div>
+
+    <!-- Container de Seleção de Parceiros (Exibido apenas na aba Usuários em Compartilhamento) -->
+    <div id="usuarios-entidades-toggle-container" class="hidden mb-4 p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+      <div>
+        <span class="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[16px] text-cyan-600 dark:text-cyan-400">handshake</span>
+          Órgãos Parceiros Conveniados
+        </span>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400">Selecione o órgão parceiro para gerenciar os acessos dos seus Pontos Focais:</p>
+      </div>
+      <div id="usuarios-entidades-toggle" class="flex items-center gap-1.5 flex-wrap shrink-0">
+      </div>
+    </div>
+
+    <div id="usuarios-admin-info-box" class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3 mb-5 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
       <span class="material-symbols-outlined text-[16px] mt-0.5">info</span>
       <span>Novas contas são criadas no painel do Supabase (Authentication → Users → Add user). Assim que a conta existe, ela aparece aqui pra você definir o papel e as permissões por camada.</span>
     </div>
 
     <div class="relative mb-3">
       <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px] pointer-events-none">search</span>
-      <input id="users-search" type="text" placeholder="Buscar por nome, e-mail, entidade ou cargo..." oninput="filterUsersList(this.value)" class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white">
+      <input id="users-search" type="text" placeholder="Buscar por nome, e-mail, entidade ou cargo..." oninput="if(window.UsuariosManager && window.UsuariosManager.onSearch) window.UsuariosManager.onSearch(this.value);" class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white">
     </div>
 
     <div id="users-list" class="flex flex-col gap-3">
-      <div class="p-6 text-center text-slate-400 text-sm italic">Clique em "Atualizar" para carregar.</div>
+      <div class="p-6 text-center text-slate-400 text-sm italic">Carregando dados...</div>
     </div>
   </div>
 
@@ -2255,6 +2342,10 @@
         const entNome = currentUserProfile.entidade || sessionStorage.getItem('user_entidade') || 'Prefeitura Municipal';
         if (entEl) entEl.textContent = entNome;
         if (viewEnt) viewEnt.textContent = entNome;
+        const viewUnidade = document.getElementById('perfil-view-unidade');
+        const viewSetor = document.getElementById('perfil-view-setor');
+        if (viewUnidade) viewUnidade.textContent = currentUserProfile.unidade || 'Não informada';
+        if (viewSetor) viewSetor.textContent = currentUserProfile.setor || 'Não informado';
         if (viewCargo) viewCargo.textContent = currentUserProfile.cargo || 'Não informado';
 
         if (pfBadge) {
@@ -2328,6 +2419,10 @@
             if (nomeInput) {
                 nomeInput.value = (currentUserProfile && (currentUserProfile.nome_cadastro || currentUserProfile.nome)) || '';
             }
+            const unidInput = document.getElementById('perfil-edit-unidade');
+            const setorInput = document.getElementById('perfil-edit-setor');
+            if (unidInput) unidInput.value = (currentUserProfile && currentUserProfile.unidade) || '';
+            if (setorInput) setorInput.value = (currentUserProfile && currentUserProfile.setor) || '';
             const cargoInput = document.getElementById('perfil-edit-cargo');
             if (cargoInput) {
                 cargoInput.value = (currentUserProfile && currentUserProfile.cargo) || '';
@@ -2369,10 +2464,14 @@
     window.salvarPerfilModal = async function() {
         const nomeInput = document.getElementById('perfil-edit-nome');
         const entSelect = document.getElementById('perfil-edit-entidade');
+        const unidInput = document.getElementById('perfil-edit-unidade');
+        const setorInput = document.getElementById('perfil-edit-setor');
         const cargoInput = document.getElementById('perfil-edit-cargo');
 
         const novoNome = nomeInput ? nomeInput.value.trim() : '';
         const novaEntidade = entSelect ? entSelect.value.trim() : '';
+        const novaUnidade = unidInput ? unidInput.value.trim() : '';
+        const novoSetor = setorInput ? setorInput.value.trim() : '';
         const novoCargo = cargoInput ? cargoInput.value.trim() : '';
 
         if (!novoNome) {
@@ -2398,6 +2497,8 @@
             const { error } = await supabaseClient.from('profiles').update({
                 nome: novoNome,
                 entidade: novaEntidade,
+                unidade: novaUnidade || null,
+                setor: novoSetor || null,
                 cargo: novoCargo || null
             }).eq('id', uid);
 
@@ -2412,6 +2513,8 @@
                         data: {
                             nome: novoNome,
                             entidade: novaEntidade,
+                            unidade: novaUnidade || null,
+                            setor: novoSetor || null,
                             cargo: novoCargo || null
                         }
                     });
@@ -2434,6 +2537,8 @@
                 currentUserProfile.nome = novoNome;
                 currentUserProfile.nome_cadastro = novoNome;
                 currentUserProfile.entidade = novaEntidade;
+                currentUserProfile.unidade = novaUnidade;
+                currentUserProfile.setor = novoSetor;
                 currentUserProfile.cargo = novoCargo;
             }
 
@@ -3381,8 +3486,8 @@
               let optionsHtml = '<option value="">Selecione um campo...</option>';
               builderTabs.forEach(t => {
                   if(t.id !== activeTab.id) {
-                      t.fields.forEach(f => {
-                           if(['text', 'number', 'select', 'cpfcnpj', 'ipl', 'ipf', 'insc_imob_cabedelo'].includes(f.type)) {
+                      (t.fields || []).forEach(f => {
+                           if(['text', 'number', 'select', 'cpfcnpj', 'ipl', 'ipf', 'insc_imob_cabedelo', 'epol', 'epol_1n', 'rip', 'rip_1n'].includes(f.type)) {
                               let optsJson = (typeof f.options === 'string') ? f.options.split(',').map(o => o.trim()).filter(o => o).join('|') : '';
                               optionsHtml += `<option value="${f.id}" data-opts="${optsJson}">[${t.title}] ${f.label || 'Campo Sem Nome'}</option>`;
                           }
@@ -3544,10 +3649,11 @@
        const currentTab = builderTabs.find(t => t.id === activeBuilderTabId);
        const targetTab = builderTabs.find(t => t.id === targetTabId);
        
-       if(currentTab && targetTab) {
+       if(currentTab && targetTab && currentTab.fields) {
           const fieldIndex = currentTab.fields.findIndex(f => f.id === fieldId);
           if(fieldIndex > -1) {
              const field = currentTab.fields.splice(fieldIndex, 1)[0];
+             if(!targetTab.fields) targetTab.fields = [];
              targetTab.fields.push(field);
              renderBuilderTabs();
           }
@@ -3900,7 +4006,7 @@
                      `;
                      fieldsContainer.appendChild(notice);
                  }
-                 activeTab.fields.forEach(f => {
+                 (activeTab.fields || []).forEach(f => {
                     renderFieldInBuilder(f);
                  });
               }
@@ -3912,16 +4018,18 @@
        const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
        if (!activeTab) return;
        
+       if (!activeTab.fields) activeTab.fields = [];
+       
        const fieldElements = document.querySelectorAll('.field-item');
        const fields = [];
        fieldElements.forEach(el => {
          const id = el.dataset.id;
-         const label = el.querySelector('.field-label').value;
-         const type = el.querySelector('.field-type').value;
-         const options = el.querySelector('.field-options').value;
+         const label = el.querySelector('.field-label')?.value || '';
+         const type = el.querySelector('.field-type')?.value || 'text';
+         const options = el.querySelector('.field-options')?.value || '';
          const showInSummary = el.querySelector('.field-show-in-summary') ? el.querySelector('.field-show-in-summary').checked : false;
          
-         const existingField = activeTab.fields.find(f => f.id === id);
+         const existingField = (activeTab.fields || []).find(f => f.id === id);
          const formulaConfig = existingField ? existingField.formulaConfig : null;
          
          fields.push({
@@ -4041,8 +4149,16 @@
          alert("Adicione uma aba primeiro.");
          return;
       }
+      const activeTab = builderTabs.find(t => t.id === activeBuilderTabId);
+      if (!activeTab) {
+         alert("Aba ativa não encontrada.");
+         return;
+      }
       const fieldId = 'f_' + Math.random().toString(36).substr(2, 9);
-      const newField = { id: fieldId, name: '', label: '', type: 'text', options: '' };
+      const newField = { id: fieldId, name: '', label: '', type: 'text', options: '', required: false };
+      
+      if (!activeTab.fields) activeTab.fields = [];
+      activeTab.fields.push(newField);
       
       renderFieldInBuilder(newField);
       
@@ -4156,7 +4272,11 @@
                 <option value="cep" ${f.type === 'cep' ? 'selected' : ''}>Endereço (Autocompletar via CEP)</option>
                 <option value="cpfcnpj" ${f.type === 'cpfcnpj' ? 'selected' : ''}>Documento (CPF / CNPJ)</option>
                 <option value="pa_anpp_ap" ${f.type === 'pa_anpp_ap' ? 'selected' : ''}>PA/ANPP/AP</option>
-                 <option value="ipl" ${f.type === 'ipl' || f.type === 'ipf' ? 'selected' : ''}>IPL</option>
+                <option value="ipl" ${(f.type || '').toLowerCase() === 'ipl' || (f.type || '').toLowerCase() === 'ipf' ? 'selected' : ''}>IPL</option>
+                <option value="epol" ${(f.type || '').toLowerCase() === 'epol' ? 'selected' : ''}>EPOL</option>
+                <option value="epol_1n" ${(f.type || '').toLowerCase() === 'epol_1n' ? 'selected' : ''}>EPOL (1:N)</option>
+                <option value="rip" ${(f.type || '').toLowerCase() === 'rip' ? 'selected' : ''}>RIP</option>
+                <option value="rip_1n" ${(f.type || '').toLowerCase() === 'rip_1n' ? 'selected' : ''}>RIP (1:N)</option>
                 <option value="insc_imob_cabedelo" ${f.type === 'insc_imob_cabedelo' ? 'selected' : ''}>Insc. Imob. Cabedelo</option>
                 <option value="hiperlink" ${f.type === 'hiperlink' ? 'selected' : ''}>Link (Título/Número/URL)</option>
                 <option value="hiperlink_1n" ${f.type === 'hiperlink_1n' ? 'selected' : ''}>Link (Título/Número/URL) (1:N)</option>
@@ -4187,7 +4307,7 @@
             </div>
           </div>
         </div>
-        <button onclick="openFormulaModal('${f.id}')" id="fx-btn-${f.id}" class="p-2 mt-6 ${fxClass} rounded-full transition-colors flex items-center justify-center" title="Configurar Fórmula de Cálculo">
+        <button type="button" onclick="openFormulaModal('${f.id}', event)" id="fx-btn-${f.id}" class="p-2 mt-6 ${fxClass} rounded-full transition-colors flex items-center justify-center" title="Configurar Fórmula de Cálculo">
           <span class="material-symbols-outlined text-[20px]">functions</span>
         </button>
         <button type="button" onclick="deleteBuilderField(this)" class="p-2 mt-6 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-slate-800 rounded-full transition-colors" title="Excluir Campo">
@@ -4368,8 +4488,8 @@
       let totalFields = 0;
       
       builderTabs.forEach(tab => {
-         tab.fields.forEach(f => {
-            if(!f.label.trim()) hasError = true;
+         (tab.fields || []).forEach(f => {
+            if(!f.label || !f.label.trim()) hasError = true;
             totalFields++;
          });
       });
@@ -4888,13 +5008,13 @@
         let groupFieldsOptions = '<option value="">(Selecione o campo de agrupamento)</option>';
         
         builderTabs.forEach(tab => {
-            tab.fields.forEach(f => {
+            (tab.fields || []).forEach(f => {
                 const isSelectedGroup = (isEditing && stat.fieldId === f.id);
                 const isSelectedCond = (isEditing && stat.conditionField === f.id);
                 
                 allFieldsOptions += `<option value="${f.id}" data-type="${f.type}" data-options="${f.options || ''}" ${isSelectedCond ? 'selected' : ''}>${f.label} [${f.type}] (${tab.title})</option>`;
                 
-                if (['select', 'radio', 'checkbox', 'pa_anpp_ap', 'text'].includes(f.type)) {
+                if (['select', 'radio', 'checkbox', 'pa_anpp_ap', 'ipl', 'epol', 'epol_1n', 'rip', 'rip_1n', 'text'].includes(f.type)) {
                     groupFieldsOptions += `<option value="${f.id}" ${isSelectedGroup ? 'selected' : ''}>${f.label} (${tab.title})</option>`;
                 }
             });
@@ -5210,7 +5330,7 @@
         // Find field options
         let field = null;
         builderTabs.forEach(tab => {
-            const found = tab.fields.find(f => f.id === fieldId);
+            const found = (tab.fields || []).find(f => f.id === fieldId);
             if (found) field = found;
         });
         
@@ -6633,7 +6753,7 @@
   </script>
   <script src="src/auditLogger.js"></script>
   <script src="src/auditoria-gestao.js"></script>
-  <script src="src/usuarios-gestao.js"></script>
+  <script src="src/usuarios-gestao.js?v=20260913_no_abrir_mapa"></script>
   <script src="src/session-security.js"></script>
 </body>
 </html>

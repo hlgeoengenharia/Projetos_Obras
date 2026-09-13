@@ -242,7 +242,7 @@
     <div class="flex items-center shrink-0">
       
       <!-- ESTADO PADRÃO (vendo os 8 cards): Apenas o Globo apontando para o início (mapa do estado) -->
-      <a id="header-mun-default-card" href="home.html" onclick="if(window.voltarParaMunicipios){ event.preventDefault(); window.voltarParaMunicipios(true); }" class="header-glass-card flex w-9 h-9 sm:w-10 sm:h-10 rounded-2xl text-primary dark:text-sky-400 items-center justify-center hover:bg-white/40 dark:hover:bg-white/10 transition-all cursor-pointer shadow-xs shrink-0" title="Início / Mapa do Estado">
+      <a id="header-mun-default-card" href="home.html" onclick="if(window.voltarParaMunicipios){ event.preventDefault(); window.voltarParaMunicipios(true); }" class="header-glass-card flex w-9 h-9 sm:w-10 sm:h-10 rounded-2xl text-primary dark:text-sky-400 items-center justify-center hover:bg-white/40 dark:hover:bg-white/10 transition-all cursor-pointer shadow-xs shrink-0" title="Início / Selecionar Outro Município (Mapa Geral do Estado)">
         <span class="material-symbols-outlined text-[20px] sm:text-[22px]">public</span>
       </a>
 
@@ -376,6 +376,14 @@
                         <span id="perfil-view-entidade" class="font-semibold text-slate-700 dark:text-slate-200 text-right truncate max-w-[200px]">—</span>
                     </div>
                     <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
+                        <span class="text-slate-400">Unidade:</span>
+                        <span id="perfil-view-unidade" class="font-semibold text-slate-700 dark:text-slate-200 text-right truncate max-w-[200px]">—</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
+                        <span class="text-slate-400">Setor:</span>
+                        <span id="perfil-view-setor" class="font-semibold text-slate-700 dark:text-slate-200 text-right truncate max-w-[200px]">—</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
                         <span class="text-slate-400">Cargo:</span>
                         <span id="perfil-view-cargo" class="font-semibold text-slate-700 dark:text-slate-200 text-right truncate max-w-[200px]">—</span>
                     </div>
@@ -395,6 +403,16 @@
                         <select id="perfil-edit-entidade" onchange="onPerfilEntidadeChange()" class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none cursor-pointer">
                             <option value="">Carregando entidades...</option>
                         </select>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">Unidade Administrativa</label>
+                            <input id="perfil-edit-unidade" type="text" placeholder="Ex: Gerência Regional, Diretoria..." class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">Setor Interno</label>
+                            <input id="perfil-edit-setor" type="text" placeholder="Ex: Fiscalização, Cartografia..." class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg dark:text-white focus:ring-1 focus:ring-primary focus:outline-none">
+                        </div>
                     </div>
                     <div>
                         <label class="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">Cargo / Função</label>
@@ -840,17 +858,28 @@
   <section id="municipio-welcome-section" class="tab-content flex-col items-center justify-start sm:justify-center h-full overflow-y-auto px-3 sm:px-6 py-4 sm:py-8 max-w-5xl mx-auto w-full">
     <!-- Grid de Cards Retangulares com Bordas Arredondadas (3 cards por linha no desktop, 2 no tablet, 1 no mobile) -->
     <div class="flex flex-wrap justify-center gap-3 sm:gap-4 md:gap-5 w-full my-auto py-2">
-      <!-- Card 1: MAPA -->
-      <button onclick="window.abrirMapaMunicipioAtivo()" class="group relative flex items-center gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-sky-500/60 dark:hover:border-sky-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.6rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
-        <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-sky-500/10 dark:bg-sky-500/20 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-          <span class="material-symbols-outlined text-[24px] sm:text-[26px]">map</span>
+      <!-- Card 1: MAPA (DESTAQUE ESPECIAL PARA RETORNAR À BASE CARTOGRÁFICA) -->
+      <button onclick="window.abrirMapaMunicipioAtivo()" class="group relative flex items-center gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-500/20 via-lime-400/20 to-amber-500/25 dark:from-emerald-950/60 dark:via-lime-950/50 dark:to-amber-950/60 border-2 border-sky-500/80 hover:border-sky-500 shadow-md hover:shadow-xl hover:shadow-sky-500/20 hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.6rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer ring-2 ring-sky-500/20 hover:ring-sky-500/40 backdrop-blur-xs">
+        <!-- Badge indicativo superior -->
+        <span class="absolute -top-2.5 right-3 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-xs flex items-center gap-1 border border-white dark:border-slate-800 pointer-events-none">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-ping"></span>
+          Voltar à Base
+        </span>
+
+        <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-sky-500/30 group-hover:scale-105 transition-transform">
+          <span class="material-symbols-outlined text-[24px] sm:text-[26px]">explore</span>
         </div>
         <div class="flex-1 min-w-0">
           <div class="flex items-center justify-between gap-1">
-            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors uppercase tracking-wider truncate">Mapa</h3>
-            <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-sky-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
+            <div class="flex items-center gap-1.5">
+              <h3 class="text-xs sm:text-sm font-black text-sky-700 dark:text-sky-300 group-hover:text-sky-600 dark:group-hover:text-sky-200 transition-colors uppercase tracking-wider truncate">Mapa</h3>
+              <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-100 text-sky-700 dark:bg-sky-900/60 dark:text-sky-300">Base</span>
+            </div>
+            <div class="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-sky-500 text-white flex items-center justify-center shadow-xs group-hover:bg-sky-600 group-hover:translate-x-1 transition-all shrink-0">
+              <span class="material-symbols-outlined text-[15px] sm:text-[17px]">arrow_forward</span>
+            </div>
           </div>
-          <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Mapa interativo e camadas</p>
+          <p class="text-[11px] sm:text-xs font-semibold text-slate-600 dark:text-slate-300 mt-0.5 truncate">Mapa interativo e camadas</p>
         </div>
       </button>
 
@@ -1718,14 +1747,39 @@ function applyCurrentUserToProfileModal() {
     if (viewNome) viewNome.textContent = rawNome;
     if (viewEmail) viewEmail.textContent = homeUserProfile.email || '—';
 
-    if (roleEl) roleEl.textContent = homeUserProfile.super_admin
-        ? 'Administrador Geral'
-        : (homeUserProfile.entidade_admin ? `Administrador — ${homeUserProfile.entidade || 'entidade'}` : (homeUserProfile.papel === 'admin' ? 'Administrador' : 'Usuário'));
+    const munAtivoId = sessionStorage.getItem('municipio_ativo');
+    const munAtivoPapel = sessionStorage.getItem('municipio_ativo_papel');
+
+    let isUserAdmin = false;
+    let roleLabel = 'Usuário';
+
+    if (homeUserProfile.super_admin) {
+        isUserAdmin = true;
+        roleLabel = 'Administrador Geral';
+    } else if (homeUserProfile.entidade_admin) {
+        isUserAdmin = true;
+        roleLabel = `Administrador — ${homeUserProfile.entidade || 'entidade'}`;
+    } else if (homeUserProfile.papel === 'admin' || munAtivoPapel === 'admin') {
+        isUserAdmin = true;
+        roleLabel = 'Administrador';
+    } else if (window.souMunicipioAdminCache) {
+        isUserAdmin = true;
+        roleLabel = 'Administrador';
+    } else if (window.municipiosParaMostrarCache && window.municipiosParaMostrarCache.some(m => (!munAtivoId || m.id === munAtivoId) && m.papel === 'admin')) {
+        isUserAdmin = true;
+        roleLabel = 'Administrador';
+    }
+
+    if (roleEl) roleEl.textContent = roleLabel;
     if (themeSelect) themeSelect.value = localStorage.getItem('constructive_theme') || 'Claro';
 
     const entNome = homeUserProfile.entidade || 'Prefeitura Municipal';
     if (entEl) entEl.textContent = entNome;
     if (viewEnt) viewEnt.textContent = entNome;
+    const viewUnidade = document.getElementById('perfil-view-unidade');
+    const viewSetor = document.getElementById('perfil-view-setor');
+    if (viewUnidade) viewUnidade.textContent = homeUserProfile.unidade || 'Não informada';
+    if (viewSetor) viewSetor.textContent = homeUserProfile.setor || 'Não informado';
     if (viewCargo) viewCargo.textContent = homeUserProfile.cargo || 'Não informado';
 
     // Formata o 1º e 2º nome do usuário (ex: "Helton Leite") e o ente para o cabeçalho
@@ -1919,6 +1973,10 @@ window.toggleEditPerfilModal = async function() {
         if (nomeInput) {
             nomeInput.value = (homeUserProfile && (homeUserProfile.nome_cadastro || homeUserProfile.nome)) || '';
         }
+        const unidInput = document.getElementById('perfil-edit-unidade');
+        const setorInput = document.getElementById('perfil-edit-setor');
+        if (unidInput) unidInput.value = homeUserProfile?.unidade || '';
+        if (setorInput) setorInput.value = homeUserProfile?.setor || '';
         document.getElementById('perfil-edit-cargo').value = homeUserProfile?.cargo || '';
         viewDiv.classList.add('hidden');
         editDiv.classList.remove('hidden');
@@ -1956,10 +2014,14 @@ window.cancelEditPerfilModal = function() {
 window.salvarPerfilModal = async function() {
     const nomeInput = document.getElementById('perfil-edit-nome');
     const entSelect = document.getElementById('perfil-edit-entidade');
+    const unidInput = document.getElementById('perfil-edit-unidade');
+    const setorInput = document.getElementById('perfil-edit-setor');
     const cargoInput = document.getElementById('perfil-edit-cargo');
 
     const novoNome = nomeInput ? nomeInput.value.trim() : '';
     const novaEntidade = entSelect ? entSelect.value.trim() : '';
+    const novaUnidade = unidInput ? unidInput.value.trim() : '';
+    const novoSetor = setorInput ? setorInput.value.trim() : '';
     const novoCargo = cargoInput ? cargoInput.value.trim() : '';
 
     if (!novoNome) {
@@ -1985,6 +2047,8 @@ window.salvarPerfilModal = async function() {
         const { error } = await supabaseClient.from('profiles').update({
             nome: novoNome,
             entidade: novaEntidade,
+            unidade: novaUnidade || null,
+            setor: novoSetor || null,
             cargo: novoCargo || null
         }).eq('id', uid);
 
@@ -1999,6 +2063,8 @@ window.salvarPerfilModal = async function() {
                     data: {
                         nome: novoNome,
                         entidade: novaEntidade,
+                        unidade: novaUnidade || null,
+                        setor: novoSetor || null,
                         cargo: novoCargo || null
                     }
                 });
@@ -2011,6 +2077,8 @@ window.salvarPerfilModal = async function() {
             homeUserProfile.nome = novoNome;
             homeUserProfile.nome_cadastro = novoNome;
             homeUserProfile.entidade = novaEntidade;
+            homeUserProfile.unidade = novaUnidade;
+            homeUserProfile.setor = novoSetor;
             homeUserProfile.cargo = novoCargo;
         }
         usuarioEntidadeCargo = { entidade: novaEntidade, cargo: novoCargo };
@@ -2996,6 +3064,8 @@ async function init() {
         .eq('papel', 'admin')
         .eq('status', 'aprovado');
     const souMunicipioAdmin = !!(meusMunicipiosAdmin && meusMunicipiosAdmin.length > 0);
+    window.souMunicipioAdminCache = souMunicipioAdmin;
+    applyCurrentUserToProfileModal();
 
     // 1. Busca todos os municípios cadastrados e entidades
     const [municipiosRes, entidadesRes] = await Promise.all([
@@ -3263,6 +3333,7 @@ async function init() {
             .map(m => ({ id: m.municipios.id, nome: m.municipios.nome, uf: m.municipios.uf, papel: m.papel, logo_url: m.municipios.logo_url }));
     }
     window.municipiosParaMostrarCache = municipiosParaMostrar;
+    applyCurrentUserToProfileModal();
 
     // Se o usuário tiver um único município aprovado e não for SuperAdmin:
     // Se a URL pedir ?view=municipio ou ?tab=..., deixa seguir para abrir o painel de gestão!
@@ -3918,7 +3989,7 @@ window.filterMunicipiosList = function(query) {
 init();
 </script>
 <script src="src/auditLogger.js"></script>
-<script src="src/usuarios-gestao.js?v=20260908c"></script>
+<script src="src/usuarios-gestao.js?v=20260913_no_abrir_mapa"></script>
 <script src="src/session-security.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </body>

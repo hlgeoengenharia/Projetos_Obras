@@ -30,22 +30,31 @@ CREATE INDEX IF NOT EXISTS idx_user_projetos_municipio_id ON public.user_projeto
 -- 3. Habilitação de Segurança por Linha (RLS)
 ALTER TABLE public.user_projetos ENABLE ROW LEVEL SECURITY;
 
+-- Concede permissões essenciais para os papéis do Supabase
+GRANT ALL ON TABLE public.user_projetos TO authenticated;
+GRANT ALL ON TABLE public.user_projetos TO service_role;
+
 -- 4. Políticas de RLS: Cada usuário acessa, cria, edita e deleta SOMENTE seus projetos
 DROP POLICY IF EXISTS user_projetos_select_policy ON public.user_projetos;
 CREATE POLICY user_projetos_select_policy ON public.user_projetos
-  FOR SELECT USING (auth.uid() = user_id);
+  FOR SELECT TO authenticated
+  USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS user_projetos_insert_policy ON public.user_projetos;
 CREATE POLICY user_projetos_insert_policy ON public.user_projetos
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+  FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS user_projetos_update_policy ON public.user_projetos;
 CREATE POLICY user_projetos_update_policy ON public.user_projetos
-  FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+  FOR UPDATE TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS user_projetos_delete_policy ON public.user_projetos;
 CREATE POLICY user_projetos_delete_policy ON public.user_projetos
-  FOR DELETE USING (auth.uid() = user_id);
+  FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);
 
 -- 5. Comentários para documentação
 COMMENT ON TABLE public.user_projetos IS 'Projetos e áreas de trabalho personalizadas com camadas e ortofotos selecionadas por usuário';
