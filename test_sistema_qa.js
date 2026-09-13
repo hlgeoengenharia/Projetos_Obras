@@ -260,6 +260,46 @@ assertTest('Sincronização: Cache em memória de _allCamadaPerms e _allAbaPerms
 const noDestructiveOrphanDeletion = !usuariosGestaoCode.includes("supabaseClient.from('permissoes_camada').delete().in('id', orphanCamadaIds)");
 assertTest('Segurança de Dados: Ausência de rotina destrutiva que deletava permissões no carregamento', noDestructiveOrphanDeletion);
 
+// 7. Prevenção de Vazamento de Dados Tabulares ("Vazamento de dados")
+const hasCanUserSeeThemeData = mainJsContent.includes('function canUserSeeThemeData(theme)') && mainJsContent.includes('window.canUserSeeThemeData = canUserSeeThemeData;');
+assertTest('Anti-Vazamento: canUserSeeThemeData implementada e exposta em window', hasCanUserSeeThemeData);
+
+const noInsecureFallbackInCanSeeFormTab = !mainJsContent.includes("return userCanOnTheme(targetTheme.id, 'ver');");
+assertTest('Anti-Vazamento: canSeeFormTab livre de fallback que concedia visão de abas por permissão de camada', noInsecureFallbackInCanSeeFormTab);
+
+const hasGatedFeatureList = mainJsContent.includes("typeof canUserSeeThemeData === 'function' && !canUserSeeThemeData(theme)") && mainJsContent.includes('Visualização de Dados Restrita');
+assertTest('Anti-Vazamento: renderFeatureListItems exibe banner de dados restritos e bloqueia feições', hasGatedFeatureList);
+
+const hasGatedFilters = mainJsContent.includes('${canSeeData ? `') && mainJsContent.includes('id="filters-container-${theme.id}"');
+assertTest('Anti-Vazamento: Container de filtros do tema condicionado à permissão canSeeData', hasGatedFilters);
+
+const hasGatedFeatureModal = mainJsContent.includes('themeObj && typeof canUserSeeThemeData === \'function\' && !canUserSeeThemeData(themeObj)');
+assertTest('Anti-Vazamento: showFeatureInfoModal bloqueia abertura do modal de feição sem permissão de dados', hasGatedFeatureModal);
+
+// 8. Estatística da Camada, Edição de Tema e Estatística Cruzada
+const hasCamadaEstatisticaCheck = usuariosGestaoCode.includes('camada-estatistica-check') && usuariosGestaoCode.includes('pode_estatistica');
+assertTest('Permissões: Checkbox de Estatística da Camada presente em Gestão de Usuários', hasCamadaEstatisticaCheck);
+
+const hasCamadaEditarTemaCheck = usuariosGestaoCode.includes('camada-editar-tema-check') && usuariosGestaoCode.includes('pode_editar_tema');
+assertTest('Permissões: Checkbox de Edição do Tema presente em Gestão de Usuários', hasCamadaEditarTemaCheck);
+
+const hasEstatisticaCruzadaCheck = usuariosGestaoCode.includes('user-pode-estatistica-cruzada-check') && usuariosGestaoCode.includes('pode_estatistica_cruzada');
+assertTest('Permissões: Delegação de Estatística Cruzada presente em Gestão de Usuários', hasEstatisticaCruzadaCheck);
+
+const hasSpatialAnalyticsGating = mainJsContent.includes('currentUserProfile.pode_estatistica_cruzada') && mainJsContent.includes('btn-spatial-analytics');
+assertTest('Permissões: Botão de Análise Espacial Cruzada condicionado a pode_estatistica_cruzada ou admin', hasSpatialAnalyticsGating);
+
+const sqlEstatisticas = fs.existsSync('supabase_projetos_e_permissoes_estatisticas.sql') ? fs.readFileSync('supabase_projetos_e_permissoes_estatisticas.sql', 'utf8') : '';
+const hasSqlEstatisticasColumns = sqlEstatisticas.includes('pode_estatistica BOOLEAN') && sqlEstatisticas.includes('pode_editar_tema BOOLEAN') && sqlEstatisticas.includes('pode_estatistica_cruzada BOOLEAN');
+assertTest('Banco de Dados: Script SQL contém colunas pode_estatistica, pode_editar_tema e pode_estatistica_cruzada', hasSqlEstatisticasColumns);
+
+// 9. Persistência de Camadas em Projetos (Gerenciador de Projetos e Compartilhamentos)
+const hasSaveWorkspaceCloudSync = mainJsContent.includes("from('user_projetos')") && mainJsContent.includes("camadas_ids: proj.camadas_ids");
+assertTest('Projetos: saveCurrentWorkspaceState sincroniza camadas_ids, rasters_ids e camadas_visiveis no Supabase', hasSaveWorkspaceCloudSync);
+
+const hasSmartMergeProjects = mainJsContent.includes('Fallback/Cache LocalStorage e Smart-Merge Bidirecional') && mainJsContent.includes('cloudHasLayers = Array.isArray(cloudProj.camadas_ids)');
+assertTest('Projetos: initUserProjects executa smart merge bidirecional garantindo persistência pós-reload', hasSmartMergeProjects);
+
 // ------------------------------------------------------------------------------
 // RELATÓRIO FINAL
 // ------------------------------------------------------------------------------

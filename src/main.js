@@ -1184,12 +1184,49 @@ window.loadUserProjects = async function() {
         }
     }
 
-    // Fallback/Cache LocalStorage
+    // Fallback/Cache LocalStorage e Smart-Merge Bidirecional
     const localSaved = localStorage.getItem('user_projetos_' + munId);
-    if (loadedProjects.length === 0 && localSaved) {
+    let localProjects = [];
+    if (localSaved) {
         try {
-            loadedProjects = JSON.parse(localSaved);
+            localProjects = JSON.parse(localSaved);
         } catch(eJson) {}
+    }
+
+    if (loadedProjects.length === 0 && localProjects.length > 0) {
+        loadedProjects = localProjects;
+    } else if (loadedProjects.length > 0 && localProjects.length > 0) {
+        // Smart merge: se o projeto local tiver camadas definidas ou updated_at mais recente, preserva
+        loadedProjects = loadedProjects.map(cloudProj => {
+            const localProj = localProjects.find(lp => lp.id === cloudProj.id);
+            if (!localProj) return cloudProj;
+
+            const cloudTime = cloudProj.updated_at ? new Date(cloudProj.updated_at).getTime() : 0;
+            const localTime = localProj.updated_at ? new Date(localProj.updated_at).getTime() : 0;
+            const cloudHasLayers = Array.isArray(cloudProj.camadas_ids) && cloudProj.camadas_ids.length > 0;
+            const localHasLayers = Array.isArray(localProj.camadas_ids) && localProj.camadas_ids.length > 0;
+
+            if (localTime > cloudTime || (!cloudHasLayers && localHasLayers)) {
+                // Sincroniza de volta para o Supabase em segundo plano
+                if (typeof supabaseClient !== 'undefined' && supabaseClient && currentUserId && isValidUUID(cloudProj.id)) {
+                    supabaseClient.from('user_projetos').update({
+                        camadas_ids: localProj.camadas_ids || [],
+                        rasters_ids: localProj.rasters_ids || [],
+                        camadas_visiveis: localProj.camadas_visiveis || [],
+                        updated_at: localProj.updated_at || new Date().toISOString()
+                    }).eq('id', cloudProj.id).eq('user_id', currentUserId).catch(() => {});
+                }
+                return { ...cloudProj, ...localProj };
+            }
+            return cloudProj;
+        });
+
+        // Inclui projetos locais que ainda não existiam no Supabase
+        localProjects.forEach(localProj => {
+            if (!loadedProjects.some(cp => cp.id === localProj.id)) {
+                loadedProjects.push(localProj);
+            }
+        });
     }
 
     // Valida e migra IDs legados (ex: proj_1788...) para UUIDs válidos para evitar erro 400 no Supabase
@@ -1763,6 +1800,32 @@ window.saveCurrentWorkspaceState = async function() {
 
             // Salva instantaneamente no cache local garantindo resposta imediata e persistência
             localStorage.setItem('user_projetos_' + munId, JSON.stringify(window.userProjects));
+
+            // Sincroniza persistência de camadas na nuvem (Supabase) de forma segura e não-bloqueante
+            let currentUserId = (typeof currentUserProfile !== 'undefined' && currentUserProfile && currentUserProfile.id) || window.currentUserProfile?.id || null;
+            if (!currentUserId && typeof supabaseClient !== 'undefined' && supabaseClient && supabaseClient.auth) {
+                try {
+                    const { data: sessData } = await supabaseClient.auth.getSession();
+                    currentUserId = sessData?.session?.user?.id || null;
+                } catch(eAuth) {}
+            }
+
+            if (typeof supabaseClient !== 'undefined' && supabaseClient && currentUserId && isValidUUID(proj.id)) {
+                supabaseClient
+                    .from('user_projetos')
+                    .update({
+                        camadas_ids: proj.camadas_ids,
+                        rasters_ids: proj.rasters_ids,
+                        camadas_visiveis: proj.camadas_visiveis,
+                        updated_at: proj.updated_at
+                    })
+                    .eq('id', proj.id)
+                    .eq('user_id', currentUserId)
+                    .then(({ error }) => {
+                        if (error) console.warn('[Projetos] Erro ao sincronizar camadas no Supabase:', error);
+                    })
+                    .catch(err => console.warn('[Projetos] Falha na rede ao sincronizar camadas:', err));
+            }
         }
     } else {
         localStorage.setItem('workspace_livre_themes_' + munId, JSON.stringify(window.activeWorkspaceThemes));
@@ -2139,6 +2202,11 @@ function renderThemes() {
     const canEditThisTheme = isSuperAdmin || (!isSharedFromOtherEntity && isAdmin);
     const canAddFeatures = isSuperAdmin || !isSharedFromOtherEntity;
 
+    const canSeeStats = isSuperAdmin || canManageThisEntityLayer || (typeof canUserSeeThemeStats === 'function' && canUserSeeThemeStats(theme.id));
+    const canEditThemeStyle = canEditThisTheme || (typeof canUserEditThemeStyle === 'function' && canUserEditThemeStyle(theme.id));
+    const hasAnyAction = canSeeStats || canAddFeatures || canEditThemeStyle;
+    const canSeeData = typeof canUserSeeThemeData === 'function' ? canUserSeeThemeData(theme) : true;
+
     const featureCount = theme.features ? theme.features.length : 0;
     const isVisible = theme.visible !== false;
     const isActiveSelection = window.activeSelectionThemeId === String(theme.id);
@@ -2246,18 +2314,20 @@ function renderThemes() {
       <div id="list-${theme.id}" class="bg-black/20 dark:bg-black/40 border-t border-white/10 ${isActiveSelection ? '' : 'hidden'} backdrop-blur-md transition-all">
         
         <!-- Barra de Ações da Camada (Visível ao expandir) -->
-        ${canManageThisEntityLayer ? `
+        ${hasAnyAction ? `
         <div class="p-2.5 border-b border-white/10 bg-slate-900/40">
             <div class="grid grid-flow-col auto-cols-fr gap-1.5 items-center w-full">
+                ${canSeeStats ? `
                 <button onclick="toggleLayerStatsMenu('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Painel de Estatísticas">
                   <span class="material-symbols-outlined text-[18px]">pie_chart</span>
                 </button>
+                ` : ''}
                 ${canAddFeatures ? `
                 <button onclick="startEditingTheme('${theme.id}', '${theme.name}', '${theme.color}', '${theme.geomType || ''}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Adicionar Feição">
                   <span class="material-symbols-outlined text-[18px]">add</span>
                 </button>
                 ` : ''}
-                ${canEditThisTheme ? `
+                ${canEditThemeStyle ? `
                 <button onclick="openEditThemeModal('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Configurações da Camada">
                   <span class="material-symbols-outlined text-[18px]">settings</span>
                 </button>
@@ -2266,7 +2336,8 @@ function renderThemes() {
         </div>
         ` : ''}
 
-        <!-- Filtro Rápido Inteligente por Qualquer Coluna da Camada -->
+        <!-- Filtro Rápido Inteligente por Qualquer Coluna da Camada (Apenas com permissão de dados) -->
+        ${canSeeData ? `
         <div class="p-2 border-b border-white/10 bg-slate-900/30" id="filters-container-${theme.id}">
           <div class="flex flex-col gap-1.5">
              <div class="flex items-center justify-between gap-2">
@@ -2299,6 +2370,7 @@ function renderThemes() {
              </div>
           </div>
         </div>
+        ` : ''}
         <div class="theme-feature-list flex flex-col max-h-64 overflow-y-auto ${!isVisible ? 'opacity-50' : ''} p-2 gap-2" id="feature-list-${theme.id}">
           ${renderFeatureListItems(theme)}
         </div>
@@ -2644,6 +2716,15 @@ window.loadMoreFeatureItems = function(themeId, startIdx) {
 };
 
 function renderFeatureListItems(theme) {
+  if (typeof canUserSeeThemeData === 'function' && !canUserSeeThemeData(theme)) {
+    return `
+      <div class="p-3 text-center text-xs text-amber-300/80 bg-amber-500/10 rounded-xl border border-amber-500/20 my-2 flex flex-col items-center gap-1.5">
+         <span class="material-symbols-outlined text-[20px] text-amber-400">visibility_off</span>
+         <span class="font-bold">Visualização de Dados Restrita</span>
+         <span class="text-[10px] text-slate-400">Você possui permissão geográfica para visualizar as geometrias no mapa. Os dados tabulares e atributos estão restritos.</span>
+      </div>
+    `;
+  }
   if (!theme.features || theme.features.length === 0) {
     return '<div class="px-4 py-3 text-xs text-slate-400 italic">Nenhuma feição adicionada.</div>';
   }
@@ -5157,6 +5238,14 @@ function showFeatureInfoModal(layer) {
       return;
   }
 
+  const themeObj = (themes || []).find(t => String(t.id) === String(themeId));
+  if (themeObj && typeof canUserSeeThemeData === 'function' && !canUserSeeThemeData(themeObj)) {
+      if (typeof showToast === 'function') {
+          showToast('Visualização de dados restrita. Você possui acesso apenas geográfico a esta camada.', 'warning');
+      }
+      return;
+  }
+
   activeFeatureLayer = layer;
   isFeatureEditMode = false;
   renderFeatureInfo();
@@ -6318,6 +6407,20 @@ function applyPermissionUIGating() {
     const novaEl = document.getElementById('drawer-btn-nova');
     if (novaEl) novaEl.style.display = isSuperAdmin ? '' : 'none';
 
+    // Botão de Estatísticas e Análise Espacial Cruzada (#btn-spatial-analytics):
+    // Visível para Admins ou se o usuário possui a delegação pode_estatistica_cruzada
+    const btnSpatialAnalytics = document.getElementById('btn-spatial-analytics');
+    if (btnSpatialAnalytics) {
+        const canSpatialStats = isAdmin || !!(currentUserProfile && (currentUserProfile.pode_estatistica_cruzada === true || currentUserProfile.pode_estatistica_cruzada === 'true'));
+        if (canSpatialStats) {
+            btnSpatialAnalytics.classList.remove('hidden');
+            btnSpatialAnalytics.style.display = 'flex';
+        } else {
+            btnSpatialAnalytics.classList.add('hidden');
+            btnSpatialAnalytics.style.display = 'none';
+        }
+    }
+
     if (typeof renderThemes === 'function') renderThemes();
 }
 
@@ -6418,6 +6521,132 @@ function userCanOnTheme(themeId, acao) {
     return false;
 }
 
+// Avaliação de permissão de visualização de dados tabulares e atributos da camada
+function canUserSeeThemeData(theme) {
+    if (!theme) return false;
+    // 1. SuperAdmin tem acesso irrestrito a todos os dados
+    if (currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin')) {
+        return true;
+    }
+
+    const tid = String(theme.id).toLowerCase().trim();
+    const targetTheme = typeof theme === 'object' ? theme : (themes || []).find(t => String(t.id).toLowerCase() === tid);
+    if (!targetTheme) return false;
+
+    // Se nem tem permissão geográfica para ver a camada no mapa, não tem visão de dados
+    if (typeof userCanOnTheme === 'function' && !userCanOnTheme(targetTheme.id, 'ver')) {
+        return false;
+    }
+
+    // Criador da camada tem acesso irrestrito aos dados
+    const currentUserId = (currentUserProfile && currentUserProfile.id) || window.currentUserProfile?.id || null;
+    const themeCreator = (targetTheme.metadata && (targetTheme.metadata.created_by || targetTheme.metadata.criador_id)) || targetTheme.created_by || targetTheme.criador_id;
+    if (currentUserId && themeCreator && String(themeCreator) === String(currentUserId)) {
+        return true;
+    }
+
+    const fId = String(targetTheme.formId || targetTheme.tipo_cadastro || targetTheme.id).toLowerCase().trim();
+    const themeEntidade = ((targetTheme.metadata && targetTheme.metadata.entidade) || targetTheme.entidade || '').trim();
+    const userEntidade = (window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').trim();
+    const themeSigla = typeof getEntitySigla === 'function' ? getEntitySigla(themeEntidade) : themeEntidade;
+    const userSigla = typeof getEntitySigla === 'function' ? getEntitySigla(userEntidade) : userEntidade;
+    const isOutroEnte = themeEntidade && userEntidade && (themeSigla !== userSigla) && (themeEntidade.toLowerCase() !== 'geral');
+
+    // Verifica se há alguma aba associada a este formulário em window.currentUserAbaPermissions
+    if (window.currentUserAbaPermissions && Object.keys(window.currentUserAbaPermissions).length > 0) {
+        const matchingTabKeys = Object.keys(window.currentUserAbaPermissions).filter(k => {
+            const [formKey] = k.split(':');
+            return formKey.toLowerCase().trim() === fId;
+        });
+
+        if (matchingTabKeys.length > 0) {
+            // Se o usuário tem regras de abas configuradas, só vê dados se pelo menos UMA aba for permitida
+            const hasAtLeastOneTab = matchingTabKeys.some(k => {
+                const perm = window.currentUserAbaPermissions[k];
+                return perm && (perm.pode_ver === true || perm.pode_ver === 'true');
+            });
+            return hasAtLeastOneTab;
+        }
+    }
+
+    // Se for de outro ente governamental e a camada possuir formulário/tipo de cadastro,
+    // exige permissão explícita em pelo menos uma aba para liberar visualização de dados tabulares
+    if (isOutroEnte) {
+        if (targetTheme.formId || targetTheme.tipo_cadastro) {
+            return false;
+        }
+        // Camada pura sem formulário: se tem permissão explícita de edição de dados, libera
+        const pc = currentUserPermissions ? (currentUserPermissions[tid] || currentUserPermissions[targetTheme.id]) : null;
+        if (pc && (pc.pode_editar === true || pc.pode_editar === 'true')) return true;
+        return false;
+    }
+
+    // Camada da própria entidade: Administrador vê dados se não houver restrição
+    if (currentMunicipioPapel === 'admin') {
+        return true;
+    }
+
+    // Para usuários comuns da própria entidade: se possui formulário cadastrado sem abas liberadas, bloqueia dados
+    if (targetTheme.formId || targetTheme.tipo_cadastro) {
+        return false;
+    }
+
+    return true;
+}
+window.canUserSeeThemeData = canUserSeeThemeData;
+
+// Permissão de acesso ao painel de estatísticas da camada
+function canUserSeeThemeStats(themeId) {
+    if (!themeId) return false;
+    if (currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin')) {
+        return true;
+    }
+    const tid = String(themeId).toLowerCase().trim();
+    const pc = currentUserPermissions ? (currentUserPermissions[tid] || currentUserPermissions[themeId]) : null;
+    if (pc && (pc.pode_estatistica === true || pc.pode_estatistica === 'true')) {
+        return true;
+    }
+
+    const targetTheme = (themes || []).find(t => String(t.id).toLowerCase() === tid);
+    const themeEntidade = targetTheme ? ((targetTheme.metadata && targetTheme.metadata.entidade) || targetTheme.entidade || '').trim() : '';
+    const userEntidade = (window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').trim();
+    const themeSigla = typeof getEntitySigla === 'function' ? getEntitySigla(themeEntidade) : themeEntidade;
+    const userSigla = typeof getEntitySigla === 'function' ? getEntitySigla(userEntidade) : userEntidade;
+    const isMyEntity = !userEntidade || !themeEntidade || themeEntidade === 'Geral' || (themeSigla === userSigla) || (themeEntidade.toLowerCase() === userEntidade.toLowerCase());
+
+    if (currentMunicipioPapel === 'admin' && isMyEntity) {
+        return true;
+    }
+    return false;
+}
+window.canUserSeeThemeStats = canUserSeeThemeStats;
+
+// Permissão de acesso à engrenagem de edição de estilo/tema da camada
+function canUserEditThemeStyle(themeId) {
+    if (!themeId) return false;
+    if (currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin')) {
+        return true;
+    }
+    const tid = String(themeId).toLowerCase().trim();
+    const pc = currentUserPermissions ? (currentUserPermissions[tid] || currentUserPermissions[themeId]) : null;
+    if (pc && (pc.pode_editar_tema === true || pc.pode_editar_tema === 'true')) {
+        return true;
+    }
+
+    const targetTheme = (themes || []).find(t => String(t.id).toLowerCase() === tid);
+    const themeEntidade = targetTheme ? ((targetTheme.metadata && targetTheme.metadata.entidade) || targetTheme.entidade || '').trim() : '';
+    const userEntidade = (window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').trim();
+    const themeSigla = typeof getEntitySigla === 'function' ? getEntitySigla(themeEntidade) : themeEntidade;
+    const userSigla = typeof getEntitySigla === 'function' ? getEntitySigla(userEntidade) : userEntidade;
+    const isMyEntity = !userEntidade || !themeEntidade || themeEntidade === 'Geral' || (themeSigla === userSigla) || (themeEntidade.toLowerCase() === userEntidade.toLowerCase());
+
+    if (currentMunicipioPapel === 'admin' && isMyEntity) {
+        return true;
+    }
+    return false;
+}
+window.canUserEditThemeStyle = canUserEditThemeStyle;
+
 // Abas de formulário (dentro de uma camada): super_admin e admin do
 // Avaliação de permissão de visualização de abas do formulário (Segurança e Isolamento Interinstitucional)
 function canSeeFormTab(formId, tabId, options = {}) {
@@ -6450,13 +6679,9 @@ function canSeeFormTab(formId, tabId, options = {}) {
     // REGRA DE OURO INTERINSTITUCIONAL:
     // Camada compartilhada de OUTRO ente:
     // 1. Se há regra explícita de aba (permissoes_aba), respeita-a fielmente.
-    // 2. Se não há regra individual por aba cadastrada, mas o usuário tem permissão de ver a camada,
-    // permite a visualização das abas em modo leitura para evitar bloqueio acidental de formulários.
+    // 2. Se não há regra individual por aba cadastrada, bloqueia a aba para evitar vazamento de dados tabulares.
     if (isOutroEnte) {
         if (perm) return perm.pode_ver === true || perm.pode_ver === 'true';
-        if (targetTheme && typeof userCanOnTheme === 'function') {
-            return userCanOnTheme(targetTheme.id, 'ver');
-        }
         return false;
     }
 

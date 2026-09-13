@@ -1046,6 +1046,7 @@
         const userSetor = (perfil.setor || userObj.setor || '').trim();
         const podeCriarCamadas = !!(perfil.pode_criar_camadas || userObj.pode_criar_camadas);
         const podeSubirOrtofotos = !!(perfil.pode_subir_ortofotos || userObj.pode_subir_ortofotos);
+        const podeEstatisticaCruzada = !!(perfil.pode_estatistica_cruzada || userObj.pode_estatistica_cruzada);
 
         // Determina a entidade do usuário deste card
         const userEntidadeRaw = (userObj.entidade || userObj.profile?.entidade || (userObj.membros && userObj.membros[0]?.entidade) || 'Prefeitura Municipal').trim();
@@ -1150,6 +1151,8 @@
 
             const podeVerCamada = !!userCamadaPerm.pode_ver || hasAnySubAbaVer;
             const podeExcluirCamada = !!userCamadaPerm.pode_excluir;
+            const podeEstatisticaCamada = !!userCamadaPerm.pode_estatistica;
+            const podeEditarTemaCamada = !!(userCamadaPerm.pode_editar_tema || userCamadaPerm.pode_editar);
 
             const tEntRaw = getThemeEntity(tema);
             const tSigla = getEntitySigla(tEntRaw);
@@ -1212,10 +1215,18 @@
                             ` : ''}
                         </div>
 
-                        <div class="flex items-center gap-4 shrink-0 bg-white/80 dark:bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 shadow-xs" onclick="event.stopPropagation()">
+                        <div class="flex items-center gap-3 shrink-0 bg-white/80 dark:bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 shadow-xs flex-wrap" onclick="event.stopPropagation()">
                             <label class="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 ${isEditing ? 'cursor-pointer' : 'cursor-default'}">
                                 <input type="checkbox" class="camada-ver-check rounded border-slate-400 dark:border-slate-500 text-sky-600 focus:ring-sky-500 w-4 h-4" ${podeVerCamada ? 'checked' : ''} ${camadaVerDisabled} onchange="window.UsuariosManager.toggleCamadaSubAbas(this, '${userId}', '${tema.id}')">
                                 Ver Camada
+                            </label>
+                            <label class="flex items-center gap-1.5 text-xs font-bold text-teal-600 dark:text-teal-400 ${isEditing ? 'cursor-pointer' : 'cursor-default'}" title="Permissão de leitura para o Painel de Estatísticas da Camada">
+                                <input type="checkbox" class="camada-estatistica-check rounded border-slate-400 dark:border-slate-500 text-teal-600 focus:ring-teal-500 w-4 h-4" ${podeEstatisticaCamada ? 'checked' : ''} ${!isEditing ? 'disabled' : ''}>
+                                <span class="material-symbols-outlined text-[15px]">pie_chart</span> Estatística
+                            </label>
+                            <label class="flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 ${isEditing ? 'cursor-pointer' : 'cursor-default'}" title="Habilita a engrenagem de edição de estilos/cores da camada compartilhada">
+                                <input type="checkbox" class="camada-editar-tema-check rounded border-slate-400 dark:border-slate-500 text-indigo-600 focus:ring-indigo-500 w-4 h-4" ${podeEditarTemaCamada ? 'checked' : ''} ${!isEditing ? 'disabled' : ''}>
+                                <span class="material-symbols-outlined text-[15px]">settings</span> Editar Tema
                             </label>
                             <label class="flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 ${isEditing ? 'cursor-pointer' : 'cursor-default'}">
                                 <input type="checkbox" class="camada-excluir-check rounded border-slate-400 dark:border-slate-500 text-rose-600 focus:ring-rose-500 w-4 h-4" ${podeExcluirCamada ? 'checked' : ''} ${camadaExcluirDisabled}>
@@ -1437,6 +1448,11 @@
                                         <span class="material-symbols-outlined text-[11px]">cloud_upload</span>+ Sobe Ortofotos
                                     </span>
                                 ` : ''}
+                                ${podeEstatisticaCruzada ? `
+                                    <span class="text-[9.5px] font-bold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30 flex items-center gap-0.5" title="Autorizado a visualizar Análise Espacial Cruzada">
+                                        <span class="material-symbols-outlined text-[11px]">analytics</span>+ Estatística Cruzada
+                                    </span>
+                                ` : ''}
                                 ${isPartnerPontoFocal ? `
                                     <span class="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 flex items-center gap-1">
                                         <span class="material-symbols-outlined text-[12px]">handshake</span> Ponto Focal ${userSigla}
@@ -1529,8 +1545,8 @@
                         </div>
                     </div>
 
-                    <!-- Delegação de Permissões Especiais (Criar Camadas e Subir Ortofotos) -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                    <!-- Delegação de Permissões Especiais (Criar Camadas, Subir Ortofotos e Estatística Cruzada) -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                         <div class="p-3 rounded-xl border border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/70 dark:bg-emerald-950/30 flex items-center justify-between gap-3 shadow-xs">
                             <div class="flex items-center gap-2.5 min-w-0 pr-2">
                                 <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
@@ -1538,10 +1554,9 @@
                                 </div>
                                 <div class="flex flex-col min-w-0">
                                     <span class="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                                        Criar / Importar Camadas
-                                        ${podeCriarCamadas ? '<span class="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">Autorizado</span>' : ''}
+                                        Criar Camadas
                                     </span>
-                                    <span class="text-[10px] text-slate-500 dark:text-slate-400">Autoriza este usuário a criar e importar camadas</span>
+                                    <span class="text-[10px] text-slate-500 dark:text-slate-400">Criar e importar</span>
                                 </div>
                             </div>
                             <label class="relative inline-flex items-center ${isEditing ? 'cursor-pointer' : 'cursor-default'} shrink-0" title="Delegar autorização para criar/importar camadas">
@@ -1557,15 +1572,32 @@
                                 </div>
                                 <div class="flex flex-col min-w-0">
                                     <span class="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                                        Carregar Ortofotos
-                                        ${podeSubirOrtofotos ? '<span class="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-600 dark:text-teal-400 border border-teal-500/30">Autorizado</span>' : ''}
+                                        Ortofotos
                                     </span>
-                                    <span class="text-[10px] text-slate-500 dark:text-slate-400">Autoriza este usuário a enviar imagens e ortofotos</span>
+                                    <span class="text-[10px] text-slate-500 dark:text-slate-400">Enviar imagens</span>
                                 </div>
                             </div>
                             <label class="relative inline-flex items-center ${isEditing ? 'cursor-pointer' : 'cursor-default'} shrink-0" title="Delegar autorização para carregar ortofotos">
                                 <input type="checkbox" class="user-pode-subir-ortofotos-check sr-only peer" ${podeSubirOrtofotos ? 'checked' : ''} ${!isEditing ? 'disabled' : ''}>
                                 <div class="w-9 h-5 bg-slate-300 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-500"></div>
+                            </label>
+                        </div>
+
+                        <div class="p-3 rounded-xl border border-purple-200 dark:border-purple-800/80 bg-purple-50/70 dark:bg-purple-950/30 flex items-center justify-between gap-3 shadow-xs">
+                            <div class="flex items-center gap-2.5 min-w-0 pr-2">
+                                <div class="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/30">
+                                    <span class="material-symbols-outlined text-[18px]">analytics</span>
+                                </div>
+                                <div class="flex flex-col min-w-0">
+                                    <span class="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                                        Estatística Cruzada
+                                    </span>
+                                    <span class="text-[10px] text-slate-500 dark:text-slate-400">Análise cruzada (leitura)</span>
+                                </div>
+                            </div>
+                            <label class="relative inline-flex items-center ${isEditing ? 'cursor-pointer' : 'cursor-default'} shrink-0" title="Autorizar visualização de Estatística Espacial Cruzada">
+                                <input type="checkbox" class="user-pode-estatistica-cruzada-check sr-only peer" ${podeEstatisticaCruzada ? 'checked' : ''} ${!isEditing ? 'disabled' : ''}>
+                                <div class="w-9 h-5 bg-slate-300 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-500"></div>
                             </label>
                         </div>
                     </div>
@@ -1852,12 +1884,17 @@
                     });
                 });
 
+                const podeEstatistica = !!cCard.querySelector('.camada-estatistica-check')?.checked;
+                const podeEditarTema = !!cCard.querySelector('.camada-editar-tema-check')?.checked;
+
                 camadaRows.push({
                     user_id: userId,
                     theme_id: themeId,
                     pode_ver: podeVer,
-                    pode_editar: podeEditarCamada,
-                    pode_excluir: podeExcluir
+                    pode_editar: podeEditarCamada || podeEditarTema,
+                    pode_excluir: podeExcluir,
+                    pode_estatistica: podeEstatistica,
+                    pode_editar_tema: podeEditarTema
                 });
             });
 
@@ -1900,6 +1937,7 @@
                 const inputSetor = card.querySelector('.user-setor-input')?.value?.trim();
                 const podeCriarCamadas = !!card.querySelector('.user-pode-criar-camadas-check')?.checked;
                 const podeSubirOrtofotos = !!card.querySelector('.user-pode-subir-ortofotos-check')?.checked;
+                const podeEstatisticaCruzada = !!card.querySelector('.user-pode-estatistica-cruzada-check')?.checked;
 
                 // Normaliza entidade para garantir consistência institucional
                 if (inputEntidade) {
@@ -1912,7 +1950,8 @@
                 const profileUpdatePayload = { 
                     ponto_focal: isPontoFocal,
                     pode_criar_camadas: podeCriarCamadas,
-                    pode_subir_ortofotos: podeSubirOrtofotos
+                    pode_subir_ortofotos: podeSubirOrtofotos,
+                    pode_estatistica_cruzada: podeEstatisticaCruzada
                 };
                 if (inputEntidade) profileUpdatePayload.entidade = inputEntidade;
                 if (inputCargo !== undefined) profileUpdatePayload.cargo = inputCargo;
@@ -1940,6 +1979,7 @@
                     m.profiles.ponto_focal = isPontoFocal;
                     m.profiles.pode_criar_camadas = podeCriarCamadas;
                     m.profiles.pode_subir_ortofotos = podeSubirOrtofotos;
+                    m.profiles.pode_estatistica_cruzada = podeEstatisticaCruzada;
                     if (inputEntidade) {
                         m.profiles.entidade = inputEntidade;
                         m.entidade = inputEntidade;
