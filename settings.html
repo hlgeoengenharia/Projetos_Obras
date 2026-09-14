@@ -1733,7 +1733,10 @@
       </div>
     </div>
 
-    <!-- Abas Principais: Minhas Camadas Criadas | Compartilhados Comigo | Usuários em Compartilhamento -->
+    <!-- Card do Usuário/Admin Logado (Inserido entre o título e as abas) -->
+    <div id="usuarios-admin-profile-card" class="mb-5"></div>
+
+    <!-- Abas Principais: Minha Equipe | Minhas Camadas Criadas | Compartilhados Comigo | Usuários em Compartilhamento -->
     <div id="usuarios-main-tabs" class="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 mb-5 overflow-x-auto pb-1">
     </div>
 
@@ -6558,15 +6561,22 @@
     }, 100);
 
     async function loadUsersPanel() {
-        const munId = activeMunicipioId || sessionStorage.getItem('municipio_ativo');
-        if (window.UsuariosManager) {
-            window.UsuariosManager.init({
-                containerId: 'users-list',
-                searchInputId: 'users-search',
-                municipioId: munId,
-                currentUserProfile: currentUserProfile
-            });
-        }
+        let attempts = 0;
+        const tryInit = () => {
+            attempts++;
+            const munId = (typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : null) || sessionStorage.getItem('municipio_ativo');
+            if (window.UsuariosManager) {
+                window.UsuariosManager.init({
+                    containerId: 'users-list',
+                    searchInputId: 'users-search',
+                    municipioId: munId,
+                    currentUserProfile: (typeof currentUserProfile !== 'undefined') ? currentUserProfile : null
+                });
+            } else if (attempts < 50) {
+                setTimeout(tryInit, 80);
+            }
+        };
+        tryInit();
     }
     window.loadUsersPanel = loadUsersPanel;
 
@@ -6753,7 +6763,7 @@
   </script>
   <script src="src/auditLogger.js"></script>
   <script src="src/auditoria-gestao.js"></script>
-  <script src="src/usuarios-gestao.js?v=20260913_no_abrir_mapa"></script>
+  <script src="src/usuarios-gestao.js?v=20260914_limpeza_concluida"></script>
   <script src="src/session-security.js"></script>
 </body>
 </html>

@@ -331,6 +331,28 @@ assertTest('Frontend: home.html reconhece entidade_admin e papel admin sem ocult
 const hasUsuariosGestaoEntidadeAdmin = usuariosGestaoCode.includes('_currentUserProfile.entidade_admin') && usuariosGestaoCode.includes('minhaSigla === \'Município\' && _targetMunicipioId');
 assertTest('Frontend: usuarios-gestao.js reconhece entidade_admin e isola apenas municípios por _targetMunicipioId', hasUsuariosGestaoEntidadeAdmin);
 
+// 11. Reestruturação da Central de Usuários: Card do Admin, 4 Abas e Isolamento de Camadas
+const settingsHtmlContent = fs.readFileSync('settings.html', 'utf8');
+const hasAdminProfileCardContainer = settingsHtmlContent.includes('id="usuarios-admin-profile-card"');
+assertTest('Central de Usuários: Container do Card do Admin presente em settings.html', hasAdminProfileCardContainer);
+
+const ugFreshCode = fs.readFileSync('src/usuarios-gestao.js', 'utf8');
+const hasRenderAdminHeaderCard = ugFreshCode.includes('function renderAdminHeaderCard()') && ugFreshCode.includes('getAdminUserObj()');
+assertTest('Central de Usuários: renderAdminHeaderCard implementada em usuarios-gestao.js', hasRenderAdminHeaderCard);
+
+const hasFourTabs = ugFreshCode.includes("'minha-equipe'") && ugFreshCode.includes("'minhas-camadas'") && ugFreshCode.includes("'compartilhados-comigo'") && ugFreshCode.includes("'usuarios-compartilhamento'");
+assertTest('Central de Usuários: 4 Abas configuradas (MINHA EQUIPE, MINHAS CAMADAS, COMPARTILHADOS COMIGO, USUÁRIOS EM COMPARTILHAMENTO)', hasFourTabs);
+
+const hasAdminExcludedFromSubordinates = ugFreshCode.includes('u.user_id === _currentUserProfile?.id') && ugFreshCode.includes('O próprio Admin logado não deve ser exibido novamente');
+assertTest('Central de Usuários: Admin logado excluído da listagem de subordinados em MINHA EQUIPE', hasAdminExcludedFromSubordinates);
+
+const hasRenderMinhasCamadasCriadas = ugFreshCode.includes('function renderMinhasCamadasCriadas(') && ugFreshCode.includes('Camadas Oficiais de');
+assertTest('Central de Usuários: renderMinhasCamadasCriadas implementada para catálogo exclusivo do ente', hasRenderMinhasCamadasCriadas);
+
+const hasEntityLayerIsolation = ugFreshCode.includes('// Para servidores da própria equipe, exibe estritamente as camadas criadas pelo próprio ente') && ugFreshCode.includes('return tSigla === minhaSigla;');
+assertTest('Central de Usuários: Camadas de outros entes (ex: SPU) isoladas e não vazadas nos cards de membros da equipe', hasEntityLayerIsolation);
+
+
 // ------------------------------------------------------------------------------
 // RELATÓRIO FINAL
 // ------------------------------------------------------------------------------

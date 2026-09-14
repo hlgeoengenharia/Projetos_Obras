@@ -70,7 +70,7 @@
     let _allMunicipios = [];
     let _allEntidadesPadrao = [];
     let _selectedEntidadeFiltro = null;
-    let _currentMainTab = 'minhas-camadas'; // 'minhas-camadas' | 'compartilhados-comigo' | 'usuarios-compartilhamento'
+    let _currentMainTab = 'minha-equipe'; // 'minha-equipe' | 'minhas-camadas' | 'compartilhados-comigo' | 'usuarios-compartilhamento'
     let _selectedCompartilhadoFiltro = 'todos'; // 'todos' ou sigla do órgão concedente
     let _containerIdAtual = null;
     let _searchInputIdAtual = null;
@@ -162,8 +162,8 @@
 
             if (!isCurrentUserAdmin()) {
                 _currentMainTab = 'compartilhados-comigo';
-            } else if (!_currentMainTab) {
-                _currentMainTab = 'minhas-camadas';
+            } else if (!_currentMainTab || _currentMainTab === 'minhas-camadas') {
+                _currentMainTab = 'minha-equipe';
             }
 
             if (!_selectedEntidadeFiltro) {
@@ -422,7 +422,69 @@
         }
     }
 
-    // Renderiza as 3 Abas Principais (para Administradores) ou gerencia a visão direta (para Usuários comuns)
+    // Monta o objeto de usuário completo para o Admin logado
+    function getAdminUserObj() {
+        if (!_currentUserProfile || !_currentUserProfile.id) return null;
+        const uid = _currentUserProfile.id;
+        const userMembros = (_allMembros || []).filter(m => m.user_id === uid);
+        const prof = _currentUserProfile;
+        const userEntidade = (prof.entidade || (userMembros[0] && (userMembros[0].entidade || userMembros[0].profiles?.entidade)) || 'Prefeitura Municipal').trim();
+        const userCargo = (prof.cargo || (userMembros[0] && userMembros[0].cargo) || '').trim();
+
+        const isAdm = isCurrentUserAdmin();
+        return {
+            user_id: uid,
+            profile: prof,
+            ponto_focal: !!prof.ponto_focal,
+            entidade: userEntidade,
+            cargo: userCargo,
+            unidade: (prof.unidade || '').trim(),
+            setor: (prof.setor || '').trim(),
+            pode_criar_camadas: !!prof.pode_criar_camadas || isAdm,
+            pode_subir_ortofotos: !!prof.pode_subir_ortofotos || isAdm,
+            pode_estatistica_cruzada: !!prof.pode_estatistica_cruzada || isAdm,
+            papel: isAdm ? 'admin' : (userMembros[0]?.papel || 'visualizador'),
+            status: userMembros[0]?.status || 'aprovado',
+            membros: userMembros.length > 0 ? userMembros : (_currentUserMembros || [])
+        };
+    }
+
+    // Renderiza o Card do Usuário/Admin Logado entre o Cabeçalho e as 4 Abas
+    function renderAdminHeaderCard() {
+        const container = document.getElementById('usuarios-admin-profile-card');
+        if (!container) return;
+
+        if (!_currentUserProfile) {
+            container.innerHTML = '';
+            return;
+        }
+
+        const adminObj = getAdminUserObj();
+        if (!adminObj) {
+            container.innerHTML = '';
+            return;
+        }
+
+        const isAdm = isCurrentUserAdmin();
+        const headerBadgeText = isAdm ? 'Meu Perfil de Administrador Conectado' : 'Meu Perfil Conectado';
+
+        container.innerHTML = `
+            <div class="mb-3">
+                <div class="flex items-center justify-between px-1 mb-1.5">
+                    <span class="text-[11px] font-black uppercase tracking-wider text-sky-700 dark:text-sky-300 flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[16px]">verified_user</span>
+                        ${headerBadgeText}
+                    </span>
+                    <span class="text-[10.5px] font-semibold text-slate-500 dark:text-slate-400">
+                        ${isAdm ? 'Gestor Titular da Unidade / Ente' : 'Usuário Autenticado'}
+                    </span>
+                </div>
+                ${renderUserCard(adminObj)}
+            </div>
+        `;
+    }
+
+    // Renderiza as 4 Abas Principais (para Administradores) ou gerencia a visão direta (para Usuários comuns)
     function renderMainTabs() {
         const tabsContainer = document.getElementById('usuarios-main-tabs');
         const adminInfoBox = document.getElementById('usuarios-admin-info-box');
@@ -433,6 +495,9 @@
         const isAdmin = isCurrentUserAdmin();
         const minhaEntidade = (_currentUserProfile?.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
         const minhaSigla = getEntitySigla(minhaEntidade);
+
+        // Renderiza o card de destaque do usuário/Admin conectado
+        renderAdminHeaderCard();
 
         if (!isAdmin) {
             if (tabsContainer) {
@@ -452,7 +517,7 @@
         }
 
         if (adminInfoBox) {
-            if (_currentMainTab === 'minhas-camadas') {
+            if (_currentMainTab === 'minha-equipe') {
                 adminInfoBox.classList.remove('hidden');
             } else {
                 adminInfoBox.classList.add('hidden');
@@ -468,23 +533,41 @@
         }
 
         if (headerTitle) headerTitle.textContent = 'Central de Usuários e Compartilhamento';
-        if (headerSubtitle) headerSubtitle.textContent = 'Gerencie as permissões da sua equipe, libere camadas para órgãos parceiros e veja o que compartilharam com você.';
+        if (headerSubtitle) headerSubtitle.textContent = 'Gerencie as permissões da sua equipe, consulte suas camadas e compartilhe com parceiros.';
 
         if (!tabsContainer) return;
 
-        // Cálculos dos badges
-        const uniqueInternalUsers = new Set();
+        // 1. Subordinados da equipe (exclui o próprio admin logado do badge)
+        const uniqueSubordinados = new Set();
         _allMembros.forEach(m => {
             const s = getEntitySigla(m.entidade || m.profiles?.entidade);
-            if (s === minhaSigla && m.status !== 'rejeitado') {
-                uniqueInternalUsers.add(m.user_id);
+            if (s === minhaSigla && m.status !== 'rejeitado' && m.user_id !== _currentUserProfile?.id) {
+                uniqueSubordinados.add(m.user_id);
             }
         });
-        const minhaEquipeCount = uniqueInternalUsers.size;
+        const subordinadosCount = uniqueSubordinados.size;
 
+        // 2. Camadas criadas pelo próprio ente
+        const meuMunId = _targetMunicipioId || sessionStorage.getItem('municipio_ativo') || _currentUserProfile?.municipio_id || (_currentUserMembros && _currentUserMembros[0]?.municipio_id);
+        const minhaCamadasCount = _allTemas.filter(t => {
+            const s = getEntitySigla(getThemeEntity(t));
+            if (s !== minhaSigla) return false;
+            if (minhaSigla === 'MUNICÍPIO' && meuMunId && t.municipio_id && t.municipio_id !== meuMunId) return false;
+            return true;
+        }).length;
+        const minhasOrtofotosCount = _allRasters.filter(r => {
+            const s = getEntitySigla(r.entidade);
+            if (s !== minhaSigla) return false;
+            if (minhaSigla === 'MUNICÍPIO' && meuMunId && r.municipio_id && r.municipio_id !== meuMunId) return false;
+            return true;
+        }).length;
+        const totalCamadasEnte = minhaCamadasCount + minhasOrtofotosCount;
+
+        // 3. Camadas compartilhadas de outros órgãos
         const sharedItems = getSharedItemsForCurrentUser();
         const sharedCount = sharedItems.length;
 
+        // 4. Pontos focais parceiros
         const uniquePartnerPf = new Set();
         _allMembros.forEach(m => {
             const s = getEntitySigla(m.entidade || m.profiles?.entidade);
@@ -496,22 +579,28 @@
 
         const tabsConfig = [
             {
+                key: 'minha-equipe',
+                label: 'EQUIPE',
+                icon: 'groups',
+                badge: `${subordinadosCount}`
+            },
+            {
                 key: 'minhas-camadas',
-                label: 'MINHAS CAMADAS CRIADAS',
+                label: 'CAMADAS',
                 icon: 'folder_shared',
-                badge: `${minhaEquipeCount} servidor${minhaEquipeCount === 1 ? '' : 'es'}`
+                badge: `${totalCamadasEnte}`
             },
             {
                 key: 'compartilhados-comigo',
-                label: 'COMPARTILHADOS COMIGO',
+                label: 'COMPARTILHADOS',
                 icon: 'inbox',
-                badge: sharedCount > 0 ? `${sharedCount} camada${sharedCount === 1 ? '' : 's'}` : '0'
+                badge: `${sharedCount}`
             },
             {
                 key: 'usuarios-compartilhamento',
-                label: 'USUÁRIOS EM COMPARTILHAMENTO',
+                label: 'PARCEIROS',
                 icon: 'handshake',
-                badge: `${partnerPfCount} parceiro${partnerPfCount === 1 ? '' : 's'}`
+                badge: `${partnerPfCount}`
             }
         ];
 
@@ -524,10 +613,10 @@
                 <button type="button" 
                     id="tab-btn-${t.key}"
                     onclick="window.UsuariosManager.switchMainTab('${t.key}')" 
-                    class="flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${isActive ? activeClasses : inactiveClasses}">
-                    <span class="material-symbols-outlined text-[18px]">${t.icon}</span>
+                    class="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-t-xl text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${isActive ? activeClasses : inactiveClasses}">
+                    <span class="material-symbols-outlined text-[17px]">${t.icon}</span>
                     <span>${t.label}</span>
-                    <span class="ml-1 px-2 py-0.5 text-[10px] font-extrabold rounded-full ${isActive ? 'bg-primary text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}">${t.badge}</span>
+                    <span class="ml-1 px-1.5 py-0.5 text-[10px] font-extrabold rounded-full ${isActive ? 'bg-primary text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}">${t.badge}</span>
                 </button>
             `;
         }).join('');
@@ -538,7 +627,7 @@
         const minhaEntidade = (_currentUserProfile?.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
         const minhaSigla = getEntitySigla(minhaEntidade);
 
-        if (tabKey === 'minhas-camadas') {
+        if (tabKey === 'minha-equipe' || tabKey === 'minhas-camadas') {
             _selectedEntidadeFiltro = minhaSigla;
         } else if (tabKey === 'usuarios-compartilhamento') {
             const parceiros = getParceirosList();
@@ -553,7 +642,18 @@
         renderEntidadesToggle();
 
         const searchInput = document.getElementById(_searchInputIdAtual || 'users-search') || document.getElementById('usuarios-search');
-        if (searchInput) searchInput.value = '';
+        if (searchInput) {
+            searchInput.value = '';
+            if (tabKey === 'minha-equipe') {
+                searchInput.placeholder = 'Buscar servidores da minha equipe por nome, e-mail ou cargo...';
+            } else if (tabKey === 'minhas-camadas') {
+                searchInput.placeholder = 'Buscar camadas e ortofotos criadas pela minha instituição...';
+            } else if (tabKey === 'compartilhados-comigo') {
+                searchInput.placeholder = 'Buscar camadas compartilhadas comigo por nome ou órgão...';
+            } else if (tabKey === 'usuarios-compartilhamento') {
+                searchInput.placeholder = `Buscar pontos focais de ${_selectedEntidadeFiltro || 'parceiros'}...`;
+            }
+        }
 
         const containerId = _containerIdAtual || 'users-list';
         renderUsersList(containerId, '');
@@ -798,6 +898,208 @@
         window.location.href = url;
     }
 
+    // Renderiza o catálogo de "Minhas Camadas Criadas" (apenas camadas e ortofotos do próprio ente)
+    function renderMinhasCamadasCriadas(containerId, searchQuery = '') {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        const query = searchQuery.trim().toLowerCase();
+        const minhaEntidade = (_currentUserProfile?.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
+        const minhaSigla = getEntitySigla(minhaEntidade);
+        const isSuperAdmin = !!(_currentUserProfile && (_currentUserProfile.super_admin || _currentUserProfile.is_superadmin || _currentUserProfile.papel === 'superadmin'));
+
+        const meuMunId = _targetMunicipioId || sessionStorage.getItem('municipio_ativo') || _currentUserProfile?.municipio_id || (_currentUserMembros && _currentUserMembros[0]?.municipio_id);
+
+        let temas = _allTemas.filter(t => {
+            const tSigla = getEntitySigla(getThemeEntity(t));
+            if (!isSuperAdmin && tSigla !== minhaSigla) return false;
+            if (minhaSigla === 'MUNICÍPIO' && meuMunId && t.municipio_id && t.municipio_id !== meuMunId) return false;
+            return true;
+        });
+
+        let rasters = _allRasters.filter(r => {
+            const rSigla = getEntitySigla(r.entidade);
+            if (!isSuperAdmin && rSigla !== minhaSigla) return false;
+            if (minhaSigla === 'MUNICÍPIO' && meuMunId && r.municipio_id && r.municipio_id !== meuMunId) return false;
+            return true;
+        });
+
+        if (query) {
+            temas = temas.filter(t => {
+                const nome = (t.nome || '').toLowerCase();
+                const desc = (t.descricao || '').toLowerCase();
+                const geom = (t.tipo_geometria || '').toLowerCase();
+                return nome.includes(query) || desc.includes(query) || geom.includes(query);
+            });
+            rasters = rasters.filter(r => {
+                const nome = (r.nome || '').toLowerCase();
+                const tipo = (r.tipo || '').toLowerCase();
+                return nome.includes(query) || tipo.includes(query);
+            });
+        }
+
+        const totalItems = temas.length + rasters.length;
+
+        const bannerHtml = `
+            <div class="mb-4 p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-200 dark:border-emerald-900 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xs">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/30 shrink-0">
+                        <span class="material-symbols-outlined text-[22px]">folder_shared</span>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+                            Camadas Oficiais de ${minhaEntidade}
+                            <span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">${minhaSigla}</span>
+                        </h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            Catálogo exclusivo de camadas e ortofotos criadas pelo seu órgão. Camadas de outros entes estão em <b>Compartilhados Comigo</b>.
+                        </p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <span class="px-3 py-1 text-xs font-extrabold rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[15px]">layers</span> ${temas.length} camadas
+                    </span>
+                    <span class="px-3 py-1 text-xs font-extrabold rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[15px]">satellite</span> ${rasters.length} ortofotos
+                    </span>
+                </div>
+            </div>
+        `;
+
+        if (totalItems === 0) {
+            container.innerHTML = bannerHtml + `
+                <div class="p-10 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 shadow-xs">
+                    <div class="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mx-auto mb-3 border border-emerald-500/20">
+                        <span class="material-symbols-outlined text-[30px]">${query ? 'search_off' : 'layers_clear'}</span>
+                    </div>
+                    <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">${query ? 'Nenhuma camada encontrada para esta busca' : 'Nenhuma camada criada pela sua instituição ainda'}</h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                        ${query ? 'Tente buscar com outro termo ou nome da camada.' : 'As camadas criadas por servidores autorizados da sua instituição aparecerão listadas aqui.'}
+                    </p>
+                </div>
+            `;
+            return;
+        }
+
+        temas.sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
+        rasters.sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
+
+        const temasHtml = temas.map(tema => {
+            const formVinculado = (tema.tipo_cadastro && tema.tipo_cadastro !== 'padrao') ? _allForms[tema.tipo_cadastro] : null;
+            const numAbas = (formVinculado && formVinculado.tabs) ? formVinculado.tabs.length : 0;
+            const munObj = _allMunicipios.find(m => m.id === tema.municipio_id);
+            const cor = tema.cor || '#0ea5e9';
+
+            let countMembrosComAcesso = 0;
+            let countParceirosComAcesso = 0;
+            Object.keys(_allCamadaPerms).forEach(k => {
+                const p = _allCamadaPerms[k];
+                if (p && p.theme_id === tema.id && p.pode_ver) {
+                    const mb = _allMembros.find(m => m.user_id === p.user_id);
+                    if (mb) {
+                        const s = getEntitySigla(mb.entidade || mb.profiles?.entidade);
+                        if (s === minhaSigla) countMembrosComAcesso++;
+                        else countParceirosComAcesso++;
+                    }
+                }
+            });
+
+            return `
+                <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border-2 border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4" style="border-left-width: 6px; border-left-color: ${cor}">
+                    <div class="flex items-start gap-3.5 min-w-0 flex-1">
+                        <div class="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border shadow-xs" style="background-color: ${cor}18; color: ${cor}; border-color: ${cor}35">
+                            <span class="material-symbols-outlined text-[24px]">${tema.icone || 'layers'}</span>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2 flex-wrap mb-1">
+                                <h4 class="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white truncate">${tema.nome}</h4>
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                    <span class="material-symbols-outlined text-[12px]">verified</span>
+                                    ${minhaSigla} (Ente)
+                                </span>
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                    <span class="material-symbols-outlined text-[12px]">category</span>
+                                    ${tema.tipo_geometria || 'vetor'}
+                                </span>
+                                ${numAbas > 0 ? `
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                                        <span class="material-symbols-outlined text-[12px]">article</span> ${numAbas} aba${numAbas === 1 ? '' : 's'}
+                                    </span>
+                                ` : ''}
+                            </div>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">${tema.descricao || 'Camada temática oficial criada pela instituição.'}</p>
+                            <div class="text-[11px] text-slate-400 mt-2 flex items-center gap-3 flex-wrap font-medium">
+                                ${munObj ? `<span><b>Município:</b> ${munObj.nome}</span><span>•</span>` : ''}
+                                <span class="text-indigo-600 dark:text-indigo-400 font-semibold flex items-center gap-1">
+                                    <span class="material-symbols-outlined text-[14px]">group</span> ${countMembrosComAcesso} servidores com acesso
+                                </span>
+                                ${countParceirosComAcesso > 0 ? `
+                                    <span>•</span>
+                                    <span class="text-cyan-600 dark:text-cyan-400 font-semibold flex items-center gap-1">
+                                        <span class="material-symbols-outlined text-[14px]">handshake</span> ${countParceirosComAcesso} parceiros externos
+                                    </span>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                        <button type="button" onclick="if(typeof openEditThemeModal === 'function') openEditThemeModal('${tema.id}');" class="px-3.5 py-1.5 bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs">
+                            <span class="material-symbols-outlined text-[16px] text-primary">palette</span> Estilo & Cores
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        const rastersHtml = rasters.map(raster => {
+            const munObj = _allMunicipios.find(m => m.id === raster.municipio_id);
+            let dateStr = '';
+            if (raster.data_imagem) {
+                dateStr = raster.data_imagem.split('-').reverse().join('/');
+            } else if (raster.nome) {
+                const m = raster.nome.match(/(\d{2})[-/](\d{2})[-/](\d{4})/);
+                if (m) dateStr = `${m[1]}/${m[2]}/${m[3]}`;
+            }
+
+            return `
+                <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border-2 border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4" style="border-left-width: 6px; border-left-color: #10b981">
+                    <div class="flex items-start gap-3.5 min-w-0 flex-1">
+                        <div class="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border border-emerald-500/30 bg-emerald-500/15 text-emerald-500 shadow-xs">
+                            <span class="material-symbols-outlined text-[24px]">satellite</span>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2 flex-wrap mb-1">
+                                <h4 class="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white truncate">${raster.nome}</h4>
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                    <span class="material-symbols-outlined text-[12px]">verified</span>
+                                    ${minhaSigla} (Ente)
+                                </span>
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20">
+                                    ${raster.tipo === 'xyz_tiles' ? 'Ortofoto XYZ Tiles' : 'Imagem GeoTIFF'}
+                                </span>
+                                ${dateStr ? `
+                                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                                        Data: ${dateStr}
+                                    </span>
+                                ` : ''}
+                            </div>
+                            <p class="text-xs text-slate-500 dark:text-slate-400">Imagem aérea/ortofoto de alta resolução georreferenciada pertencente ao ente.</p>
+                            ${munObj ? `<div class="text-[11px] text-slate-400 mt-1.5 font-medium"><b>Município:</b> ${munObj.nome}</div>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = bannerHtml + `
+            <div class="flex flex-col gap-3">
+                ${temasHtml}
+                ${rastersHtml}
+            </div>
+        `;
+    }
+
     function onSearch(query) {
         const container = document.getElementById(_containerIdAtual || 'users-list') || document.getElementById('usuarios-list');
         if (container) {
@@ -812,6 +1114,12 @@
         // Se a aba ativa for Compartilhados Comigo, renderiza o catálogo de compartilhados
         if (_currentMainTab === 'compartilhados-comigo') {
             renderCompartilhadosComigo(containerId, searchQuery);
+            return;
+        }
+
+        // Se a aba ativa for Minhas Camadas Criadas, renderiza o catálogo exclusivo do ente
+        if (_currentMainTab === 'minhas-camadas') {
+            renderMinhasCamadasCriadas(containerId, searchQuery);
             return;
         }
 
@@ -903,12 +1211,15 @@
             return;
         }
 
-        // MODO MINHAS CAMADAS CRIADAS (Minha Equipe):
+        // MODO MINHA EQUIPE (Servidores subordinados ao Admin):
         _selectedEntidadeFiltro = minhaSigla;
         const searchInput = document.getElementById(_searchInputIdAtual || 'users-search') || document.getElementById('usuarios-search');
         if (searchInput) searchInput.placeholder = 'Buscar servidores da minha equipe por nome, e-mail ou cargo...';
 
         uniqueUsers = uniqueUsers.filter(u => {
+            // O próprio Admin logado não deve ser exibido novamente na lista de subordinados
+            if (u.user_id === _currentUserProfile?.id) return false;
+
             const uSigla = getEntitySigla(u.entidade);
 
             if (!isSuperAdmin) {
@@ -945,30 +1256,21 @@
             <div class="mb-4 p-4 rounded-2xl bg-gradient-to-r from-sky-500/10 via-indigo-500/5 to-transparent border border-sky-200 dark:border-sky-900 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xs">
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center shadow-md shadow-sky-600/30 shrink-0">
-                        <span class="material-symbols-outlined text-[22px]">domain</span>
+                        <span class="material-symbols-outlined text-[22px]">groups</span>
                     </div>
                     <div>
                         <h3 class="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
-                            ${minhaEntidade}
+                            Equipe de ${minhaEntidade}
                             <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 border border-sky-300 dark:border-sky-800">${minhaSigla}</span>
                             ${minhaUnidadeExibida ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-800 flex items-center gap-1"><span class="material-symbols-outlined text-[12px]">apartment</span>Unidade: ${minhaUnidadeExibida}</span>` : ''}
                         </h3>
-                        <p class="text-xs text-slate-500 dark:text-slate-400">Servidores vinculados ao seu órgão e camadas geradas internamente.</p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Servidores subordinados à sua gestão institucional e permissões por camada.</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap">
                     <div class="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 shadow-xs flex items-center gap-1.5">
-                        <span class="material-symbols-outlined text-[16px] text-sky-600">layers</span>
-                        <span><b>${numCamadas}</b> camadas</span>
-                    </div>
-                    ${numRasters > 0 ? `
-                    <div class="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 shadow-xs flex items-center gap-1.5">
-                        <span class="material-symbols-outlined text-[16px] text-emerald-600">satellite</span>
-                        <span><b>${numRasters}</b> ortofotos</span>
-                    </div>` : ''}
-                    <div class="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 shadow-xs flex items-center gap-1.5">
-                        <span class="material-symbols-outlined text-[16px] text-indigo-600">group</span>
-                        <span><b>${numServidores}</b> na equipe</span>
+                        <span class="material-symbols-outlined text-[16px] text-sky-600">groups</span>
+                        <span><b>${numServidores}</b> subordinado${numServidores === 1 ? '' : 's'}</span>
                     </div>
                 </div>
             </div>
@@ -1122,14 +1424,8 @@
                 return tSigla === minhaSigla;
             }
 
-            // A camada pertence à entidade do usuário deste card
-            if (tSigla === userSigla) return true;
-
-            // Se for camada compartilhada de outro ente, só aparece se o usuário tiver autorização pontual
-            const userHasPerm = _allCamadaPerms[`${userId}:${t.id}`]?.pode_ver;
-            if (userHasPerm) return true;
-            
-            return false;
+            // Para servidores da própria equipe, exibe estritamente as camadas criadas pelo próprio ente
+            return tSigla === minhaSigla;
         });
 
         const camadasHtml = temasDoMunicipio.map(tema => {
@@ -1255,14 +1551,8 @@
                 return rSigla === minhaSigla;
             }
 
-            // A ortofoto pertence à entidade do usuário
-            if (rSigla === userSigla) return true;
-
-            // Ou o usuário tem autorização pontual concedida
-            const userHasPerm = _allRasterPerms[`${userId}:${r.id}`]?.pode_ver;
-            if (userHasPerm) return true;
-
-            return false;
+            // Para servidores da própria equipe, exibe estritamente as ortofotos criadas pelo próprio ente
+            return rSigla === minhaSigla;
         });
 
         const ortofotosHtml = rastersDoMunicipio.map(r => {
@@ -1740,10 +2030,11 @@
     function cancelarEdicao(userId) {
         _editingUserIds.delete(userId);
         const card = document.querySelector(`[data-user-card="${userId}"]`);
-        const container = card ? card.parentElement : null;
-        if (container) {
-            const searchInput = document.getElementById('usuarios-search') || document.getElementById('users-search');
-            renderUsersList(container.id, searchInput ? searchInput.value : '');
+        if (card && (card.closest('#usuarios-admin-profile-card') || card.parentElement?.id === 'usuarios-admin-profile-card')) {
+            renderAdminHeaderCard();
+        } else {
+            const searchInput = document.getElementById(_searchInputIdAtual || 'users-search') || document.getElementById('usuarios-search');
+            renderUsersList(_containerIdAtual || 'users-list', searchInput ? searchInput.value : '');
         }
     }
 
@@ -2110,10 +2401,10 @@
 
             renderMainTabs();
 
-            const container = card.parentElement;
-            if (container) {
-                const searchInput = document.getElementById('usuarios-search') || document.getElementById('users-search');
-                renderUsersList(container.id, searchInput ? searchInput.value : '');
+            const isCardInAdminHeader = card && (card.closest('#usuarios-admin-profile-card') || card.parentElement?.id === 'usuarios-admin-profile-card');
+            if (!isCardInAdminHeader) {
+                const searchInput = document.getElementById(_searchInputIdAtual || 'users-search') || document.getElementById('usuarios-search');
+                renderUsersList(_containerIdAtual || 'users-list', searchInput ? searchInput.value : '');
             }
 
             if (isPartnerPontoFocal) {
@@ -2191,5 +2482,31 @@
     };
 
     window.filterUsersList = onSearch;
+
+    // Auto-carregamento imediato caso a aba de Usuários já esteja aberta ou no carregamento inicial
+    try {
+        const autoCheck = () => {
+            const container = document.getElementById('users-list');
+            const isUsuariosActive = document.getElementById('usuarios')?.classList.contains('active') || 
+                                     new URLSearchParams(window.location.search).get('tab') === 'usuarios';
+            if (container && isUsuariosActive && container.innerHTML.includes('Carregando dados...')) {
+                const munId = (typeof activeMunicipioId !== 'undefined' ? activeMunicipioId : null) || sessionStorage.getItem('municipio_ativo');
+                const prof = (typeof currentUserProfile !== 'undefined') ? currentUserProfile : null;
+                initUsuariosManager({
+                    containerId: 'users-list',
+                    searchInputId: 'users-search',
+                    municipioId: munId,
+                    currentUserProfile: prof
+                });
+            }
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', autoCheck);
+        } else {
+            setTimeout(autoCheck, 50);
+        }
+    } catch(e) {
+        console.warn('[UsuariosManager] Auto-check aviso:', e);
+    }
 
 })(window);
