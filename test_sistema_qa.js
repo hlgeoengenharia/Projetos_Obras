@@ -126,7 +126,7 @@ function simulateCanManageUser(currentUser, targetUser) {
     if (currentUser.super_admin || currentUser.is_superadmin || currentUser.papel === 'superadmin') return true;
     
     // Regra estrita: Somente Admins podem gerenciar usuários
-    const isMunAdmin = (currentUser.papel === 'admin' || currentUser.unidade_admin);
+    const isMunAdmin = (currentUser.papel === 'admin' || currentUser.unidade_admin || currentUser.entidade_admin);
     if (!isMunAdmin) return false;
 
     const minhaEntidade = (currentUser.entidade || 'Prefeitura Municipal').trim().toLowerCase();
@@ -139,6 +139,7 @@ function simulateCanManageUser(currentUser, targetUser) {
     if (minhaUnidade) {
         if (targetUser.user_id === currentUser.id || targetUser.id === currentUser.id) return true;
         const userUnidade = (targetUser.unidade || '').trim().toLowerCase();
+        if (!userUnidade) return true; // Permite integrar e atribuir unidade a novos servidores
         return minhaUnidade === userUnidade;
     }
     return true;
@@ -161,7 +162,19 @@ assertTest('Admin Obras: PODE gerenciar usuário da sua Unidade (Obras)', simula
 assertTest('Admin Obras: NÃO PODE gerenciar usuário de outra Unidade (Meio Ambiente)', !simulateCanManageUser(adminObras, userMeioAmbiente), 'Isolamento de Unidade violado!');
 assertTest('Admin Obras: NÃO PODE gerenciar usuário de outra Entidade', !simulateCanManageUser(adminObras, userAnotherEntity), 'Isolamento de Entidade violado!');
 
-// 3. Usuário Comum
+// 3. Admin de Ente Parceiro (ex: MPF)
+const adminMpf = { id: 'adm-mpf', papel: 'admin', entidade_admin: true, super_admin: false, entidade: 'Ministério Público Federal', unidade: 'Procuradoria da República', unidade_admin: 'Procuradoria da República' };
+const userMpfMesmaUnidade = { id: 'user-mpf-1', entidade: 'Ministério Público Federal', unidade: 'Procuradoria da República' };
+const userMpfSemUnidade = { id: 'user-mpf-2', entidade: 'Ministério Público Federal', unidade: '' };
+const userPf = { id: 'user-pf', entidade: 'Polícia Federal', unidade: 'Superintendência' };
+
+assertTest('Admin Ente (MPF): PODE gerenciar servidor do MPF na mesma Unidade', simulateCanManageUser(adminMpf, userMpfMesmaUnidade));
+assertTest('Admin Ente (MPF): PODE gerenciar novo servidor do MPF sem unidade atribuída', simulateCanManageUser(adminMpf, userMpfSemUnidade));
+assertTest('Admin Ente (MPF): NÃO PODE gerenciar servidor da Polícia Federal', !simulateCanManageUser(adminMpf, userPf), 'Isolamento entre entes violado!');
+assertTest('Admin Ente (MPF): NÃO PODE gerenciar servidor Municipal', !simulateCanManageUser(adminMpf, userObras), 'Isolamento de ente para município violado!');
+assertTest('Admin Municipal: NÃO PODE gerenciar servidor do MPF', !simulateCanManageUser(adminObras, userMpfMesmaUnidade), 'Admin municipal gerenciando ente parceiro!');
+
+// 4. Usuário Comum
 const normalUser = { id: 'user-comum', papel: 'leitor', super_admin: false, entidade: 'Prefeitura A', unidade: 'Obras' };
 assertTest('Usuário Comum: NÃO PODE gerenciar outros usuários', !simulateCanManageUser(normalUser, userObras));
 
@@ -299,6 +312,24 @@ assertTest('Projetos: saveCurrentWorkspaceState sincroniza camadas_ids, rasters_
 
 const hasSmartMergeProjects = mainJsContent.includes('Fallback/Cache LocalStorage e Smart-Merge Bidirecional') && mainJsContent.includes('cloudHasLayers = Array.isArray(cloudProj.camadas_ids)');
 assertTest('Projetos: initUserProjects executa smart merge bidirecional garantindo persistência pós-reload', hasSmartMergeProjects);
+
+// 10. Governança e Acesso para Administradores de Entes Parceiros (MPF, PF, SPU, etc.)
+const sqlEntesFixExists = fs.existsSync('supabase_admin_entes_fix.sql');
+assertTest('Script supabase_admin_entes_fix.sql existe no repositório', sqlEntesFixExists);
+if (sqlEntesFixExists) {
+    const sqlEntesContent = fs.readFileSync('supabase_admin_entes_fix.sql', 'utf8');
+    assertTest('Script SQL: Função is_admin_for_entidade presente', sqlEntesContent.includes('is_admin_for_entidade'));
+    assertTest('Script SQL: Política membros_select atualizada com is_admin_for_entidade', sqlEntesContent.includes('membros_select') && sqlEntesContent.includes('is_admin_for_entidade(entidade)'));
+    assertTest('Script SQL: Política profiles_select_own_or_admin atualizada', sqlEntesContent.includes('profiles_select_own_or_admin'));
+    assertTest('Script SQL: Política profiles_update_admin atualizada para admin de ente', sqlEntesContent.includes('profiles_update_admin') && sqlEntesContent.includes('is_admin_for_entidade'));
+}
+
+const homeHtmlContent = fs.readFileSync('home.html', 'utf8');
+const hasHomeAdminEntesCheck = homeHtmlContent.includes('homeUserProfile.entidade_admin') && homeHtmlContent.includes("homeUserProfile.papel === 'admin'");
+assertTest('Frontend: home.html reconhece entidade_admin e papel admin sem ocultar card USUÁRIOS', hasHomeAdminEntesCheck);
+
+const hasUsuariosGestaoEntidadeAdmin = usuariosGestaoCode.includes('_currentUserProfile.entidade_admin') && usuariosGestaoCode.includes('minhaSigla === \'Município\' && _targetMunicipioId');
+assertTest('Frontend: usuarios-gestao.js reconhece entidade_admin e isola apenas municípios por _targetMunicipioId', hasUsuariosGestaoEntidadeAdmin);
 
 // ------------------------------------------------------------------------------
 // RELATÓRIO FINAL

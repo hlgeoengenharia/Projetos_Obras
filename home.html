@@ -1173,9 +1173,9 @@ window.abrirPainelMunicipio = function(id, nome) {
     // Nenhuma aba começa ativa de início
     document.querySelectorAll('#municipio-tabs .tab-btn').forEach(b => b.classList.remove('active'));
 
-    // Identifica se o usuário é administrador do município ou superadmin
+    // Identifica se o usuário é administrador do município, administrador de ente ou superadmin
     const munObj = (window.municipiosParaMostrarCache || []).find(m => m.id === id);
-    const isMunAdmin = !!(homeUserProfile && (homeUserProfile.super_admin || homeUserProfile.papel === 'admin')) || (munObj && munObj.papel === 'admin');
+    const isMunAdmin = !!(homeUserProfile && (homeUserProfile.super_admin || homeUserProfile.is_superadmin || homeUserProfile.papel === 'superadmin' || homeUserProfile.papel === 'admin' || homeUserProfile.entidade_admin)) || (munObj && munObj.papel === 'admin');
 
     // Identifica se o usuário pertence a órgão externo apenas se NÃO for administrador
     const userEnt = ((homeUserProfile && (homeUserProfile.entidade || homeUserProfile.entidade_nome)) || '').trim();

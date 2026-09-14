@@ -145,7 +145,7 @@
             _allEntidadesPadrao = entidadesRes.data || [];
             _allRasters = rastersRes.data || [];
 
-            const isSuperAdmin = !!(_currentUserProfile && (_currentUserProfile.super_admin || _currentUserProfile.is_superadmin));
+            const isSuperAdmin = !!(_currentUserProfile && (_currentUserProfile.super_admin || _currentUserProfile.is_superadmin || _currentUserProfile.papel === 'superadmin'));
             const minhaEntidade = (_currentUserProfile?.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
             const minhaSigla = getEntitySigla(minhaEntidade);
 
@@ -229,14 +229,14 @@
     function isCurrentUserAdmin() {
         if (!_currentUserProfile) return false;
         if (_currentUserProfile.super_admin || _currentUserProfile.is_superadmin || _currentUserProfile.papel === 'superadmin') return true;
-        if (_currentUserProfile.papel === 'admin') return true;
+        if (_currentUserProfile.papel === 'admin' || _currentUserProfile.entidade_admin) return true;
         return _currentUserMembros.some(m => m.papel === 'admin' && m.status === 'aprovado');
     }
 
     // Identifica se o usuário logado pode gerenciar o usuário alvo
     function canManageUser(userObj) {
         if (!_currentUserProfile) return false;
-        if (_currentUserProfile.super_admin) return true;
+        if (_currentUserProfile.super_admin || _currentUserProfile.is_superadmin || _currentUserProfile.papel === 'superadmin') return true;
 
         if (!isCurrentUserAdmin()) return false;
 
@@ -255,6 +255,7 @@
         if (minhaUnidade) {
             if (userObj.user_id === _currentUserProfile.id) return true;
             const userUnidade = (userObj.profile?.unidade || userObj.unidade || '').trim().toLowerCase();
+            if (!userUnidade) return true; // Permite integrar e atribuir unidade a novos servidores
             return userUnidade === minhaUnidade;
         }
 
@@ -912,14 +913,14 @@
 
             if (!isSuperAdmin) {
                 if (uSigla !== minhaSigla) return false;
-                const temVinculoValido = u.membros.some(mb => mb.status !== 'rejeitado' && (!_targetMunicipioId || mb.municipio_id === _targetMunicipioId));
-                if (!temVinculoValido) return false;
+                if (minhaSigla === 'Município' && _targetMunicipioId) {
+                    const temNoMunAtivo = u.membros.some(mb => mb.municipio_id === _targetMunicipioId && mb.status !== 'rejeitado');
+                    if (!temNoMunAtivo) return false;
+                } else {
+                    const temVinculoValido = u.membros.length === 0 || u.membros.some(mb => mb.status !== 'rejeitado');
+                    if (!temVinculoValido) return false;
+                }
                 if (!canManageUser(u)) return false;
-            }
-
-            if (_targetMunicipioId && !isSuperAdmin) {
-                const temNoMunAtivo = u.membros.some(mb => mb.municipio_id === _targetMunicipioId && mb.status !== 'rejeitado');
-                if (!temNoMunAtivo) return false;
             }
 
             if (query) {
