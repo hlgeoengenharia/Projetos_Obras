@@ -624,6 +624,12 @@
 <!-- Google Map -->
 <div id="map" class="absolute inset-0 z-0 w-full h-full"></div>
 
+<!-- Indicador de Densidade de Feições e Zoom -->
+<div id="map-density-indicator" class="pointer-events-none absolute top-16 md:top-20 left-1/2 -translate-x-1/2 z-[999] hidden items-center gap-2 px-4 py-2 rounded-full bg-slate-900/95 text-white dark:bg-slate-950/95 dark:text-slate-100 backdrop-blur-md shadow-2xl border border-amber-400/40 text-xs font-bold transition-all duration-300">
+  <span class="material-symbols-outlined text-amber-400 text-[18px] animate-pulse">zoom_in</span>
+  <span id="map-density-text">Alta densidade de dados: aproxime o zoom para visualizar todos os lotes desta área</span>
+</div>
+
 <!-- Print Viewfinder (A4 Aspect Ratio) -->
 <div id="print-viewfinder" class="pointer-events-none absolute inset-0 z-[1000] hidden items-center justify-center bg-black/60 transition-opacity opacity-0" style="margin-top: 3.5rem;">
   <div style="aspect-ratio: 1 / 1.414; height: 85%;" class="border-2 border-dashed border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] relative overflow-hidden ring-4 ring-primary ring-offset-2 ring-offset-black/50">

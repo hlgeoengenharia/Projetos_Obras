@@ -419,9 +419,8 @@ async function loadThemes() {
 }
 
 // Acima disso, a própria criação dos objetos Leaflet trava a aba do
-// navegador — o mapa só renderiza até esse tanto de feições por tema de
-// uma vez; passando disso, pede pra aproximar o zoom (ver loadAllFeaturesToMap).
-const MAX_FEATURES_PER_VIEW = 1500;
+// navegador — com o GeoEngine Turbo, aumentamos com segurança para 4500 feições por tema de uma vez.
+const MAX_FEATURES_PER_VIEW = 4500;
 
 // Roda uma lista de funções que retornam Promise em lotes (não tudo de uma
 // vez) — o pooler de conexão do plano gratuito do Supabase rejeita com 500
@@ -1845,6 +1844,10 @@ function loadAllFeaturesToMap() {
   const bounds = map ? map.getBounds() : null;
   const allFeatures = [];
 
+  let anyThemeCapped = false;
+  let cappedThemeName = '';
+  let cappedThemeCount = 0;
+
   themes.slice().reverse().forEach(theme => {
     if (typeof userCanOnTheme === 'function' && !userCanOnTheme(theme.id, 'ver')) return;
     if (theme.visible !== false) {
@@ -1854,11 +1857,10 @@ function loadAllFeaturesToMap() {
       if (theme._activeFilterFids) {
           toRender = withGeom.filter(f => theme._activeFilterFids.has(f.properties._tempId));
           if (toRender.length > MAX_FEATURES_PER_VIEW) {
-              const alreadyWarned = theme._tooManyFeaturesInView;
+              anyThemeCapped = true;
+              cappedThemeName = theme.name;
+              cappedThemeCount = toRender.length;
               theme._tooManyFeaturesInView = toRender.length;
-              if (!alreadyWarned && typeof showWarningToast === 'function') {
-                  showWarningToast(`"${theme.name}": ${toRender.length} resultados — refine o filtro para ver todos no mapa.`);
-              }
               toRender = toRender.slice(0, MAX_FEATURES_PER_VIEW);
           } else {
               theme._tooManyFeaturesInView = null;
@@ -1886,11 +1888,10 @@ function loadAllFeaturesToMap() {
           }
 
           if (toRender.length > MAX_FEATURES_PER_VIEW) {
-              const alreadyWarned = theme._tooManyFeaturesInView;
+              anyThemeCapped = true;
+              cappedThemeName = theme.name;
+              cappedThemeCount = toRender.length;
               theme._tooManyFeaturesInView = toRender.length;
-              if (!alreadyWarned && typeof showWarningToast === 'function') {
-                  showWarningToast(`"${theme.name}": ${toRender.length} feições nesta área — aproxime o zoom para visualizá-las.`);
-              }
               toRender = toRender.slice(0, MAX_FEATURES_PER_VIEW);
           } else {
               theme._tooManyFeaturesInView = null;
@@ -1902,6 +1903,21 @@ function loadAllFeaturesToMap() {
       allFeatures.push(...toRender);
     }
   });
+
+  const densityIndicator = document.getElementById('map-density-indicator');
+  const densityText = document.getElementById('map-density-text');
+  if (densityIndicator) {
+      if (anyThemeCapped) {
+          if (densityText) {
+              densityText.innerHTML = `Alta densidade (${cappedThemeCount.toLocaleString('pt-BR')} feições em tela): <b>aproxime o zoom</b> para ver todos os detalhes`;
+          }
+          densityIndicator.classList.remove('hidden');
+          densityIndicator.classList.add('flex');
+      } else {
+          densityIndicator.classList.add('hidden');
+          densityIndicator.classList.remove('flex');
+      }
+  }
 
   const onRenderFinished = () => {
       if (activeTempId || activeDbId) {
@@ -2457,13 +2473,28 @@ async function loadThemeProperties(themeId, forceReload = false) {
     let shouldInvalidateCache = false;
     if (typeof supabaseClient !== 'undefined' && supabaseClient && cached && cached.features && cached.features.length > 0) {
         try {
-            const { count: realDbCount, error: countErr } = await supabaseClient
-                .from('feicoes')
-                .select('id', { count: 'exact', head: true })
-                .eq('theme_id', themeId);
+            const [countRes, themeRes] = await Promise.all([
+                supabaseClient
+                    .from('feicoes')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('theme_id', themeId),
+                supabaseClient
+                    .from('temas')
+                    .select('metadata')
+                    .eq('id', themeId)
+                    .maybeSingle()
+            ]);
             
-            if (!countErr && typeof realDbCount === 'number' && realDbCount !== cached.features.length) {
+            const realDbCount = countRes.count;
+            if (!countRes.error && typeof realDbCount === 'number' && realDbCount !== cached.features.length) {
                 console.log(`[GeoEngineTurbo] Sincronização detectou alteração no tema "${theme.name}": banco=${realDbCount} vs cache=${cached.features.length}. Atualizando base...`);
+                shouldInvalidateCache = true;
+            }
+
+            const dbLastUpdate = themeRes?.data?.metadata?.last_feature_updated_at;
+            const cachedTimestamp = cached.lastUpdated || cached.timestamp || 0;
+            if (dbLastUpdate && cachedTimestamp && new Date(dbLastUpdate).getTime() > cachedTimestamp) {
+                console.log(`[GeoEngineTurbo] Sincronização detectou nova edição no tema "${theme.name}". Atualizando cache local...`);
                 shouldInvalidateCache = true;
             }
         } catch(eCount) {}
@@ -2528,7 +2559,7 @@ async function loadThemeProperties(themeId, forceReload = false) {
             .from('feicoes')
             .select('id, propriedades, geometria', { count: 'exact' })
             .eq('theme_id', themeId)
-            .range(0, fetchStep - 1), 2);
+            .range(0, fetchStep - 1), 3);
 
         let hadPageError = !!first.error;
         if (first.error) console.error(`Erro ao buscar 1ª página de feições de "${themeId}":`, first.error);
@@ -2537,24 +2568,41 @@ async function loadThemeProperties(themeId, forceReload = false) {
 
         if (!first.error && count && count > fetchStep) {
             const remainingPages = Math.ceil((count - fetchStep) / fetchStep);
-            const taskFns = [];
+            let pendingPages = [];
             for (let p = 1; p <= remainingPages; p++) {
                 const from = p * fetchStep;
-                taskFns.push(() => supabaseClient
+                pendingPages.push({ page: p, from, to: from + fetchStep - 1 });
+            }
+
+            let rounds = 0;
+            while (pendingPages.length > 0 && rounds < 3) {
+                rounds++;
+                const taskFns = pendingPages.map(item => () => supabaseClient
                     .from('feicoes')
                     .select('id, propriedades, geometria')
                     .eq('theme_id', themeId)
-                    .range(from, from + fetchStep - 1));
-            }
-            const results = await runWithConcurrencyLimit(taskFns, PAGE_FETCH_CONCURRENCY);
-            results.forEach(r => {
-                if (r.error) {
-                    hadPageError = true;
-                    console.error(`Erro ao buscar página de feições de "${themeId}":`, r.error);
-                } else if (r.data) {
-                    allRows.push(...r.data);
+                    .range(item.from, item.to));
+
+                const results = await runWithConcurrencyLimit(taskFns, PAGE_FETCH_CONCURRENCY, 3);
+                const failed = [];
+                results.forEach((r, idx) => {
+                    if (r.error || !r.data) {
+                        failed.push(pendingPages[idx]);
+                        console.warn(`[Retry] Falha na página ${pendingPages[idx].page} de "${themeId}" (tentativa ${rounds}):`, r.error);
+                    } else {
+                        allRows.push(...r.data);
+                    }
+                });
+                pendingPages = failed;
+                if (pendingPages.length > 0 && rounds < 3) {
+                    await new Promise(resolve => setTimeout(resolve, 600 * rounds));
                 }
-            });
+            }
+
+            if (pendingPages.length > 0) {
+                hadPageError = true;
+                console.error(`[LazyLoad] ${pendingPages.length} página(s) de feições de "${themeId}" não puderam ser baixadas após ${rounds} rodadas.`);
+            }
         }
 
         const existingByBankId = new Map();
@@ -5715,6 +5763,11 @@ async function saveFeatureData() {
                   }
               } else {
                   console.log(`[Supabase] Feição "${idBanco}" salva com sucesso!`);
+                  const nowIso = new Date().toISOString();
+                  supabaseClient.from('temas').update({
+                      metadata: { ...(currentTheme?.metadata || {}), last_feature_updated_at: nowIso }
+                  }).eq('id', themeId).then(() => {});
+
                   if (window.auditLogger && typeof window.auditLogger.log === 'function') {
                       window.auditLogger.log('EDITAR_DADOS', `${themeName} — Feição #${idBanco}`, {
                           tema: themeName,
@@ -5741,6 +5794,11 @@ async function saveFeatureData() {
                   idBanco = insData[0].id;
                   activeFeatureLayer.feature.properties.id_banco = idBanco;
                   console.log(`[Supabase] Nova feição criada com ID "${idBanco}"!`);
+                  const nowIso = new Date().toISOString();
+                  supabaseClient.from('temas').update({
+                      metadata: { ...(currentTheme?.metadata || {}), last_feature_updated_at: nowIso }
+                  }).eq('id', themeId).then(() => {});
+
                   if (window.auditLogger && typeof window.auditLogger.log === 'function') {
                       window.auditLogger.log('CRIAR_FEICAO', `${themeName} — Nova Feição #${idBanco}`, {
                           tema: themeName,
@@ -5907,6 +5965,12 @@ function stopGeometryEditing() {
             propriedades: props
         }).eq('id', idBanco).then(() => {
             console.log(`[Supabase] Geometria da feição "${idBanco}" atualizada.`);
+            const nowIso = new Date().toISOString();
+            const currentTheme = themes.find(t => t.id === themeId);
+            supabaseClient.from('temas').update({
+                metadata: { ...(currentTheme?.metadata || {}), last_feature_updated_at: nowIso }
+            }).eq('id', themeId).then(() => {});
+
             const tName = (themes.find(t => t.id === themeId)?.name) || themeId;
             if (window.auditLogger && typeof window.auditLogger.log === 'function') {
                 window.auditLogger.log('EDITAR_FEICAO', `${tName} — Geometria Feição #${idBanco}`, {
@@ -8720,6 +8784,7 @@ window.resetThemeClassification = function(themeId) {
 };
 
 let feicoesRealtimeTimeout = null;
+const pendingRealtimeRecords = new Map();
 
 function setupSupabaseRealtime() {
   if (typeof supabaseClient !== 'undefined' && supabaseClient) {
@@ -8798,34 +8863,50 @@ function setupSupabaseRealtime() {
                   }
 
                   if (eventType === 'INSERT' || eventType === 'UPDATE') {
+                      const record = payload.new;
+                      if (record && record.id) {
+                          pendingRealtimeRecords.set(record.id, record);
+                      }
                       clearTimeout(feicoesRealtimeTimeout);
                       feicoesRealtimeTimeout = setTimeout(async () => {
-                          const record = payload.new;
-                          if (!record) return;
+                          if (pendingRealtimeRecords.size === 0) return;
+                          const records = Array.from(pendingRealtimeRecords.values());
+                          pendingRealtimeRecords.clear();
 
-                          const theme = themes.find(t => String(t.id) === String(record.theme_id));
-                          if (!theme) return;
+                          const affectedThemeIds = new Set();
 
-                          const newFeature = {
-                              type: 'Feature',
-                              geometry: record.geometria,
-                              properties: { ...record.propriedades, themeId: record.theme_id, id_banco: record.id, _propertiesLoaded: true }
-                          };
+                          records.forEach(rec => {
+                              const theme = themes.find(t => String(t.id) === String(rec.theme_id));
+                              if (!theme) return;
+                              affectedThemeIds.add(theme.id);
 
-                          // Atualiza theme.features (fonte de verdade da contagem
-                          // e do filtro) — não só o mapa. Sem isso, edições de
-                          // outros usuários deixam a contagem/lista desatualizadas.
-                          const idx = (theme.features || []).findIndex(f => f.properties && String(f.properties.id_banco) === String(record.id));
-                          if (idx >= 0) theme.features[idx] = newFeature;
-                          else theme.features.push(newFeature);
+                              const newFeature = {
+                                  type: 'Feature',
+                                  geometry: rec.geometria,
+                                  properties: { ...rec.propriedades, themeId: rec.theme_id, id_banco: rec.id, _propertiesLoaded: true }
+                              };
 
-                          // Redesenha respeitando visibilidade e o limite de
-                          // densidade (evita furar o cap com inserções em tempo real)
+                              const idx = (theme.features || []).findIndex(f => f.properties && String(f.properties.id_banco) === String(rec.id));
+                              if (idx >= 0) theme.features[idx] = newFeature;
+                              else theme.features.push(newFeature);
+                          });
+
+                          affectedThemeIds.forEach(tId => {
+                              const t = themes.find(th => th.id === tId);
+                              if (t) {
+                                  if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.indexThemeFeatures === 'function') {
+                                      window.GeoEngineTurbo.indexThemeFeatures(t.id, t.features);
+                                  }
+                                  if (window.GeoTurboDB && typeof window.GeoTurboDB.saveThemeData === 'function') {
+                                      window.GeoTurboDB.saveThemeData(t.id, t.features, t.features.length);
+                                  }
+                                  const countEl = document.getElementById(`theme-count-${t.id}`);
+                                  if (countEl) countEl.textContent = t.features.length;
+                              }
+                          });
+
                           loadAllFeaturesToMap();
-
-                          const countEl = document.getElementById(`theme-count-${theme.id}`);
-                          if (countEl) countEl.textContent = theme.features.length;
-                      }, 500); // Debounce 500ms para lotes de importação
+                      }, 300); // 300ms de lote acumulativo
                       return;
                   }
               }

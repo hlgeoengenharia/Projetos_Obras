@@ -25,6 +25,13 @@
         rejeitado: 'Rejeitado'
     };
 
+    const ENTITY_CONFIGS = {
+        'Município': { nome: 'Prefeitura Municipal', icone: 'apartment' },
+        'MPF': { nome: 'Ministério Público Federal', icone: 'balance' },
+        'SPU': { nome: 'Superintendência do Patrimônio da União', icone: 'account_balance' },
+        'PF': { nome: 'Polícia Federal', icone: 'shield' }
+    };
+
     function getEntitySigla(name) {
         if (!name) return 'Município';
         const raw = String(name).trim();
@@ -71,7 +78,7 @@
     let _allEntidadesPadrao = [];
     let _selectedEntidadeFiltro = null;
     let _currentMainTab = 'minha-equipe'; // 'minha-equipe' | 'minhas-camadas' | 'compartilhados-comigo' | 'usuarios-compartilhamento'
-    let _selectedCompartilhadoFiltro = 'todos'; // 'todos' ou sigla do órgão concedente
+    let _selectedCompartilhadoFiltro = null; // null ou sigla/nome-UF do órgão concedente
     let _containerIdAtual = null;
     let _searchInputIdAtual = null;
     let _currentUserProfile = null;
@@ -80,7 +87,9 @@
     let _targetMunicipioId = null; // Se preenchido, prioriza o município ativo
     let _editingUserIds = new Set(); // IDs dos usuários em modo edição
     let _userSelectedMunMap = {}; // userId -> munId selecionado para visualizar/editar permissões
-    let _selectedSetorFiltro = 'todos'; // 'todos' ou nome do setor filtrado na unidade
+    let _selectedEnteEquipe = null; // null | sigla do ente selecionado na aba Equipe (ex: 'Município', 'MPF')
+    let _selectedUnidadeEquipe = null; // null, '__sem_unidade__' ou nome da unidade
+    let _selectedSetorFiltro = null; // null, '__sem_setor__' ou nome do setor filtrado na unidade
 
     async function initUsuariosManager({ containerId, searchInputId, municipioId = null, currentUserProfile }) {
         const container = document.getElementById(containerId);
@@ -251,7 +260,7 @@
         // Hierarquia de Unidade:
         // Cada Admin administra uma Unidade específica (que pode ter 1 ou vários setores).
         // Se o Admin logado possui uma Unidade atribuída, ele só visualiza e gerencia os membros da sua Unidade.
-        const minhaUnidade = (_currentUserProfile.unidade_admin || _currentUserProfile.unidade || '').trim().toLowerCase();
+        const minhaUnidade = (_currentUserProfile.unidade || (typeof _currentUserProfile.unidade_admin === 'string' ? _currentUserProfile.unidade_admin : '') || '').trim().toLowerCase();
         if (minhaUnidade) {
             if (userObj.user_id === _currentUserProfile.id) return true;
             const userUnidade = (userObj.profile?.unidade || userObj.unidade || '').trim().toLowerCase();
@@ -292,61 +301,70 @@
     function getParceirosList() {
         const minhaEntidade = (_currentUserProfile?.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
         const minhaSigla = getEntitySigla(minhaEntidade);
+        const meuMunId = _targetMunicipioId || sessionStorage.getItem('municipio_ativo') || _currentUserProfile?.municipio_id || (_currentUserMembros && _currentUserMembros[0]?.municipio_id);
         const parceirosMap = new Map();
 
-        const munAtivoObj = _allMunicipios.find(m => m.id === _targetMunicipioId);
-        const munNomeLabel = munAtivoObj ? (munAtivoObj.nome || 'Município') : (sessionStorage.getItem('municipio_ativo_nome') || 'Município');
-
+        // 1. Se o usuário logado for de um órgão EXTERNO (SPU, MPF, PF), todos os municípios cadastrados são parceiros pelo formato Nome-UF (ex: Cabedelo-PB)
         if (minhaSigla !== 'Município') {
-            parceirosMap.set('Município', {
-                sigla: 'Município',
-                label: munNomeLabel,
-                nome: munAtivoObj ? `Prefeitura Municipal de ${munAtivoObj.nome}` : 'Prefeitura Municipal',
-                icone: 'location_city'
+            _allMunicipios.forEach(m => {
+                const munLabel = `${m.nome}-${m.uf || 'PB'}`;
+                const munKey = `mun_${m.id}`;
+                parceirosMap.set(munKey, {
+                    sigla: munKey,
+                    label: munLabel,
+                    nome: munLabel,
+                    municipio_id: m.id,
+                    icone: 'location_city'
+                });
+            });
+        } else {
+            // Se o usuário logado for de uma Prefeitura, os outros municípios cadastrados aparecem como parceiros
+            _allMunicipios.forEach(m => {
+                if (m.id !== meuMunId) {
+                    const munLabel = `${m.nome}-${m.uf || 'PB'}`;
+                    const munKey = `mun_${m.id}`;
+                    parceirosMap.set(munKey, {
+                        sigla: munKey,
+                        label: munLabel,
+                        nome: munLabel,
+                        municipio_id: m.id,
+                        icone: 'location_city'
+                    });
+                }
             });
         }
 
-        // 1. Entidades cadastradas em entidades_padrao (excluindo 'Outros' e a própria entidade)
+        // 2. Entidades cadastradas em entidades_padrao (excluindo 'Outros' e a própria entidade)
         _allEntidadesPadrao.forEach(e => {
             const s = getEntitySigla(e.sigla || e.nome);
-            if (!s || s.toLowerCase() === 'outros' || s.toLowerCase() === 'outro') return;
-            if (s !== minhaSigla) {
-                if (s === 'Município') {
-                    if (minhaSigla !== 'Município' && !parceirosMap.has('Município')) {
-                        parceirosMap.set('Município', { sigla: 'Município', label: munNomeLabel, nome: 'Prefeitura Municipal', icone: 'location_city' });
-                    }
-                } else if (!parceirosMap.has(s)) {
-                    parceirosMap.set(s, { sigla: s, label: s, nome: e.nome, icone: s === 'MPF' ? 'gavel' : (s === 'PF' ? 'security' : (s === 'SPU' ? 'account_balance' : 'handshake')) });
-                }
+            if (!s || s.toLowerCase() === 'outros' || s.toLowerCase() === 'outro' || s === 'Município') return;
+            if (s !== minhaSigla && !parceirosMap.has(s)) {
+                parceirosMap.set(s, {
+                    sigla: s,
+                    label: s,
+                    nome: e.nome,
+                    icone: s === 'MPF' ? 'gavel' : (s === 'PF' ? 'security' : (s === 'SPU' ? 'account_balance' : 'handshake'))
+                });
             }
         });
 
-        // 2. Entidades presentes em membros (excluindo 'Outros' e a própria entidade)
+        // 3. Entidades presentes em membros (excluindo 'Outros' e a própria entidade)
         _allMembros.forEach(m => {
             const prof = m.profiles || {};
             const ent = (prof.entidade || m.entidade || '').trim();
             if (ent) {
                 const s = getEntitySigla(ent);
-                if (!s || s.toLowerCase() === 'outros' || s.toLowerCase() === 'outro') return;
-                if (s !== minhaSigla) {
-                    if (s === 'Município') {
-                        if (minhaSigla !== 'Município' && !parceirosMap.has('Município')) {
-                            parceirosMap.set('Município', { sigla: 'Município', label: munNomeLabel, nome: 'Prefeitura Municipal', icone: 'location_city' });
-                        }
-                    } else if (!parceirosMap.has(s)) {
-                        parceirosMap.set(s, { sigla: s, label: s, nome: ent, icone: s === 'MPF' ? 'gavel' : (s === 'PF' ? 'security' : (s === 'SPU' ? 'account_balance' : 'handshake')) });
-                    }
+                if (!s || s.toLowerCase() === 'outros' || s.toLowerCase() === 'outro' || s === 'Município') return;
+                if (s !== minhaSigla && !parceirosMap.has(s)) {
+                    parceirosMap.set(s, {
+                        sigla: s,
+                        label: s,
+                        nome: ent,
+                        icone: s === 'MPF' ? 'gavel' : (s === 'PF' ? 'security' : (s === 'SPU' ? 'account_balance' : 'handshake'))
+                    });
                 }
             }
         });
-
-        if (parceirosMap.size === 0) {
-            if (minhaSigla !== 'Município') {
-                parceirosMap.set('Município', { sigla: 'Município', label: munNomeLabel, nome: 'Prefeitura Municipal', icone: 'location_city' });
-            } else {
-                parceirosMap.set('MPF', { sigla: 'MPF', label: 'MPF', nome: 'Ministério Público Federal', icone: 'gavel' });
-            }
-        }
 
         return Array.from(parceirosMap.values());
     }
@@ -387,10 +405,12 @@
             _allMembros.forEach(m => {
                 const prof = m.profiles || {};
                 const s = getEntitySigla((prof.entidade || m.entidade || '').trim());
-                if (s === item.sigla && (prof.ponto_focal || m.ponto_focal)) {
-                    if (item.sigla === 'Município' && _targetMunicipioId) {
-                        if (m.municipio_id === _targetMunicipioId) uniquePfIds.add(m.user_id);
-                    } else {
+                if (prof.ponto_focal || m.ponto_focal) {
+                    if (item.municipio_id) {
+                        if (s === 'Município' && m.municipio_id === item.municipio_id) {
+                            uniquePfIds.add(m.user_id);
+                        }
+                    } else if (s === item.sigla) {
                         uniquePfIds.add(m.user_id);
                     }
                 }
@@ -552,13 +572,13 @@
         const minhaCamadasCount = _allTemas.filter(t => {
             const s = getEntitySigla(getThemeEntity(t));
             if (s !== minhaSigla) return false;
-            if (minhaSigla === 'MUNICÍPIO' && meuMunId && t.municipio_id && t.municipio_id !== meuMunId) return false;
+            if (minhaSigla === 'Município' && meuMunId && t.municipio_id && t.municipio_id !== meuMunId) return false;
             return true;
         }).length;
         const minhasOrtofotosCount = _allRasters.filter(r => {
             const s = getEntitySigla(r.entidade);
             if (s !== minhaSigla) return false;
-            if (minhaSigla === 'MUNICÍPIO' && meuMunId && r.municipio_id && r.municipio_id !== meuMunId) return false;
+            if (minhaSigla === 'Município' && meuMunId && r.municipio_id && r.municipio_id !== meuMunId) return false;
             return true;
         }).length;
         const totalCamadasEnte = minhaCamadasCount + minhasOrtofotosCount;
@@ -635,7 +655,7 @@
                 _selectedEntidadeFiltro = parceiros[0].sigla;
             }
         } else if (tabKey === 'compartilhados-comigo') {
-            _selectedCompartilhadoFiltro = 'todos';
+            _selectedCompartilhadoFiltro = null;
         }
 
         renderMainTabs();
@@ -692,6 +712,14 @@
             }
 
             if (isShared) {
+                let itemSigla = tSigla;
+                if (tSigla === 'Município') {
+                    const munObj = _allMunicipios.find(m => m.id === tema.municipio_id) || _allMunicipios.find(m => m.id === _targetMunicipioId);
+                    if (munObj) {
+                        itemSigla = `${munObj.nome}-${munObj.uf || 'PB'}`;
+                    }
+                }
+
                 items.push({
                     id: tema.id,
                     tipo: 'tema',
@@ -700,7 +728,7 @@
                     cor: tema.cor || '#0ea5e9',
                     icone: 'layers',
                     entidadeRaw: tEntRaw,
-                    sigla: tSigla,
+                    sigla: itemSigla,
                     isFromOther: isFromOther,
                     pode_editar: !!(perm && perm.pode_editar),
                     pode_excluir: !!(perm && perm.pode_excluir),
@@ -737,6 +765,14 @@
                     if (m) dateStr = `${m[1]}/${m[2]}/${m[3]}`;
                 }
 
+                let itemSigla = rSigla;
+                if (rSigla === 'Município') {
+                    const munObj = _allMunicipios.find(m => m.id === raster.municipio_id) || _allMunicipios.find(m => m.id === _targetMunicipioId);
+                    if (munObj) {
+                        itemSigla = `${munObj.nome}-${munObj.uf || 'PB'}`;
+                    }
+                }
+
                 items.push({
                     id: raster.id,
                     tipo: 'raster',
@@ -745,7 +781,7 @@
                     cor: '#10b981',
                     icone: 'satellite',
                     entidadeRaw: rEntRaw,
-                    sigla: rSigla,
+                    sigla: itemSigla,
                     isFromOther: isFromOther,
                     pode_editar: false,
                     pode_excluir: false,
@@ -781,10 +817,13 @@
             entidadesDisponiveis.add(it.sigla);
         });
 
-        const totalItemsCount = items.length;
+        const entidadesArr = Array.from(entidadesDisponiveis).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+        if (!_selectedCompartilhadoFiltro || _selectedCompartilhadoFiltro === 'todos' || !entidadesDisponiveis.has(_selectedCompartilhadoFiltro)) {
+            _selectedCompartilhadoFiltro = entidadesArr.length > 0 ? entidadesArr[0] : '';
+        }
 
         // Filtragem por órgão selecionado
-        if (_selectedCompartilhadoFiltro && _selectedCompartilhadoFiltro !== 'todos') {
+        if (_selectedCompartilhadoFiltro) {
             items = items.filter(it => it.sigla === _selectedCompartilhadoFiltro);
         }
 
@@ -807,12 +846,7 @@
         if (entidadesDisponiveis.size > 0) {
             filterPillsHtml = `
                 <div class="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
-                    <button type="button" 
-                        onclick="window.UsuariosManager.selectCompartilhadoFiltro('todos')"
-                        class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${(_selectedCompartilhadoFiltro === 'todos') ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'}">
-                        Todas as Camadas (${totalItemsCount})
-                    </button>
-                    ${Array.from(entidadesDisponiveis).map(sigla => {
+                    ${entidadesArr.map(sigla => {
                         const countForSigla = getSharedItemsForCurrentUser().filter(it => it.sigla === sigla).length;
                         const isCurActive = (_selectedCompartilhadoFiltro === sigla);
                         return `
@@ -912,15 +946,15 @@
 
         let temas = _allTemas.filter(t => {
             const tSigla = getEntitySigla(getThemeEntity(t));
-            if (!isSuperAdmin && tSigla !== minhaSigla) return false;
-            if (minhaSigla === 'MUNICÍPIO' && meuMunId && t.municipio_id && t.municipio_id !== meuMunId) return false;
+            if (tSigla !== minhaSigla) return false;
+            if (minhaSigla === 'Município' && meuMunId && t.municipio_id && t.municipio_id !== meuMunId) return false;
             return true;
         });
 
         let rasters = _allRasters.filter(r => {
             const rSigla = getEntitySigla(r.entidade);
-            if (!isSuperAdmin && rSigla !== minhaSigla) return false;
-            if (minhaSigla === 'MUNICÍPIO' && meuMunId && r.municipio_id && r.municipio_id !== meuMunId) return false;
+            if (rSigla !== minhaSigla) return false;
+            if (minhaSigla === 'Município' && meuMunId && r.municipio_id && r.municipio_id !== meuMunId) return false;
             return true;
         });
 
@@ -939,6 +973,9 @@
         }
 
         const totalItems = temas.length + rasters.length;
+        const activeMunObj = _allMunicipios.find(m => m.id === meuMunId);
+        const headerEntidadeNome = (minhaSigla === 'Município' && activeMunObj) ? `Prefeitura de ${activeMunObj.nome}` : minhaEntidade;
+        const headerBadgeSigla = (minhaSigla === 'Município' && activeMunObj) ? `${activeMunObj.nome}-${activeMunObj.uf || 'PB'}` : minhaSigla;
 
         const bannerHtml = `
             <div class="mb-4 p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-200 dark:border-emerald-900 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xs">
@@ -948,8 +985,8 @@
                     </div>
                     <div>
                         <h3 class="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
-                            Camadas Oficiais de ${minhaEntidade}
-                            <span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">${minhaSigla}</span>
+                            Camadas Oficiais de ${headerEntidadeNome}
+                            <span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">${headerBadgeSigla}</span>
                         </h3>
                         <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                             Catálogo exclusivo de camadas e ortofotos criadas pelo seu órgão. Camadas de outros entes estão em <b>Compartilhados Comigo</b>.
@@ -986,10 +1023,17 @@
         rasters.sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
 
         const temasHtml = temas.map(tema => {
-            const formVinculado = (tema.tipo_cadastro && tema.tipo_cadastro !== 'padrao') ? _allForms[tema.tipo_cadastro] : null;
-            const numAbas = (formVinculado && formVinculado.tabs) ? formVinculado.tabs.length : 0;
+            const cor = tema.cor || '#0284c7';
             const munObj = _allMunicipios.find(m => m.id === tema.municipio_id);
-            const cor = tema.cor || '#0ea5e9';
+            const tEntRaw = getThemeEntity(tema);
+            const tSigla = getEntitySigla(tEntRaw);
+            const badgeLabel = (tSigla === 'Município' && munObj) ? `${munObj.nome}-${munObj.uf || 'PB'}` : (tSigla || minhaSigla);
+
+            let numAbas = 0;
+            try {
+                const schema = typeof tema.schema === 'string' ? JSON.parse(tema.schema) : (tema.schema || {});
+                if (Array.isArray(schema.tabs)) numAbas = schema.tabs.length;
+            } catch(e) {}
 
             let countMembrosComAcesso = 0;
             let countParceirosComAcesso = 0;
@@ -1016,7 +1060,7 @@
                                 <h4 class="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white truncate">${tema.nome}</h4>
                                 <span class="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
                                     <span class="material-symbols-outlined text-[12px]">verified</span>
-                                    ${minhaSigla} (Ente)
+                                    ${badgeLabel} (Ente)
                                 </span>
                                 <span class="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                                     <span class="material-symbols-outlined text-[12px]">category</span>
@@ -1054,6 +1098,9 @@
 
         const rastersHtml = rasters.map(raster => {
             const munObj = _allMunicipios.find(m => m.id === raster.municipio_id);
+            const rSigla = getEntitySigla(raster.entidade);
+            const badgeLabel = (rSigla === 'Município' && munObj) ? `${munObj.nome}-${munObj.uf || 'PB'}` : (rSigla || minhaSigla);
+
             let dateStr = '';
             if (raster.data_imagem) {
                 dateStr = raster.data_imagem.split('-').reverse().join('/');
@@ -1073,7 +1120,7 @@
                                 <h4 class="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white truncate">${raster.nome}</h4>
                                 <span class="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
                                     <span class="material-symbols-outlined text-[12px]">verified</span>
-                                    ${minhaSigla} (Ente)
+                                    ${badgeLabel} (Ente)
                                 </span>
                                 <span class="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20">
                                     ${raster.tipo === 'xyz_tiles' ? 'Ortofoto XYZ Tiles' : 'Imagem GeoTIFF'}
@@ -1171,15 +1218,27 @@
         let uniqueUsers = Array.from(userMap.values());
 
         if (isModoParceiros) {
-            // MODO USUÁRIOS EM COMPARTILHAMENTO:
+            // MODO USUÁRIOS EM COMPARTILHAMENTO / PARCEIROS:
             // Exibe APENAS os Pontos Focais do parceiro selecionado em _selectedEntidadeFiltro
+            const parceiros = getParceirosList();
+            const currentPartner = parceiros.find(p => p.sigla === _selectedEntidadeFiltro) || parceiros[0];
+            const partnerLabel = currentPartner ? (currentPartner.label || currentPartner.nome) : (_selectedEntidadeFiltro || 'parceiros');
+
             const searchInput = document.getElementById(_searchInputIdAtual || 'users-search') || document.getElementById('usuarios-search');
-            if (searchInput) searchInput.placeholder = `Buscar pontos focais de ${_selectedEntidadeFiltro || 'parceiros'} por nome ou e-mail...`;
+            if (searchInput) searchInput.placeholder = `Buscar pontos focais de ${partnerLabel} por nome ou e-mail...`;
 
             uniqueUsers = uniqueUsers.filter(u => {
-                const uSigla = getEntitySigla(u.entidade);
-                if (uSigla !== _selectedEntidadeFiltro) return false;
                 if (!u.ponto_focal && !u.profile?.ponto_focal) return false;
+                const uSigla = getEntitySigla(u.entidade);
+
+                if (_selectedEntidadeFiltro && _selectedEntidadeFiltro.startsWith('mun_')) {
+                    const targetMunId = _selectedEntidadeFiltro.replace('mun_', '');
+                    if (uSigla !== 'Município') return false;
+                    const hasMun = u.membros.some(mb => mb.municipio_id === targetMunId);
+                    if (!hasMun) return false;
+                } else {
+                    if (uSigla !== _selectedEntidadeFiltro) return false;
+                }
 
                 if (query) {
                     const nome = (u.profile?.nome || '').toLowerCase();
@@ -1197,7 +1256,7 @@
                         <div class="w-12 h-12 rounded-2xl bg-cyan-500/10 text-cyan-500 flex items-center justify-center mx-auto mb-3 border border-cyan-500/20">
                             <span class="material-symbols-outlined text-[26px]">lock_person</span>
                         </div>
-                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">Nenhum Ponto Focal de ${_selectedEntidadeFiltro}</h3>
+                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">Nenhum Ponto Focal de ${partnerLabel}</h3>
                         <p class="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
                             ${query ? 'Nenhum resultado corresponde à sua pesquisa.' : 'Para compartilhar camadas e ortofotos criadas pela sua entidade com servidores deste órgão parceiro, o servidor deve estar cadastrado e marcado como <b>Ponto Focal</b>.'}
                         </p>
@@ -1216,13 +1275,15 @@
         const searchInput = document.getElementById(_searchInputIdAtual || 'users-search') || document.getElementById('usuarios-search');
         if (searchInput) searchInput.placeholder = 'Buscar servidores da minha equipe por nome, e-mail ou cargo...';
 
-        uniqueUsers = uniqueUsers.filter(u => {
-            // O próprio Admin logado não deve ser exibido novamente na lista de subordinados
+        // 1. Candidatos da equipe (O próprio Admin logado não deve ser exibido novamente na lista de subordinados)
+        let equipeCandidates = uniqueUsers.filter(u => {
             if (u.user_id === _currentUserProfile?.id) return false;
+            return true;
+        });
 
-            const uSigla = getEntitySigla(u.entidade);
-
-            if (!isSuperAdmin) {
+        if (!isSuperAdmin) {
+            equipeCandidates = equipeCandidates.filter(u => {
+                const uSigla = getEntitySigla(u.entidade);
                 if (uSigla !== minhaSigla) return false;
                 if (minhaSigla === 'Município' && _targetMunicipioId) {
                     const temNoMunAtivo = u.membros.some(mb => mb.municipio_id === _targetMunicipioId && mb.status !== 'rejeitado');
@@ -1232,74 +1293,195 @@
                     if (!temVinculoValido) return false;
                 }
                 if (!canManageUser(u)) return false;
-            }
+                return true;
+            });
+        }
 
-            if (query) {
-                const nome = (u.profile?.nome || '').toLowerCase();
-                const email = (u.profile?.email || '').toLowerCase();
-                const entidade = (u.entidade || '').toLowerCase();
-                const cargo = (u.cargo || '').toLowerCase();
-                const munNomes = u.membros.map(mb => (mb.municipios?.nome || '').toLowerCase()).join(' ');
+        // 2. NÍVEL 1: ABAS DE ENTES (Apenas para SuperAdmin com múltiplos entes disponíveis)
+        const entesDisponiveisMap = new Map();
 
-                return nome.includes(query) || email.includes(query) || entidade.includes(query) || cargo.includes(query) || munNomes.includes(query);
+        if (isSuperAdmin) {
+            // Cadastra todos os municípios ativos com rótulo Nome-UF (ex: Cabedelo-PB)
+            _allMunicipios.forEach(m => {
+                const munKey = `mun_${m.id}`;
+                const munLabel = `${m.nome}-${m.uf || 'PB'}`;
+                entesDisponiveisMap.set(munKey, {
+                    sigla: munKey,
+                    label: munLabel,
+                    nome: munLabel,
+                    municipio_id: m.id,
+                    icone: 'location_city',
+                    count: 0
+                });
+            });
+
+            // Cadastra os órgãos padrão externos (MPF, SPU, PF)
+            _allEntidadesPadrao.forEach(e => {
+                const s = getEntitySigla(e.sigla || e.nome);
+                if (!s || s.toLowerCase() === 'outros' || s.toLowerCase() === 'outro' || s === 'Município') return;
+                if (!entesDisponiveisMap.has(s)) {
+                    entesDisponiveisMap.set(s, {
+                        sigla: s,
+                        label: s,
+                        nome: e.nome,
+                        icone: s === 'MPF' ? 'gavel' : (s === 'PF' ? 'security' : (s === 'SPU' ? 'account_balance' : 'apartment')),
+                        count: 0
+                    });
+                }
+            });
+
+            // Contabiliza os servidores em cada ente/município
+            equipeCandidates.forEach(u => {
+                const sigla = getEntitySigla(u.entidade);
+                if (sigla === 'Município') {
+                    const munId = u.membros[0]?.municipio_id || _targetMunicipioId;
+                    const munKey = munId ? `mun_${munId}` : null;
+                    if (munKey && entesDisponiveisMap.has(munKey)) {
+                        entesDisponiveisMap.get(munKey).count++;
+                    } else if (_allMunicipios.length > 0) {
+                        const firstMunKey = `mun_${_allMunicipios[0].id}`;
+                        if (entesDisponiveisMap.has(firstMunKey)) entesDisponiveisMap.get(firstMunKey).count++;
+                    }
+                } else {
+                    if (entesDisponiveisMap.has(sigla)) {
+                        entesDisponiveisMap.get(sigla).count++;
+                    } else {
+                        entesDisponiveisMap.set(sigla, {
+                            sigla,
+                            label: sigla,
+                            nome: u.entidade || sigla,
+                            icone: 'domain',
+                            count: 1
+                        });
+                    }
+                }
+            });
+        }
+
+        // Resolve o Ente ativo:
+        let activeEnteSigla = minhaSigla;
+        if (isSuperAdmin) {
+            if (_selectedEnteEquipe && entesDisponiveisMap.has(_selectedEnteEquipe)) {
+                activeEnteSigla = _selectedEnteEquipe;
+            } else if (entesDisponiveisMap.size > 0) {
+                const firstWithUsers = Array.from(entesDisponiveisMap.values()).find(e => e.count > 0);
+                activeEnteSigla = firstWithUsers ? firstWithUsers.sigla : Array.from(entesDisponiveisMap.keys())[0];
+                _selectedEnteEquipe = activeEnteSigla;
             }
-            return true;
+        }
+
+        let entesHtml = '';
+        if (isSuperAdmin && entesDisponiveisMap.size > 1) {
+            const entesArr = Array.from(entesDisponiveisMap.values());
+            entesHtml = `
+                <div class="mb-4 bg-slate-100/90 dark:bg-slate-800/80 p-1.5 rounded-2xl flex items-center gap-1.5 flex-wrap border border-slate-200 dark:border-slate-700/80 shadow-xs">
+                    ${entesArr.map(e => {
+                        const isSel = (e.sigla === activeEnteSigla);
+                        const conf = ENTITY_CONFIGS[e.sigla] || { icone: e.icone || 'apartment', nome: e.label || e.nome || e.sigla };
+                        return `
+                            <button type="button" onclick="window.UsuariosManager.setEnteEquipe('${e.sigla}')" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${isSel ? 'bg-white dark:bg-slate-900 text-sky-600 dark:text-sky-400 shadow-sm border border-slate-200 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}">
+                                <span class="material-symbols-outlined text-[17px]">${conf.icone || e.icone || 'apartment'}</span>
+                                <span>${e.label || conf.nome || e.sigla}</span>
+                                <span class="px-1.5 py-0.2 text-[10px] font-extrabold rounded-full ${isSel ? 'bg-sky-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}">${e.count}</span>
+                            </button>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        // 3. Usuários pertencentes ao Ente Ativo
+        let usersDoEnte = equipeCandidates;
+        if (isSuperAdmin) {
+            if (activeEnteSigla && activeEnteSigla.startsWith('mun_')) {
+                const targetMunId = activeEnteSigla.replace('mun_', '');
+                usersDoEnte = equipeCandidates.filter(u => getEntitySigla(u.entidade) === 'Município' && u.membros.some(mb => mb.municipio_id === targetMunId));
+            } else {
+                usersDoEnte = equipeCandidates.filter(u => getEntitySigla(u.entidade) === activeEnteSigla);
+            }
+        }
+
+        // 4. NÍVEL 2: SUB-ABAS DE UNIDADES (Para SuperAdmin ou Admin Geral de Ente)
+        const minhaUnidade = (_currentUserProfile?.unidade || (typeof _currentUserProfile?.unidade_admin === 'string' ? _currentUserProfile?.unidade_admin : '') || '').trim().toLowerCase();
+        const canNavigateUnidades = isSuperAdmin || !minhaUnidade;
+
+        const unidadesMap = new Map();
+        usersDoEnte.forEach(u => {
+            const un = (u.profile?.unidade || u.unidade || '').trim();
+            if (un) {
+                unidadesMap.set(un, (unidadesMap.get(un) || 0) + 1);
+            }
         });
+        const semUnidadeCount = usersDoEnte.filter(u => !(u.profile?.unidade || u.unidade || '').trim()).length;
+        const unidadesArr = Array.from(unidadesMap.keys()).sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
-        // Banner informativo da equipe e das camadas criadas pela entidade
-        const numCamadas = _allTemas.filter(t => getEntitySigla(getThemeEntity(t)) === minhaSigla).length;
-        const numRasters = _allRasters.filter(r => getEntitySigla(r.entidade) === minhaSigla).length;
-        const numServidores = uniqueUsers.length;
-        const minhaUnidadeExibida = (_currentUserProfile?.unidade_admin || _currentUserProfile?.unidade || '').trim();
+        if (!_selectedUnidadeEquipe || (!unidadesMap.has(_selectedUnidadeEquipe) && _selectedUnidadeEquipe !== '__sem_unidade__')) {
+            _selectedUnidadeEquipe = unidadesArr.length > 0 ? unidadesArr[0] : (semUnidadeCount > 0 ? '__sem_unidade__' : '');
+        }
 
-        const bannerHtml = `
-            <div class="mb-4 p-4 rounded-2xl bg-gradient-to-r from-sky-500/10 via-indigo-500/5 to-transparent border border-sky-200 dark:border-sky-900 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xs">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center shadow-md shadow-sky-600/30 shrink-0">
-                        <span class="material-symbols-outlined text-[22px]">groups</span>
-                    </div>
-                    <div>
-                        <h3 class="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
-                            Equipe de ${minhaEntidade}
-                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 border border-sky-300 dark:border-sky-800">${minhaSigla}</span>
-                            ${minhaUnidadeExibida ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-800 flex items-center gap-1"><span class="material-symbols-outlined text-[12px]">apartment</span>Unidade: ${minhaUnidadeExibida}</span>` : ''}
-                        </h3>
-                        <p class="text-xs text-slate-500 dark:text-slate-400">Servidores subordinados à sua gestão institucional e permissões por camada.</p>
-                    </div>
+        let unidadesHtml = '';
+        if (canNavigateUnidades && (unidadesMap.size > 0 || semUnidadeCount > 0)) {
+            unidadesHtml = `
+                <div class="mb-3.5 flex items-center gap-1.5 flex-wrap select-none bg-sky-50/60 dark:bg-sky-950/20 p-2 rounded-xl border border-sky-200/70 dark:border-sky-900/40">
+                    <span class="text-[11px] font-extrabold text-sky-700 dark:text-sky-300 uppercase tracking-wider px-1.5 flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[15px]">apartment</span> Unidade:
+                    </span>
+                    ${unidadesArr.map(un => {
+                        const count = unidadesMap.get(un) || 0;
+                        const isSel = _selectedUnidadeEquipe && _selectedUnidadeEquipe.toLowerCase() === un.toLowerCase();
+                        return `
+                            <button type="button" onclick="window.UsuariosManager.setUnidadeEquipe('${un.replace(/'/g, "\\'")}')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${isSel ? 'bg-sky-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}">
+                                ${un} (${count})
+                            </button>
+                        `;
+                    }).join('')}
+                    ${semUnidadeCount > 0 ? `
+                        <button type="button" onclick="window.UsuariosManager.setUnidadeEquipe('__sem_unidade__')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${_selectedUnidadeEquipe === '__sem_unidade__' ? 'bg-slate-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-500 border border-dashed border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}">
+                            Sem Unidade (${semUnidadeCount})
+                        </button>
+                    ` : ''}
                 </div>
-                <div class="flex items-center gap-2 flex-wrap">
-                    <div class="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 shadow-xs flex items-center gap-1.5">
-                        <span class="material-symbols-outlined text-[16px] text-sky-600">groups</span>
-                        <span><b>${numServidores}</b> subordinado${numServidores === 1 ? '' : 's'}</span>
-                    </div>
-                </div>
-            </div>
-        `;
+            `;
+        }
 
-        // Coleta setores disponíveis para filtro rápido da equipe
+        // Filtra por Unidade
+        let usersDaUnidade = usersDoEnte;
+        if (canNavigateUnidades) {
+            if (_selectedUnidadeEquipe === '__sem_unidade__') {
+                usersDaUnidade = usersDoEnte.filter(u => !(u.profile?.unidade || u.unidade || '').trim());
+            } else if (_selectedUnidadeEquipe) {
+                usersDaUnidade = usersDoEnte.filter(u => (u.profile?.unidade || u.unidade || '').trim().toLowerCase() === _selectedUnidadeEquipe.toLowerCase());
+            }
+        } else if (minhaUnidade) {
+            usersDaUnidade = usersDoEnte.filter(u => {
+                const uUn = (u.profile?.unidade || u.unidade || '').trim().toLowerCase();
+                return !uUn || uUn === minhaUnidade;
+            });
+        }
+
+        // 5. NÍVEL 3: PILLS DE SETORES (Pertencentes à unidade selecionada)
         const availableSetores = new Set();
-        uniqueUsers.forEach(u => {
+        usersDaUnidade.forEach(u => {
             const s = (u.profile?.setor || u.setor || '').trim();
             if (s) availableSetores.add(s);
         });
+        const semSetorCount = usersDaUnidade.filter(u => !(u.profile?.setor || u.setor || '').trim()).length;
+        const setoresArr = Array.from(availableSetores).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+        if (!_selectedSetorFiltro || (!availableSetores.has(_selectedSetorFiltro) && _selectedSetorFiltro !== '__sem_setor__')) {
+            _selectedSetorFiltro = setoresArr.length > 0 ? setoresArr[0] : (semSetorCount > 0 ? '__sem_setor__' : '');
+        }
 
         let setorFilterHtml = '';
-        if (availableSetores.size > 0) {
-            const setoresArr = Array.from(availableSetores).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-            const totalCount = uniqueUsers.length;
-            const semSetorCount = uniqueUsers.filter(u => !(u.profile?.setor || u.setor || '').trim()).length;
-
+        if (availableSetores.size > 0 || semSetorCount > 0) {
             setorFilterHtml = `
-                <div class="mb-3.5 flex items-center gap-1.5 flex-wrap select-none bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800">
-                    <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1">
+                <div class="mb-3.5 flex items-center gap-1.5 flex-wrap select-none bg-slate-50 dark:bg-slate-800/40 p-2 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                    <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-1 flex items-center gap-1">
                         <span class="material-symbols-outlined text-[15px]">workspaces</span> Setor:
                     </span>
-                    <button type="button" onclick="window.UsuariosManager.setSetorFiltro('todos')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${_selectedSetorFiltro === 'todos' ? 'bg-sky-600 text-white shadow-xs' : 'bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'}">
-                        Todos (${totalCount})
-                    </button>
                     ${setoresArr.map(st => {
-                        const count = uniqueUsers.filter(u => (u.profile?.setor || u.setor || '').trim().toLowerCase() === st.toLowerCase()).length;
-                        const isSelected = _selectedSetorFiltro.toLowerCase() === st.toLowerCase();
+                        const count = usersDaUnidade.filter(u => (u.profile?.setor || u.setor || '').trim().toLowerCase() === st.toLowerCase()).length;
+                        const isSelected = _selectedSetorFiltro && _selectedSetorFiltro.toLowerCase() === st.toLowerCase();
                         return `
                             <button type="button" onclick="window.UsuariosManager.setSetorFiltro('${st.replace(/'/g, "\\'")}')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${isSelected ? 'bg-purple-600 text-white shadow-xs' : 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/20 hover:bg-purple-500/20'}">
                                 ${st} (${count})
@@ -1313,28 +1495,43 @@
                     ` : ''}
                 </div>
             `;
-
-            // Aplica filtro por setor selecionado
-            if (_selectedSetorFiltro === '__sem_setor__') {
-                uniqueUsers = uniqueUsers.filter(u => !(u.profile?.setor || u.setor || '').trim());
-            } else if (_selectedSetorFiltro !== 'todos') {
-                uniqueUsers = uniqueUsers.filter(u => (u.profile?.setor || u.setor || '').trim().toLowerCase() === _selectedSetorFiltro.toLowerCase());
-            }
         }
 
-        if (uniqueUsers.length === 0) {
+        // Filtra por Setor
+        let usersDoSetor = usersDaUnidade;
+        if (_selectedSetorFiltro === '__sem_setor__') {
+            usersDoSetor = usersDaUnidade.filter(u => !(u.profile?.setor || u.setor || '').trim());
+        } else if (_selectedSetorFiltro) {
+            usersDoSetor = usersDaUnidade.filter(u => (u.profile?.setor || u.setor || '').trim().toLowerCase() === _selectedSetorFiltro.toLowerCase());
+        }
+
+        // 6. Filtra por Query de Busca (se digitado)
+        let usersFinal = usersDoSetor;
+        if (query) {
+            usersFinal = usersFinal.filter(u => {
+                const nome = (u.profile?.nome || '').toLowerCase();
+                const email = (u.profile?.email || '').toLowerCase();
+                const entidade = (u.entidade || '').toLowerCase();
+                const cargo = (u.cargo || '').toLowerCase();
+                const munNomes = u.membros.map(mb => (mb.municipios?.nome || '').toLowerCase()).join(' ');
+                return nome.includes(query) || email.includes(query) || entidade.includes(query) || cargo.includes(query) || munNomes.includes(query);
+            });
+        }
+
+        if (usersFinal.length === 0) {
             container.innerHTML = `
-                ${bannerHtml}
+                ${entesHtml}
+                ${unidadesHtml}
                 ${setorFilterHtml}
                 <div class="p-8 text-center text-slate-400 text-sm italic bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/60 dark:border-slate-800 shadow-xs">
-                    ${query ? 'Nenhum membro da sua equipe corresponde a esta pesquisa.' : 'Nenhum usuário cadastrado neste filtro.'}
+                    ${query ? 'Nenhum membro corresponde a esta pesquisa.' : 'Nenhum usuário cadastrado neste filtro de órgão, unidade ou setor.'}
                 </div>
             `;
             return;
         }
 
-        uniqueUsers.sort((a, b) => (a.profile?.nome || '').localeCompare((b.profile?.nome || ''), 'pt-BR', { sensitivity: 'base' }));
-        container.innerHTML = bannerHtml + setorFilterHtml + uniqueUsers.map(u => renderUserCard(u)).join('');
+        usersFinal.sort((a, b) => (a.profile?.nome || '').localeCompare((b.profile?.nome || ''), 'pt-BR', { sensitivity: 'base' }));
+        container.innerHTML = entesHtml + unidadesHtml + setorFilterHtml + usersFinal.map(u => renderUserCard(u)).join('');
     }
 
     function renderUserCard(userObj) {
@@ -1357,7 +1554,8 @@
 
         const minhaEntidade = (_currentUserProfile?.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
         const minhaSigla = getEntitySigla(minhaEntidade);
-        const isPartnerPontoFocal = (userSigla !== minhaSigla && (userObj.ponto_focal || userObj.profile?.ponto_focal));
+        const isSuperAdmin = !!(_currentUserProfile && (_currentUserProfile.super_admin || _currentUserProfile.is_superadmin || _currentUserProfile.papel === 'superadmin'));
+        const isPartnerPontoFocal = !isSuperAdmin && (userSigla !== minhaSigla && (userObj.ponto_focal || userObj.profile?.ponto_focal));
 
         const munIdsAprovados = new Set(userObj.membros.filter(mb => mb.status === 'aprovado').map(mb => mb.municipio_id));
         const todosMunIdsDoUser = new Set(userObj.membros.map(mb => mb.municipio_id));
@@ -1746,9 +1944,9 @@
                                 ` : ''}
                                 ${isPartnerPontoFocal ? `
                                     <span class="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 flex items-center gap-1">
-                                        <span class="material-symbols-outlined text-[12px]">handshake</span> Ponto Focal ${userSigla}
+                                        <span class="material-symbols-outlined text-[12px]">handshake</span> Ponto Focal ${userSigla === 'Município' ? (nomesMunicipiosDoUser ? nomesMunicipiosDoUser.replace(/\s*-\s*/g, '-') : 'Municipal') : userSigla}
                                     </span>
-                                ` : (userObj.ponto_focal ? `<span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 flex items-center gap-1"><span class="material-symbols-outlined text-[12px]">share_location</span>Ponto Focal</span>` : '')}
+                                ` : (userObj.ponto_focal ? `<span class="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 flex items-center gap-1"><span class="material-symbols-outlined text-[12px]">share_location</span>Ponto Focal</span>` : '')}
                             </div>
                             <div class="text-xs text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-2 flex-wrap font-medium">
                                 <span>${perfil.email || ''}</span>
@@ -2119,10 +2317,11 @@
         try {
             const minhaEntidade = (_currentUserProfile?.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
             const minhaSigla = getEntitySigla(minhaEntidade);
+            const isSuperAdmin = !!(_currentUserProfile && (_currentUserProfile.super_admin || _currentUserProfile.is_superadmin || _currentUserProfile.papel === 'superadmin'));
             const userObj = _allMembros.find(m => m.user_id === userId);
             const userEntidadeRaw = (userObj?.entidade || userObj?.profiles?.entidade || '').trim();
             const userSigla = getEntitySigla(userEntidadeRaw);
-            const isPartnerPontoFocal = (userSigla !== minhaSigla && (userObj?.ponto_focal || userObj?.profiles?.ponto_focal));
+            const isPartnerPontoFocal = !isSuperAdmin && (userSigla !== minhaSigla && (userObj?.ponto_focal || userObj?.profiles?.ponto_focal));
 
             // 1. Atualiza município_membros APENAS para usuários locais (não sobrescreve o cadastro corporativo de parceiros)
             if (!isPartnerPontoFocal) {
@@ -2243,18 +2442,44 @@
                     ponto_focal: isPontoFocal,
                     pode_criar_camadas: podeCriarCamadas,
                     pode_subir_ortofotos: podeSubirOrtofotos,
-                    pode_estatistica_cruzada: podeEstatisticaCruzada
+                    pode_estatistica_cruzada: podeEstatisticaCruzada,
+                    unidade_admin: (papel === 'admin')
                 };
                 if (inputEntidade) profileUpdatePayload.entidade = inputEntidade;
                 if (inputCargo !== undefined) profileUpdatePayload.cargo = inputCargo;
                 if (inputUnidade !== undefined) profileUpdatePayload.unidade = inputUnidade || null;
                 if (inputSetor !== undefined) profileUpdatePayload.setor = inputSetor || null;
-                if (papel === 'admin' && inputUnidade) {
-                    profileUpdatePayload.unidade_admin = inputUnidade;
-                }
 
                 try {
-                    await supabaseClient.from('profiles').update(profileUpdatePayload).eq('id', userId);
+                    let { error: profErr } = await supabaseClient
+                        .from('profiles')
+                        .update(profileUpdatePayload)
+                        .eq('id', userId);
+
+                    if (profErr) {
+                        console.warn('[UsuariosManager] Tentativa completa com profiles retornou erro:', profErr.message || profErr);
+                        // Se falhou (ex: 400 Bad Request por incompatibilidade de tipo ou coluna ausente), aplica fallback seguro
+                        const safePayload = {};
+                        if (profileUpdatePayload.ponto_focal !== undefined) safePayload.ponto_focal = profileUpdatePayload.ponto_focal;
+                        if (profileUpdatePayload.entidade !== undefined) safePayload.entidade = profileUpdatePayload.entidade;
+                        if (profileUpdatePayload.cargo !== undefined) safePayload.cargo = profileUpdatePayload.cargo;
+                        if (profileUpdatePayload.unidade !== undefined) safePayload.unidade = profileUpdatePayload.unidade;
+                        if (profileUpdatePayload.setor !== undefined) safePayload.setor = profileUpdatePayload.setor;
+                        if (profileUpdatePayload.pode_criar_camadas !== undefined) safePayload.pode_criar_camadas = profileUpdatePayload.pode_criar_camadas;
+                        if (profileUpdatePayload.pode_subir_ortofotos !== undefined) safePayload.pode_subir_ortofotos = profileUpdatePayload.pode_subir_ortofotos;
+
+                        const { error: safeErr } = await supabaseClient
+                            .from('profiles')
+                            .update(safePayload)
+                            .eq('id', userId);
+
+                        if (safeErr) {
+                            console.error('[UsuariosManager] Erro no fallback de profiles:', safeErr);
+                        } else {
+                            console.log('[UsuariosManager] Fallback de profiles executado com sucesso.');
+                        }
+                    }
+
                     if (inputEntidade) {
                         await supabaseClient.from('municipio_membros').update({
                             entidade: inputEntidade,
@@ -2272,6 +2497,7 @@
                     m.profiles.pode_criar_camadas = podeCriarCamadas;
                     m.profiles.pode_subir_ortofotos = podeSubirOrtofotos;
                     m.profiles.pode_estatistica_cruzada = podeEstatisticaCruzada;
+                    m.profiles.unidade_admin = (papel === 'admin');
                     if (inputEntidade) {
                         m.profiles.entidade = inputEntidade;
                         m.entidade = inputEntidade;
@@ -2285,9 +2511,6 @@
                     }
                     if (inputSetor !== undefined) {
                         m.profiles.setor = inputSetor;
-                    }
-                    if (papel === 'admin' && inputUnidade) {
-                        m.profiles.unidade_admin = inputUnidade;
                     }
                 });
             }
@@ -2452,6 +2675,27 @@
         }
     }
 
+    function setEnteEquipe(sigla) {
+        _selectedEnteEquipe = sigla;
+        _selectedUnidadeEquipe = null;
+        _selectedSetorFiltro = null;
+        const container = document.getElementById('usuarios-list') || document.getElementById('users-container') || document.getElementById(_containerIdAtual);
+        if (container) {
+            const searchInput = document.getElementById(_searchInputIdAtual || 'users-search') || document.getElementById('usuarios-search');
+            renderUsersList(container.id, searchInput ? searchInput.value : '');
+        }
+    }
+
+    function setUnidadeEquipe(unidade) {
+        _selectedUnidadeEquipe = unidade;
+        _selectedSetorFiltro = null;
+        const container = document.getElementById('usuarios-list') || document.getElementById('users-container') || document.getElementById(_containerIdAtual);
+        if (container) {
+            const searchInput = document.getElementById(_searchInputIdAtual || 'users-search') || document.getElementById('usuarios-search');
+            renderUsersList(container.id, searchInput ? searchInput.value : '');
+        }
+    }
+
     function setSetorFiltro(setor) {
         _selectedSetorFiltro = setor;
         const container = document.getElementById('usuarios-list') || document.getElementById('users-container') || document.getElementById(_containerIdAtual);
@@ -2464,6 +2708,8 @@
     window.UsuariosManager = {
         init: initUsuariosManager,
         setMunicipio,
+        setEnteEquipe,
+        setUnidadeEquipe,
         setSetorFiltro,
         selectUserMun,
         toggleUserCard,

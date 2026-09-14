@@ -331,6 +331,16 @@ assertTest('Frontend: home.html reconhece entidade_admin e papel admin sem ocult
 const hasUsuariosGestaoEntidadeAdmin = usuariosGestaoCode.includes('_currentUserProfile.entidade_admin') && usuariosGestaoCode.includes('minhaSigla === \'Município\' && _targetMunicipioId');
 assertTest('Frontend: usuarios-gestao.js reconhece entidade_admin e isola apenas municípios por _targetMunicipioId', hasUsuariosGestaoEntidadeAdmin);
 
+const hasGerenciadorIconInMunCard = homeHtmlContent.includes('title="Gerenciador"') &&
+    homeHtmlContent.includes('more_vert') &&
+    homeHtmlContent.includes("abrirPainelMunicipio('${authData.id}'");
+assertTest('Frontend: Ícone de três pontos (Gerenciador) presente no card de município em home.html', hasGerenciadorIconInMunCard);
+
+const hasFitMapToAuthorizedBounds = homeHtmlContent.includes('function fitMapToAuthorizedBounds(') &&
+    homeHtmlContent.includes('window.fitMapToAuthorizedBounds = fitMapToAuthorizedBounds') &&
+    !homeHtmlContent.includes("paraibaMapInstance.fitBounds(bounds, { padding: [20, 20] });");
+assertTest('Frontend: Centralização e zoom dinâmico nos municípios autorizados preservados (desktop e mobile)', hasFitMapToAuthorizedBounds);
+
 // 11. Reestruturação da Central de Usuários: Card do Admin, 4 Abas e Isolamento de Camadas
 const settingsHtmlContent = fs.readFileSync('settings.html', 'utf8');
 const hasAdminProfileCardContainer = settingsHtmlContent.includes('id="usuarios-admin-profile-card"');
@@ -351,6 +361,54 @@ assertTest('Central de Usuários: renderMinhasCamadasCriadas implementada para c
 
 const hasEntityLayerIsolation = ugFreshCode.includes('// Para servidores da própria equipe, exibe estritamente as camadas criadas pelo próprio ente') && ugFreshCode.includes('return tSigla === minhaSigla;');
 assertTest('Central de Usuários: Camadas de outros entes (ex: SPU) isoladas e não vazadas nos cards de membros da equipe', hasEntityLayerIsolation);
+
+const hasStrictCamadasEnteIsolation = ugFreshCode.includes('if (tSigla !== minhaSigla) return false;') &&
+    ugFreshCode.includes("if (minhaSigla === 'Município' && meuMunId && t.municipio_id && t.municipio_id !== meuMunId) return false;");
+assertTest('Central de Usuários: Isolamento estrito de camadas do ente em CAMADAS (sem vazamento de outros órgãos)', hasStrictCamadasEnteIsolation);
+
+// 12. Estabilidade de Alta Densidade (20.709 Feições) e GeoEngineTurbo
+const indexHtmlContent = fs.readFileSync('index.html', 'utf8');
+const hasDensityIndicatorInHtml = indexHtmlContent.includes('id="map-density-indicator"') && indexHtmlContent.includes('id="map-density-text"');
+assertTest('Alta Densidade: Banner flutuante de alerta de densidade presente no index.html', hasDensityIndicatorInHtml);
+
+const mainFreshCode = fs.readFileSync('src/main.js', 'utf8');
+const hasDensityControlInMap = mainFreshCode.includes('anyThemeCapped') && mainFreshCode.includes('map-density-indicator') && mainFreshCode.includes('aproxime o zoom');
+assertTest('Alta Densidade: loadAllFeaturesToMap controla indicador de densidade visual automaticamente', hasDensityControlInMap);
+
+const hasCacheTimestampValidation = mainFreshCode.includes('last_feature_updated_at') && mainFreshCode.includes('cachedTimestamp') && mainFreshCode.includes('shouldInvalidateCache = true');
+assertTest('Cache Inteligente: loadThemeProperties valida contagem e timestamp de edições no Supabase', hasCacheTimestampValidation);
+
+const hasMultiPassPageRetry = mainFreshCode.includes('pendingPages') && mainFreshCode.includes('while (pendingPages.length > 0 && rounds < 3)');
+assertTest('Resiliência de Rede: loadThemeProperties possui retry multi-pass para páginas de feições', hasMultiPassPageRetry);
+
+const hasRealtimeBatchBuffer = mainFreshCode.includes('pendingRealtimeRecords') && mainFreshCode.includes('saveThemeData') && mainFreshCode.includes('indexThemeFeatures');
+assertTest('Tempo Real: feicoes-realtime processa eventos em lote sem perdas e sincroniza com GeoTurboDB', hasRealtimeBatchBuffer);
+
+const hasSuperAdminPontoFocalBypass = ugFreshCode.includes('isPartnerPontoFocal = !isSuperAdmin &&') || (fs.readFileSync('src/usuarios-gestao.js', 'utf8').includes('isPartnerPontoFocal = !isSuperAdmin &&'));
+assertTest('SuperAdmin: Permite atribuir municípios e editar cadastro completo de usuários externos mesmo com Ponto Focal ativo', hasSuperAdminPontoFocalBypass);
+
+// 13. Navegação Hierárquica em EQUIPE (Entes ➔ Unidades ➔ Setores)
+const ugUpdatedCode = fs.readFileSync('src/usuarios-gestao.js', 'utf8');
+const hasSetEnteAndUnidadeExports = ugUpdatedCode.includes('setEnteEquipe,') && ugUpdatedCode.includes('setUnidadeEquipe,');
+assertTest('Hierarquia EQUIPE: Funções setEnteEquipe e setUnidadeEquipe implementadas e expostas no UsuariosManager', hasSetEnteAndUnidadeExports);
+
+const hasEnteTabsRendering = ugUpdatedCode.includes('entesDisponiveisMap') && ugUpdatedCode.includes('window.UsuariosManager.setEnteEquipe') && !ugUpdatedCode.includes('Órgão / Ente:');
+assertTest('Hierarquia EQUIPE: Nível 1 (Abas de Entes) limpa sem rótulo redundante "Órgão / Ente:"', hasEnteTabsRendering);
+
+const hasUnidadeSubTabsRendering = ugUpdatedCode.includes('unidadesMap') && ugUpdatedCode.includes('window.UsuariosManager.setUnidadeEquipe') && !ugUpdatedCode.includes("setUnidadeEquipe('todas')");
+assertTest('Hierarquia EQUIPE: Nível 2 (Sub-abas de Unidades) sem botão redundante "Todas", selecionando automaticamente a primeira', hasUnidadeSubTabsRendering);
+
+const hasCleanSetorAndNoBanner = !ugUpdatedCode.includes("setSetorFiltro('todos')") && !ugUpdatedCode.includes('Equipe de ${nomeEnteExibido}') && !ugUpdatedCode.includes('Servidores subordinados à gestão institucional');
+assertTest('Hierarquia EQUIPE: Sem botão "Todos" no Setor e sem card redundante "Equipe de [Ente]"', hasCleanSetorAndNoBanner);
+
+const hasUnidadeAdminBooleanSafe = ugUpdatedCode.includes('unidade_admin: (papel === \'admin\')');
+assertTest('Estabilidade DB: unidade_admin tipado estritamente como booleano evitando erros HTTP 400', hasUnidadeAdminBooleanSafe);
+
+const hasSharedNomeUfFormatting = ugUpdatedCode.includes('${munObj.nome}-${munObj.uf || \'PB\'}') && ugUpdatedCode.includes('itemSigla = `${munObj.nome}-${munObj.uf || \'PB\'}`');
+assertTest('Compartilhamento: Origem municipal formatada como Nome-UF (ex: Cabedelo-PB) nos filtros e cards', hasSharedNomeUfFormatting);
+
+const hasParceirosNomeUfMapping = ugUpdatedCode.includes('munLabel = `${m.nome}-${m.uf || \'PB\'}`') && ugUpdatedCode.includes('sigla: munKey,') && ugUpdatedCode.includes('label: munLabel,');
+assertTest('Parceiros & Entes: Municípios mapeados individualmente no formato Nome-UF com suporte a contagem zero', hasParceirosNomeUfMapping);
 
 
 // ------------------------------------------------------------------------------

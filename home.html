@@ -132,6 +132,14 @@
   .leaflet-popup-tip {
     background: #0f172a !important;
   }
+  .leaflet-container a.leaflet-popup-close-button {
+    color: #94a3b8 !important;
+    padding: 6px 8px 0 0 !important;
+    font-size: 18px !important;
+  }
+  .leaflet-container a.leaflet-popup-close-button:hover {
+    color: #ffffff !important;
+  }
   .leaflet-container {
     background-color: #090d16 !important;
     font-family: inherit !important;
@@ -1129,9 +1137,17 @@ window.abrirMunicipioComProjeto = function(id, nome, papel, projetoId = null) {
 };
 
 // Painel de Gestão e Boas-Vindas do Município (acessado ao clicar em HOME no menu lateral do mapa ou via URL ?view=municipio)
-window.abrirPainelMunicipio = function(id, nome) {
+window.abrirPainelMunicipio = function(id, nome, papel = null) {
     if (id) sessionStorage.setItem('municipio_ativo', id);
     if (nome) sessionStorage.setItem('municipio_ativo_nome', nome);
+    if (papel) sessionStorage.setItem('municipio_ativo_papel', papel);
+
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('view', 'municipio');
+        url.searchParams.delete('tab');
+        window.history.pushState({}, '', url.toString());
+    } catch(e) {}
 
     const portalHeader = document.getElementById('header-portal-view');
     const munHeader = document.getElementById('header-municipio-view');
@@ -1274,9 +1290,8 @@ window.voltarParaMunicipios = function(forcePortal = false) {
         if (typeof paraibaMapInstance !== 'undefined' && paraibaMapInstance) {
             setTimeout(() => {
                 paraibaMapInstance.invalidateSize();
-                const bounds = paraibaGeojsonLayer?.getBounds();
-                if (bounds && bounds.isValid()) {
-                    paraibaMapInstance.fitBounds(bounds, { padding: [20, 20] });
+                if (typeof fitMapToAuthorizedBounds === 'function') {
+                    fitMapToAuthorizedBounds(false);
                 }
             }, 100);
         }
@@ -3361,6 +3376,9 @@ async function init() {
                     <div class="min-w-0">
                         <div class="flex items-center gap-2 flex-wrap">
                             <h3 class="text-base font-bold text-slate-800 dark:text-slate-100">${m.nome}${m.uf ? ' - ' + m.uf : ''}</h3>
+                            <button type="button" onclick="event.stopPropagation(); abrirPainelMunicipio('${m.id}', '${(m.nome || '').replace(/'/g, "\\'")}', '${m.papel}');" class="w-7 h-7 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-primary dark:text-slate-400 dark:hover:text-sky-400 flex items-center justify-center transition-all cursor-pointer shrink-0" title="Gerenciador">
+                                <span class="material-symbols-outlined text-[18px]">more_vert</span>
+                            </button>
                             <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${ehAdmin ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}">
                                 ${PAPEL_LABELS[m.papel] || m.papel}
                             </span>
@@ -3518,6 +3536,47 @@ function normMunString(str) {
     return String(str || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
+function fitMapToAuthorizedBounds(smooth = false) {
+    if (!paraibaMapInstance) return;
+    paraibaMapInstance.invalidateSize();
+
+    let bounds = window.paraibaTargetBounds;
+    if (!bounds || !bounds.isValid()) {
+        const munList = window.municipiosParaMostrarCache || [];
+        if (munList.length > 0 && typeof paraibaFeatureLayers !== 'undefined' && Object.keys(paraibaFeatureLayers).length > 0) {
+            const authBounds = L.latLngBounds([]);
+            let hasValid = false;
+            munList.forEach(m => {
+                const norm = normMunString(m.nome);
+                const l = paraibaFeatureLayers[norm];
+                if (l && l.getBounds && l.getBounds().isValid()) {
+                    authBounds.extend(l.getBounds());
+                    hasValid = true;
+                }
+            });
+            if (hasValid && authBounds.isValid()) {
+                bounds = authBounds;
+                window.paraibaTargetBounds = bounds;
+            }
+        }
+    }
+
+    if (!bounds || !bounds.isValid()) {
+        bounds = (typeof paraibaGeojsonLayer !== 'undefined' && paraibaGeojsonLayer) ? paraibaGeojsonLayer.getBounds() : null;
+    }
+
+    if (bounds && bounds.isValid()) {
+        const isMobile = window.innerWidth < 768;
+        const pad = isMobile ? [16, 16] : [40, 40];
+        if (smooth) {
+            paraibaMapInstance.flyToBounds(bounds, { padding: pad, maxZoom: 11, duration: 0.8 });
+        } else {
+            paraibaMapInstance.fitBounds(bounds, { padding: pad, maxZoom: 11 });
+        }
+    }
+}
+window.fitMapToAuthorizedBounds = fitMapToAuthorizedBounds;
+
 window.switchMunicipiosViewMode = function(mode, isUserClick = false) {
     // Se o clique foi do usuário e ele estiver em Configurações Globais ou outra seção, retorna imediatamente para a seção de municípios
     if (isUserClick) {
@@ -3566,10 +3625,7 @@ window.switchMunicipiosViewMode = function(mode, isUserClick = false) {
         if (paraibaMapInstance) {
             setTimeout(() => { 
                 paraibaMapInstance.invalidateSize(); 
-                const bounds = paraibaGeojsonLayer?.getBounds();
-                if (bounds && bounds.isValid()) {
-                    paraibaMapInstance.fitBounds(bounds, { padding: [20, 20] });
-                }
+                fitMapToAuthorizedBounds(false);
             }, 100);
         }
     } else {
@@ -3593,6 +3649,7 @@ window.initParaibaMap = async function(municipiosAutorizados = []) {
 
     if (paraibaMapInstance) {
         paraibaMapInstance.invalidateSize();
+        fitMapToAuthorizedBounds(false);
         return;
     }
 
@@ -3719,19 +3776,24 @@ window.initParaibaMap = async function(municipiosAutorizados = []) {
             }
 
             return `
-            <div class="p-3.5 min-w-[260px] max-w-[310px] flex flex-col gap-2.5">
-                <div class="flex items-center gap-3">
-                    <div class="w-11 h-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shrink-0 overflow-hidden p-1">
-                        ${logoEnte 
-                            ? `<img src="${logoEnte}" class="w-full h-full object-contain" alt="Logo Ente">` 
-                            : `<span class="material-symbols-outlined text-cyan-400 text-[24px]">location_city</span>`}
+            <div class="p-3.5 min-w-[270px] max-w-[320px] flex flex-col gap-2.5">
+                <div class="flex items-center justify-between gap-2.5">
+                    <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div class="w-11 h-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shrink-0 overflow-hidden p-1">
+                            ${logoEnte 
+                                ? `<img src="${logoEnte}" class="w-full h-full object-contain" alt="Logo Ente">` 
+                                : `<span class="material-symbols-outlined text-cyan-400 text-[24px]">location_city</span>`}
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <h4 class="text-sm font-bold text-white tracking-wide truncate">${authData.nome} - PB</h4>
+                            <span class="inline-block text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${ehAdmin ? 'bg-indigo-950/80 text-indigo-300 border border-indigo-700/60' : 'bg-slate-800 text-slate-300 border border-slate-700'} mt-0.5">
+                                ${papelLabel}
+                            </span>
+                        </div>
                     </div>
-                    <div class="min-w-0">
-                        <h4 class="text-sm font-bold text-white tracking-wide truncate">${authData.nome} - PB</h4>
-                        <span class="inline-block text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${ehAdmin ? 'bg-indigo-950/80 text-indigo-300 border border-indigo-700/60' : 'bg-slate-800 text-slate-300 border border-slate-700'} mt-0.5">
-                            ${papelLabel}
-                        </span>
-                    </div>
+                    <button type="button" onclick="event.stopPropagation(); abrirPainelMunicipio('${authData.id}', '${(authData.nome || '').replace(/'/g, "\\'")}', '${authData.papel}');" class="w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 hover:border-white/30 text-slate-200 hover:text-white flex items-center justify-center transition-all cursor-pointer shrink-0 shadow-xs mr-4" title="Gerenciador">
+                        <span class="material-symbols-outlined text-[24px]">more_vert</span>
+                    </button>
                 </div>
                 ${projectsContentHtml}
             </div>`;
@@ -3916,20 +3978,28 @@ window.initParaibaMap = async function(municipiosAutorizados = []) {
 
         window.paraibaTargetBounds = targetBounds;
 
-        if (targetBounds && targetBounds.isValid()) {
-            paraibaMapInstance.fitBounds(targetBounds, { padding: [40, 40], maxZoom: 11 });
-        }
+        fitMapToAuthorizedBounds(false);
 
-        // Garante sincronização perfeita do tamanho do container contra saltos de clique
+        // Garante sincronização perfeita do tamanho do container contra saltos de clique e renderização móvel
         setTimeout(() => {
-            if (paraibaMapInstance) paraibaMapInstance.invalidateSize();
-        }, 100);
+            if (typeof fitMapToAuthorizedBounds === 'function') fitMapToAuthorizedBounds(false);
+        }, 150);
         setTimeout(() => {
-            if (paraibaMapInstance) paraibaMapInstance.invalidateSize();
-        }, 350);
+            if (typeof fitMapToAuthorizedBounds === 'function') fitMapToAuthorizedBounds(false);
+        }, 400);
 
         window.addEventListener('resize', () => {
-            if (paraibaMapInstance) paraibaMapInstance.invalidateSize();
+            if (paraibaMapInstance && typeof fitMapToAuthorizedBounds === 'function') {
+                fitMapToAuthorizedBounds(false);
+            }
+        });
+
+        window.addEventListener('pageshow', (event) => {
+            if (paraibaMapInstance && typeof fitMapToAuthorizedBounds === 'function') {
+                setTimeout(() => {
+                    fitMapToAuthorizedBounds(false);
+                }, 100);
+            }
         });
 
         const savedView = localStorage.getItem('geogestor_home_view_mode') || 'map';
@@ -3948,10 +4018,7 @@ window.onSearchMunicipios = function(query) {
 
     const clean = normMunString(query);
     if (!clean) {
-        const resetBounds = window.paraibaTargetBounds || (paraibaGeojsonLayer ? paraibaGeojsonLayer.getBounds() : null);
-        if (resetBounds && resetBounds.isValid()) {
-            paraibaMapInstance.fitBounds(resetBounds, { padding: [40, 40], duration: 0.8, maxZoom: 11 });
-        }
+        fitMapToAuthorizedBounds(true);
         return;
     }
 
