@@ -9043,8 +9043,9 @@ async function loadRasterLayers() {
                     return true;
                 }
 
-                // Ortofoto da mesma entidade do usuário
-                if (userSigla && rSigla && userSigla === rSigla) {
+                // Ortofoto da mesma entidade: Administradores da entidade/município têm acesso por padrão; usuários comuns precisam de concessão explícita
+                const isEntidadeAdmin = !!(currentUserProfile && (currentUserProfile.entidade_admin || currentUserProfile.super_admin || currentMunicipioPapel === 'admin'));
+                if (isEntidadeAdmin && userSigla && rSigla && userSigla === rSigla) {
                     return true;
                 }
 
@@ -9610,7 +9611,8 @@ window.openSelectRasterModal = async function() {
             const rEntRaw = (r.entidade || 'Prefeitura Municipal').trim();
             const rSigla = (typeof getEntitySigla === 'function') ? getEntitySigla(rEntRaw) : 'Município';
             if (rSigla === 'Público' || rSigla === 'Geral' || rEntRaw.toLowerCase() === 'geral' || rEntRaw.toLowerCase() === 'público' || rEntRaw.toLowerCase() === 'publico') return true;
-            if (userSigla && rSigla && userSigla === rSigla) return true;
+            const isEntidadeAdmin = !!(currentUserProfile && (currentUserProfile.entidade_admin || currentUserProfile.super_admin || currentMunicipioPapel === 'admin'));
+            if (isEntidadeAdmin && userSigla && rSigla && userSigla === rSigla) return true;
             return false;
         });
 
@@ -10797,7 +10799,8 @@ window.renderSharedLayersCatalog = function() {
             if (window.myBlockedRasters && window.myBlockedRasters.has(r.id)) return;
             if (window.myRasterPerms && window.myRasterPerms.has(r.id)) canSeeRaster = true;
             else if (rSigla === 'Público' || rSigla === 'Geral' || rEntidade.toLowerCase() === 'geral' || rEntidade.toLowerCase() === 'público' || rEntidade.toLowerCase() === 'publico') canSeeRaster = true;
-            else if (!isFromOtherEntity) canSeeRaster = true;
+            const isEntidadeAdmin = !!(currentUserProfile && (currentUserProfile.entidade_admin || currentUserProfile.super_admin || (typeof currentMunicipioPapel !== 'undefined' && currentMunicipioPapel === 'admin')));
+            if (isEntidadeAdmin && !isFromOtherEntity) canSeeRaster = true;
         }
         if (!canSeeRaster) return;
 

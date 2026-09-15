@@ -1617,6 +1617,8 @@
             ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' 
             : (userObj.status === 'pendente' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20');
 
+        const isTargetUserAdmin = (userObj.papel === 'admin' || !!userObj.profile?.super_admin || userObj.profile?.papel === 'superadmin' || !!userObj.profile?.unidade_admin);
+
         // Renderiza camadas do município selecionado
         // FILTRO DE SEGURANÇA E ISOLAMENTO INSTITUCIONAL:
         // Se for um Ponto Focal de outro ente, exibe as camadas do ente do ADMIN para concessão de compartilhamento!
@@ -1642,7 +1644,12 @@
             const formVinculado = (tema.tipo_cadastro && tema.tipo_cadastro !== 'padrao') ? _allForms[tema.tipo_cadastro] : null;
             const numAbas = (formVinculado && formVinculado.tabs) ? formVinculado.tabs.length : 0;
 
-            const userCamadaPerm = _allCamadaPerms[`${userId}:${tema.id}`] || { pode_ver: false, pode_editar: false, pode_excluir: false };
+            const tEntRaw = getThemeEntity(tema);
+            const tSigla = getEntitySigla(tEntRaw);
+            const isFromOtherEntity = tSigla !== userSigla;
+
+            const hasExplicitCamadaPerm = _allCamadaPerms[`${userId}:${tema.id}`] !== undefined;
+            const userCamadaPerm = _allCamadaPerms[`${userId}:${tema.id}`] || {};
             const adminCeiling = getAdminCeiling(tema.id);
 
             // AUTO-HEAL DE HIERARQUIA:
@@ -1656,14 +1663,25 @@
                 });
             }
 
-            const podeVerCamada = !!userCamadaPerm.pode_ver || hasAnySubAbaVer;
-            const podeExcluirCamada = !!userCamadaPerm.pode_excluir;
-            const podeEstatisticaCamada = !!userCamadaPerm.pode_estatistica;
-            const podeEditarTemaCamada = !!(userCamadaPerm.pode_editar_tema || userCamadaPerm.pode_editar);
+            let podeVerCamada = false;
+            let podeExcluirCamada = false;
+            let podeEstatisticaCamada = false;
+            let podeEditarTemaCamada = false;
 
-            const tEntRaw = getThemeEntity(tema);
-            const tSigla = getEntitySigla(tEntRaw);
-            const isFromOtherEntity = tSigla !== userSigla;
+            if (hasExplicitCamadaPerm) {
+                podeVerCamada = !!userCamadaPerm.pode_ver || hasAnySubAbaVer;
+                podeExcluirCamada = !!userCamadaPerm.pode_excluir;
+                podeEstatisticaCamada = !!userCamadaPerm.pode_estatistica;
+                podeEditarTemaCamada = !!(userCamadaPerm.pode_editar_tema || userCamadaPerm.pode_editar);
+            } else if (isTargetUserAdmin && !isFromOtherEntity) {
+                // Administrador do município/ente tem acesso pleno padrão às camadas de sua própria entidade
+                podeVerCamada = true;
+                podeExcluirCamada = true;
+                podeEstatisticaCamada = true;
+                podeEditarTemaCamada = true;
+            } else {
+                podeVerCamada = hasAnySubAbaVer;
+            }
 
             let abasHtml = '';
             if (numAbas > 0) {
@@ -1673,12 +1691,20 @@
                             <span class="material-symbols-outlined text-[14px]">article</span> Abas do Formulário: ${formVinculado.title || ''}
                         </div>
                         ${formVinculado.tabs.map(tab => {
-                            const userAbaPerm = _allAbaPerms[`${userId}:${formVinculado.id}:${tab.id}`] || { pode_ver: false, pode_editar: false };
+                            const hasExplicitAbaPerm = _allAbaPerms[`${userId}:${formVinculado.id}:${tab.id}`] !== undefined;
+                            const userAbaPerm = _allAbaPerms[`${userId}:${formVinculado.id}:${tab.id}`] || {};
                             const abaCeiling = getAdminCeiling(tema.id, formVinculado.id, tab.id);
 
-                            // Respeito estrito à hierarquia: se a camada pai estiver desmarcada, a aba fica desmarcada
-                            const isAbaVerChecked = podeVerCamada && !!userAbaPerm.pode_ver;
-                            const isAbaEditarChecked = podeVerCamada && !!userAbaPerm.pode_editar;
+                            let isAbaVerChecked = false;
+                            let isAbaEditarChecked = false;
+
+                            if (hasExplicitAbaPerm) {
+                                isAbaVerChecked = podeVerCamada && !!userAbaPerm.pode_ver;
+                                isAbaEditarChecked = podeVerCamada && !!userAbaPerm.pode_editar;
+                            } else if (isTargetUserAdmin && !isFromOtherEntity && podeVerCamada) {
+                                isAbaVerChecked = true;
+                                isAbaEditarChecked = true;
+                            }
 
                             const verDisabled = (!isEditing || !abaCeiling.podeVer || !podeVerCamada) ? 'disabled' : '';
                             const editDisabled = (!isEditing || !abaCeiling.podeEditar || !podeVerCamada) ? 'disabled' : '';
@@ -1766,8 +1792,21 @@
         });
 
         const ortofotosHtml = rastersDoMunicipio.map(r => {
-            const userRasterPerm = _allRasterPerms[`${userId}:${r.id}`] || { pode_ver: false };
-            const podeVerRaster = !!userRasterPerm.pode_ver;
+            const rEntRaw = (r.entidade || 'Prefeitura Municipal').trim();
+            const rSigla = getEntitySigla(rEntRaw);
+            const isOtherRaster = rSigla !== userSigla;
+
+            const hasExplicitRasterPerm = _allRasterPerms[`${userId}:${r.id}`] !== undefined;
+            const userRasterPerm = _allRasterPerms[`${userId}:${r.id}`] || {};
+
+            let podeVerRaster = false;
+            if (hasExplicitRasterPerm) {
+                podeVerRaster = !!userRasterPerm.pode_ver;
+            } else if (isTargetUserAdmin && !isOtherRaster) {
+                // Administradores têm acesso pleno padrão às ortofotos de sua própria entidade
+                podeVerRaster = true;
+            }
+
             let dateStr = '';
             if (r.data_imagem) {
                 dateStr = r.data_imagem.split('-').reverse().join('/');
@@ -1775,10 +1814,6 @@
                 const m = r.nome.match(/(\d{2})[-/](\d{2})[-/](\d{4})/);
                 if (m) dateStr = `${m[1]}/${m[2]}/${m[3]}`;
             }
-
-            const rEntRaw = (r.entidade || 'Prefeitura Municipal').trim();
-            const rSigla = getEntitySigla(rEntRaw);
-            const isOtherRaster = rSigla !== userSigla;
 
             const canManageRaster = _currentUserProfile?.super_admin || (rSigla === minhaSigla);
             const rasterDisabled = (!isEditing || !canManageRaster) ? 'disabled' : '';
