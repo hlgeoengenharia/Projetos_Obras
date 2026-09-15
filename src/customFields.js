@@ -1209,6 +1209,7 @@ function formatDMS(lat, lng) {
     };
     return `${toDMS(lat, true)}, ${toDMS(lng, false)}`;
 }
+window.formatDMS = formatDMS;
 
 function formatUTM(lat, lng) {
     if (typeof proj4 === 'undefined') return "Proj4 não carregado";
@@ -1222,6 +1223,7 @@ function formatUTM(lat, lng) {
         return "Erro ao calcular UTM";
     }
 }
+window.formatUTM = formatUTM;
 
 
 // === ATUALIZAR TÍTULO DE ARQUIVO ===

@@ -6428,10 +6428,16 @@ function applyPermissionUIGating() {
         }
     }
 
-    // Botão de acesso ao Mapa Global na barra superior (visível apenas para Admins com acesso a mais de um município)
+    // Botão de acesso ao Mapa Global na barra superior
+    // Usuários municipais (seja Admin Municipal ou Usuário Comum Municipal) NÃO veem o globo.
+    // O globo é exclusivo para SuperAdmin ou Entes Externos/Estaduais com múltiplos municípios.
+    const entLower = String(window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').toLowerCase();
+    const isMunicipal = entLower.includes('prefeitura') || entLower.includes('municipal') || entLower.includes('município') || entLower.includes('municipio') || (!isSuperAdmin && (!window.currentUserEntidade || window.currentUserEntidade === 'Prefeitura Municipal'));
+    const podeVerGlobo = !isMunicipal && (isSuperAdmin || (window.userTotalMunicipiosAprovados && window.userTotalMunicipiosAprovados > 1));
+
     const btnGlobalMap = document.getElementById('btn-global-map');
     if (btnGlobalMap) {
-        if (isAdmin && temMultiplosMunicipios) {
+        if (podeVerGlobo) {
             btnGlobalMap.classList.remove('hidden');
             btnGlobalMap.style.display = 'flex';
         } else {
@@ -6981,10 +6987,15 @@ function applyCurrentUserToProfileModal() {
         }
     }
 
-    // Botão do Mapa Global (Globo) - Exclusivo para Admins com acesso a mais de um município
+    // Botão do Mapa Global (Globo) - Exclusivo para SuperAdmin ou Entes Externos com múltiplos municípios
+    // Se for Admin ou Usuário Municipal (Prefeitura), permanece oculto
+    const entLowerProfile = String(window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').toLowerCase();
+    const isMunicipalProfile = entLowerProfile.includes('prefeitura') || entLowerProfile.includes('municipal') || entLowerProfile.includes('município') || entLowerProfile.includes('municipio') || (!isSuperAdmin && (!window.currentUserEntidade || window.currentUserEntidade === 'Prefeitura Municipal'));
+    const podeVerGloboProfile = !isMunicipalProfile && (isSuperAdmin || (window.userTotalMunicipiosAprovados && window.userTotalMunicipiosAprovados > 1));
+
     const btnGlobalMap = document.getElementById('btn-global-map');
     if (btnGlobalMap) {
-        if (isAdmin && temMultiplosMunicipios) {
+        if (podeVerGloboProfile) {
             btnGlobalMap.classList.remove('hidden');
             btnGlobalMap.style.display = 'flex';
         } else {

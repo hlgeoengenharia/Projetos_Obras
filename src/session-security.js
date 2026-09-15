@@ -203,6 +203,66 @@
         }
     }
 
+    // Modal LGPD / Termos de Uso em todas as telas protegidas
+    function ensureLgpdModal() {
+        try {
+            if (sessionStorage.getItem('geogestor_lgpd_accepted') === 'true') {
+                return;
+            }
+        } catch(e) {}
+
+        if (document.getElementById('session-lgpd-modal')) {
+            return;
+        }
+
+        const modalDiv = document.createElement('div');
+        modalDiv.id = 'session-lgpd-modal';
+        modalDiv.style.zIndex = '999998';
+        modalDiv.className = 'fixed inset-0 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4 select-none';
+        modalDiv.innerHTML = `
+            <div class="bg-white dark:bg-[#0B1120] text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 w-full max-w-xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                <div class="px-6 pt-6 pb-2 text-center border-b border-slate-100 dark:border-slate-800/80">
+                    <h2 class="text-xl md:text-2xl font-black text-slate-800 dark:text-white tracking-tight">Termos de Uso</h2>
+                    <h3 class="text-xs md:text-sm font-bold text-slate-600 dark:text-slate-300 mt-1">Aviso para Proteção dos Dados Pessoais (LGPD)</h3>
+                </div>
+                <div class="p-6 overflow-y-auto max-h-[58vh] space-y-4 text-xs md:text-sm text-slate-600 dark:text-slate-300 leading-relaxed text-justify">
+                    <p>
+                        Os dados pessoais acessados por meio do sistema devem ser utilizados exclusivamente para o cumprimento de finalidades de interesse público e das atribuições legais do serviço público, sendo vedada sua utilização posterior para fins incompatíveis com aqueles que justificaram o acesso.
+                    </p>
+                    <p>
+                        O acesso e o tratamento dos dados pessoais devem limitar-se ao estritamente necessário para o cumprimento da finalidade pública específica, abrangendo somente informações pertinentes e adequadas, de forma proporcional e sem utilização de dados excessivos.
+                    </p>
+                    <p>
+                        Com o objetivo de assegurar a proteção e a segurança das informações, os dados pessoais obtidos por meio do <strong>GeoGestor</strong> deverão ser mantidos sob sigilo e ter seu acesso restrito aos agentes públicos devidamente legitimados. As alterações e edições realizadas no sistema permanecerão registradas, para fins de rastreabilidade e identificação dos respectivos responsáveis.
+                    </p>
+                    <p>
+                        A violação às disposições da LGPD pode ensejar a responsabilização dos agentes públicos nas esferas administrativo-disciplinar, cível e criminal.
+                    </p>
+                </div>
+                <div class="px-6 py-4 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-100 dark:border-slate-800/80 flex justify-center">
+                    <button id="session-lgpd-continue-btn" type="button" class="w-full sm:w-auto min-w-[200px] px-8 py-3 bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-sm uppercase tracking-wider rounded-xl transition-all shadow-md shadow-orange-500/20 active:scale-95 cursor-pointer flex items-center justify-center gap-2">
+                        <span>Continuar</span>
+                    </button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modalDiv);
+
+        const btn = document.getElementById('session-lgpd-continue-btn');
+        if (btn) {
+            btn.addEventListener('click', function() {
+                try {
+                    sessionStorage.setItem('geogestor_lgpd_accepted', 'true');
+                } catch(e) {}
+                if (window.auditLogger && typeof window.auditLogger.log === 'function') {
+                    window.auditLogger.log('TERMO_LGPD_CIENTE', 'Ciência e aceite dos Termos de Uso e Proteção de Dados (LGPD)');
+                }
+                modalDiv.remove();
+            });
+        }
+    }
+
     // Inicia o módulo de segurança com validação rigorosa pré-renderização
     function initSessionSecurity() {
         const currentPath = window.location.pathname.toLowerCase();
@@ -225,6 +285,7 @@
         // Se está válido, registra a atividade atual
         recordActivity();
         ensureWarningModal();
+        ensureLgpdModal();
 
         // Eventos Globais de Monitoramento
         const activityEvents = ['mousemove', 'mousedown', 'pointerdown', 'keydown', 'touchstart', 'wheel', 'scroll'];

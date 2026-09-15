@@ -96,8 +96,48 @@
     </p>
   </div>
 
+  <!-- Modal LGPD / Termos de Uso (Padrão Institucional) -->
+  <div id="lgpd-modal" class="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm hidden flex items-center justify-center p-4 select-none">
+    <div class="bg-white dark:bg-[#0B1120] text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 w-full max-w-xl flex flex-col overflow-hidden">
+      
+      <!-- Cabeçalho -->
+      <div class="px-6 pt-6 pb-2 text-center border-b border-slate-100 dark:border-slate-800/80">
+        <h2 class="text-xl md:text-2xl font-black text-slate-800 dark:text-white tracking-tight">Termos de Uso</h2>
+        <h3 class="text-xs md:text-sm font-bold text-slate-600 dark:text-slate-300 mt-1">Aviso para Proteção dos Dados Pessoais (LGPD)</h3>
+      </div>
+
+      <!-- Conteúdo do Termo com rolagem suave -->
+      <div class="p-6 overflow-y-auto max-h-[58vh] space-y-4 text-xs md:text-sm text-slate-600 dark:text-slate-300 leading-relaxed text-justify">
+        <p>
+          Os dados pessoais acessados por meio do sistema devem ser utilizados exclusivamente para o cumprimento de finalidades de interesse público e das atribuições legais do serviço público, sendo vedada sua utilização posterior para fins incompatíveis com aqueles que justificaram o acesso.
+        </p>
+
+        <p>
+          O acesso e o tratamento dos dados pessoais devem limitar-se ao estritamente necessário para o cumprimento da finalidade pública específica, abrangendo somente informações pertinentes e adequadas, de forma proporcional e sem utilização de dados excessivos.
+        </p>
+
+        <p>
+          Com o objetivo de assegurar a proteção e a segurança das informações, os dados pessoais obtidos por meio do <strong>GeoGestor</strong> deverão ser mantidos sob sigilo e ter seu acesso restrito aos agentes públicos devidamente legitimados. As alterações e edições realizadas no sistema permanecerão registradas, para fins de rastreabilidade e identificação dos respectivos responsáveis.
+        </p>
+
+        <p>
+          A violação às disposições da LGPD pode ensejar a responsabilização dos agentes públicos nas esferas administrativo-disciplinar, cível e criminal.
+        </p>
+      </div>
+
+      <!-- Rodapé com Botão Continuar -->
+      <div class="px-6 py-4 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-100 dark:border-slate-800/80 flex justify-center">
+        <button id="lgpd-continue-btn" type="button" class="w-full sm:w-auto min-w-[200px] px-8 py-3 bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-sm uppercase tracking-wider rounded-xl transition-all shadow-md shadow-orange-500/20 active:scale-95 cursor-pointer flex items-center justify-center gap-2">
+          <span>Continuar</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js"></script>
+<script src="src/auditLogger.js"></script>
 <script>
 (function() {
   const form = document.getElementById('login-form');
@@ -182,6 +222,82 @@
     }
   }
 
+  function showLgpdModal(onConfirm) {
+    const lgpdModal = document.getElementById('lgpd-modal');
+    const continueBtn = document.getElementById('lgpd-continue-btn');
+    if (!lgpdModal || !continueBtn) {
+      if (typeof onConfirm === 'function') onConfirm();
+      return;
+    }
+
+    lgpdModal.classList.remove('hidden');
+
+    continueBtn.onclick = async function() {
+      continueBtn.disabled = true;
+      continueBtn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span> Processando...';
+
+      if (window.auditLogger && typeof window.auditLogger.log === 'function') {
+        window.auditLogger.log('TERMO_LGPD_CIENTE', 'Ciência e aceite dos Termos de Uso e Proteção de Dados (LGPD)');
+      }
+
+      try {
+        sessionStorage.setItem('geogestor_lgpd_accepted', 'true');
+      } catch(e) {}
+
+      lgpdModal.classList.add('hidden');
+      if (typeof onConfirm === 'function') {
+        await onConfirm();
+      }
+    };
+  }
+
+  async function sendLoginNotification(user) {
+    if (!user || !user.email) return;
+
+    try {
+      const agora = new Date();
+      const dataFormatada = agora.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+      const horaFormatada = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+      const userAgent = navigator.userAgent;
+
+      let browser = 'Navegador Web';
+      if (userAgent.includes('Chrome') && !userAgent.includes('Edg')) browser = 'Google Chrome';
+      else if (userAgent.includes('Firefox')) browser = 'Mozilla Firefox';
+      else if (userAgent.includes('Safari') && !userAgent.includes('Chrome')) browser = 'Safari';
+      else if (userAgent.includes('Edg')) browser = 'Microsoft Edge';
+
+      let os = 'Dispositivo';
+      if (userAgent.includes('Windows')) os = 'Windows';
+      else if (userAgent.includes('Android')) os = 'Android';
+      else if (userAgent.includes('iPhone') || userAgent.includes('iPad')) os = 'iOS';
+      else if (userAgent.includes('Macintosh')) os = 'macOS';
+      else if (userAgent.includes('Linux')) os = 'Linux';
+
+      const userName = user.user_metadata?.nome || user.user_metadata?.nome_completo || user.email.split('@')[0];
+
+      if (window.auditLogger && typeof window.auditLogger.log === 'function') {
+        window.auditLogger.log('ALERTA_LOGIN_DISPARADO', `Notificação de acesso enviada para ${user.email} (${dataFormatada} às ${horaFormatada})`);
+      }
+
+      if (supabaseClient && supabaseClient.functions) {
+        supabaseClient.functions.invoke('send-login-alert', {
+          body: {
+            email: user.email,
+            nome: userName,
+            data: dataFormatada,
+            hora: horaFormatada,
+            dispositivo: `${browser} em ${os}`,
+            timestamp: agora.toISOString()
+          }
+        }).catch(err => {
+          console.warn('[Alerta Login] Notificação de e-mail registrada localmente:', err?.message || err);
+        });
+      }
+    } catch(err) {
+      console.warn('Erro ao processar notificação de login:', err);
+    }
+  }
+
   // Já logado?
   (async function redirectIfLoggedIn() {
     const params = new URLSearchParams(window.location.search);
@@ -194,7 +310,11 @@
     if (!supabaseClient) return;
     const { data } = await supabaseClient.auth.getSession();
     if (data && data.session) {
-      await handlePostLoginRouting(data.session.user.id);
+      if (sessionStorage.getItem('geogestor_lgpd_accepted') === 'true') {
+        await handlePostLoginRouting(data.session.user.id);
+      } else {
+        showLgpdModal(() => handlePostLoginRouting(data.session.user.id));
+      }
     }
   })();
 
@@ -233,13 +353,17 @@
       if (window.auditLogger && typeof window.auditLogger.log === 'function') {
         window.auditLogger.log('LOGIN', 'Autenticação realizada com sucesso');
       }
-      await handlePostLoginRouting(authData.user.id);
+
+      // Envia notificação por e-mail (não bloqueia o fluxo)
+      sendLoginNotification(authData.user);
+
+      // Exibe os Termos de Uso / LGPD antes de entrar no sistema
+      showLgpdModal(() => handlePostLoginRouting(authData.user.id));
     } else {
       window.location.href = 'home.html';
     }
   });
 })();
 </script>
-<script src="src/auditLogger.js"></script>
 </body>
 </html>

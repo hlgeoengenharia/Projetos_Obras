@@ -249,20 +249,20 @@
     <!-- Canto Esquerdo: Card do Município (Estado Padrão OU Card Envolvendo os 3) -->
     <div class="flex items-center shrink-0">
       
-      <!-- ESTADO PADRÃO (vendo os 8 cards): Apenas o Globo apontando para o início (mapa do estado) -->
-      <a id="header-mun-default-card" href="home.html" onclick="if(window.voltarParaMunicipios){ event.preventDefault(); window.voltarParaMunicipios(true); }" class="header-glass-card flex w-9 h-9 sm:w-10 sm:h-10 rounded-2xl text-primary dark:text-sky-400 items-center justify-center hover:bg-white/40 dark:hover:bg-white/10 transition-all cursor-pointer shadow-xs shrink-0" title="Início / Selecionar Outro Município (Mapa Geral do Estado)">
+      <!-- ESTADO PADRÃO (vendo os 8 cards): Globo para início (exclusivo para quem gerencia múltiplos municípios) -->
+      <a id="header-mun-default-card" href="home.html" onclick="if(window.voltarParaMunicipios){ event.preventDefault(); window.voltarParaMunicipios(true); }" class="hidden header-glass-card w-9 h-9 sm:w-10 sm:h-10 rounded-2xl text-primary dark:text-sky-400 items-center justify-center hover:bg-white/40 dark:hover:bg-white/10 transition-all cursor-pointer shadow-xs shrink-0" title="Início / Selecionar Outro Município (Mapa Geral do Estado)">
         <span class="material-symbols-outlined text-[20px] sm:text-[22px]">public</span>
       </a>
 
-      <!-- ESTADO COM CARD ACESSADO: Card Envolvendo os 3 (O Globo, O Nome do Card Acessado e A Seta de Retorno) -->
+      <!-- ESTADO COM CARD ACESSADO: Card Envolvendo os elementos (Globo se autorizado, Nome do Card e Seta de Retorno) -->
       <div id="header-mun-card-active-box" class="hidden header-glass-card items-center p-0.5 md:p-1 rounded-2xl gap-2 sm:gap-2.5 px-2.5 md:px-3 shadow-xs select-none">
-        <!-- 1. O Globo apontando para o início (mapa do estado) -->
-        <a href="home.html" onclick="if(window.voltarParaMunicipios){ event.preventDefault(); window.voltarParaMunicipios(true); }" class="flex w-8 h-8 md:w-9 md:h-9 rounded-xl hover:bg-white/30 dark:hover:bg-white/10 text-primary dark:text-sky-400 items-center justify-center transition-all cursor-pointer shrink-0" title="Início / Mapa do Estado">
+        <!-- 1. O Globo apontando para o início (mapa do estado - exclusivo múltiplos municípios) -->
+        <a id="header-mun-active-globe" href="home.html" onclick="if(window.voltarParaMunicipios){ event.preventDefault(); window.voltarParaMunicipios(true); }" class="hidden w-8 h-8 md:w-9 md:h-9 rounded-xl hover:bg-white/30 dark:hover:bg-white/10 text-primary dark:text-sky-400 items-center justify-center transition-all cursor-pointer shrink-0" title="Início / Mapa do Estado">
           <span class="material-symbols-outlined text-[20px] md:text-[22px]">public</span>
         </a>
 
         <!-- Divisor vertical sutil -->
-        <div class="w-[1px] h-4 bg-slate-300 dark:bg-slate-700/60 my-auto"></div>
+        <div id="header-mun-active-globe-divider" class="hidden w-[1px] h-4 bg-slate-300 dark:bg-slate-700/60 my-auto"></div>
 
         <!-- 2. O Nome do Card Acessado -->
         <span id="header-mun-card-active-title" class="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-slate-800 dark:text-slate-100 truncate max-w-[140px] sm:max-w-[240px]">ESTATÍSTICA</span>
@@ -1010,6 +1010,68 @@
 const PAPEL_LABELS = { admin: 'Administrador', editor: 'Usuário', visualizador: 'Usuário', externo: 'Usuário' };
 let homeUserProfile = null;
 
+// Regra institucional de visibilidade do ícone do Globo:
+// Usuários municipais (Admin Municipal ou Usuário Municipal) NÃO veem o globo.
+// O globo é exclusivo para SuperAdmin ou Entes Externos que gerenciam múltiplos municípios.
+window.userPodeVerGlobo = function() {
+    if (!homeUserProfile) return false;
+    if (homeUserProfile.super_admin) return true;
+
+    const entLower = String(homeUserProfile.entidade || homeUserProfile.entidade_nome || window.currentUserEntidade || '').toLowerCase();
+    const isMunicipal = entLower.includes('prefeitura') || entLower.includes('municipal') || entLower.includes('município') || entLower.includes('municipio') || (!homeUserProfile.super_admin && (!entLower || entLower === 'prefeitura municipal'));
+    if (isMunicipal) return false;
+
+    const totalMuns = (window.municipiosParaMostrarCache && window.municipiosParaMostrarCache.length) || 0;
+    return totalMuns > 1;
+};
+
+window.atualizarVisibilidadeGloboHome = function() {
+    const podeVer = typeof window.userPodeVerGlobo === 'function' && window.userPodeVerGlobo();
+
+    const portalCard = document.getElementById('header-portal-card');
+    if (portalCard) {
+        if (podeVer) {
+            portalCard.classList.remove('hidden');
+            portalCard.style.display = 'flex';
+        } else {
+            portalCard.classList.add('hidden');
+            portalCard.style.display = 'none';
+        }
+    }
+
+    const munDefaultCard = document.getElementById('header-mun-default-card');
+    if (munDefaultCard) {
+        if (podeVer) {
+            munDefaultCard.classList.remove('hidden');
+            munDefaultCard.style.display = 'flex';
+        } else {
+            munDefaultCard.classList.add('hidden');
+            munDefaultCard.style.display = 'none';
+        }
+    }
+
+    const activeGlobe = document.getElementById('header-mun-active-globe');
+    const activeDivider = document.getElementById('header-mun-active-globe-divider');
+    if (activeGlobe) {
+        if (podeVer) {
+            activeGlobe.classList.remove('hidden');
+            activeGlobe.style.display = 'flex';
+        } else {
+            activeGlobe.classList.add('hidden');
+            activeGlobe.style.display = 'none';
+        }
+    }
+    if (activeDivider) {
+        if (podeVer) {
+            activeDivider.classList.remove('hidden');
+            activeDivider.style.display = 'block';
+        } else {
+            activeDivider.classList.add('hidden');
+            activeDivider.style.display = 'none';
+        }
+    }
+};
+
 const SETTINGS_TABS = ['cadastros', 'estatistica', 'layout', 'storage', 'usuarios', 'auditoria'];
 let currentActiveSettingsTab = null;
 
@@ -1160,10 +1222,19 @@ window.abrirPainelMunicipio = function(id, nome, papel = null) {
         munHeader.classList.add('flex');
     }
 
-    // Exibe card padrão do município (Globo + Nome + Base Territorial)
+    // Exibe card padrão do município (Globo apenas para quem gerencia múltiplos municípios ou é SuperAdmin)
     const defaultCard = document.getElementById('header-mun-default-card');
     const activeBox = document.getElementById('header-mun-card-active-box');
-    if (defaultCard) defaultCard.classList.remove('hidden');
+    const podeVerGlobo = typeof window.userPodeVerGlobo === 'function' && window.userPodeVerGlobo();
+    if (defaultCard) {
+        if (podeVerGlobo) {
+            defaultCard.classList.remove('hidden');
+            defaultCard.style.display = 'flex';
+        } else {
+            defaultCard.classList.add('hidden');
+            defaultCard.style.display = 'none';
+        }
+    }
     if (activeBox) {
         activeBox.classList.add('hidden');
         activeBox.classList.remove('inline-flex');
@@ -1669,10 +1740,12 @@ window.switchMunicipioTab = function(sectionOrTab, btn) {
     };
     const tabLabel = (TAB_NAMES[sectionOrTab] || sectionOrTab).toUpperCase();
 
-    // Ativa card unificado envolvendo os 3: Globo + Nome do Card + Seta de Retorno
+    // Ativa card unificado envolvendo os elementos: Globo (se autorizado) + Nome do Card + Seta de Retorno
     const defaultCard = document.getElementById('header-mun-default-card');
     const activeBox = document.getElementById('header-mun-card-active-box');
     const activeTitle = document.getElementById('header-mun-card-active-title');
+    const activeGlobe = document.getElementById('header-mun-active-globe');
+    const activeDivider = document.getElementById('header-mun-active-globe-divider');
 
     if (defaultCard) defaultCard.classList.add('hidden');
     if (activeBox) {
@@ -1681,6 +1754,26 @@ window.switchMunicipioTab = function(sectionOrTab, btn) {
     }
     if (activeTitle) {
         activeTitle.textContent = tabLabel;
+    }
+
+    const podeVer = typeof window.userPodeVerGlobo === 'function' && window.userPodeVerGlobo();
+    if (activeGlobe) {
+        if (podeVer) {
+            activeGlobe.classList.remove('hidden');
+            activeGlobe.style.display = 'flex';
+        } else {
+            activeGlobe.classList.add('hidden');
+            activeGlobe.style.display = 'none';
+        }
+    }
+    if (activeDivider) {
+        if (podeVer) {
+            activeDivider.classList.remove('hidden');
+            activeDivider.style.display = 'block';
+        } else {
+            activeDivider.classList.add('hidden');
+            activeDivider.style.display = 'none';
+        }
     }
 
     const btnVoltarCards = document.getElementById('btn-voltar-cards-municipio');
@@ -3349,6 +3442,9 @@ async function init() {
     }
     window.municipiosParaMostrarCache = municipiosParaMostrar;
     applyCurrentUserToProfileModal();
+    if (typeof window.atualizarVisibilidadeGloboHome === 'function') {
+        window.atualizarVisibilidadeGloboHome();
+    }
 
     // Se o usuário tiver um único município aprovado e não for SuperAdmin:
     // Se a URL pedir ?view=municipio ou ?tab=..., deixa seguir para abrir o painel de gestão!

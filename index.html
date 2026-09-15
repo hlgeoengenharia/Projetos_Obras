@@ -366,6 +366,16 @@
       #shared-layers-accordion::-webkit-scrollbar-thumb:hover {
         background-color: #0369a1;
       }
+
+      /* Animação do Marcador Pulsante de Consulta de Coordenadas */
+      @keyframes coord-pulse-ring {
+        0% { transform: scale(0.6); opacity: 0.95; }
+        100% { transform: scale(2.4); opacity: 0; }
+      }
+      .custom-query-coord-marker {
+        background: transparent !important;
+        border: none !important;
+      }
     </style>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
@@ -416,7 +426,7 @@
 <div class="flex items-center gap-2 md:gap-3 shrink-0">
   <!-- Card da Base Municipal + Ícone do Mapa Global (Globo) -->
   <div id="header-municipio-card" class="header-glass-card inline-flex items-center p-0.5 md:p-1 rounded-2xl gap-1.5 px-2 md:px-2.5">
-    <!-- Ícone do Mapa Global (Globo) - Exclusivo para Admins com acesso a mais de um município -->
+    <!-- Ícone do Mapa Global (Globo) - Exclusivo para SuperAdmin ou Entes Externos com múltiplos municípios -->
     <a id="btn-global-map" href="home.html" class="hidden flex w-8 h-8 md:w-9 md:h-9 rounded-xl hover:bg-white/30 dark:hover:bg-white/10 text-primary dark:text-sky-400 items-center justify-center transition-all cursor-pointer tooltip tooltip-bottom shrink-0" title="Retornar ao Mapa Global / Municípios">
       <span class="material-symbols-outlined text-[20px] md:text-[22px]">public</span>
     </a>
@@ -468,6 +478,10 @@
         <button type="button" onclick="selectMeasurementOption('Marker')" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer text-left">
           <span class="material-symbols-outlined text-[19px] text-emerald-500 shrink-0">location_on</span>
           <span class="truncate">Coordenadas do Ponto</span>
+        </button>
+        <button type="button" onclick="selectMeasurementOption('CoordinateQuery')" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer text-left">
+          <span class="material-symbols-outlined text-[19px] text-emerald-500 shrink-0">travel_explore</span>
+          <span class="truncate">Consultar Coordenadas</span>
         </button>
         <button type="button" onclick="selectMeasurementOption('Line')" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer text-left">
           <span class="material-symbols-outlined text-[19px] text-emerald-500 shrink-0">timeline</span>
@@ -668,6 +682,157 @@
         </button>
         <button id="btn-save-measurement" class="flex-1 py-2 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 opacity-50 cursor-not-allowed" disabled onclick="saveMeasurementPDF()">
             <span class="material-symbols-outlined text-[16px]">picture_as_pdf</span> Salvar
+        </button>
+    </div>
+</div>
+
+<!-- Coordinate Query Panel (Consultar / Inserir Coordenadas) -->
+<div id="coordinate-query-panel" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[1001] hidden flex flex-col gap-3 w-[92%] max-w-md bg-white/95 dark:bg-[#0B1120]/95 backdrop-blur-xl rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.5)] border border-slate-200/60 dark:border-white/10 p-4 transition-all duration-300">
+    <!-- Header / Drag Handle -->
+    <div class="flex items-center justify-between border-b border-slate-200/50 dark:border-white/10 pb-2.5 cursor-move select-none" id="coordinate-query-panel-header">
+        <h3 class="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2 pointer-events-none">
+            <span class="material-symbols-outlined text-emerald-500">travel_explore</span> Consultar Coordenadas
+        </h3>
+        <div class="flex items-center gap-1.5">
+            <button id="btn-toggle-viewfinder-coord" type="button" class="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors text-slate-600 dark:text-slate-300 tooltip tooltip-left cursor-pointer" title="Enquadrar Impressão A4" onclick="togglePrintViewfinder()">
+                <span class="material-symbols-outlined text-[17px]">crop_free</span>
+                <span class="text-[11px] font-semibold hidden sm:inline">Enquadrar A4</span>
+            </button>
+            <button type="button" class="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer" onclick="closeCoordinateQueryPanel()" title="Fechar">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Tabs de Formato: DEC | GMS | UTM -->
+    <div class="flex rounded-xl bg-slate-100 dark:bg-slate-800/80 p-1 gap-1 border border-slate-200/50 dark:border-slate-700/60 select-none">
+        <button type="button" id="tab-coord-dec" onclick="switchCoordinateQueryTab('DEC')" class="flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs">
+            DEC <span class="text-[10px] opacity-75 font-normal hidden sm:inline">(Graus)</span>
+        </button>
+        <button type="button" id="tab-coord-gms" onclick="switchCoordinateQueryTab('GMS')" class="flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all flex items-center justify-center gap-1 cursor-pointer">
+            GMS <span class="text-[10px] opacity-75 font-normal hidden sm:inline">(G° M' S")</span>
+        </button>
+        <button type="button" id="tab-coord-utm" onclick="switchCoordinateQueryTab('UTM')" class="flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all flex items-center justify-center gap-1 cursor-pointer">
+            UTM <span class="text-[10px] opacity-75 font-normal hidden sm:inline">(Métrico)</span>
+        </button>
+    </div>
+
+    <!-- Formulários -->
+    <div class="flex flex-col gap-2.5 text-left">
+        <!-- FORM 1: DEC (Decimal) -->
+        <div id="form-coord-dec" class="flex flex-col gap-2">
+            <div class="grid grid-cols-2 gap-2">
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Latitude (Y)</label>
+                    <input type="text" id="input-coord-dec-lat" placeholder="Ex: -7.019674" class="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500" oninput="handleDecInputAutoSplit(event)">
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Longitude (X)</label>
+                    <input type="text" id="input-coord-dec-lng" placeholder="Ex: -34.832625" class="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                </div>
+            </div>
+            <span class="text-[10px] text-slate-400 dark:text-slate-500 italic">Dica: Você pode colar "Lat, Lng" direto em qualquer um dos campos.</span>
+        </div>
+
+        <!-- FORM 2: GMS (Graus Minutos Segundos) -->
+        <div id="form-coord-gms" class="hidden flex flex-col gap-2">
+            <div class="flex flex-col gap-1">
+                <label class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Colar GMS Completo</label>
+                <input type="text" id="input-coord-gms-paste" placeholder="Ex: 7° 1' 10&quot; S, 34° 49' 57&quot; W" class="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500" oninput="handleGmsPasteAutoFill(event)">
+            </div>
+            <div class="flex flex-col gap-1">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Latitude</span>
+                <div class="grid grid-cols-4 gap-1.5">
+                    <input type="number" id="input-coord-gms-lat-deg" placeholder="Graus °" class="w-full px-2 py-1 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none">
+                    <input type="number" id="input-coord-gms-lat-min" placeholder="Min '" class="w-full px-2 py-1 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none">
+                    <input type="number" step="0.01" id="input-coord-gms-lat-sec" placeholder="Seg ''" class="w-full px-2 py-1 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none">
+                    <select id="input-coord-gms-lat-dir" class="w-full px-1.5 py-1 text-xs font-bold rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer">
+                        <option value="S" selected>S (Sul)</option>
+                        <option value="N">N (Norte)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="flex flex-col gap-1">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Longitude</span>
+                <div class="grid grid-cols-4 gap-1.5">
+                    <input type="number" id="input-coord-gms-lng-deg" placeholder="Graus °" class="w-full px-2 py-1 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none">
+                    <input type="number" id="input-coord-gms-lng-min" placeholder="Min '" class="w-full px-2 py-1 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none">
+                    <input type="number" step="0.01" id="input-coord-gms-lng-sec" placeholder="Seg ''" class="w-full px-2 py-1 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none">
+                    <select id="input-coord-gms-lng-dir" class="w-full px-1.5 py-1 text-xs font-bold rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer">
+                        <option value="W" selected>W (Oeste)</option>
+                        <option value="E">E (Leste)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- FORM 3: UTM (Métrica) -->
+        <div id="form-coord-utm" class="hidden flex flex-col gap-2">
+            <div class="grid grid-cols-2 gap-2">
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Zona / Fuso UTM</label>
+                    <select id="input-coord-utm-zone" class="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer">
+                        <option value="25" selected>Zona 25S (Litoral / PB Leste)</option>
+                        <option value="24">Zona 24S (Sertão / PB Oeste)</option>
+                        <option value="23">Zona 23S</option>
+                        <option value="22">Zona 22S</option>
+                        <option value="21">Zona 21S</option>
+                        <option value="20">Zona 20S</option>
+                    </select>
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Hemisfério / Datum</label>
+                    <div class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700 text-slate-600 dark:text-slate-300 truncate">
+                        Sul (SIRGAS 2000)
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Coordenada X / Este (E)</label>
+                    <input type="text" id="input-coord-utm-x" placeholder="Ex: 297559.46" class="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Coordenada Y / Norte (N)</label>
+                    <input type="text" id="input-coord-utm-y" placeholder="Ex: 9223680.48" class="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                </div>
+            </div>
+        </div>
+
+        <!-- Mensagem de feedback de erro / validação -->
+        <div id="coord-query-error" class="hidden text-xs text-rose-500 font-medium py-1 px-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-center"></div>
+
+        <!-- Resultado do Ponto Localizado -->
+        <div id="coord-query-result-box" class="hidden flex flex-col gap-1.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 text-left">
+            <div class="flex items-center justify-between pb-1 border-b border-slate-200 dark:border-slate-700">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[14px]">check_circle</span> Ponto Localizado no Mapa
+                </span>
+                <button type="button" onclick="copyQueriedCoordinates()" class="text-[10px] text-slate-500 dark:text-slate-400 hover:text-emerald-500 flex items-center gap-0.5 cursor-pointer font-semibold" title="Copiar Coordenadas">
+                    <span class="material-symbols-outlined text-[13px]">content_copy</span> Copiar
+                </button>
+            </div>
+            <div class="flex flex-col gap-1 text-[11px] font-mono text-slate-700 dark:text-slate-200">
+                <div class="flex items-center gap-1.5"><span class="text-[9px] font-bold text-slate-400 w-8">DEC</span> <span id="res-coord-dec">-</span></div>
+                <div class="flex items-center gap-1.5"><span class="text-[9px] font-bold text-slate-400 w-8">GMS</span> <span id="res-coord-gms">-</span></div>
+                <div class="flex items-center gap-1.5"><span class="text-[9px] font-bold text-slate-400 w-8">UTM</span> <span id="res-coord-utm">-</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Botões de Ação -->
+    <div class="flex gap-2 pt-2 border-t border-slate-200/50 dark:border-white/10">
+        <button type="button" class="py-2 px-3 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 cursor-pointer" onclick="closeCoordinateQueryPanel()">
+            <span class="material-symbols-outlined text-[16px]">close</span> Sair
+        </button>
+        <button type="button" id="btn-clear-query-coord" class="py-2 px-3 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 font-semibold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 cursor-pointer" onclick="clearQueriedCoordinates()">
+            <span class="material-symbols-outlined text-[16px]">delete_sweep</span> Limpar
+        </button>
+        <button type="button" id="btn-locate-coords" class="flex-1 py-2 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-xs uppercase tracking-wider transition-all shadow-md shadow-emerald-500/20 flex items-center justify-center gap-1.5 cursor-pointer" onclick="locateCoordinatesOnMap()">
+            <span class="material-symbols-outlined text-[17px]">pin_drop</span> Localizar no Mapa
+        </button>
+        <button type="button" id="btn-save-coord-pdf" class="py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs uppercase tracking-wider transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1.5 cursor-pointer" onclick="saveMeasurementPDF()" title="Salvar em PDF">
+            <span class="material-symbols-outlined text-[17px]">picture_as_pdf</span> Salvar
         </button>
     </div>
 </div>

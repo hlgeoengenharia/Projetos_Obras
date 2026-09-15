@@ -411,6 +411,50 @@ const hasParceirosNomeUfMapping = ugUpdatedCode.includes('munLabel = `${m.nome}-
 assertTest('Parceiros & Entes: Municípios mapeados individualmente no formato Nome-UF com suporte a contagem zero', hasParceirosNomeUfMapping);
 
 
+const mainJsHeaderCode = fs.readFileSync('src/main.js', 'utf8');
+const hasGlobalMapMunicipalGating = indexHtmlContent.includes('id="btn-global-map" href="home.html" class="hidden') &&
+    mainJsHeaderCode.includes('podeVerGlobo') &&
+    mainJsHeaderCode.includes('isMunicipal') &&
+    mainJsHeaderCode.includes("btnGlobalMap.classList.add('hidden')");
+assertTest('Header: Ícone do globo (btn-global-map) oculto para Admins e Usuários Municipais e condicionado a SuperAdmin/Entes Externos', hasGlobalMapMunicipalGating);
+
+const updatedHomeHtml = fs.readFileSync('home.html', 'utf8');
+const hasHomeGloboMunicipalGating = updatedHomeHtml.includes('window.userPodeVerGlobo') &&
+    updatedHomeHtml.includes('atualizarVisibilidadeGloboHome') &&
+    updatedHomeHtml.includes('id="header-mun-default-card" href="home.html" onclick="if(window.voltarParaMunicipios){ event.preventDefault(); window.voltarParaMunicipios(true); }" class="hidden') &&
+    updatedHomeHtml.includes('id="header-mun-active-globe"');
+assertTest('Home: Ícone do globo oculto em home.html?view=municipio para Admins e Usuários Municipais', hasHomeGloboMunicipalGating);
+
+const measurementJsCode = fs.readFileSync('src/measurement.js', 'utf8');
+const hasCoordinateQueryFeature = indexHtmlContent.includes("selectMeasurementOption('CoordinateQuery')") &&
+    indexHtmlContent.includes('id="coordinate-query-panel"') &&
+    indexHtmlContent.includes('id="tab-coord-dec"') &&
+    indexHtmlContent.includes('id="tab-coord-gms"') &&
+    indexHtmlContent.includes('id="tab-coord-utm"') &&
+    measurementJsCode.includes('locateCoordinatesOnMap') &&
+    measurementJsCode.includes('convertUtmToLatLng');
+assertTest('Ferramenta de Medição: Opção "Consultar Coordenadas" com suporte a DEC, GMS e UTM implementada', hasCoordinateQueryFeature);
+
+const loginHtmlContent = fs.readFileSync('login.html', 'utf8');
+const sessionSecurityJsCode = fs.readFileSync('src/session-security.js', 'utf8');
+
+const hasLgpdModalFeature = loginHtmlContent.includes('id="lgpd-modal"') &&
+    loginHtmlContent.includes('Termos de Uso') &&
+    loginHtmlContent.includes('Aviso para Proteção dos Dados Pessoais (LGPD)') &&
+    loginHtmlContent.includes('id="lgpd-continue-btn"') &&
+    loginHtmlContent.includes('TERMO_LGPD_CIENTE') &&
+    sessionSecurityJsCode.includes('ensureLgpdModal') &&
+    sessionSecurityJsCode.includes("sessionStorage.setItem('geogestor_lgpd_accepted'");
+assertTest('LGPD / Segurança: Modal institucional de Termos de Uso e Proteção de Dados (LGPD) implementado com auditoria', hasLgpdModalFeature);
+
+const hasLoginEmailNotificationFeature = loginHtmlContent.includes('sendLoginNotification') &&
+    loginHtmlContent.includes('ALERTA_LOGIN_DISPARADO') &&
+    loginHtmlContent.includes('send-login-alert') &&
+    fs.existsSync('supabase/functions/send-login-alert/index.ts') &&
+    fs.existsSync('supabase_login_alert_setup.sql');
+assertTest('LGPD / Segurança: Rotina de notificação por e-mail com data, hora e dispositivo implementada (Edge Function & auditoria)', hasLoginEmailNotificationFeature);
+
+
 // ------------------------------------------------------------------------------
 // RELATÓRIO FINAL
 // ------------------------------------------------------------------------------
