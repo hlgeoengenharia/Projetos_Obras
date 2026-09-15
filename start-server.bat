@@ -5,7 +5,7 @@ echo Iniciando servidor web local em http://localhost:8080...
 echo ========================================================
 
 :: Garante que nenhum processo anterior fique travando a porta 8080
-powershell -NoProfile -Command "Get-Process -Id (Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue).OwningProcess -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"
+powershell -NoProfile -Command "$conns = Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue; if ($conns) { $conns | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }"
 
 :: Abre o navegador automaticamente apos 1 segundo em segundo plano
 start "" cmd /c "timeout /t 1 /nobreak >nul & start http://localhost:8080"

@@ -5,7 +5,18 @@ import sys
 import json
 import urllib.request
 import urllib.error
+import socket
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
+
+class DualStackServer(ThreadingHTTPServer):
+    address_family = socket.AF_INET6
+
+    def server_bind(self):
+        try:
+            self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        except Exception:
+            pass
+        return super().server_bind()
 
 import os
 
@@ -148,8 +159,10 @@ class CustomHandler(SimpleHTTPRequestHandler):
 
 if __name__ == '__main__':
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
-    server_address = ('', port)
-    httpd = ThreadingHTTPServer(server_address, CustomHandler)
+    try:
+        httpd = DualStackServer(('::', port), CustomHandler)
+    except Exception:
+        httpd = ThreadingHTTPServer(('', port), CustomHandler)
     httpd.daemon_threads = True
     print(f"Servidor Web GeoGestor multithread ativo em http://localhost:{port} (http://127.0.0.1:{port})")
     try:
