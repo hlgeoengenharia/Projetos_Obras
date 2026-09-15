@@ -1383,23 +1383,29 @@
         }
 
         let entesHtml = '';
-        if (isSuperAdmin && entesDisponiveisMap.size > 1) {
-            const entesArr = Array.from(entesDisponiveisMap.values());
-            entesHtml = `
-                <div class="mb-4 bg-slate-100/90 dark:bg-slate-800/80 p-1.5 rounded-2xl flex items-center gap-1.5 flex-wrap border border-slate-200 dark:border-slate-700/80 shadow-xs">
-                    ${entesArr.map(e => {
-                        const isSel = (e.sigla === activeEnteSigla);
-                        const conf = ENTITY_CONFIGS[e.sigla] || { icone: e.icone || 'apartment', nome: e.label || e.nome || e.sigla };
-                        return `
-                            <button type="button" onclick="window.UsuariosManager.setEnteEquipe('${e.sigla}')" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${isSel ? 'bg-white dark:bg-slate-900 text-sky-600 dark:text-sky-400 shadow-sm border border-slate-200 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}">
-                                <span class="material-symbols-outlined text-[17px]">${conf.icone || e.icone || 'apartment'}</span>
-                                <span>${e.label || conf.nome || e.sigla}</span>
-                                <span class="px-1.5 py-0.2 text-[10px] font-extrabold rounded-full ${isSel ? 'bg-sky-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}">${e.count}</span>
-                            </button>
-                        `;
-                    }).join('')}
-                </div>
-            `;
+        if (isSuperAdmin) {
+            const entesArr = Array.from(entesDisponiveisMap.values()).filter(e => e.count > 0);
+            if (entesArr.length > 0 && !entesArr.some(e => e.sigla === activeEnteSigla)) {
+                activeEnteSigla = entesArr[0].sigla;
+                _selectedEnteEquipe = activeEnteSigla;
+            }
+            if (entesArr.length > 1) {
+                entesHtml = `
+                    <div class="mb-4 bg-slate-100/90 dark:bg-slate-800/80 p-1.5 rounded-2xl flex items-center gap-1.5 flex-wrap border border-slate-200 dark:border-slate-700/80 shadow-xs">
+                        ${entesArr.map(e => {
+                            const isSel = (e.sigla === activeEnteSigla);
+                            const conf = ENTITY_CONFIGS[e.sigla] || { icone: e.icone || 'apartment', nome: e.label || e.nome || e.sigla };
+                            return `
+                                <button type="button" onclick="window.UsuariosManager.setEnteEquipe('${e.sigla}')" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${isSel ? 'bg-white dark:bg-slate-900 text-sky-600 dark:text-sky-400 shadow-sm border border-slate-200 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}">
+                                    <span class="material-symbols-outlined text-[17px]">${conf.icone || e.icone || 'apartment'}</span>
+                                    <span>${e.label || conf.nome || e.sigla}</span>
+                                    <span class="px-1.5 py-0.2 text-[10px] font-extrabold rounded-full ${isSel ? 'bg-sky-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}">${e.count}</span>
+                                </button>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            }
         }
 
         // 3. Usuários pertencentes ao Ente Ativo
@@ -1617,7 +1623,8 @@
             ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' 
             : (userObj.status === 'pendente' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20');
 
-        const isTargetUserAdmin = (userObj.papel === 'admin' || !!userObj.profile?.super_admin || userObj.profile?.papel === 'superadmin' || !!userObj.profile?.unidade_admin);
+        const isTargetUserSuperAdmin = !!userObj.profile?.super_admin || userObj.profile?.papel === 'superadmin' || userObj.profiles?.super_admin || userObj.profiles?.papel === 'superadmin';
+        const isTargetUserAdmin = isTargetUserSuperAdmin || (userObj.papel === 'admin' || !!userObj.profile?.unidade_admin || !!userObj.profiles?.unidade_admin);
 
         // Renderiza camadas do município selecionado
         // FILTRO DE SEGURANÇA E ISOLAMENTO INSTITUCIONAL:
@@ -1668,9 +1675,15 @@
             let podeEstatisticaCamada = false;
             let podeEditarTemaCamada = false;
 
-            if (hasExplicitCamadaPerm) {
+            if (isTargetUserSuperAdmin) {
+                // SuperAdmin tem acesso soberano e pleno padrão a todas as camadas de todos os entes
+                podeVerCamada = hasExplicitCamadaPerm ? (userCamadaPerm.pode_ver !== false) : true;
+                podeExcluirCamada = hasExplicitCamadaPerm ? (userCamadaPerm.pode_excluir !== false) : true;
+                podeEstatisticaCamada = hasExplicitCamadaPerm ? (userCamadaPerm.pode_estatistica !== false) : true;
+                podeEditarTemaCamada = hasExplicitCamadaPerm ? (userCamadaPerm.pode_editar_tema !== false && userCamadaPerm.pode_editar !== false) : true;
+            } else if (hasExplicitCamadaPerm) {
                 podeVerCamada = !!userCamadaPerm.pode_ver || hasAnySubAbaVer;
-                podeExcluirCamada = !!userCamadaPerm.pode_excluir;
+                podeExcluirCamada = !isFromOtherEntity && !!userCamadaPerm.pode_excluir;
                 podeEstatisticaCamada = !!userCamadaPerm.pode_estatistica;
                 podeEditarTemaCamada = !!(userCamadaPerm.pode_editar_tema || userCamadaPerm.pode_editar);
             } else if (isTargetUserAdmin && !isFromOtherEntity) {
@@ -1698,7 +1711,10 @@
                             let isAbaVerChecked = false;
                             let isAbaEditarChecked = false;
 
-                            if (hasExplicitAbaPerm) {
+                            if (isTargetUserSuperAdmin) {
+                                isAbaVerChecked = hasExplicitAbaPerm ? (userAbaPerm.pode_ver !== false) : true;
+                                isAbaEditarChecked = hasExplicitAbaPerm ? (userAbaPerm.pode_editar !== false) : true;
+                            } else if (hasExplicitAbaPerm) {
                                 isAbaVerChecked = podeVerCamada && !!userAbaPerm.pode_ver;
                                 isAbaEditarChecked = podeVerCamada && !!userAbaPerm.pode_editar;
                             } else if (isTargetUserAdmin && !isFromOtherEntity && podeVerCamada) {
@@ -1706,8 +1722,8 @@
                                 isAbaEditarChecked = true;
                             }
 
-                            const verDisabled = (!isEditing || !abaCeiling.podeVer || !podeVerCamada) ? 'disabled' : '';
-                            const editDisabled = (!isEditing || !abaCeiling.podeEditar || !podeVerCamada) ? 'disabled' : '';
+                            const verDisabled = (!isEditing || (!isTargetUserSuperAdmin && (!abaCeiling.podeVer || !podeVerCamada))) ? 'disabled' : '';
+                            const editDisabled = (!isEditing || (!isTargetUserSuperAdmin && (!abaCeiling.podeEditar || !podeVerCamada))) ? 'disabled' : '';
 
                             return `
                                 <div class="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600/80 rounded-lg px-3 py-2 text-xs shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors" data-form-id="${formVinculado.id}" data-tab-id="${tab.id}">
@@ -1727,8 +1743,8 @@
                 `;
             }
 
-            const camadaVerDisabled = (!isEditing || !adminCeiling.podeVer) ? 'disabled' : '';
-            const camadaExcluirDisabled = (!isEditing || !adminCeiling.podeExcluir) ? 'disabled' : '';
+            const camadaVerDisabled = (!isEditing || (!isTargetUserSuperAdmin && !adminCeiling.podeVer)) ? 'disabled' : '';
+            const camadaExcluirDisabled = (!isEditing || (!isTargetUserSuperAdmin && (!adminCeiling.podeExcluir || isFromOtherEntity))) ? 'disabled' : '';
 
             return `
                 <div class="bg-slate-100/90 dark:bg-slate-800/90 rounded-xl border-2 border-slate-300/90 dark:border-slate-700 shadow-sm transition-all overflow-hidden mb-2.5" style="border-left-width: 6px; border-left-color: ${tema.cor || '#0ea5e9'}" data-camada-id="${tema.id}">
@@ -1800,7 +1816,10 @@
             const userRasterPerm = _allRasterPerms[`${userId}:${r.id}`] || {};
 
             let podeVerRaster = false;
-            if (hasExplicitRasterPerm) {
+            if (isTargetUserSuperAdmin) {
+                // SuperAdmin tem acesso pleno padrão a todas as ortofotos de qualquer entidade
+                podeVerRaster = hasExplicitRasterPerm ? (userRasterPerm.pode_ver !== false) : true;
+            } else if (hasExplicitRasterPerm) {
                 podeVerRaster = !!userRasterPerm.pode_ver;
             } else if (isTargetUserAdmin && !isOtherRaster) {
                 // Administradores têm acesso pleno padrão às ortofotos de sua própria entidade
@@ -1815,7 +1834,7 @@
                 if (m) dateStr = `${m[1]}/${m[2]}/${m[3]}`;
             }
 
-            const canManageRaster = _currentUserProfile?.super_admin || (rSigla === minhaSigla);
+            const canManageRaster = isTargetUserSuperAdmin || _currentUserProfile?.super_admin || (rSigla === minhaSigla);
             const rasterDisabled = (!isEditing || !canManageRaster) ? 'disabled' : '';
 
             return `
