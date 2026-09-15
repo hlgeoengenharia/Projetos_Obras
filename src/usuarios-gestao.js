@@ -382,9 +382,33 @@
 
         if (containerBox) containerBox.classList.remove('hidden');
 
-        const parceiros = getParceirosList();
+        const todosParceiros = getParceirosList();
+        
+        // Calcula a contagem de pontos focais ativos para cada parceiro
+        const parceirosComContagem = todosParceiros.map(item => {
+            const uniquePfIds = new Set();
+            _allMembros.forEach(m => {
+                const prof = m.profiles || {};
+                const s = getEntitySigla((prof.entidade || m.entidade || '').trim());
+                if (prof.ponto_focal || m.ponto_focal) {
+                    if (item.municipio_id) {
+                        if (s === 'Município' && m.municipio_id === item.municipio_id) {
+                            uniquePfIds.add(m.user_id);
+                        }
+                    } else if (s === item.sigla) {
+                        uniquePfIds.add(m.user_id);
+                    }
+                }
+            });
+            item.pfCount = uniquePfIds.size;
+            return item;
+        });
+
+        // Regra solicitada: para USUÁRIOS --> PARCEIROS, o ente parceiro só deve aparecer se tiver pelo menos 1 usuário em compartilhamento (pfCount > 0)
+        const parceiros = parceirosComContagem.filter(p => p.pfCount > 0);
+
         if (parceiros.length === 0) {
-            container.innerHTML = '<span class="text-xs text-slate-400 italic">Nenhum parceiro cadastrado.</span>';
+            container.innerHTML = '<span class="text-xs text-slate-400 italic">Nenhum parceiro com pontos focais ativos no momento.</span>';
             return;
         }
 
@@ -401,21 +425,7 @@
             const activeClass = "bg-primary text-white shadow-md shadow-primary/25 ring-2 ring-primary/40 font-extrabold";
             const inactiveClass = "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold";
 
-            const uniquePfIds = new Set();
-            _allMembros.forEach(m => {
-                const prof = m.profiles || {};
-                const s = getEntitySigla((prof.entidade || m.entidade || '').trim());
-                if (prof.ponto_focal || m.ponto_focal) {
-                    if (item.municipio_id) {
-                        if (s === 'Município' && m.municipio_id === item.municipio_id) {
-                            uniquePfIds.add(m.user_id);
-                        }
-                    } else if (s === item.sigla) {
-                        uniquePfIds.add(m.user_id);
-                    }
-                }
-            });
-            const pfCount = uniquePfIds.size;
+            const pfCount = item.pfCount || 0;
             const badgeCount = `<span class="ml-1 px-1.5 py-0.2 text-[9px] font-extrabold rounded-full ${isActive ? 'bg-white/25 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}">${pfCount}</span>`;
             const labelText = item.label || item.sigla;
 
@@ -650,9 +660,23 @@
         if (tabKey === 'minha-equipe' || tabKey === 'minhas-camadas') {
             _selectedEntidadeFiltro = minhaSigla;
         } else if (tabKey === 'usuarios-compartilhamento') {
-            const parceiros = getParceirosList();
-            if (parceiros.length > 0 && (_selectedEntidadeFiltro === minhaSigla || !parceiros.some(p => p.sigla === _selectedEntidadeFiltro))) {
-                _selectedEntidadeFiltro = parceiros[0].sigla;
+            const parceirosValidos = getParceirosList().filter(item => {
+                let hasPf = false;
+                _allMembros.forEach(m => {
+                    const prof = m.profiles || {};
+                    const s = getEntitySigla((prof.entidade || m.entidade || '').trim());
+                    if (prof.ponto_focal || m.ponto_focal) {
+                        if (item.municipio_id) {
+                            if (s === 'Município' && m.municipio_id === item.municipio_id) hasPf = true;
+                        } else if (s === item.sigla) {
+                            hasPf = true;
+                        }
+                    }
+                });
+                return hasPf;
+            });
+            if (parceirosValidos.length > 0 && (_selectedEntidadeFiltro === minhaSigla || !parceirosValidos.some(p => p.sigla === _selectedEntidadeFiltro))) {
+                _selectedEntidadeFiltro = parceirosValidos[0].sigla;
             }
         } else if (tabKey === 'compartilhados-comigo') {
             _selectedCompartilhadoFiltro = null;
@@ -811,14 +835,18 @@
         const query = searchQuery.trim().toLowerCase();
         let items = getSharedItemsForCurrentUser();
 
-        // Geração dos filtros por órgão concedente
+        // Geração dos filtros por órgão concedente: somente entes com pelo menos 1 camada compartilhada
+        const todosItens = getSharedItemsForCurrentUser();
         const entidadesDisponiveis = new Set();
-        items.forEach(it => {
-            entidadesDisponiveis.add(it.sigla);
+        todosItens.forEach(it => {
+            if (it.sigla) entidadesDisponiveis.add(it.sigla);
         });
 
-        const entidadesArr = Array.from(entidadesDisponiveis).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-        if (!_selectedCompartilhadoFiltro || _selectedCompartilhadoFiltro === 'todos' || !entidadesDisponiveis.has(_selectedCompartilhadoFiltro)) {
+        const entidadesArr = Array.from(entidadesDisponiveis)
+            .filter(sigla => todosItens.filter(it => it.sigla === sigla).length > 0)
+            .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+        if (!_selectedCompartilhadoFiltro || _selectedCompartilhadoFiltro === 'todos' || !entidadesArr.includes(_selectedCompartilhadoFiltro)) {
             _selectedCompartilhadoFiltro = entidadesArr.length > 0 ? entidadesArr[0] : '';
         }
 

@@ -429,6 +429,15 @@ const hasConfigGlobaisSmartReturn = updatedHomeHtml.includes("window._configOrig
     updatedHomeHtml.includes("configSec && configSec.classList.contains('active')");
 assertTest('Navegação: Retorno inteligente das Configurações Globais (home.html se aberto do portal, cards se aberto do município)', hasConfigGlobaisSmartReturn);
 
+const hasZeroCountHidingInUsers = usuariosGestaoCode.includes('p.pfCount > 0') &&
+    usuariosGestaoCode.includes('todosItens.filter(it => it.sigla === sigla).length > 0');
+assertTest('Central de Usuários: Entes sem usuários em PARCEIROS e entes sem camadas em COMPARTILHADOS são ocultados', hasZeroCountHidingInUsers);
+
+const mainJsFullCode = fs.readFileSync('src/main.js', 'utf8');
+const hasZeroCountHidingInProjectManager = mainJsFullCode.includes('isLocal || count > 0') &&
+    mainJsFullCode.includes("tabsList.some(t => t.sigla === window.selectedSharedEntityFilter)");
+assertTest('Gerenciador de Projetos: Entes parceiros sem camadas compartilhadas (count == 0) são ocultados', hasZeroCountHidingInProjectManager);
+
 const measurementJsCode = fs.readFileSync('src/measurement.js', 'utf8');
 const hasCoordinateQueryFeature = indexHtmlContent.includes("selectMeasurementOption('CoordinateQuery')") &&
     indexHtmlContent.includes('id="coordinate-query-panel"') &&

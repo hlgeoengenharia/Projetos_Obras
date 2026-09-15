@@ -10844,22 +10844,47 @@ window.renderSharedLayersCatalog = function() {
         countsBySigla[s] = (countsBySigla[s] || 0) + count;
     });
 
-    if (!window.selectedSharedEntityFilter || window.selectedSharedEntityFilter === 'Todos') {
-        window.selectedSharedEntityFilter = projectItemsCount > 0 ? 'deste-projeto' : 'Município';
+    const activeProjObj = window.activeProjectId ? (window.userProjects || []).find(p => p.id === window.activeProjectId) : null;
+    const projectTabLabel = activeProjObj ? activeProjObj.nome : 'Modo Livre (Sem Projeto)';
+
+    const tabsList = [
+        { sigla: 'deste-projeto', label: projectTabLabel, icone: 'folder_special', count: projectItemsCount, isProjectTab: true }
+    ];
+
+    // Lista de entidades candidatas: apenas aparecem se tiverem pelo menos 1 camada em compartilhamento (count > 0) ou se for o próprio ente local
+    const possiblePartnerEntities = [
+        { sigla: 'Município', label: 'Município', icone: 'location_city' },
+        { sigla: 'MPF', label: 'MPF', icone: 'gavel' },
+        { sigla: 'SPU', label: 'SPU', icone: 'account_balance' },
+        { sigla: 'PF', label: 'PF', icone: 'security' }
+    ];
+    Object.keys(countsBySigla).forEach(s => {
+        if (!possiblePartnerEntities.some(e => e.sigla === s)) {
+            possiblePartnerEntities.push({ sigla: s, label: s, icone: 'layers' });
+        }
+    });
+
+    possiblePartnerEntities.forEach(ent => {
+        const isLocal = (minhaSigla === ent.sigla);
+        const count = countsBySigla[ent.sigla] || 0;
+        // Regra institucional: o ente só aparece no Gerenciador se tiver pelo menos 1 camada compartilhada (count > 0)
+        if (isLocal || count > 0) {
+            tabsList.push({
+                sigla: ent.sigla,
+                label: ent.label,
+                icone: ent.icone,
+                count: count,
+                isLocal: isLocal
+            });
+        }
+    });
+
+    if (!tabsList.some(t => t.sigla === window.selectedSharedEntityFilter)) {
+        window.selectedSharedEntityFilter = projectItemsCount > 0 ? 'deste-projeto' : (tabsList[1]?.sigla || 'deste-projeto');
     }
+
     const toggleContainer = document.getElementById('shared-layers-entity-toggle');
     if (toggleContainer) {
-        const activeProjObj = window.activeProjectId ? (window.userProjects || []).find(p => p.id === window.activeProjectId) : null;
-        const projectTabLabel = activeProjObj ? activeProjObj.nome : 'Modo Livre (Sem Projeto)';
-
-        const tabsList = [
-            { sigla: 'deste-projeto', label: projectTabLabel, icone: 'folder_special', count: projectItemsCount, isProjectTab: true },
-            { sigla: 'Município', label: 'Município', icone: 'location_city', count: countsBySigla['Município'] || 0, isLocal: minhaSigla === 'Município' },
-            { sigla: 'MPF', label: 'MPF', icone: 'gavel', count: countsBySigla['MPF'] || 0, isLocal: minhaSigla === 'MPF' },
-            { sigla: 'SPU', label: 'SPU', icone: 'account_balance', count: countsBySigla['SPU'] || 0, isLocal: minhaSigla === 'SPU' },
-            { sigla: 'PF', label: 'PF', icone: 'security', count: countsBySigla['PF'] || 0, isLocal: minhaSigla === 'PF' }
-        ];
-
         toggleContainer.innerHTML = tabsList.map(tab => {
             const isActive = (window.selectedSharedEntityFilter === tab.sigla);
 
