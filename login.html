@@ -298,6 +298,7 @@
       // 1. Disparo prioritário via API endpoint (/api/send-login-alert - Vercel Serverless & Servidor Local)
       fetch('/api/send-login-alert', {
         method: 'POST',
+        keepalive: true,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: user.email,

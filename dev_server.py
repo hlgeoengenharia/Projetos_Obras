@@ -5,7 +5,7 @@ import sys
 import json
 import urllib.request
 import urllib.error
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 
 import os
 
@@ -148,9 +148,10 @@ class CustomHandler(SimpleHTTPRequestHandler):
 
 if __name__ == '__main__':
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
-    server_address = ('127.0.0.1', port)
-    httpd = HTTPServer(server_address, CustomHandler)
-    print(f"Servidor Web GeoGestor ativo com suporte a Resend em http://127.0.0.1:{port}")
+    server_address = ('', port)
+    httpd = ThreadingHTTPServer(server_address, CustomHandler)
+    httpd.daemon_threads = True
+    print(f"Servidor Web GeoGestor multithread ativo em http://localhost:{port} (http://127.0.0.1:{port})")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
