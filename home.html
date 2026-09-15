@@ -584,7 +584,7 @@
   <section id="configuracoes-section" class="tab-content h-full overflow-y-auto pr-1">
     <div class="flex flex-col xl:flex-row xl:items-center justify-between pb-4 mb-6 border-b border-slate-200 dark:border-slate-800 gap-4">
       <div class="flex items-center gap-3">
-        <button onclick="voltarParaMunicipios()" class="w-9 h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all flex items-center justify-center cursor-pointer shadow-sm shrink-0" title="Voltar aos Municípios">
+        <button onclick="voltarParaMunicipios()" class="w-9 h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all flex items-center justify-center cursor-pointer shadow-sm shrink-0" title="Voltar">
           <span class="material-symbols-outlined text-[20px]">arrow_back</span>
         </button>
         <div>
@@ -1039,9 +1039,12 @@ window.atualizarVisibilidadeGloboHome = function() {
         }
     }
 
+    const activeBox = document.getElementById('header-mun-card-active-box');
+    const isCardActive = activeBox && (!activeBox.classList.contains('hidden') || activeBox.style.display === 'inline-flex' || activeBox.style.display === 'flex');
+
     const munDefaultCard = document.getElementById('header-mun-default-card');
     if (munDefaultCard) {
-        if (podeVer) {
+        if (podeVer && !isCardActive) {
             munDefaultCard.classList.remove('hidden');
             munDefaultCard.style.display = 'flex';
         } else {
@@ -1237,6 +1240,7 @@ window.abrirPainelMunicipio = function(id, nome, papel = null) {
     }
     if (activeBox) {
         activeBox.classList.add('hidden');
+        activeBox.style.display = 'none';
         activeBox.classList.remove('inline-flex');
     }
 
@@ -1325,9 +1329,24 @@ window.voltarParaMunicipios = function(forcePortal = false) {
     const frameSec = document.getElementById('settings-frame-section');
     const pendingSec = document.getElementById('pending-section');
     const configSec = document.getElementById('configuracoes-section');
+
+    // Se estiver saindo de configurações globais:
+    if (configSec && configSec.classList.contains('active')) {
+        configSec.classList.remove('active');
+        if (window._configOrigem === 'municipio' && !forcePortal) {
+            const munId = sessionStorage.getItem('municipio_ativo');
+            const munNome = sessionStorage.getItem('municipio_ativo_nome');
+            if (munId) {
+                abrirPainelMunicipio(munId, munNome);
+                return;
+            }
+        }
+        // Veio de home.html (portal de municípios): garante retorno ao portal
+        forcePortal = true;
+    }
+
     const isInsideTool = !forcePortal && ((frameSec && frameSec.classList.contains('active')) || 
-                         (pendingSec && pendingSec.classList.contains('active')) ||
-                         (configSec && configSec.classList.contains('active')));
+                         (pendingSec && pendingSec.classList.contains('active')));
     
     // Se estiver dentro de algum módulo aberto e não forçado retorno ao portal, voltar para a tela de cards do município
     if (isInsideTool) {
@@ -1408,6 +1427,12 @@ window.switchGlobalConfigTab = function(tabName) {
 };
 
 window.abrirConfiguracoesGlobais = function(initialTab = 'municipios') {
+    // Detecta origem antes de alternar telas:
+    const munHeader = document.getElementById('header-municipio-view');
+    const isMunView = (munHeader && !munHeader.classList.contains('hidden') && munHeader.style.display !== 'none') ||
+                      new URLSearchParams(window.location.search).get('view') === 'municipio';
+    window._configOrigem = isMunView ? 'municipio' : 'portal';
+
     document.querySelectorAll('main > section').forEach(s => s.classList.remove('active'));
     const cfgSec = document.getElementById('configuracoes-section');
     if (cfgSec) cfgSec.classList.add('active');
@@ -1747,9 +1772,13 @@ window.switchMunicipioTab = function(sectionOrTab, btn) {
     const activeGlobe = document.getElementById('header-mun-active-globe');
     const activeDivider = document.getElementById('header-mun-active-globe-divider');
 
-    if (defaultCard) defaultCard.classList.add('hidden');
+    if (defaultCard) {
+        defaultCard.classList.add('hidden');
+        defaultCard.style.display = 'none';
+    }
     if (activeBox) {
         activeBox.classList.remove('hidden');
+        activeBox.style.display = 'inline-flex';
         activeBox.classList.add('inline-flex');
     }
     if (activeTitle) {

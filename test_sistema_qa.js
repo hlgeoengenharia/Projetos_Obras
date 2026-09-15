@@ -413,17 +413,21 @@ assertTest('Parceiros & Entes: Municípios mapeados individualmente no formato N
 
 const mainJsHeaderCode = fs.readFileSync('src/main.js', 'utf8');
 const hasGlobalMapMunicipalGating = indexHtmlContent.includes('id="btn-global-map" href="home.html" class="hidden') &&
-    mainJsHeaderCode.includes('podeVerGlobo') &&
-    mainJsHeaderCode.includes('isMunicipal') &&
+    mainJsHeaderCode.includes('podeVerGlobo = isSuperAdmin || (!isMunicipal &&') &&
     mainJsHeaderCode.includes("btnGlobalMap.classList.add('hidden')");
-assertTest('Header: Ícone do globo (btn-global-map) oculto para Admins e Usuários Municipais e condicionado a SuperAdmin/Entes Externos', hasGlobalMapMunicipalGating);
+assertTest('Header: Ícone do globo (btn-global-map) visível para SuperAdmin e oculto para Admins e Usuários Municipais', hasGlobalMapMunicipalGating);
 
 const updatedHomeHtml = fs.readFileSync('home.html', 'utf8');
 const hasHomeGloboMunicipalGating = updatedHomeHtml.includes('window.userPodeVerGlobo') &&
     updatedHomeHtml.includes('atualizarVisibilidadeGloboHome') &&
-    updatedHomeHtml.includes('id="header-mun-default-card" href="home.html" onclick="if(window.voltarParaMunicipios){ event.preventDefault(); window.voltarParaMunicipios(true); }" class="hidden') &&
+    updatedHomeHtml.includes('isCardActive') &&
     updatedHomeHtml.includes('id="header-mun-active-globe"');
-assertTest('Home: Ícone do globo oculto em home.html?view=municipio para Admins e Usuários Municipais', hasHomeGloboMunicipalGating);
+assertTest('Home: Ícone do globo único (sem duplicidade ao entrar em card) e isolado para Admins e Usuários Municipais', hasHomeGloboMunicipalGating);
+
+const hasConfigGlobaisSmartReturn = updatedHomeHtml.includes("window._configOrigem = isMunView ? 'municipio' : 'portal'") &&
+    updatedHomeHtml.includes("if (window._configOrigem === 'municipio' && !forcePortal)") &&
+    updatedHomeHtml.includes("configSec && configSec.classList.contains('active')");
+assertTest('Navegação: Retorno inteligente das Configurações Globais (home.html se aberto do portal, cards se aberto do município)', hasConfigGlobaisSmartReturn);
 
 const measurementJsCode = fs.readFileSync('src/measurement.js', 'utf8');
 const hasCoordinateQueryFeature = indexHtmlContent.includes("selectMeasurementOption('CoordinateQuery')") &&

@@ -6433,7 +6433,7 @@ function applyPermissionUIGating() {
     // O globo é exclusivo para SuperAdmin ou Entes Externos/Estaduais com múltiplos municípios.
     const entLower = String(window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').toLowerCase();
     const isMunicipal = entLower.includes('prefeitura') || entLower.includes('municipal') || entLower.includes('município') || entLower.includes('municipio') || (!isSuperAdmin && (!window.currentUserEntidade || window.currentUserEntidade === 'Prefeitura Municipal'));
-    const podeVerGlobo = !isMunicipal && (isSuperAdmin || (window.userTotalMunicipiosAprovados && window.userTotalMunicipiosAprovados > 1));
+    const podeVerGlobo = isSuperAdmin || (!isMunicipal && (window.userTotalMunicipiosAprovados && window.userTotalMunicipiosAprovados > 1));
 
     const btnGlobalMap = document.getElementById('btn-global-map');
     if (btnGlobalMap) {
@@ -6991,7 +6991,7 @@ function applyCurrentUserToProfileModal() {
     // Se for Admin ou Usuário Municipal (Prefeitura), permanece oculto
     const entLowerProfile = String(window.currentUserEntidade || (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '').toLowerCase();
     const isMunicipalProfile = entLowerProfile.includes('prefeitura') || entLowerProfile.includes('municipal') || entLowerProfile.includes('município') || entLowerProfile.includes('municipio') || (!isSuperAdmin && (!window.currentUserEntidade || window.currentUserEntidade === 'Prefeitura Municipal'));
-    const podeVerGloboProfile = !isMunicipalProfile && (isSuperAdmin || (window.userTotalMunicipiosAprovados && window.userTotalMunicipiosAprovados > 1));
+    const podeVerGloboProfile = isSuperAdmin || (!isMunicipalProfile && (window.userTotalMunicipiosAprovados && window.userTotalMunicipiosAprovados > 1));
 
     const btnGlobalMap = document.getElementById('btn-global-map');
     if (btnGlobalMap) {
