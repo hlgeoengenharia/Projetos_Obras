@@ -180,10 +180,12 @@
         localStorage.setItem('geogestor_last_activity_ts', String(Date.now()));
       } catch(e) {}
 
+      console.log('🔄 Verificando permissões pós-login para:', userId);
       const { data: profile } = await supabaseClient.from('profiles').select('super_admin, entidade_admin').eq('id', userId).single();
       
       if (profile && profile.super_admin) {
-        window.location.href = 'home.html';
+        console.log('➡️ Redirecionando SuperAdmin para home.html');
+        window.location.replace('home.html');
         return;
       }
 
@@ -202,7 +204,8 @@
         const mun = municipiosAtribuidos[0];
         sessionStorage.setItem('municipio_ativo', mun.id);
         sessionStorage.setItem('municipio_ativo_nome', mun.nome);
-        window.location.href = 'index.html';
+        console.log('➡️ Redirecionando Usuário Municipal para index.html:', mun.nome);
+        window.location.replace('index.html');
         return;
       }
 
@@ -215,15 +218,18 @@
           .eq('status', 'rejeitado')
           .limit(1);
         if (rejeitados && rejeitados.length > 0) {
-          window.location.href = 'home.html?rejeitado=1';
+          console.log('➡️ Redirecionando para home.html?rejeitado=1');
+          window.location.replace('home.html?rejeitado=1');
           return;
         }
       }
 
       // Diferente de municipal (múltiplos municípios ou solicitação pendente): entra na Home
-      window.location.href = 'home.html';
+      console.log('➡️ Redirecionando para home.html');
+      window.location.replace('home.html');
     } catch(err) {
-      window.location.href = 'home.html';
+      console.warn('Erro ao determinar rota pós-login, direcionando para home.html:', err);
+      window.location.replace('home.html');
     }
   }
 
@@ -246,7 +252,9 @@
       continueBtn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span> Processando...';
 
       if (window.auditLogger && typeof window.auditLogger.log === 'function') {
-        window.auditLogger.log('TERMO_LGPD_CIENTE', 'Ciência e aceite dos Termos de Uso e Proteção de Dados (LGPD)');
+        try {
+          await window.auditLogger.log('TERMO_LGPD_CIENTE', 'Ciência e aceite dos Termos de Uso e Proteção de Dados (LGPD)');
+        } catch(e) {}
       }
 
       try {
@@ -255,14 +263,17 @@
         localStorage.setItem('geogestor_last_activity_ts', String(Date.now()));
       } catch(e) {}
 
-      lgpdModal.classList.add('hidden');
+      continueBtn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span> Entrando no sistema...';
+
       if (typeof onConfirm === 'function') {
         try {
           await onConfirm();
         } catch(errConfirm) {
           console.error('Erro na navegação pós-login:', errConfirm);
-          window.location.href = 'home.html';
+          window.location.replace('home.html');
         }
+      } else {
+        window.location.replace('home.html');
       }
     };
   }
@@ -371,15 +382,17 @@
       password: passwordEl.value
     });
 
-    submitBtn.disabled = false;
-    submitText.textContent = 'Entrar';
-
     if (error) {
+      submitBtn.disabled = false;
+      submitText.textContent = 'Entrar';
       showError('E-mail ou senha inválidos.');
       return;
     }
 
     if (authData && authData.user) {
+      submitBtn.disabled = true;
+      submitText.textContent = 'Conectando...';
+
       // Reativa e renova a sessão de segurança
       try {
         localStorage.removeItem('geogestor_session_expired');
@@ -396,7 +409,7 @@
       // Exibe os Termos de Uso / LGPD antes de entrar no sistema
       showLgpdModal(() => handlePostLoginRouting(authData.user.id));
     } else {
-      window.location.href = 'home.html';
+      window.location.replace('home.html');
     }
   });
 })();
