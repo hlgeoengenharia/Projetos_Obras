@@ -279,19 +279,33 @@
         window.auditLogger.log('ALERTA_LOGIN_DISPARADO', `Notificação de acesso enviada para ${user.email} (${dataFormatada} às ${horaFormatada})`);
       }
 
-      if (supabaseClient && supabaseClient.functions) {
-        supabaseClient.functions.invoke('send-login-alert', {
-          body: {
-            email: user.email,
-            nome: userName,
-            data: dataFormatada,
-            hora: horaFormatada,
-            dispositivo: `${browser} em ${os}`,
-            timestamp: agora.toISOString()
+      if (supabaseClient) {
+        // Dispara envio de e-mail via RPC no Supabase (que chama a API do Resend via pg_net de forma assíncrona)
+        supabaseClient.rpc('send_login_alert', {
+          user_email: user.email,
+          user_nome: userName,
+          user_device: `${browser} no ${os}`
+        }).then(res => {
+          if (res?.data?.success) {
+            console.log('✅ [Alerta Login] E-mail enviado com sucesso via Resend:', res.data);
           }
         }).catch(err => {
-          console.warn('[Alerta Login] Notificação de e-mail registrada localmente:', err?.message || err);
+          console.warn('[Alerta Login] RPC send_login_alert:', err?.message || err);
         });
+
+        // Disparo alternativo via Edge Function se disponível
+        if (supabaseClient.functions) {
+          supabaseClient.functions.invoke('send-login-alert', {
+            body: {
+              email: user.email,
+              nome: userName,
+              data: dataFormatada,
+              hora: horaFormatada,
+              dispositivo: `${browser} no ${os}`,
+              timestamp: agora.toISOString()
+            }
+          }).catch(() => {});
+        }
       }
     } catch(err) {
       console.warn('Erro ao processar notificação de login:', err);
