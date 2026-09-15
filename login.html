@@ -279,33 +279,34 @@
         window.auditLogger.log('ALERTA_LOGIN_DISPARADO', `Notificação de acesso enviada para ${user.email} (${dataFormatada} às ${horaFormatada})`);
       }
 
+      // 1. Disparo prioritário via API endpoint (/api/send-login-alert - Vercel Serverless & Servidor Local)
+      fetch('/api/send-login-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: user.email,
+          nome: userName,
+          data: dataFormatada,
+          hora: horaFormatada,
+          dispositivo: `${browser} no ${os}`
+        })
+      }).then(r => r.json()).then(res => {
+        if (res?.success) console.log('✅ [Alerta Login] E-mail enviado com sucesso via API Resend:', res);
+      }).catch(e => {
+        console.warn('[Alerta Login] Endpoint /api/send-login-alert offline:', e?.message || e);
+      });
+
+      // 2. Disparo complementar via Supabase RPC se configurado
       if (supabaseClient) {
-        // Dispara envio de e-mail via RPC no Supabase (que chama a API do Resend via pg_net de forma assíncrona)
         supabaseClient.rpc('send_login_alert', {
           user_email: user.email,
           user_nome: userName,
           user_device: `${browser} no ${os}`
         }).then(res => {
           if (res?.data?.success) {
-            console.log('✅ [Alerta Login] E-mail enviado com sucesso via Resend:', res.data);
+            console.log('✅ [Alerta Login] E-mail enviado via Supabase/Resend:', res.data);
           }
-        }).catch(err => {
-          console.warn('[Alerta Login] RPC send_login_alert:', err?.message || err);
-        });
-
-        // Disparo alternativo via Edge Function se disponível
-        if (supabaseClient.functions) {
-          supabaseClient.functions.invoke('send-login-alert', {
-            body: {
-              email: user.email,
-              nome: userName,
-              data: dataFormatada,
-              hora: horaFormatada,
-              dispositivo: `${browser} no ${os}`,
-              timestamp: agora.toISOString()
-            }
-          }).catch(() => {});
-        }
+        }).catch(() => {});
       }
     } catch(err) {
       console.warn('Erro ao processar notificação de login:', err);
