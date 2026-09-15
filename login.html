@@ -175,6 +175,11 @@
 
   async function handlePostLoginRouting(userId) {
     try {
+      try {
+        localStorage.removeItem('geogestor_session_expired');
+        localStorage.setItem('geogestor_last_activity_ts', String(Date.now()));
+      } catch(e) {}
+
       const { data: profile } = await supabaseClient.from('profiles').select('super_admin, entidade_admin').eq('id', userId).single();
       
       if (profile && profile.super_admin) {
@@ -230,6 +235,10 @@
       return;
     }
 
+    // Garante que o botão esteja habilitado com o texto correto
+    continueBtn.disabled = false;
+    continueBtn.innerHTML = '<span>Continuar</span>';
+
     lgpdModal.classList.remove('hidden');
 
     continueBtn.onclick = async function() {
@@ -242,11 +251,18 @@
 
       try {
         sessionStorage.setItem('geogestor_lgpd_accepted', 'true');
+        localStorage.removeItem('geogestor_session_expired');
+        localStorage.setItem('geogestor_last_activity_ts', String(Date.now()));
       } catch(e) {}
 
       lgpdModal.classList.add('hidden');
       if (typeof onConfirm === 'function') {
-        await onConfirm();
+        try {
+          await onConfirm();
+        } catch(errConfirm) {
+          console.error('Erro na navegação pós-login:', errConfirm);
+          window.location.href = 'home.html';
+        }
       }
     };
   }
@@ -316,7 +332,7 @@
   // Já logado?
   (async function redirectIfLoggedIn() {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('reason') === 'inactivity' || localStorage.getItem('geogestor_session_expired') === 'true') {
+    if (params.get('reason') === 'inactivity') {
       if (supabaseClient) {
         try { await supabaseClient.auth.signOut({ scope: 'global' }); } catch(e) {}
       }
@@ -325,6 +341,10 @@
     if (!supabaseClient) return;
     const { data } = await supabaseClient.auth.getSession();
     if (data && data.session) {
+      try {
+        localStorage.removeItem('geogestor_session_expired');
+        localStorage.setItem('geogestor_last_activity_ts', String(Date.now()));
+      } catch(e) {}
       if (sessionStorage.getItem('geogestor_lgpd_accepted') === 'true') {
         await handlePostLoginRouting(data.session.user.id);
       } else {

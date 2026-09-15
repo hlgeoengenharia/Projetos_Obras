@@ -181,7 +181,7 @@
     function checkInactivityLoop() {
         const lastAct = getLastActivity();
         if (!lastAct) {
-            performLogout();
+            recordActivity();
             return;
         }
 
@@ -276,13 +276,17 @@
         const lastAct = getLastActivity();
         const now = Date.now();
 
-        if (isExpired || !lastAct || (now - lastAct >= INACTIVITY_LIMIT_MS)) {
+        // Expira APENAS se o tempo limite tiver sido excedido ou se marcado como expirado sem atividade recente (2 min)
+        if ((lastAct && (now - lastAct >= INACTIVITY_LIMIT_MS)) || (isExpired && (!lastAct || now - lastAct >= 120000))) {
             console.warn("🛡️ Sessão expirada por inatividade detectada. Redirecionando para login...");
             performLogout(true);
             return;
         }
 
-        // Se está válido, registra a atividade atual
+        // Limpa flag de expiração antiga e registra atividade atual
+        try {
+            localStorage.removeItem(EXPIRED_FLAG_KEY);
+        } catch(e) {}
         recordActivity();
         ensureWarningModal();
         ensureLgpdModal();

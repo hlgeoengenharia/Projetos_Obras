@@ -121,18 +121,26 @@ class CustomHandler(SimpleHTTPRequestHandler):
                     # Se o Resend recusar por ser conta em modo teste, envia para a conta do desenvolvedor
                     res_json = send_to_resend('heltonleite.geotec@gmail.com')
 
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({'success': True, 'data': res_json}).encode('utf-8'))
-                print(f"[Resend] E-mail de alerta disparado com sucesso para {email}!")
+                try:
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'success': True, 'data': res_json}).encode('utf-8'))
+                    print(f"[Resend] E-mail de alerta disparado com sucesso para {email}!")
+                except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+                    print(f"[Resend] Conexão concluída para {email} (redirecionamento de página efetuado).")
                 return
 
+            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+                return
             except Exception as e:
-                self.send_response(500)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({'success': False, 'error': str(e)}).encode('utf-8'))
+                try:
+                    self.send_response(500)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'success': False, 'error': str(e)}).encode('utf-8'))
+                except Exception:
+                    pass
                 print(f"[Resend] Erro ao disparar e-mail: {e}")
                 return
 
