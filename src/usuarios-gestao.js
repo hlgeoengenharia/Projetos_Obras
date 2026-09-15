@@ -366,26 +366,8 @@
             }
         });
 
-        return Array.from(parceirosMap.values());
-    }
-
-    // Renderiza o alternador de parceiros (Pílulas estilo Mapa/Lista)
-    function renderEntidadesToggle() {
-        const container = document.getElementById('usuarios-entidades-toggle');
-        const containerBox = document.getElementById('usuarios-entidades-toggle-container');
-        if (!container) return;
-
-        if (_currentMainTab !== 'usuarios-compartilhamento') {
-            if (containerBox) containerBox.classList.add('hidden');
-            return;
-        }
-
-        if (containerBox) containerBox.classList.remove('hidden');
-
-        const todosParceiros = getParceirosList();
-        
-        // Calcula a contagem de pontos focais ativos para cada parceiro
-        const parceirosComContagem = todosParceiros.map(item => {
+        const todos = Array.from(parceirosMap.values());
+        todos.forEach(item => {
             const uniquePfIds = new Set();
             _allMembros.forEach(m => {
                 const prof = m.profiles || {};
@@ -401,11 +383,27 @@
                 }
             });
             item.pfCount = uniquePfIds.size;
-            return item;
         });
 
-        // Regra solicitada: para USUÁRIOS --> PARCEIROS, o ente parceiro só deve aparecer se tiver pelo menos 1 usuário em compartilhamento (pfCount > 0)
-        const parceiros = parceirosComContagem.filter(p => p.pfCount > 0);
+        // Regra: na aba PARCEIROS, apenas entes com pelo menos 1 usuário/ponto focal (pfCount > 0)
+        return todos.filter(p => p.pfCount > 0);
+    }
+
+    // Renderiza o alternador de parceiros (Pílulas estilo Mapa/Lista)
+    function renderEntidadesToggle() {
+        const container = document.getElementById('usuarios-entidades-toggle');
+        const containerBox = document.getElementById('usuarios-entidades-toggle-container');
+        if (!container) return;
+
+        if (_currentMainTab !== 'usuarios-compartilhamento') {
+            if (containerBox) containerBox.classList.add('hidden');
+            return;
+        }
+
+        if (containerBox) containerBox.classList.remove('hidden');
+
+        // getParceirosList já filtra rigorosamente p.pfCount > 0
+        const parceiros = getParceirosList();
 
         if (parceiros.length === 0) {
             container.innerHTML = '<span class="text-xs text-slate-400 italic">Nenhum parceiro com pontos focais ativos no momento.</span>';
@@ -660,21 +658,7 @@
         if (tabKey === 'minha-equipe' || tabKey === 'minhas-camadas') {
             _selectedEntidadeFiltro = minhaSigla;
         } else if (tabKey === 'usuarios-compartilhamento') {
-            const parceirosValidos = getParceirosList().filter(item => {
-                let hasPf = false;
-                _allMembros.forEach(m => {
-                    const prof = m.profiles || {};
-                    const s = getEntitySigla((prof.entidade || m.entidade || '').trim());
-                    if (prof.ponto_focal || m.ponto_focal) {
-                        if (item.municipio_id) {
-                            if (s === 'Município' && m.municipio_id === item.municipio_id) hasPf = true;
-                        } else if (s === item.sigla) {
-                            hasPf = true;
-                        }
-                    }
-                });
-                return hasPf;
-            });
+            const parceirosValidos = getParceirosList();
             if (parceirosValidos.length > 0 && (_selectedEntidadeFiltro === minhaSigla || !parceirosValidos.some(p => p.sigla === _selectedEntidadeFiltro))) {
                 _selectedEntidadeFiltro = parceirosValidos[0].sigla;
             }
