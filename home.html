@@ -221,7 +221,7 @@
   <div id="header-portal-view" class="flex items-center justify-between w-full">
     <!-- Card do Globo igual ao da index.html apontando para o início (mapa do estado) -->
     <a id="header-portal-card" href="home.html" onclick="if(window.voltarParaMunicipios){ event.preventDefault(); window.voltarParaMunicipios(true); }" class="header-glass-card flex w-9 h-9 sm:w-10 sm:h-10 rounded-2xl text-primary dark:text-sky-400 items-center justify-center hover:bg-white/40 dark:hover:bg-white/10 transition-all cursor-pointer shadow-xs shrink-0" title="Início / Mapa do Estado">
-      <span class="material-symbols-outlined text-[20px] sm:text-[22px]">public</span>
+      <img src="assets/globo.png" alt="Início" class="w-5 h-5 sm:w-6 sm:h-6 object-contain drop-shadow-xs transition-transform hover:scale-110 select-none pointer-events-none">
     </a>
 
     <!-- Canto Direito: [ Nome + Ente ] [ Perfil ] [ Configurações Globais ] -->
@@ -251,14 +251,14 @@
       
       <!-- ESTADO PADRÃO (vendo os 8 cards): Globo para início (exclusivo para quem gerencia múltiplos municípios) -->
       <a id="header-mun-default-card" href="home.html" onclick="if(window.voltarParaMunicipios){ event.preventDefault(); window.voltarParaMunicipios(true); }" class="hidden header-glass-card w-9 h-9 sm:w-10 sm:h-10 rounded-2xl text-primary dark:text-sky-400 items-center justify-center hover:bg-white/40 dark:hover:bg-white/10 transition-all cursor-pointer shadow-xs shrink-0" title="Início / Selecionar Outro Município (Mapa Geral do Estado)">
-        <span class="material-symbols-outlined text-[20px] sm:text-[22px]">public</span>
+        <img src="assets/globo.png" alt="Início" class="w-5 h-5 sm:w-6 sm:h-6 object-contain drop-shadow-xs transition-transform hover:scale-110 select-none pointer-events-none">
       </a>
 
       <!-- ESTADO COM CARD ACESSADO: Card Envolvendo os elementos (Globo se autorizado, Nome do Card e Seta de Retorno) -->
       <div id="header-mun-card-active-box" class="hidden header-glass-card items-center p-0.5 md:p-1 rounded-2xl gap-2 sm:gap-2.5 px-2.5 md:px-3 shadow-xs select-none">
         <!-- 1. O Globo apontando para o início (mapa do estado - exclusivo múltiplos municípios) -->
         <a id="header-mun-active-globe" href="home.html" onclick="if(window.voltarParaMunicipios){ event.preventDefault(); window.voltarParaMunicipios(true); }" class="hidden w-8 h-8 md:w-9 md:h-9 rounded-xl hover:bg-white/30 dark:hover:bg-white/10 text-primary dark:text-sky-400 items-center justify-center transition-all cursor-pointer shrink-0" title="Início / Mapa do Estado">
-          <span class="material-symbols-outlined text-[20px] md:text-[22px]">public</span>
+          <img src="assets/globo.png" alt="Início" class="w-5 h-5 md:w-5.5 md:h-5.5 object-contain drop-shadow-xs transition-transform hover:scale-110 select-none pointer-events-none">
         </a>
 
         <!-- Divisor vertical sutil -->
