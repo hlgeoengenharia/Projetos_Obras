@@ -118,14 +118,35 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
             </div>`;
         }
 
-        // Render Edit button inside the tab if we are NOT in edit mode (não renderizar em abas de Histórico Consolidado e em aba de orçamento sem campos customizados)
-        if (!isEditMode && canEditThisTab && !isConsolidated && (!isOrcamento || (tab.fields && tab.fields.length > 0))) {
+        // Verifica se há modelo de relatório A4 configurado para exibir atalho nesta aba específica ou em todas
+        let reportShortcutHtml = '';
+        try {
+            const rawTpls = (typeof window.ReportAdapter !== 'undefined' && window.ReportAdapter.getReportTemplates)
+                ? window.ReportAdapter.getReportTemplates(formId)
+                : JSON.parse(localStorage.getItem('constructive_report_templates') || '[]');
+            const matchingTpl = (rawTpls || []).find(t => t.form_id === formId && (t.atalho_aba === tab.id || t.atalho_aba === 'todas'));
+            if (matchingTpl) {
+                const reportTitle = (matchingTpl.nome || 'Relatório A4').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                reportShortcutHtml = `
+                    <button type="button" onclick="if (typeof window.openFeatureReportPage === 'function') window.openFeatureReportPage('${matchingTpl.id}', (typeof activeFeatureData !== 'undefined' ? activeFeatureData : (window.activeFeatureData || {})), (typeof activeFeatureLayer !== 'undefined' && activeFeatureLayer && activeFeatureLayer.feature ? activeFeatureLayer.feature.geometry : (window.activeFeatureLayer && window.activeFeatureLayer.feature ? window.activeFeatureLayer.feature.geometry : null))); else if (typeof window.printActiveFeatureReport === 'function') window.printActiveFeatureReport('${matchingTpl.id}'); else alert('Módulo de Relatórios não carregado.');" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-lg font-bold text-xs shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer" title="Emitir ${reportTitle}">
+                        <span class="material-symbols-outlined text-[18px]">description</span>
+                        <span>${reportTitle}</span>
+                    </button>
+                `;
+            }
+        } catch(e) {}
+
+        // Render Edit and Report buttons inside the tab if not in edit mode
+        if (!isEditMode && (!isConsolidated && (!isOrcamento || (tab.fields && tab.fields.length > 0)) || reportShortcutHtml)) {
             html += `
-            <div class="flex justify-center mb-4">
+            <div class="flex flex-wrap items-center justify-center gap-2 mb-4">
+                ${(canEditThisTab && !isConsolidated && (!isOrcamento || (tab.fields && tab.fields.length > 0))) ? `
                 <button type="button" onclick="toggleFeatureEditMode('${tab.id}')" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto text-sm">
                     <span class="material-symbols-outlined text-[18px]">edit</span>
                     Editar esta aba
                 </button>
+                ` : ''}
+                ${reportShortcutHtml}
             </div>`;
         }
 

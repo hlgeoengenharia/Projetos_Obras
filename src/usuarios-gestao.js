@@ -1791,6 +1791,7 @@
         }).join('');
 
         // Ortofotos do município selecionado
+        const currentAdminId = _currentUserProfile ? _currentUserProfile.id : null;
         const rastersDoMunicipio = (_allRasters || []).filter(r => {
             if (r.municipio_id && r.municipio_id !== selectedMunId) return false;
             const rEntRaw = (r.entidade || 'Prefeitura Municipal').trim();
@@ -1803,8 +1804,17 @@
                 return rSigla === minhaSigla;
             }
 
-            // Para servidores da própria equipe, exibe estritamente as ortofotos criadas pelo próprio ente
-            return rSigla === minhaSigla;
+            // Para servidores da própria equipe:
+            // 1. Exibe ortofotos criadas pelo próprio ente
+            if (rSigla === minhaSigla) return true;
+
+            // 2. TETO DE DELEGAÇÃO: Exibe também ortofotos de outros entes que foram compartilhadas com o Administrador logado
+            if (currentAdminId) {
+                const adminRasterPerm = _allRasterPerms[`${currentAdminId}:${r.id}`];
+                if (adminRasterPerm && adminRasterPerm.pode_ver) return true;
+            }
+
+            return false;
         });
 
         const ortofotosHtml = rastersDoMunicipio.map(r => {
@@ -1834,7 +1844,9 @@
                 if (m) dateStr = `${m[1]}/${m[2]}/${m[3]}`;
             }
 
-            const canManageRaster = isTargetUserSuperAdmin || _currentUserProfile?.super_admin || (rSigla === minhaSigla);
+            const adminRasterPerm = currentAdminId ? _allRasterPerms[`${currentAdminId}:${r.id}`] : null;
+            const adminHasPerm = (rSigla === minhaSigla) || !!(adminRasterPerm && adminRasterPerm.pode_ver);
+            const canManageRaster = isTargetUserSuperAdmin || _currentUserProfile?.super_admin || adminHasPerm;
             const rasterDisabled = (!isEditing || !canManageRaster) ? 'disabled' : '';
 
             return `
@@ -2206,7 +2218,7 @@
                         </div>
 
                         <div class="space-y-2">
-                            ${ortofotosHtml || `<div class="text-xs text-slate-400 italic py-3 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">${isPartnerPontoFocal ? `Nenhuma ortofoto da sua entidade (${minhaSigla}) cadastrada em ${selectedMunObj.nome} para compartilhar.` : `Nenhuma ortofoto da entidade ${userSigla} cadastrada em ${selectedMunObj.nome}.`}</div>`}
+                            ${ortofotosHtml || `<div class="text-xs text-slate-400 italic py-3 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">${isPartnerPontoFocal ? `Nenhuma ortofoto da sua entidade (${minhaSigla}) cadastrada em ${selectedMunObj.nome} para compartilhar.` : `Nenhuma ortofoto disponível para a entidade ${userSigla} em ${selectedMunObj.nome}.`}</div>`}
                         </div>
                     </div>
 

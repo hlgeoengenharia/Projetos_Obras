@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@600;700&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "outline-variant": "#c3c6ce", "on-primary-fixed-variant": "#314863", "surface-container-low": "#f0f3ff", "on-error-container": "#93000a", "primary-fixed-dim": "#b0c9e8", "surface": "#f9f9ff", "secondary-fixed-dim": "#68dba9", "primary-container": "#0f2942", "on-tertiary-container": "#d77503", "inverse-surface": "#263143", "tertiary-fixed": "#ffdcc3", "on-background": "#111c2d", "surface-container": "#e7eeff", "surface-variant": "#d8e3fb", "on-primary": "#ffffff", "surface-container-high": "#dee8ff", "inverse-primary": "#b0c9e8", "primary-fixed": "#d1e4ff", "surface-container-highest": "#d8e3fb", "secondary-fixed": "#85f8c4", "on-tertiary-fixed-variant": "#6e3900", "surface-tint": "#49607c", "tertiary-container": "#401f00", "surface-bright": "#f9f9ff", "inverse-on-surface": "#ecf1ff", "outline": "#74777e", "surface-dim": "#cfdaf2", "on-tertiary": "#ffffff", "on-surface": "#111c2d", "tertiary": "#220e00", "on-tertiary-fixed": "#2f1500", "background": "#f9f9ff", "on-secondary-fixed-variant": "#005137", "on-error": "#ffffff", "primary": "#001428", "on-secondary-container": "#00714e", "error": "#ba1a1a", "on-secondary-fixed": "#002114", "on-secondary": "#ffffff", "secondary-container": "#82f5c1", "error-container": "#ffdad6", "on-primary-fixed": "#011d35", "on-surface-variant": "#43474d", "tertiary-fixed-dim": "#ffb77d", "surface-container-lowest": "#ffffff", "secondary": "#006c4a", "on-primary-container": "#7991af" }, "borderRadius": { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, "spacing": { "space-xs": "0.25rem", "margin-mobile": "0.75rem", "space-sm": "0.5rem", "margin": "1.5rem", "space-xl": "2rem", "space-md": "0.75rem", "space-lg": "1.25rem", "gutter": "1rem", "gutter-mobile": "0.75rem" }, "fontFamily": { "body-sm": ["IBM Plex Sans"], "body-lg": ["IBM Plex Sans"], "label-sm": ["JetBrains Mono"], "headline-lg": ["Hanken Grotesk"], "label-md": ["JetBrains Mono"], "headline-md": ["Hanken Grotesk"], "headline-sm": ["Hanken Grotesk"], "body-md": ["IBM Plex Sans"], "display-lg": ["Hanken Grotesk"], "headline-lg-mobile": ["Hanken Grotesk"] }, "fontSize": { "body-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0em", "fontWeight": "400" }], "body-lg": ["15px", { "lineHeight": "22px", "letterSpacing": "-0.005em", "fontWeight": "400" }], "label-sm": ["10px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "500" }], "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.015em", "fontWeight": "600" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" }], "headline-md": ["18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "headline-sm": ["15px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "600" }], "body-md": ["13px", { "lineHeight": "18px", "letterSpacing": "0em", "fontWeight": "400" }], "display-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700" }], "headline-lg-mobile": ["20px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600" }] } } } };</script><style>@layer base{html,body{width:100vw;margin:0;padding:0;background:#f9f9ff;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] pt-safe"><div class="h-20 px-margin-mobile flex flex-col justify-center gap-space-xs"><div class="flex items-center justify-between"><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-secondary text-[20px]">public</span><span class="font-headline-sm text-headline-sm text-primary tracking-tight">GeoGestão / SIGweb</span></div><div class="flex items-center gap-space-xs"><button aria-label="Alternar modo de exibição" class="w-11 h-11 flex items-center justify-center text-on-surface-variant hover:text-primary transition-colors"><span class="material-symbols-outlined text-[20px]">view_quilt</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div><div class="flex items-center justify-between gap-space-xs"><nav aria-label="Breadcrumb" class="flex items-center gap-1 overflow-hidden"><span class="font-label-sm text-label-sm text-on-surface-variant uppercase truncate">Cadastros</span><span class="material-symbols-outlined text-outline text-[12px]">chevron_right</span><span class="font-label-sm text-label-sm text-primary font-semibold uppercase truncate">Relatórios Gerenciais</span></nav><div class="flex items-center gap-1 px-space-xs py-0.5 rounded bg-secondary-container/30 text-secondary"><span class="material-symbols-outlined text-[12px]">verified</span><span class="font-label-sm text-label-sm uppercase tracking-wider font-semibold whitespace-nowrap">Core Imutável</span></div></div></div></header><main class="flex flex-col relative w-full pt-20 pb-20 bg-surface min-h-screen"><div class="flex flex-col w-full px-margin-mobile pb-space-xl gap-space-md">
+<!-- 1. Card de Governança Arquitetural & Auditoria Imutável -->
+<div class="w-full bg-surface-container-low rounded-xl p-space-md shadow-sm flex flex-col gap-space-xs">
+<div class="flex items-center justify-between gap-space-xs">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="material-symbols-outlined text-secondary text-[20px] shrink-0">verified_user</span>
+<span class="font-headline-sm text-headline-sm text-primary truncate">Governança &amp; Desacoplamento</span>
+</div>
+<div class="flex items-center gap-1 bg-secondary-container px-2 py-0.5 rounded-full text-on-secondary-container shrink-0">
+<span class="material-symbols-outlined text-[14px]">lock</span>
+<span class="font-label-sm text-label-sm font-semibold uppercase">Zero Impacto no Core</span>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+      Consumo assíncrono via barramento seguro <code class="font-label-sm text-label-sm text-primary font-semibold bg-surface-container px-1 py-0.5 rounded">Adapter Read-Only</code>. As chamadas <span class="font-label-sm text-label-sm text-secondary">getFormFields(formId)</span> e <span class="font-label-sm text-label-sm text-secondary">getExistingCharts(formId)</span> operam em espelho isolado sem mutabilidade nos esquemas transacionais.
+    </p>
+<div class="flex items-center justify-between pt-space-xs">
+<div class="flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-secondary inline-block"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Contrato RPC Ativo: v2.4.1-rc</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Hash: <span class="text-primary font-semibold">a8f9c4...2e</span></span>
+</div>
+</div>
+<!-- 2. Contexto de Origem e Tipo de Emissão -->
+<div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-md">
+<div class="flex flex-col gap-space-xs">
+<label class="font-label-sm text-label-sm uppercase text-on-surface-variant font-semibold">Camada Cartográfica / Formulário Vinculado</label>
+<div class="flex items-center justify-between bg-surface-container px-space-md py-space-sm rounded-lg">
+<div class="flex items-center gap-space-sm min-w-0">
+<span class="material-symbols-outlined text-primary text-[20px] shrink-0">layers</span>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-headline-sm text-primary truncate">Cadastro Imobiliário Urbano</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">Camada: Lotes_2024 · EPSG:31983 (SIRGAS)</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">expand_more</span>
+</div>
+</div>
+<!-- Seletor Segmentado: Ficha Única vs Consolidado -->
+<div class="flex flex-col gap-space-xs">
+<span class="font-label-sm text-label-sm uppercase text-on-surface-variant font-semibold">Escopo da Composição</span>
+<div class="grid grid-cols-2 p-1 bg-surface-container rounded-lg gap-1">
+<button class="flex items-center justify-center gap-1 py-1.5 px-space-xs rounded-md bg-primary text-on-primary shadow-sm transition-all text-center" id="btn-mode-single" type="button">
+<span class="material-symbols-outlined text-[16px]">location_searching</span>
+<span class="font-body-sm text-body-sm font-semibold truncate">Ficha Feição Única</span>
+</button>
+<button class="flex items-center justify-center gap-1 py-1.5 px-space-xs rounded-md bg-transparent text-on-surface-variant hover:text-primary transition-all text-center" id="btn-mode-batch" type="button">
+<span class="material-symbols-outlined text-[16px]">auto_stories</span>
+<span class="font-body-sm text-body-sm font-semibold truncate">Relatório em Lote</span>
+</button>
+</div>
+</div>
+<!-- 3. Parâmetros Físicos do Documento (A4 Print Engine) -->
+<div class="pt-space-xs">
+<div class="grid grid-cols-3 gap-space-xs">
+<div class="flex flex-col bg-surface-container-low p-space-xs rounded-lg">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">Padrão</span>
+<div class="flex items-center gap-1 mt-0.5">
+<span class="material-symbols-outlined text-primary text-[14px]">article</span>
+<span class="font-body-md text-body-md font-semibold text-primary">ISO A4</span>
+</div>
+</div>
+<div class="flex flex-col bg-surface-container-low p-space-xs rounded-lg">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">Orientação</span>
+<div class="flex items-center gap-1 mt-0.5">
+<span class="material-symbols-outlined text-secondary text-[14px]">crop_portrait</span>
+<span class="font-body-md text-body-md font-semibold text-primary">Retrato</span>
+</div>
+</div>
+<div class="flex flex-col bg-surface-container-low p-space-xs rounded-lg">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">Margens</span>
+<div class="flex items-center gap-1 mt-0.5">
+<span class="material-symbols-outlined text-outline text-[14px]">margin</span>
+<span class="font-label-md text-label-md font-semibold text-primary">20mm</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- 4. Paleta de Blocos Disponíveis (Gaveta Drag & Drop) -->
+<div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-secondary text-[18px]">widgets</span>
+<span class="font-headline-sm text-headline-sm text-primary">Catálogo de Blocos Construtivos</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Toque para inserir</span>
+</div>
+<div class="grid grid-cols-2 gap-space-xs pt-space-xs" id="block-catalog">
+<!-- Bloco 1 -->
+<button class="group flex items-start gap-space-xs p-space-xs bg-surface-container-low hover:bg-surface-container rounded-lg text-left transition-all active:scale-98" type="button">
+<div class="w-7 h-7 rounded bg-primary text-on-primary flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[16px]">account_balance</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-semibold text-primary truncate">Cabeçalho Oficial</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">Brasão + Timbre + Protocolo</span>
+</div>
+</button>
+<!-- Bloco 2 -->
+<button class="group flex items-start gap-space-xs p-space-xs bg-surface-container-low hover:bg-surface-container rounded-lg text-left transition-all active:scale-98" type="button">
+<div class="w-7 h-7 rounded bg-secondary text-on-secondary flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[16px]">calculate</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-semibold text-primary truncate">Cards de KPI</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">COUNT, AVG, SUM, %</span>
+</div>
+</button>
+<!-- Bloco 3 -->
+<button class="group flex items-start gap-space-xs p-space-xs bg-surface-container-low hover:bg-surface-container rounded-lg text-left transition-all active:scale-98" type="button">
+<div class="w-7 h-7 rounded bg-primary-container text-on-primary-fixed flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[16px]">badge</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-semibold text-primary truncate">Grade Cadastral</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">Campos Schema Ativos</span>
+</div>
+</button>
+<!-- Bloco 4 -->
+<button class="group flex items-start gap-space-xs p-space-xs bg-surface-container-low hover:bg-surface-container rounded-lg text-left transition-all active:scale-98" type="button">
+<div class="w-7 h-7 rounded bg-surface-tint text-on-primary flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[16px]">pie_chart</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-semibold text-primary truncate">Gráfico Reutilizado</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">Uso Solo / IPTU Ativo</span>
+</div>
+</button>
+<!-- Bloco 5 -->
+<button class="group flex items-start gap-space-xs p-space-xs bg-surface-container-low hover:bg-surface-container rounded-lg text-left transition-all active:scale-98" type="button">
+<div class="w-7 h-7 rounded bg-inverse-surface text-inverse-on-surface flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[16px]">table_rows</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-semibold text-primary truncate">Tabela de Atributos</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">Colunas customizadas</span>
+</div>
+</button>
+<!-- Bloco 6 -->
+<button class="group flex items-start gap-space-xs p-space-xs bg-surface-container-low hover:bg-surface-container rounded-lg text-left transition-all active:scale-98" type="button">
+<div class="w-7 h-7 rounded bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[16px]">satellite_alt</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-semibold text-primary truncate">Snapshot SIGweb</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">Ortofoto + Polígono</span>
+</div>
+</button>
+<!-- Bloco 7 -->
+<button class="group flex items-start gap-space-xs p-space-xs bg-surface-container-low hover:bg-surface-container rounded-lg text-left transition-all active:scale-98" type="button">
+<div class="w-7 h-7 rounded bg-outline-variant text-on-surface flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[16px]">edit_note</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-semibold text-primary truncate">Parecer Técnico</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">Texto e assinaturas</span>
+</div>
+</button>
+<!-- Bloco 8 -->
+<button class="group flex items-start gap-space-xs p-space-xs bg-surface-container-low hover:bg-surface-container rounded-lg text-left transition-all active:scale-98" type="button">
+<div class="w-7 h-7 rounded bg-surface-variant text-primary flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[16px]">splitscreen</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-semibold text-primary truncate">Quebra &amp; Rodapé</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">Numeração e Hash</span>
+</div>
+</button>
+</div>
+</div>
+<!-- 5. Canvas Interativo: Folha A4 Simulação Visual -->
+<div class="w-full flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[18px]">preview</span>
+<span class="font-headline-sm text-headline-sm text-primary">Prancheta A4 (Composição Ativa)</span>
+</div>
+<div class="flex items-center gap-1 bg-surface-container px-2 py-0.5 rounded text-on-surface-variant">
+<span class="font-label-sm text-label-sm">Pág 01/01</span>
+</div>
+</div>
+<!-- Viewport da Folha A4 Física (com margens de segurança de 20mm simuladas) -->
+<div class="w-full bg-surface-container-lowest rounded-xl shadow-md p-space-md flex flex-col gap-space-md relative overflow-hidden" id="canvas-sheet">
+<!-- Indicador de Margem Virtual de Impressão -->
+<div class="w-full flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-outline text-[12px]">straighten</span>
+<span class="font-label-sm text-label-sm text-outline uppercase">Área de Impressão Segura (210mm x 297mm)</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary font-semibold">100% Escala</span>
+</div>
+<!-- Nó Construtivo 1: Cabeçalho Institucional -->
+<div class="w-full bg-surface-container-low rounded-lg p-space-sm flex flex-col gap-space-xs relative group" data-node="header">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-outline text-[16px] cursor-grab">drag_indicator</span>
+<span class="font-label-sm text-label-sm uppercase font-semibold text-primary">Cabeçalho Institucional Oficial</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<button aria-label="Configurar nó" class="w-6 h-6 flex items-center justify-center text-on-surface-variant hover:text-primary rounded hover:bg-surface-container" type="button">
+<span class="material-symbols-outlined text-[14px]">tune</span>
+</button>
+<button aria-label="Remover nó" class="w-6 h-6 flex items-center justify-center text-error hover:bg-error-container rounded" type="button">
+<span class="material-symbols-outlined text-[14px]">delete</span>
+</button>
+</div>
+</div>
+<div class="flex items-center gap-space-sm bg-surface-container-lowest p-space-xs rounded">
+<div class="w-8 h-8 rounded bg-primary-container text-on-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px]">domain</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-headline-sm text-primary truncate">PREFEITURA MUNICIPAL · SECRETARIA DE URBANISMO</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">SISTEMA INTEGRADO DE GESTÃO TERRITORIAL · SIGWEB</span>
+</div>
+</div>
+</div>
+<!-- Nó Construtivo 2: Snapshot SIGweb / Ortofoto + Polígono -->
+<div class="w-full bg-surface-container-low rounded-lg p-space-sm flex flex-col gap-space-xs relative group" data-node="map">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-outline text-[16px] cursor-grab">drag_indicator</span>
+<span class="font-label-sm text-label-sm uppercase font-semibold text-primary">Feição Geográfica · Snapshot SIGweb</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<span class="font-label-sm text-label-sm text-secondary bg-secondary-container/40 px-1.5 py-0.5 rounded font-semibold">1:2.000</span>
+<button aria-label="Configurar nó" class="w-6 h-6 flex items-center justify-center text-on-surface-variant hover:text-primary rounded hover:bg-surface-container" type="button">
+<span class="material-symbols-outlined text-[14px]">tune</span>
+</button>
+<button aria-label="Remover nó" class="w-6 h-6 flex items-center justify-center text-error hover:bg-error-container rounded" type="button">
+<span class="material-symbols-outlined text-[14px]">delete</span>
+</button>
+</div>
+</div>
+<div class="w-full h-36 bg-cover bg-center rounded relative overflow-hidden flex items-end p-space-xs shadow-inner" data-location="Brasília, Distrito Federal, Brasil" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCDE1EU-SCqHdRoxb1bybBEkRRrJJbVvWKCSzV9k42Oaw2WGwSrXfi0EQ8TsZOsWUhEYBqJIcutnzd_JXnR4qHSINiEYC1WJAVqObGWU5Uk0Io6K1JiF1q9GUMmPq1RpCf9oJ_GoMWFZyIn6W4TSbTVo1SdDRIN_20X4zQ3CSL0T7lIroxKB-af1GIL1cBnYCe7xeXLtnKohFHdq6X7dALwyJtg78wRscBkU0a5GAncHC1Qbyot6lY')">
+<div class="bg-primary/85 backdrop-blur-md px-2 py-1 rounded text-on-primary flex items-center justify-between w-full">
+<div class="flex items-center gap-1 min-w-0">
+<span class="material-symbols-outlined text-secondary-fixed text-[14px]">share_location</span>
+<span class="font-label-sm text-label-sm truncate">Lote Quadra 104 - Conjunto B - Lote 12</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary-fixed shrink-0">WGS84 / UTM 23S</span>
+</div>
+</div>
+</div>
+<!-- Nó Construtivo 3: Grade de Campos Cadastrais (Schema Dinâmico) -->
+<div class="w-full bg-surface-container-low rounded-lg p-space-sm flex flex-col gap-space-xs relative group" data-node="schema-grid">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-outline text-[16px] cursor-grab">drag_indicator</span>
+<span class="font-label-sm text-label-sm uppercase font-semibold text-primary">Atributos Extraídos (Schema Cadastral)</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<span class="font-label-sm text-label-sm text-on-surface-variant">4 chips ativos</span>
+<button aria-label="Configurar nó" class="w-6 h-6 flex items-center justify-center text-on-surface-variant hover:text-primary rounded hover:bg-surface-container" type="button">
+<span class="material-symbols-outlined text-[14px]">tune</span>
+</button>
+<button aria-label="Remover nó" class="w-6 h-6 flex items-center justify-center text-error hover:bg-error-container rounded" type="button">
+<span class="material-symbols-outlined text-[14px]">delete</span>
+</button>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-space-xs">
+<div class="bg-surface-container-lowest p-space-xs rounded flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">Inscrição Imobiliária</span>
+<span class="font-label-md text-label-md font-semibold text-primary">04.128.0092.001</span>
+</div>
+<div class="bg-surface-container-lowest p-space-xs rounded flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">Área Total Mapeada</span>
+<span class="font-label-md text-label-md font-semibold text-secondary">482,50 m²</span>
+</div>
+<div class="bg-surface-container-lowest p-space-xs rounded flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">Titular / Proprietário</span>
+<span class="font-body-sm text-body-sm font-semibold text-primary truncate">Imobiliária Central S/A</span>
+</div>
+<div class="bg-surface-container-lowest p-space-xs rounded flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">Zoneamento Municipal</span>
+<span class="font-body-sm text-body-sm font-semibold text-primary">ZUR-03 (Misto)</span>
+</div>
+</div>
+</div>
+<!-- Nó Construtivo 4: Gráfico Estatístico Vinculado (Reutilização de Chart) -->
+<div class="w-full bg-surface-container-low rounded-lg p-space-sm flex flex-col gap-space-xs relative group" data-node="chart-module">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-outline text-[16px] cursor-grab">drag_indicator</span>
+<span class="font-label-sm text-label-sm uppercase font-semibold text-primary">Estatística: Histórico e Inadimplência IPTU</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<span class="font-label-sm text-label-sm bg-surface-container px-1.5 py-0.5 rounded text-primary">Chart #04</span>
+<button aria-label="Configurar nó" class="w-6 h-6 flex items-center justify-center text-on-surface-variant hover:text-primary rounded hover:bg-surface-container" type="button">
+<span class="material-symbols-outlined text-[14px]">tune</span>
+</button>
+<button aria-label="Remover nó" class="w-6 h-6 flex items-center justify-center text-error hover:bg-error-container rounded" type="button">
+<span class="material-symbols-outlined text-[14px]">delete</span>
+</button>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-xs rounded flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<span class="font-body-sm text-body-sm font-semibold text-primary">Demonstrativo Quinquenal de Arrecadação</span>
+<span class="font-label-sm text-label-sm text-secondary font-semibold">+14.2% a.a.</span>
+</div>
+<!-- Inline SVG Chart: Bar & Trend Comparison -->
+<div class="w-full h-24 flex items-center justify-center">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 320 80">
+<!-- Grid horizontal faint lines -->
+<line stroke="#d8e3fb" stroke-dasharray="3 3" stroke-width="1" x1="0" x2="320" y1="20" y2="20"></line>
+<line stroke="#d8e3fb" stroke-dasharray="3 3" stroke-width="1" x1="0" x2="320" y1="45" y2="45"></line>
+<line stroke="#dee8ff" stroke-width="1" x1="0" x2="320" y1="70" y2="70"></line>
+<!-- Barras de Arrecadação -->
+<rect fill="#0f2942" height="28" rx="2" width="22" x="25" y="42"></rect>
+<rect fill="#0f2942" height="38" rx="2" width="22" x="85" y="32"></rect>
+<rect fill="#0f2942" height="46" rx="2" width="22" x="145" y="24"></rect>
+<rect fill="#0f2942" height="54" rx="2" width="22" x="205" y="16"></rect>
+<rect fill="#006c4a" height="62" rx="2" width="22" x="265" y="8"></rect>
+<!-- Linha de tendência suavizada -->
+<polyline fill="none" points="36,44 96,35 156,26 216,18 276,10" stroke="#68dba9" stroke-width="2.5"></polyline>
+<circle cx="276" cy="10" fill="#006c4a" r="3.5"></circle>
+</svg>
+</div>
+<div class="flex justify-between font-label-sm text-label-sm text-on-surface-variant px-2">
+<span>2020</span>
+<span>2021</span>
+<span>2022</span>
+<span>2023</span>
+<span class="font-semibold text-secondary">2024 (Real)</span>
+</div>
+</div>
+</div>
+<!-- Nó Construtivo 5: Parecer e Autenticação Criptográfica (Rodapé) -->
+<div class="w-full bg-surface-container-low rounded-lg p-space-sm flex flex-col gap-space-xs relative group" data-node="footer-seal">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-outline text-[16px] cursor-grab">drag_indicator</span>
+<span class="font-label-sm text-label-sm uppercase font-semibold text-primary">Despacho &amp; Assinatura Digital</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<button aria-label="Configurar nó" class="w-6 h-6 flex items-center justify-center text-on-surface-variant hover:text-primary rounded hover:bg-surface-container" type="button">
+<span class="material-symbols-outlined text-[14px]">tune</span>
+</button>
+<button aria-label="Remover nó" class="w-6 h-6 flex items-center justify-center text-error hover:bg-error-container rounded" type="button">
+<span class="material-symbols-outlined text-[14px]">delete</span>
+</button>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-xs rounded flex flex-col gap-1">
+<p class="font-body-sm text-body-sm text-on-surface-variant italic">
+            "Atesto que as coordenadas limítrofes e a testada descrita no registro encontram-se em plena conformidade com o Plano Diretor Estratégico Municipal e os levantamentos aerofotogramétricos vigentes."
+          </p>
+<div class="flex items-center justify-between pt-1">
+<span class="font-label-sm text-label-sm text-primary font-semibold">Eng. Roberto Vasconcellos · CREA 94021-DF</span>
+<span class="font-label-sm text-label-sm text-secondary font-semibold uppercase">ICP-Brasil Validado</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- 6. Barra Flutuante de Ações Inferiores (Persistência Desacoplada) -->
+<div class="sticky bottom-2 w-full z-20 bg-surface-container-lowest/95 backdrop-blur-md rounded-xl p-space-sm shadow-xl flex items-center justify-between gap-space-sm">
+<button class="flex-1 flex items-center justify-center gap-space-xs py-2 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-primary font-body-sm text-body-sm font-semibold transition-all active:scale-98" id="btn-preview-pdf" type="button">
+<span class="material-symbols-outlined text-[18px]">picture_as_pdf</span>
+<span>Visualizar PDF</span>
+</button>
+<button class="flex-1 flex items-center justify-center gap-space-xs py-2 px-space-md rounded-lg bg-primary hover:bg-primary-container text-on-primary font-body-sm text-body-sm font-semibold shadow-md transition-all active:scale-98" id="btn-save-template" type="button">
+<span class="material-symbols-outlined text-secondary-fixed text-[18px]">save</span>
+<span>Salvar Template</span>
+</button>
+</div>
+<!-- Toast Notificação de Persistência Desacoplada -->
+<div class="hidden fixed bottom-20 left-1/2 -translate-x-1/2 w-[90%] max-w-md bg-inverse-surface text-inverse-on-surface px-space-md py-space-sm rounded-xl shadow-2xl flex items-center justify-between gap-space-xs z-50 transition-all" id="toast-notify">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="material-symbols-outlined text-secondary-fixed text-[20px] shrink-0">cloud_done</span>
+<span class="font-body-sm text-body-sm truncate" id="toast-text">Template persistido na tabela relatorios_templates!</span>
+</div>
+<button class="text-inverse-on-surface hover:text-white" id="toast-close" type="button">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+</div>
+<script>
+  (function() {
+    const btnSingle = document.getElementById('btn-mode-single');
+    const btnBatch = document.getElementById('btn-mode-batch');
+    const btnSave = document.getElementById('btn-save-template');
+    const btnPreview = document.getElementById('btn-preview-pdf');
+    const toast = document.getElementById('toast-notify');
+    const toastText = document.getElementById('toast-text');
+    const toastClose = document.getElementById('toast-close');
+
+    function showToast(msg) {
+      if (!toast) return;
+      toastText.textContent = msg;
+      toast.classList.remove('hidden');
+      toast.classList.add('flex');
+      setTimeout(() => {
+        toast.classList.add('hidden');
+        toast.classList.remove('flex');
+      }, 4200);
+    }
+
+    if (toastClose) {
+      toastClose.addEventListener('click', () => {
+        toast.classList.add('hidden');
+        toast.classList.remove('flex');
+      });
+    }
+
+    if (btnSingle && btnBatch) {
+      btnSingle.addEventListener('click', () => {
+        btnSingle.classList.replace('bg-transparent', 'bg-primary');
+        btnSingle.classList.replace('text-on-surface-variant', 'text-on-primary');
+        btnBatch.classList.replace('bg-primary', 'bg-transparent');
+        btnBatch.classList.replace('text-on-primary', 'text-on-surface-variant');
+      });
+
+      btnBatch.addEventListener('click', () => {
+        btnBatch.classList.replace('bg-transparent', 'bg-primary');
+        btnBatch.classList.replace('text-on-surface-variant', 'text-on-primary');
+        btnSingle.classList.replace('bg-primary', 'bg-transparent');
+        btnSingle.classList.replace('text-on-primary', 'text-on-surface-variant');
+      });
+    }
+
+    if (btnSave) {
+      btnSave.addEventListener('click', () => {
+        showToast('Template gravado com sucesso em relatorios_templates (Zero Impacto no Core)');
+      });
+    }
+
+    if (btnPreview) {
+      btnPreview.addEventListener('click', () => {
+        showToast('Compilando renderização ISO A4 de 20mm...');
+      });
+    }
+
+    // Interatividade rápida nos blocos da paleta
+    const catalogButtons = document.querySelectorAll('#block-catalog button');
+    catalogButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const title = btn.querySelector('span.font-semibold') ? btn.querySelector('span.font-semibold').innerText : 'Bloco';
+        showToast(`Nó '${title}' anexado à prancheta A4`);
+      });
+    });
+  })();
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/85 backdrop-blur-xl shadow-[0_-1px_8px_rgba(0,0,0,0.04)]" data-active-classes="text-secondary"><div class="flex justify-around items-center h-16 px-space-xs"><a class="flex flex-col items-center justify-center min-w-[56px] h-11 text-on-surface-variant hover:text-on-surface transition-colors" data-path="formularios-legado" href="#"><span class="material-symbols-outlined text-[22px]">description</span><span class="font-label-sm text-label-sm mt-0.5">Formulários</span></a><a class="flex flex-col items-center justify-center min-w-[56px] h-11 text-on-surface-variant hover:text-on-surface transition-colors" data-path="mapa-sig" href="#"><span class="material-symbols-outlined text-[22px]">map</span><span class="font-label-sm text-label-sm mt-0.5">Mapa SIG</span></a><a class="flex flex-col items-center justify-center min-w-[56px] h-11 text-on-surface-variant hover:text-on-surface transition-colors" data-path="estatisticas-territoriais" href="#"><span class="material-symbols-outlined text-[22px]">query_stats</span><span class="font-label-sm text-label-sm mt-0.5">Estatísticas</span></a><a class="flex flex-col items-center justify-center min-w-[56px] h-11 text-on-surface-variant hover:text-on-surface transition-colors" data-path="relatorios-gerenciais" href="#"><span class="material-symbols-outlined text-[22px]">assessment</span><span class="font-label-sm text-label-sm mt-0.5">Relatórios</span></a></div></nav></body></html>

@@ -5278,6 +5278,50 @@ async function confirmGlobalImport() {
 let activeFeatureLayer = null;
 let isFeatureEditMode = false;
 
+function updateFeatureHeaderReportButton(layer, themeObj) {
+  const reportBtn = document.getElementById('btn-print-feature-report');
+  if (!reportBtn) return;
+  let showHeaderReport = false;
+  let headerReportTitle = 'Relatório A4';
+  let headerReportTplId = null;
+
+  try {
+      const targetLayer = layer || activeFeatureLayer;
+      const props = targetLayer && targetLayer.feature && targetLayer.feature.properties;
+      const tObj = themeObj || (props && props.themeId && Array.isArray(themes) ? themes.find(t => String(t.id) === String(props.themeId)) : null);
+      const formId = tObj ? (tObj.formId || tObj.id) : (props ? props.formId : null);
+
+      if (formId) {
+          const rawTpls = (typeof window.ReportAdapter !== 'undefined' && window.ReportAdapter.getReportTemplates)
+              ? window.ReportAdapter.getReportTemplates(formId)
+              : JSON.parse(localStorage.getItem('constructive_report_templates') || '[]');
+          const matchingHeaderTpl = (rawTpls || []).find(t => String(t.form_id) === String(formId) && t.atalho_aba === 'header');
+          if (matchingHeaderTpl) {
+              showHeaderReport = true;
+              headerReportTitle = matchingHeaderTpl.nome || 'Relatório A4';
+              headerReportTplId = matchingHeaderTpl.id;
+          }
+      }
+  } catch(e) {
+      console.warn('[ReportHeader] Erro ao verificar template para cabeçalho:', e);
+  }
+
+  if (showHeaderReport) {
+      reportBtn.style.display = 'flex';
+      reportBtn.title = `Gerar ${headerReportTitle}`;
+      const labelSpan = document.getElementById('btn-print-feature-report-label');
+      if (labelSpan) labelSpan.textContent = headerReportTitle;
+      reportBtn.onclick = function() {
+          if (typeof printActiveFeatureReport === 'function') {
+              printActiveFeatureReport(headerReportTplId);
+          }
+      };
+  } else {
+      reportBtn.style.display = 'none';
+  }
+}
+window.updateFeatureHeaderReportButton = updateFeatureHeaderReportButton;
+
 function showFeatureInfoModal(layer) {
   if (!layer) return;
   const themeId = layer.feature && layer.feature.properties && layer.feature.properties.themeId;
@@ -5295,6 +5339,7 @@ function showFeatureInfoModal(layer) {
   }
 
   activeFeatureLayer = layer;
+  window.activeFeatureLayer = layer;
   isFeatureEditMode = false;
   renderFeatureInfo();
 
@@ -5314,6 +5359,9 @@ function showFeatureInfoModal(layer) {
       const canEdit = typeof userCanOnTheme !== 'function' || userCanOnTheme(themeId, 'editar');
       editBtn.style.display = canEdit ? '' : 'none';
   }
+
+  // Visibilidade do botão Relatório A4 no cabeçalho (exclusivo para atalho_aba === 'header')
+  updateFeatureHeaderReportButton(layer, themeObj);
   
   // Força o card a receber cliques (bypass de cache do HTML/Tailwind)
   const card = document.getElementById('feature-info-card');
@@ -5888,6 +5936,9 @@ function closeFeatureInfoModal(keepLayer = false) {
   }
   if (icon) icon.textContent = 'open_in_full';
   window.isFeatureInfoFullscreen = false;
+
+  const rptBtn = document.getElementById('btn-print-feature-report');
+  if (rptBtn) rptBtn.style.display = 'none';
 
   if (!keepLayer) {
     activeFeatureLayer = null;

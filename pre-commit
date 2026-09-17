@@ -1,0 +1,18 @@
+#!/bin/sh
+# Hook de Pre-Commit Automatizado: Executa a auditoria de qualidade antes de commitar
+echo "=============================================================================="
+echo " 🛡️  Iniciando bateria de testes pré-commit (QA Gatekeeper)..."
+echo "=============================================================================="
+node test_sistema_qa.js
+
+STATUS=$?
+if [ $STATUS -ne 0 ]; then
+    echo ""
+    echo "❌ Commit abortado devido a falhas na auditoria do sistema."
+    echo "Corrija as inconsistências antes de efetuar o commit."
+    exit 1
+fi
+
+echo ""
+echo "✅ Todos os testes passaram! Commit liberado com sucesso."
+exit 0

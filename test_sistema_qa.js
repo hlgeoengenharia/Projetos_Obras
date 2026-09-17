@@ -66,7 +66,9 @@ const jsFiles = [
     'src/swipe-comparator.js',
     'src/formRenderer.js',
     'src/customFields.js',
-    'src/tableJoin.js'
+    'src/tableJoin.js',
+    'src/reportAdapter.js',
+    'src/reportBuilder.js'
 ];
 
 jsFiles.forEach(file => {
@@ -366,6 +368,11 @@ const hasStrictCamadasEnteIsolation = ugFreshCode.includes('if (tSigla !== minha
     ugFreshCode.includes("if (minhaSigla === 'Município' && meuMunId && t.municipio_id && t.municipio_id !== meuMunId) return false;");
 assertTest('Central de Usuários: Isolamento estrito de camadas do ente em CAMADAS (sem vazamento de outros órgãos)', hasStrictCamadasEnteIsolation);
 
+const hasRasterDelegationCeiling = ugFreshCode.includes('TETO DE DELEGAÇÃO: Exibe também ortofotos de outros entes que foram compartilhadas com o Administrador logado') &&
+    ugFreshCode.includes('adminRasterPerm.pode_ver') &&
+    ugFreshCode.includes('adminHasPerm = (rSigla === minhaSigla) || !!(adminRasterPerm && adminRasterPerm.pode_ver);');
+assertTest('Central de Usuários: Administrador pode delegar ortofotos compartilhadas para sua equipe (Teto de Delegação)', hasRasterDelegationCeiling);
+
 // 12. Estabilidade de Alta Densidade (20.709 Feições) e GeoEngineTurbo
 const indexHtmlContent = fs.readFileSync('index.html', 'utf8');
 const hasDensityIndicatorInHtml = indexHtmlContent.includes('id="map-density-indicator"') && indexHtmlContent.includes('id="map-density-text"');
@@ -466,6 +473,163 @@ const hasLoginEmailNotificationFeature = loginHtmlContent.includes('sendLoginNot
     fs.existsSync('supabase/functions/send-login-alert/index.ts') &&
     fs.existsSync('supabase_login_alert_setup.sql');
 assertTest('LGPD / Segurança: Rotina de notificação por e-mail com data, hora e dispositivo implementada (Edge Function & auditoria)', hasLoginEmailNotificationFeature);
+
+// 14. Módulo de Relatórios Gerenciais (A4) - Padrão Cartográfico, Gavetas Acordeon e Não-Regressão
+const reportAdapterExists = fs.existsSync('src/reportAdapter.js');
+assertTest('Relatórios A4: Arquivo src/reportAdapter.js existe', reportAdapterExists);
+
+if (reportAdapterExists) {
+    const reportAdapterCode = fs.readFileSync('src/reportAdapter.js', 'utf8');
+    const hasAdapterExports = reportAdapterCode.includes('window.ReportAdapter = {') &&
+        reportAdapterCode.includes('getFormFields') &&
+        reportAdapterCode.includes('getExistingCharts') &&
+        reportAdapterCode.includes('getHistoricalOrthophotos') &&
+        reportAdapterCode.includes('calculateFeatureDimensions') &&
+        reportAdapterCode.includes('saveReportTemplate');
+    assertTest('Relatórios A4: ReportAdapter expõe API somente-leitura e métodos analíticos', hasAdapterExports);
+}
+
+const reportBuilderExists = fs.existsSync('src/reportBuilder.js');
+assertTest('Relatórios A4: Arquivo src/reportBuilder.js existe', reportBuilderExists);
+
+if (reportBuilderExists) {
+    const reportBuilderCode = fs.readFileSync('src/reportBuilder.js', 'utf8');
+    const hasBuilderExports = reportBuilderCode.includes('window.ReportBuilder = {') &&
+        reportBuilderCode.includes('toggleAccordion') &&
+        reportBuilderCode.includes('saveCurrentTemplate') &&
+        reportBuilderCode.includes('generateIndividualReport') &&
+        reportBuilderCode.includes('enableInlineEdit');
+    assertTest('Relatórios A4: ReportBuilder implementa gavetas acordeon, edição inline e exportação', hasBuilderExports);
+
+    const hasTenAccordionCards = reportBuilderCode.includes("id: 'acc-layout'") &&
+        reportBuilderCode.includes("id: 'acc-header'") &&
+        reportBuilderCode.includes("id: 'acc-grid'") &&
+        reportBuilderCode.includes("id: 'acc-map'") &&
+        reportBuilderCode.includes("id: 'acc-charts'") &&
+        reportBuilderCode.includes("id: 'acc-kpis'") &&
+        reportBuilderCode.includes("id: 'acc-photos'") &&
+        reportBuilderCode.includes("id: 'acc-table-syn'") &&
+        reportBuilderCode.includes("id: 'acc-table-ana'") &&
+        reportBuilderCode.includes("id: 'acc-text-footer'");
+    assertTest('Relatórios A4: Todas as 10 Gavetas Acordeon (Cards 0 a 9) configuradas no painel lateral', hasTenAccordionCards);
+
+    const hasA4CanvasStyles = reportBuilderCode.includes('a4-sheet-stage') &&
+        reportBuilderCode.includes('page-break-avoid') &&
+        reportBuilderCode.includes('contenteditable');
+    assertTest('Relatórios A4: Folha virtual com suporte a double-click inline, quebra de página e A4 dinâmico', hasA4CanvasStyles);
+}
+
+const freshSettingsHtml = fs.readFileSync('settings.html', 'utf8');
+const hasSettingsReportsTab = freshSettingsHtml.includes('id="builder-module-reports"') &&
+    freshSettingsHtml.includes('id="builder-nav-reports"') &&
+    freshSettingsHtml.includes('switchBuilderModule');
+assertTest('Cadastros (settings.html): Abas do Construtor (Formulário, Dashboard, Relatórios A4) integradas', hasSettingsReportsTab);
+
+const freshIndexHtml = fs.readFileSync('index.html', 'utf8');
+const hasIndexReportIntegration = freshIndexHtml.includes('id="btn-print-feature-report"') &&
+    freshIndexHtml.includes('printActiveFeatureReport') &&
+    freshIndexHtml.includes('src/reportAdapter.js') &&
+    freshIndexHtml.includes('src/reportBuilder.js');
+assertTest('Mapa (index.html): Botão de Relatório A4 no modal de feições conectado ao ReportBuilder', hasIndexReportIntegration);
+
+const freshHomeHtml = fs.readFileSync('home.html', 'utf8');
+const hasHomeGerenciadorSecurity = freshHomeHtml.includes('ehAdmin') &&
+    freshHomeHtml.includes('title="Gerenciador"') &&
+    freshHomeHtml.includes('more_vert');
+assertTest('Segurança/Governança (home.html): Botão "Gerenciador" nos entes restrito a Admin e SuperAdmin', hasHomeGerenciadorSecurity);
+
+const formRendererCode = fs.readFileSync('src/formRenderer.js', 'utf8');
+const hasFormRendererReportShortcut = formRendererCode.includes('reportShortcutHtml') &&
+    formRendererCode.includes('constructive_report_templates') &&
+    formRendererCode.includes('atalho_aba');
+assertTest('Mapa / Formulário: Abas de atributos renderizam atalho de relatório quando configuradas', hasFormRendererReportShortcut);
+
+const reportBuilderCode = fs.existsSync('src/reportBuilder.js') ? fs.readFileSync('src/reportBuilder.js', 'utf8') : '';
+const hasReportBuilderAdvancedFeatures = reportBuilderCode.includes('updateAtalhoAba') &&
+    reportBuilderCode.includes('moveColumnOrder') &&
+    reportBuilderCode.includes('insertAnalyticalTableBlock') &&
+    reportBuilderCode.includes('handleLogoUpload');
+assertTest('Relatórios A4: Recursos avançados (seletor de aba do popup, reordenação de colunas, tabela analítica e upload de brasão)', hasReportBuilderAdvancedFeatures);
+const hasResponsiveA4Stage = reportBuilderCode.includes("boxSizing = 'border-box'") &&
+    reportBuilderCode.includes("ruler.style.maxWidth") &&
+    reportBuilderCode.includes("a4-page-break-indicator") &&
+    freshSettingsHtml.includes("w-full max-w-none") &&
+    freshHomeHtml.includes('<main class="flex-1 min-h-0 w-full px-3 sm:px-6');
+assertTest('Layout Expansivo & Relatórios A4: Tela 100% expansível para as laterais e folha A4 sem cortes em Paisagem/Retrato', hasResponsiveA4Stage);
+
+// NOVOS RECURSOS: CAIXA DE TEXTO LIVRE, ESCOPO GERAL, ATALHO DINÂMICO E PÁGINA INTERATIVA
+const hasFreeTextBox = reportBuilderCode.includes("id: 'acc-free-text'") &&
+    reportBuilderCode.includes("insertFreeTextBlock") &&
+    reportBuilderCode.includes("caixa_texto_livre") &&
+    reportBuilderCode.includes("handleFreeTextInput") &&
+    reportBuilderCode.includes("renderMentionDropdown");
+assertTest('Relatórios A4: Card "Caixa de texto livre" implementado com formatação rica e autocomplete @', hasFreeTextBox);
+
+const hasGeralScope = reportBuilderCode.includes("switchType('geral')") &&
+    reportBuilderCode.includes("ReportBuilder.switchType('geral')") &&
+    !reportBuilderCode.includes("Lote / Geral");
+assertTest('Relatórios A4: Escopo renomeado de "Lote / Geral" para "Geral"', hasGeralScope);
+
+const relatorioViewExists = fs.existsSync('relatorio_view.html');
+assertTest('Relatórios A4: Arquivo dedicado relatorio_view.html existe', relatorioViewExists);
+
+if (relatorioViewExists) {
+    const relatorioViewCode = fs.readFileSync('relatorio_view.html', 'utf8');
+    const hasRelatorioViewFeatures = relatorioViewCode.includes('Gerar PDF') &&
+        relatorioViewCode.includes('Gerar Word') &&
+        relatorioViewCode.includes('gerarWord') &&
+        relatorioViewCode.includes('initInteractiveLeafletMap') &&
+        relatorioViewCode.includes('L.map') &&
+        relatorioViewCode.includes('contenteditable="true"');
+    assertTest('Relatórios A4: relatorio_view.html possui botões (PDF, Word, Impressão), mapa SIG interativo e textos editáveis', hasRelatorioViewFeatures);
+}
+
+const hasDynamicPopupShortcut = formRendererCode.includes('matchingTpl.nome') &&
+    formRendererCode.includes('openFeatureReportPage') &&
+    freshIndexHtml.includes('openFeatureReportPage');
+assertTest('Relatórios A4: Atalho no popup exibe título dinâmico do relatório e conecta à página interativa', hasDynamicPopupShortcut);
+
+const freshMainJs = fs.readFileSync('src/main.js', 'utf8');
+const hasHeaderReportConditional = freshIndexHtml.includes('id="btn-print-feature-report"') &&
+    freshIndexHtml.includes('style="display: none;"') &&
+    freshMainJs.includes('updateFeatureHeaderReportButton') &&
+    freshMainJs.includes("atalho_aba === 'header'");
+assertTest('Relatórios A4: Botão "Relatório A4" no cabeçalho do popup condicionado exclusivamente a atalho_aba === "header"', hasHeaderReportConditional);
+
+const freshReportBuilderCode = fs.readFileSync('src/reportBuilder.js', 'utf8');
+const hasTabDisambiguationInMentions = freshReportBuilderCode.includes('data-tab-title') &&
+    freshReportBuilderCode.includes('Aba:') &&
+    freshReportBuilderCode.includes('insertMentionField') &&
+    freshReportBuilderCode.includes('w-80 sm:w-96');
+assertTest('Relatórios A4: Dropdown de menções @ exibe identificação explícita de abas para desambiguação de campos com mesmo nome', hasTabDisambiguationInMentions);
+
+const hasTabGroupedGrid = freshReportBuilderCode.includes('cfg-grid-tab-section') &&
+    freshReportBuilderCode.includes('toggleTabFieldsInDrawer') &&
+    freshReportBuilderCode.includes('filterGridFieldsInDrawer') &&
+    freshReportBuilderCode.includes('cfg-grid-search-input');
+assertTest('Relatórios A4: Card "Grade de Atributos/Campos" organiza campos por abas com filtros e seleção por aba', hasTabGroupedGrid);
+
+// Verificações do Card 6: Vistoria Fotográfica & Anexos (1:N) Reformulado
+const freshReportAdapterCode = fs.readFileSync('src/reportAdapter.js', 'utf8');
+const freshRelatorioViewCode = fs.readFileSync('relatorio_view.html', 'utf8');
+const hasMultipleTabsAdapter = freshReportAdapterCode.includes('getMultipleTabs') &&
+    freshReportAdapterCode.includes('isMultiple || t.isConsolidated');
+assertTest('Relatórios A4: ReportAdapter implementa e expõe getMultipleTabs para detecção de abas 1:N e consolidadas', hasMultipleTabsAdapter);
+
+const has1nCardReformulation = freshReportBuilderCode.includes('cfg-1n-source-tab') &&
+    freshReportBuilderCode.includes('insertSynthetic1nBlock') &&
+    freshReportBuilderCode.includes('insertAnalyticalPhotos1nBlock') &&
+    freshReportBuilderCode.includes('select1nScope') &&
+    freshReportBuilderCode.includes('btn-1n-scope-all') &&
+    freshReportBuilderCode.includes('btn-1n-scope-last');
+assertTest('Relatórios A4: Card "Vistoria Fotográfica & Anexos (1:N)" reformulado com seletor de abas 1:N, botões separados (Sintética vs Analítica) e escopo', has1nCardReformulation);
+
+const has1nViewRendering = freshRelatorioViewCode.includes('extract1nFeatureRecords') &&
+    freshRelatorioViewCode.includes('case \'tabela_sintetica_1n\':') &&
+    freshRelatorioViewCode.includes('case \'laudo_vistoria_fotos\':') &&
+    freshRelatorioViewCode.includes('cfg-1n-syn-cols-container' === 'cfg-1n-syn-cols-container');
+assertTest('Relatórios A4: relatorio_view.html extrai dados reais 1:N e renderiza tanto Tabela Sintética quanto Laudo Analítico com fotos', has1nViewRendering);
+
 
 
 // ------------------------------------------------------------------------------

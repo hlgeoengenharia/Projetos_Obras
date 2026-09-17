@@ -1622,6 +1622,10 @@
                 <span class="material-symbols-outlined text-[18px]">3d_rotation</span>
                 Analisar 3D
             </button>
+            <button id="btn-print-feature-report" onclick="printActiveFeatureReport()" class="flex items-center justify-center gap-2 px-3 py-1.5 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-800 dark:text-slate-200 font-medium text-sm transition-all tooltip" title="Gerar Relatório A4" style="display: none;">
+                <span class="material-symbols-outlined text-[18px]">description</span>
+                <span id="btn-print-feature-report-label">Relatório A4</span>
+            </button>
         </div>
         <div class="flex items-center gap-2 ml-2">
             <div class="flex items-center rounded-lg overflow-hidden border border-slate-300/50 dark:border-white/10 shadow-sm bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
@@ -2435,5 +2439,37 @@
 <script src="src/session-security.js"></script>
 <script src="src/swipe-comparator.js?v=20260908c"></script>
 <script src="src/orcamento.js?v=20260910a"></script>
+<script src="src/reportAdapter.js"></script>
+<script src="src/reportBuilder.js"></script>
+<script>
+    function printActiveFeatureReport(templateId = null) {
+        const layer = (typeof activeFeatureLayer !== 'undefined' && activeFeatureLayer) || window.activeFeatureLayer;
+        if (!layer || !layer.feature) {
+            if (typeof showToast === 'function') {
+                showToast('Selecione uma feição para gerar o relatório individual.', 'info');
+            } else {
+                alert('Selecione uma feição para gerar o relatório individual.');
+            }
+            return;
+        }
+        const props = layer.feature.properties || {};
+        const geom = layer.feature.geometry || (layer.toGeoJSON ? layer.toGeoJSON().geometry : null);
+        const themeId = props.themeId;
+        const themeObj = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes.find(t => String(t.id) === String(themeId)) : null;
+        const formId = themeObj ? (themeObj.formId || themeObj.id) : (props.formId || null);
+
+        if (typeof window.openFeatureReportPage === 'function') {
+            window.openFeatureReportPage(templateId, props, geom);
+        } else if (window.ReportBuilder && typeof window.ReportBuilder.openFeatureReportPage === 'function') {
+            window.ReportBuilder.openFeatureReportPage(templateId, props, geom);
+        } else if (window.ReportBuilder && typeof window.ReportBuilder.generateIndividualReport === 'function') {
+            window.ReportBuilder.generateIndividualReport(formId, props, geom);
+        } else {
+            console.error('[ReportBuilder] Módulo não disponível no escopo global.');
+            alert('Módulo de Relatórios A4 não carregado.');
+        }
+    }
+    window.printActiveFeatureReport = printActiveFeatureReport;
+</script>
 </body>
 </html>

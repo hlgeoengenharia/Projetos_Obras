@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizador Oficial de Relatório A4</title>
+    
+    <!-- Tipografia Oficial e Ícones -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+    
+    <!-- Leaflet & Turf.js -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        body {
+            font-family: 'IBM Plex Sans', sans-serif;
+            background-color: #f1f5f9;
+            color: #0f172a;
+            margin: 0;
+            padding: 0;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+
+        .a4-page {
+            background: #ffffff;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+            margin: 20px auto;
+            position: relative;
+            box-sizing: border-box;
+            transition: all 0.2s ease;
+        }
+
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            body {
+                background: #ffffff !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            .a4-page {
+                box-shadow: none !important;
+                margin: 0 !important;
+                width: 100% !important;
+                max-width: none !important;
+                padding: var(--print-padding, 15mm) !important;
+            }
+            .page-break-avoid {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+        }
+
+        .mention-rendered {
+            font-weight: 600;
+            color: #0f172a;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- BARRA SUPERIOR (RODATETO) - AÇÕES RÁPIDAS (OCULTA NA IMPRESSÃO) -->
+    <header class="no-print sticky top-0 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-xs px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 select-none">
+        <div class="flex items-center gap-3 w-full sm:w-auto">
+            <button type="button" onclick="window.close()" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors cursor-pointer" title="Fechar Janela">
+                <span class="material-symbols-outlined text-[22px]">arrow_back</span>
+            </button>
+            <div class="flex flex-col">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-sky-600 text-[20px]">description</span>
+                    <h1 id="report-header-title" class="font-bold text-sm sm:text-base text-slate-900 dark:text-white leading-tight truncate max-w-xs sm:max-w-md">Relatório da Feição</h1>
+                </div>
+                <span id="report-header-subtitle" class="text-[11px] font-mono text-slate-500 dark:text-slate-400">Configuração Interativa do Documento • Edição de Mapa &amp; Texto</span>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+            <!-- Botão Gerar PDF -->
+            <button type="button" onclick="gerarPDF()" class="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="Exportar como documento PDF">
+                <span class="material-symbols-outlined text-[17px]">picture_as_pdf</span>
+                <span>Gerar PDF</span>
+            </button>
+
+            <!-- Botão Gerar Word -->
+            <button type="button" onclick="gerarWord()" class="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="Exportar como documento Word (.doc)">
+                <span class="material-symbols-outlined text-[17px]">article</span>
+                <span>Gerar Word</span>
+            </button>
+
+            <!-- Botão Imprimir -->
+            <button type="button" onclick="window.print()" class="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="Imprimir em impressora">
+                <span class="material-symbols-outlined text-[17px]">print</span>
+                <span>Imprimir</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- ÁREA DE NOTIFICAÇÃO / DICA VISUAL -->
+    <div class="no-print bg-sky-50 dark:bg-sky-950/40 border-b border-sky-200 dark:border-sky-800/60 px-4 py-2 text-center text-xs text-sky-800 dark:text-sky-300 flex items-center justify-center gap-2">
+        <span class="material-symbols-outlined text-[16px]">info</span>
+        <span>Você pode navegar pelo Mini-Mapa Cartográfico (pan/zoom/camadas) e editar a Caixa de Texto Livre diretamente na folha antes de gerar o PDF ou Word.</span>
+    </div>
+
+    <!-- CONTAINER DA FOLHA A4 -->
+    <main class="flex-1 flex justify-center p-3 sm:p-6 overflow-y-auto">
+        <div id="a4-document-container" class="a4-page w-full text-slate-900">
+            <!-- Conteúdo montado dinamicamente via JS -->
+            <div id="report-blocks-render" class="flex flex-col gap-5 w-full"></div>
+        </div>
+    </main>
+
+    <script>
+        let reportPayload = null;
+        let leafletMapInstance = null;
+        let activePolygonLayer = null;
+        let currentBaseTileLayer = null;
+        let currentMapMode = 'streets';
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initReportViewer();
+        });
+
+        function initReportViewer() {
+            // Recupera o payload de dados salvo pela aplicação principal
+            try {
+                const raw = sessionStorage.getItem('constructive_active_report_payload') || 
+                            localStorage.getItem('constructive_active_report_payload');
+                if (raw) {
+                    reportPayload = JSON.parse(raw);
+                }
+            } catch(e) {
+                console.error('[Viewer] Falha ao ler payload:', e);
+            }
+
+            if (!reportPayload) {
+                document.getElementById('report-blocks-render').innerHTML = `
+                    <div class="p-10 text-center text-slate-500">
+                        <span class="material-symbols-outlined text-5xl text-amber-500 mb-2">warning</span>
+                        <h2 class="text-base font-bold">Nenhum dado de feição recebido</h2>
+                        <p class="text-xs text-slate-400 mt-1">Selecione uma feição no mapa e abra o atalho de relatório.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const { templateId, formId, featureData, featureGeometry } = reportPayload;
+            
+            // Busca o modelo
+            let templates = [];
+            try {
+                templates = JSON.parse(localStorage.getItem('constructive_report_templates') || '[]');
+            } catch(e) {}
+            
+            let tpl = templates.find(t => t.id === templateId) || templates.find(t => t.form_id === formId) || templates[0];
+            if (!tpl) {
+                tpl = {
+                    id: 'default_preview',
+                    nome: 'Ficha Individual do Imóvel',
+                    tipo: 'individual',
+                    config_pagina: { orientacao: 'portrait', margens_mm: { top: 15, bottom: 15, left: 15, right: 15 } },
+                    blocos: [
+                        { id: 'b1', tipo: 'cabecalho', titulo: 'FICHA CADASTRAL DO IMÓVEL', subtitulo: 'Prefeitura Municipal', logo: true, exibirDataHora: true, exibirProtocolo: true },
+                        { id: 'b2', tipo: 'mapa_estatico', titulo: 'Delimitação Cartográfica do Imóvel', exibirCotas: true, exibirArea: true, exibirNorte: true, exibirEscala: true, escala: '1:2.500' },
+                        { id: 'b3', tipo: 'grade_campos', titulo: 'Dados Cadastrais', colunasLayout: 2 },
+                        { id: 'b4', tipo: 'caixa_texto_livre', titulo: 'Parecer Técnico / Observações', conteudo: 'O imóvel inspecionado encontra-se devidamente delimitado conforme as coordenadas georreferenciadas levantadas.' },
+                        { id: 'b5', tipo: 'rodape', numeracao: true, exibirHash: true, exibirDataHora: true }
+                    ]
+                };
+            }
+
+            // Atualiza o título da barra superior
+            document.getElementById('report-header-title').textContent = tpl.nome || 'Relatório da Feição';
+            document.title = `${tpl.nome || 'Relatório'} - Feição`;
+
+            // Configura as dimensões da folha A4
+            const orient = (tpl.config_pagina && tpl.config_pagina.orientacao) || 'portrait';
+            const mm = (tpl.config_pagina && tpl.config_pagina.margens_mm) || { top: 15, bottom: 15, left: 15, right: 15 };
+            
+            const docContainer = document.getElementById('a4-document-container');
+            docContainer.style.maxWidth = orient === 'landscape' ? '1123px' : '794px';
+            docContainer.style.minHeight = orient === 'landscape' ? '794px' : '1123px';
+            docContainer.style.padding = `${mm.top}mm ${mm.right}mm ${mm.bottom}mm ${mm.left}mm`;
+            document.documentElement.style.setProperty('--print-padding', `${mm.top}mm ${mm.right}mm ${mm.bottom}mm ${mm.left}mm`);
+
+            // Injeta os blocos do relatório
+            renderBlocks(tpl, featureData, featureGeometry);
+        }
+
+        function renderBlocks(tpl, featureData = {}, featureGeometry = null) {
+            const container = document.getElementById('report-blocks-render');
+            if (!container) return;
+
+            // Busca campos para preenchimento
+            let fields = [];
+            try {
+                const forms = JSON.parse(localStorage.getItem('constructive_forms') || '[]');
+                const curForm = forms.find(f => f.id === tpl.form_id);
+                if (curForm && curForm.tabs) {
+                    curForm.tabs.forEach(t => {
+                        if (t.fields) fields.push(...t.fields);
+                    });
+                }
+            } catch(e) {}
+
+            let html = '';
+            (tpl.blocos || []).forEach((bloco, idx) => {
+                html += renderSingleBlock(bloco, idx, featureData, featureGeometry, fields, tpl);
+            });
+
+            container.innerHTML = html;
+
+            // Inicializa o Mini-Mapa Leaflet Interativo
+            setTimeout(() => {
+                initInteractiveLeafletMap(featureGeometry);
+            }, 100);
+        }
+
+        function renderSingleBlock(bloco, idx, featureData, featureGeometry, fields, tpl) {
+            switch(bloco.tipo) {
+                case 'cabecalho':
+                    return `
+                        <div class="flex items-start justify-between border-b-2 border-slate-900 pb-3 mb-2 gap-4 page-break-avoid">
+                            <div class="flex items-center gap-3">
+                                ${bloco.logo ? `
+                                    <div class="w-14 h-14 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden shrink-0 border border-slate-200">
+                                        ${bloco.logo_url ? `<img src="${bloco.logo_url}" class="w-full h-full object-contain" />` : `<span class="material-symbols-outlined text-slate-800 text-[42px]">account_balance</span>`}
+                                    </div>
+                                ` : ''}
+                                <div>
+                                    <div class="text-[11px] uppercase font-bold text-slate-600 tracking-wider">${escapeHtml(bloco.subtitulo || 'Prefeitura Municipal')}</div>
+                                    <div class="text-lg font-black uppercase text-slate-900 tracking-tight">${escapeHtml(bloco.titulo || tpl.nome || 'FICHA CADASTRAL DO IMÓVEL')}</div>
+                                </div>
+                            </div>
+                            <div class="text-right font-mono text-[10px] text-slate-500 shrink-0">
+                                ${bloco.exibirDataHora ? `<div>Data: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</div>` : ''}
+                                ${bloco.exibirProtocolo ? `<div class="font-bold text-slate-700">Protocolo: #${(bloco.id || '2026').slice(-6).toUpperCase()}</div>` : ''}
+                            </div>
+                        </div>
+                    `;
+
+                case 'grade_campos':
+                    const colCount = bloco.colunasLayout || 2;
+                    let fldsToRender = fields;
+                    if (bloco.campos_selecionados && bloco.campos_selecionados.length > 0) {
+                        const selSet = new Set(bloco.campos_selecionados);
+                        fldsToRender = fields.filter(f => selSet.has(f.id));
+                    }
+                    if (fldsToRender.length === 0) fldsToRender = fields.slice(0, 8);
+
+                    return `
+                        <div class="mb-4 page-break-avoid">
+                            <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
+                                <span>${escapeHtml(bloco.titulo || 'Dados Cadastrais')}</span>
+                            </div>
+                            <div class="grid ${colCount === 3 ? 'grid-cols-3' : (colCount === 1 ? 'grid-cols-1' : 'grid-cols-2')} gap-2.5">
+                                ${fldsToRender.map(f => {
+                                    const val = featureData[f.name] || featureData[f.id] || featureData[f.label] || '—';
+                                    return `
+                                        <div class="p-2 border border-slate-200 rounded-lg bg-slate-50/50">
+                                            <div class="text-[9.5px] uppercase font-bold text-slate-500">${escapeHtml(f.label)}</div>
+                                            <div class="text-xs font-bold text-slate-800 mt-0.5 truncate">${escapeHtml(val)}</div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    `;
+
+                case 'mapa_estatico':
+                    return `
+                        <div class="mb-4 page-break-avoid">
+                            <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
+                                <span>${escapeHtml(bloco.titulo || 'Delimitação Cartográfica do Imóvel')}</span>
+                                <div class="no-print flex items-center gap-1.5">
+                                    <button type="button" onclick="toggleMapBasemap()" class="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded flex items-center gap-1 cursor-pointer">
+                                        <span class="material-symbols-outlined text-[13px]">layers</span>
+                                        <span id="btn-basemap-label">Satélite</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Container do Mapa Leaflet Interativo -->
+                            <div class="relative rounded-lg overflow-hidden border border-slate-300 shadow-xs">
+                                <div id="interactive-report-map" class="w-full h-64 bg-slate-900 z-0"></div>
+                                
+                                <!-- Rosa dos Ventos -->
+                                ${bloco.exibirNorte ? `
+                                    <div class="absolute top-2.5 right-2.5 z-[400] bg-black/70 backdrop-blur-xs p-1.5 rounded-lg flex flex-col items-center text-white text-[9px] font-bold pointer-events-none">
+                                        <span class="material-symbols-outlined text-[18px] text-amber-400">navigation</span>
+                                        <span>N</span>
+                                    </div>
+                                ` : ''}
+
+                                <!-- Barra de Escala e Datum -->
+                                <div class="absolute bottom-2 left-2 z-[400] bg-black/70 backdrop-blur-xs px-2 py-1 rounded text-white text-[9px] font-mono flex items-center gap-2 pointer-events-none">
+                                    <span>SIRGAS 2000 UTM Fuso 25S</span>
+                                    <span>•</span>
+                                    <span id="map-scale-text">Escala ${bloco.escala || '1:2.500'}</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Dimensões Perimetrais Calculadas -->
+                            <div id="map-dimensions-summary" class="mt-1.5 p-2 bg-slate-50 border border-slate-200 rounded-lg flex flex-wrap items-center justify-between text-xs font-mono text-slate-700">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="font-bold text-emerald-700">Georreferenciamento:</span>
+                                    <span id="map-sides-text">Processando lados do polígono...</span>
+                                </div>
+                                <div id="map-area-text" class="font-bold text-slate-900">Área: —</div>
+                            </div>
+                        </div>
+                    `;
+
+                case 'caixa_texto_livre':
+                case 'texto_livre':
+                    // Substitui @mentions na sequência do texto com o dado do campo sem o título
+                    const processedText = replaceMentionsWithData(bloco.conteudo || '', featureData);
+                    return `
+                        <div class="mb-4 page-break-avoid">
+                            ${bloco.titulo ? `
+                                <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
+                                    <span>${escapeHtml(bloco.titulo)}</span>
+                                    <span class="no-print text-[10px] text-slate-400 font-normal">Clique para editar pontualmente</span>
+                                </div>
+                            ` : ''}
+                            <div id="viewer-free-text-${idx}" 
+                                 contenteditable="true" 
+                                 class="free-text-editable text-xs text-slate-800 leading-relaxed p-3 bg-white border border-dashed border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-sky-500 transition-all cursor-text print:border-none print:p-0" 
+                                 style="white-space: pre-wrap; line-height: ${bloco.espacamento || '1.6'}; text-align: ${bloco.alinhamento || 'justify'};"
+                                 title="Clique para editar este texto antes de exportar">${processedText}</div>
+                        </div>
+                    `;
+
+                case 'tabela_sintetica_1n': {
+                    const records = extract1nFeatureRecords(bloco.sourceTabId, featureData, fields);
+                    const cols = bloco.colunas || ['data', 'org', 'situacao_ocupacao', 'situacao_recuo', 'area_invadida', 'qtd_fotos'];
+                    const colLabelMap = {
+                        'data': 'Data',
+                        'org': 'Órgão / Entidade',
+                        'situacao_ocupacao': 'Situação Ocupação',
+                        'situacao_recuo': 'Situação Recuo',
+                        'area_invadida': 'Área Invadida',
+                        'qtd_fotos': 'Fotos'
+                    };
+
+                    let tbodyHtml = '';
+                    if (records.length === 0) {
+                        tbodyHtml = `<tr><td colspan="${cols.length + 1}" class="p-4 text-center text-slate-400 italic bg-slate-50/50">Nenhuma vistoria ou registro 1:N cadastrado para este imóvel.</td></tr>`;
+                    } else {
+                        tbodyHtml = records.map((r, rIdx) => {
+                            const isOdd = rIdx % 2 === 1;
+                            return `
+                                <tr class="${isOdd ? 'bg-slate-50/70' : 'bg-white'} hover:bg-sky-50/40 transition-colors">
+                                    <td class="p-2 border-r border-slate-200 text-center font-mono text-[10px] text-slate-400">${rIdx + 1}</td>
+                                    ${cols.map(c => {
+                                        if (c === 'data') return `<td class="p-2 border-r last:border-r-0 border-slate-200 font-medium text-slate-800 font-mono text-[10px]">${escapeHtml(r.formattedDate)}</td>`;
+                                        if (c === 'org') return `<td class="p-2 border-r last:border-r-0 border-slate-200"><span class="px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-blue-100 text-blue-800">${escapeHtml(r.org)}</span></td>`;
+                                        if (c === 'situacao_ocupacao') {
+                                            const isIrreg = r.situacaoOcupacao.toLowerCase().includes('irreg');
+                                            return `<td class="p-2 border-r last:border-r-0 border-slate-200"><span class="px-2 py-0.5 rounded-full text-[9.5px] font-bold ${isIrreg ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}">${escapeHtml(r.situacaoOcupacao)}</span></td>`;
+                                        }
+                                        if (c === 'situacao_recuo') {
+                                            const hasRecuo = r.situacaoRecuo.toLowerCase().includes('já') || r.situacaoRecuo.toLowerCase().includes('ja');
+                                            return `<td class="p-2 border-r last:border-r-0 border-slate-200"><span class="px-2 py-0.5 rounded-full text-[9.5px] font-bold ${hasRecuo ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}">${escapeHtml(r.situacaoRecuo)}</span></td>`;
+                                        }
+                                        if (c === 'area_invadida') {
+                                            return `<td class="p-2 border-r last:border-r-0 border-slate-200 font-mono font-bold text-right text-slate-800 text-[10.5px]">${r.areaInvadida > 0 ? r.areaInvadida.toFixed(2).replace('.', ',') + ' m²' : '—'}</td>`;
+                                        }
+                                        if (c === 'qtd_fotos') {
+                                            return `<td class="p-2 border-r last:border-r-0 border-slate-200 text-sky-700 font-semibold text-[10px]">${r.photos.length > 0 ? '📷 ' + r.photos.length + ' foto(s)' : '0 anexos'}</td>`;
+                                        }
+                                        return `<td class="p-2 border-r last:border-r-0 border-slate-200 text-slate-700 text-[10px]">${escapeHtml(String((r.raw && r.raw[c] !== undefined) ? r.raw[c] : '—'))}</td>`;
+                                    }).join('')}
+                                </tr>
+                            `;
+                        }).join('');
+                    }
+
+                    return `
+                        <div class="mb-4 page-break-avoid">
+                            <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
+                                <span>${escapeHtml(bloco.titulo || 'Quadro Sintético de Vistorias (Histórico 1:N)')}</span>
+                                <span class="text-[10px] font-mono text-slate-500">${records.length} registro(s)</span>
+                            </div>
+                            <div class="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+                                <table class="w-full text-left text-[11px] border-collapse">
+                                    <thead>
+                                        <tr class="bg-slate-100 border-b border-slate-200 text-[10px] font-bold text-slate-700 uppercase">
+                                            <th class="p-2 border-r border-slate-200 w-8 text-center">#</th>
+                                            ${cols.map(c => `<th class="p-2 border-r last:border-r-0 border-slate-200">${colLabelMap[c] || c}</th>`).join('')}
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100">
+                                        ${tbodyHtml}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                case 'laudo_vistoria_fotos':
+                case 'galeria_fotos': {
+                    let records = extract1nFeatureRecords(bloco.sourceTabId, featureData, fields);
+                    const isSingleVistoria = bloco.escopo === 'ultima';
+                    if (isSingleVistoria && records.length > 0) {
+                        records = records.slice(0, 1);
+                    }
+
+                    const layout = bloco.layoutFotos || '2_cols';
+                    let gridClass = 'grid-cols-2';
+                    if (layout === '1_col') gridClass = 'grid-cols-1';
+                    if (layout === 'grid_4') gridClass = 'grid-cols-2 sm:grid-cols-4';
+
+                    let contentHtml = '';
+                    if (records.length === 0) {
+                        contentHtml = `
+                            <div class="p-4 border border-dashed border-slate-300 rounded-lg bg-slate-50 text-center text-slate-500 text-xs">
+                                <span class="material-symbols-outlined text-[32px] text-slate-400 block mb-1">no_photography</span>
+                                <p class="font-bold">Nenhuma vistoria ou registro fotográfico encontrado para este imóvel.</p>
+                                <p class="text-[11px] text-slate-400">Cadastre fotos e vistorias nas abas 1:N para que sejam apresentadas neste laudo.</p>
+                            </div>
+                        `;
+                    } else {
+                        contentHtml = records.map((r, rIdx) => {
+                            const isIrreg = r.situacaoOcupacao.toLowerCase().includes('irreg');
+                            
+                            let photosHtml = '';
+                            if (r.photos.length > 0) {
+                                photosHtml = `
+                                    <div class="grid ${gridClass} gap-3 pt-1">
+                                        ${r.photos.map(p => `
+                                            <div class="border border-slate-200 rounded-lg overflow-hidden bg-white flex flex-col shadow-2xs">
+                                                <div class="h-44 bg-slate-100 overflow-hidden cursor-pointer group relative" onclick="window.open('${p.url}', '_blank')">
+                                                    <img src="${p.url}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center text-slate-400 text-xs font-bold\\'><span class=\\'material-symbols-outlined text-[28px]\\'>broken_image</span></div>';" />
+                                                    <div class="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] font-mono px-1.5 py-0.5 rounded flex items-center gap-1">
+                                                        <span class="material-symbols-outlined text-[11px]">visibility</span> Ampliar
+                                                    </div>
+                                                </div>
+                                                <div class="p-2 text-[10.5px] space-y-0.5 text-slate-600">
+                                                    ${bloco.exibirLegenda !== false && p.title ? `<div class="font-bold text-slate-800 break-words">${escapeHtml(p.title)}</div>` : ''}
+                                                    ${bloco.exibirData !== false && p.date ? `<div class="text-slate-500">Data: ${escapeHtml(p.date)}</div>` : ''}
+                                                    ${bloco.exibirCoords !== false && p.coords ? `<div class="font-mono text-[9px] text-slate-500">GPS: ${escapeHtml(p.coords)}</div>` : ''}
+                                                    ${bloco.exibirResp !== false && p.resp ? `<div class="text-slate-500">Resp: ${escapeHtml(p.resp)}</div>` : ''}
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                `;
+                            } else {
+                                photosHtml = `
+                                    <div class="p-3 text-center text-slate-400 text-xs italic bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                                        Nenhuma fotografia anexada a este registro de vistoria.
+                                    </div>
+                                `;
+                            }
+
+                            return `
+                                <div class="border border-slate-200 rounded-xl p-3.5 bg-slate-50/40 mb-3 space-y-2.5 page-break-avoid shadow-2xs">
+                                    <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                                        <div class="flex items-center gap-2">
+                                            <span class="material-symbols-outlined text-primary text-[18px]">event_available</span>
+                                            <span class="font-bold text-xs text-slate-900">Vistoria: ${escapeHtml(r.formattedDate)}</span>
+                                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">${escapeHtml(r.org)}</span>
+                                        </div>
+                                        ${r.situacaoOcupacao !== '—' ? `
+                                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold ${isIrreg ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}">
+                                                ${escapeHtml(r.situacaoOcupacao)}
+                                            </span>
+                                        ` : ''}
+                                    </div>
+
+                                    ${(bloco.exibirObs !== false && r.observacao) ? `
+                                        <div class="p-2.5 bg-white border border-slate-200 rounded-lg text-xs leading-relaxed text-slate-700">
+                                            <strong class="text-slate-900 block mb-0.5">Relato Técnico / Parecer:</strong>
+                                            ${escapeHtml(r.observacao)}
+                                        </div>
+                                    ` : ''}
+
+                                    ${(bloco.exibirLinks !== false && r.links && r.links.length > 0) ? `
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            ${r.links.map(l => `
+                                                <a href="${l.url || '#'}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-[11px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2 py-1 rounded hover:bg-sky-100">
+                                                    <span class="material-symbols-outlined text-[13px]">attachment</span>
+                                                    <span>${escapeHtml(l.title || 'Documento')}</span>
+                                                    ${l.number ? `<span class="font-mono text-[10px] text-slate-500">(${escapeHtml(l.number)})</span>` : ''}
+                                                </a>
+                                            `).join('')}
+                                        </div>
+                                    ` : ''}
+
+                                    ${photosHtml}
+                                </div>
+                            `;
+                        }).join('');
+                    }
+
+                    return `
+                        <div class="mb-4 page-break-avoid">
+                            <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">
+                                <span>${escapeHtml(bloco.titulo || 'Vistoria Fotográfica & Anexos (1:N)')}</span>
+                                <span class="text-[10px] font-mono text-slate-500">${isSingleVistoria ? 'Última Vistoria' : `${records.length} Vistoria(s)`}</span>
+                            </div>
+                            ${contentHtml}
+                        </div>
+                    `;
+                }
+
+                case 'rodape':
+                    return `
+                        <div class="border-t border-slate-300 pt-2 mt-4 text-[10px] text-slate-500 flex items-center justify-between font-mono page-break-avoid">
+                            <div>
+                                ${bloco.exibirDataHora ? `Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}` : ''}
+                                ${bloco.exibirHash ? `<span class="ml-2 font-bold text-slate-600">SHA-256: 8a4f91e...</span>` : ''}
+                            </div>
+                            <div class="font-bold text-slate-700">
+                                ${bloco.numeracao ? 'Página 1 de 1' : ''}
+                            </div>
+                        </div>
+                    `;
+
+                default:
+                    return '';
+            }
+        }
+
+        /**
+         * Substitui menções @ por dados reais da feição sem o título do campo.
+         */
+        function replaceMentionsWithData(contentHtml, featureData) {
+            if (!contentHtml) return '';
+            
+            // 1. Substitui spans com menção estruturada (@campo) priorizando data-field-id (único por campo e aba)
+            let result = contentHtml.replace(/<span[^>]*class="[^"]*mention-[^"]*"[^>]*>.*?<\/span>/gi, (match) => {
+                const idMatch = match.match(/data-field-id="([^"]+)"/i);
+                const nameMatch = match.match(/data-field-name="([^"]+)"/i);
+                const fId = idMatch ? idMatch[1] : null;
+                const fName = nameMatch ? nameMatch[1] : null;
+
+                let val = (fId && featureData[fId] !== undefined && featureData[fId] !== null && featureData[fId] !== '') ? featureData[fId] : undefined;
+                if (val === undefined || val === null || val === '') {
+                    if (fName && featureData[fName] !== undefined && featureData[fName] !== null) {
+                        val = featureData[fName];
+                    } else if (fName && featureData[fName.toLowerCase()] !== undefined && featureData[fName.toLowerCase()] !== null) {
+                        val = featureData[fName.toLowerCase()];
+                    }
+                }
+                return (val !== undefined && val !== null) ? String(val) : '';
+            });
+
+            // 2. Substitui spans legados caso existam
+            result = result.replace(/<span[^>]*data-field-id="([^"]+)"[^>]*>.*?<\/span>/gi, (match, fId) => {
+                const val = featureData[fId] || '';
+                return val !== undefined && val !== null ? String(val) : '';
+            });
+
+            result = result.replace(/<span[^>]*data-field-name="([^"]+)"[^>]*>.*?<\/span>/gi, (match, fName) => {
+                const val = featureData[fName] || featureData[fName.toLowerCase()] || '';
+                return val !== undefined && val !== null ? String(val) : '';
+            });
+
+            // 3. Substitui padrões como @[Nome] ou @nome_campo
+            for (const [key, val] of Object.entries(featureData)) {
+                if (typeof val !== 'object' && val !== null && val !== undefined) {
+                    const regex = new RegExp(`@\\[?${key}\\]?`, 'gi');
+                    result = result.replace(regex, String(val));
+                }
+            }
+
+            return result;
+        }
+
+        /**
+         * Extrai e normaliza registros 1:N da feição (vistorias, fotos, relatos, links).
+         */
+        function extract1nFeatureRecords(sourceTabId, featureData, fields = []) {
+            let rawRecords = [];
+            const isConsolidado = !sourceTabId || sourceTabId === 'consolidado';
+
+            if (isConsolidado) {
+                // Varre todas as abas e propriedades que contêm arrays de registros 1:N
+                for (const [key, val] of Object.entries(featureData || {})) {
+                    let parsed = null;
+                    if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'object') {
+                        parsed = val;
+                    } else if (typeof val === 'string' && val.trim().startsWith('[') && val.includes('{')) {
+                        try {
+                            const arr = JSON.parse(val);
+                            if (Array.isArray(arr) && arr.length > 0 && typeof arr[0] === 'object') parsed = arr;
+                        } catch(e) {}
+                    }
+                    if (parsed) {
+                        parsed.forEach(item => {
+                            if (item && typeof item === 'object') {
+                                rawRecords.push({ ...item, _origTab: key });
+                            }
+                        });
+                    }
+                }
+            } else {
+                const val = featureData ? featureData[sourceTabId] : null;
+                if (Array.isArray(val)) {
+                    rawRecords = val;
+                } else if (typeof val === 'string' && val.trim().startsWith('[')) {
+                    try { rawRecords = JSON.parse(val) || []; } catch(e) { rawRecords = []; }
+                }
+            }
+
+            // Normaliza cada registro para garantir campos consistentes
+            const normalized = rawRecords.map((r, idx) => {
+                let dateStr = r.data_vistoria || r.data || r.data_visita || r._created_at || '';
+                let formattedDate = '—';
+                let timestamp = 0;
+                if (dateStr) {
+                    timestamp = Date.parse(dateStr) || 0;
+                    if (dateStr.includes('-')) {
+                        const parts = dateStr.split('T')[0].split('-');
+                        if (parts.length === 3) formattedDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                    } else {
+                        formattedDate = dateStr;
+                    }
+                }
+
+                let org = r.org || r.orgao || r.entidade || (r._origTab ? r._origTab.toUpperCase() : 'Vistoria');
+                let situacaoOcupacao = r.situacao_ocupacao || r.situacao || r.status || '—';
+                let situacaoRecuo = r.situacao_recuo || r.recuo || '—';
+                let areaInvadida = parseFloat(r.area_invadida || r.area || 0) || 0;
+                let observacao = r.observacao || r.parecer || r.relato || r.descricao || '';
+                let resp = r.responsavel || r.fiscal || r.vistoriador || r.agente || '—';
+
+                let links = [];
+                if (Array.isArray(r.links)) links.push(...r.links);
+                else if (typeof r.links === 'string' && r.links.startsWith('[')) {
+                    try { links.push(...JSON.parse(r.links)); } catch(e) {}
+                }
+                if (r.hiperlink || r.hiperlinks) {
+                    const hl = r.hiperlink || r.hiperlinks;
+                    if (Array.isArray(hl)) links.push(...hl);
+                    else if (typeof hl === 'object') links.push(hl);
+                    else if (typeof hl === 'string') links.push({ title: 'Hiperlink', url: hl });
+                }
+                if (r.epol || r.epol_1n) links.push({ title: 'Processo EPOL', number: String(r.epol || r.epol_1n), url: '#' });
+                if (r.rip || r.rip_1n) links.push({ title: 'Registro RIP', number: String(r.rip || r.rip_1n), url: '#' });
+
+                let photos = [];
+                const possiblePhotoKeys = ['fotos', 'foto', 'photos', 'photo', 'anexos', 'attachments', 'imagens', 'images'];
+                for (const pk of possiblePhotoKeys) {
+                    if (r[pk]) {
+                        const rawP = r[pk];
+                        if (Array.isArray(rawP)) {
+                            photos.push(...rawP);
+                        } else if (typeof rawP === 'string' && rawP.startsWith('[')) {
+                            try { photos.push(...JSON.parse(rawP)); } catch(e) {}
+                        } else if (typeof rawP === 'string' && rawP.trim() !== '') {
+                            photos.push({ url: rawP, title: 'Fotografia' });
+                        }
+                    }
+                }
+                if (photos.length === 0) {
+                    for (const [k, v] of Object.entries(r)) {
+                        if (typeof v === 'string' && (v.startsWith('data:image/') || v.includes('.jpg') || v.includes('.png') || v.includes('.webp') || v.includes('supabase.co/storage'))) {
+                            photos.push({ url: v, title: k });
+                        }
+                    }
+                }
+
+                const normalizedPhotos = photos.map((p, pIdx) => {
+                    const url = typeof p === 'string' ? p : (p.url || '');
+                    const title = (typeof p === 'object' && (p.title || p.name)) ? (p.title || p.name) : `Foto #${pIdx + 1}`;
+                    const pDate = (typeof p === 'object' && p.uploadedAt) ? new Date(p.uploadedAt).toLocaleDateString('pt-BR') : formattedDate;
+                    const coords = (typeof p === 'object' && p.coords) ? p.coords : (r.geolocation || r.coords || '');
+                    return { url, title, date: pDate, coords, resp };
+                }).filter(p => !!p.url);
+
+                return {
+                    id: r.id || `rec_${idx}`,
+                    timestamp,
+                    formattedDate,
+                    org,
+                    resp,
+                    situacaoOcupacao,
+                    situacaoRecuo,
+                    areaInvadida,
+                    observacao,
+                    links,
+                    photos: normalizedPhotos,
+                    raw: r
+                };
+            });
+
+            normalized.sort((a, b) => b.timestamp - a.timestamp);
+            return normalized;
+        }
+
+        /**
+         * Inicializa o Mini-Mapa Interativo Leaflet
+         */
+        function initInteractiveLeafletMap(geometry) {
+            const mapContainer = document.getElementById('interactive-report-map');
+            if (!mapContainer || typeof L === 'undefined') return;
+
+            leafletMapInstance = L.map('interactive-report-map', {
+                zoomControl: true,
+                attributionControl: false
+            });
+
+            // Camadas base
+            const streetsLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+            const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
+            
+            currentBaseTileLayer = streetsLayer;
+            streetsLayer.addTo(leafletMapInstance);
+
+            window._reportMapStreets = streetsLayer;
+            window._reportMapSatellite = satelliteLayer;
+
+            if (geometry) {
+                try {
+                    activePolygonLayer = L.geoJSON(geometry, {
+                        style: {
+                            color: '#10b981',
+                            weight: 3,
+                            fillColor: '#34d399',
+                            fillOpacity: 0.35
+                        }
+                    }).addTo(leafletMapInstance);
+
+                    leafletMapInstance.fitBounds(activePolygonLayer.getBounds(), { padding: [30, 30] });
+
+                    // Medição via Turf.js
+                    if (typeof turf !== 'undefined') {
+                        let turfGeom = geometry;
+                        if (turfGeom.type === 'Feature') turfGeom = turfGeom.geometry;
+
+                        const areaM2 = Math.round(turf.area(turfGeom) * 100) / 100;
+                        document.getElementById('map-area-text').textContent = `Área: ${areaM2.toLocaleString('pt-BR')} m² (${(areaM2 / 10000).toFixed(4)} ha)`;
+
+                        // Calcula segmentos
+                        const coords = turfGeom.coordinates && turfGeom.coordinates[0];
+                        if (coords && coords.length > 2) {
+                            let sidesText = '';
+                            for (let i = 0; i < coords.length - 1; i++) {
+                                const p1 = coords[i];
+                                const p2 = coords[i + 1];
+                                const distM = Math.round(turf.distance(turf.point(p1), turf.point(p2), { units: 'meters' }) * 100) / 100;
+                                sidesText += `L${i + 1}: ${distM}m  `;
+                            }
+                            document.getElementById('map-sides-text').textContent = sidesText || 'Polígono Fechado';
+                        }
+                    }
+                } catch(e) {
+                    console.error('[Leaflet] Erro ao renderizar geometria:', e);
+                    leafletMapInstance.setView([-7.115, -34.863], 15);
+                }
+            } else {
+                leafletMapInstance.setView([-7.115, -34.863], 15);
+                document.getElementById('map-sides-text').textContent = 'Feição sem geometria associada';
+            }
+
+            // Atualiza texto de escala ao dar zoom
+            leafletMapInstance.on('zoomend', () => {
+                const z = leafletMapInstance.getZoom();
+                const scaleEst = Math.round(591657550.5 / Math.pow(2, z));
+                document.getElementById('map-scale-text').textContent = `Zoom ${z} • Escala ~1:${scaleEst.toLocaleString('pt-BR')}`;
+            });
+        }
+
+        function toggleMapBasemap() {
+            if (!leafletMapInstance) return;
+            const btn = document.getElementById('btn-basemap-label');
+            if (currentMapMode === 'streets') {
+                leafletMapInstance.removeLayer(window._reportMapStreets);
+                window._reportMapSatellite.addTo(leafletMapInstance);
+                currentMapMode = 'satellite';
+                if (btn) btn.textContent = 'Ruas';
+            } else {
+                leafletMapInstance.removeLayer(window._reportMapSatellite);
+                window._reportMapStreets.addTo(leafletMapInstance);
+                currentMapMode = 'streets';
+                if (btn) btn.textContent = 'Satélite';
+            }
+        }
+
+        function gerarPDF() {
+            window.print();
+        }
+
+        /**
+         * Gera download de arquivo .doc formatado nativamente para Microsoft Word
+         */
+        function gerarWord() {
+            const docElement = document.getElementById('a4-document-container');
+            if (!docElement) return;
+
+            // Clona o elemento para limpar botões e elementos no-print
+            const clone = docElement.cloneNode(true);
+            clone.querySelectorAll('.no-print').forEach(el => el.remove());
+
+            const htmlBody = clone.innerHTML;
+            const docTitle = document.getElementById('report-header-title')?.textContent || 'Relatorio_Oficial';
+
+            const wordHtml = `
+                <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+                <head>
+                    <meta charset='utf-8'>
+                    <title>${escapeHtml(docTitle)}</title>
+                    <!--[if gte mso 9]>
+                    <xml>
+                        <w:WordDocument>
+                            <w:View>Print</w:View>
+                            <w:Zoom>100</w:Zoom>
+                            <w:DoNotOptimizeForBrowser/>
+                        </w:WordDocument>
+                    </xml>
+                    <![endif]-->
+                    <style>
+                        @page Section1 {
+                            size: 595.3pt 841.9pt;
+                            margin: 2.0cm 2.0cm 2.0cm 2.0cm;
+                            mso-header-margin: 35.4pt;
+                            mso-footer-margin: 35.4pt;
+                            mso-paper-source: 0;
+                        }
+                        div.Section1 { page: Section1; }
+                        body {
+                            font-family: 'Arial', sans-serif;
+                            font-size: 11pt;
+                            color: #111827;
+                        }
+                        table {
+                            width: 100%;
+                            border-collapse: collapse;
+                            margin-bottom: 12pt;
+                        }
+                        th, td {
+                            border: 1px solid #cbd5e1;
+                            padding: 6pt;
+                            font-size: 10pt;
+                        }
+                        th {
+                            background-color: #f1f5f9;
+                            font-weight: bold;
+                        }
+                        h1, h2, h3 {
+                            color: #0f172a;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="Section1">
+                        ${htmlBody}
+                    </div>
+                </body>
+                </html>
+            `;
+
+            const blob = new Blob(['\ufeff', wordHtml], {
+                type: 'application/msword;charset=utf-8'
+            });
+
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `${docTitle.replace(/[\s\/\\:*?"<>|]+/g, '_')}_${Date.now()}.doc`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+        }
+
+        function escapeHtml(str) {
+            return String(str || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+    </script>
+</body>
+</html>
