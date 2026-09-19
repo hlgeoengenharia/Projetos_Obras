@@ -97,7 +97,12 @@ const evil = JSON.stringify({ title: 'X', url: 'javascript:alert(1)' });
 ok('hiperlink javascript: não vira link', !html(evil, T('hiperlink')).includes('href'));
 eq('hiperlink só URL', text('exemplo.com', T('hiperlink')), 'exemplo.com');
 eq('hiperlink_1n texto', text(JSON.stringify([{ title: 'A', number: '1', url: 'a.com' }, { title: 'B', url: 'b.com' }]), T('hiperlink_1n')), 'A - 1; B');
-ok('hiperlink_1n html separa por <br>', html(JSON.stringify([{ title: 'A', url: 'a.com' }, { title: 'B', url: 'b.com' }]), T('hiperlink_1n')).includes('<br>'));
+const full1n = html(JSON.stringify([{ title: 'Inquérito Civil', number: '1.24.000/2026', url: 'mpf.mp.br/ic' }, { title: 'Processo SPU', url: 'spu.gov.br/p' }]), T('hiperlink_1n'));
+ok('hiperlink_1n: cada item mostra título, número e endereço (na íntegra)',
+    full1n.includes('Inquérito Civil') && full1n.includes('1.24.000/2026') && full1n.includes('>mpf.mp.br/ic</a>'));
+ok('hiperlink_1n: todos os itens aparecem', full1n.includes('Processo SPU') && full1n.includes('>spu.gov.br/p</a>'));
+ok('hiperlink simples também mostra o endereço', html(link, T('hiperlink')).includes('>exemplo.gov.br/x</a>'));
+ok('hiperlink sem título mostra só o endereço', html(JSON.stringify({ url: 'a.com/x' }), T('hiperlink')).includes('>a.com/x</a>'));
 
 // ------------------------------------------------------------------ fotos e anexos
 const files = JSON.stringify([
@@ -106,8 +111,12 @@ const files = JSON.stringify([
 ]);
 eq('photo ignora excluídos', text(files, T('photo')), '1 foto(s)');
 eq('attachment', text(files, T('attachment')), '1 anexo(s)');
-ok('attachment html lista links', html(files, T('attachment')).includes('>Fachada</a>'));
+ok('attachment html lista o título como link', html(files, T('attachment')).includes('<strong>Fachada</strong></a>'));
+ok('attachment html mostra também o nome do arquivo', html(files, T('attachment')).includes('a.jpg'));
+ok('attachment excluído não aparece', !html(files, T('attachment')).includes('b.jpg'));
 eq('photo vazio', text('[]', T('photo')), '—');
+
+ok('epol_1n em HTML lista todos, um por linha', html('["20231234567","20241111111"]', T('epol_1n')) === '2023.1234567<br>2024.1111111');
 
 // ------------------------------------------------------------------ geolocalização
 eq('geolocation JSON', text('{"lat":-7.0182,"lng":-34.8336}', T('geolocation')), '-7.018200, -34.833600');

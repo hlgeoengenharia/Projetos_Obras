@@ -961,6 +961,15 @@
                                 </div>
                             </div>
 
+                            <!-- Sequência das Abas no Laudo -->
+                            <div class="space-y-1">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-[10px] font-bold uppercase text-slate-500 block">Sequência das Abas no Laudo:</label>
+                                    <span class="text-[9px] text-slate-400 font-mono">Use ↑ ↓</span>
+                                </div>
+                                <div class="space-y-1" id="cfg-1n-laudo-tab-sequence-list">${renderLaudoTabSequenceList()}</div>
+                            </div>
+
                             <!-- Disposição Visual das Fotos -->
                             <div>
                                 <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1">Disposição Visual das Fotos:</label>
@@ -1498,6 +1507,288 @@
     /**
      * Renderiza os blocos da Folha A4 com visual puro de documento Word e Duplo Clique Inline.
      */
+    // =====================================================================================
+    // LAUDO ANALÍTICO 1:N — pré-visualização guiada pelo formulário e sequência das abas
+    // =====================================================================================
+
+    /** Abas do formulário com seus campos (as consolidadas e a nativa de orçamento não entram no laudo). */
+    function getLaudoPreviewTabs(fields) {
+        const formId = currentTemplate && currentTemplate.form_id;
+        const tabsMeta = (window.ReportAdapter && window.ReportAdapter.getFormTabs) ? window.ReportAdapter.getFormTabs(formId) : [];
+        const groups = new Map();
+        (tabsMeta || []).forEach(t => {
+            if (t.tabType === 'consolidated' || t.isConsolidated || t.tabType === 'orcamento_nativo' || t.isNative) return;
+            groups.set(t.id, { id: t.id, title: t.title || 'Aba', isMultiple: !!t.isMultiple, fields: [] });
+        });
+        (fields || []).forEach(f => {
+            const tId = f.tabId || 'geral';
+            if (!groups.has(tId)) {
+                if (tabsMeta && tabsMeta.some(t => t.id === tId)) return; // aba consolidada/nativa: ignorada
+                groups.set(tId, { id: tId, title: f.tabTitle || 'Aba Geral', isMultiple: !!f.isMultiple, fields: [] });
+            }
+            const g = groups.get(tId);
+            if (!g.fields.some(gf => gf.id === f.id)) g.fields.push(f);
+        });
+        return Array.from(groups.values());
+    }
+
+    /** Como cada TIPO de campo será exibido no relatório (marcadores, não dados reais). */
+    function laudoSampleHtml(f) {
+        const t = String(f.type || 'text').toLowerCase();
+        const ph = (s) => `<span class="text-slate-400 italic font-normal">${escapeHtml(s)}</span>`;
+        const link = (title, num, url) => `<div class="leading-snug mb-1"><strong>${title}</strong>${num ? ' - ' + num : ''}<br><span class="text-sky-700 break-all font-normal">${url}</span></div>`;
+        switch (t) {
+            case 'hiperlink': return link('Título', 'Número', 'https://endereço-do-link');
+            case 'hiperlink_1n': return link('Título 1', 'Número 1', 'https://endereço-do-link-1') + link('Título 2', 'Número 2', 'https://endereço-do-link-2');
+            case 'attachment': return '<div class="leading-snug mb-1"><strong>Título do documento 1</strong><br><span class="font-mono text-[9px] font-normal">arquivo-1.pdf</span></div><div class="leading-snug"><strong>Título do documento 2</strong><br><span class="font-mono text-[9px] font-normal">arquivo-2.pdf</span></div>';
+            case 'epol_1n': return '2023.0000001<br>2024.0000002';
+            case 'rip_1n': return '00000000001-01<br>00000000002-02';
+            case 'date': return '14/08/2026';
+            case 'currency': return 'R$ 0,00';
+            case 'area_m2': return '0,00 m²';
+            case 'length_m': return '0,00 m';
+            case 'volume_m3': return '0,00 m³';
+            case 'cpfcnpj': return '000.000.000-00';
+            case 'ipl': case 'ipf': return '0000000-00.0000.0.00.0000';
+            case 'epol': return '0000.0000000';
+            case 'rip': return '00000000000-00';
+            case 'insc_imob_cabedelo': return '0.0000.000.00.0000.0000.0';
+            case 'pa_anpp_ap': return '0.00.000.000000/0000-00';
+            case 'cep': return 'Rua, nº - Bairro - Cidade - UF - CEP: 00000-000';
+            case 'geolocation': return '-7.000000, -34.000000';
+            case 'textarea': return ph('«texto longo, exibido na íntegra»');
+            default: return ph('«' + (f.label || f.name || f.id) + '»');
+        }
+    }
+
+    const LAUDO_WIDE_TYPES = ['textarea', 'hiperlink', 'hiperlink_1n', 'attachment', 'cep'];
+
+    /**
+     * Garante que o laudo tenha campos escolhidos que existam de verdade no formulário.
+     * Sem escolha válida, seleciona todos os campos (exceto fotos) das abas do laudo, para que
+     * arrastar, redimensionar e remover funcionem sobre campos reais.
+     */
+    function ensureLaudoFieldSelection(bloco, tabs) {
+        if (!tabs.length) return;
+        const validIds = new Set();
+        tabs.forEach(t => t.fields.forEach(f => validIds.add(f.id)));
+        const current = Array.isArray(bloco.campos_selecionados) ? bloco.campos_selecionados : [];
+        const hasValid = current.some(cf => validIds.has(typeof cf === 'string' ? cf : (cf.rawId || cf.id)));
+        if (hasValid) return;
+        const generated = [];
+        tabs.forEach(t => t.fields.forEach(f => {
+            if (String(f.type || '').toLowerCase() === 'photo') return;
+            generated.push({ id: f.id, label: f.label || f.name || f.id, rawId: f.id, tabId: t.id, tabTitle: t.title });
+        }));
+        bloco.campos_selecionados = generated;
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+    }
+
+    /**
+     * Pré-visualização do Laudo Analítico na Folha A4 interativa: uma seção por aba, NA SEQUÊNCIA
+     * escolhida e já ABERTA, com os campos escolhidos da aba prontos para arrastar, redimensionar ou remover.
+     */
+    function renderLaudoPreview(bloco, index, fields) {
+        const layout = bloco.layoutFotos || '2_cols';
+        const gridClass = layout === '1_col' ? 'grid-cols-1' : (layout === 'grid_4' ? 'grid-cols-4' : 'grid-cols-2');
+        const isSingle = bloco.escopo === 'ultima';
+        const isAsc = bloco.ordem_cronologica === 'asc';
+        const density = bloco.densidade || current1nLaudoDensity || 'compact';
+        const striping = bloco.zebrado || current1nLaudoRowStriping || 'slate';
+        let cardPad = 'p-3';
+        let gap = 'gap-2';
+        if (density === 'comfortable') { cardPad = 'p-3.5 sm:p-4'; gap = 'gap-2.5'; }
+        else if (density === 'ultracompact') { cardPad = 'p-2'; gap = 'gap-1.5'; }
+        const cardBg = striping === 'sky' ? 'bg-sky-50/60 border-sky-200' : (striping === 'white' ? 'bg-white border-slate-200' : 'bg-slate-50/70 border-slate-200');
+        const larguras = bloco.campos_larguras || {};
+
+        // Abas do laudo: as escolhidas; senão as deduzidas dos campos escolhidos; senão todas as 1:N
+        const allTabs = getLaudoPreviewTabs(fields);
+        let selectedIds = (Array.isArray(bloco.abas_selecionadas) ? bloco.abas_selecionadas : []).map(String)
+            .filter(id => allTabs.some(t => String(t.id) === id));
+        if (!selectedIds.length && Array.isArray(bloco.campos_selecionados)) {
+            bloco.campos_selecionados.forEach(cf => {
+                const tid = (cf && typeof cf === 'object') ? String(cf.tabId || '') : '';
+                if (tid && allTabs.some(t => String(t.id) === tid) && !selectedIds.includes(tid)) selectedIds.push(tid);
+            });
+        }
+        if (!selectedIds.length) selectedIds = allTabs.filter(t => t.isMultiple).map(t => String(t.id));
+
+        // Sequência definida pelo usuário
+        const order = ((Array.isArray(bloco.ordem_abas) && bloco.ordem_abas.length) ? bloco.ordem_abas : current1nTabOrder).map(String);
+        const rank = (t) => { const i = order.indexOf(String(t.id)); return i < 0 ? 999 : i; };
+        const tabs = allTabs.filter(t => selectedIds.includes(String(t.id))).sort((a, b) => rank(a) - rank(b));
+
+        ensureLaudoFieldSelection(bloco, tabs);
+        const selIds = (Array.isArray(bloco.campos_selecionados) ? bloco.campos_selecionados : [])
+            .map(cf => typeof cf === 'string' ? cf : (cf.rawId || cf.id));
+
+        const titleHtml = `
+            <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between flex-wrap gap-1">
+                <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(escapeHtml(bloco.titulo || 'Laudo Analítico e Caderno Fotográfico')).replace(/\r?\n/g, '<br>')}</span>
+                <div class="flex items-center gap-1.5 text-[10px] font-mono text-slate-400">
+                    <span>${tabs.length} aba(s)</span><span>•</span>
+                    <span>${isSingle ? 'Última vistoria de cada aba' : 'Todas as vistorias'}</span><span>•</span>
+                    <span>${isAsc ? 'Antigo → Recente' : 'Recente → Antigo'}</span>
+                    <span class="text-[9px] text-sky-600 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded font-medium print:hidden ml-1">Arraste ⠿ para reordenar campos</span>
+                </div>
+            </div>`;
+
+        if (!tabs.length) {
+            return `<div class="mb-4">${titleHtml}<div class="p-4 text-center text-xs italic text-slate-400 border border-dashed border-slate-300 rounded-lg">Marque as abas do laudo na barra lateral (card "Laudo Analítico") para elas aparecerem aqui.</div></div>`;
+        }
+
+        const sections = tabs.map(tab => {
+            const photoFields = tab.fields.filter(f => String(f.type || '').toLowerCase() === 'photo');
+            let tabFields = tab.fields.filter(f => String(f.type || '').toLowerCase() !== 'photo' && (!selIds.length || selIds.includes(f.id)));
+            if (selIds.length) tabFields = tabFields.slice().sort((a, b) => selIds.indexOf(a.id) - selIds.indexOf(b.id));
+            const tabTitle = bloco['custom_tab_title_' + tab.id] || ('Aba / Ente: ' + tab.title);
+
+            const fieldCards = tabFields.map(f => {
+                const fid = f.id;
+                const type = String(f.type || '').toLowerCase();
+                let pct = larguras[fid];
+                if (!pct) pct = LAUDO_WIDE_TYPES.includes(type) ? 100 : 50;
+                pct = Math.round(pct);
+                const widthStyle = getFieldWidthStyle(pct);
+                const isExpanded = pct > 55;
+                const label = f.label || f.name || fid;
+                return `
+                    <div class="relative group/field p-2 border ${isExpanded ? 'border-sky-300 bg-sky-50/30 shadow-2xs' : 'border-slate-200 bg-white'} rounded-lg select-none transition-all"
+                         data-field-id="${escapeHtml(fid)}" data-block-index="${index}"
+                         style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">
+                        <div class="flex items-center justify-between gap-1 mb-1">
+                            <div class="flex items-center gap-1 min-w-0 flex-1">
+                                <span class="field-drag-handle cursor-grab active:cursor-grabbing text-slate-300 group-hover/field:text-sky-600 hover:bg-slate-200/60 p-0.5 rounded transition-colors" title="Arraste para mover de posição no laudo">
+                                    <span class="material-symbols-outlined text-[14px] leading-none">drag_indicator</span>
+                                </span>
+                                <span class="text-[9.5px] uppercase font-extrabold text-slate-600 truncate" title="${escapeHtml(label)}">${escapeHtml(label)}:</span>
+                            </div>
+                            <div class="flex items-center gap-1 shrink-0">
+                                <div class="inline-flex items-center bg-white border border-slate-200 rounded p-0.5 shadow-2xs">
+                                    <button type="button" class="field-width-dec-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 hover:bg-slate-100 rounded cursor-pointer transition-colors"
+                                            onclick="ReportBuilder.changeFieldWidthStep(${index}, '${escapeHtml(fid)}', -1, event)" title="Diminuir largura do campo (-)">
+                                        <span class="material-symbols-outlined text-[12px] leading-none">remove</span>
+                                    </button>
+                                    <button type="button" class="field-width-badge-btn px-1 py-0.5 text-[9px] font-extrabold text-slate-700 hover:text-sky-600 cursor-pointer transition-colors"
+                                            onclick="ReportBuilder.toggleFieldWidthPopover(${index}, '${escapeHtml(fid)}', event)" title="Clique para escolher proporção exata">${pct}%</button>
+                                    <button type="button" class="field-width-inc-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 hover:bg-slate-100 rounded cursor-pointer transition-colors"
+                                            onclick="ReportBuilder.changeFieldWidthStep(${index}, '${escapeHtml(fid)}', 1, event)" title="Aumentar largura do campo (+)">
+                                        <span class="material-symbols-outlined text-[12px] leading-none">add</span>
+                                    </button>
+                                </div>
+                                <button type="button" class="field-remove-btn p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors cursor-pointer print:hidden"
+                                        onclick="ReportBuilder.removeFieldFromAnalytical1n(${index}, '${escapeHtml(fid)}', event)" title="Remover este campo do laudo">
+                                    <span class="material-symbols-outlined text-[13px] leading-none">close</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="text-[10.5px] text-slate-800 font-semibold break-words whitespace-normal">${laudoSampleHtml(f)}</div>
+                    </div>`;
+            }).join('');
+
+            const photosHtml = photoFields.length ? `
+                <div class="grid ${gridClass} gap-2.5 pt-1">
+                    ${photoFields.map(pf => `
+                        <div class="border border-slate-200 rounded-lg overflow-hidden bg-white flex flex-col shadow-2xs">
+                            <div class="h-24 bg-slate-100 flex items-center justify-center text-slate-400 text-xs font-bold relative">
+                                <span class="material-symbols-outlined text-[28px] text-slate-300">photo_camera</span>
+                                <span class="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1 rounded">${escapeHtml(pf.label || 'Fotos')}</span>
+                            </div>
+                            <div class="p-2 text-[10px] space-y-0.5 text-slate-600">
+                                ${bloco.exibirLegenda !== false ? '<div class="font-bold text-slate-800 truncate">Legenda da foto</div>' : ''}
+                                ${bloco.exibirData !== false ? '<div>Data: 00/00/0000</div>' : ''}
+                            </div>
+                        </div>`).join('')}
+                </div>` : '';
+
+            return `
+                <details open class="group/tab" data-tab-id="${escapeHtml(String(tab.id))}">
+                    <summary class="flex items-center justify-between px-2 py-1 bg-slate-100 rounded-lg border border-slate-200 text-xs cursor-pointer list-none">
+                        <div class="flex items-center gap-1.5 font-bold text-slate-800 uppercase tracking-wide">
+                            <span class="material-symbols-outlined text-[16px] text-amber-500">folder_open</span>
+                            <span class="cursor-text hover:bg-sky-50 px-1 rounded transition-colors" title="Duplo clique para editar o texto da aba"
+                                  ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'custom_tab_title_${escapeHtml(String(tab.id))}')">${escapeHtml(tabTitle)}</span>
+                        </div>
+                        <span class="text-[9.5px] font-mono font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">${tabFields.length} campo(s) • ${tab.isMultiple ? '1:N' : '1:1'}</span>
+                    </summary>
+                    <div class="mt-2 border rounded-xl ${cardPad} ${cardBg} space-y-2.5 shadow-2xs">
+                        ${tabFields.length
+                            ? `<div class="flex flex-wrap ${gap} a4-grid-fields-container" data-block-index="${index}">${fieldCards}</div>`
+                            : '<div class="text-[10px] italic text-slate-400">Nenhum campo desta aba foi escolhido para o laudo. Marque os campos na barra lateral.</div>'}
+                        ${photosHtml}
+                    </div>
+                </details>`;
+        }).join('');
+
+        return `<div class="mb-4">${titleHtml}<div class="space-y-4">${sections}</div></div>`;
+    }
+
+    /** Lista (↑ ↓) das abas do laudo, na ordem em que aparecerão no relatório. */
+    function renderLaudoTabSequenceList() {
+        const formId = currentTemplate && currentTemplate.form_id;
+        const allFields = (window.ReportAdapter && window.ReportAdapter.getFormFields) ? window.ReportAdapter.getFormFields(formId) : [];
+        const allTabs = getLaudoPreviewTabs(allFields);
+        allTabs.forEach(t => { if (!current1nTabOrder.includes(t.id)) current1nTabOrder.push(t.id); });
+        const block = currentTemplate && Array.isArray(currentTemplate.blocos)
+            ? currentTemplate.blocos.find(b => b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos') : null;
+        const selected = current1nLaudoSelectedTabs.size ? current1nLaudoSelectedTabs : new Set((block && block.abas_selecionadas) || []);
+        const shown = current1nTabOrder.filter(id => selected.has(id)).map(id => allTabs.find(t => t.id === id)).filter(Boolean);
+        if (!shown.length) {
+            return '<div class="text-[10px] italic text-slate-400 px-1">Marque abaixo as abas do laudo para definir a sequência delas.</div>';
+        }
+        return shown.map((t, i) => `
+            <div class="flex items-center justify-between p-1.5 bg-white rounded border border-slate-200 text-xs">
+                <div class="flex items-center gap-1.5 min-w-0">
+                    <span class="w-4 h-4 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center shrink-0">${i + 1}</span>
+                    <span class="font-semibold text-slate-800 truncate">${escapeHtml(t.title)}</span>
+                    <span class="text-[8.5px] font-mono text-slate-400">${t.isMultiple ? '1:N' : '1:1'}</span>
+                </div>
+                <div class="flex items-center gap-0.5 shrink-0">
+                    <button type="button" onclick="ReportBuilder.move1nLaudoTabSequence('${escapeHtml(String(t.id))}', -1)" ${i === 0 ? 'disabled' : ''} class="p-0.5 text-slate-500 hover:text-primary disabled:opacity-30 cursor-pointer" title="Mover para cima">
+                        <span class="material-symbols-outlined text-[14px]">arrow_upward</span>
+                    </button>
+                    <button type="button" onclick="ReportBuilder.move1nLaudoTabSequence('${escapeHtml(String(t.id))}', 1)" ${i === shown.length - 1 ? 'disabled' : ''} class="p-0.5 text-slate-500 hover:text-primary disabled:opacity-30 cursor-pointer" title="Mover para baixo">
+                        <span class="material-symbols-outlined text-[14px]">arrow_downward</span>
+                    </button>
+                </div>
+            </div>`).join('');
+    }
+
+    function refreshLaudoTabSequenceList() {
+        const el = document.getElementById('cfg-1n-laudo-tab-sequence-list');
+        if (el) el.innerHTML = renderLaudoTabSequenceList();
+    }
+
+    /** Move uma aba do laudo para cima/baixo entre as abas escolhidas para o laudo. */
+    function move1nLaudoTabSequence(tabId, direction) {
+        sync1nSelectedFieldsFromDOM();
+        const shown = current1nTabOrder.filter(id => current1nLaudoSelectedTabs.has(id));
+        const i = shown.indexOf(tabId);
+        const j = i + direction;
+        if (i < 0 || j < 0 || j >= shown.length) return;
+        const a = current1nTabOrder.indexOf(shown[i]);
+        const b = current1nTabOrder.indexOf(shown[j]);
+        const tmp = current1nTabOrder[a];
+        current1nTabOrder[a] = current1nTabOrder[b];
+        current1nTabOrder[b] = tmp;
+
+        if (currentTemplate && Array.isArray(currentTemplate.blocos)) {
+            currentTemplate.blocos.forEach(bl => {
+                if (bl.tipo === 'tabela_sintetica_1n' || bl.tipo === 'galeria_fotos' || bl.tipo === 'laudo_vistoria_fotos') {
+                    bl.ordem_abas = [...current1nTabOrder];
+                }
+            });
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+        }
+        refreshLaudoTabSequenceList();
+    }
+
     function renderA4Blocks() {
         const container = document.getElementById('a4-blocks-list');
         if (!container || !currentTemplate) return;
@@ -2326,510 +2617,7 @@
 
             case 'laudo_vistoria_fotos':
             case 'galeria_fotos': {
-                const layout = bloco.layoutFotos || '2_cols';
-                let gridClass = 'grid-cols-2';
-                if (layout === '1_col') gridClass = 'grid-cols-1';
-                if (layout === 'grid_4') gridClass = 'grid-cols-2 sm:grid-cols-4';
-                const isSingleVistoria = bloco.escopo === 'ultima';
-                const isAsc = bloco.ordem_cronologica === 'asc';
-                const isGroupedByTab = !!bloco.ordenar_por_aba;
-                const density = bloco.densidade || current1nLaudoDensity || 'compact';
-                const striping = bloco.zebrado || current1nLaudoRowStriping || 'slate';
-
-                let cardPaddingClass = 'p-3';
-                let fieldGapClass = 'gap-2';
-                if (density === 'comfortable') {
-                    cardPaddingClass = 'p-3.5 sm:p-4';
-                    fieldGapClass = 'gap-2.5';
-                } else if (density === 'ultracompact') {
-                    cardPaddingClass = 'p-2';
-                    fieldGapClass = 'gap-1.5';
-                }
-
-                const fieldsMap = new Map();
-                fields.forEach(f => fieldsMap.set(f.id, f));
-
-                // Deduplicação estrita de campos por chave única (aba + campo) sem perda canônica
-                const rawCustomFields = Array.isArray(bloco.campos_selecionados) ? bloco.campos_selecionados : [];
-                const seenFieldKeys = new Set();
-                let customFields = [];
-                rawCustomFields.forEach(cf => {
-                    const cId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
-                    const cLabel = typeof cf === 'object' ? (cf.label || cf.id) : (fieldsMap.get(cId)?.label || cId);
-                    const cTabId = typeof cf === 'object' ? (cf.tabId || '') : (fieldsMap.get(cId)?.tabId || '');
-                    const uniqueKey = `${cTabId}:${cId}`;
-                    if (!seenFieldKeys.has(uniqueKey)) {
-                        seenFieldKeys.add(uniqueKey);
-                        customFields.push(typeof cf === 'object' ? { ...cf, id: cId, label: cLabel, rawId: cId, tabId: cTabId } : { id: cId, label: cLabel, rawId: cId, tabId: cTabId });
-                    }
-                });
-
-                if (customFields.length === 0 && (!bloco.campos_selecionados || bloco.campos_selecionados.length === 0)) {
-                    customFields = [
-                        { id: 'data', label: 'Data da Vistoria' },
-                        { id: 'situacao_ocupacao', label: 'Situação da Ocupação' },
-                        { id: 'situacao_recuo', label: 'Situação do Recuo' },
-                        { id: 'area_invadida', label: 'Área Invadida (m²)' },
-                        { id: 'conclusao', label: 'Conclusão da Vistoria' },
-                        { id: 'links', label: 'Processos Oficiais & Hiperlinks' }
-                    ];
-                }
-                // Conclusão: campo no mesmo formato de apresentação dos outros atributos da grade
-
-                // Geração dinâmica de múltiplos registros analíticos para TODAS as abas reais do formulário
-                const formTabs = (window.ReportAdapter && window.ReportAdapter.getFormTabs) ? window.ReportAdapter.getFormTabs(currentTemplate?.form_id) : [];
-                const allFormFields = (window.ReportAdapter && window.ReportAdapter.getFormFields) ? window.ReportAdapter.getFormFields(currentTemplate?.form_id) : [];
-
-                const tabGroupsMap = new Map();
-                formTabs.forEach(t => {
-                    tabGroupsMap.set(t.id, {
-                        id: t.id,
-                        title: t.title || 'Aba Geral',
-                        fields: Array.isArray(t.fields) ? [...t.fields] : []
-                    });
-                });
-                allFormFields.forEach(f => {
-                    const tId = f.tabId || 'geral';
-                    const tTitle = f.tabTitle || 'Aba Geral';
-                    if (!tabGroupsMap.has(tId)) {
-                        tabGroupsMap.set(tId, {
-                            id: tId,
-                            title: tTitle,
-                            fields: []
-                        });
-                    }
-                    const grp = tabGroupsMap.get(tId);
-                    if (!grp.fields.some(gf => gf.id === f.id)) {
-                        grp.fields.push(f);
-                    }
-                });
-
-                let mockTabsAndRecords = [];
-                Array.from(tabGroupsMap.values()).forEach((tabInfo, tIdx) => {
-                    const sanitizedTitle = sanitizeTabTitle(tabInfo.title);
-                    const titleLow = sanitizedTitle.toLowerCase();
-                    let orgBadge = sanitizedTitle.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) || `ABA${tIdx + 1}`;
-                    let tabSpecificRecords = [];
-
-                    // Detecção com precedência estrita para MPF
-                    if (titleLow.includes('mpf') || titleLow.includes('minist') || titleLow.includes('procurad')) {
-                        orgBadge = 'MPF';
-                        tabSpecificRecords = [
-                            {
-                                id: `rec_${tabInfo.id}_1`,
-                                num: 1,
-                                title: `Procedimento Ministerial #1 • 14/08/2026 (MPF)`,
-                                org: sanitizedTitle,
-                                orgBadge: 'MPF',
-                                date: '14/08/2026',
-                                data: '14/08/2026',
-                                status: 'Em Investigação',
-                                statusColor: 'bg-purple-100 text-purple-700 border-purple-200',
-                                situacao_ocupacao: 'Ocupação sob Inquérito Civil',
-                                situacao_recuo: 'Não Recuou',
-                                area_invadida: '120,50 m²',
-                                fiscal: 'Analista Pericial / MPF',
-                                conclusao: 'Procedimento preparatório de tutela coletiva com notificação para adequação aos limites legais.',
-                                ipl: 'IPL 0800653/2026',
-                                distribuicao: '2ª Vara Federal',
-                                designado: 'Dr. Procurador da República',
-                                correlatos: 'ACP 0801234/2026',
-                                fase_investigacao: 'Instrução',
-                                links: [
-                                    { title: 'Inquérito Civil', number: '1.24.000.000123/2026', url: '#' }
-                                ],
-                                photos: [
-                                    { id: 101, title: 'Área Perimetral sob Inquérito', date: '14/08/2026 11:20', coords: '-7.023450, -34.845120', resp: 'Analista Pericial / MPF' }
-                                ]
-                            }
-                        ];
-                    } else if (titleLow.includes('polic') || /\bpf\b/.test(titleLow) || titleLow === 'pf' || (titleLow.includes('pf') && !titleLow.includes('mpf'))) {
-                        orgBadge = 'PF';
-                        tabSpecificRecords = [
-                            {
-                                id: `rec_${tabInfo.id}_1`,
-                                num: 1,
-                                title: `Vistoria Técnica #1 • 15/08/2026 (PF)`,
-                                org: sanitizedTitle,
-                                orgBadge: 'PF',
-                                date: '15/08/2026',
-                                data: '15/08/2026',
-                                status: 'Irregular',
-                                statusColor: 'bg-red-100 text-red-700 border-red-200',
-                                situacao_ocupacao: 'Ocupação Irregular',
-                                situacao_recuo: 'Não Recuou',
-                                area_invadida: '120,50 m²',
-                                fiscal: 'Perito Criminal Federal',
-                                conclusao: 'Constatada intervenção e ocupação irregular na área perimetral.',
-                                links: [
-                                    { title: 'Processo IPL', number: '0800653-88.2024.4.05.8200', url: '#' },
-                                    { title: 'Registro RIP', number: '2145.00192.001', url: '#' }
-                                ],
-                                photos: [
-                                    { id: 1, title: 'Fachada Principal / Acesso Lote', date: '15/08/2026 10:45', coords: '-7.023450, -34.845120', resp: 'Perito Criminal Federal' }
-                                ]
-                            },
-                            {
-                                id: `rec_${tabInfo.id}_2`,
-                                num: 2,
-                                title: `Vistoria de Reinspeção #2 • 12/01/2026 (PF)`,
-                                org: sanitizedTitle,
-                                orgBadge: 'PF',
-                                date: '12/01/2026',
-                                data: '12/01/2026',
-                                status: 'Em Notificação',
-                                statusColor: 'bg-amber-100 text-amber-800 border-amber-200',
-                                situacao_ocupacao: 'Processo em Notificação',
-                                situacao_recuo: 'Recuo Parcial',
-                                area_invadida: '120,50 m²',
-                                fiscal: 'Perito Responsável',
-                                conclusao: 'Vistoria anterior de averiguação com notificação preliminar de adequação.',
-                                links: [
-                                    { title: 'Processo IPL', number: '0800653-88.2024.4.05.8200', url: '#' },
-                                    { title: 'Auto de Notificação', number: 'NOT-2026/014', url: '#' }
-                                ],
-                                photos: [
-                                    { id: 3, title: 'Panorama Geral do Lote e Entorno', date: '12/01/2026 09:30', coords: '-7.023420, -34.845100', resp: 'Perito Responsável' }
-                                ]
-                            }
-                        ];
-                    } else if (titleLow.includes('spu') || titleLow.includes('patrim')) {
-                        orgBadge = 'SPU';
-                        tabSpecificRecords = [
-                            {
-                                id: `rec_${tabInfo.id}_1`,
-                                num: 1,
-                                title: `Vistoria Patrimonial #1 • 10/04/2026 (SPU)`,
-                                org: sanitizedTitle,
-                                orgBadge: 'SPU',
-                                date: '10/04/2026',
-                                data: '10/04/2026',
-                                status: 'Pendente',
-                                statusColor: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-                                situacao_ocupacao: 'Área da União',
-                                situacao_recuo: 'Recuo Parcial',
-                                area_invadida: '85,20 m²',
-                                fiscal: 'Auditor SPU',
-                                conclusao: 'Área da União sob regime de regularização patrimonial.',
-                                links: [
-                                    { title: 'Registro RIP', number: '2145.00192.001', url: '#' }
-                                ],
-                                photos: [
-                                    { id: 201, title: 'Linha Preamar e Faixa de União', date: '10/04/2026 14:00', coords: '-7.023410, -34.845080', resp: 'Auditor SPU' }
-                                ]
-                            }
-                        ];
-                    } else if (titleLow.includes('pm') || titleLow.includes('pref') || titleLow.includes('munic') || titleLow.includes('meio')) {
-                        orgBadge = 'MUNICÍPIO';
-                        tabSpecificRecords = [
-                            {
-                                id: `rec_${tabInfo.id}_1`,
-                                num: 1,
-                                title: `Vistoria Municipal #1 • 05/02/2026 (MUNICÍPIO)`,
-                                org: sanitizedTitle,
-                                orgBadge: 'MUNICÍPIO',
-                                date: '05/02/2026',
-                                data: '05/02/2026',
-                                status: 'Regular',
-                                statusColor: 'bg-amber-100 text-amber-800 border-amber-200',
-                                situacao_ocupacao: 'Conforme Padrão Municipal',
-                                situacao_recuo: 'Recuo Total',
-                                area_invadida: '45,00 m²',
-                                fiscal: 'Fiscal de Obras / Urbanismo',
-                                conclusao: 'Parâmetros urbanísticos respeitados de acordo com o Plano Diretor.',
-                                links: [
-                                    { title: 'Auto de Vistoria', number: 'Auto 102/2026', url: '#' }
-                                ],
-                                photos: []
-                            }
-                        ];
-                    } else {
-                        tabSpecificRecords = [
-                            {
-                                id: `rec_${tabInfo.id}_1`,
-                                num: 1,
-                                title: `Vistoria Técnica #1 • 15/08/2026 (${orgBadge})`,
-                                org: sanitizedTitle,
-                                orgBadge: orgBadge,
-                                date: '15/08/2026',
-                                data: '15/08/2026',
-                                status: 'Regular',
-                                statusColor: 'bg-slate-100 text-slate-700 border-slate-200',
-                                situacao_ocupacao: 'Cadastrado',
-                                situacao_recuo: 'Recuado',
-                                area_invadida: '0,00 m²',
-                                fiscal: 'Fiscal Técnico',
-                                conclusao: 'Vistoria técnica cadastrada sem inconformidades.',
-                                links: [
-                                    { title: 'Registro Geral', number: 'REG-2026/001', url: '#' }
-                                ],
-                                photos: []
-                            }
-                        ];
-                    }
-
-                    mockTabsAndRecords.push({
-                        tabId: tabInfo.id,
-                        tabTitle: sanitizedTitle,
-                        records: tabSpecificRecords
-                    });
-                });
-
-                // Identifica abas explicitamente selecionadas nos campos do laudo ou pelo sourceTabId
-                const selectedTabIds = new Set();
-                if (Array.isArray(bloco.abas_selecionadas) && bloco.abas_selecionadas.length > 0) {
-                    bloco.abas_selecionadas.forEach(id => selectedTabIds.add(id));
-                } else if (current1nLaudoSelectedTabs && current1nLaudoSelectedTabs.size > 0) {
-                    current1nLaudoSelectedTabs.forEach(id => selectedTabIds.add(id));
-                } else if (bloco.sourceTabId && bloco.sourceTabId !== 'consolidado') {
-                    selectedTabIds.add(bloco.sourceTabId);
-                } else {
-                    rawCustomFields.forEach(cf => {
-                        const tId = (typeof cf === 'object' && cf.tabId) ? cf.tabId : (fieldsMap.get(typeof cf === 'string' ? cf : (cf.rawId || cf.id))?.tabId);
-                        if (tId) selectedTabIds.add(tId);
-                    });
-                }
-
-                if (selectedTabIds.size > 0) {
-                    const isTabGroupSelected = (tg) => {
-                        if (selectedTabIds.has(tg.tabId)) return true;
-                        for (const selId of selectedTabIds) {
-                            if (selId === tg.tabId) return true;
-                            const normSel = normalizeColKey(selId);
-                            const normId = normalizeColKey(tg.tabId || '');
-                            const normTitle = normalizeColKey(tg.tabTitle || '');
-                            if (normSel && normId && (normSel === normId || normId.includes(normSel) || normSel.includes(normId))) return true;
-                            if (normSel && normTitle && (normTitle.includes(normSel) || normSel.includes(normTitle))) return true;
-                            if (tg.records && tg.records.some(r => {
-                                const normOrg = normalizeColKey(r.org || '');
-                                const normBadge = normalizeColKey(r.orgBadge || '');
-                                return (normSel && normBadge && (normSel === normBadge || normBadge.includes(normSel) || normSel.includes(normBadge))) ||
-                                       (normSel && normOrg && (normOrg.includes(normSel) || normOrg.includes(normOrg)));
-                            })) return true;
-                        }
-                        return false;
-                    };
-                    mockTabsAndRecords = mockTabsAndRecords.filter(isTabGroupSelected);
-                }
-
-                // Filtragem por escopo (todas vs apenas última de cada aba)
-                if (isSingleVistoria) {
-                    mockTabsAndRecords.forEach(t => {
-                        if (t.records.length > 1) t.records = [t.records[0]];
-                    });
-                }
-
-                // Ordenação cronológica
-                if (isAsc) {
-                    mockTabsAndRecords.forEach(t => t.records.reverse());
-                    mockTabsAndRecords.reverse();
-                }
-
-                const totalRecordsCount = mockTabsAndRecords.reduce((acc, t) => acc + t.records.length, 0);
-
-                return `
-                    <div class="mb-4">
-                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between flex-wrap gap-1">
-                            <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(escapeHtml(bloco.titulo || 'Vistoria Fotográfica & Anexos (1:N)')).replace(/\r?\n/g, '<br>')}</span>
-                            <div class="flex items-center gap-1.5 text-[10px] font-mono text-slate-400">
-                                <span>${isSingleVistoria ? 'Última Vistoria' : `${totalRecordsCount} Vistorias`}</span>
-                                <span>•</span>
-                                <span>${isAsc ? 'Antigo → Recente' : 'Recente → Antigo'}</span>
-                                ${isGroupedByTab ? '<span>• Por Aba</span>' : ''}
-                                <span class="text-[9px] text-sky-600 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 px-1.5 py-0.5 rounded font-medium print:hidden ml-1">Arraste ⠿ para reordenar campos</span>
-                            </div>
-                        </div>
-
-                        <!-- LISTAGEM DAS ABAS E SEUS DIVERSOS REGISTROS ANALÍTICOS (1:N) -->
-                        <div class="space-y-4">
-                            ${mockTabsAndRecords.map(tabGroup => {
-                                // Filtra os campos específicos selecionados pertencentes a esta aba
-                                const tabSpecificFields = customFields.filter(cf => {
-                                    const cfTabId = cf.tabId || fieldsMap.get(cf.rawId || cf.id)?.tabId;
-                                    if (!cfTabId) return true;
-                                    if (cfTabId === tabGroup.tabId) return true;
-                                    const normCfTab = normalizeColKey(cfTabId);
-                                    const normGroupTab = normalizeColKey(tabGroup.tabId || '');
-                                    const normGroupTitle = normalizeColKey(tabGroup.tabTitle || '');
-                                    return normCfTab === normGroupTab || normGroupTitle.includes(normCfTab) || normCfTab.includes(normGroupTitle);
-                                });
-                                if (tabSpecificFields.length === 0) return '';
-                                const fieldsToRender = tabSpecificFields;
-                                const customTabTitle = bloco['custom_tab_title_' + tabGroup.tabId] || ('Aba / Ente: ' + tabGroup.tabTitle);
-
-                                return `
-                                <div class="space-y-2.5">
-                                    <!-- Identificação Explícita da Aba / Ente -->
-                                    <div class="flex items-center justify-between px-2 py-1 bg-slate-100 dark:bg-slate-800/80 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
-                                        <div class="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wide">
-                                            <span class="material-symbols-outlined text-[16px] text-amber-500">folder_open</span>
-                                            <span class="cursor-text hover:bg-sky-50 dark:hover:bg-slate-700 px-1 rounded transition-colors" 
-                                                  title="Duplo clique para editar o texto da aba" 
-                                                  ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'custom_tab_title_${escapeHtml(tabGroup.tabId)}')">${escapeHtml(customTabTitle)}</span>
-                                        </div>
-                                        <span class="text-[9.5px] font-mono font-bold text-slate-500 bg-white dark:bg-slate-700 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-600">
-                                            ${tabGroup.records.length} registro(s) analítico(s)
-                                        </span>
-                                    </div>
-
-                                    <!-- Registros de Vistoria da Aba -->
-                                    ${tabGroup.records.map((rec, rIdx) => {
-                                        // Estilo Zebrado / Ente dos Cartões de Vistoria
-                                        let cardBgClass = 'bg-slate-50/70 border-slate-200 dark:bg-slate-900/50 dark:border-slate-700';
-                                        if (striping === 'ente') {
-                                            const orgLow = (rec.org || '').toLowerCase();
-                                            if (orgLow.includes('pf') || orgLow.includes('policia')) {
-                                                cardBgClass = 'bg-blue-50/40 border-blue-200 dark:bg-blue-950/25 dark:border-blue-800';
-                                            } else if (orgLow.includes('spu') || orgLow.includes('patrimonio')) {
-                                                cardBgClass = 'bg-emerald-50/40 border-emerald-200 dark:bg-emerald-950/25 dark:border-emerald-800';
-                                            } else if (orgLow.includes('pm') || orgLow.includes('prefeitura') || orgLow.includes('meio')) {
-                                                cardBgClass = 'bg-amber-50/40 border-amber-200 dark:bg-amber-950/25 dark:border-amber-800';
-                                            } else {
-                                                cardBgClass = rIdx % 2 === 1 ? 'bg-slate-100/70 border-slate-300' : 'bg-white border-slate-200';
-                                            }
-                                        } else if (striping === 'sky') {
-                                            cardBgClass = rIdx % 2 === 1 ? 'bg-sky-50/60 border-sky-200 dark:bg-sky-950/30' : 'bg-white border-slate-200 dark:bg-slate-800';
-                                        } else if (striping === 'white') {
-                                            cardBgClass = 'bg-white border-slate-200 dark:bg-slate-800';
-                                        } else {
-                                            // slate
-                                            cardBgClass = rIdx % 2 === 1 ? 'bg-slate-100/70 border-slate-300 dark:bg-slate-900/70' : 'bg-slate-50/50 border-slate-200 dark:bg-slate-800';
-                                        }
-
-                                        const customRecTitle = bloco['custom_rec_title_' + rec.id] || rec.title;
-
-                                        return `
-                                            <div class="border rounded-xl ${cardPaddingClass} ${cardBgClass} space-y-2.5 shadow-2xs">
-                                                <!-- Cabeçalho da Vistoria -->
-                                                <div class="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-700 pb-1.5 text-xs">
-                                                    <div class="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-100">
-                                                        <span class="material-symbols-outlined text-[16px] text-primary">event_available</span>
-                                                        <span class="cursor-text hover:bg-sky-50 dark:hover:bg-slate-700 px-1 rounded transition-colors" 
-                                                              title="Duplo clique para editar o título da vistoria" 
-                                                              ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'custom_rec_title_${escapeHtml(rec.id)}')">${escapeHtml(customRecTitle)}</span>
-                                                    </div>
-                                                    <span class="px-2 py-0.5 rounded-full ${rec.statusColor} text-[9.5px] font-bold uppercase border">
-                                                        ${escapeHtml(rec.status)}
-                                                    </span>
-                                                </div>
-
-                                                <!-- GRADE DE ATRIBUTOS DA VISTORIA (COM DRAG & DROP, LARGURA % E BOTÃO X) -->
-                                                <div class="flex flex-wrap ${fieldGapClass} a4-grid-fields-container" data-block-index="${index}">
-                                                    ${fieldsToRender.map(cf => {
-                                                        const cId = typeof cf === 'string' ? cf : cf.id;
-                                                        const cLabel = typeof cf === 'object' ? (cf.label || cf.id) : (fieldsMap.get(cId)?.label || cId);
-                                                        const canonId = getCanonicalColId(cId, cLabel);
-                                                        const larguras = bloco.campos_larguras || {};
-                                                        
-                                                        // Largura padrão: conclusão e links 100%, outros 50%
-                                                        let pct = larguras[cId];
-                                                        if (!pct) {
-                                                            pct = (canonId === 'conclusao' || canonId === 'links') ? 100 : 50;
-                                                        }
-                                                        pct = Math.round(pct);
-                                                        const widthStyle = getFieldWidthStyle(pct);
-                                                        const isExpanded = pct > 55;
-
-                                                        return `
-                                                            <div class="relative group/field p-2 border ${isExpanded ? 'border-sky-300 dark:border-sky-700 bg-sky-50/30 dark:bg-sky-950/20 shadow-2xs' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'} rounded-lg select-none transition-all"
-                                                                 data-field-id="${escapeHtml(cId)}"
-                                                                 data-block-index="${index}"
-                                                                 style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">
-                                                                
-                                                                <!-- Topo do Card: Alça de Drag, Stepper de Largura e Botão X -->
-                                                                <div class="flex items-center justify-between gap-1 mb-1">
-                                                                    <div class="flex items-center gap-1 min-w-0 flex-1">
-                                                                        <span class="field-drag-handle cursor-grab active:cursor-grabbing text-slate-300 group-hover/field:text-sky-600 hover:bg-slate-200/60 dark:hover:bg-slate-700 p-0.5 rounded transition-colors" title="Arraste para mover de posição no laudo">
-                                                                            <span class="material-symbols-outlined text-[14px] leading-none">drag_indicator</span>
-                                                                        </span>
-                                                                        <span class="text-[9.5px] uppercase font-extrabold text-slate-600 dark:text-slate-300 truncate" title="${escapeHtml(cLabel)}">
-                                                                            ${escapeHtml(cLabel)}:
-                                                                        </span>
-                                                                    </div>
-
-                                                                    <div class="flex items-center gap-1 shrink-0">
-                                                                        <!-- Stepper de Largura Direto: [-] [X%] [+] -->
-                                                                        <div class="inline-flex items-center bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded p-0.5 shadow-2xs">
-                                                                            <button type="button" 
-                                                                                    class="field-width-dec-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 rounded cursor-pointer transition-colors" 
-                                                                                    onclick="ReportBuilder.changeFieldWidthStep(${index}, '${escapeHtml(cId)}', -1, event)" 
-                                                                                    title="Diminuir largura do campo (-)">
-                                                                                <span class="material-symbols-outlined text-[12px] leading-none">remove</span>
-                                                                            </button>
-                                                                            <button type="button" 
-                                                                                    class="field-width-badge-btn px-1 py-0.5 text-[9px] font-extrabold text-slate-700 dark:text-slate-200 hover:text-sky-600 dark:hover:text-sky-300 cursor-pointer transition-colors" 
-                                                                                    onclick="ReportBuilder.toggleFieldWidthPopover(${index}, '${escapeHtml(cId)}', event)" 
-                                                                                    title="Clique para escolher proporção exata ou regular slider">
-                                                                                ${pct}%
-                                                                            </button>
-                                                                            <button type="button" 
-                                                                                    class="field-width-inc-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 rounded cursor-pointer transition-colors" 
-                                                                                    onclick="ReportBuilder.changeFieldWidthStep(${index}, '${escapeHtml(cId)}', 1, event)" 
-                                                                                    title="Aumentar largura do campo (+)">
-                                                                                <span class="material-symbols-outlined text-[12px] leading-none">add</span>
-                                                                            </button>
-                                                                        </div>
-
-                                                                        <!-- Botão X para retirar campo diretamente do laudo -->
-                                                                        <button type="button" 
-                                                                                class="field-remove-btn p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50 rounded transition-colors cursor-pointer print:hidden" 
-                                                                                onclick="ReportBuilder.removeFieldFromAnalytical1n(${index}, '${escapeHtml(cId)}', event)" 
-                                                                                title="Remover este campo do laudo">
-                                                                            <span class="material-symbols-outlined text-[13px] leading-none">close</span>
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-
-                                                                <!-- Valor do Campo (com apresentação especial para 1:N e texto integral para Conclusão) -->
-                                                                ${canonId === 'conclusao' ? `
-                                                                    <div class="text-[10px] text-slate-700 dark:text-slate-200 leading-relaxed break-words whitespace-normal font-normal">
-                                                                        ${escapeHtml(rec.conclusao || 'Constatada regularidade na vistoria.')}
-                                                                    </div>
-                                                                ` : (canonId === 'links' || Array.isArray(rec[canonId])) ? `
-                                                                    <div class="flex flex-wrap items-center gap-1 pt-0.5">
-                                                                        ${(rec.links || []).map(l => `
-                                                                            <span class="inline-flex items-center gap-1 text-[9px] font-bold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 px-1.5 py-0.5 rounded shadow-2xs">
-                                                                                <span class="material-symbols-outlined text-[11px]">attachment</span>
-                                                                                <span>${escapeHtml(l.title || 'Processo')}:</span>
-                                                                                <span class="font-mono">${escapeHtml(l.number || '#')}</span>
-                                                                            </span>
-                                                                        `).join('')}
-                                                                    </div>
-                                                                ` : `
-                                                                    <div class="font-mono text-slate-800 dark:text-slate-100 font-bold text-[10.5px] truncate">
-                                                                        ${escapeHtml(String(rec[canonId] || rec[cId] || rec.situacao_ocupacao || `[${cLabel}]`))}
-                                                                    </div>
-                                                                `}
-                                                            </div>
-                                                        `;
-                                                    }).join('')}
-                                                </div>
-
-                                                <!-- FOTOGRAFIAS DA VISTORIA (1:N INTEGRAL) -->
-                                                <div class="grid ${gridClass} gap-2.5 pt-1">
-                                                    ${rec.photos.map(p => `
-                                                        <div class="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-800 flex flex-col shadow-2xs">
-                                                            <div class="h-28 bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-400 text-xs font-bold relative">
-                                                                <span class="material-symbols-outlined text-[28px] text-slate-300 dark:text-slate-600">photo_camera</span>
-                                                                <span class="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] font-mono px-1 rounded">Foto #${p.id}</span>
-                                                            </div>
-                                                            <div class="p-2 text-[10px] space-y-0.5 text-slate-600 dark:text-slate-300">
-                                                                ${bloco.exibirLegenda !== false ? `<div class="font-bold text-slate-800 dark:text-white truncate">${escapeHtml(p.title)}</div>` : ''}
-                                                                ${bloco.exibirData !== false ? `<div>Data: ${escapeHtml(p.date)}</div>` : ''}
-                                                                ${bloco.exibirCoords !== false ? `<div class="font-mono text-[9px] text-slate-500">GPS: ${escapeHtml(p.coords)}</div>` : ''}
-                                                            </div>
-                                                        </div>
-                                                    `).join('')}
-                                                </div>
-                                            </div>
-                                        `;
-                                    }).join('')}
-                                </div>
-                            `;
-                        }).join('')}
-                        </div>
-                    </div>
-                `;
+                return renderLaudoPreview(bloco, index, fields);
             }
 
             case 'tabela_sintetica': {
@@ -3816,6 +3604,7 @@
                     window.ReportAdapter.saveReportTemplate(currentTemplate);
                 }
                 renderA4Blocks();
+                refreshLaudoTabSequenceList();
             }
         }
     }
@@ -5860,6 +5649,7 @@
         set1nLaudoDensity,
         set1nLaudoRowStriping,
         move1nTabSequence,
+        move1nLaudoTabSequence,
         set1nSortOrder,
         set1nGroupByTab,
         toggleAll1nFieldsInDrawer,

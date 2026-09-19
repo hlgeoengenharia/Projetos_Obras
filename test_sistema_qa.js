@@ -730,8 +730,8 @@ const hasTabSequenceReordering = freshReportBuilderCodeUpdated.includes('move1nT
     fs.readFileSync('relatorio_view.html', 'utf8').includes('bloco.ordem_abas');
 assertTest('Relatórios A4: Agrupamento 1:N suporta reordenar a sequência das abas com botões [↑] e [↓] na barra lateral e no relatório', hasTabSequenceReordering);
 
-const hasConclusionAndCompoundFields = freshReportBuilderCodeUpdated.includes('Conclusão da Vistoria') &&
-    freshReportBuilderCodeUpdated.includes('Conclusão:') &&
+const hasConclusionAndCompoundFields = freshReportBuilderCodeUpdated.includes('laudoSampleHtml') &&
+    freshReportBuilderCodeUpdated.includes('exibido na íntegra') &&
     fs.readFileSync('relatorio_view.html', 'utf8').includes('FieldFormatter.toHtml(r.values[f.id]') &&
     fs.readFileSync('relatorio_view.html', 'utf8').includes('attachment');
 assertTest('Relatórios A4: Laudo 1:N exibe campos longos na íntegra e formata campos compostos (links/anexos) pelo formatador único', hasConclusionAndCompoundFields);
@@ -770,13 +770,14 @@ const hasLaudoInteractiveGridControls = freshReportBuilderCodeUpdated.includes('
 assertTest('Relatórios A4: Laudo Analítico 1:N na Folha A4 conta com controles da Grade de Atributos (drag & drop, botões de largura [-] [+] e popover, remoção [x])', hasLaudoInteractiveGridControls);
 
 const hasLaudoMultiTabStructureAndStandardConclusion = freshReportBuilderCodeUpdated.includes('Aba / Ente:') &&
-    freshReportBuilderCodeUpdated.includes('mockTabsAndRecords') &&
-    freshReportBuilderCodeUpdated.includes('canonId === \'conclusao\'') &&
+    freshReportBuilderCodeUpdated.includes('renderLaudoPreview') &&
+    freshReportBuilderCodeUpdated.includes('<details open') &&
     fs.readFileSync('relatorio_view.html', 'utf8').includes('Aba / Ente:');
-assertTest('Relatórios A4: Laudo Analítico 1:N apresenta quebra analítica por aba com múltiplos registros e conclusão no formato padronizado de card', hasLaudoMultiTabStructureAndStandardConclusion);
+assertTest('Relatórios A4: Laudo Analítico 1:N mostra na Folha A4 uma seção por aba, já ABERTA, com os campos reais do formulário prontos para posicionar', hasLaudoMultiTabStructureAndStandardConclusion);
 
-const hasFullCompound1nFields = freshReportBuilderCodeUpdated.includes('Processo IPL') &&
-    freshReportBuilderCodeUpdated.includes('Registro RIP') &&
+const hasFullCompound1nFields = freshReportBuilderCodeUpdated.includes('Título 2') &&
+    freshReportBuilderCodeUpdated.includes('endereço-do-link-2') &&
+    fs.readFileSync('src/fieldFormatter.js', 'utf8').includes('linkBlockHtml') &&
     fs.readFileSync('relatorio_view.html', 'utf8').includes('hiperlink_1n');
 assertTest('Relatórios A4: Campos com tipo de dados 1:N (hiperlinks, processos e anexos) são exibidos integralmente sem truncamento', hasFullCompound1nFields);
 
@@ -874,10 +875,10 @@ const hasSinteticaDirectlyUnderOrdenacao = freshReportBuilderJs.indexOf('Ordena�
 assertTest('Relatórios A4: "1. Tabela Sintética (Cronológica)" posicionada imediatamente abaixo de "Ordenação dos Registros"', hasSinteticaDirectlyUnderOrdenacao);
 
 const hasLaudoTabFilteringAndInlineEdit = freshReportBuilderJs.includes('custom_tab_title_') &&
-    freshReportBuilderJs.includes('custom_rec_title_') &&
-    freshReportBuilderJs.includes('tabSpecificFields') &&
-    freshReportBuilderJs.includes('selectedTabIds');
-assertTest('Relatórios A4: Laudo Analítico relaciona apenas abas/campos selecionados e permite edição inline por duplo clique nos títulos de Aba e Vistoria', hasLaudoTabFilteringAndInlineEdit);
+    freshReportBuilderJs.includes('getLaudoPreviewTabs') &&
+    freshReportBuilderJs.includes('selectedIds') &&
+    freshReportBuilderJs.includes('tabFields');
+assertTest('Relatórios A4: Laudo Analítico relaciona apenas abas/campos selecionados e permite edição inline por duplo clique no título da Aba', hasLaudoTabFilteringAndInlineEdit);
 
 const hasFeaturePayloadIntegrity = fs.readFileSync('src/formRenderer.js', 'utf8').includes('window.activeFeatureData = featureData') &&
     fs.readFileSync('src/main.js', 'utf8').includes('window.activeFeatureData = (layer.feature && layer.feature.properties)') &&
@@ -952,8 +953,8 @@ assertTest('Abas 1:N: Seções de abas expansíveis com acordeão (clique para e
 const hasStrictLaudoTabSelection = freshReportBuilderJs.includes('cfg-1n-laudo-tab-select') &&
     freshReportBuilderJs.includes('on1nLaudoTabSelectChange') &&
     freshReportBuilderJs.includes('current1nLaudoSelectedTabs') &&
-    freshReportBuilderJs.includes('if (tabSpecificFields.length === 0) return \'\';') &&
-    updatedRelatorioViewHtml.includes('bloco.abas_selecionadas');
+    freshReportBuilderJs.includes('ensureLaudoFieldSelection') &&
+    updatedRelatorioViewHtml.includes('resolveTabIds(bloco.abas_selecionadas');
 assertTest('Laudo Analítico 1:N: Opção de seleção de abas via checkbox e envio restrito apenas das abas e campos selecionados', hasStrictLaudoTabSelection);
 
 const hasPrecisionDragAndDrop = freshReportBuilderJs.includes("direction: 'horizontal'") &&
@@ -963,6 +964,12 @@ const hasPrecisionDragAndDrop = freshReportBuilderJs.includes("direction: 'horiz
     freshReportBuilderJs.includes('newContainerOrder');
 assertTest('Folha A4 Interativa: Drag & drop de campos na grade com alta precisão horizontal (swapThreshold 0.65 e ordenação via DOM)', hasPrecisionDragAndDrop);
 
+const hasLaudoTabSequenceOption = freshReportBuilderJs.includes('Sequência das Abas no Laudo') &&
+    freshReportBuilderJs.includes('cfg-1n-laudo-tab-sequence-list') &&
+    freshReportBuilderJs.includes('move1nLaudoTabSequence') &&
+    updatedRelatorioViewHtml.includes('sortRecords(records, sortOrder, true, bloco.ordem_abas)');
+assertTest('Relatórios A4: Laudo Analítico permite definir a sequência das abas (↑ ↓) e o relatório sempre agrupa por aba nessa ordem', hasLaudoTabSequenceOption);
+
 // ------------------------------------------------------------------------------
 // RELATÓRIOS A4 — TESTES DE COMPORTAMENTO (executam o código de verdade, sem inspecionar texto)
 // ------------------------------------------------------------------------------
@@ -970,6 +977,7 @@ assertTest('Folha A4 Interativa: Drag & drop de campos na grade com alta precis�
     ['tests/fieldFormatter.test.js', 'Formatador único: cada tipo de campo é formatado pelo TIPO (CPF/CNPJ, IPL, EPOL, RIP, CEP, moeda, m², data, links, anexos), sem adivinhar por nome/rótulo/id'],
     ['tests/viewerResolve.test.js', 'Visualizador: campo é lido pelo ID do schema; campo vazio nunca herda valor de outro campo nem de outra aba'],
     ['tests/reportData.test.js', 'Camada de dados: abas visíveis (permissão e condição), registros 1:N e 1:1, colunas lidas pelo campo da própria aba, dados de aba oculta removidos'],
+    ['tests/builderLaudoPreview.test.js', 'Construtor: prévia do Laudo com uma seção ABERTA por aba (campos reais, arraste, largura, 1:N na íntegra) e sequência de abas (↑ ↓)'],
     ['tests/viewerTables.test.js', 'Quadro Sintético e Laudo Analítico: colunas por campo, seleção de abas, quebra por linhas entre folhas, escape de HTML e aviso quando a aba escolhida não existe']
 ].forEach(([testFile, description]) => {
     let passed = true;

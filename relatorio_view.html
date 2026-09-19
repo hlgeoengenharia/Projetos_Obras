@@ -282,6 +282,16 @@
             return key ? data[key] : undefined;
         }
 
+        /** Campos cujo valor ocupa várias linhas ou tem links: exibidos na íntegra (HTML), sem truncar. */
+        function isRichField(f) {
+            return ['hiperlink', 'hiperlink_1n', 'attachment', 'epol_1n', 'rip_1n', 'textarea'].includes(FieldFormatter.canonicalType(f || {}));
+        }
+
+        function resolveFieldHtml(f, featureData) {
+            if (!f || !featureData) return FieldFormatter.EMPTY;
+            return FieldFormatter.toHtml(readFieldRaw(f, featureData), f, { geometryCenter: getGeometryCenter() });
+        }
+
         function resolveFieldValue(f, featureData, availableFields = []) {
             if (!f || !featureData) return FieldFormatter.EMPTY;
             return formatFieldValueForDisplay(readFieldRaw(f, featureData), f);
@@ -726,6 +736,13 @@
                                 <div class="divide-y divide-slate-200 border border-slate-200 rounded-lg overflow-hidden">
                                     ${fldsToRender.map(f => {
                                         const val = resolveFieldValue(f, featureData);
+                                        if (isRichField(f)) {
+                                            return `
+                                            <div class="px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50">
+                                                <div class="font-bold text-slate-600">${escapeHtml(f.label)}:</div>
+                                                <div class="font-semibold text-slate-900 text-[11px] break-words whitespace-normal">${resolveFieldHtml(f, featureData)}</div>
+                                            </div>`;
+                                        }
                                         return `
                                             <div class="flex items-center justify-between px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50">
                                                 <span class="font-bold text-slate-600 truncate">${escapeHtml(f.label)}:</span>
@@ -760,7 +777,7 @@
                                         <div class="p-2 border border-slate-200 rounded-lg bg-slate-50/50" 
                                              style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">
                                             <div class="text-[9.5px] uppercase font-bold text-slate-500 truncate">${escapeHtml(f.label)}</div>
-                                            <div class="text-xs font-bold text-slate-800 mt-0.5 ${isLongText ? 'break-words whitespace-normal leading-snug' : 'truncate'}">${escapeHtml(val)}</div>
+                                            <div class="text-xs font-bold text-slate-800 mt-0.5 ${(isLongText || isRichField(f)) ? 'break-words whitespace-normal leading-snug' : 'truncate'}">${isRichField(f) ? resolveFieldHtml(f, featureData) : escapeHtml(val)}</div>
                                         </div>
                                     `;
                                 }).join('')}
@@ -1122,7 +1139,7 @@
 
             // Campos escolhidos (por id) e abas: escolhidas no bloco, ou deduzidas dos campos, ou todas as 1:N
             const rawSel = Array.isArray(bloco.campos_selecionados) ? bloco.campos_selecionados : [];
-            const selFieldIds = rawSel.map(cf => (typeof cf === 'string') ? cf : (cf && (cf.rawId || cf.id))).filter(Boolean);
+            const selFieldIds = rawSel.map(cf => (typeof cf === 'string') ? cf : (cf && (cf.rawId || cf.id))).filter(id => id && fieldIndex[id]);
             const hasTabSelection = Array.isArray(bloco.abas_selecionadas) && bloco.abas_selecionadas.length > 0;
             let tabIds = hasTabSelection ? resolveTabIds(bloco.abas_selecionadas, tabs) : [];
             if (!hasTabSelection && selFieldIds.length) {
@@ -1134,8 +1151,11 @@
             if (hasTabSelection && tabIds.length === 0) return reportBlockNotice(bloco, TITLE, MSG_TABS_UNAVAILABLE);
 
             let records = ReportData.buildRecords(tabs, featureData, { tabIds });
-            records = ReportData.sortRecords(records, sortOrder, groupByTab, bloco.ordem_abas);
-            if (bloco.escopo === 'ultima') records = records.slice(0, 1);
+            if (bloco.escopo === 'ultima') {
+                const seenTab = new Set();
+                records = ReportData.sortRecords(records, 'desc', true, bloco.ordem_abas).filter(r => !seenTab.has(r.tabId) && seenTab.add(r.tabId));
+            }
+            records = ReportData.sortRecords(records, sortOrder, true, bloco.ordem_abas);
             if (records.length === 0) {
                 return reportBlockNotice(bloco, TITLE, 'Nenhum registro cadastrado nas abas selecionadas para este imóvel.');
             }
@@ -1209,7 +1229,7 @@
                 if (!seenTab[r.tabId]) {
                     seenTab[r.tabId] = true;
                     groupHeader = `<div class="flex items-center justify-between px-2.5 py-1.5 bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold text-slate-800 uppercase tracking-wide mb-2">
-                        <div class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[16px] text-amber-500">folder_open</span><span>Aba / Ente: ${esc(r.tabTitle)}</span></div>
+                        <div class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[16px] text-amber-500">folder_open</span><span>${esc(bloco['custom_tab_title_' + r.tabId] || ('Aba / Ente: ' + r.tabTitle))}</span></div>
                         <span class="text-[9.5px] font-mono font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">${perTabCount[r.tabId]} registro(s)</span>
                     </div>`;
                 }

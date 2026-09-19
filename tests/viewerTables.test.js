@@ -51,7 +51,8 @@ const hist = (p) => ([
     { id: `${p}_ocup`, label: 'Situação da ocupação', type: 'select' },
     { id: `${p}_area`, label: 'Área invadida (m²)', type: 'area_m2' },
     { id: `${p}_obs`, label: 'Observações', type: 'textarea' },
-    { id: `${p}_fotos`, label: 'Fotos', type: 'photo' }
+    { id: `${p}_fotos`, label: 'Fotos', type: 'photo' },
+    { id: `${p}_links`, label: 'Processos', type: 'hiperlink_1n' }
 ]);
 window.reportViewerFormTabs = [
     { id: 't_dados', title: 'Dados do Imóvel', isMultiple: false, fields: [{ id: 'f_prop', label: 'Proprietário', type: 'text' }] },
@@ -62,7 +63,8 @@ window.reportViewerFormTabs = [
 const data = {
     f_prop: 'Maria',
     t_pf: JSON.stringify([
-        { pf_data: '2026-01-10', pf_ocup: 'Irregular', pf_area: '120.5', pf_obs: 'Constatada ocupação <b>irregular</b>.' },
+        { pf_data: '2026-01-10', pf_ocup: 'Irregular', pf_area: '120.5', pf_obs: 'Constatada ocupação <b>irregular</b>.',
+          pf_links: JSON.stringify([{ title: 'Inquérito Civil', number: '1.24.000/2026', url: 'mpf.mp.br/ic' }, { title: 'Processo PF', url: 'pf.gov.br/p' }]) },
         { pf_data: '2026-08-15', pf_ocup: 'Regular', pf_area: '10,00',
           pf_fotos: JSON.stringify([{ url: 'https://x/1.jpg', title: 'Fachada' }]) }
     ]),
@@ -137,6 +139,34 @@ ok('grupos PF e SPU', full.includes('Aba / Ente: PF') && full.includes('Aba / En
 window.reportViewerFormTabs[1].fields.push({ id: 'pf_ev', label: 'Evidência', type: 'photo' });
 out = renderAnalyticalLaudo({ abas_selecionadas: ['t_pf'] }, { t_pf: JSON.stringify([{ pf_data: '2026-01-01', pf_ev: JSON.stringify([{ url: 'javascript:alert(1)' }]) }]) });
 ok('foto com URL javascript: não vira <img>', !out.split.chunkHtml(out.split.rowsHtml, true).includes('javascript:'));
+
+// ---------------------------------------------------------------- sequência de abas, última por aba, título e campos 1:N
+out = renderAnalyticalLaudo({ abas_selecionadas: ['t_pf', 't_spu'], ordem_abas: ['t_spu', 't_pf'] }, data);
+full = out.split.chunkHtml(out.split.rowsHtml, true);
+ok('laudo segue a sequência de abas escolhida (SPU antes de PF)', full.indexOf('Aba / Ente: SPU') < full.indexOf('Aba / Ente: PF'));
+out = renderAnalyticalLaudo({ abas_selecionadas: ['t_pf', 't_spu'], ordem_abas: ['t_pf', 't_spu'] }, data);
+full = out.split.chunkHtml(out.split.rowsHtml, true);
+ok('sequência invertida: PF antes de SPU', full.indexOf('Aba / Ente: PF') < full.indexOf('Aba / Ente: SPU'));
+ok('laudo sempre agrupado por aba, sem intercalar', full.indexOf('Aba / Ente: SPU') > full.lastIndexOf('PF •'));
+
+out = renderAnalyticalLaudo({ abas_selecionadas: ['t_pf', 't_spu'], escopo: 'ultima' }, data);
+eq('"apenas última vistoria" = a mais recente de CADA aba (2 cartões)', out.split.rowsHtml.length, 2);
+full = out.split.chunkHtml(out.split.rowsHtml, true);
+ok('a última da PF é a de 15/08', full.includes('15/08/2026') && !full.includes('10/01/2026'));
+
+out = renderAnalyticalLaudo({ abas_selecionadas: ['t_pf'], custom_tab_title_t_pf: 'Polícia Federal — Vistorias' }, data);
+ok('título da aba editado no construtor aparece no laudo', out.split.chunkHtml(out.split.rowsHtml, true).includes('Polícia Federal — Vistorias'));
+
+// seleção legada (ids que não existem no formulário) não deixa o cartão vazio
+out = renderAnalyticalLaudo({ abas_selecionadas: ['t_pf'], campos_selecionados: [{ id: 'data', label: 'Data' }, { id: 'conclusao', label: 'Conclusão' }] }, data);
+full = out.split.chunkHtml(out.split.rowsHtml, true);
+ok('ids legados ignorados: mostra os campos reais da aba', full.includes('Situação da ocupação:') && !full.includes('Nenhum campo desta aba'));
+
+// campo 1:N de link: título, número e endereço na íntegra
+out = renderAnalyticalLaudo({ abas_selecionadas: ['t_pf'] }, data);
+full = out.split.chunkHtml(out.split.rowsHtml, true);
+ok('campo 1:N de link: título, número e endereço aparecem', full.includes('Inquérito Civil') && full.includes('1.24.000/2026') && full.includes('>mpf.mp.br/ic</a>'));
+ok('campo 1:N de link: todos os itens', full.includes('Processo PF') && full.includes('>pf.gov.br/p</a>'));
 
 console.log(`viewerTables: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {

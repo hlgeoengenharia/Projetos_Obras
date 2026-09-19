@@ -344,12 +344,20 @@
         opts = opts || {};
         const type = canonicalType(field);
 
-        const linkHtml = (l) => {
+        // Campos de link/anexo (simples ou 1:N) saem NA ÍNTEGRA: título, número e o endereço do link,
+        // um bloco por item. Só endereços http/https são clicáveis.
+        const linkBlockHtml = (l) => {
             const href = normalizeUrl(l.url);
-            const label = escapeHtml(linkLabel(l));
-            return href
-                ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${label}</a>`
-                : label;
+            const head = [];
+            if (l.title) head.push(`<strong>${escapeHtml(l.title)}</strong>`);
+            if (l.number) head.push(`<span>${escapeHtml(l.number)}</span>`);
+            const urlHtml = l.url
+                ? (href
+                    ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="word-break:break-all">${escapeHtml(l.url)}</a>`
+                    : `<span style="word-break:break-all">${escapeHtml(l.url)}</span>`)
+                : '';
+            const headHtml = head.join(' - ');
+            return `<div class="ff-link" style="margin:0 0 3px 0">${headHtml}${headHtml && urlHtml ? '<br>' : ''}${urlHtml}</div>`;
         };
 
         if (type !== 'geolocation' && isEmptyValue(value)) return EMPTY;
@@ -357,17 +365,28 @@
         switch (type) {
             case 'hiperlink': {
                 const l = parseLink(value);
-                return (l.url || l.title || l.number) ? linkHtml(l) : EMPTY;
+                return (l.url || l.title || l.number) ? linkBlockHtml(l) : EMPTY;
             }
             case 'hiperlink_1n': {
                 const links = parseLinks(value);
-                return links.length ? links.map(linkHtml).join('<br>') : EMPTY;
+                return links.length ? links.map(linkBlockHtml).join('') : EMPTY;
             }
             case 'attachment': {
                 const files = parseFiles(value);
                 if (!files.length) return EMPTY;
-                return files.map(f => linkHtml({ title: f.title || f.name || 'Arquivo', number: '', url: f.url })).join('<br>');
+                return files.map(f => {
+                    const href = normalizeUrl(f.url);
+                    const name = escapeHtml(f.title || f.name || 'Arquivo');
+                    const title = href
+                        ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"><strong>${name}</strong></a>`
+                        : `<strong>${name}</strong>`;
+                    const file = (f.title && f.name && f.title !== f.name) ? `<br><span>${escapeHtml(f.name)}</span>` : '';
+                    return `<div class="ff-link" style="margin:0 0 3px 0">${title}${file}</div>`;
+                }).join('');
             }
+            case 'epol_1n':
+            case 'rip_1n':
+                return escapeHtml(toText(value, field, opts)).replace(/, /g, '<br>');
             case 'textarea':
                 return escapeHtml(toText(value, field, opts)).replace(/\r?\n/g, '<br>');
             default:
