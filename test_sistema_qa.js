@@ -963,6 +963,24 @@ const hasPrecisionDragAndDrop = freshReportBuilderJs.includes("direction: 'horiz
     freshReportBuilderJs.includes('newContainerOrder');
 assertTest('Folha A4 Interativa: Drag & drop de campos na grade com alta precisão horizontal (swapThreshold 0.65 e ordenação via DOM)', hasPrecisionDragAndDrop);
 
+// ------------------------------------------------------------------------------
+// RELATÓRIOS A4 — TESTES DE COMPORTAMENTO (executam o código de verdade, sem inspecionar texto)
+// ------------------------------------------------------------------------------
+[
+    ['tests/fieldFormatter.test.js', 'Formatador único: cada tipo de campo é formatado pelo TIPO (CPF/CNPJ, IPL, EPOL, RIP, CEP, moeda, m², data, links, anexos), sem adivinhar por nome/rótulo/id'],
+    ['tests/viewerResolve.test.js', 'Visualizador: campo é lido pelo ID do schema; campo vazio nunca herda valor de outro campo nem de outra aba']
+].forEach(([testFile, description]) => {
+    let passed = true;
+    let output = '';
+    try {
+        execSync(`node ${testFile}`, { stdio: 'pipe' });
+    } catch (err) {
+        passed = false;
+        output = String(err.stderr || err.stdout || err.message).trim();
+    }
+    assertTest(`Relatórios A4: ${description}`, passed, output);
+});
+
 // RELATÓRIO FINAL
 // ------------------------------------------------------------------------------
 console.log(`\n${BOLD}${CYAN}==============================================================================${RESET}`);

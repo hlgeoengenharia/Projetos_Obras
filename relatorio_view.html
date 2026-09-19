@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+    <script src="src/fieldFormatter.js"></script>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -236,48 +237,6 @@
             return String(val);
         }
 
-        function formatAddressValue(val) {
-            if (!val) return '—';
-            let data = null;
-            if (typeof val === 'object' && val !== null) {
-                data = val;
-            } else if (typeof val === 'string' && val.trim().startsWith('{')) {
-                try { data = JSON.parse(val); } catch(e) {}
-            }
-            if (data && typeof data === 'object') {
-                const parts = [];
-                if (data.logradouro && data.logradouro !== 'null' && String(data.logradouro).trim() !== '') {
-                    let line = String(data.logradouro).trim();
-                    if (data.numero && data.numero !== 'null' && String(data.numero).trim() !== '' && String(data.numero).trim().toUpperCase() !== 'S/N') {
-                        line += `, nº ${String(data.numero).trim()}`;
-                    } else if (data.numero && String(data.numero).trim().toUpperCase() === 'S/N') {
-                        line += ', S/N';
-                    }
-                    if (data.complemento && data.complemento !== 'null' && String(data.complemento).trim() !== '') {
-                        line += ` (${String(data.complemento).trim()})`;
-                    }
-                    parts.push(line);
-                }
-                if (data.bairro && data.bairro !== 'null' && String(data.bairro).trim() !== '') {
-                    parts.push(String(data.bairro).trim());
-                }
-                const cityParts = [];
-                if (data.cidade && data.cidade !== 'null' && String(data.cidade).trim() !== '') {
-                    cityParts.push(String(data.cidade).trim());
-                }
-                if (data.uf && data.uf !== 'null' && String(data.uf).trim() !== '') {
-                    cityParts.push(String(data.uf).trim());
-                }
-                if (cityParts.length > 0) {
-                    parts.push(cityParts.join(' - '));
-                }
-                if (data.cep && data.cep !== 'null' && String(data.cep).trim() !== '') {
-                    parts.push(`CEP: ${maskCep(data.cep)}`);
-                }
-                if (parts.length > 0) return parts.join(' - ');
-            }
-            return String(val || '—');
-        }
 
         function getOrgBadgeHtml(org) {
             const o = String(org || '').toUpperCase().trim();
@@ -333,104 +292,27 @@
             return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9.5px] font-medium bg-slate-100 text-slate-700 border border-slate-200">${escapeHtml(recuo)}</span>`;
         }
 
+        /**
+         * Centro da geometria da feição (usado como valor de campos de geolocalização não gravados).
+         */
+        function getGeometryCenter() {
+            try {
+                const g = reportPayload && reportPayload.featureGeometry;
+                if (!g || typeof turf === 'undefined') return null;
+                const c = turf.centroid({ type: 'Feature', properties: {}, geometry: g }).geometry.coordinates;
+                return { lat: c[1], lng: c[0] };
+            } catch (e) {
+                return null;
+            }
+        }
+
+        /**
+         * Formata um valor para exibição. A formatação é decidida SOMENTE pelo TIPO do campo
+         * (fieldDef.type), em src/fieldFormatter.js — o mesmo formatador serve ao construtor e ao Word.
+         * Nunca adivinha por nome, rótulo ou id do campo.
+         */
         function formatFieldValueForDisplay(val, fieldDef = {}) {
-            if (val === undefined || val === null || val === '' || val === 'null' || val === 'undefined') {
-                return '—';
-            }
-
-            const type = (fieldDef.type || '').toLowerCase();
-            const id = (fieldDef.id || '').toLowerCase();
-            const label = (fieldDef.label || '').toLowerCase();
-
-            // 1. JSON ou Objeto de Endereço / CEP
-            if (type === 'cep' || (typeof val === 'string' && val.trim().startsWith('{') && (val.includes('"logradouro"') || val.includes('"cep"') || val.includes('"bairro"') || val.includes('"cidade"')))) {
-                return formatAddressValue(val);
-            }
-            if (typeof val === 'object' && val !== null && !Array.isArray(val) && (val.logradouro || val.cep || val.bairro || val.cidade)) {
-                return formatAddressValue(val);
-            }
-
-            // 2. Arrays (anexos, fotos, links, listas)
-            if (Array.isArray(val) || (typeof val === 'string' && val.trim().startsWith('[') && val.includes('{'))) {
-                let arr = Array.isArray(val) ? val : null;
-                if (!arr) { try { arr = JSON.parse(val); } catch(e){} }
-                if (Array.isArray(arr)) {
-                    if (arr.length === 0) return '—';
-                    if (type === 'photo' || type === 'attachment') {
-                        return `📷 ${arr.length} anexo(s)`;
-                    }
-                    if (arr[0] && (arr[0].title || arr[0].url || arr[0].name)) {
-                        return arr.map(it => it.title || it.name || it.number || it.url).filter(Boolean).join(', ');
-                    }
-                    return arr.join(', ');
-                }
-            }
-
-            // 3. CPF / CNPJ
-            const cleanDigits = String(val).replace(/\D/g, '');
-            const isProcessOrCode = id.includes('ipl') || id.includes('process') || id.includes('inquerito') || id.includes('protocol') || id.includes('auto') || id.includes('distrib') ||
-                                    label.includes('ipl') || label.includes('process') || label.includes('inquérito') || label.includes('protocol') || label.includes('auto') || label.includes('distrib');
-            if (!isProcessOrCode && (type === 'cpfcnpj' || id.includes('cpf') || id.includes('cnpj') || label.includes('cpf') || label.includes('cnpj') || (!id.includes('tel') && !id.includes('fone') && !label.includes('tel') && !label.includes('cel') && (cleanDigits.length === 11 || cleanDigits.length === 14) && (id.includes('doc') || label.includes('doc') || type === 'cpfcnpj')))) {
-                if (cleanDigits.length === 11 || cleanDigits.length === 14) {
-                    return maskCpfCnpj(cleanDigits);
-                }
-            }
-
-            // 4. EPOL
-            if (type === 'epol' || id.includes('epol') || label.includes('epol')) {
-                return maskEpol(val);
-            }
-
-            // 5. RIP
-            if (type === 'rip' || id.includes('rip') || label.includes('rip')) {
-                return maskRip(val);
-            }
-
-            // 6. Inscrição Imobiliária Cabedelo
-            if (type === 'insc_imob_cabedelo' || id.includes('insc_imob') || label.includes('inscrição imobiliária') || label.includes('inscricao imobiliaria')) {
-                return maskInscCabedelo(val);
-            }
-
-            // 7. Parse de números locais (com suporte a vírgula brasileira)
-            const parseLocalNumber = (v) => {
-                const s = String(v).trim();
-                if (s.includes(',')) return parseFloat(s.replace(/\./g, '').replace(',', '.'));
-                return parseFloat(s);
-            };
-
-            // 8. Moeda / Currency
-            if (type === 'currency' || label.includes('(r$)') || (label.includes('valor') && !label.includes('recuo') && !label.includes('ocup'))) {
-                const num = parseLocalNumber(val);
-                if (!isNaN(num)) return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
-            }
-
-            // 9. Áreas e Dimensões
-            if (type === 'area_m2' || label.includes('(m²)') || label.includes('m2') || label.includes('área invadida') || label.includes('area invadida') || label.includes('área do terreno') || label.includes('area do terreno')) {
-                const num = parseLocalNumber(val);
-                if (!isNaN(num)) return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num) + ' m²';
-            }
-            if (type === 'length_m' || label.includes('(m)')) {
-                const num = parseLocalNumber(val);
-                if (!isNaN(num)) return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num) + ' m';
-            }
-            if (type === 'volume_m3' || label.includes('(m³)')) {
-                const num = parseLocalNumber(val);
-                if (!isNaN(num)) return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num) + ' m³';
-            }
-
-            // 10. Datas (ISO -> DD/MM/YYYY)
-            if (type === 'date' || (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val.trim()))) {
-                const str = String(val).trim().split('T')[0];
-                const p = str.split('-');
-                if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
-            }
-
-            // 11. Booleanos
-            if (typeof val === 'boolean') {
-                return val ? 'Sim' : 'Não';
-            }
-
-            return String(val);
+            return FieldFormatter.toText(val, fieldDef || {}, { geometryCenter: getGeometryCenter() });
         }
 
         function normalizeEnteTab(val) {
@@ -458,217 +340,22 @@
             return isNaN(t) ? -Infinity : t;
         }
 
-        function getLatestRecordAcrossTabs(targetTabs, dateFieldId, sourceFieldId, featureData, sourceFieldLabel) {
-            const fData = featureData || (typeof reportPayload !== 'undefined' && reportPayload?.featureData) || {};
-            let collectedEntries = [];
-            const clean = s => String(s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
 
-            for (const [k, val] of Object.entries(fData)) {
-                let records = [];
-                if (Array.isArray(val)) records = val;
-                else if (typeof val === 'string' && val.trim().startsWith('[')) {
-                    try { records = JSON.parse(val); } catch(e) {}
-                }
-                if (!Array.isArray(records) || records.length === 0) continue;
-
-                const normTab = normalizeEnteTab(k);
-                if (Array.isArray(targetTabs) && targetTabs.length > 0) {
-                    const allowed = targetTabs.map(normalizeEnteTab);
-                    if (!allowed.includes(normTab)) continue;
-                }
-
-                records.forEach(rec => {
-                    if (!rec || typeof rec !== 'object') return;
-                    let recordDate = null;
-                    if (dateFieldId && dateFieldId !== 'auto' && rec[dateFieldId] !== undefined) {
-                        recordDate = rec[dateFieldId];
-                    } else {
-                        for (const rk of Object.keys(rec)) {
-                            if (rk.toLowerCase().includes('data') || rk.toLowerCase().includes('date')) {
-                                recordDate = rec[rk];
-                                break;
-                            }
-                        }
-                        if (!recordDate) {
-                            for (const rk of Object.keys(rec)) {
-                                const valStr = String(rec[rk]).trim();
-                                if (/^\d{4}-\d{2}-\d{2}/.test(valStr) || /^\d{2}[\/\-]\d{2}[\/\-]\d{4}/.test(valStr)) {
-                                    recordDate = rec[rk];
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    const timestamp = parseDateToTimestamp(recordDate);
-
-                    let valResolved = undefined;
-                    if (sourceFieldId && rec[sourceFieldId] !== undefined) {
-                        valResolved = rec[sourceFieldId];
-                    } else {
-                        const targetSlug = clean(sourceFieldLabel || sourceFieldId || '');
-                        for (const [rk, rv] of Object.entries(rec)) {
-                            if (clean(rk) === targetSlug || clean(rk).includes(targetSlug)) {
-                                valResolved = rv;
-                                break;
-                            }
-                        }
-                    }
-                    if (valResolved !== undefined && valResolved !== null && String(valResolved).trim() !== '') {
-                        collectedEntries.push({ timestamp, value: valResolved, record: rec });
-                    }
-                });
-            }
-
-            if (collectedEntries.length === 0) return null;
-            collectedEntries.sort((a, b) => b.timestamp - a.timestamp);
-            return collectedEntries[0].value;
+        /**
+         * Valor bruto de um campo na feição (ou no registro 1:N). A ÚNICA chave de leitura é o id do
+         * campo no schema do formulário. Só quando a definição não tem id (menção antiga) usa o nome
+         * exato. Sem aliases, sem busca por rótulo, sem varredura em outras abas: se o dado não
+         * existe naquele campo, o valor é vazio — nunca o de outro campo.
+         */
+        function readFieldRaw(f, data) {
+            if (!f || !data) return undefined;
+            const key = f.id || f.name;
+            return key ? data[key] : undefined;
         }
 
         function resolveFieldValue(f, featureData, availableFields = []) {
-            if (!featureData || !f) return '—';
-            const fId = f.id;
-            const fName = f.name;
-            const fLabel = f.label;
-
-            let rawVal = undefined;
-
-            // 1. Verificação direta de chaves no nível raiz
-            if (fId && featureData[fId] !== undefined && featureData[fId] !== null && featureData[fId] !== '') rawVal = featureData[fId];
-            else if (fName && featureData[fName] !== undefined && featureData[fName] !== null && featureData[fName] !== '') rawVal = featureData[fName];
-            else if (fLabel && featureData[fLabel] !== undefined && featureData[fLabel] !== null && featureData[fLabel] !== '') rawVal = featureData[fLabel];
-
-            // 2. Variações de maiúsculas e minúsculas
-            if (rawVal === undefined) {
-                const candidates = [fLabel, fName, fId].filter(Boolean);
-                for (const c of candidates) {
-                    const upper = c.toUpperCase();
-                    const lower = c.toLowerCase();
-                    if (featureData[upper] !== undefined && featureData[upper] !== null && featureData[upper] !== '') { rawVal = featureData[upper]; break; }
-                    if (featureData[lower] !== undefined && featureData[lower] !== null && featureData[lower] !== '') { rawVal = featureData[lower]; break; }
-                }
-            }
-
-            // 3. Mapeamento cruzado através da lista de campos do formulário (availableFields)
-            const fieldsPool = (Array.isArray(availableFields) && availableFields.length > 0) 
-                ? availableFields 
-                : (typeof window !== 'undefined' && Array.isArray(window.reportViewerFormFields) ? window.reportViewerFormFields : []);
-
-            if (rawVal === undefined && fieldsPool.length > 0) {
-                const clean = (s) => String(s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
-                const targetClean = [clean(fLabel), clean(fName), clean(fId)].filter(Boolean);
-                const matchedDef = fieldsPool.find(af => {
-                    const afClean = [clean(af.label), clean(af.name), clean(af.id)].filter(Boolean);
-                    return targetClean.some(t => afClean.includes(t));
-                });
-                if (matchedDef) {
-                    if (featureData[matchedDef.id] !== undefined && featureData[matchedDef.id] !== null && featureData[matchedDef.id] !== '') {
-                        rawVal = featureData[matchedDef.id];
-                    } else if (matchedDef.name && featureData[matchedDef.name] !== undefined && featureData[matchedDef.name] !== null && featureData[matchedDef.name] !== '') {
-                        rawVal = featureData[matchedDef.name];
-                    }
-                }
-            }
-
-            // 4. Normalização de acentos e caracteres especiais
-            if (rawVal === undefined) {
-                const clean = (s) => String(s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
-                const targetSlugs = [clean(fLabel), clean(fName), clean(fId)].filter(Boolean);
-
-                for (const [k, v] of Object.entries(featureData)) {
-                    if (v === undefined || v === null || v === '' || v === 'null') continue;
-                    const cleanK = clean(k);
-                    if (targetSlugs.some(t => t === cleanK || cleanK === t.replace(/_/g, ''))) {
-                        rawVal = v;
-                        break;
-                    }
-                }
-            }
-
-            // 5. Aliases semânticos comuns (incluindo campos específicos MPF, PF, SPU e Município)
-            if (rawVal === undefined) {
-                const clean = (s) => String(s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
-                const targetSlugs = [clean(fLabel), clean(fName), clean(fId)].filter(Boolean);
-
-                const semanticAliases = {
-                    'proprietario': ['proprietario', 'titular', 'nome_proprietario', 'contribuinte', 'posseiro', 'responsavel', 'nome', 'proprietario_posseiro'],
-                    'cpf': ['cpf_cnpj', 'cpf', 'cnpj', 'cpfcnpj', 'documento', 'doc', 'num_doc'],
-                    'cpf_cnpj': ['cpf_cnpj', 'cpf', 'cnpj', 'cpfcnpj', 'documento', 'doc', 'num_doc'],
-                    'endereco': ['endereco', 'logradouro', 'rua', 'local', 'localizacao', 'endereco_completo', 'cep', 'endereco_imovel', 'local_imovel'],
-                    'loteamento': ['loteamento', 'bairro', 'condominio', 'gleba', 'setor', 'localidade', 'subdivisao'],
-                    'quadra': ['quadra', 'qd', 'quadra_lote', 'num_quadra'],
-                    'lote': ['lote', 'lt', 'numero_lote', 'num_lote', 'lote_numero'],
-                    'observacoes': ['observacoes_do_imovel', 'observacoes', 'observacao', 'obs', 'obs_gerais', 'observacoes_gerais', 'obs_mpf', 'obs_pecunia', 'obs_inquerito_pf', 'observacao_imovel', 'observacoes_imovel', 'parecer', 'descricao', 'historico', 'relato', 'nota', 'detalhes', 'anotacoes', 'conclusao', 'conclusoes'],
-                    'area_terreno': ['area_terreno', 'area_do_terreno', 'areaterreno', 'area_total', 'area_imovel', 'area_m2', 'area'],
-                    'area_invadida': ['area_invadida', 'areainvadida', 'area_ocupada', 'area_invasao'],
-                    'epol': ['epol', 'processo_epol', 'num_epol', 'num_processo', 'inquerito', 'fld_epol'],
-                    'rip': ['rip', 'registro_rip', 'num_rip', 'fld_rip'],
-                    'recuo': ['situacao_recuo', 'recuo', 'status_recuo'],
-                    'ocupacao': ['situacao_ocupacao', 'ocupacao', 'status_ocupacao'],
-                    // Aliases MPF
-                    'ipl': ['ipl', 'inquerito_policial', 'inquerito', 'inquerito_policial_link', 'numero_inquerito_policial', 'processo_ipl', 'num_inquerito', 'fld_ipl'],
-                    'distribuicao': ['distribuicao', 'vara', 'vara_federal', 'juizo', 'distribuicao_vara', 'num_vara'],
-                    'designado': ['designado', 'procurador', 'procurador_designado', 'membro_mpf', 'procurador_republica', 'responsavel_mpf', 'fiscal_designado'],
-                    'correlatos': ['correlatos', 'processos_correlatos', 'acp', 'acao_civil_publica', 'inquerito_civil', 'procedimento_preparatorio'],
-                    'fase_investigacao': ['fase_investigacao', 'fase', 'fase_da_investigacao', 'etapa_investigacao', 'status_investigacao'],
-                    'providencia': ['providencia', 'providencias', 'medida', 'medidas', 'deliberacao', 'despacho'],
-                    'valor_pecunia': ['valor_pecunia', 'pecunia', 'valor_total', 'valor_formatado', 'valor_m2', 'area_pecunia', 'obs_pecunia']
-                };
-
-                for (const target of targetSlugs) {
-                    for (const [concept, aliases] of Object.entries(semanticAliases)) {
-                        if (target.includes(concept) || aliases.includes(target)) {
-                            for (const alias of aliases) {
-                                for (const [k, v] of Object.entries(featureData)) {
-                                    if (v === undefined || v === null || v === '' || v === 'null') continue;
-                                    if (clean(k) === clean(alias)) {
-                                        rawVal = v;
-                                        break;
-                                    }
-                                }
-                                if (rawVal !== undefined) break;
-                            }
-                        }
-                        if (rawVal !== undefined) break;
-                    }
-                    if (rawVal !== undefined) break;
-                }
-            }
-
-            // 6. Varredura recursiva em sub-objetos de abas (ex: featureData.mpf, featureData.tab_mpf)
-            if (rawVal === undefined) {
-                for (const [subKey, subVal] of Object.entries(featureData)) {
-                    if (subVal && typeof subVal === 'object' && !Array.isArray(subVal)) {
-                        const subRes = resolveFieldValue(f, subVal, availableFields);
-                        if (subRes !== '—') {
-                            return subRes;
-                        }
-                    }
-                }
-            }
-
-            // 7. Fallback consolidado para vistorias (Data, Ocupação, Recuo, Área)
-            if (rawVal === undefined) {
-                const clean = (s) => String(s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
-                const targetSlugs = [clean(fLabel), clean(fName), clean(fId)].filter(Boolean);
-                const isDate = targetSlugs.some(s => s.includes('data'));
-                const isOcup = targetSlugs.some(s => s.includes('ocupac'));
-                const isRecuo = targetSlugs.some(s => s.includes('recuo'));
-                const isArea = targetSlugs.some(s => s.includes('areainvadida') || (s.includes('area') && !s.includes('terreno')));
-
-                if (isDate || isOcup || isRecuo || isArea) {
-                    const reqKey = isDate ? 'data' : (isOcup ? 'situacao_ocupacao' : (isRecuo ? 'situacao_recuo' : 'area_invadida'));
-                    const latest = getLatestRecordAcrossTabs(['PF', 'SPU', 'MUNICÍPIO'], 'auto', reqKey, featureData, fLabel);
-                    if (latest !== null && latest !== undefined && latest !== '') {
-                        rawVal = latest;
-                    }
-                }
-            }
-
-            if (rawVal === undefined || rawVal === null || rawVal === '' || rawVal === 'null') {
-                return '—';
-            }
-
-            return formatFieldValueForDisplay(rawVal, f);
+            if (!f || !featureData) return FieldFormatter.EMPTY;
+            return formatFieldValueForDisplay(readFieldRaw(f, featureData), f);
         }
 
         function initReportViewer() {
