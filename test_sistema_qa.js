@@ -576,13 +576,13 @@ assertTest('Relatórios A4: Arquivo dedicado relatorio_view.html existe', relato
 
 if (relatorioViewExists) {
     const relatorioViewCode = fs.readFileSync('relatorio_view.html', 'utf8');
-    const hasRelatorioViewFeatures = relatorioViewCode.includes('Gerar PDF') &&
+    const hasRelatorioViewFeatures = !relatorioViewCode.includes('Gerar PDF') && relatorioViewCode.includes('window.print()') &&
         relatorioViewCode.includes('Gerar Word') &&
         relatorioViewCode.includes('gerarWord') &&
         relatorioViewCode.includes('initInteractiveLeafletMap') &&
         relatorioViewCode.includes('L.map') &&
         relatorioViewCode.includes('contenteditable="true"');
-    assertTest('Relatórios A4: relatorio_view.html possui botões (PDF, Word, Impressão), mapa SIG interativo e textos editáveis', hasRelatorioViewFeatures);
+    assertTest('Relatórios A4: relatorio_view.html possui botões (Word e Imprimir/PDF, sem botão PDF redundante), mapa SIG interativo e textos editáveis', hasRelatorioViewFeatures);
 }
 
 const hasDynamicPopupShortcut = formRendererCode.includes('matchingTpl.nome') &&

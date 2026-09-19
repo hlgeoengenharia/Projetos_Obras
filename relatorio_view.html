@@ -146,12 +146,6 @@
         </div>
 
         <div class="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
-            <!-- Botão Gerar PDF -->
-            <button type="button" onclick="gerarPDF()" class="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="Exportar como documento PDF">
-                <span class="material-symbols-outlined text-[17px]">picture_as_pdf</span>
-                <span>Gerar PDF</span>
-            </button>
-
             <!-- Botão Gerar Word -->
             <button type="button" onclick="gerarWord()" class="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="Exportar como documento Word (.doc)">
                 <span class="material-symbols-outlined text-[17px]">article</span>
@@ -159,7 +153,7 @@
             </button>
 
             <!-- Botão Imprimir -->
-            <button type="button" onclick="window.print()" class="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="Imprimir em impressora">
+            <button type="button" onclick="window.print()" class="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="Imprimir em impressora ou salvar como PDF">
                 <span class="material-symbols-outlined text-[17px]">print</span>
                 <span>Imprimir</span>
             </button>
@@ -169,7 +163,7 @@
     <!-- ÁREA DE NOTIFICAÇÃO / DICA VISUAL -->
     <div class="no-print bg-sky-50 dark:bg-sky-950/40 border-b border-sky-200 dark:border-sky-800/60 px-4 py-2 text-center text-xs text-sky-800 dark:text-sky-300 flex items-center justify-center gap-2">
         <span class="material-symbols-outlined text-[16px]">info</span>
-        <span>Você pode navegar pelo Mini-Mapa Cartográfico (pan/zoom/camadas) e editar a Caixa de Texto Livre diretamente na folha antes de gerar o PDF ou Word.</span>
+        <span>Você pode navegar pelo Mini-Mapa Cartográfico (pan/zoom/camadas) e editar a Caixa de Texto Livre diretamente na folha antes de imprimir (ou salvar em PDF) ou gerar o Word.</span>
     </div>
 
     <!-- CONTAINER DA FOLHA A4 -->
