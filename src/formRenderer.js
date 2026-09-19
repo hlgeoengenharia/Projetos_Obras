@@ -19,8 +19,11 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
     
     // Store current state globally for 1:N handlers
     window.currentFormFeatures = formConfig;
+    window.activeFormSchema = formConfig;
+    window.activeFormTabs = formConfig;
     window.currentFormContainerId = containerId;
     window.currentFormFeatureData = featureData;
+    window.activeFeatureData = featureData;
     window.currentFormIsEditMode = isEditMode;
     window.currentFormIsPreview = options.isPreview || false;
     window.currentFormEditTabId = options.editTabId || null;
@@ -128,7 +131,7 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
             if (matchingTpl) {
                 const reportTitle = (matchingTpl.nome || 'Relatório A4').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 reportShortcutHtml = `
-                    <button type="button" onclick="if (typeof window.openFeatureReportPage === 'function') window.openFeatureReportPage('${matchingTpl.id}', (typeof activeFeatureData !== 'undefined' ? activeFeatureData : (window.activeFeatureData || {})), (typeof activeFeatureLayer !== 'undefined' && activeFeatureLayer && activeFeatureLayer.feature ? activeFeatureLayer.feature.geometry : (window.activeFeatureLayer && window.activeFeatureLayer.feature ? window.activeFeatureLayer.feature.geometry : null))); else if (typeof window.printActiveFeatureReport === 'function') window.printActiveFeatureReport('${matchingTpl.id}'); else alert('Módulo de Relatórios não carregado.');" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-lg font-bold text-xs shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer" title="Emitir ${reportTitle}">
+                    <button type="button" onclick="if (typeof window.printActiveFeatureReport === 'function') window.printActiveFeatureReport('${matchingTpl.id}'); else if (typeof window.openFeatureReportPage === 'function') window.openFeatureReportPage('${matchingTpl.id}', (typeof window.activeFeatureData !== 'undefined' ? window.activeFeatureData : (window.currentFormFeatureData || (window.activeFeatureLayer && window.activeFeatureLayer.feature ? window.activeFeatureLayer.feature.properties : {}))), (window.activeFeatureLayer && window.activeFeatureLayer.feature ? window.activeFeatureLayer.feature.geometry : null)); else alert('Módulo de Relatórios não carregado.');" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-lg font-bold text-xs shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer" title="Emitir ${reportTitle}">
                         <span class="material-symbols-outlined text-[18px]">description</span>
                         <span>${reportTitle}</span>
                     </button>

@@ -2452,7 +2452,11 @@
             }
             return;
         }
-        const props = layer.feature.properties || {};
+        const props = (window.activeFeatureData && Object.keys(window.activeFeatureData).length > 0)
+            ? window.activeFeatureData
+            : (window.currentFormFeatureData && Object.keys(window.currentFormFeatureData).length > 0
+                ? window.currentFormFeatureData
+                : (layer.feature.properties || {}));
         const geom = layer.feature.geometry || (layer.toGeoJSON ? layer.toGeoJSON().geometry : null);
         const themeId = props.themeId;
         const themeObj = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes.find(t => String(t.id) === String(themeId)) : null;

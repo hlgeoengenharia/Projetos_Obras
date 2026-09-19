@@ -6,6 +6,17 @@
     'use strict';
 
     const STORAGE_KEY_TEMPLATES = 'constructive_report_templates';
+    const STORAGE_KEY_REMOTE_AVAILABLE = 'constructive_remote_templates_available';
+
+    // Recupera do LocalStorage se já foi constatado que a tabela remota relatorios_templates não existe no Supabase
+    let isRemoteTemplatesTableAvailable = (function() {
+        try {
+            const val = localStorage.getItem(STORAGE_KEY_REMOTE_AVAILABLE);
+            if (val === 'false') return false;
+            if (val === 'true') return true;
+        } catch(e) {}
+        return null;
+    })();
 
     /**
      * Retorna os campos disponíveis em um formulário para uso em relatórios.
@@ -14,14 +25,27 @@
      */
     function getFormFields(formId) {
         if (!formId) return [];
-        const formsList = (typeof forms !== 'undefined' && Array.isArray(forms)) ? forms : [];
-        const targetForm = formsList.find(f => f.id === formId || (typeof isOrcamentoForm === 'function' && isOrcamentoForm(formId) && isOrcamentoForm(f)));
+        const formsList = (typeof forms !== 'undefined' && Array.isArray(forms)) ? forms :
+            ((typeof allForms !== 'undefined' && Array.isArray(allForms)) ? allForms :
+            (typeof window !== 'undefined' && Array.isArray(window.allForms) ? window.allForms :
+            (typeof window !== 'undefined' && Array.isArray(window.forms) ? window.forms : [])));
+        let targetForm = formsList.find(f => f.id === formId || (typeof isOrcamentoForm === 'function' && isOrcamentoForm(formId) && isOrcamentoForm(f)));
+        if (!targetForm && typeof localStorage !== 'undefined') {
+            try {
+                const storedForms = JSON.parse(localStorage.getItem('constructive_forms') || '[]');
+                targetForm = storedForms.find(f => f.id === formId || (typeof isOrcamentoForm === 'function' && isOrcamentoForm(formId) && isOrcamentoForm(f)));
+            } catch(e) {}
+        }
         
         let tabs = [];
         if (typeof currentFormId !== 'undefined' && currentFormId === formId && typeof builderTabs !== 'undefined' && Array.isArray(builderTabs) && builderTabs.length > 0) {
             tabs = builderTabs;
+        } else if (typeof window !== 'undefined' && window.currentFormId === formId && Array.isArray(window.builderTabs) && window.builderTabs.length > 0) {
+            tabs = window.builderTabs;
         } else if (targetForm && Array.isArray(targetForm.tabs)) {
             tabs = targetForm.tabs;
+        } else if (targetForm && targetForm.schema && Array.isArray(targetForm.schema.tabs)) {
+            tabs = targetForm.schema.tabs;
         }
 
         const fields = [];
@@ -55,26 +79,55 @@
      */
     function getFormTabs(formId) {
         if (!formId) return [];
-        const formsList = (typeof forms !== 'undefined' && Array.isArray(forms)) ? forms : [];
-        const targetForm = formsList.find(f => f.id === formId || (typeof isOrcamentoForm === 'function' && isOrcamentoForm(formId) && isOrcamentoForm(f)));
+        const formsList = (typeof forms !== 'undefined' && Array.isArray(forms)) ? forms :
+            ((typeof allForms !== 'undefined' && Array.isArray(allForms)) ? allForms :
+            (typeof window !== 'undefined' && Array.isArray(window.allForms) ? window.allForms :
+            (typeof window !== 'undefined' && Array.isArray(window.forms) ? window.forms : [])));
+        let targetForm = formsList.find(f => f.id === formId || (typeof isOrcamentoForm === 'function' && isOrcamentoForm(formId) && isOrcamentoForm(f)));
+        if (!targetForm && typeof localStorage !== 'undefined') {
+            try {
+                const storedForms = JSON.parse(localStorage.getItem('constructive_forms') || '[]');
+                targetForm = storedForms.find(f => f.id === formId || (typeof isOrcamentoForm === 'function' && isOrcamentoForm(formId) && isOrcamentoForm(f)));
+            } catch(e) {}
+        }
         
         let tabs = [];
         if (typeof currentFormId !== 'undefined' && currentFormId === formId && typeof builderTabs !== 'undefined' && Array.isArray(builderTabs) && builderTabs.length > 0) {
             tabs = builderTabs;
+        } else if (typeof window !== 'undefined' && window.currentFormId === formId && Array.isArray(window.builderTabs) && window.builderTabs.length > 0) {
+            tabs = window.builderTabs;
         } else if (targetForm && Array.isArray(targetForm.tabs)) {
             tabs = targetForm.tabs;
+        } else if (targetForm && targetForm.schema && Array.isArray(targetForm.schema.tabs)) {
+            tabs = targetForm.schema.tabs;
+        } else {
+            try {
+                const storedForms = JSON.parse(localStorage.getItem('constructive_forms') || '[]');
+                const found = storedForms.find(f => f.id === formId);
+                if (found) {
+                    if (Array.isArray(found.tabs)) tabs = found.tabs;
+                    else if (found.schema && Array.isArray(found.schema.tabs)) tabs = found.schema.tabs;
+                }
+            } catch(e) {}
         }
 
         return tabs.map(t => {
             const isConsolidated = t.tabType === 'consolidated' || t.tabType === 'cross_tabs' || !!t.isConsolidated || 
                                    (t.title && (t.title.toUpperCase().includes('HISTÓRICO') || t.title.toUpperCase().includes('HISTORICO')));
+            const isMulti = !!t.isMultiple || (t.title && (t.title.toUpperCase().includes('VISTORIA') || t.title.toUpperCase().includes('FOTO') || t.title.toUpperCase().includes('ANEXO')));
             return {
                 id: t.id,
                 title: t.title || 'Aba Geral',
-                isMultiple: !!t.isMultiple,
+                isMultiple: isMulti,
                 isConsolidated: isConsolidated,
-                tabType: t.tabType || (isConsolidated ? 'consolidated' : (t.isMultiple ? 'multiple' : 'regular')),
-                fields: t.fields || []
+                tabType: t.tabType || (isConsolidated ? 'consolidated' : (isMulti ? 'multiple' : 'regular')),
+                fields: Array.isArray(t.fields) ? t.fields.map(f => ({
+                    id: f.id || f.name,
+                    name: f.name || f.id,
+                    label: f.label || f.name || f.id,
+                    type: f.type || 'text',
+                    options: f.options || []
+                })) : []
             };
         });
     }
@@ -86,7 +139,8 @@
      */
     function getMultipleTabs(formId) {
         const allTabs = getFormTabs(formId);
-        return allTabs.filter(t => t.isMultiple || t.isConsolidated);
+        const multi = allTabs.filter(t => t.isMultiple || t.isConsolidated);
+        return multi.length > 0 ? multi : allTabs;
     }
 
     /**
@@ -319,10 +373,10 @@
         }
         localStorage.setItem(STORAGE_KEY_TEMPLATES, JSON.stringify(allTemplates));
 
-        // 2. Persistência remota no Supabase (se disponível)
-        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        // 2. Persistência remota no Supabase (se disponível e tabela existir)
+        if (isRemoteTemplatesTableAvailable !== false && typeof supabaseClient !== 'undefined' && supabaseClient) {
             try {
-                await supabaseClient.from('relatorios_templates').upsert({
+                const { error } = await supabaseClient.from('relatorios_templates').upsert({
                     id: template.id,
                     form_id: template.form_id,
                     nome: template.nome,
@@ -332,12 +386,53 @@
                     blocos: template.blocos,
                     updated_at: template.updatedAt
                 });
+
+                if (error) {
+                    if (error.code === '42P01' || error.code === 'PGRST205' || error.code === 'PGRST204' || error.code === 'PGRST200' || error.status === 404 || (error.message && error.message.toLowerCase().includes('not found'))) {
+                        isRemoteTemplatesTableAvailable = false;
+                        try { localStorage.setItem(STORAGE_KEY_REMOTE_AVAILABLE, 'false'); } catch(e) {}
+                        console.info('[reportAdapter] Tabela remota "relatorios_templates" não encontrada no Supabase (HTTP 404). Circuito fechado: requisições POST suprimidas e persistência mantida em LocalStorage e forms.schema.');
+                    } else {
+                        console.warn('[reportAdapter] Aviso ao sincronizar template com Supabase:', error);
+                    }
+                } else {
+                    isRemoteTemplatesTableAvailable = true;
+                    try { localStorage.setItem(STORAGE_KEY_REMOTE_AVAILABLE, 'true'); } catch(e) {}
+                }
             } catch(remoteErr) {
-                console.warn('[reportAdapter] Aviso: Não foi possível sincronizar template no Supabase (operando em cache local):', remoteErr);
+                isRemoteTemplatesTableAvailable = false;
+                try { localStorage.setItem(STORAGE_KEY_REMOTE_AVAILABLE, 'false'); } catch(e) {}
+                console.info('[reportAdapter] Tabela remota "relatorios_templates" indisponível. Persistência mantida em LocalStorage.');
             }
         }
 
+        // 3. Fallback inteligente em nuvem: persiste também dentro do forms.schema do Supabase
+        saveToFormsTableFallback(template);
+
         return template;
+    }
+
+    function saveToFormsTableFallback(template) {
+        try {
+            if (typeof forms !== 'undefined' && Array.isArray(forms)) {
+                const frm = forms.find(f => f.id === template.form_id);
+                if (frm) {
+                    if (!frm.reportTemplates) frm.reportTemplates = [];
+                    const rIdx = frm.reportTemplates.findIndex(rt => rt.id === template.id);
+                    if (rIdx >= 0) frm.reportTemplates[rIdx] = template;
+                    else frm.reportTemplates.push(template);
+                    if (typeof saveFormsToStorage === 'function') {
+                        saveFormsToStorage();
+                    }
+                }
+            }
+        } catch(eForms) {}
+    }
+
+    function resetRemoteTableCheck() {
+        isRemoteTemplatesTableAvailable = null;
+        try { localStorage.removeItem(STORAGE_KEY_REMOTE_AVAILABLE); } catch(e) {}
+        console.info('[reportAdapter] Verificação de relatorios_templates resetada.');
     }
 
     /**
@@ -371,7 +466,7 @@
         allTemplates = allTemplates.filter(t => t.id !== templateId);
         localStorage.setItem(STORAGE_KEY_TEMPLATES, JSON.stringify(allTemplates));
 
-        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        if (isRemoteTemplatesTableAvailable !== false && typeof supabaseClient !== 'undefined' && supabaseClient) {
             try {
                 await supabaseClient.from('relatorios_templates').delete().eq('id', templateId);
             } catch(e) {}
@@ -520,7 +615,8 @@
         saveReportTemplate,
         getReportTemplates,
         deleteReportTemplate,
-        createDefaultTemplate
+        createDefaultTemplate,
+        resetRemoteTableCheck
     };
 
 })();

@@ -910,6 +910,48 @@
         border-width: 0 2.5px 2.5px 0 !important;
         transform: rotate(45deg) translate(-1px, -1px) !important;
       }
+
+      input[type="radio"]:not(.sr-only):not(.peer) {
+        appearance: none !important;
+        -webkit-appearance: none !important;
+        width: 1.15rem !important;
+        height: 1.15rem !important;
+        min-width: 1.15rem !important;
+        min-height: 1.15rem !important;
+        border: 2px solid #94a3b8 !important;
+        border-radius: 9999px !important;
+        background: #ffffff !important;
+        cursor: pointer !important;
+        display: inline-grid !important;
+        place-content: center !important;
+        transition: all 0.15s ease-in-out !important;
+        vertical-align: middle !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+      }
+
+      html.dark input[type="radio"]:not(.sr-only):not(.peer) {
+        border-color: #64748b !important;
+        background: #1e293b !important;
+      }
+
+      input[type="radio"]:not(.sr-only):not(.peer):hover {
+        border-color: #0284c7 !important;
+        box-shadow: 0 0 8px rgba(2, 132, 199, 0.35) !important;
+      }
+
+      input[type="radio"]:not(.sr-only):not(.peer):checked {
+        background: #0284c7 !important;
+        border-color: #0284c7 !important;
+        box-shadow: 0 0 8px rgba(2, 132, 199, 0.45) !important;
+      }
+
+      input[type="radio"]:not(.sr-only):not(.peer):checked::before {
+        content: "" !important;
+        width: 0.45rem !important;
+        height: 0.45rem !important;
+        border-radius: 9999px !important;
+        background: #ffffff !important;
+      }
     </style>
 <style>
   .tab-content { display: none; }
@@ -3082,27 +3124,46 @@
 
     function getFormEntity(form) {
         if (!form) return 'Geral';
-        if (form.entidade) return form.entidade;
-        if (form.schema && form.schema.entidade) return form.schema.entidade;
-        
-        let themesList = [];
+
+        const formId = String(form.id || '');
+        const formName = (form.name || form.title || '').trim();
+        const lower = formName.toLowerCase();
+
+        // 1. Identificação direta prioritária por nomes canônicos e siglas de entidades
+        if (lower === 'mpf' || lower.startsWith('mpf ') || lower.includes('ministério público')) return 'Ministério Público Federal';
+        if (lower === 'spu' || lower.startsWith('spu ') || lower === 'lpm' || lower === 'ltm' || lower.includes('patrimônio da união') || lower.includes('patrimonio da uniao')) return 'Superintendência do Patrimônio da União';
+        if (lower === 'pf' || lower.startsWith('pf ') || lower.includes('polícia federal') || lower.includes('policia federal')) return 'Polícia Federal';
+
+        // 2. Identificação por Camada / Tema vinculado (carregado via Supabase ou Local)
+        let themesList = Array.isArray(themesForForms) && themesForForms.length > 0 ? [...themesForForms] : [];
+        if (typeof themes !== 'undefined' && Array.isArray(themes)) {
+            themesList = themesList.concat(themes);
+        }
         try {
             const saved = localStorage.getItem('constructive_themes');
-            if (saved) themesList = JSON.parse(saved);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed)) themesList = themesList.concat(parsed);
+            }
         } catch(e) {}
-        
-        const found = themesList.find(t => String(t.formId) === String(form.id) || (t.name && form.name && t.name.trim().toLowerCase() === form.name.trim().toLowerCase()));
+
+        const found = themesList.find(t => 
+            (t.formId && String(t.formId) === formId) || 
+            (t.tipo_cadastro && String(t.tipo_cadastro) === formId) ||
+            (t.name && formName && t.name.trim().toLowerCase() === formName.toLowerCase()) ||
+            (t.nome && formName && t.nome.trim().toLowerCase() === formName.toLowerCase())
+        );
         if (found) {
             const ent = ((found.metadata && found.metadata.entidade) || found.entidade || '').trim();
-            if (ent) return ent;
+            if (ent && ent.toLowerCase() !== 'geral') return ent;
         }
-        
-        const lower = (form.name || '').toLowerCase();
-        if (lower.includes('mpf') || lower.includes('ministério público')) return 'Ministério Público Federal';
-        if (lower.includes('spu') || lower.includes('lpm') || lower.includes('ltm') || lower.includes('patrimônio da união')) return 'Superintendência do Patrimônio da União';
-        if (lower.includes('municipal') || lower.includes('prefeitura') || lower.includes('ctm') || lower.includes('obras')) return 'Prefeitura Municipal';
-        if (lower.includes('pf') || lower.includes('polícia federal')) return 'Polícia Federal';
-        
+
+        // 3. Entidade explicitamente gravada no form (se válida e não default genérico sobrescrito)
+        if (form.entidade && form.entidade !== 'Geral') return form.entidade;
+        if (form.schema && form.schema.entidade && form.schema.entidade !== 'Geral') return form.schema.entidade;
+
+        if (lower.includes('municipal') || lower.includes('prefeitura') || lower.includes('ctm') || lower.includes('obras') || lower.includes('bci')) return 'Prefeitura Municipal';
+
         return 'Geral';
     }
 
@@ -3154,7 +3215,46 @@
       }
     }
 
+    let themesForForms = [];
+
+    async function loadThemesForForms() {
+      themesForForms = [];
+      if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        try {
+          let q = supabaseClient.from('temas').select('id, nome, tipo_cadastro, municipio_id, entidade, metadata');
+          if (activeMunicipioId) q = q.eq('municipio_id', activeMunicipioId);
+          const { data, error } = await q;
+          if (!error && data && data.length > 0) {
+            themesForForms = data.map(d => ({
+              id: d.id,
+              name: d.nome,
+              formId: d.tipo_cadastro,
+              entidade: ((d.metadata && d.metadata.entidade) || d.entidade || '').trim()
+            }));
+          }
+        } catch (e) {
+          console.warn('Erro ao carregar temas no Supabase:', e);
+        }
+      }
+      if (themesForForms.length === 0) {
+        try {
+          const saved = localStorage.getItem('constructive_themes');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) {
+              themesForForms = parsed.map(t => ({
+                id: t.id,
+                name: t.name || t.nome,
+                formId: t.formId || t.tipo_cadastro || t.cadastroType
+              }));
+            }
+          }
+        } catch(e) {}
+      }
+    }
+
     async function loadForms() {
+      await loadThemesForForms();
       if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         try {
           let formsQuery = supabaseClient.from('forms').select('*').order('created_at', { ascending: false });
@@ -3238,14 +3338,14 @@
       
       if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         try {
-          const userEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || 'Prefeitura Municipal';
           for (const form of forms) {
+            const resolvedEntidade = getFormEntity(form) || form.entidade || ((currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || 'Prefeitura Municipal');
             const { error } = await supabaseClient
               .from('forms')
               .upsert({
                 id: form.id,
                 title: form.name,
-                schema: { tabs: form.tabs, statsConfig: form.statsConfig, entidade: form.entidade || userEntidade },
+                schema: { tabs: form.tabs, statsConfig: form.statsConfig, entidade: resolvedEntidade },
                 municipio_id: activeMunicipioId
               });
             if (error) console.error('Erro ao salvar no Supabase:', error);
@@ -3300,25 +3400,46 @@
         const sigla = getEntitySigla(fEnt);
         const isOrcamento = isOrcamentoForm(form);
         
+        // Identifica se este formulário está atualmente associado a alguma camada vetorial
+        const boundTheme = themesForForms.find(t => 
+          t.formId && String(t.formId) === String(form.id) && !isOrcamento
+        );
+        const isBound = !!boundTheme;
+        const boundThemeName = boundTheme ? (boundTheme.name || 'Camada Vetorial') : '';
+
         html += `
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-5 bg-white dark:bg-slate-800 rounded-xl border ${isOrcamento ? 'border-emerald-300/80 dark:border-emerald-800/80 bg-emerald-50/10' : 'border-slate-200 dark:border-slate-700'} shadow-sm hover:shadow-md transition-shadow">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-5 bg-white dark:bg-slate-800 rounded-xl border ${isOrcamento ? 'border-emerald-300/80 dark:border-emerald-800/80 bg-emerald-50/10' : (isBound ? 'border-sky-300/80 dark:border-sky-800/80 bg-sky-50/10' : 'border-slate-200 dark:border-slate-700')} shadow-sm hover:shadow-md transition-shadow">
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
                 <h3 class="font-bold text-slate-900 dark:text-white uppercase tracking-wide text-sm sm:text-base truncate">${form.name}</h3>
                 ${isOrcamento ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 text-[9.5px] font-extrabold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 shadow-2xs"><span class="material-symbols-outlined text-[13px]">request_quote</span><span>SINAPI / CAIXA</span></span>` : ''}
                 ${sigla ? `<span class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[9px] font-bold rounded bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 truncate max-w-[120px]" title="Entidade: ${fEnt}"><span class="material-symbols-outlined text-[11px]">hub</span><span>${sigla}</span></span>` : ''}
+                ${isBound ? `
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 text-[9.5px] font-bold rounded-md bg-sky-100 dark:bg-sky-950/80 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-800 shadow-2xs" title="Exclusivo da camada vetorial: ${boundThemeName}">
+                    <span class="material-symbols-outlined text-[13px]">layers</span>
+                    <span>Camada: ${boundThemeName}</span>
+                  </span>
+                ` : (!isOrcamento ? `
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 text-[9.5px] font-bold rounded-md bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 shadow-2xs" title="Livre para vincular a uma nova camada vetorial">
+                    <span class="material-symbols-outlined text-[13px]">verified</span>
+                    <span>Disponível / Modelo</span>
+                  </span>
+                ` : '')}
               </div>
               <p class="text-xs sm:text-sm text-slate-500 mt-0.5">${fieldCount} campo(s) personalizado(s) em ${form.tabs ? form.tabs.length : 0} aba(s) ${isOrcamento ? '• Inclui Aba Nativa de Cálculo SINAPI' : ''}</p>
             </div>
             <div class="flex items-center gap-1 sm:gap-1.5 self-end sm:self-auto bg-slate-50 dark:bg-slate-900/60 sm:bg-transparent p-1 sm:p-0 rounded-xl border border-slate-100 dark:border-slate-800 sm:border-0 shrink-0">
-              <button onclick="previewForm('${form.id}')" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-700/60 rounded-lg transition-colors tooltip" title="Visualizar">
+              <button onclick="cloneForm('${form.id}')" class="p-2 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-slate-700/60 rounded-lg transition-colors tooltip cursor-pointer" title="Duplicar Cadastro (Usar como Modelo)">
+                <span class="material-symbols-outlined text-[19px] sm:text-[20px]">content_copy</span>
+              </button>
+              <button onclick="previewForm('${form.id}')" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-700/60 rounded-lg transition-colors tooltip cursor-pointer" title="Visualizar">
                 <span class="material-symbols-outlined text-[19px] sm:text-[20px]">visibility</span>
               </button>
-              <button onclick="editForm('${form.id}')" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-700/60 rounded-lg transition-colors tooltip" title="Editar">
+              <button onclick="editForm('${form.id}')" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-700/60 rounded-lg transition-colors tooltip cursor-pointer" title="Editar">
                 <span class="material-symbols-outlined text-[19px] sm:text-[20px]">edit</span>
               </button>
               ${isOrcamento ? '' : `
-              <button onclick="deleteForm('${form.id}')" class="p-2 text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-slate-700/60 rounded-lg transition-colors tooltip" title="Excluir">
+              <button onclick="deleteForm('${form.id}')" class="p-2 ${isBound ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed' : 'text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-slate-700/60 cursor-pointer'} rounded-lg transition-colors tooltip" title="${isBound ? 'Cadastro associado a uma camada ativa (exclusão bloqueada)' : 'Excluir'}">
                 <span class="material-symbols-outlined text-[19px] sm:text-[20px]">delete</span>
               </button>
               `}
@@ -4157,9 +4278,56 @@
       document.getElementById('form-builder-view').classList.remove('hidden');
     }
 
+    async function cloneForm(id) {
+      const original = forms.find(f => f.id === id || (isOrcamentoForm(id) && isOrcamentoForm(f)));
+      if (!original) {
+        alert('Cadastro não encontrado para duplicação.');
+        return;
+      }
+
+      const newId = generateUUID();
+      const baseName = (original.name || original.title || 'Cadastro').trim();
+      const newName = baseName.endsWith('(Cópia)') ? `${baseName.replace(/\(Cópia\)$/, '').trim()} (Cópia ${Date.now().toString().slice(-4)})` : `${baseName} (Cópia)`;
+
+      // Cópia profunda das abas e campos
+      const clonedTabs = original.tabs ? JSON.parse(JSON.stringify(original.tabs)) : [];
+      clonedTabs.forEach(t => {
+        if (t.isNative) delete t.isNative;
+        if (t.tabType === 'orcamento_nativo') t.tabType = 'custom';
+      });
+
+      const clonedStats = original.statsConfig ? JSON.parse(JSON.stringify(original.statsConfig)) : null;
+      const userEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || original.entidade || 'Prefeitura Municipal';
+
+      const clonedForm = {
+        id: newId,
+        name: newName,
+        tabs: clonedTabs,
+        statsConfig: clonedStats,
+        entidade: userEntidade
+      };
+
+      forms.unshift(clonedForm);
+      await saveFormsToStorage();
+      await loadThemesForForms();
+      renderFormsList();
+
+      if (window.auditLogger && typeof window.auditLogger.log === 'function') {
+        window.auditLogger.log('DUPLICAR_FORMULARIO', `Formulário clonado: ${newName}`, { originalId: id, newId: newId });
+      }
+
+      alert(`✅ Cadastro duplicado com sucesso!\n\nNovo modelo criado: "${newName}"\n\nEste cadastro está livre e disponível para ser associado a uma nova camada vetorial.`);
+    }
+    window.cloneForm = cloneForm;
+
     function deleteForm(id) {
       if (isOrcamentoForm(id)) {
         alert('O template oficial de Orçamento de Obra (SINAPI / Caixa) é padrão do sistema e não pode ser excluído.');
+        return;
+      }
+      const boundTheme = themesForForms.find(t => t.formId && String(t.formId) === String(id));
+      if (boundTheme) {
+        alert(`⚠️ BLOQUEADO: O cadastro não pode ser excluído pois está atualmente vinculado à camada vetorial "${boundTheme.name || 'Camada'}".\n\nPara excluí-lo, primeiro altere ou exclua a camada correspondente.`);
         return;
       }
       const form = forms.find(f => f.id === id);

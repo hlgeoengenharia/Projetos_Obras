@@ -160,7 +160,7 @@ class CustomHandler(SimpleHTTPRequestHandler):
 if __name__ == '__main__':
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
     try:
-        httpd = DualStackServer(('::', port), CustomHandler)
+        httpd = ThreadingHTTPServer(('0.0.0.0', port), CustomHandler)
     except Exception:
         httpd = ThreadingHTTPServer(('', port), CustomHandler)
     httpd.daemon_threads = True

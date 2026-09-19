@@ -361,8 +361,9 @@ assertTest('Central de Usuários: Admin logado excluído da listagem de subordin
 const hasRenderMinhasCamadasCriadas = ugFreshCode.includes('function renderMinhasCamadasCriadas(') && ugFreshCode.includes('Camadas Oficiais de');
 assertTest('Central de Usuários: renderMinhasCamadasCriadas implementada para catálogo exclusivo do ente', hasRenderMinhasCamadasCriadas);
 
-const hasEntityLayerIsolation = ugFreshCode.includes('// Para servidores da própria equipe, exibe estritamente as camadas criadas pelo próprio ente') && ugFreshCode.includes('return tSigla === minhaSigla;');
-assertTest('Central de Usuários: Camadas de outros entes (ex: SPU) isoladas e não vazadas nos cards de membros da equipe', hasEntityLayerIsolation);
+const hasLayerDelegationCeiling = ugFreshCode.includes('TETO DE DELEGAÇÃO: Exibe também camadas de outros entes que foram compartilhadas com o Administrador logado') &&
+    ugFreshCode.includes('adminCamadaPerm && adminCamadaPerm.pode_ver === true');
+assertTest('Central de Usuários: Administrador pode delegar camadas compartilhadas para sua equipe (Teto de Delegação)', hasLayerDelegationCeiling);
 
 const hasStrictCamadasEnteIsolation = ugFreshCode.includes('if (tSigla !== minhaSigla) return false;') &&
     ugFreshCode.includes("if (minhaSigla === 'Município' && meuMunId && t.municipio_id && t.municipio_id !== meuMunId) return false;");
@@ -630,9 +631,338 @@ const has1nViewRendering = freshRelatorioViewCode.includes('extract1nFeatureReco
     freshRelatorioViewCode.includes('cfg-1n-syn-cols-container' === 'cfg-1n-syn-cols-container');
 assertTest('Relatórios A4: relatorio_view.html extrai dados reais 1:N e renderiza tanto Tabela Sintética quanto Laudo Analítico com fotos', has1nViewRendering);
 
+const freshReportBuilderCodeUpdated = fs.readFileSync('src/reportBuilder.js', 'utf8');
+const hasGridReorderAndResize = freshReportBuilderCodeUpdated.includes('initGridFieldsSortable') &&
+    freshReportBuilderCodeUpdated.includes('changeFieldWidthStep') &&
+    freshReportBuilderCodeUpdated.includes('setFieldWidthExact') &&
+    freshReportBuilderCodeUpdated.includes('toggleFieldWidthPopover') &&
+    freshReportBuilderCodeUpdated.includes('field-width-dec-btn') &&
+    freshReportBuilderCodeUpdated.includes('field-width-inc-btn') &&
+    freshReportBuilderCodeUpdated.includes('field-drag-handle') &&
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('spans[f.id]');
+assertTest('Relatórios A4: Grade de Atributos suporta reordenação (drag & drop), botões steppers [-] [+] e menu popover de proporções', hasGridReorderAndResize);
 
+const hasFluidGridResizing = freshReportBuilderCodeUpdated.includes('campos_larguras') &&
+    freshReportBuilderCodeUpdated.includes('getFieldWidthStyle') &&
+    freshReportBuilderCodeUpdated.includes('field-width-popover') &&
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('campos_larguras') &&
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('getFieldWidthStyle');
+assertTest('Relatórios A4: Grade de Atributos suporta ajuste de largura (% rápido por frações e slider livre de 15% a 100%) na folha interativa e no relatório final', hasFluidGridResizing);
+
+const hasGridFieldDeletion = freshReportBuilderCodeUpdated.includes('removeFieldFromGrid') &&
+    freshReportBuilderCodeUpdated.includes('field-remove-btn');
+assertTest('Relatórios A4: Grade de Atributos possui botão "x" para retirar campos diretamente da folha', hasGridFieldDeletion);
+
+const hasExistingGridAppend = freshReportBuilderCodeUpdated.includes('addSelectedFieldsToExistingGrid') &&
+    freshReportBuilderCodeUpdated.includes('quickAddFieldToExistingGrid');
+assertTest('Relatórios A4: Card "Grade de Atributos / Campos" permite inserir campos em grade já existente na folha', hasExistingGridAppend);
+
+const freshUsuariosGestaoCode = fs.readFileSync('src/usuarios-gestao.js', 'utf8');
+
+const hasStrictAdminCeiling = freshUsuariosGestaoCode.includes('podeVerAba = adminAbaPerm ? (adminAbaPerm.pode_ver === true || adminAbaPerm.pode_ver === \'true\') : false') &&
+    freshUsuariosGestaoCode.includes('podeEditarAba = podeVerAba && adminAbaPerm && (adminAbaPerm.pode_editar === true || adminAbaPerm.pode_editar === \'true\') && !!adminCamadaPerm.pode_editar');
+assertTest('Central de Usuários: getAdminCeiling bloqueia abas de camadas compartilhadas sem permissão explícita', hasStrictAdminCeiling);
+
+const hasRenderUserCardClamping = freshUsuariosGestaoCode.includes('podeVerCamada = podeVerCamada && adminCeiling.podeVer') &&
+    freshUsuariosGestaoCode.includes('podeEditarTemaCamada = podeVerCamada && adminCeiling.podeEditarTema && podeEditarTemaCamada') &&
+    freshUsuariosGestaoCode.includes('isAbaVerChecked = isAbaVerChecked && abaCeiling.podeVer') &&
+    freshUsuariosGestaoCode.includes('isAbaEditarChecked = isAbaEditarChecked && isAbaVerChecked && abaCeiling.podeEditar');
+assertTest('Central de Usuários: renderUserCard aplica clamp estrito de delegação em camadas e sub-abas', hasRenderUserCardClamping);
+
+const hasCeilingInteractiveGuards = freshUsuariosGestaoCode.includes('onCamadaControlChange') &&
+    freshUsuariosGestaoCode.includes('const canVer = isSuperAdmin || abaCeiling.podeVer') &&
+    freshUsuariosGestaoCode.includes('const canEdit = isSuperAdmin || (abaCeiling.podeEditar && canVer)');
+assertTest('Central de Usuários: toggleCamadaSubAbas e onSubAbaChange respeitam teto do Admin por sub-aba', hasCeilingInteractiveGuards);
+
+const hasSalvarUsuarioCeiling = freshUsuariosGestaoCode.includes('podeVer = podeVer && adminCeiling.podeVer') &&
+    freshUsuariosGestaoCode.includes('podeVerAba = podeVerAba && abaCeiling.podeVer') &&
+    freshUsuariosGestaoCode.includes('podeEditarAba = podeEditarAba && podeVerAba && abaCeiling.podeEditar') &&
+    freshUsuariosGestaoCode.includes('if (!canManageRaster) {');
+assertTest('Central de Usuários: salvarUsuario valida teto do Admin em camadas, abas e ortofotos', hasSalvarUsuarioCeiling);
+
+// Verificações da Resolução Supabase 404 e Card 6 (1:N) com Abas, Campos, Remoção "x" e Inserção
+const hasSupabaseSqlFile = fs.existsSync('supabase_relatorios_templates.sql');
+const supabaseSqlCode = hasSupabaseSqlFile ? fs.readFileSync('supabase_relatorios_templates.sql', 'utf8') : '';
+const hasValidTemplatesSql = hasSupabaseSqlFile &&
+    supabaseSqlCode.includes('CREATE TABLE IF NOT EXISTS public.relatorios_templates') &&
+    supabaseSqlCode.includes('ENABLE ROW LEVEL SECURITY') &&
+    supabaseSqlCode.includes('idx_relatorios_templates_form_id');
+assertTest('Supabase DDL: Script supabase_relatorios_templates.sql criado com DDL completo, RLS e índices para a tabela relatorios_templates', hasValidTemplatesSql);
+
+const currentReportAdapterCode = fs.readFileSync('src/reportAdapter.js', 'utf8');
+const hasTemplatesCircuitBreaker = currentReportAdapterCode.includes('isRemoteTemplatesTableAvailable') &&
+    currentReportAdapterCode.includes('error.code === \'PGRST205\'') &&
+    currentReportAdapterCode.includes('isRemoteTemplatesTableAvailable = false;');
+assertTest('ReportAdapter: Circuit breaker implementado para suprimir loop de erros 404/PGRST205 em relatorios_templates com fallback em localStorage', hasTemplatesCircuitBreaker);
+
+const hasCard6TabsAndFields = freshReportBuilderCodeUpdated.includes('cfg-1n-tabs-container') &&
+    freshReportBuilderCodeUpdated.includes('cfg-1n-group-by-tab') &&
+    freshReportBuilderCodeUpdated.includes('set1nSortOrder') &&
+    freshReportBuilderCodeUpdated.includes('set1nGroupByTab') &&
+    freshReportBuilderCodeUpdated.includes('quickAddFieldTo1n');
+assertTest('Relatórios A4: Card "Vistoria Fotográfica & Anexos (1:N)" exibe abas e campos estruturados, ordenação cronológica e por aba, e botão [+ Add]', hasCard6TabsAndFields);
+
+const hasCard6ExistingInsertsAndRemoves = freshReportBuilderCodeUpdated.includes('addSelectedFieldsToExistingSynthetic1n') &&
+    freshReportBuilderCodeUpdated.includes('addSelectedFieldsToExistingAnalytical1n') &&
+    freshReportBuilderCodeUpdated.includes('removeColumnFromSynthetic1n') &&
+    freshReportBuilderCodeUpdated.includes('removeFieldFromAnalytical1n');
+assertTest('Relatórios A4: Card 1:N permite adicionar campos a tabelas/laudos existentes e botões "x" na folha A4 para remover colunas e campos', hasCard6ExistingInsertsAndRemoves);
+
+const has1nViewCustomFieldsAndSorting = fs.readFileSync('relatorio_view.html', 'utf8').includes('extract1nFeatureRecords(bloco.sourceTabId, featureData, fields, sortOrder, groupByTab, tabOrder)') &&
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('bloco.campos_selecionados') &&
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('bloco.ordenar_por_aba');
+assertTest('Relatórios A4: relatorio_view.html renderiza campos customizados, ordenação cronológica e agrupamento por aba para blocos 1:N', has1nViewCustomFieldsAndSorting);
+
+const hasSynthetic1nColumnControls = freshReportBuilderCodeUpdated.includes('moveSynthetic1nColumn') &&
+    freshReportBuilderCodeUpdated.includes('editSynthetic1nColTitle') &&
+    freshReportBuilderCodeUpdated.includes('removeColumnFromSynthetic1n');
+assertTest('Relatórios A4: Tabela Sintética 1:N permite mover colunas (◀ / ▶) e renomear/abreviar títulos com quebra de linha', hasSynthetic1nColumnControls);
+
+const hasTableDensityAndStriping = freshReportBuilderCodeUpdated.includes('set1nTableDensity') &&
+    freshReportBuilderCodeUpdated.includes('set1nRowStriping') &&
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('density === \'ultracompact\'') &&
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('bloco.zebrado');
+assertTest('Relatórios A4: Tabela Sintética 1:N suporta densidade horizontal (Confortável/Compacto/Ultra) e cores alternadas por linha (Zebrado/Ente)', hasTableDensityAndStriping);
+
+const hasTabSequenceReordering = freshReportBuilderCodeUpdated.includes('move1nTabSequence') &&
+    freshReportBuilderCodeUpdated.includes('cfg-1n-tab-sequence-container') &&
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('tabOrder.findIndex');
+assertTest('Relatórios A4: Agrupamento 1:N suporta reordenar a sequência das abas com botões [↑] e [↓] na barra lateral e no relatório', hasTabSequenceReordering);
+
+const hasConclusionAndCompoundFields = freshReportBuilderCodeUpdated.includes('Conclusão da Vistoria') &&
+    freshReportBuilderCodeUpdated.includes('Conclusão:') &&
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('r.conclusao') &&
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('Conclusão:') &&
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('attachment');
+assertTest('Relatórios A4: Laudo 1:N exibe "Conclusão" na íntegra e formata campos compostos (links/documentos) com ícones e chips estruturados', hasConclusionAndCompoundFields);
+
+const has1nCheckboxPersistence = freshReportBuilderCodeUpdated.includes('current1nSelectedFieldKeys') &&
+    freshReportBuilderCodeUpdated.includes('on1nFieldCheckboxChange') &&
+    freshReportBuilderCodeUpdated.includes('sync1nSelectedFieldsFromDOM') &&
+    freshReportBuilderCodeUpdated.includes('btn-1n-density-') &&
+    freshReportBuilderCodeUpdated.includes('btn-1n-striping-');
+assertTest('Relatórios A4: Checkboxes de campos 1:N persistem seleção (on1nFieldCheckboxChange e sync1nSelectedFieldsFromDOM) sem reset ao alterar ordenação, densidade ou zebrado', has1nCheckboxPersistence);
+
+const hasCanonicalColumnDeduplication = freshReportBuilderCodeUpdated.includes('getCanonicalColId') &&
+    freshReportBuilderCodeUpdated.includes('existingCol.fieldIds.push(f.id)') &&
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('colObj.fieldIds');
+assertTest('Relatórios A4: Tabela Sintética 1:N unifica colunas sinônimas/canônicas (getCanonicalColId) evitando duplicidade entre abas', hasCanonicalColumnDeduplication);
+
+const has1nMultiRecordInspectionPreview = freshReportBuilderCodeUpdated.includes('mockRecords') &&
+    freshReportBuilderCodeUpdated.includes('15/08/2026') &&
+    freshReportBuilderCodeUpdated.includes('12/01/2026') &&
+    freshReportBuilderCodeUpdated.includes('10/04/2026') &&
+    freshReportBuilderCodeUpdated.includes('Vistoria inicial de constatação.');
+assertTest('Relatórios A4: Visualização interativa 1:N renderiza múltiplas linhas por ente para múltiplos registros/vistorias com datas e dados distintos', has1nMultiRecordInspectionPreview);
+
+// Novos testes: Laudo Analítico & Fotos (1:N) com paridade da Grade de Atributos e Abas Analíticas
+const hasLaudoDensityAndStripingControls = freshReportBuilderCodeUpdated.includes('set1nLaudoDensity') &&
+    freshReportBuilderCodeUpdated.includes('set1nLaudoRowStriping') &&
+    freshReportBuilderCodeUpdated.includes('btn-1n-laudo-density-') &&
+    freshReportBuilderCodeUpdated.includes('btn-1n-laudo-striping-');
+assertTest('Relatórios A4: Laudo Analítico 1:N possui controles de densidade e zebrado/ente independentes na barra lateral', hasLaudoDensityAndStripingControls);
+
+const hasLaudoInteractiveGridControls = freshReportBuilderCodeUpdated.includes('a4-grid-fields-container') &&
+    freshReportBuilderCodeUpdated.includes('removeFieldFromAnalytical1n') &&
+    freshReportBuilderCodeUpdated.includes('field-drag-handle') &&
+    freshReportBuilderCodeUpdated.includes('changeFieldWidthStep') &&
+    freshReportBuilderCodeUpdated.includes('toggleFieldWidthPopover');
+assertTest('Relatórios A4: Laudo Analítico 1:N na Folha A4 conta com controles da Grade de Atributos (drag & drop, botões de largura [-] [+] e popover, remoção [x])', hasLaudoInteractiveGridControls);
+
+const hasLaudoMultiTabStructureAndStandardConclusion = freshReportBuilderCodeUpdated.includes('Aba / Ente:') &&
+    freshReportBuilderCodeUpdated.includes('mockTabsAndRecords') &&
+    freshReportBuilderCodeUpdated.includes('canonId === \'conclusao\'') &&
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('isConclusion');
+assertTest('Relatórios A4: Laudo Analítico 1:N apresenta quebra analítica por aba com múltiplos registros e conclusão no formato padronizado de card', hasLaudoMultiTabStructureAndStandardConclusion);
+
+const hasFullCompound1nFields = freshReportBuilderCodeUpdated.includes('Processo IPL') &&
+    freshReportBuilderCodeUpdated.includes('Registro RIP') &&
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('linkItems.map');
+assertTest('Relatórios A4: Campos com tipo de dados 1:N (hiperlinks, processos e anexos) são exibidos integralmente sem truncamento', hasFullCompound1nFields);
+
+const freshReportBuilderCodeFinal = fs.readFileSync('src/reportBuilder.js', 'utf8');
+const hasLaudoFieldCheckboxesInDrawer = freshReportBuilderCodeFinal.includes('cfg-1n-laudo-tabs-container') &&
+    freshReportBuilderCodeFinal.includes('cfg-1n-laudo-field') &&
+    freshReportBuilderCodeFinal.includes('on1nLaudoFieldCheckboxChange') &&
+    freshReportBuilderCodeFinal.includes('current1nLaudoSelectedFieldKeys') &&
+    freshReportBuilderCodeFinal.includes('toggleAll1nLaudoFieldsInDrawer') &&
+    freshReportBuilderCodeFinal.includes('filter1nLaudoFieldsInDrawer');
+assertTest('Relatórios A4: Seção "2. Laudo Analítico & Fotos (1:N)" possui árvore completa de abas e campos com checkboxes independentes para seleção e desseleção', hasLaudoFieldCheckboxesInDrawer);
+
+const hasLaudoInsertAndRemoveControls = freshReportBuilderCodeFinal.includes('quickAddFieldToAnalytical1n') &&
+    freshReportBuilderCodeFinal.includes('quickRemoveFieldFromAnalytical1n') &&
+    freshReportBuilderCodeFinal.includes('removeSelectedFieldsFromExistingAnalytical1n') &&
+    freshReportBuilderCodeFinal.includes('Retirar do Laudo');
+assertTest('Relatórios A4: Laudo Analítico 1:N conta com botões rápidos de inserção/retirada por campo e ações em lote (Inserir no Laudo / Retirar do Laudo)', hasLaudoInsertAndRemoveControls);
+
+// ASSOCIAÇÃO EXCLUSIVA (1:1) DE FORMULÁRIOS POR CAMADA E CLONAGEM DE MODELOS
+// ------------------------------------------------------------------------------
+const freshSettingsHtmlForms = fs.readFileSync('settings.html', 'utf8');
+const freshMainJsForms = fs.readFileSync('src/main.js', 'utf8');
+
+const hasCloneFormButtonAndFunction = freshSettingsHtmlForms.includes('cloneForm') &&
+    freshSettingsHtmlForms.includes('content_copy') &&
+    freshSettingsHtmlForms.includes('Duplicar Cadastro (Usar como Modelo)') &&
+    freshSettingsHtmlForms.includes('generateUUID()') &&
+    freshSettingsHtmlForms.includes('(Cópia)');
+assertTest('Cadastros Personalizados: Possui botão de duplicar (content_copy) com função cloneForm gerando novo UUID e cópia profunda independente', hasCloneFormButtonAndFunction);
+
+const hasBoundStatusBadgesAndExclusionProtection = freshSettingsHtmlForms.includes('themesForForms') &&
+    freshSettingsHtmlForms.includes('loadThemesForForms') &&
+    freshSettingsHtmlForms.includes('Disponível / Modelo') &&
+    freshSettingsHtmlForms.includes('Exclusivo da camada vetorial') &&
+    freshSettingsHtmlForms.includes('está atualmente vinculado à camada vetorial');
+assertTest('Cadastros Personalizados: Exibe badges de status (Camada vinculada vs Disponível/Modelo) e bloqueia exclusão acidental de formulários em uso', hasBoundStatusBadgesAndExclusionProtection);
+
+const hasExclusiveDropdownFiltering = freshMainJsForms.includes('assignedFormIds') &&
+    freshMainJsForms.includes('currentEditingThemeFormId') &&
+    freshMainJsForms.includes('assignedFormIds.has(formIdStr) && !isCurrentThemeForm') &&
+    freshMainJsForms.includes('themeBeingEdited');
+assertTest('Camadas Vetoriais: Dropdowns de criação/importação ocultam formulários já vinculados a outras camadas, preservando o formulário na edição da própria camada', hasExclusiveDropdownFiltering);
+
+const hasLifecycleSelectSynchronization = freshMainJsForms.includes('openNewThemeModal') &&
+    freshMainJsForms.includes('openEditThemeModal') &&
+    freshMainJsForms.includes('saveNewTheme') &&
+    freshMainJsForms.includes('populateFormSelects');
+assertTest('Camadas Vetoriais: Selects de formulário sincronizam dinamicamente na abertura, salvamento e exclusão de temas no mapa', hasLifecycleSelectSynchronization);
 
 // ------------------------------------------------------------------------------
+// BATERIA 5: RELATÓRIOS GERENCIAIS A4 (CABEÇALHO, QUEBRAS DE LINHA E SUPRESSÃO 404)
+// ------------------------------------------------------------------------------
+console.log(`\n${BOLD}[5/5] Verificando Relatórios Gerenciais A4 (Cabeçalho, Quebras de Linha e Supressão 404)...${RESET}`);
+
+const freshReportAdapterJs = fs.readFileSync('src/reportAdapter.js', 'utf8');
+const freshReportBuilderJs = fs.readFileSync('src/reportBuilder.js', 'utf8');
+const freshRelatorioViewHtml = fs.readFileSync('relatorio_view.html', 'utf8');
+
+const hasCircuitBreakerAndCloudSync = freshReportAdapterJs.includes('STORAGE_KEY_REMOTE_AVAILABLE') &&
+    freshReportAdapterJs.includes('isRemoteTemplatesTableAvailable') &&
+    freshReportAdapterJs.includes('saveToFormsTableFallback') &&
+    freshReportAdapterJs.includes('resetRemoteTableCheck');
+assertTest('ReportAdapter: Disjuntor persistente para supressão do erro 404 de relatorios_templates com fallback automático em forms.schema', hasCircuitBreakerAndCloudSync);
+
+const hasHeaderRepeatOptions = freshReportBuilderJs.includes('cfg-hdr-repeat-first') &&
+    freshReportBuilderJs.includes('cfg-hdr-repeat-all') &&
+    freshReportBuilderJs.includes('setHeaderRepeatMode') &&
+    freshReportBuilderJs.includes('repetir_todas_folhas');
+assertTest('ReportBuilder: Card 1 possui opções de repetição do cabeçalho (1ª Folha vs Todas as Folhas) com sincronização e badge', hasHeaderRepeatOptions);
+
+const hasHeaderMetadataOutsideCard = freshReportBuilderJs.includes('Data e Hora Automática da Emissão') &&
+    freshReportBuilderJs.includes('Número de Protocolo e Autenticação') &&
+    freshReportBuilderJs.includes('left-2') &&
+    freshReportBuilderJs.includes('-top-3.5 left-2');
+assertTest('ReportBuilder: Data/Hora e Protocolo posicionados no topo direito fora do card/borda, desobstruindo a barra de ferramentas', hasHeaderMetadataOutsideCard);
+
+const hasMultilinePreservation = freshReportBuilderJs.includes('whitespace-pre-line') &&
+    freshReportBuilderJs.includes(".replace(/\\r?\\n/g, '<br>')") &&
+    freshReportBuilderJs.includes('document.activeElement.blur()');
+assertTest('ReportBuilder: Edição inline preserva quebras de linha com Enter ao salvar e renderizar, com desfoque preventivo do activeElement', hasMultilinePreservation);
+
+const hasRelatorioViewMultilineAndHeader = freshRelatorioViewHtml.includes('cabecalho-repetir-todas') &&
+    freshRelatorioViewHtml.includes('whitespace-pre-line') &&
+    freshRelatorioViewHtml.includes(".replace(/\\r?\\n/g, '<br>')");
+assertTest('Relatório View: Renderização do cabeçalho fora do card com metadados no topo direito e suporte completo a quebras multiline', hasRelatorioViewMultilineAndHeader);
+
+// Verificação da Reorganização do Card 6: Quadro Analítico e Sintético
+const hasQuadroAnaliticoESintetico = freshReportBuilderJs.includes("title: 'Quadro Analítico e Sintético'") &&
+    freshReportBuilderJs.includes("tabsFor1n = tabGroups");
+assertTest('Relatórios A4: Card 6 renomeado para "Quadro Analítico e Sintético" e Fonte de Dados 1:N inclui todas as abas do formulário', hasQuadroAnaliticoESintetico);
+
+const hasSinteticaDirectlyUnderOrdenacao = freshReportBuilderJs.indexOf('Ordenação dos Registros') !== -1 &&
+    freshReportBuilderJs.indexOf('1. Tabela Sintética (Cronológica)') > freshReportBuilderJs.indexOf('Ordenação dos Registros') &&
+    freshReportBuilderJs.indexOf('2. Laudo Analítico & Fotos (1:N)') > freshReportBuilderJs.indexOf('1. Tabela Sintética (Cronológica)');
+assertTest('Relatórios A4: "1. Tabela Sintética (Cronológica)" posicionada imediatamente abaixo de "Ordenação dos Registros"', hasSinteticaDirectlyUnderOrdenacao);
+
+const hasLaudoTabFilteringAndInlineEdit = freshReportBuilderJs.includes('custom_tab_title_') &&
+    freshReportBuilderJs.includes('custom_rec_title_') &&
+    freshReportBuilderJs.includes('tabSpecificFields') &&
+    freshReportBuilderJs.includes('selectedTabIds');
+assertTest('Relatórios A4: Laudo Analítico relaciona apenas abas/campos selecionados e permite edição inline por duplo clique nos títulos de Aba e Vistoria', hasLaudoTabFilteringAndInlineEdit);
+
+const hasFeaturePayloadIntegrity = fs.readFileSync('src/formRenderer.js', 'utf8').includes('window.activeFeatureData = featureData') &&
+    fs.readFileSync('src/main.js', 'utf8').includes('window.activeFeatureData = (layer.feature && layer.feature.properties)') &&
+    fs.readFileSync('src/reportBuilder.js', 'utf8').includes('window.activeFeatureData && Object.keys(window.activeFeatureData).length > 0') &&
+    fs.readFileSync('index.html', 'utf8').includes('window.activeFeatureData && Object.keys(window.activeFeatureData).length > 0');
+assertTest('Relatórios A4: Sincronização e integridade do payload de feição individual (activeFeatureData e openFeatureReportPage)', hasFeaturePayloadIntegrity);
+
+const hasFeatureDataResolutionInViewer = fs.readFileSync('relatorio_view.html', 'utf8').includes('function resolveFieldValue') &&
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('resolveFieldValue(f, featureData)') &&
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('window.opener.activeFeatureData') &&
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('window.reportViewerFormTabs');
+assertTest('Relatórios A4: relatorio_view.html implementa resolveFieldValue resiliente e suporte a dados de window.opener e formTabs', hasFeatureDataResolutionInViewer);
+
+// Verificações: Cabeçalho Acima da Margem, Rodapé Abaixo da Margem e Numeração a partir da 2ª Folha
+const hasHeaderFooterSlots = freshReportBuilderJs.includes('a4-header-slot') &&
+    freshReportBuilderJs.includes('a4-footer-slot') &&
+    freshReportBuilderJs.includes('a4-blocks-list') &&
+    freshReportBuilderJs.includes('blocksList.style.paddingTop') &&
+    freshReportBuilderJs.includes('blocksList.style.paddingBottom');
+assertTest('ReportBuilder: Cabeçalho posicionado no slot superior acima da margem e Rodapé fixo no slot inferior abaixo da margem', hasHeaderFooterSlots);
+
+const hasFooterPageStartOptions = freshReportBuilderJs.includes('cfg-ftr-page-start-first') &&
+    freshReportBuilderJs.includes('cfg-ftr-page-start-second') &&
+    freshReportBuilderJs.includes('setFooterPageStart') &&
+    freshReportBuilderJs.includes('updateFooterProperty');
+assertTest('ReportBuilder: Card Rodapé Oficial inclui seleção de início de numeração (1ª folha vs 2ª folha) e métodos sincronizados', hasFooterPageStartOptions);
+
+const updatedRelatorioViewHtml = fs.readFileSync('relatorio_view.html', 'utf8');
+const hasZeroMarginPrint = updatedRelatorioViewHtml.includes('@page') &&
+    updatedRelatorioViewHtml.includes('size: A4') &&
+    updatedRelatorioViewHtml.includes('margin: 0') &&
+    updatedRelatorioViewHtml.includes('single-page') &&
+    updatedRelatorioViewHtml.includes('overflow: hidden');
+assertTest('Relatório View: Impressão @page com margem zero e folha A4 contida sem vazamento do rodapé para a 2ª folha', hasZeroMarginPrint);
+
+const hasFooterStartSecondLogic = updatedRelatorioViewHtml.includes('getFooterPageNumberText') &&
+    updatedRelatorioViewHtml.includes("startMode === 'segunda'") &&
+    updatedRelatorioViewHtml.includes('pageIdx === 1') &&
+    updatedRelatorioViewHtml.includes('a4-page-footer-slot');
+assertTest('Relatório View: getFooterPageNumberText implementa numeração a partir da 2ª folha começando com o número 2', hasFooterStartSecondLogic);
+
+const hasBrowserHeadersFootersSuppression = updatedRelatorioViewHtml.includes('margin: 0 !important;') &&
+    updatedRelatorioViewHtml.includes('beforeprint') &&
+    freshReportBuilderJs.includes('openFeatureReportPage(currentTemplate.form_id') &&
+    freshReportBuilderJs.includes("window.addEventListener('beforeprint'");
+assertTest('Impressão A4: Supressão de cabeçalho e rodapé nativos do navegador (about:blank, data/hora e título) sem vazamento', hasBrowserHeadersFootersSuppression);
+
+const hasTwoDigitFooterPagination = updatedRelatorioViewHtml.includes('String(pageIdx).padStart(2, \'0\')') &&
+    freshReportBuilderJs.includes('Página 01 de 01') &&
+    freshReportBuilderJs.includes('Página 02 de 10');
+assertTest('Rodapé Oficial: Data/hora integrada e numeração de páginas com 2 dígitos (Ex: Página 01 de 10)', hasTwoDigitFooterPagination);
+
+// Verificações dos ajustes do Quadro Analítico e Sintético (Tabela Sintética, Laudo 1:N, Accordion e Drag & Drop)
+const hasSyntheticHorizontalLines = updatedRelatorioViewHtml.includes('divide-y divide-slate-200') &&
+    updatedRelatorioViewHtml.includes('border-b border-slate-200') &&
+    freshReportBuilderJs.includes('divide-y divide-slate-200') &&
+    freshReportBuilderCodeUpdated.includes('border-b border-slate-200');
+assertTest('Tabela Sintética: Linhas horizontais visíveis separando registros/entes na Folha A4 e no Relatório Final', hasSyntheticHorizontalLines);
+
+const hasMpfBadgeResolution = updatedRelatorioViewHtml.includes("o.includes('MPF')") &&
+    updatedRelatorioViewHtml.includes('bg-purple-100 text-purple-800') &&
+    freshReportBuilderJs.includes('bg-purple-100 text-purple-800') &&
+    freshReportBuilderJs.includes("rec.org.toLowerCase().includes('mpf')");
+assertTest('Tabela Sintética: Ente no ícone roxo exibe nome correto (MPF) resolvido a partir dos títulos das abas', hasMpfBadgeResolution);
+
+const hasExpandableTabAccordions = freshReportBuilderJs.includes('toggleAccordionTab') &&
+    freshReportBuilderJs.includes('cfg-tab-fields-syn-') &&
+    freshReportBuilderJs.includes('cfg-tab-fields-laudo-') &&
+    freshReportBuilderJs.includes('expand_more');
+assertTest('Abas 1:N: Seções de abas expansíveis com acordeão (clique para expandir e selecionar campos) na Tabela Sintética e no Laudo', hasExpandableTabAccordions);
+
+const hasStrictLaudoTabSelection = freshReportBuilderJs.includes('cfg-1n-laudo-tab-select') &&
+    freshReportBuilderJs.includes('on1nLaudoTabSelectChange') &&
+    freshReportBuilderJs.includes('current1nLaudoSelectedTabs') &&
+    freshReportBuilderJs.includes('if (tabSpecificFields.length === 0) return \'\';') &&
+    updatedRelatorioViewHtml.includes('bloco.abas_selecionadas');
+assertTest('Laudo Analítico 1:N: Opção de seleção de abas via checkbox e envio restrito apenas das abas e campos selecionados', hasStrictLaudoTabSelection);
+
+const hasPrecisionDragAndDrop = freshReportBuilderJs.includes("direction: 'horizontal'") &&
+    freshReportBuilderJs.includes('swapThreshold: 0.65') &&
+    freshReportBuilderJs.includes('invertSwap: true') &&
+    freshReportBuilderJs.includes('data-field-id') &&
+    freshReportBuilderJs.includes('newContainerOrder');
+assertTest('Folha A4 Interativa: Drag & drop de campos na grade com alta precisão horizontal (swapThreshold 0.65 e ordenação via DOM)', hasPrecisionDragAndDrop);
+
 // RELATÓRIO FINAL
 // ------------------------------------------------------------------------------
 console.log(`\n${BOLD}${CYAN}==============================================================================${RESET}`);

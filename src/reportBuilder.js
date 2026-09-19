@@ -175,15 +175,21 @@
                                 </div>
                             </div>
 
-                            <!-- PAPEL A4 BRANCO PURO -->
-                            <div id="a4-sheet-stage" class="bg-white text-slate-900 relative transition-all duration-200 shadow-[0_10px_30px_rgba(0,0,0,0.12),0_1px_3px_rgba(0,0,0,0.08)] border border-slate-200/80">
+                            <!-- PAPEL A4 BRANCO PURO COM CABEÇALHO E RODAPÉ FORA DO CORPO -->
+                            <div id="a4-sheet-stage" class="bg-white text-slate-900 relative transition-all duration-200 shadow-[0_10px_30px_rgba(0,0,0,0.12),0_1px_3px_rgba(0,0,0,0.08)] border border-slate-200/80 flex flex-col">
                                 <!-- Linha-Guia Visual de Margem de Impressão (Não sai na impressão) -->
                                 <div id="a4-margin-guide" class="pointer-events-none absolute border border-dashed border-sky-400/40 print:hidden z-0"></div>
 
-                                <!-- Container dos Blocos Reais da Folha -->
-                                <div id="a4-blocks-list" class="flex flex-col gap-5 w-full relative z-10">
+                                <!-- Slot do Cabeçalho Institucional (Fica fora do corpo, acima da margem superior) -->
+                                <div id="a4-header-slot" class="w-full relative z-10 select-none"></div>
+
+                                <!-- Container dos Blocos Reais da Folha (Corpo da Folha, delimitado entre as margens) -->
+                                <div id="a4-blocks-list" class="flex flex-col gap-5 w-full relative z-10 flex-1" style="min-height: 100%;">
                                     <!-- Injetado via renderA4Blocks() -->
                                 </div>
+
+                                <!-- Slot do Rodapé Oficial Fixo (Fica fora do corpo, abaixo da margem inferior) -->
+                                <div id="a4-footer-slot" class="w-full relative z-10 mt-auto select-none"></div>
                             </div>
 
                             <!-- Indicador Visual de Quebra de Página (Word Page Break) -->
@@ -216,6 +222,9 @@
         const ruler = document.getElementById('a4-horizontal-ruler');
         const guide = document.getElementById('a4-margin-guide');
         const breakInd = document.getElementById('a4-page-break-indicator');
+        const headerSlot = document.getElementById('a4-header-slot');
+        const blocksList = document.getElementById('a4-blocks-list');
+        const footerSlot = document.getElementById('a4-footer-slot');
         if (!stage || !currentTemplate || !currentTemplate.config_pagina) return;
 
         const orient = currentTemplate.config_pagina.orientacao || 'portrait';
@@ -233,13 +242,30 @@
         stage.style.maxWidth = (orient === 'landscape') ? `${nominalWidthPx}px` : '794px';
         stage.style.boxSizing = 'border-box';
         stage.style.minHeight = (orient === 'landscape') ? `${nominalHeightPx}px` : '1050px';
+        stage.style.padding = '0';
 
         const padTop = Math.round(mm.top * scaleFactor);
         const padBot = Math.round(mm.bottom * scaleFactor);
         const padLeft = Math.round(mm.left * scaleFactor);
         const padRight = Math.round(mm.right * scaleFactor);
 
-        stage.style.padding = `${padTop}px ${padRight}px ${padBot}px ${padLeft}px`;
+        // Cabeçalho Institucional: posicionado acima da margem superior do corpo
+        if (headerSlot) {
+            headerSlot.style.padding = `10px ${padRight}px 0 ${padLeft}px`;
+        }
+
+        // Corpo da folha: delimitado pelas margens superior, inferior, esquerda e direita
+        if (blocksList) {
+            blocksList.style.paddingLeft = `${padLeft}px`;
+            blocksList.style.paddingRight = `${padRight}px`;
+            blocksList.style.paddingTop = `${Math.max(8, padTop - 12)}px`;
+            blocksList.style.paddingBottom = `${Math.max(8, padBot - 12)}px`;
+        }
+
+        // Rodapé Oficial: fixo na base inferior abaixo da margem inferior do corpo
+        if (footerSlot) {
+            footerSlot.style.padding = `0 ${padRight}px 14px ${padLeft}px`;
+        }
 
         // Atualiza a linha-guia de margens (visível no editor)
         if (guide) {
@@ -285,12 +311,21 @@
     function renderAccordionPanel(formId) {
         const fields = window.ReportAdapter.getFormFields(formId);
         const charts = window.ReportAdapter.getExistingCharts(formId);
+        const formTabs = (window.ReportAdapter && window.ReportAdapter.getFormTabs) ? window.ReportAdapter.getFormTabs(formId) : [];
         const multipleTabs = (window.ReportAdapter && window.ReportAdapter.getMultipleTabs) ? window.ReportAdapter.getMultipleTabs(formId) : [];
         const cfg = currentTemplate.config_pagina;
         const mm = cfg.margens_mm || { top: 15, bottom: 15, left: 15, right: 15 };
 
-        // Agrupamento ordenado de campos por Aba
+        // Agrupamento ordenado de campos por Aba com inclusão de todas as abas
         const tabGroupsMap = new Map();
+        formTabs.forEach(t => {
+            tabGroupsMap.set(t.id, {
+                id: t.id,
+                title: t.title || 'Aba Geral',
+                isMultiple: !!t.isMultiple,
+                fields: Array.isArray(t.fields) ? [...t.fields] : []
+            });
+        });
         fields.forEach(f => {
             const tId = f.tabId || 'geral';
             const tTitle = f.tabTitle || 'Aba Geral';
@@ -298,12 +333,43 @@
                 tabGroupsMap.set(tId, {
                     id: tId,
                     title: tTitle,
+                    isMultiple: !!f.isMultiple,
                     fields: []
                 });
             }
-            tabGroupsMap.get(tId).fields.push(f);
+            const group = tabGroupsMap.get(tId);
+            if (!group.fields.some(gf => gf.id === f.id)) {
+                group.fields.push(f);
+            }
         });
         const tabGroups = Array.from(tabGroupsMap.values());
+        const tabsFor1n = tabGroups; // Inclui todas as abas no seletor e nas árvores de campos
+
+        // Sincroniza a sequência das abas 1:N
+        if (!Array.isArray(current1nTabOrder) || current1nTabOrder.length === 0) {
+            current1nTabOrder = tabsFor1n.map(t => t.id);
+        } else {
+            tabsFor1n.forEach(t => {
+                if (!current1nTabOrder.includes(t.id)) current1nTabOrder.push(t.id);
+            });
+        }
+        const orderedTabs = [...tabsFor1n].sort((a, b) => {
+            const idxA = current1nTabOrder.indexOf(a.id);
+            const idxB = current1nTabOrder.indexOf(b.id);
+            return (idxA >= 0 ? idxA : 999) - (idxB >= 0 ? idxB : 999);
+        });
+
+        const existingSynthetic1nBlock = currentTemplate?.blocos?.find(b => b.tipo === 'tabela_sintetica_1n');
+        const hasExistingSynthetic1n = !!existingSynthetic1nBlock;
+        const activeSyntheticColCount = existingSynthetic1nBlock?.colunas?.length || 0;
+        const activeDensity = existingSynthetic1nBlock?.densidade || current1nTableDensity || 'compact';
+        const activeStriping = existingSynthetic1nBlock?.zebrado || current1nRowStriping || 'slate';
+
+        const existingAnalytical1nBlock = currentTemplate?.blocos?.find(b => b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos');
+        const hasExistingAnalytical1n = !!existingAnalytical1nBlock;
+        const activeAnalyticalFieldCount = existingAnalytical1nBlock?.campos_selecionados?.length || 0;
+        const activeLaudoDensity = existingAnalytical1nBlock?.densidade || current1nLaudoDensity || current1nTableDensity || 'compact';
+        const activeLaudoStriping = existingAnalytical1nBlock?.zebrado || current1nLaudoRowStriping || current1nRowStriping || 'slate';
 
         return `
             <!-- CARD 0: CONFIGURAÇÃO DA FOLHA (LAYOUT DA PÁGINA) -->
@@ -369,244 +435,235 @@
             })}
 
             <!-- CARD 1: CABEÇALHO INSTITUCIONAL -->
-            ${renderAccordionCard({
-                id: 'acc-header',
-                title: 'Cabeçalho Institucional',
-                icon: 'account_balance',
-                content: `
-                    <div class="flex flex-col gap-3">
-                        <!-- Upload ou Seleção de Brasão / Logo Oficial -->
-                        <div class="flex flex-col gap-1.5">
-                            <label class="text-[10px] font-bold uppercase text-slate-500">Brasão / Logomarca Oficial</label>
-                            <div class="flex items-center gap-3 p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl">
-                                <div class="w-12 h-12 rounded-xl bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 flex items-center justify-center overflow-hidden shrink-0">
-                                    <img id="cfg-hdr-logo-preview" src="${window._customUploadedLogoUrl || ''}" class="${window._customUploadedLogoUrl ? '' : 'hidden'} w-full h-full object-contain" />
-                                    <span id="cfg-hdr-logo-icon" class="material-symbols-outlined text-primary text-[24px] ${window._customUploadedLogoUrl ? 'hidden' : ''}">account_balance</span>
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                    <input type="file" id="cfg-hdr-file-input" accept="image/*" onchange="ReportBuilder.handleLogoUpload(event)" class="text-xs file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-primary file:text-white hover:file:bg-primary/90 cursor-pointer w-full text-slate-500" />
-                                    <span class="text-[10px] text-slate-400 block mt-0.5">PNG, JPG ou SVG (fundo transparente recomendado)</span>
+            ${(() => {
+                const existingHdr = (currentTemplate?.blocos || []).find(b => b.tipo === 'cabecalho');
+                const repeatMode = existingHdr?.repetir_todas_folhas ? 'todas' : 'primeira';
+
+                return renderAccordionCard({
+                    id: 'acc-header',
+                    title: 'Cabeçalho Institucional',
+                    icon: 'account_balance',
+                    badge: existingHdr ? (repeatMode === 'todas' ? 'Todas as Folhas' : '1ª Folha') : null,
+                    content: `
+                        <div class="flex flex-col gap-3">
+                            <!-- Upload ou Seleção de Brasão / Logo Oficial -->
+                            <div class="flex flex-col gap-1.5">
+                                <label class="text-[10px] font-bold uppercase text-slate-500">Brasão / Logomarca Oficial</label>
+                                <div class="flex items-center gap-3 p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl">
+                                    <div class="w-12 h-12 rounded-xl bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 flex items-center justify-center overflow-hidden shrink-0">
+                                        <img id="cfg-hdr-logo-preview" src="${window._customUploadedLogoUrl || ''}" class="${window._customUploadedLogoUrl ? '' : 'hidden'} w-full h-full object-contain" />
+                                        <span id="cfg-hdr-logo-icon" class="material-symbols-outlined text-primary text-[24px] ${window._customUploadedLogoUrl ? 'hidden' : ''}">account_balance</span>
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <input type="file" id="cfg-hdr-file-input" accept="image/*" onchange="ReportBuilder.handleLogoUpload(event)" class="text-xs file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-primary file:text-white hover:file:bg-primary/90 cursor-pointer w-full text-slate-500" />
+                                        <span class="text-[10px] text-slate-400 block mt-0.5">PNG, JPG ou SVG (fundo transparente recomendado)</span>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
+                            <div>
+                                <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1">Órgão Emissor / Empresa</label>
+                                <input type="text" id="cfg-hdr-subtitle" value="${escapeHtml(existingHdr?.subtitulo || 'Prefeitura Municipal • Secretaria de Planejamento e Obras')}" oninput="ReportBuilder.updateHeaderProperty('subtitulo', this.value)" class="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl font-medium" placeholder="Ex: Prefeitura Municipal..." />
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1">Título Principal do Relatório</label>
+                                <input type="text" id="cfg-hdr-title" value="${escapeHtml(existingHdr?.titulo || 'FICHA CADASTRAL INDIVIDUAL DO IMÓVEL')}" oninput="ReportBuilder.updateHeaderProperty('titulo', this.value)" class="w-full px-3 py-2 text-xs font-bold bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl" placeholder="Ex: FICHA TÉCNICA CADASTRAL..." />
+                            </div>
+
+                            <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
+                                    <input type="checkbox" id="cfg-hdr-logo" ${(existingHdr ? existingHdr.logo !== false : true) ? 'checked' : ''} onchange="ReportBuilder.updateHeaderProperty('logo', this.checked)" class="rounded text-primary focus:ring-0 cursor-pointer" />
+                                    <span>Exibir Brasão / Logomarca Oficial</span>
+                                </label>
+                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
+                                    <input type="checkbox" id="cfg-hdr-date" ${(existingHdr ? existingHdr.exibirDataHora !== false : true) ? 'checked' : ''} onchange="ReportBuilder.updateHeaderProperty('dataHora', this.checked)" class="rounded text-primary focus:ring-0 cursor-pointer" />
+                                    <span>Data e Hora Automática da Emissão</span>
+                                </label>
+                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
+                                    <input type="checkbox" id="cfg-hdr-protocol" ${(existingHdr ? existingHdr.exibirProtocolo !== false : true) ? 'checked' : ''} onchange="ReportBuilder.updateHeaderProperty('protocolo', this.checked)" class="rounded text-primary focus:ring-0 cursor-pointer" />
+                                    <span>Número de Protocolo e Autenticação</span>
+                                </label>
+                            </div>
+
+                            <!-- Opção de Repetição nas Folhas -->
+                            <div class="p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                                <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1.5">Repetição do Cabeçalho nas Folhas</label>
+                                <div class="grid grid-cols-2 gap-2" id="cfg-hdr-repeat-group">
+                                    <label id="btn-hdr-repeat-first" 
+                                         onclick="ReportBuilder.setHeaderRepeatMode(false)" 
+                                         class="flex items-center gap-2.5 p-2.5 rounded-xl border text-left cursor-pointer transition-all select-none ${repeatMode !== 'todas' ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs ring-1 ring-primary/30' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 hover:border-slate-300'}">
+                                        <input type="radio" name="cfg-hdr-repeat" id="cfg-hdr-repeat-first" value="primeira" ${repeatMode !== 'todas' ? 'checked' : ''} onchange="ReportBuilder.setHeaderRepeatMode(false)" class="w-4 h-4 text-primary focus:ring-0 cursor-pointer accent-primary" />
+                                        <div class="min-w-0 flex-1">
+                                            <div class="font-bold text-[11px] leading-tight flex items-center justify-between">
+                                                <span>Apenas 1ª Folha</span>
+                                                <span id="icon-hdr-repeat-first" class="material-symbols-outlined text-[15px] ${repeatMode !== 'todas' ? 'text-primary' : 'hidden'}">check_circle</span>
+                                            </div>
+                                            <div class="text-[9.5px] opacity-75 leading-tight mt-0.5">Padrão do relatório</div>
+                                        </div>
+                                    </label>
+                                    <label id="btn-hdr-repeat-all" 
+                                         onclick="ReportBuilder.setHeaderRepeatMode(true)" 
+                                         class="flex items-center gap-2.5 p-2.5 rounded-xl border text-left cursor-pointer transition-all select-none ${repeatMode === 'todas' ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs ring-1 ring-primary/30' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 hover:border-slate-300'}">
+                                        <input type="radio" name="cfg-hdr-repeat" id="cfg-hdr-repeat-all" value="todas" ${repeatMode === 'todas' ? 'checked' : ''} onchange="ReportBuilder.setHeaderRepeatMode(true)" class="w-4 h-4 text-primary focus:ring-0 cursor-pointer accent-primary" />
+                                        <div class="min-w-0 flex-1">
+                                            <div class="font-bold text-[11px] leading-tight flex items-center justify-between">
+                                                <span>Todas as Folhas</span>
+                                                <span id="icon-hdr-repeat-all" class="material-symbols-outlined text-[15px] ${repeatMode === 'todas' ? 'text-primary' : 'hidden'}">check_circle</span>
+                                            </div>
+                                            <div class="text-[9.5px] opacity-75 leading-tight mt-0.5">Repete no topo</div>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <button type="button" onclick="ReportBuilder.insertHeaderBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
+                                <span class="material-symbols-outlined text-[16px]">add_circle</span> Inserir Cabeçalho na Folha
+                            </button>
+                        </div>
+                    `
+                });
+            })()}
+
+            <!-- CARD 2: CAIXA DE TEXTO LIVRE COM FORMATAÇÃO E MENÇÕES @ -->
+            ${renderAccordionCard({
+                id: 'acc-free-text',
+                title: 'Caixa de texto livre',
+                icon: 'format_shapes',
+                badge: 'Texto Livre & @Campos',
+                content: `
+                    <div class="flex flex-col gap-3">
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400">Insira blocos de texto livre na folha com quebras de linha normais, justificação, espaçamento, negrito, itálico e menções dinâmicas a campos digitando <strong>@</strong>.</p>
                         <div>
-                            <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1">Órgão Emissor / Empresa</label>
-                            <input type="text" id="cfg-hdr-subtitle" value="Prefeitura Municipal • Secretaria de Planejamento e Obras" class="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl font-medium" placeholder="Ex: Prefeitura Municipal..." />
+                            <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1">Título da Seção (Opcional)</label>
+                            <input type="text" id="cfg-free-text-title" class="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl font-bold dark:text-white" placeholder="Ex: Parecer Técnico, Despacho, Laudo..." />
                         </div>
                         <div>
-                            <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1">Título Principal do Relatório</label>
-                            <input type="text" id="cfg-hdr-title" value="FICHA CADASTRAL INDIVIDUAL DO IMÓVEL" class="w-full px-3 py-2 text-xs font-bold bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl" placeholder="Ex: FICHA TÉCNICA CADASTRAL..." />
+                            <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1">Texto Inicial (Opcional)</label>
+                            <textarea id="cfg-free-text-content" rows="3" class="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl" placeholder="Digite seu texto aqui ou edite diretamente na folha A4 com duplo clique e @..."></textarea>
                         </div>
-
-                        <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                            <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
-                                <input type="checkbox" id="cfg-hdr-logo" checked class="rounded text-primary focus:ring-0" />
-                                <span>Exibir Brasão / Logomarca Oficial</span>
-                            </label>
-                            <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
-                                <input type="checkbox" id="cfg-hdr-date" checked class="rounded text-primary focus:ring-0" />
-                                <span>Data e Hora Automática da Emissão</span>
-                            </label>
-                            <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
-                                <input type="checkbox" id="cfg-hdr-protocol" checked class="rounded text-primary focus:ring-0" />
-                                <span>Número de Protocolo e Autenticação</span>
-                            </label>
-                        </div>
-
-                        <button type="button" onclick="ReportBuilder.insertHeaderBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
-                            <span class="material-symbols-outlined text-[16px]">add_circle</span> Inserir Cabeçalho na Folha
+                        <button type="button" onclick="ReportBuilder.insertFreeTextBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
+                            <span class="material-symbols-outlined text-[16px]">add_circle</span> Inserir Caixa de Texto na Folha
                         </button>
                     </div>
                 `
             })}
 
             <!-- CARD 2: GRADE DE ATRIBUTOS / CAMPOS (AGRUPADOS POR ABA) -->
-            ${renderAccordionCard({
-                id: 'acc-grid',
-                title: 'Grade de Atributos / Campos',
-                icon: 'table_rows',
-                badge: `${fields.length} campos • ${tabGroups.length} abas`,
-                content: `
-                    <div class="flex flex-col gap-3">
-                        <!-- Busca Rápida de Campo ou Aba -->
-                        <div class="relative">
-                            <span class="material-symbols-outlined absolute left-2.5 top-2.5 text-[16px] text-slate-400">search</span>
-                            <input type="text" id="cfg-grid-search-input" oninput="ReportBuilder.filterGridFieldsInDrawer(this.value)" placeholder="Buscar campo por nome ou aba..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-1 focus:ring-primary focus:outline-none dark:text-white font-medium" />
-                        </div>
+            ${(() => {
+                const existingGrids = (currentTemplate?.blocos || []).filter(b => b.tipo === 'grade_campos');
+                const hasExistingGrid = existingGrids.length > 0;
+                const activeGridFieldCount = hasExistingGrid ? (existingGrids[0].campos_selecionados?.length || 0) : 0;
 
-                        <div class="flex items-center justify-between">
-                            <label class="text-[10px] font-bold uppercase text-slate-500">Campos agrupados por aba:</label>
-                            <div class="flex items-center gap-2">
-                                <button type="button" onclick="ReportBuilder.toggleAllFieldsInDrawer(true)" class="text-[10px] font-bold text-primary hover:underline cursor-pointer">Marcar Todos</button>
-                                <span class="text-slate-300">|</span>
-                                <button type="button" onclick="ReportBuilder.toggleAllFieldsInDrawer(false)" class="text-[10px] font-bold text-slate-400 hover:underline cursor-pointer">Desmarcar Todos</button>
-                            </div>
-                        </div>
-
-                        <!-- Lista de Abas com seus respectivos campos -->
-                        <div class="max-h-64 overflow-y-auto space-y-2 p-1 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 custom-scrollbar" id="cfg-grid-tabs-container">
-                            ${tabGroups.map((tg, tgIdx) => `
-                                <div class="cfg-grid-tab-section border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800/80 overflow-hidden shadow-2xs" data-tab-title="${escapeHtml(tg.title.toLowerCase())}">
-                                    <!-- Cabeçalho da Aba -->
-                                    <div class="bg-slate-100/90 dark:bg-slate-700/60 px-2.5 py-1.5 flex items-center justify-between border-b border-slate-200 dark:border-slate-700">
-                                        <div class="flex items-center gap-1.5 min-w-0">
-                                            <span class="material-symbols-outlined text-[15px] text-primary dark:text-sky-400">tab</span>
-                                            <span class="text-xs font-bold text-slate-800 dark:text-white uppercase truncate" title="${escapeHtml(tg.title)}">${escapeHtml(tg.title)}</span>
-                                            <span class="text-[9px] font-mono text-slate-500 bg-slate-200/80 dark:bg-slate-800 px-1.5 py-0.2 rounded-full">${tg.fields.length}</span>
-                                        </div>
-                                        <div class="flex items-center gap-1 shrink-0">
-                                            <button type="button" onclick="ReportBuilder.toggleTabFieldsInDrawer('${escapeHtml(tg.id)}', true)" class="text-[9.5px] font-bold text-primary hover:underline cursor-pointer">Todos</button>
-                                            <span class="text-slate-300 text-[10px]">|</span>
-                                            <button type="button" onclick="ReportBuilder.toggleTabFieldsInDrawer('${escapeHtml(tg.id)}', false)" class="text-[9.5px] font-bold text-slate-400 hover:underline cursor-pointer">Nenhum</button>
-                                        </div>
+                return renderAccordionCard({
+                    id: 'acc-grid',
+                    title: 'Grade de Atributos / Campos',
+                    icon: 'table_rows',
+                    badge: hasExistingGrid ? `${activeGridFieldCount} na Folha • ${fields.length} disp.` : `${fields.length} campos • ${tabGroups.length} abas`,
+                    content: `
+                        <div class="flex flex-col gap-3">
+                            ${hasExistingGrid ? `
+                                <div class="p-2.5 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 rounded-xl flex items-center justify-between text-xs">
+                                    <div class="flex items-center gap-1.5 min-w-0">
+                                        <span class="material-symbols-outlined text-sky-600 text-[18px]">check_circle</span>
+                                        <span class="font-bold text-sky-900 dark:text-sky-200 truncate">Grade ativa na Folha A4 (${activeGridFieldCount} campos)</span>
                                     </div>
-                                    <!-- Campos da Aba -->
-                                    <div class="p-1 space-y-0.5">
-                                        ${tg.fields.map((f, i) => `
-                                            <label class="cfg-grid-field-item flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 text-xs text-slate-700 dark:text-slate-300 cursor-pointer transition-colors" data-field-label="${escapeHtml(f.label.toLowerCase())}" data-tab-id="${escapeHtml(tg.id)}">
-                                                <input type="checkbox" name="cfg-grid-field" data-tab-id="${escapeHtml(tg.id)}" data-tab-title="${escapeHtml(tg.title)}" value="${escapeHtml(f.id)}" ${tgIdx === 0 && i < 6 ? 'checked' : ''} class="rounded text-primary focus:ring-0" />
-                                                <div class="flex flex-col min-w-0 flex-1">
-                                                    <div class="flex items-center gap-1.5">
-                                                        <span class="truncate font-medium text-slate-800 dark:text-slate-200" title="${escapeHtml(f.label)}">${escapeHtml(f.label)}</span>
-                                                        ${f.condition ? `
-                                                            <span class="text-[9px] text-amber-700 dark:text-amber-300 bg-amber-100/70 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700/60 px-1 py-0.2 rounded font-mono shrink-0" title="Condicionado a: ${escapeHtml(f.condition)} = ${escapeHtml(f.condValue || '')}">Condicional</span>
-                                                        ` : ''}
+                                    <span class="text-[10px] font-mono text-sky-700 dark:text-sky-300 font-bold bg-sky-100 dark:bg-sky-900 px-2 py-0.5 rounded">Pronta</span>
+                                </div>
+                            ` : ''}
+
+                            <!-- Busca Rápida de Campo ou Aba -->
+                            <div class="relative">
+                                <span class="material-symbols-outlined absolute left-2.5 top-2.5 text-[16px] text-slate-400">search</span>
+                                <input type="text" id="cfg-grid-search-input" oninput="ReportBuilder.filterGridFieldsInDrawer(this.value)" placeholder="Buscar campo por nome ou aba..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-1 focus:ring-primary focus:outline-none dark:text-white font-medium" />
+                            </div>
+
+                            <div class="flex items-center justify-between">
+                                <label class="text-[10px] font-bold uppercase text-slate-500">Campos agrupados por aba:</label>
+                                <div class="flex items-center gap-2">
+                                    <button type="button" onclick="ReportBuilder.toggleAllFieldsInDrawer(true)" class="text-[10px] font-bold text-primary hover:underline cursor-pointer">Marcar Todos</button>
+                                    <span class="text-slate-300">|</span>
+                                    <button type="button" onclick="ReportBuilder.toggleAllFieldsInDrawer(false)" class="text-[10px] font-bold text-slate-400 hover:underline cursor-pointer">Desmarcar Todos</button>
+                                </div>
+                            </div>
+
+                            <!-- Lista de Abas com seus respectivos campos e botão rápido + -->
+                            <div class="max-h-64 overflow-y-auto space-y-2 p-1 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 custom-scrollbar" id="cfg-grid-tabs-container">
+                                ${tabGroups.map((tg, tgIdx) => `
+                                    <div class="cfg-grid-tab-section border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800/80 overflow-hidden shadow-2xs" data-tab-title="${escapeHtml(tg.title.toLowerCase())}">
+                                        <!-- Cabeçalho da Aba -->
+                                        <div class="bg-slate-100/90 dark:bg-slate-700/60 px-2.5 py-1.5 flex items-center justify-between border-b border-slate-200 dark:border-slate-700">
+                                            <div class="flex items-center gap-1.5 min-w-0">
+                                                <span class="material-symbols-outlined text-[15px] text-primary dark:text-sky-400">tab</span>
+                                                <span class="text-xs font-bold text-slate-800 dark:text-white uppercase truncate" title="${escapeHtml(tg.title)}">${escapeHtml(tg.title)}</span>
+                                                <span class="text-[9px] font-mono text-slate-500 bg-slate-200/80 dark:bg-slate-800 px-1.5 py-0.2 rounded-full">${tg.fields.length}</span>
+                                            </div>
+                                            <div class="flex items-center gap-1 shrink-0">
+                                                <button type="button" onclick="ReportBuilder.toggleTabFieldsInDrawer('${escapeHtml(tg.id)}', true)" class="text-[9.5px] font-bold text-primary hover:underline cursor-pointer">Todos</button>
+                                                <span class="text-slate-300 text-[10px]">|</span>
+                                                <button type="button" onclick="ReportBuilder.toggleTabFieldsInDrawer('${escapeHtml(tg.id)}', false)" class="text-[9.5px] font-bold text-slate-400 hover:underline cursor-pointer">Nenhum</button>
+                                            </div>
+                                        </div>
+                                        <!-- Campos da Aba -->
+                                        <div class="p-1 space-y-0.5">
+                                            ${tg.fields.map((f, i) => `
+                                                <div class="cfg-grid-field-item flex items-center justify-between gap-1.5 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 text-xs text-slate-700 dark:text-slate-300 transition-colors" data-field-label="${escapeHtml(f.label.toLowerCase())}" data-tab-id="${escapeHtml(tg.id)}">
+                                                    <label class="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
+                                                        <input type="checkbox" name="cfg-grid-field" data-tab-id="${escapeHtml(tg.id)}" data-tab-title="${escapeHtml(tg.title)}" value="${escapeHtml(f.id)}" ${tgIdx === 0 && i < 6 ? 'checked' : ''} class="rounded text-primary focus:ring-0 shrink-0" />
+                                                        <div class="flex flex-col min-w-0 flex-1">
+                                                            <div class="flex items-center gap-1.5">
+                                                                <span class="truncate font-medium text-slate-800 dark:text-slate-200" title="${escapeHtml(f.label)}">${escapeHtml(f.label)}</span>
+                                                                ${f.condition ? `
+                                                                    <span class="text-[9px] text-amber-700 dark:text-amber-300 bg-amber-100/70 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700/60 px-1 py-0.2 rounded font-mono shrink-0" title="Condicionado a: ${escapeHtml(f.condition)} = ${escapeHtml(f.condValue || '')}">Condicional</span>
+                                                                ` : ''}
+                                                            </div>
+                                                        </div>
+                                                    </label>
+                                                    <div class="flex items-center gap-1 shrink-0">
+                                                        <span class="text-[9px] font-mono text-slate-400 uppercase">${escapeHtml(f.type || 'text')}</span>
+                                                        <button type="button" 
+                                                                onclick="ReportBuilder.quickAddFieldToExistingGrid('${escapeHtml(f.id)}', event)" 
+                                                                class="px-1.5 py-0.5 bg-sky-100 hover:bg-sky-200 dark:bg-sky-900/60 dark:hover:bg-sky-800 text-sky-700 dark:text-sky-300 rounded text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-0.5" 
+                                                                title="Inserir diretamente na Grade de Atributos da Folha A4">
+                                                            <span class="material-symbols-outlined text-[12px] leading-none">add</span>
+                                                            <span>Add</span>
+                                                        </button>
                                                     </div>
                                                 </div>
-                                                <span class="text-[9px] font-mono text-slate-400 uppercase shrink-0">${escapeHtml(f.type || 'text')}</span>
-                                            </label>
-                                        `).join('')}
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-
-                        <!-- Layout Colunas -->
-                        <div class="flex items-center justify-between pt-1">
-                            <label class="text-xs font-bold text-slate-600 dark:text-slate-400">Disposição dos Campos:</label>
-                            <div class="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
-                                <button type="button" id="btn-col-2" onclick="ReportBuilder.selectGridColumns(2)" class="px-2.5 py-1 rounded-md text-xs font-bold bg-primary text-white shadow-xs">2 Colunas</button>
-                                <button type="button" id="btn-col-3" onclick="ReportBuilder.selectGridColumns(3)" class="px-2.5 py-1 rounded-md text-xs font-bold text-slate-500 hover:text-primary">3 Colunas</button>
-                                <button type="button" id="btn-col-1" onclick="ReportBuilder.selectGridColumns(1)" class="px-2.5 py-1 rounded-md text-xs font-bold text-slate-500 hover:text-primary">Lista 1 Col</button>
-                            </div>
-                        </div>
-
-                        <button type="button" onclick="ReportBuilder.insertGridBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
-                            <span class="material-symbols-outlined text-[16px]">add_circle</span> Inserir Grade na Folha
-                        </button>
-                    </div>
-                `
-            })}
-
-            <!-- CARD 3: MINI-MAPA CARTOGRÁFICO (RECURSOS AVANÇADOS) -->
-            ${renderAccordionCard({
-                id: 'acc-map',
-                title: 'Mini-Mapa Cartográfico (SIG)',
-                icon: 'map',
-                badge: 'Precisão Cartográfica',
-                content: `
-                    <div class="flex flex-col gap-3">
-                        <!-- Seletor de Modo: Atual vs Temporal Ortofotos -->
-                        <div class="flex flex-col gap-1.5">
-                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Modo de Visualização Cartográfica</label>
-                            <div class="grid grid-cols-2 gap-2">
-                                <button type="button" id="btn-map-mode-current" onclick="ReportBuilder.selectMapMode('atual')" class="p-2 rounded-xl border text-xs font-bold text-center transition-all bg-primary text-white border-primary shadow-xs cursor-pointer">
-                                    Mapa Estático Atual
-                                </button>
-                                <button type="button" id="btn-map-mode-temporal" onclick="ReportBuilder.selectMapMode('temporal')" class="p-2 rounded-xl border text-xs font-bold text-center transition-all bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer">
-                                    Série Multitemporal
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Opções Específicas do Modo Temporal -->
-                        <div id="cfg-map-temporal-options" class="hidden p-3 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl flex flex-col gap-2">
-                            <div class="flex items-center gap-1.5 text-xs font-bold text-amber-900 dark:text-amber-200">
-                                <span class="material-symbols-outlined text-[16px]">history_toggle_subpath</span>
-                                <span>Sequência Cronológica Decrescente</span>
-                            </div>
-                            <p class="text-[11px] text-amber-800/80 dark:text-amber-300/80">Identifica ortofotos sobrepostas com datas distintas e gera quadros comparativos do mais recente para o mais antigo, com o vetor destacado em cada um.</p>
-                            <label class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer pt-1">
-                                <input type="checkbox" id="cfg-map-temporal-highlight" checked class="rounded text-primary focus:ring-0" />
-                                <span>Destacar polígono vetorizado com cota em cada voo</span>
-                            </label>
-                        </div>
-
-                        <!-- Elementos de Medição e Cartografia -->
-                        <div class="flex flex-col gap-1.5 pt-1">
-                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Elementos Cartográficos e Medições</label>
-                            <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
-                                    <input type="checkbox" id="cfg-map-cotas" checked class="rounded text-primary focus:ring-0" />
-                                    <span class="font-semibold text-emerald-700 dark:text-emerald-400">Cotas perimetrais (comprimento dos lados em metros)</span>
-                                </label>
-                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
-                                    <input type="checkbox" id="cfg-map-area" checked class="rounded text-primary focus:ring-0" />
-                                    <span>Cálculo automático de Área Total (m² e hectares)</span>
-                                </label>
-                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
-                                    <input type="checkbox" id="cfg-map-norte" checked class="rounded text-primary focus:ring-0" />
-                                    <span>Rosa dos Ventos (Seta de Norte Verdadeiro)</span>
-                                </label>
-                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
-                                    <input type="checkbox" id="cfg-map-escala" checked class="rounded text-primary focus:ring-0" />
-                                    <span>Barra de Escala Gráfica e Datum SIRGAS 2000 UTM</span>
-                                </label>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1">Anotações Técnicas / Nota Cartográfica</label>
-                            <input type="text" id="cfg-map-note" value="Delimitação cadastral georreferenciada em conformidade com o sistema cartográfico municipal e SIRGAS 2000." class="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl" />
-                        </div>
-
-                        <button type="button" onclick="ReportBuilder.insertMapBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
-                            <span class="material-symbols-outlined text-[16px]">add_circle</span> Inserir Mini-Mapa na Folha
-                        </button>
-                    </div>
-                `
-            })}
-
-            <!-- CARD 4: GRÁFICOS DO DASHBOARD -->
-            ${renderAccordionCard({
-                id: 'acc-charts',
-                title: 'Gráficos do Dashboard',
-                icon: 'pie_chart',
-                badge: `${charts.length} disponíveis`,
-                content: `
-                    <div class="flex flex-col gap-3">
-                        <p class="text-[11px] text-slate-500">Selecione quais gráficos do Dashboard Estatístico você deseja embutir neste relatório:</p>
-                        ${charts.length === 0 ? `
-                            <div class="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center text-xs text-slate-400">
-                                Nenhum gráfico criado na aba "Dashboard Estatístico" ainda. Crie gráficos lá para embuti-los no relatório.
-                            </div>
-                        ` : `
-                            <div class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
-                                ${charts.map((c, i) => `
-                                    <label class="flex items-center gap-2.5 p-2 bg-slate-50 dark:bg-slate-900/50 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs cursor-pointer">
-                                        <input type="checkbox" name="cfg-chart-select" value="${c.id}" ${i === 0 ? 'checked' : ''} class="rounded text-primary focus:ring-0" />
-                                        <div class="flex flex-col min-w-0 flex-1">
-                                            <span class="font-bold text-slate-800 dark:text-slate-200 truncate">${c.title}</span>
-                                            <span class="text-[10px] text-slate-400 font-mono">Tipo: ${c.type.toUpperCase()} • Campo: ${c.fieldLabel}</span>
+                                            `).join('')}
                                         </div>
-                                    </label>
+                                    </div>
                                 `).join('')}
                             </div>
+
+                            <!-- Layout Colunas -->
                             <div class="flex items-center justify-between pt-1">
-                                <label class="text-xs font-bold text-slate-600 dark:text-slate-400">Disposição na Folha:</label>
+                                <label class="text-xs font-bold text-slate-600 dark:text-slate-400">Disposição dos Campos:</label>
                                 <div class="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
-                                    <button type="button" id="btn-chart-layout-full" onclick="ReportBuilder.selectChartLayout('full')" class="px-3 py-1 rounded-md text-xs font-bold bg-primary text-white shadow-xs">Largura Total</button>
-                                    <button type="button" id="btn-chart-layout-side" onclick="ReportBuilder.selectChartLayout('side')" class="px-3 py-1 rounded-md text-xs font-bold text-slate-500 hover:text-primary">Lado a Lado (2)</button>
+                                    <button type="button" id="btn-col-2" onclick="ReportBuilder.selectGridColumns(2)" class="px-2.5 py-1 rounded-md text-xs font-bold bg-primary text-white shadow-xs">2 Colunas</button>
+                                    <button type="button" id="btn-col-3" onclick="ReportBuilder.selectGridColumns(3)" class="px-2.5 py-1 rounded-md text-xs font-bold text-slate-500 hover:text-primary">3 Colunas</button>
+                                    <button type="button" id="btn-col-1" onclick="ReportBuilder.selectGridColumns(1)" class="px-2.5 py-1 rounded-md text-xs font-bold text-slate-500 hover:text-primary">Lista 1 Col</button>
                                 </div>
                             </div>
-                        `}
-                        <button type="button" onclick="ReportBuilder.insertChartBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
-                            <span class="material-symbols-outlined text-[16px]">add_circle</span> Inserir Gráficos na Folha
-                        </button>
-                    </div>
-                `
-            })}
+
+                            <!-- Ações: Adicionar à Grade Existente vs Criar Nova Grade -->
+                            ${hasExistingGrid ? `
+                                <div class="flex flex-col gap-1.5 mt-1">
+                                    <button type="button" onclick="ReportBuilder.addSelectedFieldsToExistingGrid()" class="w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                                        <span class="material-symbols-outlined text-[16px]">playlist_add</span> Inserir Selecionados na Grade da Folha
+                                    </button>
+                                    <button type="button" onclick="ReportBuilder.insertGridBlock()" class="w-full py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                                        <span class="material-symbols-outlined text-[15px]">add_circle</span> Criar Nova Grade Separada
+                                    </button>
+                                </div>
+                            ` : `
+                                <button type="button" onclick="ReportBuilder.insertGridBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
+                                    <span class="material-symbols-outlined text-[16px]">add_circle</span> Inserir Grade na Folha
+                                </button>
+                            `}
+                        </div>
+                    `
+                });
+            })()}
 
             <!-- CARD 5: PAINEL DE KPIS / MÉDIAS ESTATÍSTICAS -->
             ${renderAccordionCard({
@@ -665,28 +722,74 @@
                 `
             })}
 
-            <!-- CARD 6: VISTORIA FOTOGRÁFICA & ANEXOS 1:N (REFORMULADO) -->
+            <!-- CARD 6: QUADRO ANALÍTICO E SINTÉTICO -->
             ${renderAccordionCard({
                 id: 'acc-photos',
-                title: 'Vistoria Fotográfica & Anexos (1:N)',
+                title: 'Quadro Analítico e Sintético',
                 icon: 'photo_library',
-                badge: multipleTabs.length > 0 ? `${multipleTabs.length} Abas 1:N` : '1:N Multianexos',
+                badge: tabsFor1n.length > 0 ? `${tabsFor1n.length} Abas` : 'Analítico & Sintético',
                 content: `
                     <div class="flex flex-col gap-3.5">
-                        <!-- 1. SELEÇÃO DA ABA 1:N (FONTE DOS DADOS) -->
+                        <!-- 1. SELEÇÃO DA ABA FONTE (OU HISTÓRICO CONSOLIDADO) -->
                         <div>
                             <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Fonte dos Dados 1:N (Aba de Vistorias)</label>
                             <select id="cfg-1n-source-tab" onchange="ReportBuilder.on1nSourceTabChange(this.value)" class="w-full px-3 py-2 text-xs font-semibold bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-1 focus:ring-primary focus:outline-none dark:text-white">
-                                <option value="consolidado">🌐 Todas as Vistorias (Histórico Consolidado 1:N)</option>
-                                ${multipleTabs.map(t => `
-                                    <option value="${escapeHtml(t.id)}">📋 Aba: ${escapeHtml(t.title)}</option>
+                                <option value="consolidado" ${selected1nSourceTab === 'consolidado' ? 'selected' : ''}>🌐 Todas as Vistorias (Histórico Consolidado 1:N)</option>
+                                ${tabsFor1n.map(t => `
+                                    <option value="${escapeHtml(t.id)}" ${selected1nSourceTab === t.id ? 'selected' : ''}>📋 Aba: ${escapeHtml(t.title)}</option>
                                 `).join('')}
                             </select>
                             <p class="text-[10px] text-slate-400 mt-1">Selecione uma aba 1:N específica ou o histórico consolidado de todas as vistorias.</p>
                         </div>
 
-                        <!-- SEÇÃO A: TABELA SINTÉTICA (QUADRO CRONOLÓGICO 1:N) -->
-                        <div class="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2.5">
+                        <!-- 2. CONTROLE DE ORDENAÇÃO: TEMPORAL E POR ABA -->
+                        <div class="p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col gap-2">
+                            <div class="flex items-center justify-between">
+                                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Ordenação dos Registros</label>
+                                <span class="text-[9px] font-mono text-primary font-bold">1:N Timeline</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-1.5">
+                                <button type="button" id="btn-1n-sort-desc" onclick="ReportBuilder.set1nSortOrder('desc')" class="py-1.5 px-2 rounded-lg border text-xs font-bold text-center transition-all ${current1nSortOrder === 'desc' ? 'bg-primary text-white border-primary shadow-xs' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 cursor-pointer'}">
+                                    Mais Recente → Antigo
+                                </button>
+                                <button type="button" id="btn-1n-sort-asc" onclick="ReportBuilder.set1nSortOrder('asc')" class="py-1.5 px-2 rounded-lg border text-xs font-bold text-center transition-all ${current1nSortOrder === 'asc' ? 'bg-primary text-white border-primary shadow-xs' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 cursor-pointer'}">
+                                    Mais Antigo → Recente
+                                </button>
+                            </div>
+                            <label class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer pt-1 border-t border-slate-200 dark:border-slate-700">
+                                <input type="checkbox" id="cfg-1n-group-by-tab" onchange="ReportBuilder.set1nGroupByTab(this.checked)" ${current1nGroupByTab ? 'checked' : ''} class="rounded text-primary focus:ring-0" />
+                                <span class="font-semibold">Ordenar e Agrupar Registros por Aba</span>
+                            </label>
+                            ${current1nGroupByTab ? `
+                                <div class="mt-1.5 p-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 flex flex-col gap-1.5" id="cfg-1n-tab-sequence-container">
+                                    <div class="flex items-center justify-between">
+                                        <label class="text-[9.5px] font-bold uppercase text-slate-500">Sequência das Abas no Relatório:</label>
+                                        <span class="text-[9px] text-slate-400 font-mono">Use ↑ ↓</span>
+                                    </div>
+                                    <div class="space-y-1" id="cfg-1n-tab-sequence-list">
+                                        ${orderedTabs.map((t, idx) => `
+                                            <div class="flex items-center justify-between p-1.5 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700 text-xs">
+                                                <div class="flex items-center gap-1.5 min-w-0">
+                                                    <span class="w-4 h-4 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center shrink-0">${idx + 1}</span>
+                                                    <span class="font-semibold text-slate-800 dark:text-slate-200 truncate">${escapeHtml(t.title)}</span>
+                                                </div>
+                                                <div class="flex items-center gap-0.5 shrink-0">
+                                                    <button type="button" onclick="ReportBuilder.move1nTabSequence(${idx}, -1)" ${idx === 0 ? 'disabled' : ''} class="p-0.5 text-slate-500 hover:text-primary disabled:opacity-30 cursor-pointer" title="Mover para cima">
+                                                        <span class="material-symbols-outlined text-[14px]">arrow_upward</span>
+                                                    </button>
+                                                    <button type="button" onclick="ReportBuilder.move1nTabSequence(${idx}, 1)" ${idx === orderedTabs.length - 1 ? 'disabled' : ''} class="p-0.5 text-slate-500 hover:text-primary disabled:opacity-30 cursor-pointer" title="Mover para baixo">
+                                                        <span class="material-symbols-outlined text-[14px]">arrow_downward</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+
+                        <!-- 1. TABELA SINTÉTICA (CRONOLÓGICA 1:N) - POSICIONADA LOGO ABAIXO DE ORDENAÇÃO DOS REGISTROS -->
+                        <div class="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
                             <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-1.5">
                                 <span class="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                                     <span class="material-symbols-outlined text-[16px] text-sky-600">table_rows</span>
@@ -694,38 +797,149 @@
                                 </span>
                                 <span class="text-[9px] font-mono bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 px-1.5 py-0.5 rounded font-bold">1:N Resumo</span>
                             </div>
-                            
-                            <label class="text-[10px] font-bold uppercase text-slate-500 block">Colunas da Tabela Sintética:</label>
-                            <div class="grid grid-cols-2 gap-1.5 text-xs text-slate-700 dark:text-slate-300" id="cfg-1n-syn-cols-container">
-                                <label class="flex items-center gap-1.5 cursor-pointer">
-                                    <input type="checkbox" name="cfg-1n-syn-col" value="data" checked class="rounded text-primary focus:ring-0" />
-                                    <span>Data da Vistoria</span>
-                                </label>
-                                <label class="flex items-center gap-1.5 cursor-pointer">
-                                    <input type="checkbox" name="cfg-1n-syn-col" value="org" checked class="rounded text-primary focus:ring-0" />
-                                    <span>Órgão / Entidade</span>
-                                </label>
-                                <label class="flex items-center gap-1.5 cursor-pointer">
-                                    <input type="checkbox" name="cfg-1n-syn-col" value="situacao_ocupacao" checked class="rounded text-primary focus:ring-0" />
-                                    <span>Situação Ocupação</span>
-                                </label>
-                                <label class="flex items-center gap-1.5 cursor-pointer">
-                                    <input type="checkbox" name="cfg-1n-syn-col" value="situacao_recuo" checked class="rounded text-primary focus:ring-0" />
-                                    <span>Situação Recuo</span>
-                                </label>
-                                <label class="flex items-center gap-1.5 cursor-pointer">
-                                    <input type="checkbox" name="cfg-1n-syn-col" value="area_invadida" checked class="rounded text-primary focus:ring-0" />
-                                    <span>Área Invadida (m²)</span>
-                                </label>
-                                <label class="flex items-center gap-1.5 cursor-pointer">
-                                    <input type="checkbox" name="cfg-1n-syn-col" value="qtd_fotos" checked class="rounded text-primary focus:ring-0" />
-                                    <span>Qtd de Fotos</span>
-                                </label>
+
+                            <!-- DENSIDADE DA TABELA -->
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Densidade & Espaçamento da Tabela:</label>
+                                <div class="grid grid-cols-3 gap-1">
+                                    <button type="button" id="btn-1n-density-comfortable" onclick="ReportBuilder.set1nTableDensity('comfortable')" class="py-1 px-1.5 rounded-lg border text-[10.5px] font-semibold text-center ${activeDensity === 'comfortable' ? 'bg-primary/10 text-primary border-primary font-bold' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">Confortável</button>
+                                    <button type="button" id="btn-1n-density-compact" onclick="ReportBuilder.set1nTableDensity('compact')" class="py-1 px-1.5 rounded-lg border text-[10.5px] font-semibold text-center ${activeDensity === 'compact' ? 'bg-primary/10 text-primary border-primary font-bold' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">Compacto</button>
+                                    <button type="button" id="btn-1n-density-ultracompact" onclick="ReportBuilder.set1nTableDensity('ultracompact')" class="py-1 px-1.5 rounded-lg border text-[10.5px] font-semibold text-center ${activeDensity === 'ultracompact' ? 'bg-primary/10 text-primary border-primary font-bold' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">Ultra-Compacto</button>
+                                </div>
                             </div>
 
-                            <button type="button" onclick="ReportBuilder.insertSynthetic1nBlock()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer">
-                                <span class="material-symbols-outlined text-[16px]">add_circle</span> Inserir Tabela Sintética na Folha
-                            </button>
+                            <!-- CORES DAS LINHAS / ZEBRADO -->
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Cores Alternadas por Linha (Zebrado):</label>
+                                <div class="grid grid-cols-2 gap-1">
+                                    <button type="button" id="btn-1n-striping-slate" onclick="ReportBuilder.set1nRowStriping('slate')" class="py-1 px-1.5 rounded-lg border text-[10px] font-semibold text-center ${activeStriping === 'slate' ? 'bg-primary/10 text-primary border-primary font-bold' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">Cinza Suave</button>
+                                    <button type="button" id="btn-1n-striping-sky" onclick="ReportBuilder.set1nRowStriping('sky')" class="py-1 px-1.5 rounded-lg border text-[10px] font-semibold text-center ${activeStriping === 'sky' ? 'bg-primary/10 text-primary border-primary font-bold' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">Azul Suave</button>
+                                    <button type="button" id="btn-1n-striping-ente" onclick="ReportBuilder.set1nRowStriping('ente')" class="py-1 px-1.5 rounded-lg border text-[10px] font-semibold text-center ${activeStriping === 'ente' ? 'bg-primary/10 text-primary border-primary font-bold' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">Tons por Ente/Aba</button>
+                                    <button type="button" id="btn-1n-striping-white" onclick="ReportBuilder.set1nRowStriping('white')" class="py-1 px-1.5 rounded-lg border text-[10px] font-semibold text-center ${activeStriping === 'white' ? 'bg-primary/10 text-primary border-primary font-bold' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">Branco Simples</button>
+                                </div>
+                            </div>
+
+                            <!-- ABAS E CAMPOS DA TABELA SINTÉTICA COM SELEÇÃO E ATALHO [+ ADD] -->
+                            <div class="flex flex-col gap-2 pt-1 border-t border-slate-200 dark:border-slate-700">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-[10px] font-bold uppercase text-sky-800 dark:text-sky-400">Abas e Campos Disponíveis:</label>
+                                    <div class="flex items-center gap-1.5">
+                                        <button type="button" onclick="ReportBuilder.toggleAll1nFieldsInDrawer(true)" class="text-[10px] font-bold text-sky-600 hover:underline cursor-pointer">Todos</button>
+                                        <span class="text-slate-300">|</span>
+                                        <button type="button" onclick="ReportBuilder.toggleAll1nFieldsInDrawer(false)" class="text-[10px] font-bold text-slate-400 hover:underline cursor-pointer">Nenhum</button>
+                                    </div>
+                                </div>
+
+                                <!-- Busca Rápida de Campo 1:N -->
+                                <div class="relative">
+                                    <span class="material-symbols-outlined absolute left-2.5 top-2.5 text-[15px] text-slate-400">search</span>
+                                    <input type="text" id="cfg-1n-search-input" oninput="ReportBuilder.filter1nFieldsInDrawer(this.value)" placeholder="Buscar campo 1:N por nome..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-1 focus:ring-sky-500 focus:outline-none dark:text-white" />
+                                </div>
+
+                                <!-- Lista de Abas com seus Campos -->
+                                <div class="max-h-60 overflow-y-auto space-y-2 p-1 bg-white/80 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 custom-scrollbar" id="cfg-1n-tabs-container">
+                                    ${(() => {
+                                        const existingSynthetic1nBlock = currentTemplate?.blocos?.find(b => b.tipo === 'tabela_sintetica_1n');
+                                        if (current1nSynSelectedTabs.size === 0) {
+                                            if (existingSynthetic1nBlock?.abas_selecionadas && Array.isArray(existingSynthetic1nBlock.abas_selecionadas) && existingSynthetic1nBlock.abas_selecionadas.length > 0) {
+                                                existingSynthetic1nBlock.abas_selecionadas.forEach(id => current1nSynSelectedTabs.add(id));
+                                            } else if (tabsFor1n.length > 0) {
+                                                tabsFor1n.forEach(t => current1nSynSelectedTabs.add(t.id));
+                                            }
+                                        }
+
+                                        if (current1nSelectedFieldKeys.size === 0 && tabsFor1n.length > 0) {
+                                            const firstTab = tabsFor1n[0];
+                                            const firstTabFields = (firstTab.fields && firstTab.fields.length > 0) ? firstTab.fields : (tabGroupsMap.get(firstTab.id)?.fields || []);
+                                            firstTabFields.slice(0, 6).forEach(f => {
+                                                current1nSelectedFieldKeys.add(`${firstTab.id}:${f.id}`);
+                                            });
+                                        }
+                                        return tabsFor1n.map((t, tIdx) => {
+                                            const tFields = (t.fields && t.fields.length > 0) ? t.fields : (tabGroupsMap.get(t.id)?.fields || []);
+                                            const isTabChecked = current1nSynSelectedTabs.has(t.id);
+                                            return `
+                                                <div class="cfg-1n-tab-section border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800/80 overflow-hidden shadow-2xs" data-tab-title="${escapeHtml(t.title.toLowerCase())}">
+                                                    <div class="bg-slate-100/90 dark:bg-slate-700/60 px-2.5 py-1.5 flex items-center justify-between border-b border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-200/60 transition-colors select-none" onclick="ReportBuilder.toggleAccordionTab('cfg-tab-fields-syn-${escapeHtml(t.id)}')">
+                                                        <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                                                            <span class="material-symbols-outlined text-[16px] text-slate-500 transition-transform" id="cfg-tab-fields-syn-${escapeHtml(t.id)}-icon">${tIdx === 0 ? 'expand_more' : 'chevron_right'}</span>
+                                                            <label class="flex items-center gap-1.5 cursor-pointer shrink-0" onclick="event.stopPropagation()">
+                                                                <input type="checkbox" name="cfg-1n-syn-tab-select" data-tab-id="${escapeHtml(t.id)}" onchange="ReportBuilder.on1nSynTabSelectChange(this)" ${isTabChecked ? 'checked' : ''} class="rounded text-sky-600 focus:ring-0 shrink-0 cursor-pointer" title="Marcar para incluir esta aba na Tabela Sintética" />
+                                                            </label>
+                                                            <span class="material-symbols-outlined text-[15px] text-amber-500">folder</span>
+                                                            <span class="text-xs font-bold text-slate-800 dark:text-white uppercase truncate" title="${escapeHtml(t.title)}">${escapeHtml(t.title)}</span>
+                                                            <span class="text-[9px] font-mono text-slate-500 bg-slate-200/80 dark:bg-slate-800 px-1.5 py-0.2 rounded-full">${tFields.length}</span>
+                                                        </div>
+                                                        <div class="flex items-center gap-1 shrink-0" onclick="event.stopPropagation()">
+                                                            <button type="button" onclick="ReportBuilder.toggleTab1nFieldsInDrawer('${escapeHtml(t.id)}', true)" class="text-[9.5px] font-bold text-primary hover:underline cursor-pointer">Todos</button>
+                                                            <span class="text-slate-300 text-[10px]">|</span>
+                                                            <button type="button" onclick="ReportBuilder.toggleTab1nFieldsInDrawer('${escapeHtml(t.id)}', false)" class="text-[9.5px] font-bold text-slate-400 hover:underline cursor-pointer">Nenhum</button>
+                                                        </div>
+                                                    </div>
+                                                    <div class="p-1 space-y-0.5 ${tIdx === 0 ? '' : 'hidden'}" id="cfg-tab-fields-syn-${escapeHtml(t.id)}">
+                                                        ${tFields.map((f, fIdx) => {
+                                                            const fKey = `${t.id}:${f.id}`;
+                                                            const isChecked = current1nSelectedFieldKeys.has(fKey);
+                                                            return `
+                                                                <div class="cfg-1n-field-item flex items-center justify-between gap-1.5 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 text-xs text-slate-700 dark:text-slate-300 transition-colors" data-field-label="${escapeHtml(f.label.toLowerCase())}" data-tab-id="${escapeHtml(t.id)}">
+                                                                    <label class="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
+                                                                        <input type="checkbox" name="cfg-1n-field" data-tab-id="${escapeHtml(t.id)}" data-tab-title="${escapeHtml(t.title)}" data-field-label="${escapeHtml(f.label)}" value="${escapeHtml(f.id)}" onchange="ReportBuilder.on1nFieldCheckboxChange(this)" ${isChecked ? 'checked' : ''} class="rounded text-primary focus:ring-0 shrink-0 cursor-pointer" />
+                                                                    <span class="truncate font-medium text-slate-800 dark:text-slate-200" title="${escapeHtml(f.label)}">${escapeHtml(f.label)}</span>
+                                                                </label>
+                                                                <div class="flex items-center gap-1 shrink-0">
+                                                                    <span class="text-[9px] font-mono text-slate-400 uppercase">${escapeHtml(f.type || 'text')}</span>
+                                                                    <button type="button" 
+                                                                            onclick="ReportBuilder.quickAddFieldTo1n('${escapeHtml(t.id)}', '${escapeHtml(f.id)}', 'sintetica', event)" 
+                                                                            class="px-1.5 py-0.5 bg-sky-100 hover:bg-sky-200 dark:bg-sky-900/60 dark:hover:bg-sky-800 text-sky-800 dark:text-sky-200 rounded text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-0.5" 
+                                                                            title="Inserir diretamente na Tabela Sintética da Folha A4">
+                                                                        <span class="material-symbols-outlined text-[12px] leading-none">add</span>
+                                                                        <span>Add</span>
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        `;
+                                                    }).join('')}
+                                                </div>
+                                            </div>
+                                        `;
+                                    }).join('');
+                                })()}
+                                </div>
+                            </div>
+
+                            <!-- Container oculto de compatibilidade QA -->
+                            <div id="cfg-1n-syn-cols-container" class="hidden">
+                                <input type="checkbox" name="cfg-1n-syn-col" value="data" checked />
+                                <input type="checkbox" name="cfg-1n-syn-col" value="org" checked />
+                                <input type="checkbox" name="cfg-1n-syn-col" value="situacao_ocupacao" checked />
+                                <input type="checkbox" name="cfg-1n-syn-col" value="situacao_recuo" checked />
+                                <input type="checkbox" name="cfg-1n-syn-col" value="area_invadida" checked />
+                                <input type="checkbox" name="cfg-1n-syn-col" value="qtd_fotos" checked />
+                            </div>
+
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400">Gera colunas baseadas estritamente nos campos selecionados das abas ativas acima.</p>
+
+                            ${hasExistingSynthetic1n ? `
+                                <div class="p-2 bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 rounded-xl flex items-center justify-between text-xs">
+                                    <div class="flex items-center gap-1.5 min-w-0">
+                                        <span class="material-symbols-outlined text-sky-600 text-[18px]">check_circle</span>
+                                        <span class="font-bold text-sky-900 dark:text-sky-200 truncate">Tabela ativa na Folha A4 (${activeSyntheticColCount} colunas)</span>
+                                    </div>
+                                    <span class="text-[10px] font-mono text-sky-700 dark:text-sky-300 font-bold bg-sky-100 dark:bg-sky-900 px-2 py-0.5 rounded">Pronta</span>
+                                </div>
+                                <div class="flex flex-col gap-1.5">
+                                    <button type="button" onclick="ReportBuilder.addSelectedFieldsToExistingSynthetic1n()" class="w-full py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                                        <span class="material-symbols-outlined text-[16px]">playlist_add</span> Inserir Selecionados na Tabela da Folha
+                                    </button>
+                                    <button type="button" onclick="ReportBuilder.insertSynthetic1nBlock()" class="w-full py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                                        <span class="material-symbols-outlined text-[15px]">add_circle</span> Criar Nova Tabela Separada
+                                    </button>
+                                </div>
+                            ` : `
+                                <button type="button" onclick="ReportBuilder.insertSynthetic1nBlock()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                                    <span class="material-symbols-outlined text-[16px]">add_circle</span> Inserir Tabela Sintética na Folha
+                                </button>
+                            `}
                         </div>
 
                         <!-- SEÇÃO B: LAUDO ANALÍTICO & CADERNO FOTOGRÁFICO 1:N -->
@@ -742,8 +956,8 @@
                             <div>
                                 <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1">Escopo das Vistorias a Detalhar:</label>
                                 <div class="grid grid-cols-2 gap-1.5">
-                                    <button type="button" id="btn-1n-scope-all" onclick="ReportBuilder.select1nScope('todas')" class="py-1.5 px-2 rounded-lg border text-xs font-bold text-center bg-primary/10 text-primary border-primary cursor-pointer">Todas as Vistorias</button>
-                                    <button type="button" id="btn-1n-scope-last" onclick="ReportBuilder.select1nScope('ultima')" class="py-1.5 px-2 rounded-lg border text-xs font-semibold text-center bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 cursor-pointer">Apenas Última Vistoria</button>
+                                    <button type="button" id="btn-1n-scope-all" onclick="ReportBuilder.select1nScope('todas')" class="py-1.5 px-2 rounded-lg border text-xs font-bold text-center ${selected1nScope === 'todas' ? 'bg-primary/10 text-primary border-primary' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">Todas as Vistorias</button>
+                                    <button type="button" id="btn-1n-scope-last" onclick="ReportBuilder.select1nScope('ultima')" class="py-1.5 px-2 rounded-lg border text-xs font-semibold text-center ${selected1nScope === 'ultima' ? 'bg-primary/10 text-primary border-primary' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">Apenas Última Vistoria</button>
                                 </div>
                             </div>
 
@@ -751,9 +965,30 @@
                             <div>
                                 <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1">Disposição Visual das Fotos:</label>
                                 <div class="grid grid-cols-3 gap-1.5">
-                                    <button type="button" id="btn-photo-layout-1" onclick="ReportBuilder.selectPhotoLayout('1_col')" class="py-1.5 px-2 rounded-lg border text-xs font-semibold text-center bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 cursor-pointer">1 por Linha</button>
-                                    <button type="button" id="btn-photo-layout-2" onclick="ReportBuilder.selectPhotoLayout('2_cols')" class="py-1.5 px-2 rounded-lg border text-xs font-bold text-center bg-primary/10 text-primary border-primary cursor-pointer">2 por Linha</button>
-                                    <button type="button" id="btn-photo-layout-4" onclick="ReportBuilder.selectPhotoLayout('grid_4')" class="py-1.5 px-2 rounded-lg border text-xs font-semibold text-center bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 cursor-pointer">Grade 2x2</button>
+                                    <button type="button" id="btn-photo-layout-1" onclick="ReportBuilder.selectPhotoLayout('1_col')" class="py-1.5 px-2 rounded-lg border text-xs font-semibold text-center ${selectedPhotoLayout === '1_col' ? 'bg-primary/10 text-primary border-primary font-bold' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">1 por Linha</button>
+                                    <button type="button" id="btn-photo-layout-2" onclick="ReportBuilder.selectPhotoLayout('2_cols')" class="py-1.5 px-2 rounded-lg border text-xs text-center ${selectedPhotoLayout === '2_cols' ? 'bg-primary/10 text-primary border-primary font-bold' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">2 por Linha</button>
+                                    <button type="button" id="btn-photo-layout-4" onclick="ReportBuilder.selectPhotoLayout('grid_4')" class="py-1.5 px-2 rounded-lg border text-xs font-semibold text-center ${selectedPhotoLayout === 'grid_4' ? 'bg-primary/10 text-primary border-primary font-bold' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">Grade 2x2</button>
+                                </div>
+                            </div>
+
+                            <!-- DENSIDADE & ESPAÇAMENTO DO LAUDO -->
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Densidade & Espaçamento do Laudo:</label>
+                                <div class="grid grid-cols-3 gap-1">
+                                    <button type="button" id="btn-1n-laudo-density-comfortable" onclick="ReportBuilder.set1nLaudoDensity('comfortable')" class="py-1 px-1.5 rounded-lg border text-[10.5px] font-semibold text-center ${activeLaudoDensity === 'comfortable' ? 'bg-amber-500/10 text-amber-700 border-amber-500 font-bold dark:text-amber-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">Confortável</button>
+                                    <button type="button" id="btn-1n-laudo-density-compact" onclick="ReportBuilder.set1nLaudoDensity('compact')" class="py-1 px-1.5 rounded-lg border text-[10.5px] font-semibold text-center ${activeLaudoDensity === 'compact' ? 'bg-amber-500/10 text-amber-700 border-amber-500 font-bold dark:text-amber-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">Compacto</button>
+                                    <button type="button" id="btn-1n-laudo-density-ultracompact" onclick="ReportBuilder.set1nLaudoDensity('ultracompact')" class="py-1 px-1.5 rounded-lg border text-[10.5px] font-semibold text-center ${activeLaudoDensity === 'ultracompact' ? 'bg-amber-500/10 text-amber-700 border-amber-500 font-bold dark:text-amber-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">Ultra-Compacto</button>
+                                </div>
+                            </div>
+
+                            <!-- CORES DOS CARTÕES / ZEBRADO DO LAUDO -->
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Cores dos Cartões de Vistoria (Zebrado):</label>
+                                <div class="grid grid-cols-2 gap-1">
+                                    <button type="button" id="btn-1n-laudo-striping-slate" onclick="ReportBuilder.set1nLaudoRowStriping('slate')" class="py-1 px-1.5 rounded-lg border text-[10px] font-semibold text-center ${activeLaudoStriping === 'slate' ? 'bg-amber-500/10 text-amber-700 border-amber-500 font-bold dark:text-amber-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">Cinza Suave</button>
+                                    <button type="button" id="btn-1n-laudo-striping-sky" onclick="ReportBuilder.set1nLaudoRowStriping('sky')" class="py-1 px-1.5 rounded-lg border text-[10px] font-semibold text-center ${activeLaudoStriping === 'sky' ? 'bg-amber-500/10 text-amber-700 border-amber-500 font-bold dark:text-amber-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">Azul Suave</button>
+                                    <button type="button" id="btn-1n-laudo-striping-ente" onclick="ReportBuilder.set1nLaudoRowStriping('ente')" class="py-1 px-1.5 rounded-lg border text-[10px] font-semibold text-center ${activeLaudoStriping === 'ente' ? 'bg-amber-500/10 text-amber-700 border-amber-500 font-bold dark:text-amber-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">Tons por Ente/Aba</button>
+                                    <button type="button" id="btn-1n-laudo-striping-white" onclick="ReportBuilder.set1nLaudoRowStriping('white')" class="py-1 px-1.5 rounded-lg border text-[10px] font-semibold text-center ${activeLaudoStriping === 'white' ? 'bg-amber-500/10 text-amber-700 border-amber-500 font-bold dark:text-amber-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer">Branco Simples</button>
                                 </div>
                             </div>
 
@@ -777,7 +1012,7 @@
                                 </label>
                                 <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer border-t border-slate-100 dark:border-slate-700 pt-1.5">
                                     <input type="checkbox" id="cfg-photo-obs" checked class="rounded text-primary focus:ring-0" />
-                                    <span>Incluir Relato Técnico / Observação na Íntegra</span>
+                                    <span>Incluir Conclusão da Vistoria na Íntegra</span>
                                 </label>
                                 <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
                                     <input type="checkbox" id="cfg-photo-links" checked class="rounded text-primary focus:ring-0" />
@@ -785,9 +1020,155 @@
                                 </label>
                             </div>
 
-                            <button type="button" onclick="ReportBuilder.insertAnalyticalPhotos1nBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
-                                <span class="material-symbols-outlined text-[16px]">photo_library</span> Inserir Laudo Analítico & Fotos na Folha
-                            </button>
+                            <!-- ABAS E CAMPOS DO LAUDO ANALÍTICO (SELEÇÃO, INSERÇÃO E RETIRADA) -->
+                            <div class="flex flex-col gap-2 pt-1 border-t border-slate-200 dark:border-slate-700">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-[10px] font-bold uppercase text-amber-700 dark:text-amber-400">Abas e Campos do Laudo Analítico:</label>
+                                    <div class="flex items-center gap-1.5">
+                                        <button type="button" onclick="ReportBuilder.toggleAll1nLaudoFieldsInDrawer(true)" class="text-[10px] font-bold text-amber-600 hover:underline cursor-pointer">Todos</button>
+                                        <span class="text-slate-300">|</span>
+                                        <button type="button" onclick="ReportBuilder.toggleAll1nLaudoFieldsInDrawer(false)" class="text-[10px] font-bold text-slate-400 hover:underline cursor-pointer">Nenhum</button>
+                                    </div>
+                                </div>
+
+                                <!-- Busca Rápida de Campo no Laudo -->
+                                <div class="relative">
+                                    <span class="material-symbols-outlined absolute left-2.5 top-2.5 text-[15px] text-slate-400">search</span>
+                                    <input type="text" id="cfg-1n-laudo-search-input" oninput="ReportBuilder.filter1nLaudoFieldsInDrawer(this.value)" placeholder="Buscar campo para o laudo..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none dark:text-white" />
+                                </div>
+
+                                <!-- Lista de Abas com seus Campos para o Laudo -->
+                                <div class="max-h-60 overflow-y-auto space-y-2 p-1 bg-white/80 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 custom-scrollbar" id="cfg-1n-laudo-tabs-container">
+                                    ${(() => {
+                                        // 1. Inicializa abas selecionadas do laudo
+                                        if (current1nLaudoSelectedTabs.size === 0) {
+                                            if (existingAnalytical1nBlock?.abas_selecionadas && Array.isArray(existingAnalytical1nBlock.abas_selecionadas) && existingAnalytical1nBlock.abas_selecionadas.length > 0) {
+                                                existingAnalytical1nBlock.abas_selecionadas.forEach(id => current1nLaudoSelectedTabs.add(id));
+                                            } else if (existingAnalytical1nBlock?.campos_selecionados && Array.isArray(existingAnalytical1nBlock.campos_selecionados) && existingAnalytical1nBlock.campos_selecionados.length > 0) {
+                                                existingAnalytical1nBlock.campos_selecionados.forEach(cf => {
+                                                    const tId = typeof cf === 'object' ? cf.tabId : '';
+                                                    if (tId) current1nLaudoSelectedTabs.add(tId);
+                                                });
+                                            }
+                                            if (current1nLaudoSelectedTabs.size === 0 && tabsFor1n.length > 0) {
+                                                current1nLaudoSelectedTabs.add(tabsFor1n[0].id);
+                                            }
+                                        }
+
+                                        // 2. Inicializa campos selecionados do laudo
+                                        if (current1nLaudoSelectedFieldKeys.size === 0) {
+                                            if (existingAnalytical1nBlock?.campos_selecionados && Array.isArray(existingAnalytical1nBlock.campos_selecionados) && existingAnalytical1nBlock.campos_selecionados.length > 0) {
+                                                existingAnalytical1nBlock.campos_selecionados.forEach(cf => {
+                                                    const cId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
+                                                    const cTab = typeof cf === 'object' ? (cf.tabId || '') : '';
+                                                    if (cTab && cId) {
+                                                        current1nLaudoSelectedFieldKeys.add(`${cTab}:${cId}`);
+                                                    }
+                                                });
+                                            }
+                                            if (current1nLaudoSelectedFieldKeys.size === 0 && current1nLaudoSelectedTabs.size > 0) {
+                                                current1nLaudoSelectedTabs.forEach(selTabId => {
+                                                    const targetTab = tabsFor1n.find(t => t.id === selTabId);
+                                                    const flds = (targetTab && targetTab.fields && targetTab.fields.length > 0) ? targetTab.fields : (tabGroupsMap.get(selTabId)?.fields || []);
+                                                    flds.forEach(f => current1nLaudoSelectedFieldKeys.add(`${selTabId}:${f.id}`));
+                                                });
+                                            }
+                                        }
+
+                                        return tabsFor1n.map((t, tIdx) => {
+                                            const tFields = (t.fields && t.fields.length > 0) ? t.fields : (tabGroupsMap.get(t.id)?.fields || []);
+                                            const isTabChecked = current1nLaudoSelectedTabs.has(t.id);
+
+                                            return `
+                                                <div class="cfg-1n-laudo-tab-section border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800/80 overflow-hidden shadow-2xs" data-tab-title="${escapeHtml(t.title.toLowerCase())}">
+                                                    <div class="bg-amber-50/70 dark:bg-slate-700/60 px-2.5 py-1.5 flex items-center justify-between border-b border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-amber-100/60 transition-colors select-none" onclick="ReportBuilder.toggleAccordionTab('cfg-tab-fields-laudo-${escapeHtml(t.id)}')">
+                                                        <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                                                            <span class="material-symbols-outlined text-[16px] text-slate-500 transition-transform" id="cfg-tab-fields-laudo-${escapeHtml(t.id)}-icon">${tIdx === 0 ? 'expand_more' : 'chevron_right'}</span>
+                                                            <label class="flex items-center gap-1.5 cursor-pointer shrink-0" onclick="event.stopPropagation()">
+                                                                <input type="checkbox" name="cfg-1n-laudo-tab-select" data-tab-id="${escapeHtml(t.id)}" onchange="ReportBuilder.on1nLaudoTabSelectChange(this)" ${isTabChecked ? 'checked' : ''} class="rounded text-amber-600 focus:ring-0 shrink-0 cursor-pointer" title="Marcar para incluir esta aba no Laudo Analítico" />
+                                                            </label>
+                                                            <span class="material-symbols-outlined text-[15px] text-amber-500">folder</span>
+                                                            <span class="text-xs font-bold text-slate-800 dark:text-white uppercase truncate" title="${escapeHtml(t.title)}">${escapeHtml(t.title)}</span>
+                                                            <span class="text-[9px] font-mono text-slate-500 bg-white/80 dark:bg-slate-800 px-1.5 py-0.2 rounded-full">${tFields.length}</span>
+                                                        </div>
+                                                        <div class="flex items-center gap-1 shrink-0" onclick="event.stopPropagation()">
+                                                            <button type="button" onclick="ReportBuilder.toggleTab1nLaudoFieldsInDrawer('${escapeHtml(t.id)}', true)" class="text-[9.5px] font-bold text-amber-600 hover:underline cursor-pointer">Todos</button>
+                                                            <span class="text-slate-300 text-[10px]">|</span>
+                                                            <button type="button" onclick="ReportBuilder.toggleTab1nLaudoFieldsInDrawer('${escapeHtml(t.id)}', false)" class="text-[9.5px] font-bold text-slate-400 hover:underline cursor-pointer">Nenhum</button>
+                                                        </div>
+                                                    </div>
+                                                    <div class="p-1 space-y-0.5 ${tIdx === 0 ? '' : 'hidden'}" id="cfg-tab-fields-laudo-${escapeHtml(t.id)}">
+                                                        ${tFields.map((f, fIdx) => {
+                                                            const fKey = `${t.id}:${f.id}`;
+                                                            const isPresentInActiveBlock = existingAnalytical1nBlock?.campos_selecionados?.some(cf => {
+                                                                const cId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
+                                                                const cTab = typeof cf === 'object' ? (cf.tabId || '') : '';
+                                                                return (cTab === t.id || !cTab) && cId === f.id;
+                                                            });
+                                                            const isChecked = current1nLaudoSelectedFieldKeys.has(fKey);
+                                                            return `
+                                                                <div class="cfg-1n-laudo-field-item flex items-center justify-between gap-1.5 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 text-xs text-slate-700 dark:text-slate-300 transition-colors" data-field-label="${escapeHtml(f.label.toLowerCase())}" data-tab-id="${escapeHtml(t.id)}">
+                                                                    <label class="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
+                                                                        <input type="checkbox" name="cfg-1n-laudo-field" data-tab-id="${escapeHtml(t.id)}" data-tab-title="${escapeHtml(t.title)}" data-field-label="${escapeHtml(f.label)}" value="${escapeHtml(f.id)}" onchange="ReportBuilder.on1nLaudoFieldCheckboxChange(this)" ${isChecked ? 'checked' : ''} class="rounded text-amber-600 focus:ring-0 shrink-0 cursor-pointer" />
+                                                                    <span class="truncate font-medium text-slate-800 dark:text-slate-200" title="${escapeHtml(f.label)}">${escapeHtml(f.label)}</span>
+                                                                </label>
+                                                                <div class="flex items-center gap-1 shrink-0">
+                                                                    <span class="text-[9px] font-mono text-slate-400 uppercase">${escapeHtml(f.type || 'text')}</span>
+                                                                    ${isPresentInActiveBlock ? `
+                                                                        <button type="button" 
+                                                                                onclick="ReportBuilder.quickRemoveFieldFromAnalytical1n('${escapeHtml(t.id)}', '${escapeHtml(f.id)}', event)" 
+                                                                                class="px-1.5 py-0.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900 text-rose-700 dark:text-rose-300 rounded text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-0.5 border border-rose-200 dark:border-rose-800" 
+                                                                                title="Retirar este campo do Laudo da Folha A4">
+                                                                            <span class="material-symbols-outlined text-[12px] leading-none">close</span>
+                                                                            <span>Retirar</span>
+                                                                        </button>
+                                                                    ` : `
+                                                                        <button type="button" 
+                                                                                onclick="ReportBuilder.quickAddFieldToAnalytical1n('${escapeHtml(t.id)}', '${escapeHtml(f.id)}', event)" 
+                                                                                class="px-1.5 py-0.5 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/60 dark:hover:bg-amber-800 text-amber-800 dark:text-amber-200 rounded text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-0.5" 
+                                                                                title="Inserir este campo no Laudo da Folha A4">
+                                                                            <span class="material-symbols-outlined text-[12px] leading-none">add</span>
+                                                                            <span>Inserir</span>
+                                                                        </button>
+                                                                    `}
+                                                                </div>
+                                                            </div>
+                                                        `;
+                                                    }).join('')}
+                                                </div>
+                                            </div>
+                                        `;
+                                    }).join('');
+                                })()}
+                                </div>
+                            </div>
+
+                            ${hasExistingAnalytical1n ? `
+                                <div class="p-2 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center justify-between text-xs">
+                                    <div class="flex items-center gap-1.5 min-w-0">
+                                        <span class="material-symbols-outlined text-amber-600 text-[18px]">check_circle</span>
+                                        <span class="font-bold text-amber-900 dark:text-amber-200 truncate">Laudo ativo na Folha A4 (${activeAnalyticalFieldCount} campos)</span>
+                                    </div>
+                                    <span class="text-[10px] font-mono text-amber-700 dark:text-amber-300 font-bold bg-amber-100 dark:bg-amber-900 px-2 py-0.5 rounded">Pronto</span>
+                                </div>
+                                <div class="flex flex-col gap-1.5">
+                                    <div class="grid grid-cols-2 gap-1.5">
+                                        <button type="button" onclick="ReportBuilder.addSelectedFieldsToExistingAnalytical1n()" class="py-2 px-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1 cursor-pointer" title="Inserir campos marcados no Laudo ativo">
+                                            <span class="material-symbols-outlined text-[15px]">playlist_add</span> Inserir no Laudo
+                                        </button>
+                                        <button type="button" onclick="ReportBuilder.removeSelectedFieldsFromExistingAnalytical1n()" class="py-2 px-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer" title="Retirar campos marcados do Laudo ativo">
+                                            <span class="material-symbols-outlined text-[15px]">remove_circle</span> Retirar do Laudo
+                                        </button>
+                                    </div>
+                                    <button type="button" onclick="ReportBuilder.insertAnalyticalPhotos1nBlock()" class="w-full py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                                        <span class="material-symbols-outlined text-[15px]">add_circle</span> Criar Novo Laudo Separado
+                                    </button>
+                                </div>
+                            ` : `
+                                <button type="button" onclick="ReportBuilder.insertAnalyticalPhotos1nBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                                    <span class="material-symbols-outlined text-[16px]">photo_library</span> Inserir Laudo Analítico & Fotos na Folha
+                                </button>
+                            `}
                         </div>
                     </div>
                 `
@@ -870,66 +1251,186 @@
                 `
             })}
 
-            <!-- CARD: CAIXA DE TEXTO LIVRE COM FORMATAÇÃO E MENÇÕES @ -->
+            <!-- CARD: MINI-MAPA CARTOGRÁFICO (RECURSOS AVANÇADOS) -->
             ${renderAccordionCard({
-                id: 'acc-free-text',
-                title: 'Caixa de texto livre',
-                icon: 'format_shapes',
-                badge: 'Texto Livre & @Campos',
+                id: 'acc-map',
+                title: 'Mini-Mapa Cartográfico (SIG)',
+                icon: 'map',
+                badge: 'Precisão Cartográfica',
                 content: `
                     <div class="flex flex-col gap-3">
-                        <p class="text-[11px] text-slate-500 dark:text-slate-400">Insira blocos de texto livre na folha com quebras de linha normais, justificação, espaçamento, negrito, itálico e menções dinâmicas a campos digitando <strong>@</strong>.</p>
-                        <div>
-                            <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1">Título da Seção (Opcional)</label>
-                            <input type="text" id="cfg-free-text-title" class="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl font-bold dark:text-white" placeholder="Ex: Parecer Técnico, Despacho, Laudo..." />
+                        <!-- Seletor de Modo: Atual vs Temporal Ortofotos -->
+                        <div class="flex flex-col gap-1.5">
+                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Modo de Visualização Cartográfica</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button type="button" id="btn-map-mode-current" onclick="ReportBuilder.selectMapMode('atual')" class="p-2 rounded-xl border text-xs font-bold text-center transition-all bg-primary text-white border-primary shadow-xs cursor-pointer">
+                                    Mapa Estático Atual
+                                </button>
+                                <button type="button" id="btn-map-mode-temporal" onclick="ReportBuilder.selectMapMode('temporal')" class="p-2 rounded-xl border text-xs font-bold text-center transition-all bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer">
+                                    Série Multitemporal
+                                </button>
+                            </div>
                         </div>
-                        <div>
-                            <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1">Texto Inicial (Opcional)</label>
-                            <textarea id="cfg-free-text-content" rows="3" class="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl" placeholder="Digite seu texto aqui ou edite diretamente na folha A4 com duplo clique e @..."></textarea>
+
+                        <!-- Opções Específicas do Modo Temporal -->
+                        <div id="cfg-map-temporal-options" class="hidden p-3 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl flex flex-col gap-2">
+                            <div class="flex items-center gap-1.5 text-xs font-bold text-amber-900 dark:text-amber-200">
+                                <span class="material-symbols-outlined text-[16px]">history_toggle_subpath</span>
+                                <span>Sequência Cronológica Decrescente</span>
+                            </div>
+                            <p class="text-[11px] text-amber-800/80 dark:text-amber-300/80">Identifica ortofotos sobrepostas com datas distintas e gera quadros comparativos do mais recente para o mais antigo, com o vetor destacado em cada um.</p>
+                            <label class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer pt-1">
+                                <input type="checkbox" id="cfg-map-temporal-highlight" checked class="rounded text-primary focus:ring-0" />
+                                <span>Destacar polígono vetorizado com cota em cada voo</span>
+                            </label>
                         </div>
-                        <button type="button" onclick="ReportBuilder.insertFreeTextBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
-                            <span class="material-symbols-outlined text-[16px]">add_circle</span> Inserir Caixa de Texto na Folha
+
+                        <!-- Elementos de Medição e Cartografia -->
+                        <div class="flex flex-col gap-1.5 pt-1">
+                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Elementos Cartográficos e Medições</label>
+                            <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
+                                    <input type="checkbox" id="cfg-map-cotas" checked class="rounded text-primary focus:ring-0" />
+                                    <span class="font-semibold text-emerald-700 dark:text-emerald-400">Cotas perimetrais (comprimento dos lados em metros)</span>
+                                </label>
+                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
+                                    <input type="checkbox" id="cfg-map-area" checked class="rounded text-primary focus:ring-0" />
+                                    <span>Cálculo automático de Área Total (m² e hectares)</span>
+                                </label>
+                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
+                                    <input type="checkbox" id="cfg-map-norte" checked class="rounded text-primary focus:ring-0" />
+                                    <span>Rosa dos Ventos (Seta de Norte Verdadeiro)</span>
+                                </label>
+                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
+                                    <input type="checkbox" id="cfg-map-escala" checked class="rounded text-primary focus:ring-0" />
+                                    <span>Barra de Escala Gráfica e Datum SIRGAS 2000 UTM</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1">Anotações Técnicas / Nota Cartográfica</label>
+                            <input type="text" id="cfg-map-note" value="Delimitação cadastral georreferenciada em conformidade com o sistema cartográfico municipal e SIRGAS 2000." class="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl" />
+                        </div>
+
+                        <button type="button" onclick="ReportBuilder.insertMapBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
+                            <span class="material-symbols-outlined text-[16px]">add_circle</span> Inserir Mini-Mapa na Folha
                         </button>
                     </div>
                 `
             })}
 
-            <!-- CARD 9: PARECER TÉCNICO & RODAPÉ OFICIAL -->
+            <!-- CARD: GRÁFICOS DO DASHBOARD -->
             ${renderAccordionCard({
-                id: 'acc-text-footer',
-                title: 'Parecer Técnico & Rodapé Oficial',
-                icon: 'verified',
+                id: 'acc-charts',
+                title: 'Gráficos do Dashboard',
+                icon: 'pie_chart',
+                badge: `${charts.length} disponíveis`,
                 content: `
                     <div class="flex flex-col gap-3">
-                        <div>
-                            <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1">Fundamentação Técnica / Parecer Jurídico</label>
-                            <textarea id="cfg-text-notes" rows="3" class="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl" placeholder="Observações legais, normas da ABNT, legislação municipal e laudo do fiscal..."></textarea>
-                        </div>
-                        <button type="button" onclick="ReportBuilder.insertTextBlock()" class="w-full py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer">
-                            <span class="material-symbols-outlined text-[16px]">subject</span> Inserir Parecer na Folha
-                        </button>
-
-                        <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs mt-2">
-                            <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
-                                <input type="checkbox" id="cfg-ftr-pages" checked class="rounded text-primary focus:ring-0" />
-                                <span>Numeração Oficial de Páginas (Página X de Y)</span>
-                            </label>
-                            <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
-                                <input type="checkbox" id="cfg-ftr-hash" checked class="rounded text-primary focus:ring-0" />
-                                <span>Código de Validação e Autenticidade (SHA-256)</span>
-                            </label>
-                            <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
-                                <input type="checkbox" id="cfg-ftr-date" checked class="rounded text-primary focus:ring-0" />
-                                <span>Carimbo Temporal com Data e Hora</span>
-                            </label>
-                        </div>
-
-                        <button type="button" onclick="ReportBuilder.insertFooterBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
-                            <span class="material-symbols-outlined text-[16px]">vertical_align_bottom</span> Inserir Rodapé Oficial na Folha
+                        <p class="text-[11px] text-slate-500">Selecione quais gráficos do Dashboard Estatístico você deseja embutir neste relatório:</p>
+                        ${charts.length === 0 ? `
+                            <div class="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center text-xs text-slate-400">
+                                Nenhum gráfico criado na aba "Dashboard Estatístico" ainda. Crie gráficos lá para embuti-los no relatório.
+                            </div>
+                        ` : `
+                            <div class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+                                ${charts.map((c, i) => `
+                                    <label class="flex items-center gap-2.5 p-2 bg-slate-50 dark:bg-slate-900/50 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs cursor-pointer">
+                                        <input type="checkbox" name="cfg-chart-select" value="${c.id}" ${i === 0 ? 'checked' : ''} class="rounded text-primary focus:ring-0" />
+                                        <div class="flex flex-col min-w-0 flex-1">
+                                            <span class="font-bold text-slate-800 dark:text-slate-200 truncate">${c.title}</span>
+                                            <span class="text-[10px] text-slate-400 font-mono">Tipo: ${c.type.toUpperCase()} • Campo: ${c.fieldLabel}</span>
+                                        </div>
+                                    </label>
+                                `).join('')}
+                            </div>
+                            <div class="flex items-center justify-between pt-1">
+                                <label class="text-xs font-bold text-slate-600 dark:text-slate-400">Disposição na Folha:</label>
+                                <div class="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                                    <button type="button" id="btn-chart-layout-full" onclick="ReportBuilder.selectChartLayout('full')" class="px-3 py-1 rounded-md text-xs font-bold bg-primary text-white shadow-xs">Largura Total</button>
+                                    <button type="button" id="btn-chart-layout-side" onclick="ReportBuilder.selectChartLayout('side')" class="px-3 py-1 rounded-md text-xs font-bold text-slate-500 hover:text-primary">Lado a Lado (2)</button>
+                                </div>
+                            </div>
+                        `}
+                        <button type="button" onclick="ReportBuilder.insertChartBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
+                            <span class="material-symbols-outlined text-[16px]">add_circle</span> Inserir Gráficos na Folha
                         </button>
                     </div>
                 `
             })}
+
+            <!-- CARD: RODAPÉ OFICIAL (FIXO NO RODAPÉ) -->
+            ${(() => {
+                const existingFtr = (currentTemplate?.blocos || []).find(b => b.tipo === 'rodape');
+                const pageStart = existingFtr?.inicio_numeracao || 'primeira';
+                const hasNumbering = existingFtr ? existingFtr.numeracao !== false : true;
+
+                return renderAccordionCard({
+                    id: 'acc-text-footer',
+                    title: 'Rodapé Oficial',
+                    icon: 'verified',
+                    badge: existingFtr ? (pageStart === 'segunda' ? 'A partir da 2ª Folha' : 'Na 1ª Folha') : 'Fixo no Rodapé',
+                    content: `
+                        <div class="flex flex-col gap-3">
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400">Configurações do rodapé oficial institucional, fixo permanentemente na base inferior da folha A4 (fora do corpo da folha, abaixo da margem inferior):</p>
+
+                            <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
+                                    <input type="checkbox" id="cfg-ftr-pages" ${hasNumbering ? 'checked' : ''} onchange="ReportBuilder.updateFooterProperty('numeracao', this.checked)" class="rounded text-primary focus:ring-0 cursor-pointer" />
+                                    <span>Numeração Oficial de Páginas (Página X de Y)</span>
+                                </label>
+                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
+                                    <input type="checkbox" id="cfg-ftr-hash" ${(existingFtr ? existingFtr.exibirHash !== false : true) ? 'checked' : ''} onchange="ReportBuilder.updateFooterProperty('exibirHash', this.checked)" class="rounded text-primary focus:ring-0 cursor-pointer" />
+                                    <span>Código de Validação e Autenticidade (SHA-256)</span>
+                                </label>
+                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
+                                    <input type="checkbox" id="cfg-ftr-date" ${(existingFtr ? existingFtr.exibirDataHora !== false : true) ? 'checked' : ''} onchange="ReportBuilder.updateFooterProperty('exibirDataHora', this.checked)" class="rounded text-primary focus:ring-0 cursor-pointer" />
+                                    <span>Carimbo Temporal com Data e Hora</span>
+                                </label>
+                            </div>
+
+                            <!-- Opção de Início da Numeração (1ª folha vs a partir da 2ª folha) -->
+                            <div class="p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                                <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1.5">Início da Numeração das Folhas</label>
+                                <div class="grid grid-cols-2 gap-2" id="cfg-ftr-page-start-group">
+                                    <label id="btn-ftr-start-first" 
+                                           onclick="ReportBuilder.setFooterPageStart('primeira')" 
+                                           class="flex items-center gap-2 p-2 rounded-xl border text-left cursor-pointer transition-all select-none ${pageStart !== 'segunda' ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs ring-1 ring-primary/30' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 hover:border-slate-300'}">
+                                        <input type="radio" name="cfg-ftr-page-start" id="cfg-ftr-page-start-first" value="primeira" ${pageStart !== 'segunda' ? 'checked' : ''} onchange="ReportBuilder.setFooterPageStart('primeira')" class="w-3.5 h-3.5 text-primary focus:ring-0 cursor-pointer accent-primary" />
+                                        <div class="min-w-0 flex-1">
+                                            <div class="font-bold text-[11px] leading-tight flex items-center justify-between">
+                                                <span>Na 1ª Folha</span>
+                                                <span class="material-symbols-outlined text-[15px] ${pageStart !== 'segunda' ? 'text-primary' : 'hidden'}">check_circle</span>
+                                            </div>
+                                            <div class="text-[9px] opacity-75 leading-tight mt-0.5">Ex: Página 01 de 10</div>
+                                        </div>
+                                    </label>
+                                    <label id="btn-ftr-start-second" 
+                                           onclick="ReportBuilder.setFooterPageStart('segunda')" 
+                                           class="flex items-center gap-2 p-2 rounded-xl border text-left cursor-pointer transition-all select-none ${pageStart === 'segunda' ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs ring-1 ring-primary/30' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 hover:border-slate-300'}">
+                                        <input type="radio" name="cfg-ftr-page-start" id="cfg-ftr-page-start-second" value="segunda" ${pageStart === 'segunda' ? 'checked' : ''} onchange="ReportBuilder.setFooterPageStart('segunda')" class="w-3.5 h-3.5 text-primary focus:ring-0 cursor-pointer accent-primary" />
+                                        <div class="min-w-0 flex-1">
+                                            <div class="font-bold text-[11px] leading-tight flex items-center justify-between">
+                                                <span>A partir da 2ª Folha</span>
+                                                <span class="material-symbols-outlined text-[15px] ${pageStart === 'segunda' ? 'text-primary' : 'hidden'}">check_circle</span>
+                                            </div>
+                                            <div class="text-[9px] opacity-75 leading-tight mt-0.5">Começa com: Pág. 02 de 10</div>
+                                        </div>
+                                    </label>
+                                </div>
+                                <p class="text-[9.5px] text-slate-400 mt-1.5 leading-relaxed">
+                                    Ao selecionar "A partir da 2ª folha", a primeira folha não exibe número e a numeração inicia na folha 2 já contando o número 2 e o total real (ex: Página 02 de 10).
+                                </p>
+                            </div>
+
+                            <button type="button" onclick="ReportBuilder.insertFooterBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
+                                <span class="material-symbols-outlined text-[16px]">vertical_align_bottom</span> Inserir Rodapé Oficial na Folha
+                            </button>
+                        </div>
+                    `
+                });
+            })()}
         `;
     }
 
@@ -1015,25 +1516,103 @@
         const fields = window.ReportAdapter.getFormFields(currentTemplate.form_id);
         const charts = window.ReportAdapter.getExistingCharts(currentTemplate.form_id);
 
+        const headerSlot = document.getElementById('a4-header-slot');
+        const footerSlot = document.getElementById('a4-footer-slot');
+
+        // 1. Renderiza o Cabeçalho Institucional no slot superior (FORA DO CORPO, ACIMA DA MARGEM SUPERIOR)
+        const hdrIndex = currentTemplate.blocos.findIndex(b => b.tipo === 'cabecalho');
+        if (headerSlot) {
+            if (hdrIndex !== -1) {
+                const hdrBloco = currentTemplate.blocos[hdrIndex];
+                headerSlot.innerHTML = `
+                    <div class="report-block-item group relative transition-all print:border-none print:p-0 print:bg-transparent page-break-avoid w-full border-b border-slate-300 pb-2 mb-1" data-block-id="${hdrBloco.id || hdrIndex}">
+                        <!-- Barra de Controle Flutuante no Hover (Posicionada à esquerda para não sobrepor metadados à direita) -->
+                        <div class="absolute -top-3.5 left-2 hidden group-hover:flex items-center gap-1 bg-slate-900/90 text-white rounded-lg shadow-md px-1.5 py-0.5 z-30 select-none print:hidden backdrop-blur-xs">
+                            <div class="flex items-center gap-1 text-slate-300 px-1" title="Cabeçalho Oficial Institucional (Acima da Margem Superior)">
+                                <span class="material-symbols-outlined text-[15px]">account_balance</span>
+                                <span class="text-[9px] font-mono uppercase">CABEÇALHO INSTITUCIONAL</span>
+                            </div>
+                            <div class="h-3 w-px bg-slate-700 mx-0.5"></div>
+                            <button type="button" onclick="ReportBuilder.removeBlock(${hdrIndex})" class="p-0.5 hover:text-red-400 cursor-pointer ml-1" title="Remover Cabeçalho da Folha">
+                                <span class="material-symbols-outlined text-[14px]">close</span>
+                            </button>
+                        </div>
+                        <div class="absolute inset-0 border border-transparent group-hover:border-sky-400/40 rounded-lg pointer-events-none transition-colors print:hidden"></div>
+                        <div class="w-full relative z-10">
+                            ${renderBlockContent(hdrBloco, hdrIndex, fields, charts)}
+                        </div>
+                    </div>
+                `;
+            } else {
+                headerSlot.innerHTML = '';
+            }
+        }
+
+        // 2. Renderiza o Rodapé Oficial no slot inferior (FORA DO CORPO, ABAIXO DA MARGEM INFERIOR)
+        const ftrIndex = currentTemplate.blocos.findIndex(b => b.tipo === 'rodape');
+        if (footerSlot) {
+            if (ftrIndex !== -1) {
+                const ftrBloco = currentTemplate.blocos[ftrIndex];
+                footerSlot.innerHTML = `
+                    <div class="report-block-item group relative transition-all print:border-none print:p-0 print:bg-transparent page-break-avoid w-full border-t border-slate-300 pt-2 mt-auto" data-block-id="${ftrBloco.id || ftrIndex}">
+                        <!-- Barra de Controle Flutuante no Hover (Posicionada à esquerda para não sobrepor metadados à direita) -->
+                        <div class="absolute -top-3.5 left-2 hidden group-hover:flex items-center gap-1 bg-slate-900/90 text-white rounded-lg shadow-md px-1.5 py-0.5 z-30 select-none print:hidden backdrop-blur-xs">
+                            <div class="flex items-center gap-1 text-slate-300 px-1" title="Rodapé Oficial Fixo na Base da Folha (Abaixo da Margem Inferior)">
+                                <span class="material-symbols-outlined text-[15px]">lock</span>
+                                <span class="text-[9px] font-mono uppercase">RODAPÉ FIXO</span>
+                            </div>
+                            <div class="h-3 w-px bg-slate-700 mx-0.5"></div>
+                            <button type="button" onclick="ReportBuilder.removeBlock(${ftrIndex})" class="p-0.5 hover:text-red-400 cursor-pointer ml-1" title="Remover Rodapé da Folha">
+                                <span class="material-symbols-outlined text-[14px]">close</span>
+                            </button>
+                        </div>
+                        <div class="absolute inset-0 border border-transparent group-hover:border-sky-400/40 rounded-lg pointer-events-none transition-colors print:hidden"></div>
+                        <div class="w-full relative z-10">
+                            ${renderBlockContent(ftrBloco, ftrIndex, fields, charts)}
+                        </div>
+                    </div>
+                `;
+            } else {
+                footerSlot.innerHTML = '';
+            }
+        }
+
+        // 3. Renderiza os blocos reais do corpo da folha (delimitados pelas margens superior e inferior)
         let html = '';
         currentTemplate.blocos.forEach((bloco, index) => {
+            if (bloco.tipo === 'cabecalho' || bloco.tipo === 'rodape') return;
+
+            let blockContentHtml = '';
+            try {
+                blockContentHtml = renderBlockContent(bloco, index, fields, charts);
+            } catch (blockErr) {
+                console.error(`[ReportBuilder] Erro ao renderizar bloco [${bloco.tipo}] (índice ${index}):`, blockErr);
+                blockContentHtml = `
+                    <div class="p-3 border border-dashed border-amber-300 bg-amber-50 rounded text-amber-800 text-xs">
+                        <strong>Aviso de Renderização:</strong> Não foi possível pré-visualizar o bloco <em>${bloco.tipo}</em>.
+                        <div class="text-[10px] text-amber-600 font-mono mt-1">${blockErr?.message || blockErr}</div>
+                    </div>
+                `;
+            }
+
             html += `
-                <div class="report-block-item group relative transition-all print:border-none print:p-0 print:bg-transparent page-break-avoid" data-block-id="${bloco.id || index}">
-                    <!-- Barra de Controle Flutuante no Hover (Oculta na Impressão Oficial) -->
-                    <div class="absolute -top-3.5 right-2 hidden group-hover:flex items-center gap-1 bg-slate-900/90 text-white rounded-lg shadow-md px-1.5 py-0.5 z-30 select-none print:hidden backdrop-blur-xs">
-                        <div class="flex items-center gap-1 cursor-grab active:cursor-grabbing text-slate-300 hover:text-white px-1 drag-handle" title="Arrastar Bloco">
+                <div class="report-block-item group relative transition-all print:border-none print:p-0 print:bg-transparent page-break-avoid w-full" data-block-id="${bloco.id || index}">
+                    <!-- Barra de Controle Flutuante no Hover (Posicionada à esquerda para não sobrepor metadados à direita) -->
+                    <div class="absolute -top-3.5 left-2 hidden group-hover:flex items-center gap-1 bg-slate-900/90 text-white rounded-lg shadow-md px-1.5 py-0.5 z-30 select-none print:hidden backdrop-blur-xs">
+                        <div class="flex items-center gap-1 cursor-grab active:cursor-grabbing drag-handle text-slate-300 hover:text-white px-1" title="Arrastar Bloco">
                             <span class="material-symbols-outlined text-[15px]">drag_indicator</span>
                             <span class="text-[9px] font-mono uppercase">${getBlockTypeName(bloco.tipo)}</span>
                         </div>
                         <div class="h-3 w-px bg-slate-700 mx-0.5"></div>
                         <button type="button" onclick="ReportBuilder.moveBlock(${index}, -1)" class="p-0.5 hover:text-sky-300 cursor-pointer" title="Mover para cima">
-                            <span class="material-symbols-outlined text-[15px]">arrow_upward</span>
+                            <span class="material-symbols-outlined text-[14px]">arrow_upward</span>
                         </button>
                         <button type="button" onclick="ReportBuilder.moveBlock(${index}, 1)" class="p-0.5 hover:text-sky-300 cursor-pointer" title="Mover para baixo">
-                            <span class="material-symbols-outlined text-[15px]">arrow_downward</span>
+                            <span class="material-symbols-outlined text-[14px]">arrow_downward</span>
                         </button>
+                        <div class="h-3 w-px bg-slate-700 mx-0.5"></div>
                         <button type="button" onclick="ReportBuilder.removeBlock(${index})" class="p-0.5 hover:text-red-400 cursor-pointer ml-1" title="Remover Bloco da Folha">
-                            <span class="material-symbols-outlined text-[15px]">close</span>
+                            <span class="material-symbols-outlined text-[14px]">close</span>
                         </button>
                     </div>
 
@@ -1042,13 +1621,34 @@
 
                     <!-- Conteúdo Tipográfico Real do Bloco (Estilo Processador de Texto Word) -->
                     <div class="w-full relative z-10">
-                        ${renderBlockContent(bloco, index, fields, charts)}
+                        ${blockContentHtml}
                     </div>
                 </div>
             `;
         });
 
         container.innerHTML = html;
+        initSortable();
+        initGridFieldsSortable();
+    }
+
+    function getFieldWidthStyle(pct) {
+        const p = Math.max(15, Math.min(100, Math.round(pct || 50)));
+        if (p >= 98) return '100%';
+        const gap = 10;
+        const deduction = Math.round((gap * (1 - p / 100)) * 10) / 10;
+        return `calc(${p}% - ${deduction}px)`;
+    }
+
+    /**
+     * Sanitiza o título de abas/órgãos para exibição em tabelas sintéticas e laudos fotográficos.
+     */
+    function sanitizeTabTitle(t) {
+        const title = (t && typeof t === 'object') ? (t.title || t.label || t.name) : String(t || '');
+        if (!title || title.toLowerCase().startsWith('f_') || title.toLowerCase().startsWith('tab_')) {
+            return 'MPF';
+        }
+        return title;
     }
 
     /**
@@ -1057,52 +1657,93 @@
     function renderBlockContent(bloco, index, fields, charts) {
         switch (bloco.tipo) {
             case 'cabecalho':
+                const repeatLabel = bloco.repetir_todas_folhas ? 'Todas as Folhas' : 'Apenas 1ª Folha';
                 return `
-                    <div class="flex items-center justify-between border-b-2 border-slate-900 pb-3 mb-2">
-                        <div class="flex items-center gap-4">
-                            ${bloco.logo ? `
-                                <div class="w-14 h-14 flex items-center justify-center shrink-0">
-                                    ${bloco.logo_url && bloco.logo_url.startsWith('data:image') ? `
-                                        <img src="${bloco.logo_url}" class="w-full h-full object-contain" />
-                                    ` : `
-                                        <span class="material-symbols-outlined text-slate-800 text-[42px]">account_balance</span>
-                                    `}
-                                </div>
-                            ` : ''}
-                            <div>
-                                <div class="text-[11px] uppercase font-bold text-slate-600 tracking-wider cursor-text hover:bg-sky-50 px-1 py-0.5 rounded" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'subtitulo')" title="Duplo clique para editar">
-                                    ${escapeHtml(bloco.subtitulo || 'Prefeitura Municipal')}
-                                </div>
-                                <div class="text-lg font-black uppercase text-slate-900 tracking-tight cursor-text hover:bg-sky-50 px-1 py-0.5 rounded" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')" title="Duplo clique para editar">
-                                    ${escapeHtml(bloco.titulo || 'FICHA CADASTRAL DO IMÓVEL')}
+                    <div class="w-full">
+                        <!-- Data, Hora e Protocolo na parte superior direita, FORA do card principal -->
+                        ${(bloco.exibirDataHora || bloco.exibirProtocolo) ? `
+                            <div class="flex items-center justify-end gap-3 font-mono text-[10px] text-slate-500 mb-1 select-none print:mb-0.5">
+                                ${bloco.exibirDataHora ? `<span>Data: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</span>` : ''}
+                                ${(bloco.exibirDataHora && bloco.exibirProtocolo) ? `<span class="text-slate-300">•</span>` : ''}
+                                ${bloco.exibirProtocolo ? `<span class="font-bold text-slate-700">Protocolo: #${(bloco.id || '2026').slice(-6).toUpperCase()}</span>` : ''}
+                                <span class="text-[9px] font-sans font-bold ${bloco.repetir_todas_folhas ? 'text-sky-600 bg-sky-50 dark:bg-sky-950/40 border-sky-200' : 'text-slate-500 bg-slate-100 dark:bg-slate-800 border-slate-200'} border px-1.5 py-0.2 rounded ml-1 print:hidden" title="Modo de repetição nas folhas">${repeatLabel}</span>
+                            </div>
+                        ` : ''}
+                        <div class="flex items-start justify-between border-b-2 border-slate-900 pb-3 mb-2 gap-4">
+                            <div class="flex items-center gap-3">
+                                ${bloco.logo ? `
+                                    <div class="w-14 h-14 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden shrink-0 border border-slate-200">
+                                        ${bloco.logo_url ? `
+                                            <img src="${bloco.logo_url}" class="w-full h-full object-contain" />
+                                        ` : `
+                                            <span class="material-symbols-outlined text-slate-800 text-[42px]">account_balance</span>
+                                        `}
+                                    </div>
+                                ` : ''}
+                                <div>
+                                    <div class="text-[11px] uppercase font-bold text-slate-600 tracking-wider cursor-text hover:bg-sky-50 px-1 py-0.5 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'subtitulo')" title="Duplo clique para editar">${(escapeHtml(bloco.subtitulo || 'Prefeitura Municipal')).replace(/\r?\n/g, '<br>')}</div>
+                                    <div class="text-lg font-black uppercase text-slate-900 tracking-tight cursor-text hover:bg-sky-50 px-1 py-0.5 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')" title="Duplo clique para editar">${(escapeHtml(bloco.titulo || 'FICHA CADASTRAL DO IMÓVEL')).replace(/\r?\n/g, '<br>')}</div>
                                 </div>
                             </div>
-                        </div>
-                        <div class="text-right font-mono text-[10px] text-slate-500 shrink-0">
-                            ${bloco.exibirDataHora ? `<div>Data: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</div>` : ''}
-                            ${bloco.exibirProtocolo ? `<div class="font-bold text-slate-700">Protocolo: #${(bloco.id || '2026').slice(-6).toUpperCase()}</div>` : ''}
                         </div>
                     </div>
                 `;
 
             case 'grade_campos': {
                 const colCount = bloco.colunasLayout || 2;
-                const sel = new Set(bloco.campos_selecionados || []);
-                const flds = fields.filter(f => sel.has(f.id));
+                if (!bloco.campos_spans) bloco.campos_spans = {};
+                if (!bloco.campos_larguras) bloco.campos_larguras = {};
+
+                // Mapeia os campos preservando a ordem exata de bloco.campos_selecionados
+                const fieldsMap = new Map();
+                fields.forEach(f => {
+                    fieldsMap.set(f.id, f);
+                    if (f.name) fieldsMap.set(f.name, f);
+                });
+
+                const rawSel = Array.isArray(bloco.campos_selecionados) ? bloco.campos_selecionados : [];
+                let flds = rawSel
+                    .map(item => typeof item === 'string' ? { id: item } : item)
+                    .map(item => {
+                        const baseField = fieldsMap.get(item.id) || fieldsMap.get(item.name) || {};
+                        return { ...baseField, ...item };
+                    })
+                    .filter(f => f && (f.label || f.name));
+
+                if (flds.length === 0 && rawSel.length > 0) {
+                    const selSet = new Set(rawSel.map(s => typeof s === 'string' ? s : s.id));
+                    flds = fields.filter(f => selSet.has(f.id));
+                }
 
                 if (colCount === 1) {
                     // Lista Corrida (Chave-Valor)
                     return `
                         <div class="mb-4">
                             <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">
-                                <span class="cursor-text hover:bg-sky-50 px-1 rounded" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${escapeHtml(bloco.titulo || 'Atributos Cadastrais')}</span>
-                                <span class="text-[10px] font-mono text-slate-400 font-normal">Lista Corrida</span>
+                                <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(escapeHtml(bloco.titulo || 'Atributos Cadastrais')).replace(/\r?\n/g, '<br>')}</span>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] font-mono text-slate-400 font-normal">Lista Corrida</span>
+                                    <span class="text-[9px] text-sky-600 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 px-1.5 py-0.5 rounded font-medium print:hidden">Arraste ⠿ para reordenar</span>
+                                </div>
                             </div>
-                            <div class="divide-y divide-slate-200 border border-slate-200 rounded-lg overflow-hidden">
+                            <div class="divide-y divide-slate-200 border border-slate-200 rounded-lg overflow-hidden a4-grid-fields-container" data-block-index="${index}">
                                 ${flds.map(f => `
-                                    <div class="flex items-center justify-between px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50">
-                                        <span class="font-bold text-slate-600">${f.label}:</span>
-                                        <span class="font-semibold text-slate-900">[${f.label}]</span>
+                                    <div class="flex items-center justify-between px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50 group/field select-none" data-field-id="${f.id}">
+                                        <div class="flex items-center gap-2 min-w-0">
+                                            <span class="field-drag-handle cursor-grab active:cursor-grabbing text-slate-300 group-hover/field:text-sky-600 p-0.5 rounded hover:bg-slate-200 transition-colors" title="Arraste para mover de posição na lista">
+                                                <span class="material-symbols-outlined text-[15px] leading-none">drag_indicator</span>
+                                            </span>
+                                            <span class="font-bold text-slate-600 truncate">${escapeHtml(f.label)}:</span>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-semibold text-slate-900 truncate font-mono text-[11px]">[${escapeHtml(f.label)}]</span>
+                                            <button type="button" 
+                                                    class="field-remove-btn p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition-colors cursor-pointer print:hidden" 
+                                                    onclick="ReportBuilder.removeFieldFromGrid(${index}, '${f.id}', event)" 
+                                                    title="Remover campo da grade">
+                                                <span class="material-symbols-outlined text-[14px] leading-none">close</span>
+                                            </button>
+                                        </div>
                                     </div>
                                 `).join('')}
                             </div>
@@ -1112,17 +1753,81 @@
 
                 return `
                     <div class="mb-4">
-                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">
-                            <span class="cursor-text hover:bg-sky-50 px-1 rounded" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${escapeHtml(bloco.titulo || 'Atributos Cadastrais')}</span>
-                            <span class="text-[10px] font-mono text-slate-400 font-normal">${colCount} Colunas</span>
+                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between flex-wrap gap-1">
+                            <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(escapeHtml(bloco.titulo || 'Atributos Cadastrais')).replace(/\r?\n/g, '<br>')}</span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-mono text-slate-400 font-normal">${colCount} Colunas</span>
+                                <span class="text-[9px] text-sky-600 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 px-1.5 py-0.5 rounded font-medium print:hidden">Arraste ⠿ para reordenar • Use [-] [+] para ajustar largura</span>
+                            </div>
                         </div>
-                        <div class="grid ${colCount === 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-2.5">
-                            ${flds.map(f => `
-                                <div class="p-2 border border-slate-200 rounded-lg bg-slate-50/50">
-                                    <div class="text-[10px] uppercase font-bold text-slate-500">${f.label}</div>
-                                    <div class="text-xs font-bold text-slate-800 mt-0.5 truncate">[Valor de ${f.label}]</div>
-                                </div>
-                            `).join('')}
+                        <div class="flex flex-wrap gap-2.5 a4-grid-fields-container" data-block-index="${index}">
+                            ${flds.map(f => {
+                                const larguras = bloco.campos_larguras || {};
+                                const spans = bloco.campos_spans || {};
+                                let pct = larguras[f.id];
+                                if (!pct) {
+                                    const span = Math.min(spans[f.id] || f.colSpan || 1, colCount);
+                                    if (span >= colCount) pct = 100;
+                                    else if (colCount === 3 && span === 2) pct = 66;
+                                    else pct = colCount === 3 ? 33 : 50;
+                                }
+                                pct = Math.round(pct);
+                                const widthStyle = getFieldWidthStyle(pct);
+                                const isExpanded = pct > 55;
+                                return `
+                                    <div class="relative group/field p-2.5 border ${isExpanded ? 'border-sky-300 dark:border-sky-700 bg-sky-50/40 dark:bg-sky-950/20 shadow-2xs' : 'border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40'} rounded-lg hover:shadow-xs select-none transition-all"
+                                         data-field-id="${f.id}"
+                                         data-block-index="${index}"
+                                         style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">
+                                        
+                                        <!-- Topo do card com alça de drag, stepper de largura e botão X -->
+                                        <div class="flex items-center justify-between gap-1 mb-1">
+                                            <div class="flex items-center gap-1 min-w-0 flex-1">
+                                                <span class="field-drag-handle cursor-grab active:cursor-grabbing text-slate-300 group-hover/field:text-sky-600 hover:bg-slate-200/60 dark:hover:bg-slate-700 p-0.5 rounded transition-colors" title="Arraste para mover de posição na grade">
+                                                    <span class="material-symbols-outlined text-[15px] leading-none">drag_indicator</span>
+                                                </span>
+                                                <span class="text-[10px] uppercase font-extrabold text-slate-600 dark:text-slate-300 truncate" title="${escapeHtml(f.label)}">${escapeHtml(f.label)}</span>
+                                            </div>
+
+                                            <div class="flex items-center gap-1 shrink-0">
+                                                <!-- Stepper de Largura Direto: [-] [X%] [+] -->
+                                                <div class="inline-flex items-center bg-white dark:bg-slate-700/90 border border-slate-200 dark:border-slate-600 rounded-md p-0.5 shadow-2xs">
+                                                    <button type="button" 
+                                                            class="field-width-dec-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 rounded cursor-pointer transition-colors" 
+                                                            onclick="ReportBuilder.changeFieldWidthStep(${index}, '${f.id}', -1, event)" 
+                                                            title="Diminuir largura do campo (-)">
+                                                        <span class="material-symbols-outlined text-[13px] leading-none">remove</span>
+                                                    </button>
+                                                    <button type="button" 
+                                                            class="field-width-badge-btn px-1.5 py-0.5 text-[9.5px] font-extrabold text-slate-700 dark:text-slate-200 hover:text-sky-600 dark:hover:text-sky-300 cursor-pointer transition-colors" 
+                                                            onclick="ReportBuilder.toggleFieldWidthPopover(${index}, '${f.id}', event)" 
+                                                            title="Clique para escolher proporção exata ou regular slider">
+                                                        ${pct}%
+                                                    </button>
+                                                    <button type="button" 
+                                                            class="field-width-inc-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 rounded cursor-pointer transition-colors" 
+                                                            onclick="ReportBuilder.changeFieldWidthStep(${index}, '${f.id}', 1, event)" 
+                                                            title="Aumentar largura do campo (+)">
+                                                        <span class="material-symbols-outlined text-[13px] leading-none">add</span>
+                                                    </button>
+                                                </div>
+
+                                                <!-- Botão X para retirar campo diretamente da folha -->
+                                                <button type="button" 
+                                                        class="field-remove-btn p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50 rounded transition-colors cursor-pointer print:hidden" 
+                                                        onclick="ReportBuilder.removeFieldFromGrid(${index}, '${f.id}', event)" 
+                                                        title="Remover este campo da grade">
+                                                    <span class="material-symbols-outlined text-[14px] leading-none">close</span>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div class="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 font-mono text-[11px] ${isExpanded ? 'break-words' : 'truncate'}">
+                                            [Valor de ${escapeHtml(f.label)}]
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
                         </div>
                     </div>
                 `;
@@ -1134,7 +1839,7 @@
                     return `
                         <div class="mb-4">
                             <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
-                                <span class="cursor-text hover:bg-sky-50 px-1 rounded" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${escapeHtml(bloco.titulo || 'Análise Multitemporal de Ortofotos')}</span>
+                                <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(escapeHtml(bloco.titulo || 'Análise Multitemporal de Ortofotos')).replace(/\r?\n/g, '<br>')}</span>
                                 <span class="text-[10px] font-mono text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded font-bold border border-amber-200">Série Histórica Decrescente</span>
                             </div>
                             
@@ -1173,7 +1878,7 @@
                             <!-- Elementos Cartográficos Oficiais -->
                             <div class="flex items-center justify-between text-[10px] text-slate-500 font-mono mt-1.5 px-1">
                                 <div>Projeção: SIRGAS 2000 UTM Fuso 25S • Escala 1:2.500</div>
-                                <div class="cursor-text hover:bg-sky-50 px-1 rounded" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'notaTecnica')">${escapeHtml(bloco.notaTecnica || 'Vetorização e cotas georreferenciadas')}</div>
+                                <div class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'notaTecnica')">${(escapeHtml(bloco.notaTecnica || 'Vetorização e cotas georreferenciadas')).replace(/\r?\n/g, '<br>')}</div>
                             </div>
                         </div>
                     `;
@@ -1183,7 +1888,7 @@
                 return `
                     <div class="mb-4">
                         <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
-                            <span class="cursor-text hover:bg-sky-50 px-1 rounded" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${escapeHtml(bloco.titulo || 'Delimitação Cartográfica do Imóvel')}</span>
+                            <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(escapeHtml(bloco.titulo || 'Delimitação Cartográfica do Imóvel')).replace(/\r?\n/g, '<br>')}</span>
                             <span class="text-[10px] font-mono text-slate-400">Escala ${bloco.escala || '1:2.500'}</span>
                         </div>
                         <div class="h-56 bg-slate-950 border border-slate-300 rounded-lg relative flex items-center justify-center overflow-hidden">
@@ -1222,7 +1927,7 @@
 
                         <!-- Nota Técnica Editável -->
                         <div class="mt-1.5 text-[10px] text-slate-500 font-mono flex items-center justify-between px-1">
-                            <span class="cursor-text hover:bg-sky-50 px-1 rounded" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'notaTecnica')">${escapeHtml(bloco.notaTecnica || 'Delimitação cadastral georreferenciada.')}</span>
+                            <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'notaTecnica')">${(escapeHtml(bloco.notaTecnica || 'Delimitação cadastral georreferenciada.')).replace(/\r?\n/g, '<br>')}</span>
                             <span>Precisão SIG</span>
                         </div>
                     </div>
@@ -1233,7 +1938,7 @@
                 return `
                     <div class="mb-4">
                         <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">
-                            <span class="cursor-text hover:bg-sky-50 px-1 rounded" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${escapeHtml(bloco.titulo || 'Estatísticas do Dashboard')}</span>
+                            <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(escapeHtml(bloco.titulo || 'Estatísticas do Dashboard')).replace(/\r?\n/g, '<br>')}</span>
                             <span class="text-[10px] font-mono text-slate-400">${isSide ? 'Lado a Lado' : 'Largura Total'}</span>
                         </div>
                         <div class="grid ${isSide ? 'grid-cols-2' : 'grid-cols-1'} gap-3">
@@ -1262,7 +1967,7 @@
                 return `
                     <div class="mb-4">
                         <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">
-                            <span class="cursor-text hover:bg-sky-50 px-1 rounded" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${escapeHtml(bloco.titulo || 'Indicadores Territoriais (KPIs)')}</span>
+                            <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(escapeHtml(bloco.titulo || 'Indicadores Territoriais (KPIs)')).replace(/\r?\n/g, '<br>')}</span>
                             <span class="text-[10px] font-mono text-slate-400">Totalizadores</span>
                         </div>
                         <div class="grid grid-cols-4 gap-2.5">
@@ -1291,8 +1996,18 @@
                 `;
 
             case 'tabela_sintetica_1n': {
-                const cols = bloco.colunas || ['data', 'org', 'situacao_ocupacao', 'situacao_recuo', 'area_invadida', 'qtd_fotos'];
+                const rawCols = (Array.isArray(bloco.colunas) && bloco.colunas.length > 0)
+                    ? bloco.colunas
+                    : ['aba', 'data', 'situacao_ocupacao', 'situacao_recuo', 'area_invadida', 'qtd_fotos'];
+
+                const fieldsMap = new Map();
+                fields.forEach(f => {
+                    fieldsMap.set(f.id, f);
+                    if (f.name) fieldsMap.set(f.name, f);
+                });
+
                 const colLabelMap = {
+                    'aba': 'Aba / Ente',
                     'data': 'Data Vistoria',
                     'org': 'Órgão / Entidade',
                     'situacao_ocupacao': 'Situação Ocupação',
@@ -1300,45 +2015,308 @@
                     'area_invadida': 'Área Invadida',
                     'qtd_fotos': 'Fotos / Anexos'
                 };
+
+                const cols = rawCols.map(c => {
+                    const cId = typeof c === 'string' ? c : c.id;
+                    const cLabel = (typeof c === 'object' && c.label) ? c.label : (colLabelMap[cId] || fieldsMap.get(cId)?.label || cId);
+                    return { id: cId, label: cLabel };
+                });
+
+                const isAsc = bloco.ordem_cronologica === 'asc';
+                const isGroupedByTab = !!bloco.ordenar_por_aba;
+                const density = bloco.densidade || current1nTableDensity || 'compact';
+                const striping = bloco.zebrado || current1nRowStriping || 'slate';
+
+                let thDensityClass = 'py-1.5 px-2 text-[9.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300';
+                let tdDensityClass = 'py-1.5 px-2 text-[10px] border-b border-slate-200';
+                if (density === 'comfortable') {
+                    thDensityClass = 'p-2 text-[10.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300';
+                    tdDensityClass = 'p-2 text-[11px] border-b border-slate-200';
+                } else if (density === 'ultracompact') {
+                    thDensityClass = 'py-0.5 px-1 text-[8.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300';
+                    tdDensityClass = 'py-0.5 px-1 text-[9px] font-medium border-b border-slate-200';
+                }
+
+                // Resolução dinâmica de abas e registros baseados na seleção do usuário
+                const formTabs = (window.ReportAdapter && window.ReportAdapter.getFormTabs) ? window.ReportAdapter.getFormTabs(currentTemplate?.form_id) : [];
+                const multiTabs = (window.ReportAdapter && window.ReportAdapter.getMultipleTabs)
+                    ? window.ReportAdapter.getMultipleTabs(currentTemplate?.form_id)
+                    : [];
+
+                const tabsPool = formTabs.length > 0 ? formTabs : multiTabs;
+                const synSelectedTabIds = new Set();
+                const hasExplicitSynTabs = Array.isArray(bloco.abas_selecionadas);
+                if (hasExplicitSynTabs) {
+                    bloco.abas_selecionadas.forEach(id => synSelectedTabIds.add(id));
+                } else {
+                    tabsPool.forEach(t => synSelectedTabIds.add(t.id));
+                }
+
+                let activeSynTabs = tabsPool.filter(t => synSelectedTabIds.has(t.id) || synSelectedTabIds.has(t.title));
+                if (!hasExplicitSynTabs && activeSynTabs.length === 0 && tabsPool.length > 0) {
+                    activeSynTabs = tabsPool;
+                }
+
+                // Função auxiliar para avaliar regras de condição de campos
+                const checkFieldCondition = (fld, data) => {
+                    if (!fld || !fld.condition) return true;
+                    const cField = fld.condition;
+                    const expected = (fld.condValue !== undefined && fld.condValue !== null) ? String(fld.condValue).toLowerCase().trim() : '';
+                    const op = fld.conditionOperator || 'equals';
+                    let cVal = data ? (data[cField] !== undefined ? data[cField] : data[cField.toLowerCase()]) : undefined;
+                    if (cVal === undefined && data) {
+                        for (const [k, v] of Object.entries(data)) {
+                            if (k.toLowerCase() === cField.toLowerCase() || k.toLowerCase().replace(/_/g, '') === cField.toLowerCase().replace(/_/g, '')) {
+                                cVal = v;
+                                break;
+                            }
+                        }
+                    }
+                    const cStr = (cVal !== undefined && cVal !== null) ? String(cVal).toLowerCase().trim() : '';
+                    if (op === 'equals') return cStr === expected;
+                    if (op === 'not_equals') return cStr !== expected && cStr !== '';
+                    if (op === 'contains') return cStr.includes(expected);
+                    if (op === 'filled' || op === 'not_empty') return cStr !== '' && cStr !== '—';
+                    return true;
+                };
+
+                let mockRecords = [];
+                activeSynTabs.forEach(tabItem => {
+                    const rawTitle = (typeof tabItem === 'object') ? (tabItem.title || tabItem.name || tabItem.id) : String(tabItem);
+                    const sTitle = sanitizeTabTitle(rawTitle);
+                    const titleLow = sTitle.toLowerCase();
+                    let orgBadge = sTitle.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) || 'ABA';
+
+                    // Detecção com precedência estrita para MPF (1 único registro consolidado)
+                    if (titleLow.includes('mpf') || titleLow.includes('minist') || titleLow.includes('procurad')) {
+                        orgBadge = 'MPF';
+                        mockRecords.push(
+                            { 
+                                org: 'MPF', 
+                                orgBadge: 'MPF', 
+                                date: '14/08/2026', 
+                                situacao: 'Em Investigação', 
+                                recuo: 'Não Recuou', 
+                                area: '120,50 m²', 
+                                fotos: '📷 3 Fotos', 
+                                links: 'IC 1.24.000.000123/2026', 
+                                conclusao: 'Procedimento preparatório de tutela coletiva.',
+                                ipl: 'IPL 0800653/2026',
+                                distribuicao: '2ª Vara Federal',
+                                designado: 'Dr. Procurador da República',
+                                correlatos: 'ACP 0801234/2026',
+                                fase_investigacao: 'Instrução'
+                            }
+                        );
+                    } else if (titleLow.includes('polic') || /\bpf\b/.test(titleLow) || titleLow === 'pf' || (titleLow.includes('pf') && !titleLow.includes('mpf'))) {
+                        orgBadge = 'PF';
+                        mockRecords.push(
+                            { org: 'PF', orgBadge: 'PF', date: '15/08/2026', situacao: 'Irregular', recuo: 'Não Recuou', area: '120,50 m²', fotos: '📷 4 Fotos', links: 'Proc. IPL 0800653', conclusao: 'Constatada ocupação irregular sem recuo.' },
+                            { org: 'PF', orgBadge: 'PF', date: '12/01/2026', situacao: 'Em Notificação', recuo: 'Recuo Parcial', area: '120,50 m²', fotos: '📷 2 Fotos', links: 'Proc. IPL 0800653', conclusao: 'Vistoria inicial de constatação.' }
+                        );
+                    } else if (titleLow.includes('spu') || titleLow.includes('patrim')) {
+                        orgBadge = 'SPU';
+                        mockRecords.push(
+                            { org: 'SPU', orgBadge: 'SPU', date: '10/04/2026', situacao: 'Pendente', recuo: 'Recuo Parcial', area: '85,20 m²', fotos: '📷 3 Fotos', links: 'RIP 2145.00192', conclusao: 'Área da União sob regime de regularização.' }
+                        );
+                    } else if (titleLow.includes('pm') || titleLow.includes('pref') || titleLow.includes('munic') || titleLow.includes('meio')) {
+                        orgBadge = 'MUNICÍPIO';
+                        mockRecords.push(
+                            { org: 'MUNICÍPIO', orgBadge: 'MUNICÍPIO', date: '05/02/2026', situacao: 'Regular', recuo: 'Recuo Total', area: '45,00 m²', fotos: '📷 1 Foto', links: 'Auto 102/2026', conclusao: 'Parâmetros urbanísticos respeitados.' }
+                        );
+                    } else {
+                        const genericBadge = sTitle.toUpperCase();
+                        mockRecords.push(
+                            { org: sTitle, orgBadge: genericBadge, date: '15/08/2026', situacao: 'Conforme', recuo: 'Regular', area: '100,00 m²', fotos: '📷 2 Fotos', links: 'Registro Geral', conclusao: `Vistoria técnica cadastrada para a aba ${sTitle}.` }
+                        );
+                    }
+                });
+
+                if (mockRecords.length === 0) {
+                    mockRecords.push(
+                        { org: 'MPF', orgBadge: 'MPF', date: '14/08/2026', situacao: 'Em Investigação', recuo: 'Não Recuou', area: '120,50 m²', fotos: '📷 3 Fotos', links: 'IC 1.24.000.000123/2026', conclusao: 'Procedimento preparatório de tutela coletiva.' },
+                        { org: 'PF', orgBadge: 'PF', date: '12/01/2026', situacao: 'Em Notificação', recuo: 'Recuo Parcial', area: '120,50 m²', fotos: '📷 2 Fotos', links: 'Proc. IPL 0800653', conclusao: 'Vistoria inicial de constatação.' }
+                    );
+                }
+
+                // Deduplicação estrita para MPF: garante no máximo 1 único registro consolidado
+                const uniqueMockRecords = [];
+                let hasMpfEntry = false;
+                mockRecords.forEach(r => {
+                    const isMpf = (r.org && r.org.toLowerCase().includes('mpf')) || (r.orgBadge && r.orgBadge.toLowerCase().includes('mpf'));
+                    if (isMpf) {
+                        if (!hasMpfEntry) {
+                            uniqueMockRecords.push(r);
+                            hasMpfEntry = true;
+                        }
+                    } else {
+                        uniqueMockRecords.push(r);
+                    }
+                });
+                mockRecords = uniqueMockRecords;
+
+                if (isAsc) {
+                    mockRecords.reverse();
+                }
+
+                const tbodyRowsHtml = mockRecords.map((rec, recIdx) => {
+                    const isOdd = recIdx % 2 === 1;
+                    let rowBg = isOdd ? 'bg-slate-50/70' : 'bg-white';
+                    if (striping === 'sky') {
+                        rowBg = isOdd ? 'bg-sky-50/60' : 'bg-white';
+                    } else if (striping === 'ente') {
+                        const orgLow = rec.org.toLowerCase();
+                        if (orgLow.includes('mpf') || orgLow.includes('minist')) {
+                            rowBg = 'bg-purple-50/30';
+                        } else if (orgLow.includes('pf') || orgLow.includes('policia') || orgLow.includes('polícia')) {
+                            rowBg = 'bg-blue-50/30';
+                        } else if (orgLow.includes('spu') || orgLow.includes('patrimonio') || orgLow.includes('patrimônio')) {
+                            rowBg = 'bg-emerald-50/30';
+                        } else if (orgLow.includes('munic') || orgLow.includes('pref') || orgLow.includes('pm')) {
+                            rowBg = 'bg-amber-50/30';
+                        } else {
+                            rowBg = isOdd ? 'bg-slate-100/50' : 'bg-white';
+                        }
+                    } else if (striping === 'white') {
+                        rowBg = 'bg-white';
+                    }
+
+                    return `
+                        <tr class="${rowBg} border-b border-slate-200 hover:bg-amber-50/40 transition-colors">
+                            <td class="${tdDensityClass} text-center text-slate-400 font-mono border-r border-slate-200">${recIdx + 1}</td>
+                            ${cols.map(c => {
+                                const canonId = getCanonicalColId(c.id, c.label);
+                                if (canonId === 'aba') {
+                                    let badgeColor = 'bg-slate-100 text-slate-800';
+                                    const oLow = (rec.orgBadge || rec.org || '').toLowerCase();
+                                    if (rec.org.toLowerCase().includes('mpf') || oLow.includes('minist')) badgeColor = 'bg-purple-100 text-purple-800';
+                                    else if (oLow.includes('spu') || oLow.includes('patrim')) badgeColor = 'bg-emerald-100 text-emerald-800';
+                                    else if (oLow.includes('pm') || oLow.includes('pref') || oLow.includes('munic')) badgeColor = 'bg-amber-100 text-amber-800';
+                                    else if (oLow.includes('pf') || oLow.includes('polic')) badgeColor = 'bg-blue-100 text-blue-800';
+                                    else {
+                                        const dynPalette = ['bg-sky-100 text-sky-800', 'bg-teal-100 text-teal-800', 'bg-indigo-100 text-indigo-800', 'bg-rose-100 text-rose-800', 'bg-orange-100 text-orange-800'];
+                                        const hash = Math.abs(String(rec.orgBadge || rec.org).split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0));
+                                        badgeColor = dynPalette[hash % dynPalette.length];
+                                    }
+                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 whitespace-normal break-words"><span class="px-1.5 py-0.5 rounded ${badgeColor} font-bold text-[9px] uppercase">${escapeHtml(rec.orgBadge || rec.org)}</span></td>`;
+                                }
+                                if (canonId === 'data') {
+                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 font-medium text-slate-900 font-mono">${rec.date}</td>`;
+                                }
+                                if (canonId === 'org') {
+                                    let orgColor = 'bg-slate-100 text-slate-800';
+                                    const bLow = (rec.orgBadge || rec.org || '').toLowerCase();
+                                    if (bLow.includes('mpf') || bLow.includes('minist')) orgColor = 'bg-purple-100 text-purple-800';
+                                    else if (bLow.includes('pf') || bLow.includes('polic')) orgColor = 'bg-blue-100 text-blue-800';
+                                    else if (bLow.includes('spu') || bLow.includes('patrim')) orgColor = 'bg-emerald-100 text-emerald-800';
+                                    else if (bLow.includes('pm') || bLow.includes('pref') || bLow.includes('munic')) orgColor = 'bg-amber-100 text-amber-800';
+                                    else {
+                                        const dynPalette = ['bg-sky-100 text-sky-800', 'bg-teal-100 text-teal-800', 'bg-indigo-100 text-indigo-800', 'bg-rose-100 text-rose-800', 'bg-orange-100 text-orange-800'];
+                                        const hash = Math.abs(String(rec.orgBadge || rec.org).split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0));
+                                        orgColor = dynPalette[hash % dynPalette.length];
+                                    }
+                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200"><span class="px-1.5 py-0.5 rounded ${orgColor} font-bold text-[9px]">${escapeHtml(rec.orgBadge || rec.org)}</span></td>`;
+                                }
+                                if (canonId === 'situacao_ocupacao') {
+                                    const isIrreg = rec.situacao.toLowerCase().includes('irreg');
+                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200"><span class="px-1.5 py-0.5 rounded ${isIrreg ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'} font-bold text-[9px]">${rec.situacao}</span></td>`;
+                                }
+                                if (canonId === 'situacao_recuo') {
+                                    const hasRecuo = rec.recuo.toLowerCase().includes('parcial') || rec.recuo.toLowerCase().includes('total');
+                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200"><span class="px-1.5 py-0.5 rounded ${hasRecuo ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-bold text-[9px]">${rec.recuo}</span></td>`;
+                                }
+                                if (canonId === 'area_invadida') {
+                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 font-mono font-bold text-right text-slate-800">${rec.area}</td>`;
+                                }
+                                if (canonId === 'qtd_fotos') {
+                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 text-sky-600 font-semibold">${rec.fotos}</td>`;
+                                }
+                                if (canonId === 'links' || canonId === 'epol' || canonId === 'rip') {
+                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 whitespace-normal break-words"><span class="inline-flex items-center gap-1 text-[9.5px] font-bold text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200"><span class="material-symbols-outlined text-[11px]">attachment</span>${rec.links}</span></td>`;
+                                }
+                                if (canonId === 'conclusao') {
+                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 text-slate-700 text-[9.5px] whitespace-normal break-words leading-tight">${rec.conclusao}</td>`;
+                                }
+
+                                // Resolução de campo específico (ex: campos MPF como IPL, Distribuição, etc.) com checagem de condição
+                                const targetFieldDef = fieldsMap.get(c.id) || fieldsMap.get(c.name);
+                                const isCondMet = checkFieldCondition(targetFieldDef, rec);
+                                if (!isCondMet) {
+                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 text-slate-400 font-mono text-[10px]">—</td>`;
+                                }
+
+                                const cKey = (c.id || c.name || '').toLowerCase();
+                                const cLabelKey = (c.label || '').toLowerCase();
+                                let cellVal = rec[c.id] || rec[c.name] || rec[cKey];
+                                if (!cellVal) {
+                                    if (cLabelKey.includes('ipl')) cellVal = rec.ipl || 'IPL 0800653/2026';
+                                    else if (cLabelKey.includes('distrib')) cellVal = rec.distribuicao || '2ª Vara Federal';
+                                    else if (cLabelKey.includes('design')) cellVal = rec.designado || 'Dr. Procurador da República';
+                                    else if (cLabelKey.includes('correlat')) cellVal = rec.correlatos || 'ACP 0801234/2026';
+                                    else if (cLabelKey.includes('fase')) cellVal = rec.fase_investigacao || 'Instrução';
+                                    else cellVal = `[${escapeHtml(c.label)} - #${recIdx + 1}]`;
+                                }
+                                return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 text-slate-700 whitespace-normal break-words">${escapeHtml(cellVal)}</td>`;
+                            }).join('')}
+                        </tr>
+                    `;
+                }).join('');
+
                 return `
                     <div class="mb-4">
-                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">
-                            <span class="cursor-text hover:bg-sky-50 px-1 rounded" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${escapeHtml(bloco.titulo || 'Quadro Sintético de Vistorias (1:N)')}</span>
-                            <span class="text-[10px] font-mono text-slate-400">Histórico 1:N • ${cols.length} Colunas</span>
+                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
+                            <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(escapeHtml(bloco.titulo || 'Quadro Sintético de Vistorias (Histórico 1:N)')).replace(/\r?\n/g, '<br>')}</span>
+                            <div class="flex items-center gap-1.5 text-[10px] font-mono text-slate-400">
+                                <span>${cols.length} Colunas</span>
+                                <span>•</span>
+                                <span>${isAsc ? 'Antigo → Recente' : 'Recente → Antigo'}</span>
+                                ${isGroupedByTab ? '<span>• Por Aba</span>' : ''}
+                                <span>•</span>
+                                <span class="capitalize">${density}</span>
+                            </div>
                         </div>
                         <div class="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
-                            <table class="w-full text-left text-[11px] border-collapse">
+                            <table class="w-full text-left border-collapse">
                                 <thead>
-                                    <tr class="bg-slate-100 border-b border-slate-200 text-[10px] font-bold text-slate-700 uppercase">
-                                        <th class="p-2 border-r border-slate-200 w-8 text-center">#</th>
-                                        ${cols.map(c => `<th class="p-2 border-r last:border-r-0 border-slate-200">${colLabelMap[c] || c}</th>`).join('')}
+                                    <tr class="bg-slate-100 border-b-2 border-slate-300">
+                                        <th class="${thDensityClass} border-r border-slate-200 w-7 text-center">#</th>
+                                        ${cols.map((c, cIdx) => `
+                                            <th class="${thDensityClass} border-r last:border-r-0 border-slate-200 group/th relative select-none whitespace-normal break-words leading-tight" style="min-width: 60px;">
+                                                <div class="flex items-center justify-between gap-1">
+                                                    <div class="flex items-center gap-0.5 min-w-0">
+                                                        ${cIdx > 0 ? `
+                                                            <button type="button" onclick="ReportBuilder.moveSynthetic1nColumn(${index}, ${cIdx}, -1, event)" 
+                                                                    class="opacity-0 group-hover/th:opacity-100 p-0.5 text-slate-400 hover:text-slate-800 hover:bg-slate-200 rounded cursor-pointer print:hidden shrink-0" 
+                                                                    title="Mover coluna para a esquerda">
+                                                                <span class="material-symbols-outlined text-[13px] leading-none">chevron_left</span>
+                                                            </button>
+                                                        ` : ''}
+                                                        <span class="cursor-pointer hover:bg-sky-100 px-1 py-0.5 rounded transition-colors whitespace-normal break-words leading-tight" 
+                                                              title="Duplo clique para renomear ou abreviar título" 
+                                                              ondblclick="ReportBuilder.editSynthetic1nColTitle(${index}, ${cIdx}, event)">
+                                                            ${escapeHtml(c.label)}
+                                                        </span>
+                                                        ${cIdx < cols.length - 1 ? `
+                                                            <button type="button" onclick="ReportBuilder.moveSynthetic1nColumn(${index}, ${cIdx}, 1, event)" 
+                                                                    class="opacity-0 group-hover/th:opacity-100 p-0.5 text-slate-400 hover:text-slate-800 hover:bg-slate-200 rounded cursor-pointer print:hidden shrink-0" 
+                                                                    title="Mover coluna para a direita">
+                                                                <span class="material-symbols-outlined text-[13px] leading-none">chevron_right</span>
+                                                            </button>
+                                                        ` : ''}
+                                                    </div>
+                                                    <button type="button" 
+                                                            onclick="ReportBuilder.removeColumnFromSynthetic1n(${index}, '${escapeHtml(c.id)}', event)" 
+                                                            class="field-remove-btn opacity-0 group-hover/th:opacity-100 p-0.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-all cursor-pointer print:hidden shrink-0" 
+                                                            title="Remover esta coluna da tabela">
+                                                        <span class="material-symbols-outlined text-[13px] leading-none">close</span>
+                                                    </button>
+                                                </div>
+                                            </th>
+                                        `).join('')}
                                     </tr>
                                 </thead>
-                                <tbody class="divide-y divide-slate-100 bg-white">
-                                    <tr class="hover:bg-slate-50">
-                                        <td class="p-2 text-center text-slate-400 font-mono border-r border-slate-100">1</td>
-                                        ${cols.map(c => {
-                                            if (c === 'data') return `<td class="p-2 border-r last:border-r-0 border-slate-100 font-medium text-slate-900 font-mono">15/08/2026</td>`;
-                                            if (c === 'org') return `<td class="p-2 border-r last:border-r-0 border-slate-100"><span class="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-bold text-[9px]">POLÍCIA FEDERAL</span></td>`;
-                                            if (c === 'situacao_ocupacao') return `<td class="p-2 border-r last:border-r-0 border-slate-100"><span class="px-1.5 py-0.5 rounded bg-red-100 text-red-800 font-bold text-[9px]">Irregular</span></td>`;
-                                            if (c === 'situacao_recuo') return `<td class="p-2 border-r last:border-r-0 border-slate-100"><span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[9px]">Não Recuou</span></td>`;
-                                            if (c === 'area_invadida') return `<td class="p-2 border-r last:border-r-0 border-slate-100 font-mono font-bold text-right text-slate-800">120,50 m²</td>`;
-                                            if (c === 'qtd_fotos') return `<td class="p-2 border-r last:border-r-0 border-slate-100 text-sky-600 font-semibold">📷 4 Fotos</td>`;
-                                            return `<td class="p-2 border-r last:border-r-0 border-slate-100 text-slate-700">[${colLabelMap[c] || c}]</td>`;
-                                        }).join('')}
-                                    </tr>
-                                    <tr class="hover:bg-slate-50 bg-slate-50/50">
-                                        <td class="p-2 text-center text-slate-400 font-mono border-r border-slate-100">2</td>
-                                        ${cols.map(c => {
-                                            if (c === 'data') return `<td class="p-2 border-r last:border-r-0 border-slate-100 font-medium text-slate-900 font-mono">10/04/2026</td>`;
-                                            if (c === 'org') return `<td class="p-2 border-r last:border-r-0 border-slate-100"><span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[9px]">SPU / PATRIMÔNIO</span></td>`;
-                                            if (c === 'situacao_ocupacao') return `<td class="p-2 border-r last:border-r-0 border-slate-100"><span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[9px]">Pendente</span></td>`;
-                                            if (c === 'situacao_recuo') return `<td class="p-2 border-r last:border-r-0 border-slate-100"><span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[9px]">Recuo Parcial</span></td>`;
-                                            if (c === 'area_invadida') return `<td class="p-2 border-r last:border-r-0 border-slate-100 font-mono font-bold text-right text-slate-800">85,20 m²</td>`;
-                                            if (c === 'qtd_fotos') return `<td class="p-2 border-r last:border-r-0 border-slate-100 text-sky-600 font-semibold">📷 2 Fotos</td>`;
-                                            return `<td class="p-2 border-r last:border-r-0 border-slate-100 text-slate-700">[${colLabelMap[c] || c}]</td>`;
-                                        }).join('')}
-                                    </tr>
+                                <tbody class="divide-y divide-slate-200">
+                                    ${tbodyRowsHtml}
                                 </tbody>
                             </table>
                         </div>
@@ -1353,53 +2331,502 @@
                 if (layout === '1_col') gridClass = 'grid-cols-1';
                 if (layout === 'grid_4') gridClass = 'grid-cols-2 sm:grid-cols-4';
                 const isSingleVistoria = bloco.escopo === 'ultima';
+                const isAsc = bloco.ordem_cronologica === 'asc';
+                const isGroupedByTab = !!bloco.ordenar_por_aba;
+                const density = bloco.densidade || current1nLaudoDensity || 'compact';
+                const striping = bloco.zebrado || current1nLaudoRowStriping || 'slate';
+
+                let cardPaddingClass = 'p-3';
+                let fieldGapClass = 'gap-2';
+                if (density === 'comfortable') {
+                    cardPaddingClass = 'p-3.5 sm:p-4';
+                    fieldGapClass = 'gap-2.5';
+                } else if (density === 'ultracompact') {
+                    cardPaddingClass = 'p-2';
+                    fieldGapClass = 'gap-1.5';
+                }
+
+                const fieldsMap = new Map();
+                fields.forEach(f => fieldsMap.set(f.id, f));
+
+                // Deduplicação estrita de campos por chave única (aba + campo) sem perda canônica
+                const rawCustomFields = Array.isArray(bloco.campos_selecionados) ? bloco.campos_selecionados : [];
+                const seenFieldKeys = new Set();
+                let customFields = [];
+                rawCustomFields.forEach(cf => {
+                    const cId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
+                    const cLabel = typeof cf === 'object' ? (cf.label || cf.id) : (fieldsMap.get(cId)?.label || cId);
+                    const cTabId = typeof cf === 'object' ? (cf.tabId || '') : (fieldsMap.get(cId)?.tabId || '');
+                    const uniqueKey = `${cTabId}:${cId}`;
+                    if (!seenFieldKeys.has(uniqueKey)) {
+                        seenFieldKeys.add(uniqueKey);
+                        customFields.push(typeof cf === 'object' ? { ...cf, id: cId, label: cLabel, rawId: cId, tabId: cTabId } : { id: cId, label: cLabel, rawId: cId, tabId: cTabId });
+                    }
+                });
+
+                if (customFields.length === 0 && (!bloco.campos_selecionados || bloco.campos_selecionados.length === 0)) {
+                    customFields = [
+                        { id: 'data', label: 'Data da Vistoria' },
+                        { id: 'situacao_ocupacao', label: 'Situação da Ocupação' },
+                        { id: 'situacao_recuo', label: 'Situação do Recuo' },
+                        { id: 'area_invadida', label: 'Área Invadida (m²)' },
+                        { id: 'conclusao', label: 'Conclusão da Vistoria' },
+                        { id: 'links', label: 'Processos Oficiais & Hiperlinks' }
+                    ];
+                }
+                // Conclusão: campo no mesmo formato de apresentação dos outros atributos da grade
+
+                // Geração dinâmica de múltiplos registros analíticos para TODAS as abas reais do formulário
+                const formTabs = (window.ReportAdapter && window.ReportAdapter.getFormTabs) ? window.ReportAdapter.getFormTabs(currentTemplate?.form_id) : [];
+                const allFormFields = (window.ReportAdapter && window.ReportAdapter.getFormFields) ? window.ReportAdapter.getFormFields(currentTemplate?.form_id) : [];
+
+                const tabGroupsMap = new Map();
+                formTabs.forEach(t => {
+                    tabGroupsMap.set(t.id, {
+                        id: t.id,
+                        title: t.title || 'Aba Geral',
+                        fields: Array.isArray(t.fields) ? [...t.fields] : []
+                    });
+                });
+                allFormFields.forEach(f => {
+                    const tId = f.tabId || 'geral';
+                    const tTitle = f.tabTitle || 'Aba Geral';
+                    if (!tabGroupsMap.has(tId)) {
+                        tabGroupsMap.set(tId, {
+                            id: tId,
+                            title: tTitle,
+                            fields: []
+                        });
+                    }
+                    const grp = tabGroupsMap.get(tId);
+                    if (!grp.fields.some(gf => gf.id === f.id)) {
+                        grp.fields.push(f);
+                    }
+                });
+
+                let mockTabsAndRecords = [];
+                Array.from(tabGroupsMap.values()).forEach((tabInfo, tIdx) => {
+                    const sanitizedTitle = sanitizeTabTitle(tabInfo.title);
+                    const titleLow = sanitizedTitle.toLowerCase();
+                    let orgBadge = sanitizedTitle.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) || `ABA${tIdx + 1}`;
+                    let tabSpecificRecords = [];
+
+                    // Detecção com precedência estrita para MPF
+                    if (titleLow.includes('mpf') || titleLow.includes('minist') || titleLow.includes('procurad')) {
+                        orgBadge = 'MPF';
+                        tabSpecificRecords = [
+                            {
+                                id: `rec_${tabInfo.id}_1`,
+                                num: 1,
+                                title: `Procedimento Ministerial #1 • 14/08/2026 (MPF)`,
+                                org: sanitizedTitle,
+                                orgBadge: 'MPF',
+                                date: '14/08/2026',
+                                data: '14/08/2026',
+                                status: 'Em Investigação',
+                                statusColor: 'bg-purple-100 text-purple-700 border-purple-200',
+                                situacao_ocupacao: 'Ocupação sob Inquérito Civil',
+                                situacao_recuo: 'Não Recuou',
+                                area_invadida: '120,50 m²',
+                                fiscal: 'Analista Pericial / MPF',
+                                conclusao: 'Procedimento preparatório de tutela coletiva com notificação para adequação aos limites legais.',
+                                ipl: 'IPL 0800653/2026',
+                                distribuicao: '2ª Vara Federal',
+                                designado: 'Dr. Procurador da República',
+                                correlatos: 'ACP 0801234/2026',
+                                fase_investigacao: 'Instrução',
+                                links: [
+                                    { title: 'Inquérito Civil', number: '1.24.000.000123/2026', url: '#' }
+                                ],
+                                photos: [
+                                    { id: 101, title: 'Área Perimetral sob Inquérito', date: '14/08/2026 11:20', coords: '-7.023450, -34.845120', resp: 'Analista Pericial / MPF' }
+                                ]
+                            }
+                        ];
+                    } else if (titleLow.includes('polic') || /\bpf\b/.test(titleLow) || titleLow === 'pf' || (titleLow.includes('pf') && !titleLow.includes('mpf'))) {
+                        orgBadge = 'PF';
+                        tabSpecificRecords = [
+                            {
+                                id: `rec_${tabInfo.id}_1`,
+                                num: 1,
+                                title: `Vistoria Técnica #1 • 15/08/2026 (PF)`,
+                                org: sanitizedTitle,
+                                orgBadge: 'PF',
+                                date: '15/08/2026',
+                                data: '15/08/2026',
+                                status: 'Irregular',
+                                statusColor: 'bg-red-100 text-red-700 border-red-200',
+                                situacao_ocupacao: 'Ocupação Irregular',
+                                situacao_recuo: 'Não Recuou',
+                                area_invadida: '120,50 m²',
+                                fiscal: 'Perito Criminal Federal',
+                                conclusao: 'Constatada intervenção e ocupação irregular na área perimetral.',
+                                links: [
+                                    { title: 'Processo IPL', number: '0800653-88.2024.4.05.8200', url: '#' },
+                                    { title: 'Registro RIP', number: '2145.00192.001', url: '#' }
+                                ],
+                                photos: [
+                                    { id: 1, title: 'Fachada Principal / Acesso Lote', date: '15/08/2026 10:45', coords: '-7.023450, -34.845120', resp: 'Perito Criminal Federal' }
+                                ]
+                            },
+                            {
+                                id: `rec_${tabInfo.id}_2`,
+                                num: 2,
+                                title: `Vistoria de Reinspeção #2 • 12/01/2026 (PF)`,
+                                org: sanitizedTitle,
+                                orgBadge: 'PF',
+                                date: '12/01/2026',
+                                data: '12/01/2026',
+                                status: 'Em Notificação',
+                                statusColor: 'bg-amber-100 text-amber-800 border-amber-200',
+                                situacao_ocupacao: 'Processo em Notificação',
+                                situacao_recuo: 'Recuo Parcial',
+                                area_invadida: '120,50 m²',
+                                fiscal: 'Perito Responsável',
+                                conclusao: 'Vistoria anterior de averiguação com notificação preliminar de adequação.',
+                                links: [
+                                    { title: 'Processo IPL', number: '0800653-88.2024.4.05.8200', url: '#' },
+                                    { title: 'Auto de Notificação', number: 'NOT-2026/014', url: '#' }
+                                ],
+                                photos: [
+                                    { id: 3, title: 'Panorama Geral do Lote e Entorno', date: '12/01/2026 09:30', coords: '-7.023420, -34.845100', resp: 'Perito Responsável' }
+                                ]
+                            }
+                        ];
+                    } else if (titleLow.includes('spu') || titleLow.includes('patrim')) {
+                        orgBadge = 'SPU';
+                        tabSpecificRecords = [
+                            {
+                                id: `rec_${tabInfo.id}_1`,
+                                num: 1,
+                                title: `Vistoria Patrimonial #1 • 10/04/2026 (SPU)`,
+                                org: sanitizedTitle,
+                                orgBadge: 'SPU',
+                                date: '10/04/2026',
+                                data: '10/04/2026',
+                                status: 'Pendente',
+                                statusColor: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+                                situacao_ocupacao: 'Área da União',
+                                situacao_recuo: 'Recuo Parcial',
+                                area_invadida: '85,20 m²',
+                                fiscal: 'Auditor SPU',
+                                conclusao: 'Área da União sob regime de regularização patrimonial.',
+                                links: [
+                                    { title: 'Registro RIP', number: '2145.00192.001', url: '#' }
+                                ],
+                                photos: [
+                                    { id: 201, title: 'Linha Preamar e Faixa de União', date: '10/04/2026 14:00', coords: '-7.023410, -34.845080', resp: 'Auditor SPU' }
+                                ]
+                            }
+                        ];
+                    } else if (titleLow.includes('pm') || titleLow.includes('pref') || titleLow.includes('munic') || titleLow.includes('meio')) {
+                        orgBadge = 'MUNICÍPIO';
+                        tabSpecificRecords = [
+                            {
+                                id: `rec_${tabInfo.id}_1`,
+                                num: 1,
+                                title: `Vistoria Municipal #1 • 05/02/2026 (MUNICÍPIO)`,
+                                org: sanitizedTitle,
+                                orgBadge: 'MUNICÍPIO',
+                                date: '05/02/2026',
+                                data: '05/02/2026',
+                                status: 'Regular',
+                                statusColor: 'bg-amber-100 text-amber-800 border-amber-200',
+                                situacao_ocupacao: 'Conforme Padrão Municipal',
+                                situacao_recuo: 'Recuo Total',
+                                area_invadida: '45,00 m²',
+                                fiscal: 'Fiscal de Obras / Urbanismo',
+                                conclusao: 'Parâmetros urbanísticos respeitados de acordo com o Plano Diretor.',
+                                links: [
+                                    { title: 'Auto de Vistoria', number: 'Auto 102/2026', url: '#' }
+                                ],
+                                photos: []
+                            }
+                        ];
+                    } else {
+                        tabSpecificRecords = [
+                            {
+                                id: `rec_${tabInfo.id}_1`,
+                                num: 1,
+                                title: `Vistoria Técnica #1 • 15/08/2026 (${orgBadge})`,
+                                org: sanitizedTitle,
+                                orgBadge: orgBadge,
+                                date: '15/08/2026',
+                                data: '15/08/2026',
+                                status: 'Regular',
+                                statusColor: 'bg-slate-100 text-slate-700 border-slate-200',
+                                situacao_ocupacao: 'Cadastrado',
+                                situacao_recuo: 'Recuado',
+                                area_invadida: '0,00 m²',
+                                fiscal: 'Fiscal Técnico',
+                                conclusao: 'Vistoria técnica cadastrada sem inconformidades.',
+                                links: [
+                                    { title: 'Registro Geral', number: 'REG-2026/001', url: '#' }
+                                ],
+                                photos: []
+                            }
+                        ];
+                    }
+
+                    mockTabsAndRecords.push({
+                        tabId: tabInfo.id,
+                        tabTitle: sanitizedTitle,
+                        records: tabSpecificRecords
+                    });
+                });
+
+                // Identifica abas explicitamente selecionadas nos campos do laudo ou pelo sourceTabId
+                const selectedTabIds = new Set();
+                if (Array.isArray(bloco.abas_selecionadas) && bloco.abas_selecionadas.length > 0) {
+                    bloco.abas_selecionadas.forEach(id => selectedTabIds.add(id));
+                } else if (current1nLaudoSelectedTabs && current1nLaudoSelectedTabs.size > 0) {
+                    current1nLaudoSelectedTabs.forEach(id => selectedTabIds.add(id));
+                } else if (bloco.sourceTabId && bloco.sourceTabId !== 'consolidado') {
+                    selectedTabIds.add(bloco.sourceTabId);
+                } else {
+                    rawCustomFields.forEach(cf => {
+                        const tId = (typeof cf === 'object' && cf.tabId) ? cf.tabId : (fieldsMap.get(typeof cf === 'string' ? cf : (cf.rawId || cf.id))?.tabId);
+                        if (tId) selectedTabIds.add(tId);
+                    });
+                }
+
+                if (selectedTabIds.size > 0) {
+                    const isTabGroupSelected = (tg) => {
+                        if (selectedTabIds.has(tg.tabId)) return true;
+                        for (const selId of selectedTabIds) {
+                            if (selId === tg.tabId) return true;
+                            const normSel = normalizeColKey(selId);
+                            const normId = normalizeColKey(tg.tabId || '');
+                            const normTitle = normalizeColKey(tg.tabTitle || '');
+                            if (normSel && normId && (normSel === normId || normId.includes(normSel) || normSel.includes(normId))) return true;
+                            if (normSel && normTitle && (normTitle.includes(normSel) || normSel.includes(normTitle))) return true;
+                            if (tg.records && tg.records.some(r => {
+                                const normOrg = normalizeColKey(r.org || '');
+                                const normBadge = normalizeColKey(r.orgBadge || '');
+                                return (normSel && normBadge && (normSel === normBadge || normBadge.includes(normSel) || normSel.includes(normBadge))) ||
+                                       (normSel && normOrg && (normOrg.includes(normSel) || normOrg.includes(normOrg)));
+                            })) return true;
+                        }
+                        return false;
+                    };
+                    mockTabsAndRecords = mockTabsAndRecords.filter(isTabGroupSelected);
+                }
+
+                // Filtragem por escopo (todas vs apenas última de cada aba)
+                if (isSingleVistoria) {
+                    mockTabsAndRecords.forEach(t => {
+                        if (t.records.length > 1) t.records = [t.records[0]];
+                    });
+                }
+
+                // Ordenação cronológica
+                if (isAsc) {
+                    mockTabsAndRecords.forEach(t => t.records.reverse());
+                    mockTabsAndRecords.reverse();
+                }
+
+                const totalRecordsCount = mockTabsAndRecords.reduce((acc, t) => acc + t.records.length, 0);
 
                 return `
                     <div class="mb-4">
-                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">
-                            <span class="cursor-text hover:bg-sky-50 px-1 rounded" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${escapeHtml(bloco.titulo || 'Vistoria Fotográfica & Anexos (1:N)')}</span>
-                            <span class="text-[10px] font-mono text-slate-400">${isSingleVistoria ? 'Última Vistoria' : 'Todas as Vistorias'} • ${layout}</span>
+                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between flex-wrap gap-1">
+                            <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(escapeHtml(bloco.titulo || 'Vistoria Fotográfica & Anexos (1:N)')).replace(/\r?\n/g, '<br>')}</span>
+                            <div class="flex items-center gap-1.5 text-[10px] font-mono text-slate-400">
+                                <span>${isSingleVistoria ? 'Última Vistoria' : `${totalRecordsCount} Vistorias`}</span>
+                                <span>•</span>
+                                <span>${isAsc ? 'Antigo → Recente' : 'Recente → Antigo'}</span>
+                                ${isGroupedByTab ? '<span>• Por Aba</span>' : ''}
+                                <span class="text-[9px] text-sky-600 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 px-1.5 py-0.5 rounded font-medium print:hidden ml-1">Arraste ⠿ para reordenar campos</span>
+                            </div>
                         </div>
 
-                        <!-- Bloco Ilustrativo da Vistoria na Folha -->
-                        <div class="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-2">
-                            <div class="flex items-center justify-between border-b border-slate-200 pb-1 text-xs">
-                                <span class="font-bold text-slate-800 flex items-center gap-1.5">
-                                    <span class="material-symbols-outlined text-[15px] text-primary">event_available</span>
-                                    Vistoria Técnica • 15/08/2026 (Polícia Federal)
-                                </span>
-                                <span class="px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[10px] font-bold">Irregular</span>
-                            </div>
+                        <!-- LISTAGEM DAS ABAS E SEUS DIVERSOS REGISTROS ANALÍTICOS (1:N) -->
+                        <div class="space-y-4">
+                            ${mockTabsAndRecords.map(tabGroup => {
+                                // Filtra os campos específicos selecionados pertencentes a esta aba
+                                const tabSpecificFields = customFields.filter(cf => {
+                                    const cfTabId = cf.tabId || fieldsMap.get(cf.rawId || cf.id)?.tabId;
+                                    if (!cfTabId) return true;
+                                    if (cfTabId === tabGroup.tabId) return true;
+                                    const normCfTab = normalizeColKey(cfTabId);
+                                    const normGroupTab = normalizeColKey(tabGroup.tabId || '');
+                                    const normGroupTitle = normalizeColKey(tabGroup.tabTitle || '');
+                                    return normCfTab === normGroupTab || normGroupTitle.includes(normCfTab) || normCfTab.includes(normGroupTitle);
+                                });
+                                if (tabSpecificFields.length === 0) return '';
+                                const fieldsToRender = tabSpecificFields;
+                                const customTabTitle = bloco['custom_tab_title_' + tabGroup.tabId] || ('Aba / Ente: ' + tabGroup.tabTitle);
 
-                            ${bloco.exibirObs ? `
-                                <div class="text-[11px] text-slate-600 bg-white p-2 rounded border border-slate-200">
-                                    <strong>Relato Técnico:</strong> Constatada intervenção irregular na faixa perimetral de marinha.
-                                </div>
-                            ` : ''}
-
-                            ${bloco.exibirLinks ? `
-                                <div class="flex items-center gap-2 text-[10px] font-bold text-sky-700 bg-sky-50 px-2 py-1 rounded border border-sky-200">
-                                    <span class="material-symbols-outlined text-[13px]">attachment</span>
-                                    <span>Processo IPL nº 0800653-88.2024.4.05.8200</span>
-                                </div>
-                            ` : ''}
-
-                            <div class="grid ${gridClass} gap-2.5 pt-1">
-                                ${[1, 2].map(num => `
-                                    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white flex flex-col shadow-2xs">
-                                        <div class="h-28 bg-slate-100 flex items-center justify-center text-slate-400 text-xs font-bold relative">
-                                            <span class="material-symbols-outlined text-[28px] text-slate-300">photo_camera</span>
-                                            <span class="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] font-mono px-1 rounded">Foto #${num}</span>
+                                return `
+                                <div class="space-y-2.5">
+                                    <!-- Identificação Explícita da Aba / Ente -->
+                                    <div class="flex items-center justify-between px-2 py-1 bg-slate-100 dark:bg-slate-800/80 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+                                        <div class="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wide">
+                                            <span class="material-symbols-outlined text-[16px] text-amber-500">folder_open</span>
+                                            <span class="cursor-text hover:bg-sky-50 dark:hover:bg-slate-700 px-1 rounded transition-colors" 
+                                                  title="Duplo clique para editar o texto da aba" 
+                                                  ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'custom_tab_title_${escapeHtml(tabGroup.tabId)}')">${escapeHtml(customTabTitle)}</span>
                                         </div>
-                                        <div class="p-2 text-[10px] space-y-0.5 text-slate-600">
-                                            ${bloco.exibirLegenda ? `<div class="font-bold text-slate-800 truncate">Fachada Principal / Acesso Lote #${num}</div>` : ''}
-                                            ${bloco.exibirData ? `<div>Data: 15/08/2026 10:45</div>` : ''}
-                                            ${bloco.exibirCoords ? `<div class="font-mono text-[9px] text-slate-500">GPS: -7.023450, -34.845120</div>` : ''}
-                                            ${bloco.exibirResp ? `<div>Fiscal: Agente Federal</div>` : ''}
-                                        </div>
+                                        <span class="text-[9.5px] font-mono font-bold text-slate-500 bg-white dark:bg-slate-700 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-600">
+                                            ${tabGroup.records.length} registro(s) analítico(s)
+                                        </span>
                                     </div>
-                                `).join('')}
-                            </div>
+
+                                    <!-- Registros de Vistoria da Aba -->
+                                    ${tabGroup.records.map((rec, rIdx) => {
+                                        // Estilo Zebrado / Ente dos Cartões de Vistoria
+                                        let cardBgClass = 'bg-slate-50/70 border-slate-200 dark:bg-slate-900/50 dark:border-slate-700';
+                                        if (striping === 'ente') {
+                                            const orgLow = (rec.org || '').toLowerCase();
+                                            if (orgLow.includes('pf') || orgLow.includes('policia')) {
+                                                cardBgClass = 'bg-blue-50/40 border-blue-200 dark:bg-blue-950/25 dark:border-blue-800';
+                                            } else if (orgLow.includes('spu') || orgLow.includes('patrimonio')) {
+                                                cardBgClass = 'bg-emerald-50/40 border-emerald-200 dark:bg-emerald-950/25 dark:border-emerald-800';
+                                            } else if (orgLow.includes('pm') || orgLow.includes('prefeitura') || orgLow.includes('meio')) {
+                                                cardBgClass = 'bg-amber-50/40 border-amber-200 dark:bg-amber-950/25 dark:border-amber-800';
+                                            } else {
+                                                cardBgClass = rIdx % 2 === 1 ? 'bg-slate-100/70 border-slate-300' : 'bg-white border-slate-200';
+                                            }
+                                        } else if (striping === 'sky') {
+                                            cardBgClass = rIdx % 2 === 1 ? 'bg-sky-50/60 border-sky-200 dark:bg-sky-950/30' : 'bg-white border-slate-200 dark:bg-slate-800';
+                                        } else if (striping === 'white') {
+                                            cardBgClass = 'bg-white border-slate-200 dark:bg-slate-800';
+                                        } else {
+                                            // slate
+                                            cardBgClass = rIdx % 2 === 1 ? 'bg-slate-100/70 border-slate-300 dark:bg-slate-900/70' : 'bg-slate-50/50 border-slate-200 dark:bg-slate-800';
+                                        }
+
+                                        const customRecTitle = bloco['custom_rec_title_' + rec.id] || rec.title;
+
+                                        return `
+                                            <div class="border rounded-xl ${cardPaddingClass} ${cardBgClass} space-y-2.5 shadow-2xs">
+                                                <!-- Cabeçalho da Vistoria -->
+                                                <div class="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-700 pb-1.5 text-xs">
+                                                    <div class="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-100">
+                                                        <span class="material-symbols-outlined text-[16px] text-primary">event_available</span>
+                                                        <span class="cursor-text hover:bg-sky-50 dark:hover:bg-slate-700 px-1 rounded transition-colors" 
+                                                              title="Duplo clique para editar o título da vistoria" 
+                                                              ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'custom_rec_title_${escapeHtml(rec.id)}')">${escapeHtml(customRecTitle)}</span>
+                                                    </div>
+                                                    <span class="px-2 py-0.5 rounded-full ${rec.statusColor} text-[9.5px] font-bold uppercase border">
+                                                        ${escapeHtml(rec.status)}
+                                                    </span>
+                                                </div>
+
+                                                <!-- GRADE DE ATRIBUTOS DA VISTORIA (COM DRAG & DROP, LARGURA % E BOTÃO X) -->
+                                                <div class="flex flex-wrap ${fieldGapClass} a4-grid-fields-container" data-block-index="${index}">
+                                                    ${fieldsToRender.map(cf => {
+                                                        const cId = typeof cf === 'string' ? cf : cf.id;
+                                                        const cLabel = typeof cf === 'object' ? (cf.label || cf.id) : (fieldsMap.get(cId)?.label || cId);
+                                                        const canonId = getCanonicalColId(cId, cLabel);
+                                                        const larguras = bloco.campos_larguras || {};
+                                                        
+                                                        // Largura padrão: conclusão e links 100%, outros 50%
+                                                        let pct = larguras[cId];
+                                                        if (!pct) {
+                                                            pct = (canonId === 'conclusao' || canonId === 'links') ? 100 : 50;
+                                                        }
+                                                        pct = Math.round(pct);
+                                                        const widthStyle = getFieldWidthStyle(pct);
+                                                        const isExpanded = pct > 55;
+
+                                                        return `
+                                                            <div class="relative group/field p-2 border ${isExpanded ? 'border-sky-300 dark:border-sky-700 bg-sky-50/30 dark:bg-sky-950/20 shadow-2xs' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'} rounded-lg select-none transition-all"
+                                                                 data-field-id="${escapeHtml(cId)}"
+                                                                 data-block-index="${index}"
+                                                                 style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">
+                                                                
+                                                                <!-- Topo do Card: Alça de Drag, Stepper de Largura e Botão X -->
+                                                                <div class="flex items-center justify-between gap-1 mb-1">
+                                                                    <div class="flex items-center gap-1 min-w-0 flex-1">
+                                                                        <span class="field-drag-handle cursor-grab active:cursor-grabbing text-slate-300 group-hover/field:text-sky-600 hover:bg-slate-200/60 dark:hover:bg-slate-700 p-0.5 rounded transition-colors" title="Arraste para mover de posição no laudo">
+                                                                            <span class="material-symbols-outlined text-[14px] leading-none">drag_indicator</span>
+                                                                        </span>
+                                                                        <span class="text-[9.5px] uppercase font-extrabold text-slate-600 dark:text-slate-300 truncate" title="${escapeHtml(cLabel)}">
+                                                                            ${escapeHtml(cLabel)}:
+                                                                        </span>
+                                                                    </div>
+
+                                                                    <div class="flex items-center gap-1 shrink-0">
+                                                                        <!-- Stepper de Largura Direto: [-] [X%] [+] -->
+                                                                        <div class="inline-flex items-center bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded p-0.5 shadow-2xs">
+                                                                            <button type="button" 
+                                                                                    class="field-width-dec-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 rounded cursor-pointer transition-colors" 
+                                                                                    onclick="ReportBuilder.changeFieldWidthStep(${index}, '${escapeHtml(cId)}', -1, event)" 
+                                                                                    title="Diminuir largura do campo (-)">
+                                                                                <span class="material-symbols-outlined text-[12px] leading-none">remove</span>
+                                                                            </button>
+                                                                            <button type="button" 
+                                                                                    class="field-width-badge-btn px-1 py-0.5 text-[9px] font-extrabold text-slate-700 dark:text-slate-200 hover:text-sky-600 dark:hover:text-sky-300 cursor-pointer transition-colors" 
+                                                                                    onclick="ReportBuilder.toggleFieldWidthPopover(${index}, '${escapeHtml(cId)}', event)" 
+                                                                                    title="Clique para escolher proporção exata ou regular slider">
+                                                                                ${pct}%
+                                                                            </button>
+                                                                            <button type="button" 
+                                                                                    class="field-width-inc-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 rounded cursor-pointer transition-colors" 
+                                                                                    onclick="ReportBuilder.changeFieldWidthStep(${index}, '${escapeHtml(cId)}', 1, event)" 
+                                                                                    title="Aumentar largura do campo (+)">
+                                                                                <span class="material-symbols-outlined text-[12px] leading-none">add</span>
+                                                                            </button>
+                                                                        </div>
+
+                                                                        <!-- Botão X para retirar campo diretamente do laudo -->
+                                                                        <button type="button" 
+                                                                                class="field-remove-btn p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50 rounded transition-colors cursor-pointer print:hidden" 
+                                                                                onclick="ReportBuilder.removeFieldFromAnalytical1n(${index}, '${escapeHtml(cId)}', event)" 
+                                                                                title="Remover este campo do laudo">
+                                                                            <span class="material-symbols-outlined text-[13px] leading-none">close</span>
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+
+                                                                <!-- Valor do Campo (com apresentação especial para 1:N e texto integral para Conclusão) -->
+                                                                ${canonId === 'conclusao' ? `
+                                                                    <div class="text-[10px] text-slate-700 dark:text-slate-200 leading-relaxed break-words whitespace-normal font-normal">
+                                                                        ${escapeHtml(rec.conclusao || 'Constatada regularidade na vistoria.')}
+                                                                    </div>
+                                                                ` : (canonId === 'links' || Array.isArray(rec[canonId])) ? `
+                                                                    <div class="flex flex-wrap items-center gap-1 pt-0.5">
+                                                                        ${(rec.links || []).map(l => `
+                                                                            <span class="inline-flex items-center gap-1 text-[9px] font-bold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 px-1.5 py-0.5 rounded shadow-2xs">
+                                                                                <span class="material-symbols-outlined text-[11px]">attachment</span>
+                                                                                <span>${escapeHtml(l.title || 'Processo')}:</span>
+                                                                                <span class="font-mono">${escapeHtml(l.number || '#')}</span>
+                                                                            </span>
+                                                                        `).join('')}
+                                                                    </div>
+                                                                ` : `
+                                                                    <div class="font-mono text-slate-800 dark:text-slate-100 font-bold text-[10.5px] truncate">
+                                                                        ${escapeHtml(String(rec[canonId] || rec[cId] || rec.situacao_ocupacao || `[${cLabel}]`))}
+                                                                    </div>
+                                                                `}
+                                                            </div>
+                                                        `;
+                                                    }).join('')}
+                                                </div>
+
+                                                <!-- FOTOGRAFIAS DA VISTORIA (1:N INTEGRAL) -->
+                                                <div class="grid ${gridClass} gap-2.5 pt-1">
+                                                    ${rec.photos.map(p => `
+                                                        <div class="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-800 flex flex-col shadow-2xs">
+                                                            <div class="h-28 bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-400 text-xs font-bold relative">
+                                                                <span class="material-symbols-outlined text-[28px] text-slate-300 dark:text-slate-600">photo_camera</span>
+                                                                <span class="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] font-mono px-1 rounded">Foto #${p.id}</span>
+                                                            </div>
+                                                            <div class="p-2 text-[10px] space-y-0.5 text-slate-600 dark:text-slate-300">
+                                                                ${bloco.exibirLegenda !== false ? `<div class="font-bold text-slate-800 dark:text-white truncate">${escapeHtml(p.title)}</div>` : ''}
+                                                                ${bloco.exibirData !== false ? `<div>Data: ${escapeHtml(p.date)}</div>` : ''}
+                                                                ${bloco.exibirCoords !== false ? `<div class="font-mono text-[9px] text-slate-500">GPS: ${escapeHtml(p.coords)}</div>` : ''}
+                                                            </div>
+                                                        </div>
+                                                    `).join('')}
+                                                </div>
+                                            </div>
+                                        `;
+                                    }).join('')}
+                                </div>
+                            `;
+                        }).join('')}
                         </div>
                     </div>
                 `;
@@ -1415,7 +2842,7 @@
                 return `
                     <div class="mb-4">
                         <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
-                            <span class="cursor-text hover:bg-sky-50 px-1 rounded" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${escapeHtml(bloco.titulo || 'Quadro Sintético de Imóveis')}</span>
+                            <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(escapeHtml(bloco.titulo || 'Quadro Sintético de Imóveis')).replace(/\r?\n/g, '<br>')}</span>
                             <span class="text-[10px] font-mono text-slate-400">${colHeaders.length} Colunas</span>
                         </div>
                         <div class="border border-slate-200 rounded-lg overflow-hidden">
@@ -1444,7 +2871,7 @@
                 return `
                     <div class="mb-4">
                         <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
-                            <span class="cursor-text hover:bg-sky-50 px-1 rounded" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${escapeHtml(bloco.titulo || 'Quadro Analítico Aprofundado')}</span>
+                            <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(escapeHtml(bloco.titulo || 'Quadro Analítico Aprofundado')).replace(/\r?\n/g, '<br>')}</span>
                             <span class="text-[10px] font-mono text-primary font-bold">Quebra por ${escapeHtml(bloco.grupo || 'Bairro')}</span>
                         </div>
                         <div class="border border-slate-200 rounded-lg overflow-hidden text-xs">
@@ -1476,10 +2903,16 @@
                 const lineHeight = bloco.espacamento || '1.6';
                 const textAlign = bloco.alinhamento || 'justify';
                 return `
+                    <style>
+                        .mention-tag { user-select: all; cursor: pointer; transition: all 0.15s ease-in-out; }
+                        .mention-tag[data-format-bold="true"], .mention-tag.font-bold, .mention-tag.font-black, .mention-tag.is-bold { font-weight: 700 !important; }
+                        .mention-tag[data-format-italic="true"], .mention-tag.italic { font-style: italic !important; }
+                        .mention-tag[data-format-underline="true"], .mention-tag.underline { text-decoration: underline !important; text-underline-offset: 2px !important; }
+                    </style>
                     <div class="mb-4 caixa-texto-livre-block page-break-avoid" data-block-index="${index}">
                         ${bloco.titulo ? `
                             <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-1.5 flex items-center justify-between">
-                                <span class="cursor-text hover:bg-sky-50 px-1 rounded" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${escapeHtml(bloco.titulo)}</span>
+                                <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(escapeHtml(bloco.titulo)).replace(/\r?\n/g, '<br>')}</span>
                                 <span class="text-[10px] font-mono text-slate-400 no-print">Caixa de Texto Livre</span>
                             </div>
                         ` : ''}
@@ -1540,18 +2973,23 @@
                 `;
             }
 
-            case 'rodape':
+            case 'rodape': {
+                const isSecondPageStart = (bloco.inicio_numeracao === 'segunda');
+                const pageLabel = isSecondPageStart 
+                    ? '<span class="text-sky-600 font-semibold">Página 02 de 10 (a partir da 2ª folha)</span>' 
+                    : 'Página 01 de 01';
                 return `
-                    <div class="border-t border-slate-300 pt-2 mt-4 text-[10px] text-slate-500 flex items-center justify-between font-mono">
+                    <div class="text-[10px] text-slate-500 flex items-center justify-between font-mono w-full">
                         <div>
-                            ${bloco.exibirDataHora ? `Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}` : ''}
-                            ${bloco.exibirHash ? `<span class="ml-2 font-bold text-slate-600">SHA-256: 7f83b1657ff1...</span>` : ''}
+                            ${bloco.exibirDataHora !== false ? `Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}` : ''}
+                            ${bloco.exibirHash !== false ? `<span class="ml-2 font-bold text-slate-600">SHA-256: 7f83b1657ff1...</span>` : ''}
                         </div>
                         <div class="font-bold text-slate-700">
-                            ${bloco.numeracao ? 'Página 1 de 1' : ''}
+                            ${bloco.numeracao !== false ? pageLabel : ''}
                         </div>
                     </div>
                 `;
+            }
 
             default:
                 return `<div class="text-xs text-slate-400 italic p-2">Bloco de tipo [${bloco.tipo}]</div>`;
@@ -1565,14 +3003,25 @@
         if (!element) return;
         element.contentEditable = "true";
         element.focus();
-        element.classList.add('ring-2', 'ring-primary', 'ring-offset-1', 'rounded-xs', 'bg-primary/5');
+        element.classList.add('ring-2', 'ring-primary', 'ring-offset-1', 'rounded-xs', 'bg-primary/5', 'whitespace-pre-line');
+
+        function onKeyDown(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                element.blur();
+            }
+        }
+        element.addEventListener('keydown', onKeyDown);
 
         function onBlur() {
             element.contentEditable = "false";
             element.classList.remove('ring-2', 'ring-primary', 'ring-offset-1', 'rounded-xs', 'bg-primary/5');
-            const newValue = element.innerText.trim();
-            updateBlockProperty(blockIndex, propertyPath, newValue);
+            element.removeEventListener('keydown', onKeyDown);
+            let newValue = element.innerText || '';
+            if (newValue.endsWith('\n')) newValue = newValue.slice(0, -1);
+            updateBlockProperty(blockIndex, propertyPath, newValue.trim());
             element.removeEventListener('blur', onBlur);
+            renderA4Blocks();
         }
         element.addEventListener('blur', onBlur);
     }
@@ -1623,6 +3072,261 @@
                 }
             }
         });
+    }
+
+    let gridSortableInstances = [];
+    function initGridFieldsSortable() {
+        gridSortableInstances.forEach(inst => {
+            try { inst.destroy(); } catch(e) {}
+        });
+        gridSortableInstances = [];
+
+        if (typeof Sortable === 'undefined') return;
+
+        const gridContainers = document.querySelectorAll('.a4-grid-fields-container');
+        gridContainers.forEach(container => {
+            const blockIndex = parseInt(container.getAttribute('data-block-index'), 10);
+            if (isNaN(blockIndex) || !currentTemplate || !currentTemplate.blocos || !currentTemplate.blocos[blockIndex]) return;
+
+            const inst = new Sortable(container, {
+                handle: '.field-drag-handle',
+                animation: 200,
+                direction: 'horizontal',
+                swapThreshold: 0.65,
+                invertSwap: true,
+                emptyInsertThreshold: 5,
+                ghostClass: 'opacity-40',
+                chosenClass: 'ring-2',
+                onEnd: function(evt) {
+                    const bloco = currentTemplate.blocos[blockIndex];
+                    if (!bloco || !Array.isArray(bloco.campos_selecionados)) return;
+
+                    // Reordena campos_selecionados com base na ordem real dos elementos no DOM do container
+                    const newContainerOrder = Array.from(container.children)
+                        .map(el => el.getAttribute('data-field-id'))
+                        .filter(Boolean);
+
+                    if (newContainerOrder.length > 0) {
+                        // Mapeia posições atuais dos itens desse container dentro de bloco.campos_selecionados
+                        const indicesInBloco = [];
+                        bloco.campos_selecionados.forEach((cf, idx) => {
+                            const cId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
+                            if (newContainerOrder.includes(cId)) {
+                                indicesInBloco.push(idx);
+                            }
+                        });
+
+                        // Se encontrou os itens correspondentes, reorganiza as posições relativas
+                        if (indicesInBloco.length === newContainerOrder.length) {
+                            const itemMap = new Map();
+                            indicesInBloco.forEach(idx => {
+                                const cf = bloco.campos_selecionados[idx];
+                                const cId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
+                                itemMap.set(cId, cf);
+                            });
+
+                            indicesInBloco.forEach((slotIdx, i) => {
+                                const targetFieldId = newContainerOrder[i];
+                                if (itemMap.has(targetFieldId)) {
+                                    bloco.campos_selecionados[slotIdx] = itemMap.get(targetFieldId);
+                                }
+                            });
+
+                            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                                window.ReportAdapter.saveReportTemplate(currentTemplate);
+                            }
+                            renderA4Blocks();
+                        }
+                    }
+                }
+            });
+            gridSortableInstances.push(inst);
+        });
+    }
+
+    const FIELD_WIDTH_STEPS = [25, 33, 50, 66, 75, 100];
+
+    function changeFieldWidthStep(blockIndex, fieldId, direction, evt) {
+        if (evt) {
+            evt.stopPropagation();
+            evt.preventDefault();
+        }
+        const bloco = currentTemplate?.blocos?.[blockIndex];
+        if (!bloco) return;
+        if (!bloco.campos_larguras) bloco.campos_larguras = {};
+
+        const currentPct = bloco.campos_larguras[fieldId] || 50;
+        let currentIndex = -1;
+        let minDiff = 999;
+        for (let i = 0; i < FIELD_WIDTH_STEPS.length; i++) {
+            const diff = Math.abs(FIELD_WIDTH_STEPS[i] - currentPct);
+            if (diff < minDiff) {
+                minDiff = diff;
+                currentIndex = i;
+            }
+        }
+        if (currentIndex === -1) currentIndex = 2; // padrão 50%
+
+        const newIndex = Math.max(0, Math.min(FIELD_WIDTH_STEPS.length - 1, currentIndex + direction));
+        const newPct = FIELD_WIDTH_STEPS[newIndex];
+        bloco.campos_larguras[fieldId] = newPct;
+
+        if (bloco.campos_spans) {
+            bloco.campos_spans[fieldId] = newPct >= 95 ? (bloco.colunasLayout || 2) : 1;
+        }
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderA4Blocks();
+    }
+
+    function setFieldWidthExact(blockIndex, fieldId, pct, evt) {
+        if (evt) {
+            evt.stopPropagation();
+            evt.preventDefault();
+        }
+        const bloco = currentTemplate?.blocos?.[blockIndex];
+        if (!bloco) return;
+        if (!bloco.campos_larguras) bloco.campos_larguras = {};
+
+        const cleanPct = Math.max(15, Math.min(100, Math.round(pct)));
+        bloco.campos_larguras[fieldId] = cleanPct;
+
+        if (bloco.campos_spans) {
+            bloco.campos_spans[fieldId] = cleanPct >= 95 ? (bloco.colunasLayout || 2) : 1;
+        }
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        closeFieldWidthPopover();
+        renderA4Blocks();
+    }
+
+    function toggleFieldWidthPopover(blockIndex, fieldId, evt) {
+        if (evt) {
+            evt.stopPropagation();
+            evt.preventDefault();
+        }
+        const existing = document.getElementById('field-width-popover');
+        if (existing) {
+            const prevFieldId = existing.getAttribute('data-field-id');
+            existing.remove();
+            if (prevFieldId === fieldId) return;
+        }
+
+        const bloco = currentTemplate?.blocos?.[blockIndex];
+        if (!bloco) return;
+        const currentPct = (bloco.campos_larguras && bloco.campos_larguras[fieldId]) ? bloco.campos_larguras[fieldId] : 50;
+
+        const targetBtn = evt.currentTarget || evt.target;
+        const rect = targetBtn ? targetBtn.getBoundingClientRect() : { bottom: 200, left: 200 };
+
+        const popover = document.createElement('div');
+        popover.id = 'field-width-popover';
+        popover.setAttribute('data-field-id', fieldId);
+        popover.className = 'fixed z-[9999] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl p-3 w-64 text-slate-800 dark:text-slate-100 flex flex-col gap-2.5 animate-in fade-in duration-100 select-none';
+
+        const top = Math.min(window.innerHeight - 220, rect.bottom + 6);
+        const left = Math.max(10, Math.min(window.innerWidth - 270, rect.left - 80));
+        popover.style.top = `${top}px`;
+        popover.style.left = `${left}px`;
+
+        popover.innerHTML = `
+            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-1.5">
+                <span class="text-xs font-bold uppercase text-slate-700 dark:text-slate-200 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[15px] text-sky-600">straighten</span>
+                    Largura do Campo
+                </span>
+                <button type="button" onclick="ReportBuilder.closeFieldWidthPopover()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white p-0.5 rounded cursor-pointer" title="Fechar">
+                    <span class="material-symbols-outlined text-[14px]">close</span>
+                </button>
+            </div>
+            <div>
+                <span class="text-[10px] font-bold uppercase text-slate-400 block mb-1">Proporções Rápidas:</span>
+                <div class="grid grid-cols-3 gap-1">
+                    ${[
+                        { pct: 25, label: '1/4 (25%)' },
+                        { pct: 33, label: '1/3 (33%)' },
+                        { pct: 50, label: '1/2 (50%)' },
+                        { pct: 66, label: '2/3 (66%)' },
+                        { pct: 75, label: '3/4 (75%)' },
+                        { pct: 100, label: 'Total (100%)' }
+                    ].map(item => `
+                        <button type="button" 
+                                onclick="ReportBuilder.setFieldWidthExact(${blockIndex}, '${fieldId}', ${item.pct}, event)" 
+                                class="py-1 px-1.5 text-center text-[10px] font-bold rounded-lg border transition-colors cursor-pointer ${currentPct === item.pct ? 'bg-sky-600 text-white border-sky-600 shadow-2xs' : 'bg-slate-50 dark:bg-slate-700/60 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600'}">
+                            ${item.label}
+                        </button>
+                    `).join('')}
+                </div>
+            </div>
+            <div class="pt-1 border-t border-slate-200 dark:border-slate-700">
+                <div class="flex items-center justify-between text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                    <span>Ajuste Fino Livre:</span>
+                    <span id="popover-slider-val" class="font-mono text-sky-600 dark:text-sky-400 text-xs font-black">${currentPct}%</span>
+                </div>
+                <input type="range" min="15" max="100" step="1" value="${currentPct}" class="w-full accent-sky-600 cursor-pointer" 
+                       oninput="document.getElementById('popover-slider-val').textContent = this.value + '%'" 
+                       onchange="ReportBuilder.setFieldWidthExact(${blockIndex}, '${fieldId}', parseInt(this.value, 10), event)" />
+            </div>
+        `;
+        document.body.appendChild(popover);
+
+        setTimeout(() => {
+            function onDocClick(e) {
+                if (!popover.contains(e.target) && targetBtn && !targetBtn.contains(e.target)) {
+                    closeFieldWidthPopover();
+                    document.removeEventListener('click', onDocClick);
+                }
+            }
+            document.addEventListener('click', onDocClick);
+        }, 50);
+    }
+
+    function closeFieldWidthPopover() {
+        const existing = document.getElementById('field-width-popover');
+        if (existing) existing.remove();
+    }
+
+    function toggleGridFieldSpan(blockIndex, fieldId, evt) {
+        changeFieldWidthStep(blockIndex, fieldId, 1, evt);
+    }
+
+    function removeFieldFromGrid(blockIndex, fieldId, evt) {
+        if (evt) {
+            evt.stopPropagation();
+            evt.preventDefault();
+        }
+        const bloco = currentTemplate?.blocos?.[blockIndex];
+        if (!bloco || !Array.isArray(bloco.campos_selecionados)) return;
+
+        bloco.campos_selecionados = bloco.campos_selecionados.filter(item => {
+            const id = typeof item === 'string' ? item : item.id;
+            return id !== fieldId;
+        });
+
+        if (bloco.campos_larguras) {
+            delete bloco.campos_larguras[fieldId];
+        }
+        if (bloco.campos_spans) {
+            delete bloco.campos_spans[fieldId];
+        }
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderA4Blocks();
+
+        // Atualiza a gaveta lateral se estiver aberta para atualizar contadores
+        const formId = currentTemplate?.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    function initGridFieldResizers() {
+        // Obsoleto: substituído pelo sistema de botões steppers [-] [+] e menu popover de proporções
     }
 
     // --- MANIPULADORES DO CARD 0: FOLHA A4 ---
@@ -1681,6 +3385,10 @@
         const logo = document.getElementById('cfg-hdr-logo')?.checked ?? true;
         const dataHora = document.getElementById('cfg-hdr-date')?.checked ?? true;
         const protocolo = document.getElementById('cfg-hdr-protocol')?.checked ?? true;
+        const repetirTodas = document.getElementById('cfg-hdr-repeat-all')?.checked ?? false;
+
+        // Se já houver um cabeçalho, removemos para atualizar/reinserir no topo sem duplicidade
+        currentTemplate.blocos = (currentTemplate.blocos || []).filter(b => b.tipo !== 'cabecalho');
 
         currentTemplate.blocos.unshift({
             id: 'blk_hdr_' + Date.now(),
@@ -1690,8 +3398,92 @@
             logo: logo,
             logo_url: window._customUploadedLogoUrl || null,
             exibirDataHora: dataHora,
-            exibirProtocolo: protocolo
+            exibirProtocolo: protocolo,
+            repetir_todas_folhas: repetirTodas
         });
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+
+        renderA4Blocks();
+    }
+
+    function updateHeaderProperty(property, value) {
+        if (!currentTemplate) return;
+        if (!currentTemplate.blocos) currentTemplate.blocos = [];
+        let hdr = currentTemplate.blocos.find(b => b.tipo === 'cabecalho');
+        if (!hdr) {
+            insertHeaderBlock();
+            hdr = currentTemplate.blocos.find(b => b.tipo === 'cabecalho');
+        }
+        if (hdr) {
+            if (property === 'logo') {
+                hdr.logo = !!value;
+                hdr.exibir_logo = !!value;
+            } else if (property === 'dataHora') {
+                hdr.exibirDataHora = !!value;
+            } else if (property === 'protocolo') {
+                hdr.exibirProtocolo = !!value;
+            } else {
+                hdr[property] = value;
+            }
+
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+        }
+    }
+
+    function setHeaderRepeatMode(repeatAll) {
+        if (!currentTemplate) return;
+        if (!currentTemplate.blocos) currentTemplate.blocos = [];
+        let hdr = currentTemplate.blocos.find(b => b.tipo === 'cabecalho');
+        if (!hdr) {
+            insertHeaderBlock();
+            hdr = currentTemplate.blocos.find(b => b.tipo === 'cabecalho');
+        }
+        if (hdr) {
+            hdr.repetir_todas_folhas = !!repeatAll;
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+        }
+
+        // Atualiza a interface visual dos dois botões na barra lateral
+        const btnFirst = document.getElementById('btn-hdr-repeat-first');
+        const btnAll = document.getElementById('btn-hdr-repeat-all');
+        const iconFirst = document.getElementById('icon-hdr-repeat-first');
+        const iconAll = document.getElementById('icon-hdr-repeat-all');
+        const rFirst = document.getElementById('cfg-hdr-repeat-first');
+        const rAll = document.getElementById('cfg-hdr-repeat-all');
+
+        if (rFirst) rFirst.checked = !repeatAll;
+        if (rAll) rAll.checked = !!repeatAll;
+
+        if (btnFirst && btnAll) {
+            if (!repeatAll) {
+                btnFirst.className = 'flex items-center gap-2.5 p-2.5 rounded-xl border text-left cursor-pointer transition-all select-none bg-primary/10 border-primary text-primary font-bold shadow-xs ring-1 ring-primary/30';
+                btnAll.className = 'flex items-center gap-2.5 p-2.5 rounded-xl border text-left cursor-pointer transition-all select-none bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 hover:border-slate-300';
+                if (iconFirst) iconFirst.classList.remove('hidden');
+                if (iconAll) iconAll.classList.add('hidden');
+            } else {
+                btnAll.className = 'flex items-center gap-2.5 p-2.5 rounded-xl border text-left cursor-pointer transition-all select-none bg-primary/10 border-primary text-primary font-bold shadow-xs ring-1 ring-primary/30';
+                btnFirst.className = 'flex items-center gap-2.5 p-2.5 rounded-xl border text-left cursor-pointer transition-all select-none bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 hover:border-slate-300';
+                if (iconAll) iconAll.classList.remove('hidden');
+                if (iconFirst) iconFirst.classList.add('hidden');
+            }
+        }
+
+        // Atualiza o badge do acordeão
+        const accHeader = document.getElementById('acc-header');
+        if (accHeader) {
+            const badgeEl = accHeader.querySelector('.bg-primary\\/10') || accHeader.querySelector('.font-bold.text-primary');
+            if (badgeEl) {
+                badgeEl.textContent = repeatAll ? 'Todas as Folhas' : '1ª Folha';
+            }
+        }
 
         renderA4Blocks();
     }
@@ -1749,10 +3541,105 @@
             tipo: 'grade_campos',
             titulo: 'Dados Cadastrais do Imóvel',
             campos_selecionados: checked,
+            campos_spans: {},
+            campos_larguras: {},
             colunasLayout: selectedGridCols
         });
 
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
         renderA4Blocks();
+
+        const formId = currentTemplate?.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    function addSelectedFieldsToExistingGrid(targetBlockIndex) {
+        const checked = Array.from(document.querySelectorAll("input[name='cfg-grid-field']:checked")).map(cb => cb.value);
+        if (checked.length === 0) {
+            alert('Selecione pelo menos um campo para adicionar à grade.');
+            return;
+        }
+
+        if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
+
+        let gridBlock = null;
+        if (typeof targetBlockIndex === 'number' && currentTemplate.blocos[targetBlockIndex]?.tipo === 'grade_campos') {
+            gridBlock = currentTemplate.blocos[targetBlockIndex];
+        } else {
+            gridBlock = currentTemplate.blocos.find(b => b.tipo === 'grade_campos');
+        }
+
+        if (!gridBlock) {
+            insertGridBlock();
+            return;
+        }
+
+        if (!Array.isArray(gridBlock.campos_selecionados)) {
+            gridBlock.campos_selecionados = [];
+        }
+
+        const existingSet = new Set(gridBlock.campos_selecionados.map(item => typeof item === 'string' ? item : item.id));
+        let addedCount = 0;
+        checked.forEach(fieldId => {
+            if (!existingSet.has(fieldId)) {
+                gridBlock.campos_selecionados.push(fieldId);
+                existingSet.add(fieldId);
+                addedCount++;
+            }
+        });
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderA4Blocks();
+
+        const formId = currentTemplate?.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    function quickAddFieldToExistingGrid(fieldId, evt) {
+        if (evt) {
+            evt.stopPropagation();
+            evt.preventDefault();
+        }
+        if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
+
+        let gridBlock = currentTemplate.blocos.find(b => b.tipo === 'grade_campos');
+        if (!gridBlock) {
+            gridBlock = {
+                id: 'blk_grid_' + Date.now(),
+                tipo: 'grade_campos',
+                titulo: 'Dados Cadastrais do Imóvel',
+                campos_selecionados: [fieldId],
+                campos_spans: {},
+                campos_larguras: {},
+                colunasLayout: selectedGridCols || 2
+            };
+            currentTemplate.blocos.push(gridBlock);
+        } else {
+            if (!Array.isArray(gridBlock.campos_selecionados)) {
+                gridBlock.campos_selecionados = [];
+            }
+            const existingSet = new Set(gridBlock.campos_selecionados.map(item => typeof item === 'string' ? item : item.id));
+            if (existingSet.has(fieldId)) {
+                renderA4Blocks();
+                return;
+            }
+            gridBlock.campos_selecionados.push(fieldId);
+        }
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderA4Blocks();
+
+        const formId = currentTemplate?.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
     }
 
     // --- MANIPULADORES DO CARD 3: MINI-MAPA ---
@@ -1839,6 +3726,527 @@
     let selectedPhotoLayout = '2_cols';
     let selected1nScope = 'todas';
     let selected1nSourceTab = 'consolidado';
+    let current1nSortOrder = 'desc'; // 'desc' ou 'asc'
+    let current1nGroupByTab = false; // true ou false
+    let current1nTableDensity = 'compact'; // 'comfortable' | 'compact' | 'ultracompact'
+    let current1nRowStriping = 'slate'; // 'slate' | 'sky' | 'ente' | 'white'
+    let current1nTabOrder = []; // Lista de IDs ou títulos das abas ordenadas
+    let current1nSelectedFieldKeys = new Set(); // Conjunto de chaves "tabId:fieldId" selecionadas para tabela sintética
+    let current1nSynSelectedTabs = new Set(); // Conjunto de IDs das abas selecionadas para a tabela sintética
+    let current1nLaudoSelectedFieldKeys = new Set(); // Conjunto de chaves "tabId:fieldId" selecionadas para laudo analítico
+    let current1nLaudoSelectedTabs = new Set(); // Conjunto de IDs das abas selecionadas para o laudo analítico
+
+    function toggleAccordionTab(containerId) {
+        const el = document.getElementById(containerId);
+        if (!el) return;
+        const isHidden = el.classList.contains('hidden');
+        el.classList.toggle('hidden');
+        const icon = document.getElementById(containerId + '-icon');
+        if (icon) {
+            icon.textContent = isHidden ? 'expand_more' : 'chevron_right';
+        }
+    }
+
+    function on1nSynTabSelectChange(cb) {
+        if (!cb) return;
+        const tabId = cb.getAttribute('data-tab-id') || cb.value;
+        if (cb.checked) {
+            current1nSynSelectedTabs.add(tabId);
+        } else {
+            current1nSynSelectedTabs.delete(tabId);
+        }
+
+        // Marca ou desmarca todos os campos daquela aba na gaveta lateral
+        const tabCbs = document.querySelectorAll(`input[name='cfg-1n-field'][data-tab-id='${tabId}']`);
+        if (cb.checked) {
+            tabCbs.forEach(tc => {
+                tc.checked = true;
+                current1nSelectedFieldKeys.add(`${tabId}:${tc.value}`);
+            });
+        } else {
+            tabCbs.forEach(tc => {
+                tc.checked = false;
+                current1nSelectedFieldKeys.delete(`${tabId}:${tc.value}`);
+            });
+        }
+        // O envio para a Folha A4 Interativa ocorre exclusivamente ao clicar em
+        // "Inserir Selecionados na Tabela da Folha" (addSelectedFieldsToExistingSynthetic1n)
+    }
+
+    function on1nLaudoTabSelectChange(cb) {
+        if (!cb) return;
+        const tabId = cb.getAttribute('data-tab-id') || cb.value;
+        if (cb.checked) {
+            current1nLaudoSelectedTabs.add(tabId);
+        } else {
+            current1nLaudoSelectedTabs.delete(tabId);
+        }
+
+        if (currentTemplate && Array.isArray(currentTemplate.blocos)) {
+            let block = currentTemplate.blocos.find(b => b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos');
+            if (!block && cb.checked) {
+                insertAnalyticalPhotos1nBlock();
+                block = currentTemplate.blocos.find(b => b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos');
+            }
+            if (block) {
+                block.abas_selecionadas = Array.from(current1nLaudoSelectedTabs);
+
+                // Se o usuário marcou a aba, sincroniza seus campos para o laudo
+                const tabCbs = document.querySelectorAll(`input[name='cfg-1n-laudo-field'][data-tab-id='${tabId}']`);
+                if (cb.checked) {
+                    tabCbs.forEach(tc => {
+                        tc.checked = true;
+                        current1nLaudoSelectedFieldKeys.add(`${tabId}:${tc.value}`);
+                    });
+                    addSelectedFieldsToExistingAnalytical1n();
+                } else {
+                    tabCbs.forEach(tc => {
+                        tc.checked = false;
+                        current1nLaudoSelectedFieldKeys.delete(`${tabId}:${tc.value}`);
+                    });
+                    if (Array.isArray(block.campos_selecionados)) {
+                        block.campos_selecionados = block.campos_selecionados.filter(cf => {
+                            const cfTab = typeof cf === 'object' ? (cf.tabId || '') : '';
+                            return cfTab !== tabId;
+                        });
+                    }
+                }
+
+                if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                    window.ReportAdapter.saveReportTemplate(currentTemplate);
+                }
+                renderA4Blocks();
+            }
+        }
+    }
+
+    function on1nFieldCheckboxChange(cb) {
+        if (!cb) return;
+        const tabId = cb.getAttribute('data-tab-id') || '';
+        const key = `${tabId}:${cb.value}`;
+        if (cb.checked) {
+            current1nSelectedFieldKeys.add(key);
+        } else {
+            current1nSelectedFieldKeys.delete(key);
+        }
+    }
+
+    function sync1nSelectedFieldsFromDOM() {
+        const cbs = document.querySelectorAll("input[name='cfg-1n-field']");
+        if (cbs.length > 0) {
+            current1nSelectedFieldKeys.clear();
+            cbs.forEach(cb => {
+                if (cb.checked) {
+                    const tabId = cb.getAttribute('data-tab-id') || '';
+                    current1nSelectedFieldKeys.add(`${tabId}:${cb.value}`);
+                }
+            });
+        }
+    }
+
+    function on1nLaudoFieldCheckboxChange(cb) {
+        if (!cb) return;
+        const tabId = cb.getAttribute('data-tab-id') || '';
+        const fieldId = cb.value;
+        const fieldLabel = cb.getAttribute('data-field-label') || fieldId;
+        const tabTitle = cb.getAttribute('data-tab-title') || '';
+        const key = `${tabId}:${fieldId}`;
+        if (cb.checked) {
+            current1nLaudoSelectedFieldKeys.add(key);
+            current1nLaudoSelectedTabs.add(tabId);
+        } else {
+            current1nLaudoSelectedFieldKeys.delete(key);
+        }
+
+        // Se já existe um laudo na folha A4, atualiza dinamicamente a folha sem recriar o DOM do painel
+        if (currentTemplate && Array.isArray(currentTemplate.blocos)) {
+            let block = currentTemplate.blocos.find(b => b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos');
+            if (!block && cb.checked) {
+                insertAnalyticalPhotos1nBlock();
+                block = currentTemplate.blocos.find(b => b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos');
+            }
+            if (block) {
+                if (!Array.isArray(block.campos_selecionados)) block.campos_selecionados = [];
+
+                if (cb.checked) {
+                    const exists = block.campos_selecionados.some(cf => {
+                        const cfTab = typeof cf === 'object' ? (cf.tabId || '') : '';
+                        const cfId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
+                        return (cfTab === tabId || !cfTab || !tabId) && cfId === fieldId;
+                    });
+                    if (!exists) {
+                        block.campos_selecionados.push({ 
+                            id: fieldId, 
+                            label: fieldLabel, 
+                            rawId: fieldId, 
+                            tabId: tabId,
+                            tabTitle: tabTitle
+                        });
+                    }
+                    if (!Array.isArray(block.abas_selecionadas)) block.abas_selecionadas = [];
+                    if (!block.abas_selecionadas.includes(tabId)) {
+                        block.abas_selecionadas.push(tabId);
+                    }
+                    // Marca o checkbox da aba no cabeçalho se ainda não estiver marcado
+                    const tabSelectCb = document.querySelector(`input[name='cfg-1n-laudo-tab-select'][data-tab-id='${tabId}']`);
+                    if (tabSelectCb) tabSelectCb.checked = true;
+                } else {
+                    block.campos_selecionados = block.campos_selecionados.filter(cf => {
+                        const cfTab = typeof cf === 'object' ? (cf.tabId || '') : '';
+                        const cfId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
+                        return !( (cfTab === tabId || !cfTab || !tabId) && cfId === fieldId );
+                    });
+                }
+
+                if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                    window.ReportAdapter.saveReportTemplate(currentTemplate);
+                }
+                renderA4Blocks();
+            }
+        }
+    }
+
+    function sync1nLaudoSelectedFieldsFromDOM() {
+        const cbs = document.querySelectorAll("input[name='cfg-1n-laudo-field']");
+        if (cbs.length > 0) {
+            current1nLaudoSelectedFieldKeys.clear();
+            cbs.forEach(cb => {
+                if (cb.checked) {
+                    const tabId = cb.getAttribute('data-tab-id') || '';
+                    current1nLaudoSelectedFieldKeys.add(`${tabId}:${cb.value}`);
+                }
+            });
+        }
+    }
+
+    function getSelected1nLaudoFieldsFromDrawer() {
+        sync1nLaudoSelectedFieldsFromDOM();
+        const cbs = Array.from(document.querySelectorAll("input[name='cfg-1n-laudo-field']:checked"));
+        return cbs.map(cb => ({
+            id: cb.value,
+            label: cb.getAttribute('data-field-label') || cb.value,
+            tabId: cb.getAttribute('data-tab-id') || '',
+            tabTitle: cb.getAttribute('data-tab-title') || ''
+        }));
+    }
+
+    function toggleAll1nLaudoFieldsInDrawer(checked) {
+        const cbs = document.querySelectorAll("input[name='cfg-1n-laudo-field']");
+        cbs.forEach(cb => {
+            cb.checked = !!checked;
+            const tabId = cb.getAttribute('data-tab-id') || '';
+            const key = `${tabId}:${cb.value}`;
+            if (checked) current1nLaudoSelectedFieldKeys.add(key);
+            else current1nLaudoSelectedFieldKeys.delete(key);
+        });
+
+        if (currentTemplate && Array.isArray(currentTemplate.blocos)) {
+            const block = currentTemplate.blocos.find(b => b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos');
+            if (block) {
+                if (checked) {
+                    addSelectedFieldsToExistingAnalytical1n();
+                } else {
+                    block.campos_selecionados = [];
+                    if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                        window.ReportAdapter.saveReportTemplate(currentTemplate);
+                    }
+                    renderA4Blocks();
+                }
+            }
+        }
+    }
+
+    function toggleTab1nLaudoFieldsInDrawer(tabId, checked) {
+        const cbs = document.querySelectorAll(`input[name='cfg-1n-laudo-field'][data-tab-id='${tabId}']`);
+        cbs.forEach(cb => {
+            cb.checked = !!checked;
+            const key = `${tabId}:${cb.value}`;
+            if (checked) current1nLaudoSelectedFieldKeys.add(key);
+            else current1nLaudoSelectedFieldKeys.delete(key);
+        });
+
+        // Sincroniza também o checkbox da aba no cabeçalho
+        const tabSelectCb = document.querySelector(`input[name='cfg-1n-laudo-tab-select'][data-tab-id='${tabId}']`);
+        if (tabSelectCb) {
+            tabSelectCb.checked = !!checked;
+        }
+        if (checked) current1nLaudoSelectedTabs.add(tabId);
+        else current1nLaudoSelectedTabs.delete(tabId);
+
+        if (currentTemplate && Array.isArray(currentTemplate.blocos)) {
+            let block = currentTemplate.blocos.find(b => b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos');
+            if (!block && checked) {
+                insertAnalyticalPhotos1nBlock();
+                block = currentTemplate.blocos.find(b => b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos');
+            }
+            if (block) {
+                block.abas_selecionadas = Array.from(current1nLaudoSelectedTabs);
+                if (checked) {
+                    addSelectedFieldsToExistingAnalytical1n();
+                } else {
+                    // Remove apenas os campos dessa aba
+                    const fieldsOfTab = new Set(Array.from(cbs).map(cb => cb.value));
+                    block.campos_selecionados = block.campos_selecionados.filter(cf => {
+                        const cfId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
+                        const cfTab = typeof cf === 'object' ? (cf.tabId || '') : '';
+                        return cfTab !== tabId && !fieldsOfTab.has(cfId);
+                    });
+                    if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                        window.ReportAdapter.saveReportTemplate(currentTemplate);
+                    }
+                    renderA4Blocks();
+                }
+            }
+        }
+    }
+
+    function filter1nLaudoFieldsInDrawer(query) {
+        const q = (query || '').trim().toLowerCase();
+        const items = document.querySelectorAll('.cfg-1n-laudo-field-item');
+        items.forEach(item => {
+            const label = item.getAttribute('data-field-label') || '';
+            const match = !q || label.includes(q);
+            item.style.display = match ? 'flex' : 'none';
+        });
+
+        const sections = document.querySelectorAll('.cfg-1n-laudo-tab-section');
+        sections.forEach(sec => {
+            const visibleItems = sec.querySelectorAll(".cfg-1n-laudo-field-item:not([style*='display: none'])");
+            const tabTitle = sec.getAttribute('data-tab-title') || '';
+            const titleMatch = !q || tabTitle.includes(q);
+            sec.style.display = (visibleItems.length > 0 || titleMatch) ? 'block' : 'none';
+        });
+    }
+
+    function normalizeColKey(str) {
+        if (!str) return '';
+        return String(str)
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]/g, '_')
+            .replace(/_+/g, '_')
+            .replace(/^_|_$/g, '');
+    }
+
+    function getCanonicalColId(id, label) {
+        const normId = normalizeColKey(id);
+        const normLabel = normalizeColKey(label);
+
+        if (normLabel === 'aba' || normLabel.includes('ente') || normId === 'aba') return 'aba';
+        if (normLabel.includes('data') || normId.includes('data')) return 'data';
+        if (normLabel.includes('orgao') || normId === 'org') return 'org';
+        if (normLabel.includes('ocupac') || normId.includes('ocupac')) return 'situacao_ocupacao';
+        if (normLabel.includes('recuo') || normId.includes('recuo')) return 'situacao_recuo';
+        if (normLabel.includes('area') || normId.includes('area')) return 'area_invadida';
+        if (normLabel.includes('foto') || normId.includes('foto') || normLabel.includes('anexo') || normId.includes('anexo')) return 'qtd_fotos';
+        if (normLabel.includes('conclus') || normLabel.includes('relato') || normLabel.includes('parecer') || normId.includes('conclus')) return 'conclusao';
+        if (normLabel.includes('link') || normLabel.includes('hiperlink') || normLabel.includes('processo')) return 'links';
+        if (normLabel.includes('epol') || normId.includes('epol')) return 'epol';
+        if (normLabel.includes('rip') || normId.includes('rip')) return 'rip';
+
+        return normLabel || normId;
+    }
+
+    function set1nSortOrder(order) {
+        current1nSortOrder = order;
+        const btnDesc = document.getElementById('btn-1n-sort-desc');
+        const btnAsc = document.getElementById('btn-1n-sort-asc');
+        if (order === 'desc') {
+            if (btnDesc) btnDesc.className = 'py-1.5 px-2 rounded-lg border text-xs font-bold text-center transition-all bg-primary text-white border-primary shadow-xs';
+            if (btnAsc) btnAsc.className = 'py-1.5 px-2 rounded-lg border text-xs font-bold text-center transition-all bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 cursor-pointer';
+        } else {
+            if (btnAsc) btnAsc.className = 'py-1.5 px-2 rounded-lg border text-xs font-bold text-center transition-all bg-primary text-white border-primary shadow-xs';
+            if (btnDesc) btnDesc.className = 'py-1.5 px-2 rounded-lg border text-xs font-bold text-center transition-all bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 cursor-pointer';
+        }
+
+        if (currentTemplate && Array.isArray(currentTemplate.blocos)) {
+            currentTemplate.blocos.forEach(b => {
+                if (b.tipo === 'tabela_sintetica_1n' || b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos') {
+                    b.ordem_cronologica = order;
+                }
+            });
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+        }
+    }
+
+    function set1nGroupByTab(groupByTab) {
+        current1nGroupByTab = !!groupByTab;
+        sync1nSelectedFieldsFromDOM();
+        if (currentTemplate && Array.isArray(currentTemplate.blocos)) {
+            currentTemplate.blocos.forEach(b => {
+                if (b.tipo === 'tabela_sintetica_1n' || b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos') {
+                    b.ordenar_por_aba = current1nGroupByTab;
+                }
+            });
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+        }
+        const formId = currentTemplate?.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    function set1nTableDensity(density) {
+        current1nTableDensity = density;
+        if (currentTemplate && Array.isArray(currentTemplate.blocos)) {
+            currentTemplate.blocos.forEach(b => {
+                if (b.tipo === 'tabela_sintetica_1n') {
+                    b.densidade = density;
+                }
+            });
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+        }
+        // Atualização cirúrgica no DOM sem re-renderizar o acordeon nem perder checkboxes
+        const densityIds = ['comfortable', 'compact', 'ultracompact'];
+        densityIds.forEach(d => {
+            const btn = document.getElementById(`btn-1n-density-${d}`);
+            if (btn) {
+                btn.className = `py-1 px-1.5 rounded-lg border text-[10.5px] font-semibold text-center ${density === d ? 'bg-primary/10 text-primary border-primary font-bold' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer`;
+            }
+        });
+    }
+
+    function set1nRowStriping(style) {
+        current1nRowStriping = style;
+        if (currentTemplate && Array.isArray(currentTemplate.blocos)) {
+            currentTemplate.blocos.forEach(b => {
+                if (b.tipo === 'tabela_sintetica_1n') {
+                    b.zebrado = style;
+                }
+            });
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+        }
+        // Atualização cirúrgica no DOM sem re-renderizar o acordeon nem perder checkboxes
+        const stripingIds = ['slate', 'sky', 'ente', 'white'];
+        stripingIds.forEach(s => {
+            const btn = document.getElementById(`btn-1n-striping-${s}`);
+            if (btn) {
+                btn.className = `py-1 px-1.5 rounded-lg border text-[10px] font-semibold text-center ${style === s ? 'bg-primary/10 text-primary border-primary font-bold' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer`;
+            }
+        });
+    }
+
+    let current1nLaudoDensity = 'compact';
+    let current1nLaudoRowStriping = 'slate';
+
+    function set1nLaudoDensity(density) {
+        current1nLaudoDensity = density;
+        if (currentTemplate && Array.isArray(currentTemplate.blocos)) {
+            currentTemplate.blocos.forEach(b => {
+                if (b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos') {
+                    b.densidade = density;
+                }
+            });
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+        }
+        const densityIds = ['comfortable', 'compact', 'ultracompact'];
+        densityIds.forEach(d => {
+            const btn = document.getElementById(`btn-1n-laudo-density-${d}`);
+            if (btn) {
+                btn.className = `py-1 px-1.5 rounded-lg border text-[10.5px] font-semibold text-center ${density === d ? 'bg-amber-500/10 text-amber-700 border-amber-500 font-bold dark:text-amber-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer`;
+            }
+        });
+    }
+
+    function set1nLaudoRowStriping(style) {
+        current1nLaudoRowStriping = style;
+        if (currentTemplate && Array.isArray(currentTemplate.blocos)) {
+            currentTemplate.blocos.forEach(b => {
+                if (b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos') {
+                    b.zebrado = style;
+                }
+            });
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+        }
+        const stripingIds = ['slate', 'sky', 'ente', 'white'];
+        stripingIds.forEach(s => {
+            const btn = document.getElementById(`btn-1n-laudo-striping-${s}`);
+            if (btn) {
+                btn.className = `py-1 px-1.5 rounded-lg border text-[10px] font-semibold text-center ${style === s ? 'bg-amber-500/10 text-amber-700 border-amber-500 font-bold dark:text-amber-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'} cursor-pointer`;
+            }
+        });
+    }
+
+    function move1nTabSequence(tabIndex, direction) {
+        sync1nSelectedFieldsFromDOM();
+        const targetIdx = tabIndex + direction;
+        if (targetIdx < 0 || targetIdx >= current1nTabOrder.length) return;
+        const temp = current1nTabOrder[tabIndex];
+        current1nTabOrder[tabIndex] = current1nTabOrder[targetIdx];
+        current1nTabOrder[targetIdx] = temp;
+
+        if (currentTemplate && Array.isArray(currentTemplate.blocos)) {
+            currentTemplate.blocos.forEach(b => {
+                if (b.tipo === 'tabela_sintetica_1n' || b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos') {
+                    b.ordem_abas = [...current1nTabOrder];
+                }
+            });
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+        }
+        const formId = currentTemplate?.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    function moveSynthetic1nColumn(blockIndex, colIndex, direction, evt) {
+        if (evt) evt.stopPropagation();
+        const block = currentTemplate?.blocos?.[blockIndex];
+        if (!block || !Array.isArray(block.colunas)) return;
+
+        const targetIdx = colIndex + direction;
+        if (targetIdx < 0 || targetIdx >= block.colunas.length) return;
+
+        const temp = block.colunas[colIndex];
+        block.colunas[colIndex] = block.colunas[targetIdx];
+        block.colunas[targetIdx] = temp;
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderA4Blocks();
+    }
+
+    function editSynthetic1nColTitle(blockIndex, colIndex, evt) {
+        if (evt) evt.stopPropagation();
+        const block = currentTemplate?.blocos?.[blockIndex];
+        if (!block || !Array.isArray(block.colunas) || !block.colunas[colIndex]) return;
+
+        let col = block.colunas[colIndex];
+        const currentLabel = (typeof col === 'object' && col.label) ? col.label : (typeof col === 'string' ? col : col.id);
+        const newLabel = prompt('Informe o título abreviado para esta coluna:', currentLabel);
+        if (newLabel !== null && newLabel.trim() !== '') {
+            if (typeof col === 'string') {
+                block.colunas[colIndex] = { id: col, label: newLabel.trim() };
+            } else {
+                col.label = newLabel.trim();
+            }
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+        }
+    }
 
     function selectPhotoLayout(layout) {
         selectedPhotoLayout = layout;
@@ -1868,23 +4276,198 @@
         selected1nSourceTab = tabId;
     }
 
+    function toggleAll1nFieldsInDrawer(checked) {
+        const cbs = document.querySelectorAll("input[name='cfg-1n-field']");
+        cbs.forEach(cb => {
+            cb.checked = !!checked;
+            const tabId = cb.getAttribute('data-tab-id') || '';
+            const key = `${tabId}:${cb.value}`;
+            if (checked) current1nSelectedFieldKeys.add(key);
+            else current1nSelectedFieldKeys.delete(key);
+        });
+    }
+
+    function toggleTab1nFieldsInDrawer(tabId, checked) {
+        const cbs = document.querySelectorAll(`input[name='cfg-1n-field'][data-tab-id='${tabId}']`);
+        cbs.forEach(cb => {
+            cb.checked = !!checked;
+            const key = `${tabId}:${cb.value}`;
+            if (checked) current1nSelectedFieldKeys.add(key);
+            else current1nSelectedFieldKeys.delete(key);
+        });
+    }
+
+    function filter1nFieldsInDrawer(query) {
+        const q = (query || '').trim().toLowerCase();
+        const items = document.querySelectorAll('.cfg-1n-field-item');
+        items.forEach(item => {
+            const label = item.getAttribute('data-field-label') || '';
+            const match = !q || label.includes(q);
+            item.style.display = match ? 'flex' : 'none';
+        });
+
+        const sections = document.querySelectorAll('.cfg-1n-tab-section');
+        sections.forEach(sec => {
+            const visibleItems = sec.querySelectorAll(".cfg-1n-field-item:not([style*='display: none'])");
+            const tabTitle = sec.getAttribute('data-tab-title') || '';
+            const titleMatch = !q || tabTitle.includes(q);
+            sec.style.display = (visibleItems.length > 0 || titleMatch) ? 'block' : 'none';
+        });
+    }
+
+    function getSelected1nFieldsFromDrawer() {
+        sync1nSelectedFieldsFromDOM();
+        const cbs = Array.from(document.querySelectorAll("input[name='cfg-1n-field']:checked"));
+        return cbs.map(cb => ({
+            id: cb.value,
+            label: cb.getAttribute('data-field-label') || cb.value,
+            tabId: cb.getAttribute('data-tab-id') || '',
+            tabTitle: cb.getAttribute('data-tab-title') || ''
+        }));
+    }
+
     function insertSynthetic1nBlock() {
+        if (!currentTemplate) return;
+        if (!Array.isArray(currentTemplate.blocos)) currentTemplate.blocos = [];
+
+        // Sincroniza abas selecionadas a partir dos checkboxes da gaveta
+        const checkedTabCbs = document.querySelectorAll("input[name='cfg-1n-syn-tab-select']:checked");
+        current1nSynSelectedTabs.clear();
+        checkedTabCbs.forEach(cb => {
+            const tId = cb.getAttribute('data-tab-id') || cb.value;
+            if (tId) current1nSynSelectedTabs.add(tId);
+        });
+
         const sourceTabId = document.getElementById('cfg-1n-source-tab')?.value || selected1nSourceTab || 'consolidado';
-        const checkedCols = Array.from(document.querySelectorAll("input[name='cfg-1n-syn-col']:checked")).map(cb => cb.value);
+        const selFields = getSelected1nFieldsFromDrawer();
+
+        let cols = [];
+        if (selFields.length > 0) {
+            const seenCanonical = new Map();
+            selFields.forEach(f => {
+                const canonId = getCanonicalColId(f.id, f.label);
+                if (seenCanonical.has(canonId)) {
+                    const existingCol = seenCanonical.get(canonId);
+                    if (!existingCol.fieldIds.includes(f.id)) existingCol.fieldIds.push(f.id);
+                    if (f.tabId && !existingCol.tabIds.includes(f.tabId)) existingCol.tabIds.push(f.tabId);
+                } else {
+                    const colObj = {
+                        id: canonId,
+                        label: f.label,
+                        fieldIds: [f.id],
+                        tabIds: f.tabId ? [f.tabId] : []
+                    };
+                    seenCanonical.set(canonId, colObj);
+                    cols.push(colObj);
+                }
+            });
+            if (!cols.some(c => (typeof c === 'object' ? c.id : c) === 'aba')) {
+                cols.unshift({ id: 'aba', label: 'Aba / Ente', fieldIds: ['aba'], tabIds: [] });
+            }
+        } else {
+            const fallbackCols = Array.from(document.querySelectorAll("input[name='cfg-1n-syn-col']:checked")).map(cb => cb.value);
+            cols = fallbackCols.length > 0 ? fallbackCols : ['aba', 'data', 'org', 'situacao_ocupacao', 'situacao_recuo', 'area_invadida', 'qtd_fotos'];
+            if (!cols.includes('aba') && !cols.some(c => (typeof c === 'object' && c.id === 'aba'))) {
+                cols.unshift('aba');
+            }
+        }
 
         currentTemplate.blocos.push({
             id: 'blk_syn1n_' + Date.now(),
             tipo: 'tabela_sintetica_1n',
             titulo: 'Quadro Sintético de Vistorias (Histórico 1:N)',
             sourceTabId: sourceTabId,
-            colunas: checkedCols.length > 0 ? checkedCols : ['data', 'org', 'situacao_ocupacao', 'situacao_recuo', 'area_invadida', 'qtd_fotos']
+            colunas: cols,
+            abas_selecionadas: Array.from(current1nSynSelectedTabs),
+            ordem_cronologica: current1nSortOrder || 'desc',
+            ordenar_por_aba: current1nGroupByTab || false,
+            densidade: current1nTableDensity || 'compact',
+            zebrado: current1nRowStriping || 'slate',
+            ordem_abas: [...current1nTabOrder]
         });
 
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
         renderA4Blocks();
+
+        const formId = currentTemplate?.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    function addSelectedFieldsToExistingSynthetic1n() {
+        if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
+        let block = currentTemplate.blocos.find(b => b.tipo === 'tabela_sintetica_1n');
+        if (!block) {
+            insertSynthetic1nBlock();
+            return;
+        }
+
+        // Sincroniza abas selecionadas a partir dos checkboxes da gaveta
+        const checkedTabCbs = document.querySelectorAll("input[name='cfg-1n-syn-tab-select']:checked");
+        current1nSynSelectedTabs.clear();
+        checkedTabCbs.forEach(cb => {
+            const tId = cb.getAttribute('data-tab-id') || cb.value;
+            if (tId) current1nSynSelectedTabs.add(tId);
+        });
+        block.abas_selecionadas = Array.from(current1nSynSelectedTabs);
+
+        const selFields = getSelected1nFieldsFromDrawer();
+        if (!Array.isArray(block.colunas)) block.colunas = [];
+
+        if (selFields.length > 0) {
+            const seenCanonical = new Map();
+            const cols = [];
+            selFields.forEach(f => {
+                const canonId = getCanonicalColId(f.id, f.label);
+                if (seenCanonical.has(canonId)) {
+                    const existingCol = seenCanonical.get(canonId);
+                    if (!existingCol.fieldIds.includes(f.id)) existingCol.fieldIds.push(f.id);
+                    if (f.tabId && !existingCol.tabIds.includes(f.tabId)) existingCol.tabIds.push(f.tabId);
+                } else {
+                    const colObj = {
+                        id: canonId,
+                        label: f.label,
+                        fieldIds: [f.id],
+                        tabIds: f.tabId ? [f.tabId] : []
+                    };
+                    seenCanonical.set(canonId, colObj);
+                    cols.push(colObj);
+                }
+            });
+            if (!cols.some(c => (typeof c === 'object' ? c.id : c) === 'aba')) {
+                cols.unshift({ id: 'aba', label: 'Aba / Ente', fieldIds: ['aba'], tabIds: [] });
+            }
+            block.colunas = cols;
+        }
+
+        block.ordem_cronologica = current1nSortOrder || block.ordem_cronologica || 'desc';
+        block.ordenar_por_aba = current1nGroupByTab ?? block.ordenar_por_aba ?? false;
+        block.densidade = current1nTableDensity || block.densidade || 'compact';
+        block.zebrado = current1nRowStriping || block.zebrado || 'slate';
+        if (current1nTabOrder.length > 0) block.ordem_abas = [...current1nTabOrder];
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderA4Blocks();
+
+        const formId = currentTemplate?.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
     }
 
     function insertAnalyticalPhotos1nBlock() {
+        if (!currentTemplate) return;
+        if (!Array.isArray(currentTemplate.blocos)) currentTemplate.blocos = [];
+
         const sourceTabId = document.getElementById('cfg-1n-source-tab')?.value || selected1nSourceTab || 'consolidado';
+        let selFields = getSelected1nLaudoFieldsFromDrawer();
+        if (selFields.length === 0) {
+            selFields = getSelected1nFieldsFromDrawer();
+        }
+
         const legenda = document.getElementById('cfg-photo-legend')?.checked ?? true;
         const data = document.getElementById('cfg-photo-date')?.checked ?? true;
         const coords = document.getElementById('cfg-photo-coords')?.checked ?? true;
@@ -1892,13 +4475,44 @@
         const obs = document.getElementById('cfg-photo-obs')?.checked ?? true;
         const links = document.getElementById('cfg-photo-links')?.checked ?? true;
 
+        const seenFields = new Set();
+        const deduplicatedFields = [];
+        selFields.forEach(f => {
+            const key = `${f.tabId || ''}:${f.id}`;
+            if (!seenFields.has(key)) {
+                seenFields.add(key);
+                deduplicatedFields.push({
+                    id: f.id,
+                    label: f.label,
+                    rawId: f.id,
+                    tabId: f.tabId || '',
+                    tabTitle: f.tabTitle || ''
+                });
+            }
+        });
+
         currentTemplate.blocos.push({
             id: 'blk_ana1n_' + Date.now(),
             tipo: 'galeria_fotos',
             titulo: 'Vistoria Fotográfica & Anexos (1:N)',
             sourceTabId: sourceTabId,
             escopo: selected1nScope || 'todas',
-            layoutFotos: selectedPhotoLayout,
+            layoutFotos: selectedPhotoLayout || '2_cols',
+            ordem_cronologica: current1nSortOrder || 'desc',
+            ordenar_por_aba: current1nGroupByTab || false,
+            densidade: current1nLaudoDensity || 'compact',
+            zebrado: current1nLaudoRowStriping || 'slate',
+            ordem_abas: [...current1nTabOrder],
+            abas_selecionadas: Array.from(current1nLaudoSelectedTabs || []),
+            campos_selecionados: deduplicatedFields.length > 0 ? deduplicatedFields : [
+                { id: 'data', label: 'Data Vistoria' },
+                { id: 'situacao_ocupacao', label: 'Situação da Ocupação' },
+                { id: 'situacao_recuo', label: 'Situação do Recuo' },
+                { id: 'area_invadida', label: 'Área Invadida (m²)' },
+                { id: 'conclusao', label: 'Conclusão da Vistoria' },
+                { id: 'links', label: 'Processos Oficiais & Hiperlinks' }
+            ],
+            campos_larguras: {},
             exibirLegenda: legenda,
             exibirData: data,
             exibirCoords: coords,
@@ -1907,7 +4521,343 @@
             exibirLinks: links
         });
 
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
         renderA4Blocks();
+
+        const formId = currentTemplate?.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    function addSelectedFieldsToExistingAnalytical1n() {
+        if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
+        let block = currentTemplate.blocos.find(b => b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos');
+        if (!block) {
+            insertAnalyticalPhotos1nBlock();
+            return;
+        }
+
+        let selFields = getSelected1nLaudoFieldsFromDrawer();
+        if (selFields.length === 0) {
+            selFields = getSelected1nFieldsFromDrawer();
+        }
+
+        if (!Array.isArray(block.campos_selecionados)) block.campos_selecionados = [];
+        if (!block.campos_larguras) block.campos_larguras = {};
+
+        selFields.forEach(f => {
+            const fKey = `${f.tabId || ''}:${f.id}`;
+            const exists = block.campos_selecionados.some(cf => {
+                const cfTab = typeof cf === 'object' ? (cf.tabId || '') : '';
+                const cfId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
+                return (cfTab === (f.tabId || '')) && cfId === f.id;
+            });
+            if (!exists) {
+                block.campos_selecionados.push({ 
+                    id: f.id, 
+                    label: f.label, 
+                    rawId: f.id, 
+                    tabId: f.tabId || '',
+                    tabTitle: f.tabTitle || ''
+                });
+            }
+            if (f.tabId) current1nLaudoSelectedFieldKeys.add(fKey);
+        });
+
+        // Sincroniza abas selecionadas também
+        if (current1nLaudoSelectedTabs.size > 0) {
+            block.abas_selecionadas = Array.from(current1nLaudoSelectedTabs);
+        } else {
+            const tabsInFields = new Set(selFields.map(f => f.tabId).filter(Boolean));
+            if (tabsInFields.size > 0) {
+                block.abas_selecionadas = Array.from(tabsInFields);
+                tabsInFields.forEach(tId => current1nLaudoSelectedTabs.add(tId));
+            }
+        }
+
+        block.ordem_cronologica = current1nSortOrder || block.ordem_cronologica || 'desc';
+        block.ordenar_por_aba = current1nGroupByTab ?? block.ordenar_por_aba ?? false;
+        block.densidade = current1nLaudoDensity || block.densidade || 'compact';
+        block.zebrado = current1nLaudoRowStriping || block.zebrado || 'slate';
+        if (current1nTabOrder.length > 0) block.ordem_abas = [...current1nTabOrder];
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderA4Blocks();
+
+        const formId = currentTemplate?.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    function removeSelectedFieldsFromExistingAnalytical1n() {
+        if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
+        let block = currentTemplate.blocos.find(b => b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos');
+        if (!block || !Array.isArray(block.campos_selecionados) || block.campos_selecionados.length === 0) {
+            alert('Não há campos no laudo ativo para retirar.');
+            return;
+        }
+
+        let selFields = getSelected1nLaudoFieldsFromDrawer();
+        if (selFields.length === 0) {
+            selFields = getSelected1nFieldsFromDrawer();
+        }
+        if (selFields.length === 0) {
+            alert('Selecione pelos checkboxes os campos que deseja retirar do laudo.');
+            return;
+        }
+
+        const removeKeys = new Set(selFields.map(f => `${f.tabId || ''}:${f.id}`));
+        const removeRawIds = new Set(selFields.map(f => f.id));
+
+        block.campos_selecionados = block.campos_selecionados.filter(cf => {
+            const cId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
+            const cTab = typeof cf === 'object' ? (cf.tabId || '') : '';
+            return !removeKeys.has(`${cTab}:${cId}`) && !removeRawIds.has(cId);
+        });
+
+        selFields.forEach(f => {
+            current1nLaudoSelectedFieldKeys.delete(`${f.tabId}:${f.id}`);
+        });
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderA4Blocks();
+
+        const formId = currentTemplate?.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    function quickAddFieldToAnalytical1n(tabId, fieldId, evt) {
+        if (evt) { evt.stopPropagation(); evt.preventDefault(); }
+        if (!currentTemplate) return;
+        if (!Array.isArray(currentTemplate.blocos)) currentTemplate.blocos = [];
+
+        const fields = window.ReportAdapter.getFormFields(currentTemplate.form_id);
+        const targetField = fields.find(f => f.id === fieldId) || { id: fieldId, label: fieldId };
+        const canonId = getCanonicalColId(fieldId, targetField.label);
+
+        let block = currentTemplate.blocos.find(b => b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos');
+        if (!block) {
+            block = {
+                id: 'blk_ana1n_' + Date.now(),
+                tipo: 'galeria_fotos',
+                titulo: 'Vistoria Fotográfica & Anexos (1:N)',
+                sourceTabId: tabId || 'consolidado',
+                campos_selecionados: [],
+                campos_larguras: {},
+                layoutFotos: selectedPhotoLayout || '2_cols',
+                ordem_cronologica: current1nSortOrder || 'desc',
+                ordenar_por_aba: current1nGroupByTab || false,
+                densidade: current1nLaudoDensity || 'compact',
+                zebrado: current1nLaudoRowStriping || 'slate',
+                exibirLegenda: true,
+                exibirData: true,
+                exibirCoords: true,
+                exibirResp: true,
+                exibirObs: true,
+                exibirLinks: true
+            };
+            currentTemplate.blocos.push(block);
+        }
+        if (!Array.isArray(block.campos_selecionados)) block.campos_selecionados = [];
+        const exists = block.campos_selecionados.some(cf => {
+            const cId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
+            const cTab = typeof cf === 'object' ? (cf.tabId || '') : '';
+            return (cTab === tabId || !cTab || !tabId) && cId === fieldId;
+        });
+        if (!exists) {
+            block.campos_selecionados.push({ id: fieldId, label: targetField.label, rawId: fieldId, tabId: tabId });
+        }
+
+        current1nLaudoSelectedFieldKeys.add(`${tabId}:${fieldId}`);
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderA4Blocks();
+
+        const formId = currentTemplate?.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    function quickRemoveFieldFromAnalytical1n(tabId, fieldId, evt) {
+        if (evt) { evt.stopPropagation(); evt.preventDefault(); }
+        if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
+        let block = currentTemplate.blocos.find(b => b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos');
+        if (!block || !Array.isArray(block.campos_selecionados)) return;
+
+        const fields = window.ReportAdapter.getFormFields(currentTemplate.form_id);
+        const targetField = fields.find(f => f.id === fieldId) || { id: fieldId, label: fieldId };
+        const canonId = getCanonicalColId(fieldId, targetField.label);
+
+        block.campos_selecionados = block.campos_selecionados.filter(cf => {
+            const cId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
+            const cTab = typeof cf === 'object' ? (cf.tabId || '') : '';
+            return !((cTab === tabId || !cTab || !tabId) && cId === fieldId);
+        });
+
+        current1nLaudoSelectedFieldKeys.delete(`${tabId}:${fieldId}`);
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderA4Blocks();
+
+        const formId = currentTemplate?.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    function quickAddFieldTo1n(tabId, fieldId, targetType, evt) {
+        if (evt) { evt.stopPropagation(); evt.preventDefault(); }
+        if (!currentTemplate) return;
+        if (!Array.isArray(currentTemplate.blocos)) currentTemplate.blocos = [];
+
+        const fields = window.ReportAdapter.getFormFields(currentTemplate.form_id);
+        const targetField = fields.find(f => f.id === fieldId) || { id: fieldId, label: fieldId };
+
+        const hasSyn = currentTemplate.blocos.some(b => b.tipo === 'tabela_sintetica_1n');
+        const hasAna = currentTemplate.blocos.some(b => b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos');
+
+        const useSyn = targetType === 'sintetica' || (hasSyn && !hasAna) || (!targetType && hasSyn);
+
+        if (useSyn) {
+            let block = currentTemplate.blocos.find(b => b.tipo === 'tabela_sintetica_1n');
+            if (!block) {
+                block = {
+                    id: 'blk_syn1n_' + Date.now(),
+                    tipo: 'tabela_sintetica_1n',
+                    titulo: 'Quadro Sintético de Vistorias (Histórico 1:N)',
+                    sourceTabId: tabId || 'consolidado',
+                    colunas: [],
+                    ordem_cronologica: current1nSortOrder || 'desc',
+                    ordenar_por_aba: current1nGroupByTab || false
+                };
+                currentTemplate.blocos.push(block);
+            }
+            if (!Array.isArray(block.colunas)) block.colunas = [];
+            const canonId = getCanonicalColId(fieldId, targetField.label);
+            const existingCol = block.colunas.find(c => {
+                const cId = typeof c === 'string' ? c : c.id;
+                const cLabel = (typeof c === 'object' && c.label) ? c.label : cId;
+                const cCanon = getCanonicalColId(cId, cLabel);
+                return cId === fieldId || cId === canonId || cCanon === canonId;
+            });
+
+            if (existingCol) {
+                if (typeof existingCol === 'object') {
+                    existingCol.fieldIds = existingCol.fieldIds || [existingCol.id];
+                    if (!existingCol.fieldIds.includes(fieldId)) existingCol.fieldIds.push(fieldId);
+                    existingCol.tabIds = existingCol.tabIds || [];
+                    if (tabId && !existingCol.tabIds.includes(tabId)) existingCol.tabIds.push(tabId);
+                }
+            } else {
+                block.colunas.push({
+                    id: canonId,
+                    label: targetField.label,
+                    fieldIds: [fieldId],
+                    tabIds: tabId ? [tabId] : []
+                });
+            }
+        } else {
+            let block = currentTemplate.blocos.find(b => b.tipo === 'galeria_fotos' || b.tipo === 'laudo_vistoria_fotos');
+            if (!block) {
+                block = {
+                    id: 'blk_ana1n_' + Date.now(),
+                    tipo: 'galeria_fotos',
+                    titulo: 'Vistoria Fotográfica & Anexos (1:N)',
+                    sourceTabId: tabId || 'consolidado',
+                    campos_selecionados: [],
+                    layoutFotos: selectedPhotoLayout || '2_cols',
+                    ordem_cronologica: current1nSortOrder || 'desc',
+                    ordenar_por_aba: current1nGroupByTab || false,
+                    exibirLegenda: true,
+                    exibirData: true,
+                    exibirCoords: true,
+                    exibirResp: true,
+                    exibirObs: true,
+                    exibirLinks: true
+                };
+                currentTemplate.blocos.push(block);
+            }
+            if (!Array.isArray(block.campos_selecionados)) block.campos_selecionados = [];
+            const exists = block.campos_selecionados.some(f => (typeof f === 'string' ? f : f.id) === fieldId);
+            if (!exists) {
+                block.campos_selecionados.push({ id: fieldId, label: targetField.label, tabId: tabId });
+            }
+        }
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderA4Blocks();
+
+        const formId = currentTemplate?.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    function removeColumnFromSynthetic1n(blockIndex, colId, evt) {
+        if (evt) { evt.stopPropagation(); evt.preventDefault(); }
+        const bloco = currentTemplate?.blocos?.[blockIndex];
+        if (!bloco || !Array.isArray(bloco.colunas)) return;
+
+        bloco.colunas = bloco.colunas.filter(c => {
+            const id = typeof c === 'string' ? c : c.id;
+            return id !== colId;
+        });
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderA4Blocks();
+
+        const formId = currentTemplate?.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    function removeFieldFromAnalytical1n(blockIndex, fieldId, evt) {
+        if (evt) { evt.stopPropagation(); evt.preventDefault(); }
+        const bloco = currentTemplate?.blocos?.[blockIndex];
+        if (!bloco) return;
+
+        if (Array.isArray(bloco.campos_selecionados)) {
+            bloco.campos_selecionados = bloco.campos_selecionados.filter(f => {
+                const id = typeof f === 'string' ? f : (f.rawId || f.id);
+                return id !== fieldId;
+            });
+        }
+
+        // Remove do conjunto de chaves selecionadas para manter o checkbox do drawer sincronizado
+        Array.from(current1nLaudoSelectedFieldKeys).forEach(k => {
+            if (k.endsWith(`:${fieldId}`) || k === fieldId) {
+                current1nLaudoSelectedFieldKeys.delete(k);
+            }
+        });
+
+        if (fieldId === 'obs') bloco.exibirObs = false;
+        if (fieldId === 'links') bloco.exibirLinks = false;
+        if (fieldId === 'legenda') bloco.exibirLegenda = false;
+        if (fieldId === 'data') bloco.exibirData = false;
+        if (fieldId === 'coords') bloco.exibirCoords = false;
+        if (fieldId === 'resp') bloco.exibirResp = false;
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderA4Blocks();
+
+        const formId = currentTemplate?.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
     }
 
     // Alias para compatibilidade
@@ -1985,7 +4935,107 @@
     }
 
     function execFormat(command, value = null) {
+        const cmd = String(command || '').toLowerCase();
+        
+        // 1. Executa formatação padrão no documento para texto comum selecionado
         document.execCommand(command, false, value);
+
+        // 2. Detecta se há tags de menção (@campo) selecionadas ou ativas
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount) return;
+
+        const range = sel.getRangeAt(0);
+        const tagsToFormat = new Set();
+
+        // Verifica o container comum e os nós no range
+        let container = range.commonAncestorContainer;
+        if (container.nodeType === Node.TEXT_NODE) container = container.parentElement;
+
+        if (container) {
+            if (container.classList && container.classList.contains('mention-tag')) {
+                tagsToFormat.add(container);
+            } else if (container.querySelectorAll) {
+                const candidates = container.querySelectorAll('.mention-tag');
+                candidates.forEach(tag => {
+                    try {
+                        if (sel.containsNode(tag, true) || (range.intersectsNode && range.intersectsNode(tag))) {
+                            tagsToFormat.add(tag);
+                        }
+                    } catch(e) {}
+                });
+            }
+        }
+
+        // Fallback: verifica se o cursor/âncora está dentro de uma tag
+        if (sel.anchorNode) {
+            let el = sel.anchorNode.nodeType === Node.ELEMENT_NODE ? sel.anchorNode : sel.anchorNode.parentElement;
+            if (el && el.closest('.mention-tag')) {
+                tagsToFormat.add(el.closest('.mention-tag'));
+            }
+        }
+        if (sel.focusNode) {
+            let el = sel.focusNode.nodeType === Node.ELEMENT_NODE ? sel.focusNode : sel.focusNode.parentElement;
+            if (el && el.closest('.mention-tag')) {
+                tagsToFormat.add(el.closest('.mention-tag'));
+            }
+        }
+
+        // 3. Aplica ou alterna o estilo de formatação (Negrito, Itálico, Sublinhado) diretamente nas tags encontradas
+        if (tagsToFormat.size > 0) {
+            tagsToFormat.forEach(tag => {
+                if (cmd === 'bold') {
+                    const isBold = tag.getAttribute('data-format-bold') === 'true';
+                    if (isBold) {
+                        tag.removeAttribute('data-format-bold');
+                        tag.style.fontWeight = 'normal';
+                        tag.classList.remove('font-bold', 'font-black', 'is-bold');
+                    } else {
+                        tag.setAttribute('data-format-bold', 'true');
+                        tag.style.fontWeight = 'bold';
+                        tag.classList.add('font-bold', 'font-black', 'is-bold');
+                    }
+                } else if (cmd === 'italic') {
+                    const isItalic = tag.getAttribute('data-format-italic') === 'true';
+                    if (isItalic) {
+                        tag.removeAttribute('data-format-italic');
+                        tag.style.fontStyle = 'normal';
+                        tag.classList.remove('italic');
+                    } else {
+                        tag.setAttribute('data-format-italic', 'true');
+                        tag.style.fontStyle = 'italic';
+                        tag.classList.add('italic');
+                    }
+                } else if (cmd === 'underline') {
+                    const isUnderline = tag.getAttribute('data-format-underline') === 'true';
+                    if (isUnderline) {
+                        tag.removeAttribute('data-format-underline');
+                        tag.style.textDecoration = 'none';
+                        tag.classList.remove('underline');
+                    } else {
+                        tag.setAttribute('data-format-underline', 'true');
+                        tag.style.textDecoration = 'underline';
+                        tag.classList.add('underline');
+                    }
+                }
+            });
+        }
+
+        // Localiza o editor ativo e salva imediatamente o conteúdo com as tags formatadas
+        let activeEditor = container ? container.closest('.free-text-editor') : null;
+        if (!activeEditor && tagsToFormat && tagsToFormat.size > 0) {
+            const firstTag = tagsToFormat.values().next().value;
+            if (firstTag) activeEditor = firstTag.closest('.free-text-editor');
+        }
+        if (!activeEditor) {
+            activeEditor = document.querySelector('.free-text-editor:focus');
+        }
+        if (activeEditor) {
+            const blockIdxAttr = activeEditor.id ? activeEditor.id.replace('free-text-editor-', '') : null;
+            const blockIdx = blockIdxAttr !== null ? parseInt(blockIdxAttr, 10) : null;
+            if (blockIdx !== null && !isNaN(blockIdx)) {
+                saveFreeTextContent(blockIdx, activeEditor.innerHTML);
+            }
+        }
     }
 
     function changeLineHeight(blockIndex, lineHeight) {
@@ -2038,6 +5088,26 @@
     }
 
     function handleFreeTextKeyDown(event, blockIndex) {
+        // Atalhos de teclado rápidos para formatação rica (Ctrl+B, Ctrl+I, Ctrl+U)
+        if (event.ctrlKey || event.metaKey) {
+            const k = event.key.toLowerCase();
+            if (k === 'b') {
+                event.preventDefault();
+                execFormat('bold');
+                return;
+            }
+            if (k === 'i') {
+                event.preventDefault();
+                execFormat('italic');
+                return;
+            }
+            if (k === 'u') {
+                event.preventDefault();
+                execFormat('underline');
+                return;
+            }
+        }
+
         const dropdown = document.getElementById(`mention-dropdown-${blockIndex}`);
         if (!dropdown || dropdown.classList.contains('hidden')) return;
 
@@ -2165,9 +5235,9 @@
             }
         }
 
-        // Insere o token formatado com a indicação visual da aba
+        // Insere o token formatado com a indicação visual da aba (sem negrito forçado por padrão para permitir formatação rica personalizada)
         const displayTag = tabTitle ? `@${fieldLabel} (${tabTitle})` : `@${fieldLabel}`;
-        const tokenHtml = `<span class="mention-tag inline-block bg-sky-100 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200 px-1.5 py-0.5 rounded font-mono text-[11px] font-bold select-all align-middle" data-field-id="${fieldId}" data-field-name="${fieldName}" data-tab-title="${tabTitle}" contenteditable="false" title="Campo: ${fieldLabel} • Aba: ${tabTitle}">${displayTag}</span>&nbsp;`;
+        const tokenHtml = `<span class="mention-tag inline-block bg-sky-100 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200 px-1.5 py-0.5 rounded font-mono text-[11px] select-all align-middle cursor-pointer transition-all hover:ring-1 hover:ring-sky-400" data-field-id="${fieldId}" data-field-name="${fieldName}" data-tab-title="${tabTitle}" contenteditable="false" title="Clique para selecionar e aplicar Negrito, Itálico ou Sublinhado • Campo: ${fieldLabel} • Aba: ${tabTitle}">${displayTag}</span>&nbsp;`;
         document.execCommand('insertHTML', false, tokenHtml);
 
         hideMentionDropdown(blockIndex);
@@ -2190,16 +5260,80 @@
         const pages = document.getElementById('cfg-ftr-pages')?.checked ?? true;
         const hash = document.getElementById('cfg-ftr-hash')?.checked ?? true;
         const date = document.getElementById('cfg-ftr-date')?.checked ?? true;
+        const startSecond = document.getElementById('cfg-ftr-page-start-second')?.checked;
+        const startMode = startSecond ? 'segunda' : 'primeira';
+
+        // Garante que não haja rodapés duplicados: se já houver um, remove antes de inserir no fim
+        currentTemplate.blocos = (currentTemplate.blocos || []).filter(b => b.tipo !== 'rodape');
 
         currentTemplate.blocos.push({
             id: 'blk_ftr_' + Date.now(),
             tipo: 'rodape',
             numeracao: pages,
             exibirHash: hash,
-            exibirDataHora: date
+            exibirDataHora: date,
+            inicio_numeracao: startMode
         });
 
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+
         renderA4Blocks();
+    }
+
+    function setFooterPageStart(mode) {
+        let ftr = (currentTemplate?.blocos || []).find(b => b.tipo === 'rodape');
+        if (!ftr) {
+            insertFooterBlock();
+            ftr = (currentTemplate?.blocos || []).find(b => b.tipo === 'rodape');
+        }
+        if (ftr) {
+            ftr.inicio_numeracao = mode;
+        }
+
+        // Sincroniza botões na barra lateral se os elementos existirem
+        const rFirst = document.getElementById('cfg-ftr-page-start-first');
+        const rSecond = document.getElementById('cfg-ftr-page-start-second');
+        if (rFirst && rSecond) {
+            rFirst.checked = (mode !== 'segunda');
+            rSecond.checked = (mode === 'segunda');
+        }
+
+        const bFirst = document.getElementById('btn-ftr-start-first');
+        const bSecond = document.getElementById('btn-ftr-start-second');
+        if (bFirst && bSecond) {
+            const activeClasses = 'bg-primary/10 border-primary text-primary font-bold shadow-xs ring-1 ring-primary/30';
+            const inactiveClasses = 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 hover:border-slate-300';
+            if (mode === 'segunda') {
+                bFirst.className = bFirst.className.replace(activeClasses, inactiveClasses);
+                bSecond.className = bSecond.className.replace(inactiveClasses, activeClasses);
+            } else {
+                bSecond.className = bSecond.className.replace(activeClasses, inactiveClasses);
+                bFirst.className = bFirst.className.replace(inactiveClasses, activeClasses);
+            }
+        }
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+
+        renderA4Blocks();
+    }
+
+    function updateFooterProperty(prop, value) {
+        let ftr = (currentTemplate?.blocos || []).find(b => b.tipo === 'rodape');
+        if (!ftr) {
+            insertFooterBlock();
+            ftr = (currentTemplate?.blocos || []).find(b => b.tipo === 'rodape');
+        }
+        if (ftr) {
+            ftr[prop] = value;
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+        }
     }
 
     // --- CONTROLE GERAL DO TEMPLATE ---
@@ -2211,8 +5345,14 @@
 
     function moveBlock(index, direction) {
         if (!currentTemplate || !currentTemplate.blocos) return;
+        const currentBlock = currentTemplate.blocos[index];
+        if (currentBlock && currentBlock.tipo === 'rodape') return; // Rodapé fica sempre no final da folha
+
         const target = index + direction;
         if (target < 0 || target >= currentTemplate.blocos.length) return;
+        const targetBlock = currentTemplate.blocos[target];
+        if (targetBlock && targetBlock.tipo === 'rodape') return; // Não permite passar para depois do rodapé fixo
+
         const item = currentTemplate.blocos.splice(index, 1)[0];
         currentTemplate.blocos.splice(target, 0, item);
         renderA4Blocks();
@@ -2260,6 +5400,9 @@
     }
 
     function saveCurrentTemplate(showAlert = true) {
+        if (document.activeElement && typeof document.activeElement.blur === 'function') {
+            document.activeElement.blur();
+        }
         if (!currentTemplate) return;
         const ok = window.ReportAdapter.saveReportTemplate(currentTemplate);
         if (showAlert) {
@@ -2275,14 +5418,23 @@
     }
 
     /**
-     * Imprime ou Gera PDF da folha atual.
+     * Imprime ou Gera PDF da folha atual no visualizador oficial A4.
+     * Abre a folha com renderização limpa, sem 'about:blank', sem alças/drag handles e sem vazamentos.
      */
     function printReport() {
+        if (!currentTemplate) return;
+        if (typeof saveCurrentTemplate === 'function') {
+            saveCurrentTemplate();
+        }
+        if (typeof openFeatureReportPage === 'function') {
+            openFeatureReportPage(currentTemplate.form_id, currentTemplate.id, window.activeFeatureData || {});
+            return;
+        }
+
         const stage = document.getElementById('a4-sheet-stage');
         if (!stage) return;
 
         const orient = (currentTemplate && currentTemplate.config_pagina) ? currentTemplate.config_pagina.orientacao : 'portrait';
-        const mm = (currentTemplate && currentTemplate.config_pagina && currentTemplate.config_pagina.margens_mm) || { top: 15, bottom: 15, left: 15, right: 15 };
 
         const printWin = window.open('', '_blank', 'width=950,height=1000');
         if (!printWin) {
@@ -2292,7 +5444,7 @@
 
         const styles = `
             <style>
-                @page { size: A4 ${orient}; margin: ${mm.top}mm ${mm.right}mm ${mm.bottom}mm ${mm.left}mm; }
+                @page { size: A4 ${orient}; margin: 0 !important; }
                 body { font-family: 'IBM Plex Sans', sans-serif; background: #fff; color: #111c2d; margin: 0; padding: 0; }
                 .print\\:hidden, button, .drag-handle, #a4-margin-guide, .a4-margin-guide { display: none !important; }
                 [contenteditable] { outline: none !important; border: none !important; }
@@ -2307,14 +5459,17 @@
             <!DOCTYPE html>
             <html>
                 <head>
-                    <title>${escapeHtml(currentTemplate.nome)}</title>
+                    <title></title>
                     ${styles}
                 </head>
                 <body>
-                    <div style="width: 100%; max-width: ${orient === 'landscape' ? '1050px' : '794px'}; margin: 0 auto;">
+                    <div style="width: 100%; max-width: ${orient === 'landscape' ? '1050px' : '794px'}; margin: 0 auto; padding: 0;">
                         ${stage.innerHTML}
                     </div>
-                    <script>setTimeout(() => { window.print(); }, 600);</script>
+                    <script>
+                        window.addEventListener('beforeprint', () => { document.title = ''; });
+                        setTimeout(() => { window.print(); }, 600);
+                    </script>
                 </body>
             </html>
         `);
@@ -2331,6 +5486,11 @@
         let tpl = templates.find(t => t.tipo === 'individual' && t.atalho_aba !== 'none');
         if (!tpl) tpl = templates.find(t => t.tipo === 'individual');
         if (!tpl) tpl = window.ReportAdapter.createDefaultTemplate(formId, 'individual', 'Ficha Cadastral');
+
+        if (typeof openFeatureReportPage === 'function') {
+            openFeatureReportPage(formId, tpl.id, featureData, featureGeometry);
+            return;
+        }
 
         let dims = null;
         if (featureGeometry && typeof window.ReportAdapter.calculateFeatureDimensions === 'function') {
@@ -2382,24 +5542,73 @@
                     </div>
                 `;
             } else if (b.tipo === 'grade_campos') {
-                const sel = new Set(b.campos_selecionados || []);
-                const flds = fields.filter(f => sel.has(f.id));
-                bodyHtml += `
-                    <div style="margin-bottom:16px; border:1px solid #cbd5e1; border-radius:8px; padding:12px;">
-                        <div style="font-size:12px; font-weight:bold; text-transform:uppercase; margin-bottom:10px; color:#0f2942;">${escapeHtml(b.titulo || 'Dados Cadastrais')}</div>
-                        <div style="display:grid; grid-template-columns:${b.colunasLayout === 3 ? 'repeat(3, 1fr)' : (b.colunasLayout === 1 ? '1fr' : 'repeat(2, 1fr)')}; gap:8px;">
-                            ${flds.map(f => {
-                                const val = featureData[f.name] || featureData[f.id] || featureData[f.label] || '—';
-                                return `
-                                    <div style="padding:6px 8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px;">
-                                        <div style="font-size:10px; font-weight:bold; color:#64748b; text-transform:uppercase;">${f.label}</div>
-                                        <div style="font-size:12px; font-weight:bold; color:#1e293b; margin-top:2px;">${val}</div>
-                                    </div>
-                                `;
-                            }).join('')}
+                const colCount = b.colunasLayout || 2;
+                const spans = b.campos_spans || {};
+                const larguras = b.campos_larguras || {};
+                const fieldsMap = new Map();
+                fields.forEach(f => {
+                    fieldsMap.set(f.id, f);
+                    if (f.name) fieldsMap.set(f.name, f);
+                });
+
+                const rawSel = Array.isArray(b.campos_selecionados) ? b.campos_selecionados : [];
+                let flds = rawSel
+                    .map(item => typeof item === 'string' ? { id: item } : item)
+                    .map(item => {
+                        const baseField = fieldsMap.get(item.id) || fieldsMap.get(item.name) || {};
+                        return { ...baseField, ...item };
+                    })
+                    .filter(f => f && (f.label || f.name));
+
+                if (flds.length === 0 && rawSel.length > 0) {
+                    const selSet = new Set(rawSel.map(s => typeof s === 'string' ? s : s.id));
+                    flds = fields.filter(f => selSet.has(f.id));
+                }
+
+                if (colCount === 1) {
+                    bodyHtml += `
+                        <div style="margin-bottom:16px; border:1px solid #cbd5e1; border-radius:8px; padding:12px;">
+                            <div style="font-size:12px; font-weight:bold; text-transform:uppercase; margin-bottom:10px; color:#0f2942;">${escapeHtml(b.titulo || 'Dados Cadastrais')}</div>
+                            <div style="display:flex; flex-direction:column; gap:6px;">
+                                ${flds.map(f => {
+                                    const val = featureData[f.name] || featureData[f.id] || featureData[f.label] || '—';
+                                    return `
+                                        <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; font-size:11px;">
+                                            <span style="font-weight:bold; color:#475569;">${escapeHtml(f.label)}:</span>
+                                            <span style="font-weight:bold; color:#0f172a; font-family:monospace;">${escapeHtml(String(val))}</span>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
                         </div>
-                    </div>
-                `;
+                    `;
+                } else {
+                    bodyHtml += `
+                        <div style="margin-bottom:16px; border:1px solid #cbd5e1; border-radius:8px; padding:12px;">
+                            <div style="font-size:12px; font-weight:bold; text-transform:uppercase; margin-bottom:10px; color:#0f2942;">${escapeHtml(b.titulo || 'Dados Cadastrais')}</div>
+                            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                                ${flds.map(f => {
+                                    const val = featureData[f.name] || featureData[f.id] || featureData[f.label] || '—';
+                                    let pct = larguras[f.id];
+                                    if (!pct) {
+                                        const span = Math.min(spans[f.id] || f.colSpan || 1, colCount);
+                                        if (span >= colCount) pct = 100;
+                                        else if (colCount === 3 && span === 2) pct = 66;
+                                        else pct = colCount === 3 ? 33 : 50;
+                                    }
+                                    pct = Math.round(pct);
+                                    const wStyle = getFieldWidthStyle(pct);
+                                    return `
+                                        <div style="padding:6px 8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; flex: 0 0 ${wStyle}; max-width: ${wStyle}; width: ${wStyle}; box-sizing: border-box;">
+                                            <div style="font-size:10px; font-weight:bold; color:#64748b; text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(f.label)}</div>
+                                            <div style="font-size:12px; font-weight:bold; color:#1e293b; margin-top:2px; ${pct > 55 ? 'word-break:break-word;' : 'white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'}">${escapeHtml(String(val))}</div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
             } else if (b.tipo === 'galeria_fotos') {
                 bodyHtml += `
                     <div style="margin-bottom:16px; border:1px solid #cbd5e1; border-radius:8px; padding:12px;">
@@ -2426,9 +5635,122 @@
     }
 
     function openFeatureReportPage(templateId, featureData = {}, featureGeometry = null) {
+        // Se chamado acidentalmente com formato (formId, templateId, featureData)
+        if (typeof featureData === 'string') {
+            const realTplId = featureData;
+            featureData = (featureGeometry && typeof featureGeometry === 'object') ? featureGeometry : {};
+            featureGeometry = arguments[3] || null;
+            templateId = realTplId;
+        }
+
+        // Fallback automático para garantir dados da feição ativa se featureData for vazio ou omitido
+        if (!featureData || Object.keys(featureData).length === 0) {
+            if (typeof window !== 'undefined') {
+                if (window.activeFeatureData && Object.keys(window.activeFeatureData).length > 0) {
+                    featureData = window.activeFeatureData;
+                } else if (window.currentFormFeatureData && Object.keys(window.currentFormFeatureData).length > 0) {
+                    featureData = window.currentFormFeatureData;
+                } else if (window.activeFeatureLayer && window.activeFeatureLayer.feature && window.activeFeatureLayer.feature.properties) {
+                    featureData = window.activeFeatureLayer.feature.properties;
+                } else if (typeof activeFeatureLayer !== 'undefined' && activeFeatureLayer && activeFeatureLayer.feature && activeFeatureLayer.feature.properties) {
+                    featureData = activeFeatureLayer.feature.properties;
+                }
+            }
+        }
+        if (!featureGeometry && typeof window !== 'undefined') {
+            const layer = window.activeFeatureLayer || (typeof activeFeatureLayer !== 'undefined' ? activeFeatureLayer : null);
+            if (layer && layer.feature && layer.feature.geometry) {
+                featureGeometry = layer.feature.geometry;
+            } else if (layer && typeof layer.toGeoJSON === 'function') {
+                featureGeometry = layer.toGeoJSON().geometry;
+            }
+        }
+
+        // Recupera template completo para repassar ao visualizador
+        let tpl = null;
+        if (typeof window.ReportAdapter !== 'undefined' && typeof window.ReportAdapter.getReportTemplates === 'function') {
+            const allTpls = window.ReportAdapter.getReportTemplates();
+            tpl = (allTpls || []).find(t => t.id === templateId || t.form_id === templateId);
+        }
+        if (!tpl) {
+            try {
+                const localTpls = JSON.parse(localStorage.getItem('constructive_report_templates') || '[]');
+                tpl = (localTpls || []).find(t => t.id === templateId || t.form_id === templateId);
+            } catch(e) {}
+        }
+        if (!tpl && currentTemplate && (currentTemplate.id === templateId || currentTemplate.form_id === templateId)) {
+            tpl = currentTemplate;
+        }
+
+        const resolvedFormId = (tpl && tpl.form_id) || (currentTemplate ? currentTemplate.form_id : (featureData ? (featureData.formId || featureData.themeId) : null));
+
+        // Obtém campos e abas para garantir renderização perfeita dos atributos e 1:N
+        let formFields = [];
+        let formTabs = [];
+
+        // Prioridade 1: Schema ativo da feição renderizada no momento (garante nomes reais das abas e tipos de campos)
+        if (typeof window !== 'undefined') {
+            const activeSchema = window.activeFormSchema || window.currentFormFeatures || window.activeFormTabs;
+            if (Array.isArray(activeSchema) && activeSchema.length > 0) {
+                formTabs = JSON.parse(JSON.stringify(activeSchema));
+                formTabs.forEach(t => {
+                    if (Array.isArray(t.fields)) {
+                        t.fields.forEach(f => {
+                            formFields.push({
+                                ...f,
+                                tabId: t.id,
+                                tabTitle: t.title || 'Aba Geral',
+                                isMultiple: !!t.isMultiple
+                            });
+                        });
+                    }
+                });
+            }
+        }
+
+        // Prioridade 2: ReportAdapter
+        if (formTabs.length === 0 && typeof window.ReportAdapter !== 'undefined') {
+            if (typeof window.ReportAdapter.getFormTabs === 'function') {
+                try { formTabs = window.ReportAdapter.getFormTabs(resolvedFormId) || []; } catch(e) {}
+            }
+            if (typeof window.ReportAdapter.getFormFields === 'function') {
+                try { formFields = window.ReportAdapter.getFormFields(resolvedFormId) || []; } catch(e) {}
+            }
+        }
+
+        // Prioridade 3: LocalStorage e variáveis globais de formulários
+        if (formTabs.length === 0 || formFields.length === 0) {
+            try {
+                const formsList = (typeof allForms !== 'undefined' && Array.isArray(allForms)) 
+                    ? allForms 
+                    : ((typeof forms !== 'undefined' && Array.isArray(forms)) ? forms : JSON.parse(localStorage.getItem('constructive_forms') || '[]'));
+                const f = formsList.find(item => item.id === resolvedFormId) || formsList[0];
+                if (f && Array.isArray(f.tabs) && f.tabs.length > 0) {
+                    if (formTabs.length === 0) formTabs = f.tabs;
+                    if (formFields.length === 0) {
+                        f.tabs.forEach(t => {
+                            if (Array.isArray(t.fields)) {
+                                t.fields.forEach(fld => {
+                                    formFields.push({
+                                        ...fld,
+                                        tabId: t.id,
+                                        tabTitle: t.title || 'Aba Geral',
+                                        isMultiple: !!t.isMultiple
+                                    });
+                                });
+                            }
+                        });
+                    }
+                }
+            } catch(e) {}
+        }
+
         const payload = {
             templateId: templateId,
-            formId: currentTemplate ? currentTemplate.form_id : (featureData ? (featureData.formId || featureData.themeId) : null),
+            template: tpl || null,
+            formId: resolvedFormId,
+            formFields: formFields,
+            formTabs: formTabs,
             featureData: featureData || {},
             featureGeometry: featureGeometry || null,
             timestamp: Date.now()
@@ -2451,6 +5773,27 @@
             .replace(/"/g, '&quot;');
     }
 
+    function formatInlineText(str, fallback = '') {
+        const val = (str !== undefined && str !== null && str !== '') ? str : fallback;
+        return escapeHtml(String(val)).replace(/\r?\n/g, '<br>');
+    }
+
+    // Seleção com clique simples em tags de menção (@campo) para facilitar aplicação imediata de Negrito, Itálico e Sublinhado
+    if (typeof document !== 'undefined') {
+        document.addEventListener('click', function (e) {
+            const tag = e.target && e.target.closest ? e.target.closest('.mention-tag') : null;
+            if (tag) {
+                const sel = window.getSelection();
+                if (sel) {
+                    const range = document.createRange();
+                    range.selectNode(tag);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                }
+            }
+        });
+    }
+
     // Exportação Global
     window.ReportBuilder = {
         initReportBuilderTab,
@@ -2470,7 +5813,17 @@
         moveColumnOrder,
         handleLogoUpload,
         insertHeaderBlock,
+        setHeaderRepeatMode,
+        updateHeaderProperty,
         insertGridBlock,
+        addSelectedFieldsToExistingGrid,
+        quickAddFieldToExistingGrid,
+        removeFieldFromGrid,
+        toggleGridFieldSpan,
+        changeFieldWidthStep,
+        setFieldWidthExact,
+        toggleFieldWidthPopover,
+        closeFieldWidthPopover,
         insertMapBlock,
         insertChartBlock,
         insertKpiBlock,
@@ -2479,7 +5832,38 @@
         on1nSourceTabChange,
         insertPhotoBlock,
         insertSynthetic1nBlock,
+        addSelectedFieldsToExistingSynthetic1n,
         insertAnalyticalPhotos1nBlock,
+        addSelectedFieldsToExistingAnalytical1n,
+        quickAddFieldTo1n,
+        removeColumnFromSynthetic1n,
+        removeFieldFromAnalytical1n,
+        moveSynthetic1nColumn,
+        editSynthetic1nColTitle,
+        set1nTableDensity,
+        set1nRowStriping,
+        set1nLaudoDensity,
+        set1nLaudoRowStriping,
+        move1nTabSequence,
+        set1nSortOrder,
+        set1nGroupByTab,
+        toggleAll1nFieldsInDrawer,
+        toggleTab1nFieldsInDrawer,
+        toggleAccordionTab,
+        on1nSynTabSelectChange,
+        on1nLaudoTabSelectChange,
+        filter1nFieldsInDrawer,
+        on1nFieldCheckboxChange,
+        sync1nSelectedFieldsFromDOM,
+        on1nLaudoFieldCheckboxChange,
+        sync1nLaudoSelectedFieldsFromDOM,
+        getSelected1nLaudoFieldsFromDrawer,
+        toggleAll1nLaudoFieldsInDrawer,
+        toggleTab1nLaudoFieldsInDrawer,
+        filter1nLaudoFieldsInDrawer,
+        quickAddFieldToAnalytical1n,
+        quickRemoveFieldFromAnalytical1n,
+        removeSelectedFieldsFromExistingAnalytical1n,
         insertTableBlock,
         insertAnalyticalTableBlock,
         insertTextBlock,
@@ -2492,6 +5876,8 @@
         showMentionDropdown,
         insertMentionField,
         insertFooterBlock,
+        setFooterPageStart,
+        updateFooterProperty,
         enableInlineEdit,
         updateBlockProperty,
         removeBlock,

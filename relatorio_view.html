@@ -37,23 +37,67 @@
             position: relative;
             box-sizing: border-box;
             transition: all 0.2s ease;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        @media screen {
+            .a4-page {
+                min-height: var(--page-height, 1123px);
+                max-width: var(--page-width, 794px);
+            }
+            .a4-page.single-page {
+                height: var(--page-height, 1123px);
+                max-height: var(--page-height, 1123px);
+                overflow: hidden;
+            }
+        }
+
+        @page {
+            size: A4 portrait;
+            margin: 0 !important;
         }
 
         @media print {
             .no-print {
                 display: none !important;
             }
-            body {
+            html, body {
                 background: #ffffff !important;
                 margin: 0 !important;
                 padding: 0 !important;
+                width: 100% !important;
+            }
+            main {
+                padding: 0 !important;
+                margin: 0 !important;
+                display: block !important;
+            }
+            #a4-document-container {
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100% !important;
+                max-width: none !important;
+                display: block !important;
             }
             .a4-page {
                 box-shadow: none !important;
                 margin: 0 !important;
+                padding: 0 !important;
                 width: 100% !important;
                 max-width: none !important;
-                padding: var(--print-padding, 15mm) !important;
+                height: var(--print-page-height, 297mm) !important;
+                min-height: var(--print-page-height, 297mm) !important;
+                max-height: var(--print-page-height, 297mm) !important;
+                overflow: hidden !important;
+                box-sizing: border-box !important;
+                page-break-after: always !important;
+                break-after: page !important;
+            }
+            .a4-page:last-child {
+                page-break-after: auto !important;
+                break-after: auto !important;
             }
             .page-break-avoid {
                 break-inside: avoid;
@@ -64,6 +108,21 @@
         .mention-rendered {
             font-weight: 600;
             color: #0f172a;
+        }
+        .mention-tag {
+            user-select: all;
+            cursor: pointer;
+            transition: all 0.15s ease-in-out;
+        }
+        .mention-tag[data-format-bold="true"], .mention-tag.font-bold, .mention-tag.font-black, .mention-tag.is-bold {
+            font-weight: 700 !important;
+        }
+        .mention-tag[data-format-italic="true"], .mention-tag.italic {
+            font-style: italic !important;
+        }
+        .mention-tag[data-format-underline="true"], .mention-tag.underline {
+            text-decoration: underline !important;
+            text-underline-offset: 2px !important;
         }
     </style>
 </head>
@@ -113,9 +172,9 @@
 
     <!-- CONTAINER DA FOLHA A4 -->
     <main class="flex-1 flex justify-center p-3 sm:p-6 overflow-y-auto">
-        <div id="a4-document-container" class="a4-page w-full text-slate-900">
-            <!-- Conteúdo montado dinamicamente via JS -->
-            <div id="report-blocks-render" class="flex flex-col gap-5 w-full"></div>
+        <div id="a4-document-container" class="w-full flex flex-col items-center gap-6">
+            <!-- Conteúdo montado dinamicamente via JS com suporte a multi-páginas e folha única sem vazamento -->
+            <div id="report-blocks-render" class="a4-page w-full text-slate-900"></div>
         </div>
     </main>
 
@@ -130,6 +189,488 @@
             initReportViewer();
         });
 
+        function maskCpfCnpj(val) {
+            if (!val) return '';
+            const digits = String(val).replace(/\D/g, '');
+            if (digits.length === 11) {
+                return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+            } else if (digits.length === 14) {
+                return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+            }
+            return String(val);
+        }
+
+        function maskCep(val) {
+            if (!val) return '';
+            const digits = String(val).replace(/\D/g, '');
+            if (digits.length === 8) {
+                return digits.replace(/^(\d{5})(\d{3})/, "$1-$2");
+            }
+            return String(val);
+        }
+
+        function maskEpol(val) {
+            if (!val) return '';
+            const digits = String(val).replace(/\D/g, '');
+            if (digits.length >= 5) {
+                return digits.substring(0, 4) + '.' + digits.substring(4, 11);
+            }
+            return String(val);
+        }
+
+        function maskRip(val) {
+            if (!val) return '';
+            const digits = String(val).replace(/\D/g, '');
+            if (digits.length >= 12) {
+                return digits.substring(0, 11) + '-' + digits.substring(11, 13);
+            }
+            return String(val);
+        }
+
+        function maskInscCabedelo(val) {
+            if (!val) return '';
+            const digits = String(val).replace(/\D/g, '');
+            if (digits.length === 19) {
+                return digits.replace(/(\d{1})(\d{4})(\d{3})(\d{2})(\d{4})(\d{4})(\d{1})/, "$1.$2.$3.$4.$5.$6.$7");
+            }
+            return String(val);
+        }
+
+        function formatAddressValue(val) {
+            if (!val) return '—';
+            let data = null;
+            if (typeof val === 'object' && val !== null) {
+                data = val;
+            } else if (typeof val === 'string' && val.trim().startsWith('{')) {
+                try { data = JSON.parse(val); } catch(e) {}
+            }
+            if (data && typeof data === 'object') {
+                const parts = [];
+                if (data.logradouro && data.logradouro !== 'null' && String(data.logradouro).trim() !== '') {
+                    let line = String(data.logradouro).trim();
+                    if (data.numero && data.numero !== 'null' && String(data.numero).trim() !== '' && String(data.numero).trim().toUpperCase() !== 'S/N') {
+                        line += `, nº ${String(data.numero).trim()}`;
+                    } else if (data.numero && String(data.numero).trim().toUpperCase() === 'S/N') {
+                        line += ', S/N';
+                    }
+                    if (data.complemento && data.complemento !== 'null' && String(data.complemento).trim() !== '') {
+                        line += ` (${String(data.complemento).trim()})`;
+                    }
+                    parts.push(line);
+                }
+                if (data.bairro && data.bairro !== 'null' && String(data.bairro).trim() !== '') {
+                    parts.push(String(data.bairro).trim());
+                }
+                const cityParts = [];
+                if (data.cidade && data.cidade !== 'null' && String(data.cidade).trim() !== '') {
+                    cityParts.push(String(data.cidade).trim());
+                }
+                if (data.uf && data.uf !== 'null' && String(data.uf).trim() !== '') {
+                    cityParts.push(String(data.uf).trim());
+                }
+                if (cityParts.length > 0) {
+                    parts.push(cityParts.join(' - '));
+                }
+                if (data.cep && data.cep !== 'null' && String(data.cep).trim() !== '') {
+                    parts.push(`CEP: ${maskCep(data.cep)}`);
+                }
+                if (parts.length > 0) return parts.join(' - ');
+            }
+            return String(val || '—');
+        }
+
+        function getOrgBadgeHtml(org) {
+            const o = String(org || '').toUpperCase().trim();
+            if (!o || o === 'VISTORIA') {
+                return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs"><span class="material-symbols-outlined text-[12px]">visibility</span> Vistoria</span>`;
+            }
+            if (o.includes('MPF') || o.includes('MINISTÉRIO PÚBLICO') || o.includes('MINISTERIO PUBLICO') || o.includes('PROCURADORIA')) {
+                return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-purple-100 text-purple-800 border border-purple-200 shadow-2xs"><span class="material-symbols-outlined text-[12px]">gavel</span> ${escapeHtml(org)}</span>`;
+            }
+            if (o.includes('POLÍCIA') || o.includes('POLICIA') || (o.includes('PF') && !o.includes('MPF'))) {
+                return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-blue-100 text-blue-800 border border-blue-200 shadow-2xs"><span class="material-symbols-outlined text-[12px]">local_police</span> ${escapeHtml(org)}</span>`;
+            }
+            if (o.includes('SPU') || o.includes('PATRIMÔNIO') || o.includes('PATRIMONIO') || o.includes('FEDERAL')) {
+                return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-2xs"><span class="material-symbols-outlined text-[12px]">account_balance</span> ${escapeHtml(org)}</span>`;
+            }
+            if (o.includes('MUNIC') || o.includes('PREFEITURA') || o.includes('SEDEC') || o.includes('SEPLAM') || o.includes('CABEDELO') || o === 'PM') {
+                const displayOrg = (org === 'PM') ? 'MUNICÍPIO' : org;
+                return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-amber-100 text-amber-800 border border-amber-200 shadow-2xs"><span class="material-symbols-outlined text-[12px]">domain</span> ${escapeHtml(displayOrg)}</span>`;
+            }
+            const genericPalettes = [
+                'bg-sky-100 text-sky-800 border-sky-200',
+                'bg-teal-100 text-teal-800 border-teal-200',
+                'bg-indigo-100 text-indigo-800 border-indigo-200',
+                'bg-rose-100 text-rose-800 border-rose-200',
+                'bg-orange-100 text-orange-800 border-orange-200'
+            ];
+            const gHash = Math.abs(String(org || '').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0));
+            const gClass = genericPalettes[gHash % genericPalettes.length];
+            return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold ${gClass} shadow-2xs"><span class="material-symbols-outlined text-[12px]">corporate_fare</span> ${escapeHtml(org)}</span>`;
+        }
+
+        function getStatusBadgeHtml(status) {
+            const s = String(status || '').toLowerCase().trim();
+            if (!s || s === '—' || s === '---' || s === '-') return '<span class="text-slate-400 opacity-60 font-mono text-[10px]">—</span>';
+            if (s.includes('irregular') || s.includes('invas') || s.includes('não conforme') || s.includes('nao conforme')) {
+                return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-red-100 text-red-700 border border-red-200 shadow-2xs"><span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span> ${escapeHtml(status)}</span>`;
+            }
+            if (s.includes('regular') || s.includes('conforme') || s.includes('legal')) {
+                return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-2xs"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> ${escapeHtml(status)}</span>`;
+            }
+            return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9.5px] font-medium bg-slate-100 text-slate-700 border border-slate-200">${escapeHtml(status)}</span>`;
+        }
+
+        function getRecuoBadgeHtml(recuo) {
+            const r = String(recuo || '').toLowerCase().trim();
+            if (!r || r === '—' || r === '---' || r === '-') return '<span class="text-slate-400 opacity-60 font-mono text-[10px]">—</span>';
+            if (r.includes('já recuou') || r.includes('ja recuou') || r.includes('recuado') || r.includes('com recuo') || r.includes('sim')) {
+                return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-2xs"><span class="material-symbols-outlined text-[11px]">check_circle</span> ${escapeHtml(recuo)}</span>`;
+            }
+            if (r.includes('não') || r.includes('nao') || r.includes('sem recuo') || r.includes('pendente')) {
+                return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-amber-100 text-amber-800 border border-amber-200 shadow-2xs"><span class="material-symbols-outlined text-[11px]">warning</span> ${escapeHtml(recuo)}</span>`;
+            }
+            return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9.5px] font-medium bg-slate-100 text-slate-700 border border-slate-200">${escapeHtml(recuo)}</span>`;
+        }
+
+        function formatFieldValueForDisplay(val, fieldDef = {}) {
+            if (val === undefined || val === null || val === '' || val === 'null' || val === 'undefined') {
+                return '—';
+            }
+
+            const type = (fieldDef.type || '').toLowerCase();
+            const id = (fieldDef.id || '').toLowerCase();
+            const label = (fieldDef.label || '').toLowerCase();
+
+            // 1. JSON ou Objeto de Endereço / CEP
+            if (type === 'cep' || (typeof val === 'string' && val.trim().startsWith('{') && (val.includes('"logradouro"') || val.includes('"cep"') || val.includes('"bairro"') || val.includes('"cidade"')))) {
+                return formatAddressValue(val);
+            }
+            if (typeof val === 'object' && val !== null && !Array.isArray(val) && (val.logradouro || val.cep || val.bairro || val.cidade)) {
+                return formatAddressValue(val);
+            }
+
+            // 2. Arrays (anexos, fotos, links, listas)
+            if (Array.isArray(val) || (typeof val === 'string' && val.trim().startsWith('[') && val.includes('{'))) {
+                let arr = Array.isArray(val) ? val : null;
+                if (!arr) { try { arr = JSON.parse(val); } catch(e){} }
+                if (Array.isArray(arr)) {
+                    if (arr.length === 0) return '—';
+                    if (type === 'photo' || type === 'attachment') {
+                        return `📷 ${arr.length} anexo(s)`;
+                    }
+                    if (arr[0] && (arr[0].title || arr[0].url || arr[0].name)) {
+                        return arr.map(it => it.title || it.name || it.number || it.url).filter(Boolean).join(', ');
+                    }
+                    return arr.join(', ');
+                }
+            }
+
+            // 3. CPF / CNPJ
+            const cleanDigits = String(val).replace(/\D/g, '');
+            const isProcessOrCode = id.includes('ipl') || id.includes('process') || id.includes('inquerito') || id.includes('protocol') || id.includes('auto') || id.includes('distrib') ||
+                                    label.includes('ipl') || label.includes('process') || label.includes('inquérito') || label.includes('protocol') || label.includes('auto') || label.includes('distrib');
+            if (!isProcessOrCode && (type === 'cpfcnpj' || id.includes('cpf') || id.includes('cnpj') || label.includes('cpf') || label.includes('cnpj') || (!id.includes('tel') && !id.includes('fone') && !label.includes('tel') && !label.includes('cel') && (cleanDigits.length === 11 || cleanDigits.length === 14) && (id.includes('doc') || label.includes('doc') || type === 'cpfcnpj')))) {
+                if (cleanDigits.length === 11 || cleanDigits.length === 14) {
+                    return maskCpfCnpj(cleanDigits);
+                }
+            }
+
+            // 4. EPOL
+            if (type === 'epol' || id.includes('epol') || label.includes('epol')) {
+                return maskEpol(val);
+            }
+
+            // 5. RIP
+            if (type === 'rip' || id.includes('rip') || label.includes('rip')) {
+                return maskRip(val);
+            }
+
+            // 6. Inscrição Imobiliária Cabedelo
+            if (type === 'insc_imob_cabedelo' || id.includes('insc_imob') || label.includes('inscrição imobiliária') || label.includes('inscricao imobiliaria')) {
+                return maskInscCabedelo(val);
+            }
+
+            // 7. Parse de números locais (com suporte a vírgula brasileira)
+            const parseLocalNumber = (v) => {
+                const s = String(v).trim();
+                if (s.includes(',')) return parseFloat(s.replace(/\./g, '').replace(',', '.'));
+                return parseFloat(s);
+            };
+
+            // 8. Moeda / Currency
+            if (type === 'currency' || label.includes('(r$)') || (label.includes('valor') && !label.includes('recuo') && !label.includes('ocup'))) {
+                const num = parseLocalNumber(val);
+                if (!isNaN(num)) return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
+            }
+
+            // 9. Áreas e Dimensões
+            if (type === 'area_m2' || label.includes('(m²)') || label.includes('m2') || label.includes('área invadida') || label.includes('area invadida') || label.includes('área do terreno') || label.includes('area do terreno')) {
+                const num = parseLocalNumber(val);
+                if (!isNaN(num)) return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num) + ' m²';
+            }
+            if (type === 'length_m' || label.includes('(m)')) {
+                const num = parseLocalNumber(val);
+                if (!isNaN(num)) return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num) + ' m';
+            }
+            if (type === 'volume_m3' || label.includes('(m³)')) {
+                const num = parseLocalNumber(val);
+                if (!isNaN(num)) return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num) + ' m³';
+            }
+
+            // 10. Datas (ISO -> DD/MM/YYYY)
+            if (type === 'date' || (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val.trim()))) {
+                const str = String(val).trim().split('T')[0];
+                const p = str.split('-');
+                if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
+            }
+
+            // 11. Booleanos
+            if (typeof val === 'boolean') {
+                return val ? 'Sim' : 'Não';
+            }
+
+            return String(val);
+        }
+
+        function normalizeEnteTab(val) {
+            if (!val) return '';
+            const s = String(val).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (s.includes('mpf') || s.includes('minister') || s.includes('procurad')) return 'mpf';
+            if (s.includes('polic') || s === 'pf' || (s.includes('pf') && !s.includes('mpf'))) return 'pf';
+            if (s.includes('spu') || s.includes('patrimon')) return 'spu';
+            if (s.includes('munic') || s.includes('pref') || s.includes('pm') || s.includes('meio')) return 'municipio';
+            return s;
+        }
+
+        function parseDateToTimestamp(val) {
+            if (!val) return -Infinity;
+            const s = String(val).trim();
+            if (!s) return -Infinity;
+            const brMatch = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(.*)$/);
+            if (brMatch) {
+                const day = parseInt(brMatch[1], 10);
+                const month = parseInt(brMatch[2], 10) - 1;
+                const year = parseInt(brMatch[3], 10);
+                return new Date(year, month, day).getTime();
+            }
+            const t = Date.parse(s);
+            return isNaN(t) ? -Infinity : t;
+        }
+
+        function getLatestRecordAcrossTabs(targetTabs, dateFieldId, sourceFieldId, featureData, sourceFieldLabel) {
+            const fData = featureData || (typeof reportPayload !== 'undefined' && reportPayload?.featureData) || {};
+            let collectedEntries = [];
+            const clean = s => String(s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
+
+            for (const [k, val] of Object.entries(fData)) {
+                let records = [];
+                if (Array.isArray(val)) records = val;
+                else if (typeof val === 'string' && val.trim().startsWith('[')) {
+                    try { records = JSON.parse(val); } catch(e) {}
+                }
+                if (!Array.isArray(records) || records.length === 0) continue;
+
+                const normTab = normalizeEnteTab(k);
+                if (Array.isArray(targetTabs) && targetTabs.length > 0) {
+                    const allowed = targetTabs.map(normalizeEnteTab);
+                    if (!allowed.includes(normTab)) continue;
+                }
+
+                records.forEach(rec => {
+                    if (!rec || typeof rec !== 'object') return;
+                    let recordDate = null;
+                    if (dateFieldId && dateFieldId !== 'auto' && rec[dateFieldId] !== undefined) {
+                        recordDate = rec[dateFieldId];
+                    } else {
+                        for (const rk of Object.keys(rec)) {
+                            if (rk.toLowerCase().includes('data') || rk.toLowerCase().includes('date')) {
+                                recordDate = rec[rk];
+                                break;
+                            }
+                        }
+                        if (!recordDate) {
+                            for (const rk of Object.keys(rec)) {
+                                const valStr = String(rec[rk]).trim();
+                                if (/^\d{4}-\d{2}-\d{2}/.test(valStr) || /^\d{2}[\/\-]\d{2}[\/\-]\d{4}/.test(valStr)) {
+                                    recordDate = rec[rk];
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    const timestamp = parseDateToTimestamp(recordDate);
+
+                    let valResolved = undefined;
+                    if (sourceFieldId && rec[sourceFieldId] !== undefined) {
+                        valResolved = rec[sourceFieldId];
+                    } else {
+                        const targetSlug = clean(sourceFieldLabel || sourceFieldId || '');
+                        for (const [rk, rv] of Object.entries(rec)) {
+                            if (clean(rk) === targetSlug || clean(rk).includes(targetSlug)) {
+                                valResolved = rv;
+                                break;
+                            }
+                        }
+                    }
+                    if (valResolved !== undefined && valResolved !== null && String(valResolved).trim() !== '') {
+                        collectedEntries.push({ timestamp, value: valResolved, record: rec });
+                    }
+                });
+            }
+
+            if (collectedEntries.length === 0) return null;
+            collectedEntries.sort((a, b) => b.timestamp - a.timestamp);
+            return collectedEntries[0].value;
+        }
+
+        function resolveFieldValue(f, featureData, availableFields = []) {
+            if (!featureData || !f) return '—';
+            const fId = f.id;
+            const fName = f.name;
+            const fLabel = f.label;
+
+            let rawVal = undefined;
+
+            // 1. Verificação direta de chaves no nível raiz
+            if (fId && featureData[fId] !== undefined && featureData[fId] !== null && featureData[fId] !== '') rawVal = featureData[fId];
+            else if (fName && featureData[fName] !== undefined && featureData[fName] !== null && featureData[fName] !== '') rawVal = featureData[fName];
+            else if (fLabel && featureData[fLabel] !== undefined && featureData[fLabel] !== null && featureData[fLabel] !== '') rawVal = featureData[fLabel];
+
+            // 2. Variações de maiúsculas e minúsculas
+            if (rawVal === undefined) {
+                const candidates = [fLabel, fName, fId].filter(Boolean);
+                for (const c of candidates) {
+                    const upper = c.toUpperCase();
+                    const lower = c.toLowerCase();
+                    if (featureData[upper] !== undefined && featureData[upper] !== null && featureData[upper] !== '') { rawVal = featureData[upper]; break; }
+                    if (featureData[lower] !== undefined && featureData[lower] !== null && featureData[lower] !== '') { rawVal = featureData[lower]; break; }
+                }
+            }
+
+            // 3. Mapeamento cruzado através da lista de campos do formulário (availableFields)
+            const fieldsPool = (Array.isArray(availableFields) && availableFields.length > 0) 
+                ? availableFields 
+                : (typeof window !== 'undefined' && Array.isArray(window.reportViewerFormFields) ? window.reportViewerFormFields : []);
+
+            if (rawVal === undefined && fieldsPool.length > 0) {
+                const clean = (s) => String(s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
+                const targetClean = [clean(fLabel), clean(fName), clean(fId)].filter(Boolean);
+                const matchedDef = fieldsPool.find(af => {
+                    const afClean = [clean(af.label), clean(af.name), clean(af.id)].filter(Boolean);
+                    return targetClean.some(t => afClean.includes(t));
+                });
+                if (matchedDef) {
+                    if (featureData[matchedDef.id] !== undefined && featureData[matchedDef.id] !== null && featureData[matchedDef.id] !== '') {
+                        rawVal = featureData[matchedDef.id];
+                    } else if (matchedDef.name && featureData[matchedDef.name] !== undefined && featureData[matchedDef.name] !== null && featureData[matchedDef.name] !== '') {
+                        rawVal = featureData[matchedDef.name];
+                    }
+                }
+            }
+
+            // 4. Normalização de acentos e caracteres especiais
+            if (rawVal === undefined) {
+                const clean = (s) => String(s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
+                const targetSlugs = [clean(fLabel), clean(fName), clean(fId)].filter(Boolean);
+
+                for (const [k, v] of Object.entries(featureData)) {
+                    if (v === undefined || v === null || v === '' || v === 'null') continue;
+                    const cleanK = clean(k);
+                    if (targetSlugs.some(t => t === cleanK || cleanK === t.replace(/_/g, ''))) {
+                        rawVal = v;
+                        break;
+                    }
+                }
+            }
+
+            // 5. Aliases semânticos comuns (incluindo campos específicos MPF, PF, SPU e Município)
+            if (rawVal === undefined) {
+                const clean = (s) => String(s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
+                const targetSlugs = [clean(fLabel), clean(fName), clean(fId)].filter(Boolean);
+
+                const semanticAliases = {
+                    'proprietario': ['proprietario', 'titular', 'nome_proprietario', 'contribuinte', 'posseiro', 'responsavel', 'nome', 'proprietario_posseiro'],
+                    'cpf': ['cpf_cnpj', 'cpf', 'cnpj', 'cpfcnpj', 'documento', 'doc', 'num_doc'],
+                    'cpf_cnpj': ['cpf_cnpj', 'cpf', 'cnpj', 'cpfcnpj', 'documento', 'doc', 'num_doc'],
+                    'endereco': ['endereco', 'logradouro', 'rua', 'local', 'localizacao', 'endereco_completo', 'cep', 'endereco_imovel', 'local_imovel'],
+                    'loteamento': ['loteamento', 'bairro', 'condominio', 'gleba', 'setor', 'localidade', 'subdivisao'],
+                    'quadra': ['quadra', 'qd', 'quadra_lote', 'num_quadra'],
+                    'lote': ['lote', 'lt', 'numero_lote', 'num_lote', 'lote_numero'],
+                    'observacoes': ['observacoes_do_imovel', 'observacoes', 'observacao', 'obs', 'obs_gerais', 'observacoes_gerais', 'obs_mpf', 'obs_pecunia', 'obs_inquerito_pf', 'observacao_imovel', 'observacoes_imovel', 'parecer', 'descricao', 'historico', 'relato', 'nota', 'detalhes', 'anotacoes', 'conclusao', 'conclusoes'],
+                    'area_terreno': ['area_terreno', 'area_do_terreno', 'areaterreno', 'area_total', 'area_imovel', 'area_m2', 'area'],
+                    'area_invadida': ['area_invadida', 'areainvadida', 'area_ocupada', 'area_invasao'],
+                    'epol': ['epol', 'processo_epol', 'num_epol', 'num_processo', 'inquerito', 'fld_epol'],
+                    'rip': ['rip', 'registro_rip', 'num_rip', 'fld_rip'],
+                    'recuo': ['situacao_recuo', 'recuo', 'status_recuo'],
+                    'ocupacao': ['situacao_ocupacao', 'ocupacao', 'status_ocupacao'],
+                    // Aliases MPF
+                    'ipl': ['ipl', 'inquerito_policial', 'inquerito', 'inquerito_policial_link', 'numero_inquerito_policial', 'processo_ipl', 'num_inquerito', 'fld_ipl'],
+                    'distribuicao': ['distribuicao', 'vara', 'vara_federal', 'juizo', 'distribuicao_vara', 'num_vara'],
+                    'designado': ['designado', 'procurador', 'procurador_designado', 'membro_mpf', 'procurador_republica', 'responsavel_mpf', 'fiscal_designado'],
+                    'correlatos': ['correlatos', 'processos_correlatos', 'acp', 'acao_civil_publica', 'inquerito_civil', 'procedimento_preparatorio'],
+                    'fase_investigacao': ['fase_investigacao', 'fase', 'fase_da_investigacao', 'etapa_investigacao', 'status_investigacao'],
+                    'providencia': ['providencia', 'providencias', 'medida', 'medidas', 'deliberacao', 'despacho'],
+                    'valor_pecunia': ['valor_pecunia', 'pecunia', 'valor_total', 'valor_formatado', 'valor_m2', 'area_pecunia', 'obs_pecunia']
+                };
+
+                for (const target of targetSlugs) {
+                    for (const [concept, aliases] of Object.entries(semanticAliases)) {
+                        if (target.includes(concept) || aliases.includes(target)) {
+                            for (const alias of aliases) {
+                                for (const [k, v] of Object.entries(featureData)) {
+                                    if (v === undefined || v === null || v === '' || v === 'null') continue;
+                                    if (clean(k) === clean(alias)) {
+                                        rawVal = v;
+                                        break;
+                                    }
+                                }
+                                if (rawVal !== undefined) break;
+                            }
+                        }
+                        if (rawVal !== undefined) break;
+                    }
+                    if (rawVal !== undefined) break;
+                }
+            }
+
+            // 6. Varredura recursiva em sub-objetos de abas (ex: featureData.mpf, featureData.tab_mpf)
+            if (rawVal === undefined) {
+                for (const [subKey, subVal] of Object.entries(featureData)) {
+                    if (subVal && typeof subVal === 'object' && !Array.isArray(subVal)) {
+                        const subRes = resolveFieldValue(f, subVal, availableFields);
+                        if (subRes !== '—') {
+                            return subRes;
+                        }
+                    }
+                }
+            }
+
+            // 7. Fallback consolidado para vistorias (Data, Ocupação, Recuo, Área)
+            if (rawVal === undefined) {
+                const clean = (s) => String(s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
+                const targetSlugs = [clean(fLabel), clean(fName), clean(fId)].filter(Boolean);
+                const isDate = targetSlugs.some(s => s.includes('data'));
+                const isOcup = targetSlugs.some(s => s.includes('ocupac'));
+                const isRecuo = targetSlugs.some(s => s.includes('recuo'));
+                const isArea = targetSlugs.some(s => s.includes('areainvadida') || (s.includes('area') && !s.includes('terreno')));
+
+                if (isDate || isOcup || isRecuo || isArea) {
+                    const reqKey = isDate ? 'data' : (isOcup ? 'situacao_ocupacao' : (isRecuo ? 'situacao_recuo' : 'area_invadida'));
+                    const latest = getLatestRecordAcrossTabs(['PF', 'SPU', 'MUNICÍPIO'], 'auto', reqKey, featureData, fLabel);
+                    if (latest !== null && latest !== undefined && latest !== '') {
+                        rawVal = latest;
+                    }
+                }
+            }
+
+            if (rawVal === undefined || rawVal === null || rawVal === '' || rawVal === 'null') {
+                return '—';
+            }
+
+            return formatFieldValueForDisplay(rawVal, f);
+        }
+
         function initReportViewer() {
             // Recupera o payload de dados salvo pela aplicação principal
             try {
@@ -140,6 +681,24 @@
                 }
             } catch(e) {
                 console.error('[Viewer] Falha ao ler payload:', e);
+            }
+
+            // Fallback para recuperar dados da feição da janela principal (window.opener) se o payload for vazio
+            if ((!reportPayload || !reportPayload.featureData || Object.keys(reportPayload.featureData).length === 0) && typeof window !== 'undefined' && window.opener) {
+                try {
+                    const opLayer = window.opener.activeFeatureLayer;
+                    if (opLayer && opLayer.feature) {
+                        if (!reportPayload) reportPayload = {};
+                        reportPayload.featureData = window.opener.activeFeatureData || window.opener.currentFormFeatureData || opLayer.feature.properties || {};
+                        reportPayload.featureGeometry = opLayer.feature.geometry || (opLayer.toGeoJSON ? opLayer.toGeoJSON().geometry : null);
+                        if (!reportPayload.templateId) {
+                            const urlParams = new URLSearchParams(window.location.search);
+                            reportPayload.templateId = urlParams.get('templateId');
+                        }
+                    }
+                } catch(e) {
+                    console.warn('[Viewer] Falha ao recuperar dados da janela principal:', e);
+                }
             }
 
             if (!reportPayload) {
@@ -153,7 +712,7 @@
                 return;
             }
 
-            const { templateId, formId, featureData, featureGeometry } = reportPayload;
+            const { templateId, formId, featureData, featureGeometry, template } = reportPayload;
             
             // Busca o modelo
             let templates = [];
@@ -161,7 +720,7 @@
                 templates = JSON.parse(localStorage.getItem('constructive_report_templates') || '[]');
             } catch(e) {}
             
-            let tpl = templates.find(t => t.id === templateId) || templates.find(t => t.form_id === formId) || templates[0];
+            let tpl = template || templates.find(t => t.id === templateId) || templates.find(t => t.form_id === formId) || templates[0];
             if (!tpl) {
                 tpl = {
                     id: 'default_preview',
@@ -186,38 +745,268 @@
             const orient = (tpl.config_pagina && tpl.config_pagina.orientacao) || 'portrait';
             const mm = (tpl.config_pagina && tpl.config_pagina.margens_mm) || { top: 15, bottom: 15, left: 15, right: 15 };
             
+            // Injeta regra @page dinâmica
+            let pageStyle = document.getElementById('dynamic-page-print-style');
+            if (!pageStyle) {
+                pageStyle = document.createElement('style');
+                pageStyle.id = 'dynamic-page-print-style';
+                document.head.appendChild(pageStyle);
+            }
+            pageStyle.textContent = `
+                @page {
+                    size: A4 ${orient};
+                    margin: 0;
+                }
+            `;
+
             const docContainer = document.getElementById('a4-document-container');
-            docContainer.style.maxWidth = orient === 'landscape' ? '1123px' : '794px';
-            docContainer.style.minHeight = orient === 'landscape' ? '794px' : '1123px';
-            docContainer.style.padding = `${mm.top}mm ${mm.right}mm ${mm.bottom}mm ${mm.left}mm`;
+            if (docContainer) {
+                docContainer.style.maxWidth = orient === 'landscape' ? '1123px' : '794px';
+                docContainer.style.padding = '0';
+                docContainer.style.display = 'flex';
+                docContainer.style.flexDirection = 'column';
+                docContainer.style.alignItems = 'center';
+            }
             document.documentElement.style.setProperty('--print-padding', `${mm.top}mm ${mm.right}mm ${mm.bottom}mm ${mm.left}mm`);
+            document.documentElement.style.setProperty('--page-width', orient === 'landscape' ? '1123px' : '794px');
+            document.documentElement.style.setProperty('--page-height', orient === 'landscape' ? '794px' : '1123px');
+            document.documentElement.style.setProperty('--print-page-width', orient === 'landscape' ? '297mm' : '210mm');
+            document.documentElement.style.setProperty('--print-page-height', orient === 'landscape' ? '210mm' : '297mm');
 
             // Injeta os blocos do relatório
             renderBlocks(tpl, featureData, featureGeometry);
         }
 
+        function getFooterPageNumberText(pageIdx, totalPages, ftrBloco) {
+            if (!ftrBloco || ftrBloco.numeracao === false) return '';
+            const startMode = ftrBloco.inicio_numeracao || 'primeira';
+
+            const curPad = String(pageIdx).padStart(2, '0');
+            const totalPad = totalPages < 10 ? String(totalPages).padStart(2, '0') : String(totalPages);
+
+            if (startMode === 'segunda') {
+                if (pageIdx === 1) {
+                    return ''; // Na 1ª folha não exibe número
+                }
+                return `Página ${curPad} de ${totalPad}`;
+            } else {
+                return `Página ${curPad} de ${totalPad}`;
+            }
+        }
+
+        function renderHeaderSlotHtml(hdrBloco, tpl, padLeftMm, padRightMm) {
+            if (!hdrBloco) return '';
+            return `
+                <div class="a4-page-header-slot w-full select-none" style="padding: 6mm ${padRightMm}mm 0 ${padLeftMm}mm;">
+                    <div class="mb-2 page-break-avoid ${hdrBloco.repetir_todas_folhas ? 'cabecalho-repetir-todas' : ''}">
+                        <!-- Metadados de Emissão e Protocolo fora do card/borda principal (topo direito) -->
+                        ${(hdrBloco.exibirDataHora || hdrBloco.exibirProtocolo) ? `
+                            <div class="flex items-center justify-end gap-3 text-[10px] font-mono text-slate-500 pb-1 mb-1 border-b border-slate-200/80">
+                                ${hdrBloco.exibirDataHora ? `
+                                    <div class="flex items-center gap-1">
+                                        <span class="text-slate-400">Emissão:</span>
+                                        <span class="font-medium text-slate-600">${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</span>
+                                    </div>
+                                ` : ''}
+                                ${hdrBloco.exibirProtocolo ? `
+                                    <div class="flex items-center gap-1 font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/60">
+                                        <span class="text-slate-400 font-normal">Protocolo:</span>
+                                        <span>#${(hdrBloco.id || '2026').slice(-6).toUpperCase()}</span>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        ` : ''}
+
+                        <div class="flex items-center justify-between border-b-2 border-slate-900 pb-2.5 gap-4">
+                            <div class="flex items-center gap-3">
+                                ${hdrBloco.logo ? `
+                                    <div class="w-14 h-14 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden shrink-0 border border-slate-200">
+                                        ${hdrBloco.logo_url ? `<img src="${hdrBloco.logo_url}" class="w-full h-full object-contain" />` : `<span class="material-symbols-outlined text-slate-800 text-[42px]">account_balance</span>`}
+                                    </div>
+                                ` : ''}
+                                <div>
+                                    <div class="text-[11px] uppercase font-bold text-slate-600 tracking-wider whitespace-pre-line">${(escapeHtml(hdrBloco.subtitulo || 'Prefeitura Municipal')).replace(/\r?\n/g, '<br>')}</div>
+                                    <div class="text-lg font-black uppercase text-slate-900 tracking-tight whitespace-pre-line">${(escapeHtml(hdrBloco.titulo || tpl.nome || 'FICHA CADASTRAL DO IMÓVEL')).replace(/\r?\n/g, '<br>')}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderFooterSlotHtml(ftrBloco, pageIdx, totalPages, padLeftMm, padRightMm) {
+            if (!ftrBloco) return '';
+            const pageText = getFooterPageNumberText(pageIdx, totalPages, ftrBloco);
+            return `
+                <div class="a4-page-footer-slot w-full mt-auto select-none" style="padding: 0 ${padRightMm}mm 6mm ${padLeftMm}mm;">
+                    <div class="border-t border-slate-300 pt-2 text-[10px] text-slate-500 flex items-center justify-between font-mono page-break-avoid w-full">
+                        <div>
+                            ${ftrBloco.exibirDataHora !== false ? `Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}` : ''}
+                            ${ftrBloco.exibirHash !== false ? `<span class="ml-2 font-bold text-slate-600">SHA-256: ${(ftrBloco.id || '8a4f91e').slice(-8)}...</span>` : ''}
+                        </div>
+                        <div class="font-bold text-slate-700">
+                            ${pageText}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
         function renderBlocks(tpl, featureData = {}, featureGeometry = null) {
-            const container = document.getElementById('report-blocks-render');
-            if (!container) return;
+            const docContainer = document.getElementById('a4-document-container');
+            if (!docContainer) return;
 
             // Busca campos para preenchimento
             let fields = [];
-            try {
-                const forms = JSON.parse(localStorage.getItem('constructive_forms') || '[]');
-                const curForm = forms.find(f => f.id === tpl.form_id);
-                if (curForm && curForm.tabs) {
-                    curForm.tabs.forEach(t => {
-                        if (t.fields) fields.push(...t.fields);
-                    });
-                }
-            } catch(e) {}
+            let formTabs = [];
+            if (reportPayload && Array.isArray(reportPayload.formFields) && reportPayload.formFields.length > 0) {
+                fields = [...reportPayload.formFields];
+            }
+            if (reportPayload && Array.isArray(reportPayload.formTabs) && reportPayload.formTabs.length > 0) {
+                formTabs = [...reportPayload.formTabs];
+            }
 
-            let html = '';
-            (tpl.blocos || []).forEach((bloco, idx) => {
-                html += renderSingleBlock(bloco, idx, featureData, featureGeometry, fields, tpl);
+            // Fallback para window.opener se abas ou campos estiverem vazios
+            if ((formTabs.length === 0 || fields.length === 0) && typeof window !== 'undefined' && window.opener) {
+                try {
+                    const op = window.opener;
+                    const opTabs = op.activeFormSchema || op.currentFormFeatures || op.activeFormTabs;
+                    if (Array.isArray(opTabs) && opTabs.length > 0) {
+                        if (formTabs.length === 0) formTabs = opTabs;
+                        if (fields.length === 0) {
+                            opTabs.forEach(t => {
+                                if (Array.isArray(t.fields)) fields.push(...t.fields);
+                            });
+                        }
+                    }
+                } catch(e) {}
+            }
+
+            if (fields.length === 0) {
+                try {
+                    const forms = JSON.parse(localStorage.getItem('constructive_forms') || '[]');
+                    const curForm = forms.find(f => f.id === tpl.form_id) || forms[0];
+                    const tabsList = curForm?.tabs || (curForm?.schema && curForm.schema.tabs);
+                    if (tabsList && Array.isArray(tabsList)) {
+                        tabsList.forEach(t => {
+                            if (t.fields) fields.push(...t.fields);
+                        });
+                        if (formTabs.length === 0) formTabs = tabsList;
+                    }
+                } catch(e) {}
+            }
+            window.reportViewerFormTabs = formTabs;
+            window.reportViewerFormFields = fields;
+
+            const blocos = tpl.blocos || [];
+            const hdrBloco = blocos.find(b => b.tipo === 'cabecalho');
+            const ftrBloco = blocos.find(b => b.tipo === 'rodape');
+            const bodyBlocos = blocos.filter(b => b.tipo !== 'cabecalho' && b.tipo !== 'rodape');
+
+            const orient = (tpl.config_pagina && tpl.config_pagina.orientacao) || 'portrait';
+            const mm = (tpl.config_pagina && tpl.config_pagina.margens_mm) || { top: 15, bottom: 15, left: 15, right: 15 };
+            const pageHeightPx = orient === 'landscape' ? 794 : 1123;
+            const pageWidthPx = orient === 'landscape' ? 1123 : 794;
+
+            // Renderiza previamente os blocos de corpo
+            const renderedBodyBlocks = bodyBlocos.map((b, bIdx) => {
+                const globalIdx = blocos.indexOf(b);
+                return {
+                    bloco: b,
+                    html: renderSingleBlock(b, globalIdx >= 0 ? globalIdx : bIdx, featureData, featureGeometry, fields, tpl)
+                };
             });
 
-            container.innerHTML = html;
+            // Medição inteligente de altura para distribuição em folhas
+            let measureBox = document.getElementById('a4-measure-stage');
+            if (!measureBox) {
+                measureBox = document.createElement('div');
+                measureBox.id = 'a4-measure-stage';
+                measureBox.style.cssText = 'position:absolute; left:-9999px; top:-9999px; visibility:hidden; width:' + (pageWidthPx - Math.round((mm.left + mm.right) * 3.78)) + 'px;';
+                document.body.appendChild(measureBox);
+            }
+            measureBox.style.width = (pageWidthPx - Math.round((mm.left + mm.right) * 3.78)) + 'px';
+
+            const headerHeightPx = hdrBloco ? 135 : 0;
+            const footerHeightPx = ftrBloco ? 42 : 0;
+            const marginHeightPx = Math.round((mm.top + mm.bottom) * 3.78);
+
+            const maxBodyHeightP1 = pageHeightPx - headerHeightPx - footerHeightPx - marginHeightPx;
+            const maxBodyHeightP2 = pageHeightPx - (hdrBloco && hdrBloco.repetir_todas_folhas ? headerHeightPx : 15) - footerHeightPx - marginHeightPx;
+
+            let totalEstimatedHeight = 0;
+            const blockHeights = renderedBodyBlocks.map(rb => {
+                measureBox.innerHTML = rb.html;
+                const h = Math.max(40, measureBox.firstElementChild ? measureBox.firstElementChild.offsetHeight : measureBox.offsetHeight) + 20;
+                totalEstimatedHeight += h;
+                return h;
+            });
+            measureBox.innerHTML = '';
+
+            const pagesBlocks = [];
+            if (totalEstimatedHeight <= maxBodyHeightP1 || renderedBodyBlocks.length <= 1) {
+                pagesBlocks.push(renderedBodyBlocks);
+            } else {
+                let currentPage = [];
+                let currentAccum = 0;
+                let isFirstPage = true;
+
+                renderedBodyBlocks.forEach((rb, i) => {
+                    const blockH = blockHeights[i];
+                    const limit = isFirstPage ? maxBodyHeightP1 : maxBodyHeightP2;
+
+                    if (currentPage.length > 0 && (currentAccum + blockH > limit)) {
+                        pagesBlocks.push(currentPage);
+                        currentPage = [rb];
+                        currentAccum = blockH;
+                        isFirstPage = false;
+                    } else {
+                        currentPage.push(rb);
+                        currentAccum += blockH;
+                    }
+                });
+
+                if (currentPage.length > 0) {
+                    pagesBlocks.push(currentPage);
+                }
+            }
+
+            const totalPages = pagesBlocks.length;
+
+            let pagesHtml = '';
+            pagesBlocks.forEach((pageBlocks, pIdx) => {
+                const pageNum = pIdx + 1;
+                const isFirst = (pageNum === 1);
+                const showHeader = isFirst || (hdrBloco && hdrBloco.repetir_todas_folhas);
+                const showFooter = !!ftrBloco;
+
+                const padTopMm = showHeader ? Math.max(2, mm.top - 8) : mm.top;
+                const padBotMm = showFooter ? Math.max(2, mm.bottom - 8) : mm.bottom;
+
+                const bodyHtml = pageBlocks.map(b => b.html).join('');
+                const pageIdAttr = isFirst ? 'id="report-blocks-render"' : '';
+
+                pagesHtml += `
+                    <div class="a4-page w-full text-slate-900 ${totalPages === 1 ? 'single-page' : ''}" 
+                         data-page="${pageNum}"
+                         style="max-width: ${pageWidthPx}px; min-height: ${pageHeightPx}px; ${totalPages === 1 ? `height: ${pageHeightPx}px; max-height: ${pageHeightPx}px; overflow: hidden;` : ''}">
+                        
+                        <!-- Cabeçalho Institucional: Fora do corpo, acima da margem superior -->
+                        ${showHeader ? renderHeaderSlotHtml(hdrBloco, tpl, mm.left, mm.right) : ''}
+
+                        <!-- Corpo da Folha: Delimitado entre as margens superior e inferior -->
+                        <div ${pageIdAttr} class="a4-page-body-slot flex flex-col gap-5 w-full flex-1" style="padding: ${padTopMm}mm ${mm.right}mm ${padBotMm}mm ${mm.left}mm; box-sizing: border-box;">
+                            ${bodyHtml}
+                        </div>
+
+                        <!-- Rodapé Oficial: Fora do corpo, abaixo da margem inferior, fixo na base -->
+                        ${showFooter ? renderFooterSlotHtml(ftrBloco, pageNum, totalPages, mm.left, mm.right) : ''}
+                    </div>
+                `;
+            });
+
+            docContainer.innerHTML = pagesHtml;
 
             // Inicializa o Mini-Mapa Leaflet Interativo
             setTimeout(() => {
@@ -225,62 +1014,136 @@
             }, 100);
         }
 
+        function getFieldWidthStyle(pct) {
+            const p = Math.max(15, Math.min(100, Math.round(pct || 50)));
+            if (p >= 98) return '100%';
+            const gap = 10;
+            const deduction = Math.round((gap * (1 - p / 100)) * 10) / 10;
+            return `calc(${p}% - ${deduction}px)`;
+        }
+
         function renderSingleBlock(bloco, idx, featureData, featureGeometry, fields, tpl) {
             switch(bloco.tipo) {
                 case 'cabecalho':
                     return `
-                        <div class="flex items-start justify-between border-b-2 border-slate-900 pb-3 mb-2 gap-4 page-break-avoid">
-                            <div class="flex items-center gap-3">
-                                ${bloco.logo ? `
-                                    <div class="w-14 h-14 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden shrink-0 border border-slate-200">
-                                        ${bloco.logo_url ? `<img src="${bloco.logo_url}" class="w-full h-full object-contain" />` : `<span class="material-symbols-outlined text-slate-800 text-[42px]">account_balance</span>`}
-                                    </div>
-                                ` : ''}
-                                <div>
-                                    <div class="text-[11px] uppercase font-bold text-slate-600 tracking-wider">${escapeHtml(bloco.subtitulo || 'Prefeitura Municipal')}</div>
-                                    <div class="text-lg font-black uppercase text-slate-900 tracking-tight">${escapeHtml(bloco.titulo || tpl.nome || 'FICHA CADASTRAL DO IMÓVEL')}</div>
+                        <div class="mb-3 page-break-avoid ${bloco.repetir_todas_folhas ? 'cabecalho-repetir-todas' : ''}">
+                            <!-- Metadados de Emissão e Protocolo fora do card/borda principal (topo direito) -->
+                            ${(bloco.exibirDataHora || bloco.exibirProtocolo) ? `
+                                <div class="flex items-center justify-end gap-3 text-[10px] font-mono text-slate-500 pb-1 mb-1 border-b border-slate-200/80">
+                                    ${bloco.exibirDataHora ? `
+                                        <div class="flex items-center gap-1">
+                                            <span class="text-slate-400">Emissão:</span>
+                                            <span class="font-medium text-slate-600">${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</span>
+                                        </div>
+                                    ` : ''}
+                                    ${bloco.exibirProtocolo ? `
+                                        <div class="flex items-center gap-1 font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/60">
+                                            <span class="text-slate-400 font-normal">Protocolo:</span>
+                                            <span>#${(bloco.id || '2026').slice(-6).toUpperCase()}</span>
+                                        </div>
+                                    ` : ''}
                                 </div>
-                            </div>
-                            <div class="text-right font-mono text-[10px] text-slate-500 shrink-0">
-                                ${bloco.exibirDataHora ? `<div>Data: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</div>` : ''}
-                                ${bloco.exibirProtocolo ? `<div class="font-bold text-slate-700">Protocolo: #${(bloco.id || '2026').slice(-6).toUpperCase()}</div>` : ''}
+                            ` : ''}
+
+                            <div class="flex items-center justify-between border-b-2 border-slate-900 pb-3 gap-4">
+                                <div class="flex items-center gap-3">
+                                    ${bloco.logo ? `
+                                        <div class="w-14 h-14 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden shrink-0 border border-slate-200">
+                                            ${bloco.logo_url ? `<img src="${bloco.logo_url}" class="w-full h-full object-contain" />` : `<span class="material-symbols-outlined text-slate-800 text-[42px]">account_balance</span>`}
+                                        </div>
+                                    ` : ''}
+                                    <div>
+                                        <div class="text-[11px] uppercase font-bold text-slate-600 tracking-wider whitespace-pre-line">${(escapeHtml(bloco.subtitulo || 'Prefeitura Municipal')).replace(/\r?\n/g, '<br>')}</div>
+                                        <div class="text-lg font-black uppercase text-slate-900 tracking-tight whitespace-pre-line">${(escapeHtml(bloco.titulo || tpl.nome || 'FICHA CADASTRAL DO IMÓVEL')).replace(/\r?\n/g, '<br>')}</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     `;
 
-                case 'grade_campos':
+                case 'grade_campos': {
                     const colCount = bloco.colunasLayout || 2;
-                    let fldsToRender = fields;
-                    if (bloco.campos_selecionados && bloco.campos_selecionados.length > 0) {
-                        const selSet = new Set(bloco.campos_selecionados);
+                    const spans = bloco.campos_spans || {};
+                    const larguras = bloco.campos_larguras || {};
+
+                    const fieldsMap = new Map();
+                    fields.forEach(f => {
+                        fieldsMap.set(f.id, f);
+                        if (f.name) fieldsMap.set(f.name, f);
+                    });
+
+                    const rawSel = Array.isArray(bloco.campos_selecionados) ? bloco.campos_selecionados : [];
+                    let fldsToRender = rawSel
+                        .map(item => typeof item === 'string' ? { id: item } : item)
+                        .map(item => {
+                            const baseField = fieldsMap.get(item.id) || fieldsMap.get(item.name) || {};
+                            return { ...baseField, ...item };
+                        })
+                        .filter(f => f && (f.label || f.name));
+
+                    if (fldsToRender.length === 0 && rawSel.length > 0) {
+                        const selSet = new Set(rawSel.map(s => typeof s === 'string' ? s : s.id));
                         fldsToRender = fields.filter(f => selSet.has(f.id));
                     }
                     if (fldsToRender.length === 0) fldsToRender = fields.slice(0, 8);
 
+                    if (colCount === 1) {
+                        return `
+                            <div class="mb-4 page-break-avoid">
+                                <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
+                                    <span class="whitespace-pre-line">${(escapeHtml(bloco.titulo || 'Dados Cadastrais')).replace(/\r?\n/g, '<br>')}</span>
+                                </div>
+                                <div class="divide-y divide-slate-200 border border-slate-200 rounded-lg overflow-hidden">
+                                    ${fldsToRender.map(f => {
+                                        const val = resolveFieldValue(f, featureData);
+                                        return `
+                                            <div class="flex items-center justify-between px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50">
+                                                <span class="font-bold text-slate-600 truncate">${escapeHtml(f.label)}:</span>
+                                                <span class="font-semibold text-slate-900 truncate font-mono text-[11px]">${escapeHtml(val)}</span>
+                                            </div>
+                                        `;
+                                    }).join('')}
+                                </div>
+                            </div>
+                        `;
+                    }
+
                     return `
                         <div class="mb-4 page-break-avoid">
                             <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
-                                <span>${escapeHtml(bloco.titulo || 'Dados Cadastrais')}</span>
+                                <span class="whitespace-pre-line">${(escapeHtml(bloco.titulo || 'Dados Cadastrais')).replace(/\r?\n/g, '<br>')}</span>
                             </div>
-                            <div class="grid ${colCount === 3 ? 'grid-cols-3' : (colCount === 1 ? 'grid-cols-1' : 'grid-cols-2')} gap-2.5">
+                            <div class="flex flex-wrap gap-2.5">
                                 ${fldsToRender.map(f => {
-                                    const val = featureData[f.name] || featureData[f.id] || featureData[f.label] || '—';
+                                    const val = resolveFieldValue(f, featureData);
+                                    let pct = larguras[f.id];
+                                    if (!pct) {
+                                        const span = Math.min(spans[f.id] || f.colSpan || 1, colCount);
+                                        if (span >= colCount) pct = 100;
+                                        else if (colCount === 3 && span === 2) pct = 66;
+                                        else pct = colCount === 3 ? 33 : 50;
+                                    }
+                                    pct = Math.round(pct);
+                                    const widthStyle = getFieldWidthStyle(pct);
+                                    const isLongText = pct >= 45 || String(val).length > 25 || (f.id && (f.id.includes('endereco') || f.id.includes('obs'))) || (f.label && (f.label.toLowerCase().includes('endereço') || f.label.toLowerCase().includes('observa')));
                                     return `
-                                        <div class="p-2 border border-slate-200 rounded-lg bg-slate-50/50">
-                                            <div class="text-[9.5px] uppercase font-bold text-slate-500">${escapeHtml(f.label)}</div>
-                                            <div class="text-xs font-bold text-slate-800 mt-0.5 truncate">${escapeHtml(val)}</div>
+                                        <div class="p-2 border border-slate-200 rounded-lg bg-slate-50/50" 
+                                             style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">
+                                            <div class="text-[9.5px] uppercase font-bold text-slate-500 truncate">${escapeHtml(f.label)}</div>
+                                            <div class="text-xs font-bold text-slate-800 mt-0.5 ${isLongText ? 'break-words whitespace-normal leading-snug' : 'truncate'}">${escapeHtml(val)}</div>
                                         </div>
                                     `;
                                 }).join('')}
                             </div>
                         </div>
                     `;
+                }
 
                 case 'mapa_estatico':
                     return `
                         <div class="mb-4 page-break-avoid">
                             <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
-                                <span>${escapeHtml(bloco.titulo || 'Delimitação Cartográfica do Imóvel')}</span>
+                                <span class="whitespace-pre-line">${(escapeHtml(bloco.titulo || 'Delimitação Cartográfica do Imóvel')).replace(/\r?\n/g, '<br>')}</span>
                                 <div class="no-print flex items-center gap-1.5">
                                     <button type="button" onclick="toggleMapBasemap()" class="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded flex items-center gap-1 cursor-pointer">
                                         <span class="material-symbols-outlined text-[13px]">layers</span>
@@ -327,7 +1190,7 @@
                         <div class="mb-4 page-break-avoid">
                             ${bloco.titulo ? `
                                 <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
-                                    <span>${escapeHtml(bloco.titulo)}</span>
+                                    <span class="whitespace-pre-line">${(escapeHtml(bloco.titulo)).replace(/\r?\n/g, '<br>')}</span>
                                     <span class="no-print text-[10px] text-slate-400 font-normal">Clique para editar pontualmente</span>
                                 </div>
                             ` : ''}
@@ -340,9 +1203,42 @@
                     `;
 
                 case 'tabela_sintetica_1n': {
-                    const records = extract1nFeatureRecords(bloco.sourceTabId, featureData, fields);
-                    const cols = bloco.colunas || ['data', 'org', 'situacao_ocupacao', 'situacao_recuo', 'area_invadida', 'qtd_fotos'];
+                    const sortOrder = bloco.ordem_cronologica || 'desc';
+                    const groupByTab = !!bloco.ordenar_por_aba;
+                    const tabOrder = bloco.ordem_abas || [];
+                    let records = extract1nFeatureRecords(bloco.sourceTabId, featureData, fields, sortOrder, groupByTab, tabOrder);
+                    if (Array.isArray(bloco.abas_selecionadas) && bloco.abas_selecionadas.length > 0) {
+                        const normSel = new Set(bloco.abas_selecionadas.map(normalizeEnteTab));
+                        const selTabs = new Set(bloco.abas_selecionadas.map(s => String(s).toLowerCase()));
+                        const filtered = records.filter(r => {
+                            const rTab = String(r.sourceTab || r.tabId || r.org || r.tabTitle || (r.raw && r.raw._origTab) || '').toLowerCase();
+                            if (selTabs.has(rTab)) return true;
+                            const normR = normalizeEnteTab(r.sourceTab || r.org || r.tabTitle || (r.raw && r.raw._origTab));
+                            return normSel.has(normR);
+                        });
+                        records = filtered;
+                    }
+
+                    // Deduplicação estrita para MPF: garante no máximo 1 único registro consolidado (o mais recente)
+                    const dedupedRecords = [];
+                    let hasMpfRecord = false;
+                    records.forEach(r => {
+                        const rOrg = String(r.org || r.sourceTab || '').toLowerCase();
+                        if (rOrg.includes('mpf') || rOrg.includes('minist')) {
+                            if (!hasMpfRecord) {
+                                dedupedRecords.push(r);
+                                hasMpfRecord = true;
+                            }
+                        } else {
+                            dedupedRecords.push(r);
+                        }
+                    });
+                    records = dedupedRecords;
+
+                    const rawCols = bloco.colunas || ['aba', 'data', 'org', 'situacao_ocupacao', 'situacao_recuo', 'area_invadida', 'qtd_fotos'];
+                    const cols = rawCols.map(c => typeof c === 'object' ? c.id : c);
                     const colLabelMap = {
+                        'aba': 'Aba / Ente',
                         'data': 'Data',
                         'org': 'Órgão / Entidade',
                         'situacao_ocupacao': 'Situação Ocupação',
@@ -350,6 +1246,31 @@
                         'area_invadida': 'Área Invadida',
                         'qtd_fotos': 'Fotos'
                     };
+                    rawCols.forEach(c => {
+                        if (typeof c === 'object' && c.id) {
+                            colLabelMap[c.id] = c.label || c.id;
+                        }
+                    });
+                    if (Array.isArray(fields)) {
+                        fields.forEach(f => {
+                            if (f && f.id && !colLabelMap[f.id]) {
+                                colLabelMap[f.id] = f.label || f.name || f.id;
+                            }
+                        });
+                    }
+
+                    const density = bloco.densidade || 'compact';
+                    const striping = bloco.zebrado || 'slate';
+
+                    let thDensityClass = 'py-1.5 px-2 text-[9.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300';
+                    let tdDensityClass = 'py-1.5 px-2 text-[10px] border-b border-slate-200';
+                    if (density === 'comfortable') {
+                        thDensityClass = 'p-2 text-[10.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300';
+                        tdDensityClass = 'p-2 text-[11px] border-b border-slate-200';
+                    } else if (density === 'ultracompact') {
+                        thDensityClass = 'py-0.5 px-1 text-[8.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300';
+                        tdDensityClass = 'py-0.5 px-1 text-[9px] font-medium border-b border-slate-200';
+                    }
 
                     let tbodyHtml = '';
                     if (records.length === 0) {
@@ -357,27 +1278,88 @@
                     } else {
                         tbodyHtml = records.map((r, rIdx) => {
                             const isOdd = rIdx % 2 === 1;
+                            let rowBg = isOdd ? 'bg-slate-50/70' : 'bg-white';
+                            if (striping === 'sky') {
+                                rowBg = isOdd ? 'bg-sky-50/50' : 'bg-white';
+                            } else if (striping === 'ente') {
+                                const tabLow = (r.sourceTab || r.org || '').toLowerCase();
+                                if (tabLow.includes('pf') || tabLow.includes('policia') || tabLow.includes('polícia')) {
+                                    rowBg = 'bg-blue-50/35';
+                                } else if (tabLow.includes('spu') || tabLow.includes('patrimonio') || tabLow.includes('patrimônio')) {
+                                    rowBg = 'bg-emerald-50/35';
+                                } else {
+                                    rowBg = isOdd ? 'bg-amber-50/35' : 'bg-white';
+                                }
+                            } else if (striping === 'white') {
+                                rowBg = 'bg-white';
+                            }
+
                             return `
-                                <tr class="${isOdd ? 'bg-slate-50/70' : 'bg-white'} hover:bg-sky-50/40 transition-colors">
-                                    <td class="p-2 border-r border-slate-200 text-center font-mono text-[10px] text-slate-400">${rIdx + 1}</td>
+                                <tr class="${rowBg} hover:bg-amber-50/40 transition-colors">
+                                    <td class="${tdDensityClass} border-r border-slate-200 text-center font-mono text-[10px] text-slate-400">${rIdx + 1}</td>
                                     ${cols.map(c => {
-                                        if (c === 'data') return `<td class="p-2 border-r last:border-r-0 border-slate-200 font-medium text-slate-800 font-mono text-[10px]">${escapeHtml(r.formattedDate)}</td>`;
-                                        if (c === 'org') return `<td class="p-2 border-r last:border-r-0 border-slate-200"><span class="px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-blue-100 text-blue-800">${escapeHtml(r.org)}</span></td>`;
+                                        if (c === 'aba') {
+                                            return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 whitespace-normal break-words">${getOrgBadgeHtml(r.sourceTab || r.org || 'Vistoria')}</td>`;
+                                        }
+                                        if (c === 'data') return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 font-medium text-slate-800 font-mono text-[10px] whitespace-normal break-words">${escapeHtml(r.formattedDate)}</td>`;
+                                        if (c === 'org') return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 whitespace-normal break-words">${getOrgBadgeHtml(r.org)}</td>`;
                                         if (c === 'situacao_ocupacao') {
-                                            const isIrreg = r.situacaoOcupacao.toLowerCase().includes('irreg');
-                                            return `<td class="p-2 border-r last:border-r-0 border-slate-200"><span class="px-2 py-0.5 rounded-full text-[9.5px] font-bold ${isIrreg ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}">${escapeHtml(r.situacaoOcupacao)}</span></td>`;
+                                            return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 whitespace-normal break-words">${getStatusBadgeHtml(r.situacaoOcupacao)}</td>`;
                                         }
                                         if (c === 'situacao_recuo') {
-                                            const hasRecuo = r.situacaoRecuo.toLowerCase().includes('já') || r.situacaoRecuo.toLowerCase().includes('ja');
-                                            return `<td class="p-2 border-r last:border-r-0 border-slate-200"><span class="px-2 py-0.5 rounded-full text-[9.5px] font-bold ${hasRecuo ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}">${escapeHtml(r.situacaoRecuo)}</span></td>`;
+                                            return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 whitespace-normal break-words">${getRecuoBadgeHtml(r.situacaoRecuo)}</td>`;
                                         }
                                         if (c === 'area_invadida') {
-                                            return `<td class="p-2 border-r last:border-r-0 border-slate-200 font-mono font-bold text-right text-slate-800 text-[10.5px]">${r.areaInvadida > 0 ? r.areaInvadida.toFixed(2).replace('.', ',') + ' m²' : '—'}</td>`;
+                                            return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 font-mono font-bold text-right text-slate-800 text-[10.5px] whitespace-normal break-words">${r.areaInvadida > 0 ? (new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(r.areaInvadida) + ' m²') : '—'}</td>`;
                                         }
                                         if (c === 'qtd_fotos') {
-                                            return `<td class="p-2 border-r last:border-r-0 border-slate-200 text-sky-700 font-semibold text-[10px]">${r.photos.length > 0 ? '📷 ' + r.photos.length + ' foto(s)' : '0 anexos'}</td>`;
+                                            const fotoCount = Array.isArray(r.photos) ? r.photos.length : 0;
+                                            const docCount = Array.isArray(r.links) ? r.links.length : 0;
+                                            let anexoLabel = '';
+                                            if (fotoCount > 0 && docCount > 0) anexoLabel = `📷 ${fotoCount} foto(s) + 📎 ${docCount} doc(s)`;
+                                            else if (fotoCount > 0) anexoLabel = `📷 ${fotoCount} foto(s)`;
+                                            else if (docCount > 0) anexoLabel = `📎 ${docCount} doc(s)`;
+                                            else anexoLabel = '<span class="text-slate-400 font-mono text-[10px]">—</span>';
+                                            return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 text-sky-700 font-semibold text-[10px] whitespace-normal break-words">${anexoLabel}</td>`;
                                         }
-                                        return `<td class="p-2 border-r last:border-r-0 border-slate-200 text-slate-700 text-[10px]">${escapeHtml(String((r.raw && r.raw[c] !== undefined) ? r.raw[c] : '—'))}</td>`;
+
+                                        // Lookup candidate keys from aliases if c is unified
+                                        const colObj = rawCols.find(col => (typeof col === 'object' ? col.id : col) === c);
+                                        const candidates = [c];
+                                        if (colObj && typeof colObj === 'object' && Array.isArray(colObj.fieldIds)) {
+                                            candidates.push(...colObj.fieldIds);
+                                        }
+                                        let customVal = null;
+                                        for (const cand of candidates) {
+                                            if (r[cand] !== undefined && r[cand] !== null) { customVal = r[cand]; break; }
+                                            if (r.raw && r.raw[cand] !== undefined && r.raw[cand] !== null) { customVal = r.raw[cand]; break; }
+                                        }
+                                        if (!customVal && c === 'conclusao') {
+                                            customVal = r.conclusao || r.observacao || null;
+                                        }
+                                        if (!customVal && c === 'links' && Array.isArray(r.links) && r.links.length > 0) {
+                                            customVal = r.links;
+                                        }
+                                        if (customVal === null && typeof resolveFieldValue === 'function') {
+                                            const candidateData = Object.assign({}, featureData || {}, r.raw || {}, r || {});
+                                            const candidateDef = (r.tabFields || fields || []).find(f => candidates.includes(f.id) || candidates.includes(f.name)) || (typeof colObj === 'object' ? colObj : { id: c });
+                                            const resolved = resolveFieldValue(candidateDef, candidateData, (r.tabFields || fields));
+                                            if (resolved !== '—') customVal = resolved;
+                                        }
+                                        
+                                        // Formatação inteligente para campos compostos (links, processos, listas)
+                                        if (Array.isArray(customVal) || (typeof customVal === 'string' && customVal.trim().startsWith('[') && customVal.includes('{'))) {
+                                            let parsed = Array.isArray(customVal) ? customVal : null;
+                                            if (!parsed) { try { parsed = JSON.parse(customVal); } catch(e){} }
+                                            if (Array.isArray(parsed) && parsed.length > 0) {
+                                                return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 whitespace-normal break-words"><div class="flex flex-col gap-0.5">${parsed.map(item => `<a href="${item.url || '#'}" target="_blank" class="inline-flex items-center gap-1 text-[9px] font-bold text-sky-700 bg-sky-50 px-1 py-0.5 rounded hover:underline"><span class="material-symbols-outlined text-[10px]">attachment</span>${escapeHtml(item.title || item.number || 'Anexo')}</a>`).join('')}</div></td>`;
+                                            }
+                                        }
+
+                                        const fDef = (r.tabFields || fields || []).find(f => f.id === c || f.name === c) || (typeof colObj === 'object' ? colObj : { id: c });
+                                        const formattedCustom = formatFieldValueForDisplay(customVal, fDef);
+
+                                        return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 text-slate-700 whitespace-normal break-words">${escapeHtml(String(formattedCustom))}</td>`;
                                     }).join('')}
                                 </tr>
                             `;
@@ -387,18 +1369,23 @@
                     return `
                         <div class="mb-4 page-break-avoid">
                             <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
-                                <span>${escapeHtml(bloco.titulo || 'Quadro Sintético de Vistorias (Histórico 1:N)')}</span>
-                                <span class="text-[10px] font-mono text-slate-500">${records.length} registro(s)</span>
+                                <span class="whitespace-pre-line">${(escapeHtml(bloco.titulo || 'Quadro Sintético de Vistorias (Histórico 1:N)')).replace(/\r?\n/g, '<br>')}</span>
+                                <div class="flex items-center gap-2 text-[10px] font-mono text-slate-500">
+                                    <span>${records.length} registro(s)</span>
+                                    <span>•</span>
+                                    <span>${sortOrder === 'asc' ? 'Antigo → Recente' : 'Recente → Antigo'}</span>
+                                    ${groupByTab ? '<span>• Por Aba</span>' : ''}
+                                </div>
                             </div>
                             <div class="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
-                                <table class="w-full text-left text-[11px] border-collapse">
+                                <table class="w-full text-left border-collapse">
                                     <thead>
-                                        <tr class="bg-slate-100 border-b border-slate-200 text-[10px] font-bold text-slate-700 uppercase">
-                                            <th class="p-2 border-r border-slate-200 w-8 text-center">#</th>
-                                            ${cols.map(c => `<th class="p-2 border-r last:border-r-0 border-slate-200">${colLabelMap[c] || c}</th>`).join('')}
+                                        <tr class="bg-slate-100 border-b border-slate-200 text-slate-700">
+                                            <th class="${thDensityClass} border-r border-slate-200 w-8 text-center">#</th>
+                                            ${cols.map(c => `<th class="${thDensityClass} border-r last:border-r-0 border-slate-200 whitespace-normal break-words leading-tight">${escapeHtml(colLabelMap[c] || c)}</th>`).join('')}
                                         </tr>
                                     </thead>
-                                    <tbody class="divide-y divide-slate-100">
+                                    <tbody class="divide-y divide-slate-200">
                                         ${tbodyHtml}
                                     </tbody>
                                 </table>
@@ -409,7 +1396,10 @@
 
                 case 'laudo_vistoria_fotos':
                 case 'galeria_fotos': {
-                    let records = extract1nFeatureRecords(bloco.sourceTabId, featureData, fields);
+                    const sortOrder = bloco.ordem_cronologica || 'desc';
+                    const groupByTab = !!bloco.ordenar_por_aba;
+                    const tabOrder = bloco.ordem_abas || [];
+                    let records = extract1nFeatureRecords(bloco.sourceTabId, featureData, fields, sortOrder, groupByTab, tabOrder);
                     const isSingleVistoria = bloco.escopo === 'ultima';
                     if (isSingleVistoria && records.length > 0) {
                         records = records.slice(0, 1);
@@ -419,6 +1409,85 @@
                     let gridClass = 'grid-cols-2';
                     if (layout === '1_col') gridClass = 'grid-cols-1';
                     if (layout === 'grid_4') gridClass = 'grid-cols-2 sm:grid-cols-4';
+
+                    const density = bloco.densidade || 'compact';
+                    const striping = bloco.zebrado || 'slate';
+
+                    let cardPaddingClass = 'p-3.5';
+                    let fieldGapClass = 'gap-2';
+                    if (density === 'comfortable') {
+                        cardPaddingClass = 'p-4 sm:p-5';
+                        fieldGapClass = 'gap-2.5';
+                    } else if (density === 'ultracompact') {
+                        cardPaddingClass = 'p-2.5';
+                        fieldGapClass = 'gap-1.5';
+                    }
+
+                    const rawCustomFields = Array.isArray(bloco.campos_selecionados) ? bloco.campos_selecionados : [];
+                    const hasExplicitSelectedTabs = Array.isArray(bloco.abas_selecionadas) && bloco.abas_selecionadas.length > 0;
+                    const selectedTabIds = new Set();
+                    if (hasExplicitSelectedTabs) {
+                        bloco.abas_selecionadas.forEach(id => selectedTabIds.add(String(id)));
+                    } else if (bloco.sourceTabId && bloco.sourceTabId !== 'consolidado') {
+                        selectedTabIds.add(String(bloco.sourceTabId));
+                    } else {
+                        rawCustomFields.forEach(cf => {
+                            const tId = (typeof cf === 'object' && cf.tabId) ? cf.tabId : (fields.find(f => f.id === (typeof cf === 'string' ? cf : (cf.rawId || cf.id)))?.tabId);
+                            if (tId) selectedTabIds.add(String(tId));
+                        });
+                    }
+
+                    if (selectedTabIds.size > 0 && records.length > 0) {
+                        const normSel = new Set(Array.from(selectedTabIds).map(normalizeEnteTab));
+                        const selSet = new Set(Array.from(selectedTabIds).map(s => String(s).toLowerCase()));
+                        records = records.filter(r => {
+                            const rTab = String(r.tabId || r.sourceTabId || r._origTab || r.sourceTab || r.org || r.tabTitle || '').toLowerCase();
+                            if (selSet.has(rTab)) return true;
+                            const normR = normalizeEnteTab(r.sourceTab || r.org || r.tabTitle || r.tabId || r._origTab);
+                            return normSel.has(normR);
+                        });
+                    }
+
+                    // Deduplicação estrita de MPF no Laudo Analítico (garante 1 único cartão para MPF)
+                    const dedupedLaudoRecords = [];
+                    let hasMpfLaudo = false;
+                    records.forEach(r => {
+                        const rNorm = normalizeEnteTab(r.sourceTab || r.org || r.tabTitle || r._origTab);
+                        if (rNorm === 'mpf') {
+                            if (!hasMpfLaudo) {
+                                dedupedLaudoRecords.push(r);
+                                hasMpfLaudo = true;
+                            }
+                        } else {
+                            dedupedLaudoRecords.push(r);
+                        }
+                    });
+                    records = dedupedLaudoRecords;
+
+                    const seenFieldKeys = new Set();
+                    let customFields = [];
+                    rawCustomFields.forEach(cf => {
+                        const cId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
+                        const cLabel = typeof cf === 'object' ? (cf.label || cf.id) : cId;
+                        const cTabId = typeof cf === 'object' ? (cf.tabId || '') : '';
+                        const uniqueKey = `${cTabId}:${cId}`;
+                        if (!seenFieldKeys.has(uniqueKey)) {
+                            seenFieldKeys.add(uniqueKey);
+                            customFields.push(typeof cf === 'object' ? { ...cf, id: cId, label: cLabel, tabId: cTabId } : { id: cId, label: cLabel, rawId: cId, tabId: cTabId });
+                        }
+                    });
+
+                    if (customFields.length === 0) {
+                        customFields = [
+                            { id: 'data', label: 'Data da Vistoria' },
+                            { id: 'situacao_ocupacao', label: 'Situação da Ocupação' },
+                            { id: 'situacao_recuo', label: 'Situação do Recuo' },
+                            { id: 'area_invadida', label: 'Área Invadida (m²)' },
+                            { id: 'conclusao', label: 'Conclusão da Vistoria' },
+                            { id: 'links', label: 'Processos Oficiais & Hiperlinks' }
+                        ];
+                    }
+                    // Conclusão: campo formatado na grade de atributos como os demais campos
 
                     let contentHtml = '';
                     if (records.length === 0) {
@@ -430,9 +1499,58 @@
                             </div>
                         `;
                     } else {
-                        contentHtml = records.map((r, rIdx) => {
-                            const isIrreg = r.situacaoOcupacao.toLowerCase().includes('irreg');
-                            
+                        // Agrupamento estrito por aba para manter cada aba completamente separada na folha
+                        const tabGroupsMap = new Map();
+                        records.forEach(r => {
+                            const tKey = r.sourceTab || r.org || r.tabId || r._origTab || 'Vistorias';
+                            if (!tabGroupsMap.has(tKey)) {
+                                tabGroupsMap.set(tKey, {
+                                    title: tKey,
+                                    records: []
+                                });
+                            }
+                            tabGroupsMap.get(tKey).records.push(r);
+                        });
+
+                        contentHtml = `
+                            <div class="space-y-4">
+                                ${Array.from(tabGroupsMap.values()).map(tg => `
+                                    <div class="space-y-2.5">
+                                        <div class="flex items-center justify-between px-2.5 py-1.5 bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold text-slate-800 uppercase tracking-wide">
+                                            <div class="flex items-center gap-1.5">
+                                                <span class="material-symbols-outlined text-[16px] text-amber-500">folder_open</span>
+                                                <span>Aba / Ente: ${escapeHtml(tg.title)}</span>
+                                            </div>
+                                            <span class="text-[9.5px] font-mono font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                                                ${tg.records.length} registro(s) analítico(s)
+                                            </span>
+                                        </div>
+                                        ${tg.records.map((r, rIdx) => {
+                                            const isIrreg = (r.situacaoOcupacao || '').toLowerCase().includes('irreg');
+                                            
+                                            // Cores de fundo do cartão de vistoria conforme o zebrado / tema do ente
+                                            let cardBgClass = 'bg-slate-50/50 border-slate-200';
+                                            if (striping === 'ente') {
+                                                const orgLow = (r.sourceTab || r.org || '').toLowerCase();
+                                                if (orgLow.includes('mpf') || orgLow.includes('minist')) {
+                                                    cardBgClass = 'bg-purple-50/40 border-purple-200';
+                                                } else if (orgLow.includes('policia') || orgLow.includes('polícia') || orgLow === 'pf' || (orgLow.includes('pf') && !orgLow.includes('mpf'))) {
+                                                    cardBgClass = 'bg-blue-50/40 border-blue-200';
+                                                } else if (orgLow.includes('spu') || orgLow.includes('patrimonio') || orgLow.includes('patrimônio')) {
+                                                    cardBgClass = 'bg-emerald-50/40 border-emerald-200';
+                                                } else if (orgLow.includes('pm') || orgLow.includes('prefeitura') || orgLow.includes('meio')) {
+                                                    cardBgClass = 'bg-amber-50/40 border-amber-200';
+                                                } else {
+                                                    cardBgClass = rIdx % 2 === 1 ? 'bg-slate-100/70 border-slate-300' : 'bg-white border-slate-200';
+                                                }
+                                            } else if (striping === 'sky') {
+                                                cardBgClass = rIdx % 2 === 1 ? 'bg-sky-50/50 border-sky-200' : 'bg-white border-slate-200';
+                                            } else if (striping === 'white') {
+                                                cardBgClass = 'bg-white border-slate-200';
+                                            } else {
+                                                cardBgClass = rIdx % 2 === 1 ? 'bg-slate-100/70 border-slate-300' : 'bg-white border-slate-200';
+                                            }
+
                             let photosHtml = '';
                             if (r.photos.length > 0) {
                                 photosHtml = `
@@ -463,69 +1581,202 @@
                                 `;
                             }
 
-                            return `
-                                <div class="border border-slate-200 rounded-xl p-3.5 bg-slate-50/40 mb-3 space-y-2.5 page-break-avoid shadow-2xs">
-                                    <div class="flex items-center justify-between border-b border-slate-200 pb-2">
-                                        <div class="flex items-center gap-2">
-                                            <span class="material-symbols-outlined text-primary text-[18px]">event_available</span>
-                                            <span class="font-bold text-xs text-slate-900">Vistoria: ${escapeHtml(r.formattedDate)}</span>
-                                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">${escapeHtml(r.org)}</span>
-                                        </div>
-                                        ${r.situacaoOcupacao !== '—' ? `
-                                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold ${isIrreg ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}">
-                                                ${escapeHtml(r.situacaoOcupacao)}
-                                            </span>
-                                        ` : ''}
+                            // Campos customizados selecionados para o laudo com larguras flexíveis
+                            let customFieldsHtml = '';
+                            const recTab = r.tabId || r.sourceTabId || r._origTab || r.sourceTab || r.org || r.tabTitle;
+                            const normRecTab = normalizeEnteTab(recTab);
+                            const fieldsForRec = customFields.filter(cf => {
+                                if (cf.tabId) {
+                                    const normCfTab = normalizeEnteTab(cf.tabId);
+                                    return normCfTab === normRecTab;
+                                }
+                                if (Array.isArray(r.tabFields) && r.tabFields.length > 0) {
+                                    return r.tabFields.some(tf => tf.id === cf.id || tf.name === cf.id || tf.label === cf.label);
+                                }
+                                return true;
+                            });
+
+                            let effectiveFields = [];
+                            if (fieldsForRec.length > 0) {
+                                effectiveFields = fieldsForRec;
+                            } else if (Array.isArray(r.tabFields) && r.tabFields.length > 0) {
+                                effectiveFields = r.tabFields.slice(0, 10).map(tf => ({ id: tf.id, label: tf.label || tf.id, tabId: r.tabId }));
+                            } else {
+                                effectiveFields = [
+                                    { id: 'data', label: 'Data da Vistoria' },
+                                    { id: 'situacao_ocupacao', label: 'Situação da Ocupação' },
+                                    { id: 'situacao_recuo', label: 'Situação do Recuo' },
+                                    { id: 'area_invadida', label: 'Área Invadida (m²)' },
+                                    { id: 'conclusao', label: 'Conclusão da Vistoria' },
+                                    { id: 'links', label: 'Processos Oficiais & Hiperlinks' }
+                                ];
+                            }
+                            if (effectiveFields.length > 0) {
+                                customFieldsHtml = `
+                                    <div class="flex flex-wrap ${fieldGapClass}">
+                                        ${effectiveFields.map(cf => {
+                                            const cId = typeof cf === 'object' ? cf.id : cf;
+                                            const cLabel = typeof cf === 'object' ? (cf.label || cf.id) : (fields.find(f => f.id === cId)?.label || cId);
+                                            const isConclusion = cId.toLowerCase().includes('conclus') || (cLabel && cLabel.toLowerCase().includes('conclus'));
+                                            const isLinks = cId.toLowerCase().includes('link') || (cLabel && cLabel.toLowerCase().includes('link')) || cId.toLowerCase().includes('process');
+                                            
+                                            const larguras = bloco.campos_larguras || {};
+                                            let pct = larguras[cId];
+                                            if (!pct) {
+                                                pct = (isConclusion || isLinks) ? 100 : 50;
+                                            }
+                                            pct = Math.round(pct);
+                                            const widthStyle = pct >= 98 ? '100%' : (pct >= 65 ? '66.666%' : (pct <= 28 ? '25%' : (pct <= 38 ? '33.333%' : '50%')));
+
+                                            let displayValHtml = '';
+                                            if (isConclusion) {
+                                                displayValHtml = `<div class="text-[10.5px] text-slate-700 leading-relaxed break-words whitespace-normal font-normal">${escapeHtml(r.conclusao || r.observacao || 'Constatada regularidade.')}</div>`;
+                                            } else if (isLinks || Array.isArray(r[cId])) {
+                                                const linkItems = Array.isArray(r[cId]) ? r[cId] : (r.links || []);
+                                                if (linkItems.length > 0) {
+                                                    displayValHtml = `
+                                                        <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                                            ${linkItems.map(l => `
+                                                                <a href="${l.url || '#'}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-[9.5px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded hover:bg-sky-100">
+                                                                    <span class="material-symbols-outlined text-[11px]">attachment</span>
+                                                                    <span>${escapeHtml(l.title || 'Processo')}:</span>
+                                                                    <span class="font-mono">${escapeHtml(l.number || '#')}</span>
+                                                                </a>
+                                                            `).join('')}
+                                                        </div>
+                                                    `;
+                                                } else {
+                                                    displayValHtml = `<span class="text-slate-400 italic text-[10px]">Sem processos/links</span>`;
+                                                }
+                                            } else {
+                                                let val = (r[cId] !== undefined && r[cId] !== null) ? r[cId] : (r.raw && r.raw[cId] !== undefined && r.raw[cId] !== null ? r.raw[cId] : null);
+                                                if (val === null && typeof resolveFieldValue === 'function') {
+                                                    const candidateData = Object.assign({}, featureData || {}, r.raw || {}, r || {});
+                                                    val = resolveFieldValue({ id: cId, name: cId, label: cLabel }, candidateData, (r.tabFields || fields));
+                                                    if (val === '—') val = null;
+                                                }
+                                                if (val === null) {
+                                                    if (cId === 'data') val = r.formattedDate;
+                                                    else if (cId === 'situacao_ocupacao') val = r.situacaoOcupacao;
+                                                    else if (cId === 'situacao_recuo') val = r.situacaoRecuo;
+                                                    else if (cId === 'area_invadida') val = r.areaInvadida > 0 ? (r.areaInvadida.toFixed(2).replace('.', ',') + ' m²') : '—';
+                                                    else if (cId === 'org') val = r.org;
+                                                    else val = '—';
+                                                }
+                                                const tabFieldPool = r.tabFields || fields || [];
+                                                const fDef = tabFieldPool.find(f => f.id === cId || f.name === cId) || (typeof cf === 'object' ? cf : { id: cId, label: cLabel });
+                                                const formattedVal = formatFieldValueForDisplay(val, fDef);
+                                                displayValHtml = `<span class="font-mono text-slate-800 font-bold text-[10.5px] break-words whitespace-normal block">${escapeHtml(String(formattedVal))}</span>`;
+                                            }
+
+                                            return `
+                                                <div class="p-2 bg-white rounded-lg border border-slate-200 text-xs" 
+                                                     style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">
+                                                    <span class="font-bold text-slate-500 uppercase text-[9px] block truncate mb-0.5">${escapeHtml(cLabel)}:</span>
+                                                    ${displayValHtml}
+                                                </div>
+                                            `;
+                                        }).join('')}
                                     </div>
+                                `;
+                            }
 
-                                    ${(bloco.exibirObs !== false && r.observacao) ? `
-                                        <div class="p-2.5 bg-white border border-slate-200 rounded-lg text-xs leading-relaxed text-slate-700">
-                                            <strong class="text-slate-900 block mb-0.5">Relato Técnico / Parecer:</strong>
-                                            ${escapeHtml(r.observacao)}
-                                        </div>
-                                    ` : ''}
+                            // Relato Técnico / Conclusão & Observações dedicado
+                            let conclusionHtml = '';
+                            const relatorioTexto = r.conclusao || r.observacao || '';
+                            if (relatorioTexto && relatorioTexto.trim() !== '') {
+                                conclusionHtml = `
+                                    <div class="text-[11px] leading-relaxed text-slate-700 bg-slate-50/80 p-2.5 rounded-lg border border-slate-200">
+                                        <strong class="text-slate-900 block mb-1 flex items-center gap-1">
+                                            <span class="material-symbols-outlined text-[14px] text-primary">description</span> Relato Técnico / Conclusão & Observações:
+                                        </strong>
+                                        <div class="whitespace-pre-line">${escapeHtml(relatorioTexto)}</div>
+                                    </div>
+                                `;
+                            }
 
-                                    ${(bloco.exibirLinks !== false && r.links && r.links.length > 0) ? `
-                                        <div class="flex flex-wrap items-center gap-2">
+                            // Processos Oficiais & Hiperlinks dedicados
+                            let linksBlockHtml = '';
+                            if (Array.isArray(r.links) && r.links.length > 0) {
+                                linksBlockHtml = `
+                                    <div class="pt-1 border-t border-slate-200/80">
+                                        <span class="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider block mb-1 flex items-center gap-1">
+                                            <span class="material-symbols-outlined text-[13px] text-sky-600">attachment</span> Processos Oficiais & Hiperlinks:
+                                        </span>
+                                        <div class="flex flex-wrap items-center gap-1.5">
                                             ${r.links.map(l => `
-                                                <a href="${l.url || '#'}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-[11px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2 py-1 rounded hover:bg-sky-100">
-                                                    <span class="material-symbols-outlined text-[13px]">attachment</span>
-                                                    <span>${escapeHtml(l.title || 'Documento')}</span>
-                                                    ${l.number ? `<span class="font-mono text-[10px] text-slate-500">(${escapeHtml(l.number)})</span>` : ''}
+                                                <a href="${l.url || '#'}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-[9.5px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded hover:bg-sky-100">
+                                                    <span class="material-symbols-outlined text-[11px]">open_in_new</span>
+                                                    <span>${escapeHtml(l.title || 'Processo')}:</span>
+                                                    <span class="font-mono">${escapeHtml(l.number || '#')}</span>
                                                 </a>
                                             `).join('')}
                                         </div>
-                                    ` : ''}
+                                    </div>
+                                `;
+                            }
+
+                            return `
+                                <div class="border rounded-xl ${cardPaddingClass} ${cardBgClass} space-y-2.5 shadow-2xs">
+                                    <!-- Cabeçalho da Vistoria com badge individual isolado -->
+                                    <div class="flex items-center justify-between border-b border-slate-200 pb-1.5 text-xs">
+                                        <div class="flex items-center gap-1.5 font-bold text-slate-800">
+                                            <span class="material-symbols-outlined text-[16px] text-sky-600">event_available</span>
+                                            <span>${escapeHtml(r.title || `Vistoria #${rIdx + 1} • ${r.formattedDate} (${r.sourceTab || r.org || 'Vistoria'})`)}</span>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            ${getOrgBadgeHtml(r.sourceTab || r.org || 'Vistoria')}
+                                        </div>
+                                    </div>
+
+                                    ${customFieldsHtml}
+
+                                    ${conclusionHtml}
+
+                                    ${linksBlockHtml}
 
                                     ${photosHtml}
                                 </div>
                             `;
-                        }).join('');
+                        }).join('')}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `;
                     }
 
                     return `
                         <div class="mb-4 page-break-avoid">
                             <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">
-                                <span>${escapeHtml(bloco.titulo || 'Vistoria Fotográfica & Anexos (1:N)')}</span>
-                                <span class="text-[10px] font-mono text-slate-500">${isSingleVistoria ? 'Última Vistoria' : `${records.length} Vistoria(s)`}</span>
+                                <span class="whitespace-pre-line">${(escapeHtml(bloco.titulo || 'Vistoria Fotográfica & Anexos (1:N)')).replace(/\r?\n/g, '<br>')}</span>
+                                <div class="flex items-center gap-2 text-[10px] font-mono text-slate-500">
+                                    <span>${isSingleVistoria ? 'Última Vistoria' : `${records.length} Vistoria(s)`}</span>
+                                    <span>•</span>
+                                    <span>${sortOrder === 'asc' ? 'Antigo → Recente' : 'Recente → Antigo'}</span>
+                                    ${groupByTab ? '<span>• Por Aba</span>' : ''}
+                                </div>
                             </div>
                             ${contentHtml}
                         </div>
                     `;
                 }
 
-                case 'rodape':
+                case 'rodape': {
+                    const startMode = bloco.inicio_numeracao || 'primeira';
+                    const isSecond = (startMode === 'segunda');
+                    const pageText = isSecond ? '' : 'Página 1 de 1';
                     return `
-                        <div class="border-t border-slate-300 pt-2 mt-4 text-[10px] text-slate-500 flex items-center justify-between font-mono page-break-avoid">
+                        <div class="border-t border-slate-300 pt-2 mt-auto text-[10px] text-slate-500 flex items-center justify-between font-mono page-break-avoid w-full">
                             <div>
-                                ${bloco.exibirDataHora ? `Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}` : ''}
-                                ${bloco.exibirHash ? `<span class="ml-2 font-bold text-slate-600">SHA-256: 8a4f91e...</span>` : ''}
+                                ${bloco.exibirDataHora !== false ? `Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}` : ''}
+                                ${bloco.exibirHash !== false ? `<span class="ml-2 font-bold text-slate-600">SHA-256: 8a4f91e...</span>` : ''}
                             </div>
                             <div class="font-bold text-slate-700">
-                                ${bloco.numeracao ? 'Página 1 de 1' : ''}
+                                ${bloco.numeracao !== false ? pageText : ''}
                             </div>
                         </div>
                     `;
+                }
 
                 default:
                     return '';
@@ -535,43 +1786,125 @@
         /**
          * Substitui menções @ por dados reais da feição sem o título do campo.
          */
+        /**
+         * Substitui menções @ por dados reais da feição sem o título do campo,
+         * aplicando formatação de máscaras (CPF/CNPJ, Endereço, etc.) e formatação rica (Negrito, Itálico, Sublinhado).
+         */
         function replaceMentionsWithData(contentHtml, featureData) {
             if (!contentHtml) return '';
             
+            const availableFields = (window.reportViewerFormFields && Array.isArray(window.reportViewerFormFields)) ? window.reportViewerFormFields : [];
+
             // 1. Substitui spans com menção estruturada (@campo) priorizando data-field-id (único por campo e aba)
-            let result = contentHtml.replace(/<span[^>]*class="[^"]*mention-[^"]*"[^>]*>.*?<\/span>/gi, (match) => {
+            let result = contentHtml.replace(/<span[^>]*class="[^"]*mention-[^"]*"[^>]*>[\s\S]*?<\/span>/gi, (match) => {
                 const idMatch = match.match(/data-field-id="([^"]+)"/i);
                 const nameMatch = match.match(/data-field-name="([^"]+)"/i);
                 const fId = idMatch ? idMatch[1] : null;
                 const fName = nameMatch ? nameMatch[1] : null;
 
-                let val = (fId && featureData[fId] !== undefined && featureData[fId] !== null && featureData[fId] !== '') ? featureData[fId] : undefined;
+                // Extrai rótulo limpo do texto da menção (ex: "@Loteamento (Dados do Imóvel)" -> "Loteamento")
+                const rawInnerText = match.replace(/<[^>]+>/g, '').replace(/^@/, '').trim();
+                const cleanLabel = rawInnerText.replace(/\s*\([^)]*\)$/, '').trim();
+
+                let fieldDef = availableFields.find(f => (fId && f.id === fId) || (fName && f.name === fName));
+                if (!fieldDef && cleanLabel) {
+                    fieldDef = availableFields.find(f => f.label && f.label.toLowerCase().trim() === cleanLabel.toLowerCase().trim());
+                }
+                if (!fieldDef) {
+                    fieldDef = { id: fId, name: fName, label: cleanLabel };
+                }
+                if (!fieldDef.label && cleanLabel) fieldDef.label = cleanLabel;
+
+                // Resolve o valor formatado através de resolveFieldValue (que já faz busca inteligente, aliases e formatação)
+                let val = undefined;
+                if (typeof resolveFieldValue === 'function') {
+                    const resolved = resolveFieldValue(fieldDef, featureData, availableFields);
+                    if (resolved !== '—') val = resolved;
+                }
+
+                // Fallback direto em featureData caso resolveFieldValue não encontre
                 if (val === undefined || val === null || val === '') {
-                    if (fName && featureData[fName] !== undefined && featureData[fName] !== null) {
-                        val = featureData[fName];
-                    } else if (fName && featureData[fName.toLowerCase()] !== undefined && featureData[fName.toLowerCase()] !== null) {
-                        val = featureData[fName.toLowerCase()];
+                    if (fId && featureData[fId] !== undefined && featureData[fId] !== null && featureData[fId] !== '') {
+                        val = formatFieldValueForDisplay(featureData[fId], fieldDef);
+                    } else if (fName && featureData[fName] !== undefined && featureData[fName] !== null && featureData[fName] !== '') {
+                        val = formatFieldValueForDisplay(featureData[fName], fieldDef);
+                    } else if (fName && featureData[fName.toLowerCase()] !== undefined && featureData[fName.toLowerCase()] !== null && featureData[fName.toLowerCase()] !== '') {
+                        val = formatFieldValueForDisplay(featureData[fName.toLowerCase()], fieldDef);
                     }
                 }
-                return (val !== undefined && val !== null) ? String(val) : '';
+
+                if (val === undefined || val === null || val === '') {
+                    val = '—';
+                }
+
+                let displayVal = String(val);
+
+                // Detecta opções de formatação ricas (Negrito, Itálico, Sublinhado) aplicadas na tag ou pelo editor
+                const isBold = match.includes('data-format-bold="true"') || 
+                               /font-weight\s*:\s*(bold|700|800|900)/i.test(match) || 
+                               /\bfont-black\b/i.test(match) || 
+                               /\bis-bold\b/i.test(match);
+
+                const isItalic = match.includes('data-format-italic="true"') || 
+                                 /font-style\s*:\s*italic/i.test(match) || 
+                                 /\bitalic\b/i.test(match);
+
+                const isUnderline = match.includes('data-format-underline="true"') || 
+                                   /text-decoration\s*:\s*underline/i.test(match) || 
+                                   /\bunderline\b/i.test(match);
+
+                let formattedOutput = escapeHtml(displayVal);
+                if (isUnderline) formattedOutput = `<u>${formattedOutput}</u>`;
+                if (isItalic) formattedOutput = `<em>${formattedOutput}</em>`;
+                if (isBold) formattedOutput = `<strong>${formattedOutput}</strong>`;
+
+                return formattedOutput;
             });
 
             // 2. Substitui spans legados caso existam
             result = result.replace(/<span[^>]*data-field-id="([^"]+)"[^>]*>.*?<\/span>/gi, (match, fId) => {
-                const val = featureData[fId] || '';
-                return val !== undefined && val !== null ? String(val) : '';
+                const isBold = match.includes('data-format-bold="true"') || /font-weight\s*:\s*(bold|700|800|900)/i.test(match) || /\bfont-black\b/i.test(match) || /\bis-bold\b/i.test(match);
+                const isItalic = match.includes('data-format-italic="true"') || /font-style\s*:\s*italic/i.test(match) || /\bitalic\b/i.test(match);
+                const isUnderline = match.includes('data-format-underline="true"') || /text-decoration\s*:\s*underline/i.test(match) || /\bunderline\b/i.test(match);
+
+                let fieldDef = availableFields.find(f => f.id === fId) || { id: fId };
+                let val = (typeof resolveFieldValue === 'function') ? resolveFieldValue(fieldDef, featureData, availableFields) : undefined;
+                if (val === undefined || val === null || val === '—') {
+                    val = featureData[fId] ? formatFieldValueForDisplay(featureData[fId], fieldDef) : '—';
+                }
+                let out = escapeHtml(String(val));
+                if (isUnderline) out = `<u>${out}</u>`;
+                if (isItalic) out = `<em>${out}</em>`;
+                if (isBold) out = `<strong>${out}</strong>`;
+                return out;
             });
 
             result = result.replace(/<span[^>]*data-field-name="([^"]+)"[^>]*>.*?<\/span>/gi, (match, fName) => {
-                const val = featureData[fName] || featureData[fName.toLowerCase()] || '';
-                return val !== undefined && val !== null ? String(val) : '';
+                const isBold = match.includes('data-format-bold="true"') || /font-weight\s*:\s*(bold|700|800|900)/i.test(match) || /\bfont-black\b/i.test(match) || /\bis-bold\b/i.test(match);
+                const isItalic = match.includes('data-format-italic="true"') || /font-style\s*:\s*italic/i.test(match) || /\bitalic\b/i.test(match);
+                const isUnderline = match.includes('data-format-underline="true"') || /text-decoration\s*:\s*underline/i.test(match) || /\bunderline\b/i.test(match);
+
+                let fieldDef = availableFields.find(f => f.name === fName) || { name: fName };
+                let val = (typeof resolveFieldValue === 'function') ? resolveFieldValue(fieldDef, featureData, availableFields) : undefined;
+                if (val === undefined || val === null || val === '—') {
+                    val = featureData[fName] ? formatFieldValueForDisplay(featureData[fName], fieldDef) : '—';
+                }
+                let out = escapeHtml(String(val));
+                if (isUnderline) out = `<u>${out}</u>`;
+                if (isItalic) out = `<em>${out}</em>`;
+                if (isBold) out = `<strong>${out}</strong>`;
+                return out;
             });
 
             // 3. Substitui padrões como @[Nome] ou @nome_campo
-            for (const [key, val] of Object.entries(featureData)) {
-                if (typeof val !== 'object' && val !== null && val !== undefined) {
+            for (const [key, rawVal] of Object.entries(featureData)) {
+                if (rawVal !== null && rawVal !== undefined) {
                     const regex = new RegExp(`@\\[?${key}\\]?`, 'gi');
-                    result = result.replace(regex, String(val));
+                    if (regex.test(result)) {
+                        const fieldDef = availableFields.find(f => f.name === key || f.id === key) || { id: key, name: key };
+                        const formatted = formatFieldValueForDisplay(rawVal, fieldDef);
+                        result = result.replace(regex, escapeHtml(String(formatted)));
+                    }
                 }
             }
 
@@ -581,7 +1914,7 @@
         /**
          * Extrai e normaliza registros 1:N da feição (vistorias, fotos, relatos, links).
          */
-        function extract1nFeatureRecords(sourceTabId, featureData, fields = []) {
+        function extract1nFeatureRecords(sourceTabId, featureData, fields = [], sortOrder = 'desc', groupByTab = false, tabOrder = []) {
             let rawRecords = [];
             const isConsolidado = !sourceTabId || sourceTabId === 'consolidado';
 
@@ -606,37 +1939,288 @@
                     }
                 }
             } else {
-                const val = featureData ? featureData[sourceTabId] : null;
-                if (Array.isArray(val)) {
-                    rawRecords = val;
-                } else if (typeof val === 'string' && val.trim().startsWith('[')) {
-                    try { rawRecords = JSON.parse(val) || []; } catch(e) { rawRecords = []; }
+                let val = featureData ? featureData[sourceTabId] : null;
+                if (!val && featureData) {
+                    const cleanStr = s => String(s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
+                    const cleanTarget = cleanStr(sourceTabId);
+                    for (const [k, v] of Object.entries(featureData)) {
+                        if (cleanStr(k) === cleanTarget) {
+                            val = v;
+                            break;
+                        }
+                    }
+                    if (!val && typeof window !== 'undefined' && window.reportViewerFormTabs && Array.isArray(window.reportViewerFormTabs)) {
+                        const matchedTab = window.reportViewerFormTabs.find(t => cleanStr(t.id) === cleanTarget || cleanStr(t.title) === cleanTarget);
+                        if (matchedTab) {
+                            val = featureData[matchedTab.id] || featureData[matchedTab.title];
+                        }
+                    }
                 }
+
+                if (Array.isArray(val)) {
+                    rawRecords = val.map(it => ({ ...it, _origTab: sourceTabId }));
+                } else if (typeof val === 'string' && val.trim().startsWith('[')) {
+                    try { 
+                        const arr = JSON.parse(val) || [];
+                        rawRecords = (Array.isArray(arr) ? arr : []).map(it => ({ ...it, _origTab: sourceTabId }));
+                    } catch(e) { rawRecords = []; }
+                }
+            }
+
+            // Garante inclusão de registro ministerial para MPF se a aba existir no formulário ou houver dados da feição
+            const availableTabsPool = (typeof window !== 'undefined' && window.reportViewerFormTabs && Array.isArray(window.reportViewerFormTabs)) ? window.reportViewerFormTabs : (Array.isArray(tabOrder) ? tabOrder : []);
+            const mpfTabDef = availableTabsPool.find(t => {
+                const s = String(typeof t === 'object' ? (t.id || t.title) : t).toLowerCase();
+                return s.includes('mpf') || s.includes('minist') || s.includes('procurad');
+            });
+            const hasMpfInRaw = rawRecords.some(r => {
+                const orgStr = String(r._origTab || r.org || r.tabId || '').toLowerCase();
+                return orgStr.includes('mpf') || orgStr.includes('minist');
+            });
+            const hasMpfDataInFeature = featureData && (
+                featureData.mpf || featureData.tab_mpf || featureData.ipl || featureData.Inquerito_Policial || featureData.distribuicao || featureData.designado ||
+                Object.keys(featureData).some(k => k.toLowerCase().includes('mpf') || k.toLowerCase().includes('inquerito'))
+            );
+
+            if (!hasMpfInRaw && (mpfTabDef || hasMpfDataInFeature || isConsolidado)) {
+                const mpfSubData = (featureData && (featureData.mpf || featureData.tab_mpf || (mpfTabDef && featureData[mpfTabDef.id]))) || {};
+                rawRecords.push({
+                    ...mpfSubData,
+                    _origTab: mpfTabDef ? (mpfTabDef.id || mpfTabDef.title) : 'MPF',
+                    _origTitle: 'MPF',
+                    sourceTab: 'MPF',
+                    org: 'MPF',
+                    _isConsolidatedMpf: true
+                });
             }
 
             // Normaliza cada registro para garantir campos consistentes
             const normalized = rawRecords.map((r, idx) => {
-                let dateStr = r.data_vistoria || r.data || r.data_visita || r._created_at || '';
-                let formattedDate = '—';
-                let timestamp = 0;
-                if (dateStr) {
-                    timestamp = Date.parse(dateStr) || 0;
-                    if (dateStr.includes('-')) {
-                        const parts = dateStr.split('T')[0].split('-');
-                        if (parts.length === 3) formattedDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
-                    } else {
-                        formattedDate = dateStr;
+                const availableTabs = (typeof window !== 'undefined' && window.reportViewerFormTabs && Array.isArray(window.reportViewerFormTabs)) ? window.reportViewerFormTabs : (Array.isArray(tabOrder) ? tabOrder : []);
+                const cleanStr = s => String(s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
+                const origKey = String(r._origTab || sourceTabId || '');
+                const cleanKey = cleanStr(origKey);
+
+                let tabTitle = null;
+                let tabFields = [];
+                if (availableTabs.length > 0) {
+                    const foundTab = availableTabs.find(t => {
+                        const tId = typeof t === 'object' ? t.id : String(t);
+                        const tTitle = typeof t === 'object' ? t.title : String(t);
+                        return cleanStr(tId) === cleanKey || cleanStr(tTitle) === cleanKey || cleanKey.includes(cleanStr(tId)) || cleanStr(tId).includes(cleanKey);
+                    });
+                    if (foundTab && typeof foundTab === 'object') {
+                        if (foundTab.title && !foundTab.title.toLowerCase().startsWith('f_') && !foundTab.title.toLowerCase().startsWith('tab_')) tabTitle = foundTab.title;
+                        if (Array.isArray(foundTab.fields)) tabFields = foundTab.fields;
                     }
                 }
 
-                let org = r.org || r.orgao || r.entidade || (r._origTab ? r._origTab.toUpperCase() : 'Vistoria');
-                let situacaoOcupacao = r.situacao_ocupacao || r.situacao || r.status || '—';
-                let situacaoRecuo = r.situacao_recuo || r.recuo || '—';
-                let areaInvadida = parseFloat(r.area_invadida || r.area || 0) || 0;
-                let observacao = r.observacao || r.parecer || r.relato || r.descricao || '';
+                // Busca título legível da aba nos campos do formulário
+                if ((!tabTitle || tabTitle.toLowerCase().startsWith('f_') || tabTitle.toLowerCase().startsWith('tab_')) && Array.isArray(fields)) {
+                    const fWithTab = fields.find(f => (f.tabId && cleanStr(f.tabId) === cleanKey) || (f.tabTitle && cleanStr(f.tabTitle) === cleanKey));
+                    if (fWithTab && fWithTab.tabTitle && !fWithTab.tabTitle.toLowerCase().startsWith('f_') && !fWithTab.tabTitle.toLowerCase().startsWith('tab_')) {
+                        tabTitle = fWithTab.tabTitle;
+                    }
+                }
+
+                const isInternalId = (s) => {
+                    const str = String(s || '').trim();
+                    return !str || str.startsWith('f_') || str.startsWith('tab_') || str.startsWith('p_') || str.startsWith('TAB_') || str.startsWith('P_') || (/^[a-z0-9_]{7,}$/i.test(str) && !/^[A-Z]{2,4}$/.test(str));
+                };
+
+                if (!tabTitle || isInternalId(tabTitle)) {
+                    if (cleanKey.includes('mpf') || cleanKey.includes('minister') || cleanKey.includes('procurad')) tabTitle = 'MPF';
+                    else if (cleanKey.includes('polic') || cleanKey === 'pf' || (cleanKey.includes('pf') && !cleanKey.includes('mpf'))) tabTitle = 'PF';
+                    else if (cleanKey.includes('spu') || cleanKey.includes('patrimon')) tabTitle = 'SPU';
+                    else if (cleanKey.includes('pm') || cleanKey.includes('munic') || cleanKey.includes('pref')) tabTitle = 'MUNICÍPIO';
+                    else {
+                        // Heurística profunda nos campos e valores do registro
+                        const rKeysStr = Object.keys(r).join(' ').toLowerCase();
+                        const rValsStr = Object.values(r).filter(v => typeof v === 'string').join(' ').toLowerCase();
+                        if (rKeysStr.includes('mpf') || rValsStr.includes('mpf') || rKeysStr.includes('ministerio') || rValsStr.includes('ministerio') || rKeysStr.includes('procurador') || rValsStr.includes('procurador')) {
+                            tabTitle = 'MPF';
+                        } else if (rKeysStr.includes('epol') || rValsStr.includes('epol') || rKeysStr.includes('delegad') || rValsStr.includes('inquerito')) {
+                            tabTitle = 'PF';
+                        } else if (rKeysStr.includes('rip') || rValsStr.includes('rip') || rKeysStr.includes('patrimonio') || rValsStr.includes('spu')) {
+                            tabTitle = 'SPU';
+                        } else if (rKeysStr.includes('prefeitura') || rKeysStr.includes('alvara') || rValsStr.includes('prefeitura') || rKeysStr.includes('munic') || rValsStr.includes('munic')) {
+                            tabTitle = 'MUNICÍPIO';
+                        }
+                    }
+                }
+
+                if (tabFields.length === 0 && Array.isArray(fields) && fields.length > 0) {
+                    tabFields = fields.filter(f => {
+                        if (f.tabId && cleanStr(f.tabId) === cleanKey) return true;
+                        if (f.tabTitle && cleanStr(f.tabTitle) === cleanKey) return true;
+                        return false;
+                    });
+                }
+
+                let org = tabTitle || r.org || r.orgao || r.entidade;
+                if (!org || isInternalId(org)) {
+                    const fWithTab = (Array.isArray(fields) ? fields : []).find(f => (f.tabId === origKey || cleanStr(f.tabId) === cleanKey) && f.tabTitle && !isInternalId(f.tabTitle));
+                    if (fWithTab && fWithTab.tabTitle) {
+                        org = fWithTab.tabTitle;
+                    } else if (tabTitle && !isInternalId(tabTitle)) {
+                        org = tabTitle;
+                    } else {
+                        const rStr = (Object.keys(r).join(' ') + ' ' + Object.values(r).join(' ')).toUpperCase();
+                        if (rStr.includes('MPF') || rStr.includes('MINIST') || (tpl && tpl.nome && tpl.nome.toUpperCase().includes('MPF'))) {
+                            org = 'MPF';
+                        } else {
+                            org = 'Vistoria';
+                        }
+                    }
+                }
+
+                // 1. Data da Vistoria
+                let rawDate = '';
+                for (const f of tabFields) {
+                    if (f.type === 'date' || (f.label && f.label.toLowerCase().includes('data')) || (f.id && f.id.toLowerCase().includes('data'))) {
+                        if (r[f.id]) { rawDate = r[f.id]; break; }
+                        if (f.name && r[f.name]) { rawDate = r[f.name]; break; }
+                    }
+                }
+                if (!rawDate) {
+                    for (const [k, v] of Object.entries(r)) {
+                        if (typeof v === 'string' && (k.toLowerCase().includes('data') || k.toLowerCase().includes('date') || /^\d{4}-\d{2}-\d{2}/.test(v.trim()) || /^\d{2}\/\d{2}\/\d{4}/.test(v.trim()))) {
+                            rawDate = v;
+                            break;
+                        }
+                    }
+                }
+                if (!rawDate) rawDate = r.data_vistoria || r.data || r.data_visita || r._created_at || '';
+                let formattedDate = '—';
+                let timestamp = 0;
+                if (rawDate) {
+                    timestamp = parseDateToTimestamp(rawDate) || 0;
+                    if (rawDate.includes('-')) {
+                        const parts = rawDate.split('T')[0].split('-');
+                        if (parts.length === 3) formattedDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                    } else {
+                        formattedDate = rawDate;
+                    }
+                }
+
+                // 2. Situação da Ocupação
+                let situacaoOcupacao = '—';
+                for (const f of tabFields) {
+                    const fLabel = (f.label || '').toLowerCase();
+                    if (fLabel.includes('ocupação') || fLabel.includes('ocupacao') || (f.id && f.id.toLowerCase().includes('ocupac'))) {
+                        if (r[f.id] !== undefined && String(r[f.id]).trim() !== '') {
+                            situacaoOcupacao = String(r[f.id]).trim();
+                            break;
+                        }
+                    }
+                }
+                if (situacaoOcupacao === '—') {
+                    for (const [k, v] of Object.entries(r)) {
+                        if (typeof v === 'string' && v.trim() !== '') {
+                            const vLow = v.toLowerCase();
+                            if (vLow === 'irregular' || vLow === 'regular' || vLow.includes('invasão') || vLow.includes('invasao') || vLow.includes('não conforme') || vLow.includes('nao conforme') || vLow === 'conforme') {
+                                situacaoOcupacao = v.trim();
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (situacaoOcupacao === '—') {
+                    situacaoOcupacao = r.situacao_ocupacao || r.situacao || r.status || r.ocupacao || '—';
+                }
+
+                // 3. Situação do Recuo
+                let situacaoRecuo = '—';
+                for (const f of tabFields) {
+                    const fLabel = (f.label || '').toLowerCase();
+                    if (fLabel.includes('recuo') || (f.id && f.id.toLowerCase().includes('recuo'))) {
+                        if (r[f.id] !== undefined && String(r[f.id]).trim() !== '') {
+                            situacaoRecuo = String(r[f.id]).trim();
+                            break;
+                        }
+                    }
+                }
+                if (situacaoRecuo === '—') {
+                    for (const [k, v] of Object.entries(r)) {
+                        if (typeof v === 'string' && v.trim() !== '') {
+                            const vLow = v.toLowerCase();
+                            if (vLow.includes('já recuou') || vLow.includes('ja recuou') || vLow.includes('com recuo') || vLow.includes('sem recuo') || vLow.includes('não recuou') || vLow.includes('nao recuou') || vLow === 'recuado') {
+                                situacaoRecuo = v.trim();
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (situacaoRecuo === '—') {
+                    situacaoRecuo = r.situacao_recuo || r.recuo || '—';
+                }
+
+                // 4. Área Invadida
+                let areaInvadida = 0;
+                let hasArea = false;
+                for (const f of tabFields) {
+                    const fLabel = (f.label || '').toLowerCase();
+                    if (fLabel.includes('área invadida') || fLabel.includes('area invadida') || (fLabel.includes('área') && f.type === 'area_m2') || (f.id && f.id.toLowerCase().includes('area_invadida'))) {
+                        if (r[f.id] !== undefined && r[f.id] !== '') {
+                            areaInvadida = parseFloat(String(r[f.id]).replace(/\./g, '').replace(',', '.')) || 0;
+                            hasArea = true;
+                            break;
+                        }
+                    }
+                }
+                if (!hasArea) {
+                    areaInvadida = parseFloat(r.area_invadida || r.area || 0) || 0;
+                }
+
+                // 5. Conclusão / Parecer / Relato / Observações
+                let conclusao = '';
+                for (const f of tabFields) {
+                    const fLabel = (f.label || '').toLowerCase();
+                    if (f.type === 'textarea' || fLabel.includes('conclus') || fLabel.includes('observa') || fLabel.includes('parecer') || fLabel.includes('relato') || fLabel.includes('descricao')) {
+                        if (r[f.id] && String(r[f.id]).trim() !== '') {
+                            conclusao = String(r[f.id]).trim();
+                            break;
+                        }
+                    }
+                }
+                if (!conclusao) {
+                    conclusao = r.conclusao || r.conclusão || r.observacao || r.parecer || r.relato || r.descricao || '';
+                }
+                if (!conclusao) {
+                    for (const [k, v] of Object.entries(r)) {
+                        if (typeof v === 'string' && v.trim().length > 15 && !v.startsWith('http') && !v.startsWith('data:') && !v.startsWith('{') && !v.startsWith('[')) {
+                            conclusao = v.trim();
+                            break;
+                        }
+                    }
+                }
+                let observacao = conclusao;
                 let resp = r.responsavel || r.fiscal || r.vistoriador || r.agente || '—';
 
+                // 6. Links e Processos Oficiais
                 let links = [];
+                for (const f of tabFields) {
+                    if (f.type === 'hiperlink' || f.type === 'hiperlink_1n' || (f.label && f.label.toLowerCase().includes('link'))) {
+                        const rawL = r[f.id];
+                        if (rawL) {
+                            if (Array.isArray(rawL)) links.push(...rawL);
+                            else if (typeof rawL === 'string' && rawL.startsWith('[')) { try { links.push(...JSON.parse(rawL)); } catch(e){} }
+                            else if (typeof rawL === 'string' && rawL.startsWith('{')) { try { links.push(JSON.parse(rawL)); } catch(e){} }
+                            else if (typeof rawL === 'object') links.push(rawL);
+                            else if (typeof rawL === 'string' && rawL.trim() !== '') links.push({ title: f.label, number: '', url: rawL });
+                        }
+                    }
+                    if (f.type === 'epol' || (f.label && f.label.toLowerCase().includes('epol'))) {
+                        const val = r[f.id];
+                        if (val) links.push({ title: 'Processo EPOL', number: maskEpol(String(val)), url: '#' });
+                    }
+                    if (f.type === 'rip' || (f.label && f.label.toLowerCase().includes('rip'))) {
+                        const val = r[f.id];
+                        if (val) links.push({ title: 'Registro RIP', number: maskRip(String(val)), url: '#' });
+                    }
+                }
+                if (r.epol || r.epol_1n) links.push({ title: 'Processo EPOL', number: maskEpol(String(r.epol || r.epol_1n)), url: '#' });
+                if (r.rip || r.rip_1n) links.push({ title: 'Registro RIP', number: maskRip(String(r.rip || r.rip_1n)), url: '#' });
                 if (Array.isArray(r.links)) links.push(...r.links);
                 else if (typeof r.links === 'string' && r.links.startsWith('[')) {
                     try { links.push(...JSON.parse(r.links)); } catch(e) {}
@@ -647,9 +2231,8 @@
                     else if (typeof hl === 'object') links.push(hl);
                     else if (typeof hl === 'string') links.push({ title: 'Hiperlink', url: hl });
                 }
-                if (r.epol || r.epol_1n) links.push({ title: 'Processo EPOL', number: String(r.epol || r.epol_1n), url: '#' });
-                if (r.rip || r.rip_1n) links.push({ title: 'Registro RIP', number: String(r.rip || r.rip_1n), url: '#' });
 
+                // 7. Fotografias
                 let photos = [];
                 const possiblePhotoKeys = ['fotos', 'foto', 'photos', 'photo', 'anexos', 'attachments', 'imagens', 'images'];
                 for (const pk of possiblePhotoKeys) {
@@ -680,15 +2263,21 @@
                     return { url, title, date: pDate, coords, resp };
                 }).filter(p => !!p.url);
 
+                const sourceTabName = tabTitle || r._origTab || sourceTabId || 'Geral';
+
                 return {
                     id: r.id || `rec_${idx}`,
                     timestamp,
                     formattedDate,
+                    sourceTab: sourceTabName,
+                    tabTitle,
+                    tabFields,
                     org,
                     resp,
                     situacaoOcupacao,
                     situacaoRecuo,
                     areaInvadida,
+                    conclusao,
                     observacao,
                     links,
                     photos: normalizedPhotos,
@@ -696,7 +2285,83 @@
                 };
             });
 
-            normalized.sort((a, b) => b.timestamp - a.timestamp);
+            // Consolidação cruzada inteligente para MPF:
+            // Herda a vistoria física mais recente realizada pelos órgãos parceiros (PF, SPU, Município)
+            let latestPartnerRecord = null;
+            let maxPartnerTs = -Infinity;
+
+            normalized.forEach(r => {
+                const rNorm = normalizeEnteTab(r.sourceTab || r.org || r.tabTitle || (r.raw && r.raw._origTab));
+                if (rNorm !== 'mpf') {
+                    const ts = r.timestamp || parseDateToTimestamp(r.formattedDate);
+                    if (ts > maxPartnerTs || (latestPartnerRecord === null && r.formattedDate && r.formattedDate !== '—')) {
+                        maxPartnerTs = ts;
+                        latestPartnerRecord = r;
+                    }
+                }
+            });
+
+            normalized.forEach(r => {
+                const rNorm = normalizeEnteTab(r.sourceTab || r.org || r.tabTitle || (r.raw && r.raw._origTab));
+                if (rNorm === 'mpf') {
+                    if (latestPartnerRecord) {
+                        if (!r.formattedDate || r.formattedDate === '—') {
+                            r.formattedDate = latestPartnerRecord.formattedDate;
+                            r.timestamp = latestPartnerRecord.timestamp;
+                        }
+                        if (!r.situacaoOcupacao || r.situacaoOcupacao === '—') {
+                            r.situacaoOcupacao = latestPartnerRecord.situacaoOcupacao;
+                        }
+                        if (!r.situacaoRecuo || r.situacaoRecuo === '—') {
+                            r.situacaoRecuo = latestPartnerRecord.situacaoRecuo;
+                        }
+                        if (!r.areaInvadida || r.areaInvadida === 0) {
+                            r.areaInvadida = latestPartnerRecord.areaInvadida;
+                        }
+                    }
+                    // Anexa campos específicos do MPF (IPL, Distribuição, Designado, Correlatos, etc.) no próprio registro
+                    const mpfKeys = [
+                        'ipl', 'Inquerito_Policial', 'numero_inquerito_policial', 'inquerito',
+                        'distribuicao', 'vara', 'vara_federal',
+                        'designado', 'procurador', 'procurador_designado',
+                        'correlatos', 'processos_correlatos', 'acp',
+                        'fase_investigacao', 'Fase_investigacao', 'fase',
+                        'providencia', 'providencias',
+                        'valor_pecunia', 'pecunia', 'valor_total', 'valor_formatado', 'area_pecunia',
+                        'observacoes', 'obs_pecunia', 'obs_inquerito_pf'
+                    ];
+                    mpfKeys.forEach(k => {
+                        if (r[k] === undefined && featureData && featureData[k] !== undefined) {
+                            r[k] = featureData[k];
+                        }
+                    });
+                }
+            });
+
+            normalized.sort((a, b) => {
+                if (groupByTab) {
+                    const tabA = (a.sourceTab || '').toLowerCase();
+                    const tabB = (b.sourceTab || '').toLowerCase();
+                    if (Array.isArray(tabOrder) && tabOrder.length > 0) {
+                        const idxA = tabOrder.findIndex(t => {
+                            const tid = (typeof t === 'object' ? (t.id || t.title) : String(t)).toLowerCase();
+                            return tid === tabA || tabA.includes(tid) || tid.includes(tabA);
+                        });
+                        const idxB = tabOrder.findIndex(t => {
+                            const tid = (typeof t === 'object' ? (t.id || t.title) : String(t)).toLowerCase();
+                            return tid === tabB || tabB.includes(tid) || tid.includes(tabB);
+                        });
+                        const posA = idxA !== -1 ? idxA : 999;
+                        const posB = idxB !== -1 ? idxB : 999;
+                        if (posA !== posB) return posA - posB;
+                    }
+                    if (tabA !== tabB) {
+                        return tabA.localeCompare(tabB);
+                    }
+                }
+                return sortOrder === 'asc' ? (a.timestamp - b.timestamp) : (b.timestamp - a.timestamp);
+            });
+
             return normalized;
         }
 
@@ -788,6 +2453,17 @@
                 if (btn) btn.textContent = 'Satélite';
             }
         }
+
+        // Garante que o navegador não imprima cabeçalhos/rodapés nativos indesejados (como 'about:blank', títulos ou data/hora do sistema)
+        window.addEventListener('beforeprint', () => {
+            window._savedDocTitle = document.title;
+            document.title = '';
+        });
+        window.addEventListener('afterprint', () => {
+            if (window._savedDocTitle) {
+                document.title = window._savedDocTitle;
+            }
+        });
 
         function gerarPDF() {
             window.print();

@@ -73,6 +73,27 @@ async function fetchDynamicForm() {
 }
 function populateFormSelects() {
     const selects = ['theme-cadastro-type', 'edit-theme-cadastro-type', 'global-import-cadastro-type', 'remap-cadastro-type'];
+
+    // Mapeia todos os formulários personalizados atualmente associados a alguma camada ativa
+    const assignedFormIds = new Set();
+    if (typeof themes !== 'undefined' && Array.isArray(themes)) {
+        themes.forEach(t => {
+            const fid = t.formId || t.cadastroType || t.tipo_cadastro;
+            if (fid && fid !== 'orcamento_obra' && fid !== '00000000-0000-4000-8000-000000000001' && fid !== 'padrao') {
+                assignedFormIds.add(String(fid));
+            }
+        });
+    }
+
+    // Identifica o formulário atualmente em uso pela camada sendo editada (se houver)
+    let currentEditingThemeFormId = null;
+    if (typeof themeBeingEdited !== 'undefined' && themeBeingEdited && typeof themes !== 'undefined' && Array.isArray(themes)) {
+        const currTheme = themes.find(t => t.id === themeBeingEdited);
+        if (currTheme) {
+            currentEditingThemeFormId = String(currTheme.formId || currTheme.cadastroType || currTheme.tipo_cadastro || '');
+        }
+    }
+
     selects.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -82,9 +103,18 @@ function populateFormSelects() {
             if (typeof allForms !== 'undefined' && Array.isArray(allForms)) {
                 allForms.forEach(f => {
                     const isOrc = (f.id === 'orcamento_obra' || f.id === '00000000-0000-4000-8000-000000000001' || (f.name && f.name.toLowerCase().includes('orçamento de obra')));
-                    if (!isOrc) {
-                        html += `<option value="${f.id}">${f.title || f.name}</option>`;
+                    if (isOrc) return;
+
+                    const formIdStr = String(f.id);
+                    const isCurrentThemeForm = (id === 'edit-theme-cadastro-type' && currentEditingThemeFormId && formIdStr === currentEditingThemeFormId);
+
+                    // REGRA DE ASSOCIAÇÃO EXCLUSIVA (1:1):
+                    // Se o cadastro já estiver associado a outra camada vetorial ativa, oculta do select de criação/importação!
+                    if (assignedFormIds.has(formIdStr) && !isCurrentThemeForm) {
+                        return; // Oculta este cadastro, pois já pertence a outra camada vetorial
                     }
+
+                    html += `<option value="${f.id}">${f.title || f.name}</option>`;
                 });
             }
             el.innerHTML = html;
@@ -374,7 +404,8 @@ async function loadThemes() {
                       disp2Active: tMeta.disp2Active !== false,
                       entidade: tMeta.entidade || t.entidade || '',
                       compartilhada: tMeta.compartilhada !== undefined ? !!tMeta.compartilhada : (t.compartilhada !== undefined ? !!t.compartilhada : true),
-                      created_by: t.created_by || (tMeta && (tMeta.created_by || tMeta.criador_id)) || null,
+                      created_by: t.criado_por || t.created_by || (tMeta && (tMeta.created_by || tMeta.criador_id)) || null,
+                      criado_por: t.criado_por || t.created_by || (tMeta && (tMeta.created_by || tMeta.criador_id)) || null,
                       metadata: tMeta,
                       // Por padrão TODAS as camadas começam DESLIGADAS — o usuário ativa no switch sob demanda
                       visible: false,
@@ -3377,6 +3408,9 @@ function filterThemeFeatures(themeId) {
 }
 
 function openNewThemeModal() {
+  themeBeingEdited = null;
+  if (typeof populateFormSelects === 'function') populateFormSelects();
+
   const drawer = document.getElementById('side-drawer');
   const overlay = document.getElementById('drawer-overlay');
   if (drawer) drawer.classList.add('-translate-x-[120%]');
@@ -3492,7 +3526,6 @@ async function saveNewTheme() {
               entidade: selectedEntidade
           };
           if (currentUserId) {
-              insertPayload.created_by = currentUserId;
               insertPayload.criado_por = currentUserId;
           }
           if (userUnidade) insertPayload.unidade = userUnidade;
@@ -3561,6 +3594,7 @@ async function saveNewTheme() {
 
   saveThemes();
   renderThemes();
+  if (typeof populateFormSelects === 'function') populateFormSelects();
   closeNewThemeModal();
   if (typeof focusOnThemeCard === 'function') focusOnThemeCard(id);
 }
@@ -3569,6 +3603,7 @@ function openEditThemeModal(themeId, focusField = null) {
   const theme = themes.find(t => t.id === themeId);
   if (!theme) return;
   themeBeingEdited = themeId;
+  if (typeof populateFormSelects === 'function') populateFormSelects();
   document.getElementById('edit-theme-name-input').value = theme.name;
   document.getElementById('edit-theme-color-input').value = theme.color;
   
@@ -3787,6 +3822,7 @@ async function saveEditedTheme() {
     saveThemes();
     loadAllFeaturesToMap(); // Update colors on the map
     renderThemes();
+    if (typeof populateFormSelects === 'function') populateFormSelects();
     if (typeof focusOnThemeCard === 'function') focusOnThemeCard(themeBeingEdited);
   }
   closeEditThemeModal();
@@ -4204,6 +4240,7 @@ async function deleteTheme(themeId) {
   }
   loadAllFeaturesToMap();
   renderThemes();
+  if (typeof populateFormSelects === 'function') populateFormSelects();
   if (typeof window.renderAdminLayersManagementList === 'function') {
       window.renderAdminLayersManagementList();
   }
@@ -4419,6 +4456,7 @@ document.getElementById('global-geojson-upload').addEventListener('change', func
       }
       
       // Auto-select template if not selected? Not strictly requested, but we could.
+      if (typeof populateFormSelects === 'function') populateFormSelects();
       renderImportFieldMapping();
       
       document.getElementById('global-import-modal').classList.remove('hidden');
@@ -5011,9 +5049,9 @@ async function confirmGlobalImport() {
               municipio_id: activeMunicipioId,
               entidade: themeEntidade
           };
-          if (currentUserId) insertImportPayload.created_by = currentUserId;
+          if (currentUserId) insertImportPayload.criado_por = currentUserId;
           if (window.supabaseTemasHasMetadata) {
-              insertImportPayload.metadata = { entidade: themeEntidade, created_by: currentUserId };
+              insertImportPayload.metadata = { entidade: themeEntidade, criado_por: currentUserId, created_by: currentUserId };
           }
           const { data, error } = await supabaseClient.from('temas').insert(insertImportPayload).select();
           
@@ -5262,6 +5300,7 @@ async function confirmGlobalImport() {
   
   closeGlobalImportModal();
   renderThemes();
+  if (typeof populateFormSelects === 'function') populateFormSelects();
   focusOnThemeCard(themeId);
   
   const bounds = newLayer.getBounds();
@@ -5340,6 +5379,7 @@ function showFeatureInfoModal(layer) {
 
   activeFeatureLayer = layer;
   window.activeFeatureLayer = layer;
+  window.activeFeatureData = (layer.feature && layer.feature.properties) ? layer.feature.properties : {};
   isFeatureEditMode = false;
   renderFeatureInfo();
 

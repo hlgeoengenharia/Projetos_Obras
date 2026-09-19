@@ -273,11 +273,11 @@
 
     function getAdminCeiling(themeId, formId, tabId) {
         if (!_currentUserProfile) {
-            return { podeVer: false, podeEditar: false, podeExcluir: false };
+            return { podeVer: false, podeEditar: false, podeExcluir: false, podeEditarTema: false, podeEstatistica: false };
         }
         // 1. SuperAdmin Geral tem controle sobre todas as camadas e abas de todos os órgãos
-        if (_currentUserProfile.super_admin) {
-            return { podeVer: true, podeEditar: true, podeExcluir: true };
+        if (_currentUserProfile.super_admin || _currentUserProfile.is_superadmin || _currentUserProfile.papel === 'superadmin') {
+            return { podeVer: true, podeEditar: true, podeExcluir: true, podeEditarTema: true, podeEstatistica: true };
         }
 
         const minhaEntidade = (_currentUserProfile.entidade || (_currentUserMembros && _currentUserMembros[0]?.entidade) || 'Prefeitura Municipal').trim();
@@ -290,11 +290,37 @@
 
         // 2. Administrador de um Ente tem soberania TOTAL sobre as camadas da sua própria entidade!
         if (tSigla === minhaSigla) {
-            return { podeVer: true, podeEditar: true, podeExcluir: true };
+            return { podeVer: true, podeEditar: true, podeExcluir: true, podeEditarTema: true, podeEstatistica: true };
         }
 
-        // 3. Administrador de um ente NÃO pode conceder camadas de OUTROS entes parceiros
-        return { podeVer: false, podeEditar: false, podeExcluir: false };
+        // 3. TETO DE DELEGAÇÃO: Se a camada pertencer a outro ente parceiro,
+        // mas foi compartilhada com o Administrador logado (ex: LTM/LPM compartilhadas com Klebson/MPF ou Ana Laura/Prefeitura):
+        // O Administrador herda o direito de delegar para a sua equipe no limite do que ele próprio tem permissão!
+        const currentAdminId = _currentUserProfile.id;
+        if (currentAdminId && themeId) {
+            const adminCamadaPerm = _allCamadaPerms[`${currentAdminId}:${themeId}`];
+            if (adminCamadaPerm && adminCamadaPerm.pode_ver === true) {
+                if (formId && tabId) {
+                    const adminAbaPerm = _allAbaPerms[`${currentAdminId}:${formId}:${tabId}`];
+                    // REGRA DE SEGURANÇA E ISOLAMENTO: Para camadas de outro ente, uma aba SÓ pode ser vista/delegada
+                    // se o Administrador possuir autorização explícita pode_ver: true nesta aba!
+                    const podeVerAba = adminAbaPerm ? (adminAbaPerm.pode_ver === true || adminAbaPerm.pode_ver === 'true') : false;
+                    // E só pode ser editada se o Administrador possuir pode_editar: true na aba E pode_editar: true na camada!
+                    const podeEditarAba = podeVerAba && adminAbaPerm && (adminAbaPerm.pode_editar === true || adminAbaPerm.pode_editar === 'true') && !!adminCamadaPerm.pode_editar;
+                    return { podeVer: podeVerAba, podeEditar: podeEditarAba, podeExcluir: false, podeEditarTema: false, podeEstatistica: false };
+                }
+                return {
+                    podeVer: !!adminCamadaPerm.pode_ver,
+                    podeEditar: !!adminCamadaPerm.pode_editar,
+                    podeEditarTema: !!adminCamadaPerm.pode_editar_tema,
+                    podeEstatistica: !!adminCamadaPerm.pode_estatistica,
+                    podeExcluir: false // Jamais permitir excluir camada pertencente a outro ente parceiro!
+                };
+            }
+        }
+
+        // 4. Administrador de um ente NÃO pode conceder camadas de OUTROS entes não compartilhadas com ele
+        return { podeVer: false, podeEditar: false, podeExcluir: false, podeEditarTema: false, podeEstatistica: false };
     }
 
     // Obtém a lista dos parceiros institucionais externos (filtrando rigorosamente 'Outros' e a própria entidade)
@@ -1630,6 +1656,7 @@
         // FILTRO DE SEGURANÇA E ISOLAMENTO INSTITUCIONAL:
         // Se for um Ponto Focal de outro ente, exibe as camadas do ente do ADMIN para concessão de compartilhamento!
         // Se for usuário interno, exibe as camadas da entidade dele.
+        const currentAdminId = _currentUserProfile ? _currentUserProfile.id : null;
         const temasDoMunicipio = _allTemas.filter(t => {
             if (t.municipio_id && t.municipio_id !== selectedMunId) return false;
             
@@ -1643,8 +1670,27 @@
                 return tSigla === minhaSigla;
             }
 
-            // Para servidores da própria equipe, exibe estritamente as camadas criadas pelo próprio ente
-            return tSigla === minhaSigla;
+            // Para servidores da própria equipe:
+            // 1. Exibe camadas criadas pelo próprio ente
+            if (tSigla === minhaSigla) return true;
+
+            // 2. TETO DE DELEGAÇÃO: Exibe também camadas de outros entes que foram compartilhadas com o Administrador logado
+            if (currentAdminId) {
+                const adminCamadaPerm = _allCamadaPerms[`${currentAdminId}:${t.id}`];
+                if (adminCamadaPerm && adminCamadaPerm.pode_ver === true) return true;
+
+                // Ou se o Admin possui permissão em alguma sub-aba vinculada com pode_ver ativo
+                const formVinculado = (t.tipo_cadastro && t.tipo_cadastro !== 'padrao') ? _allForms[t.tipo_cadastro] : null;
+                if (formVinculado && formVinculado.tabs) {
+                    const hasAdminSubAba = formVinculado.tabs.some(tab => {
+                        const ap = _allAbaPerms[`${currentAdminId}:${formVinculado.id}:${tab.id}`];
+                        return !!(ap && ap.pode_ver === true);
+                    });
+                    if (hasAdminSubAba) return true;
+                }
+            }
+
+            return false;
         });
 
         const camadasHtml = temasDoMunicipio.map(tema => {
@@ -1684,8 +1730,8 @@
             } else if (hasExplicitCamadaPerm) {
                 podeVerCamada = !!userCamadaPerm.pode_ver || hasAnySubAbaVer;
                 podeExcluirCamada = !isFromOtherEntity && !!userCamadaPerm.pode_excluir;
-                podeEstatisticaCamada = !!userCamadaPerm.pode_estatistica;
-                podeEditarTemaCamada = !!(userCamadaPerm.pode_editar_tema || userCamadaPerm.pode_editar);
+                podeEstatisticaCamada = podeVerCamada && !!userCamadaPerm.pode_estatistica;
+                podeEditarTemaCamada = podeVerCamada && !!(userCamadaPerm.pode_editar_tema || userCamadaPerm.pode_editar);
             } else if (isTargetUserAdmin && !isFromOtherEntity) {
                 // Administrador do município/ente tem acesso pleno padrão às camadas de sua própria entidade
                 podeVerCamada = true;
@@ -1694,6 +1740,14 @@
                 podeEditarTemaCamada = true;
             } else {
                 podeVerCamada = hasAnySubAbaVer;
+            }
+
+            // TETO MÁXIMO DE DELEGAÇÃO (Golden Rule: Admin só libera o que está liberado para ele próprio):
+            if (!isTargetUserSuperAdmin && !isSuperAdmin) {
+                podeVerCamada = podeVerCamada && adminCeiling.podeVer;
+                podeExcluirCamada = podeVerCamada && !isFromOtherEntity && adminCeiling.podeExcluir && podeExcluirCamada;
+                podeEstatisticaCamada = podeVerCamada && adminCeiling.podeEstatistica && podeEstatisticaCamada;
+                podeEditarTemaCamada = podeVerCamada && adminCeiling.podeEditarTema && podeEditarTemaCamada;
             }
 
             let abasHtml = '';
@@ -1722,8 +1776,14 @@
                                 isAbaEditarChecked = true;
                             }
 
-                            const verDisabled = (!isEditing || (!isTargetUserSuperAdmin && (!abaCeiling.podeVer || !podeVerCamada))) ? 'disabled' : '';
-                            const editDisabled = (!isEditing || (!isTargetUserSuperAdmin && (!abaCeiling.podeEditar || !podeVerCamada))) ? 'disabled' : '';
+                            // TETO DE DELEGAÇÃO DAS ABAS (Golden Rule):
+                            if (!isTargetUserSuperAdmin && !isSuperAdmin) {
+                                isAbaVerChecked = isAbaVerChecked && abaCeiling.podeVer;
+                                isAbaEditarChecked = isAbaEditarChecked && isAbaVerChecked && abaCeiling.podeEditar;
+                            }
+
+                            const verDisabled = (!isEditing || (!isTargetUserSuperAdmin && !isSuperAdmin && (!abaCeiling.podeVer || !podeVerCamada))) ? 'disabled' : '';
+                            const editDisabled = (!isEditing || (!isTargetUserSuperAdmin && !isSuperAdmin && (!abaCeiling.podeEditar || !podeVerCamada || !isAbaVerChecked))) ? 'disabled' : '';
 
                             return `
                                 <div class="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600/80 rounded-lg px-3 py-2 text-xs shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-colors" data-form-id="${formVinculado.id}" data-tab-id="${tab.id}">
@@ -1743,8 +1803,10 @@
                 `;
             }
 
-            const camadaVerDisabled = (!isEditing || (!isTargetUserSuperAdmin && !adminCeiling.podeVer)) ? 'disabled' : '';
-            const camadaExcluirDisabled = (!isEditing || (!isTargetUserSuperAdmin && (!adminCeiling.podeExcluir || isFromOtherEntity))) ? 'disabled' : '';
+            const camadaVerDisabled = (!isEditing || (!isTargetUserSuperAdmin && !isSuperAdmin && !adminCeiling.podeVer)) ? 'disabled' : '';
+            const camadaExcluirDisabled = (!isEditing || (!isTargetUserSuperAdmin && !isSuperAdmin && (!adminCeiling.podeExcluir || isFromOtherEntity || !podeVerCamada))) ? 'disabled' : '';
+            const camadaEstatisticaDisabled = (!isEditing || (!isTargetUserSuperAdmin && !isSuperAdmin && (!adminCeiling.podeEstatistica || !podeVerCamada))) ? 'disabled' : '';
+            const camadaEditarTemaDisabled = (!isEditing || (!isTargetUserSuperAdmin && !isSuperAdmin && (!adminCeiling.podeEditarTema || !podeVerCamada))) ? 'disabled' : '';
 
             return `
                 <div class="bg-slate-100/90 dark:bg-slate-800/90 rounded-xl border-2 border-slate-300/90 dark:border-slate-700 shadow-sm transition-all overflow-hidden mb-2.5" style="border-left-width: 6px; border-left-color: ${tema.cor || '#0ea5e9'}" data-camada-id="${tema.id}">
@@ -1770,15 +1832,15 @@
                                 Ver Camada
                             </label>
                             <label class="flex items-center gap-1.5 text-xs font-bold text-teal-600 dark:text-teal-400 ${isEditing ? 'cursor-pointer' : 'cursor-default'}" title="Permissão de leitura para o Painel de Estatísticas da Camada">
-                                <input type="checkbox" class="camada-estatistica-check rounded border-slate-400 dark:border-slate-500 text-teal-600 focus:ring-teal-500 w-4 h-4" ${podeEstatisticaCamada ? 'checked' : ''} ${!isEditing ? 'disabled' : ''}>
+                                <input type="checkbox" class="camada-estatistica-check rounded border-slate-400 dark:border-slate-500 text-teal-600 focus:ring-teal-500 w-4 h-4" ${podeEstatisticaCamada ? 'checked' : ''} ${camadaEstatisticaDisabled} onchange="window.UsuariosManager.onCamadaControlChange(this, '${userId}', '${tema.id}', 'estatistica')">
                                 <span class="material-symbols-outlined text-[15px]">pie_chart</span> Estatística
                             </label>
                             <label class="flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 ${isEditing ? 'cursor-pointer' : 'cursor-default'}" title="Habilita a engrenagem de edição de estilos/cores da camada compartilhada">
-                                <input type="checkbox" class="camada-editar-tema-check rounded border-slate-400 dark:border-slate-500 text-indigo-600 focus:ring-indigo-500 w-4 h-4" ${podeEditarTemaCamada ? 'checked' : ''} ${!isEditing ? 'disabled' : ''}>
+                                <input type="checkbox" class="camada-editar-tema-check rounded border-slate-400 dark:border-slate-500 text-indigo-600 focus:ring-indigo-500 w-4 h-4" ${podeEditarTemaCamada ? 'checked' : ''} ${camadaEditarTemaDisabled} onchange="window.UsuariosManager.onCamadaControlChange(this, '${userId}', '${tema.id}', 'editar_tema')">
                                 <span class="material-symbols-outlined text-[15px]">settings</span> Editar Tema
                             </label>
                             <label class="flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 ${isEditing ? 'cursor-pointer' : 'cursor-default'}">
-                                <input type="checkbox" class="camada-excluir-check rounded border-slate-400 dark:border-slate-500 text-rose-600 focus:ring-rose-500 w-4 h-4" ${podeExcluirCamada ? 'checked' : ''} ${camadaExcluirDisabled}>
+                                <input type="checkbox" class="camada-excluir-check rounded border-slate-400 dark:border-slate-500 text-rose-600 focus:ring-rose-500 w-4 h-4" ${podeExcluirCamada ? 'checked' : ''} ${camadaExcluirDisabled} onchange="window.UsuariosManager.onCamadaControlChange(this, '${userId}', '${tema.id}', 'excluir')">
                                 Pode Excluir
                             </label>
                         </div>
@@ -1791,7 +1853,6 @@
         }).join('');
 
         // Ortofotos do município selecionado
-        const currentAdminId = _currentUserProfile ? _currentUserProfile.id : null;
         const rastersDoMunicipio = (_allRasters || []).filter(r => {
             if (r.municipio_id && r.municipio_id !== selectedMunId) return false;
             const rEntRaw = (r.entidade || 'Prefeitura Municipal').trim();
@@ -1847,6 +1908,12 @@
             const adminRasterPerm = currentAdminId ? _allRasterPerms[`${currentAdminId}:${r.id}`] : null;
             const adminHasPerm = (rSigla === minhaSigla) || !!(adminRasterPerm && adminRasterPerm.pode_ver);
             const canManageRaster = isTargetUserSuperAdmin || _currentUserProfile?.super_admin || adminHasPerm;
+
+            // TETO DE DELEGAÇÃO DE ORTOFOTOS:
+            if (!isTargetUserSuperAdmin && !isSuperAdmin) {
+                podeVerRaster = podeVerRaster && adminHasPerm;
+            }
+
             const rasterDisabled = (!isEditing || !canManageRaster) ? 'disabled' : '';
 
             return `
@@ -2238,11 +2305,18 @@
     function selectUserMun(userId, munId) {
         _userSelectedMunMap[userId] = munId;
         const card = document.querySelector(`[data-user-card="${userId}"]`);
-        const container = card ? card.parentElement : null;
-        if (container) {
-            const searchInput = document.getElementById('usuarios-search') || document.getElementById('users-search');
-            renderUsersList(container.id, searchInput ? searchInput.value : '');
-            // Mantém o card aberto
+        const isCardInAdminHeader = card && (card.closest('#usuarios-admin-profile-card') || card.parentElement?.id === 'usuarios-admin-profile-card');
+
+        if (isCardInAdminHeader) {
+            renderAdminHeaderCard();
+            const body = document.getElementById(`user-card-body-${userId}`);
+            const chevron = document.getElementById(`user-chevron-${userId}`);
+            if (body) body.classList.remove('hidden');
+            if (chevron) chevron.classList.add('rotate-180');
+        } else {
+            const listContainerId = _containerIdAtual || 'users-list';
+            const searchInput = document.getElementById(_searchInputIdAtual || 'users-search') || document.getElementById('usuarios-search');
+            renderUsersList(listContainerId, searchInput ? searchInput.value : '');
             const body = document.getElementById(`user-card-body-${userId}`);
             const chevron = document.getElementById(`user-chevron-${userId}`);
             if (body) body.classList.remove('hidden');
@@ -2292,10 +2366,18 @@
         _editingUserIds.clear();
         _editingUserIds.add(userId);
         const card = document.querySelector(`[data-user-card="${userId}"]`);
-        const container = card ? card.parentElement : null;
-        if (container) {
-            const searchInput = document.getElementById('usuarios-search') || document.getElementById('users-search');
-            renderUsersList(container.id, searchInput ? searchInput.value : '');
+        const isCardInAdminHeader = card && (card.closest('#usuarios-admin-profile-card') || card.parentElement?.id === 'usuarios-admin-profile-card');
+
+        if (isCardInAdminHeader) {
+            renderAdminHeaderCard();
+            const body = document.getElementById(`user-card-body-${userId}`);
+            const chevron = document.getElementById(`user-chevron-${userId}`);
+            if (body) body.classList.remove('hidden');
+            if (chevron) chevron.classList.add('rotate-180');
+        } else {
+            const listContainerId = _containerIdAtual || 'users-list';
+            const searchInput = document.getElementById(_searchInputIdAtual || 'users-search') || document.getElementById('usuarios-search');
+            renderUsersList(listContainerId, searchInput ? searchInput.value : '');
             const body = document.getElementById(`user-card-body-${userId}`);
             const chevron = document.getElementById(`user-chevron-${userId}`);
             if (body) body.classList.remove('hidden');
@@ -2316,19 +2398,77 @@
 
     function toggleCamadaSubAbas(camadaCheckbox, userId, themeId) {
         const isChecked = camadaCheckbox.checked;
+        const card = document.querySelector(`[data-user-card="${userId}"]`);
+        const camadaCard = card ? card.querySelector(`[data-camada-id="${themeId}"]`) : null;
         const subContainer = document.getElementById(`camada-sub-abas-${userId}-${themeId}`);
+        const isSuperAdmin = !!(_currentUserProfile && (_currentUserProfile.super_admin || _currentUserProfile.is_superadmin || _currentUserProfile.papel === 'superadmin'));
+        const adminCeiling = getAdminCeiling(themeId);
+
+        if (camadaCard) {
+            const estatisticaCb = camadaCard.querySelector('.camada-estatistica-check');
+            const editarTemaCb = camadaCard.querySelector('.camada-editar-tema-check');
+            const excluirCb = camadaCard.querySelector('.camada-excluir-check');
+
+            if (!isChecked) {
+                // Ao desabilitar a camada, desmarca estatística, tema e exclusão imediatamente
+                if (estatisticaCb) { estatisticaCb.checked = false; estatisticaCb.disabled = true; }
+                if (editarTemaCb) { editarTemaCb.checked = false; editarTemaCb.disabled = true; }
+                if (excluirCb) { excluirCb.checked = false; excluirCb.disabled = true; }
+            } else {
+                // Ao habilitar, ajusta permissões respeitando estritamente o teto do Administrador
+                if (estatisticaCb) estatisticaCb.disabled = !isSuperAdmin && !adminCeiling.podeEstatistica;
+                if (editarTemaCb) editarTemaCb.disabled = !isSuperAdmin && !adminCeiling.podeEditarTema;
+                if (excluirCb) {
+                    const tema = _allTemas.find(t => t.id === themeId);
+                    const tSigla = getEntitySigla(tema ? getThemeEntity(tema) : '');
+                    const minhaSigla = getEntitySigla(_currentUserProfile?.entidade || 'Prefeitura Municipal');
+                    excluirCb.disabled = !isSuperAdmin && (!adminCeiling.podeExcluir || (tSigla !== minhaSigla));
+                }
+            }
+        }
+
         if (subContainer) {
             subContainer.style.opacity = isChecked ? '1' : '0.4';
             subContainer.style.pointerEvents = isChecked ? 'auto' : 'none';
+            const rows = subContainer.querySelectorAll('[data-form-id][data-tab-id]');
+
             if (isChecked) {
-                // Ao habilitar a camada, reabilita os inputs e garante que 'Ver' venha checado por padrão se nada estiver checado
-                subContainer.querySelectorAll('.aba-ver-check, .aba-editar-check').forEach(cb => {
-                    cb.disabled = false;
+                // Ao habilitar a camada, reavalia CADA sub-aba individualmente contra o teto do Admin
+                rows.forEach(row => {
+                    const formId = row.getAttribute('data-form-id');
+                    const tabId = row.getAttribute('data-tab-id');
+                    const abaCeiling = getAdminCeiling(themeId, formId, tabId);
+                    const verCb = row.querySelector('.aba-ver-check');
+                    const editCb = row.querySelector('.aba-editar-check');
+
+                    const canVer = isSuperAdmin || abaCeiling.podeVer;
+                    const canEdit = isSuperAdmin || (abaCeiling.podeEditar && canVer);
+
+                    if (verCb) {
+                        verCb.disabled = !canVer;
+                        if (!canVer) verCb.checked = false;
+                    }
+                    if (editCb) {
+                        editCb.disabled = !canEdit || (verCb && !verCb.checked);
+                        if (!canEdit) editCb.checked = false;
+                    }
                 });
+
+                // Se nenhuma aba estiver checada, marca 'Ver' por padrão APENAS nas abas autorizadas para o Admin
                 const anyVerChecked = Array.from(subContainer.querySelectorAll('.aba-ver-check')).some(cb => cb.checked);
                 if (!anyVerChecked) {
-                    subContainer.querySelectorAll('.aba-ver-check').forEach(cb => {
-                        cb.checked = true;
+                    rows.forEach(row => {
+                        const formId = row.getAttribute('data-form-id');
+                        const tabId = row.getAttribute('data-tab-id');
+                        const abaCeiling = getAdminCeiling(themeId, formId, tabId);
+                        const canVer = isSuperAdmin || abaCeiling.podeVer;
+                        const verCb = row.querySelector('.aba-ver-check');
+                        if (verCb && canVer) {
+                            verCb.checked = true;
+                            const editCb = row.querySelector('.aba-editar-check');
+                            const canEdit = isSuperAdmin || abaCeiling.podeEditar;
+                            if (editCb) editCb.disabled = !canEdit;
+                        }
                     });
                 }
             } else {
@@ -2341,39 +2481,93 @@
         }
     }
 
+    function onCamadaControlChange(checkbox, userId, themeId, type) {
+        const card = document.querySelector(`[data-user-card="${userId}"]`);
+        const camadaCard = card ? card.querySelector(`[data-camada-id="${themeId}"]`) : null;
+        if (!camadaCard) return;
+        const camadaCheckbox = camadaCard.querySelector('.camada-ver-check');
+        const isSuperAdmin = !!(_currentUserProfile && (_currentUserProfile.super_admin || _currentUserProfile.is_superadmin || _currentUserProfile.papel === 'superadmin'));
+        const adminCeiling = getAdminCeiling(themeId);
+
+        if (checkbox.checked) {
+            if (type === 'estatistica' && !isSuperAdmin && !adminCeiling.podeEstatistica) {
+                checkbox.checked = false;
+                return;
+            }
+            if (type === 'editar_tema' && !isSuperAdmin && !adminCeiling.podeEditarTema) {
+                checkbox.checked = false;
+                return;
+            }
+            if (type === 'excluir') {
+                const tema = _allTemas.find(t => t.id === themeId);
+                const tSigla = getEntitySigla(tema ? getThemeEntity(tema) : '');
+                const minhaSigla = getEntitySigla(_currentUserProfile?.entidade || 'Prefeitura Municipal');
+                if (!isSuperAdmin && (!adminCeiling.podeExcluir || tSigla !== minhaSigla)) {
+                    checkbox.checked = false;
+                    return;
+                }
+            }
+            // Se marcou estatística, tema ou excluir, garante que a camada pai está marcada para Ver
+            if (camadaCheckbox && !camadaCheckbox.checked) {
+                camadaCheckbox.checked = true;
+                toggleCamadaSubAbas(camadaCheckbox, userId, themeId);
+            }
+        }
+    }
+
     function onSubAbaChange(abaCheckbox, userId, themeId, actionType) {
         const subContainer = document.getElementById(`camada-sub-abas-${userId}-${themeId}`);
         const card = document.querySelector(`[data-user-card="${userId}"]`);
         const camadaCard = card ? card.querySelector(`[data-camada-id="${themeId}"]`) : null;
         const camadaCheckbox = camadaCard ? camadaCard.querySelector('.camada-ver-check') : null;
+        const isSuperAdmin = !!(_currentUserProfile && (_currentUserProfile.super_admin || _currentUserProfile.is_superadmin || _currentUserProfile.papel === 'superadmin'));
+
+        const row = abaCheckbox.closest('[data-form-id][data-tab-id]');
+        const formId = row ? row.getAttribute('data-form-id') : null;
+        const tabId = row ? row.getAttribute('data-tab-id') : null;
+        const abaCeiling = getAdminCeiling(themeId, formId, tabId);
+
+        // Validação estrita do teto: impede marcação de 'Ver' ou 'Editar' não autorizadas
+        if (actionType === 'ver' && abaCheckbox.checked && !isSuperAdmin && !abaCeiling.podeVer) {
+            abaCheckbox.checked = false;
+            return;
+        }
+        if (actionType === 'editar' && abaCheckbox.checked && !isSuperAdmin && !abaCeiling.podeEditar) {
+            abaCheckbox.checked = false;
+            return;
+        }
 
         // Se uma aba foi marcada (Ver ou Editar), garante que a camada pai fique marcada!
         if (abaCheckbox.checked && camadaCheckbox && !camadaCheckbox.checked) {
             camadaCheckbox.checked = true;
-            if (subContainer) {
-                subContainer.style.opacity = '1';
-                subContainer.style.pointerEvents = 'auto';
-                subContainer.querySelectorAll('.aba-ver-check, .aba-editar-check').forEach(cb => {
-                    cb.disabled = false;
-                });
-            }
+            toggleCamadaSubAbas(camadaCheckbox, userId, themeId);
         }
 
         // Se marcou 'Editar', obrigatoriamente precisa ter 'Ver' marcado
         if (actionType === 'editar' && abaCheckbox.checked) {
-            const row = abaCheckbox.closest('[data-form-id][data-tab-id]');
             if (row) {
                 const verCb = row.querySelector('.aba-ver-check');
                 if (verCb) verCb.checked = true;
             }
         }
 
-        // Se desmarcou 'Ver', obrigatoriamente desmarca 'Editar'
+        // Se desmarcou 'Ver', obrigatoriamente desmarca 'Editar' e bloqueia 'Editar'
         if (actionType === 'ver' && !abaCheckbox.checked) {
-            const row = abaCheckbox.closest('[data-form-id][data-tab-id]');
             if (row) {
                 const editCb = row.querySelector('.aba-editar-check');
-                if (editCb) editCb.checked = false;
+                if (editCb) {
+                    editCb.checked = false;
+                    editCb.disabled = true;
+                }
+            }
+        }
+
+        // Se marcou 'Ver', reabilita 'Editar' caso o admin tenha permissão de editar
+        if (actionType === 'ver' && abaCheckbox.checked) {
+            if (row) {
+                const editCb = row.querySelector('.aba-editar-check');
+                const canEdit = isSuperAdmin || abaCeiling.podeEditar;
+                if (editCb) editCb.disabled = !canEdit;
             }
         }
     }
@@ -2400,6 +2594,7 @@
             const userEntidadeRaw = (userObj?.entidade || userObj?.profiles?.entidade || '').trim();
             const userSigla = getEntitySigla(userEntidadeRaw);
             const isPartnerPontoFocal = !isSuperAdmin && (userSigla !== minhaSigla && (userObj?.ponto_focal || userObj?.profiles?.ponto_focal));
+            const currentAdminId = _currentUserProfile ? _currentUserProfile.id : null;
 
             // 1. Atualiza município_membros APENAS para usuários locais (não sobrescreve o cadastro corporativo de parceiros)
             if (!isPartnerPontoFocal) {
@@ -2426,8 +2621,24 @@
 
             camadaCards.forEach(cCard => {
                 const themeId = cCard.getAttribute('data-camada-id');
+                const adminCeiling = getAdminCeiling(themeId);
+                const tema = _allTemas.find(t => t.id === themeId);
+                const tEntRaw = tema ? getThemeEntity(tema) : '';
+                const tSigla = getEntitySigla(tEntRaw);
+                const isFromOtherEntity = (tSigla !== minhaSigla);
+
                 let podeVer = !!cCard.querySelector('.camada-ver-check')?.checked;
-                const podeExcluir = !!cCard.querySelector('.camada-excluir-check')?.checked;
+                let podeExcluir = !!cCard.querySelector('.camada-excluir-check')?.checked;
+                let podeEstatistica = !!cCard.querySelector('.camada-estatistica-check')?.checked;
+                let podeEditarTema = !!cCard.querySelector('.camada-editar-tema-check')?.checked;
+
+                // TETO RIGOROSO DE DELEGAÇÃO: Administrador só delega o que ele próprio pode!
+                if (!isSuperAdmin) {
+                    podeVer = podeVer && adminCeiling.podeVer;
+                    podeExcluir = podeVer && !isFromOtherEntity && adminCeiling.podeExcluir && podeExcluir;
+                    podeEstatistica = podeVer && adminCeiling.podeEstatistica && podeEstatistica;
+                    podeEditarTema = podeVer && adminCeiling.podeEditarTema && podeEditarTema;
+                }
 
                 const abaEls = cCard.querySelectorAll('[data-form-id][data-tab-id]');
                 let podeEditarCamada = false;
@@ -2435,12 +2646,21 @@
                 abaEls.forEach(aEl => {
                     const formId = aEl.getAttribute('data-form-id');
                     const tabId = aEl.getAttribute('data-tab-id');
-                    const podeVerAba = !!aEl.querySelector('.aba-ver-check')?.checked;
-                    const podeEditarAba = !!aEl.querySelector('.aba-editar-check')?.checked;
+                    const abaCeiling = getAdminCeiling(themeId, formId, tabId);
+
+                    let podeVerAba = !!aEl.querySelector('.aba-ver-check')?.checked;
+                    let podeEditarAba = !!aEl.querySelector('.aba-editar-check')?.checked;
+
+                    if (!isSuperAdmin) {
+                        podeVerAba = podeVerAba && abaCeiling.podeVer;
+                        podeEditarAba = podeEditarAba && podeVerAba && abaCeiling.podeEditar;
+                    }
 
                     // Se qualquer aba estiver marcada, a camada pai obrigatoriamente deve ser verdadeira
                     if (podeVerAba || podeEditarAba) {
-                        podeVer = true;
+                        if (isSuperAdmin || adminCeiling.podeVer) {
+                            podeVer = true;
+                        }
                     }
                     if (podeEditarAba) podeEditarCamada = true;
 
@@ -2453,17 +2673,16 @@
                     });
                 });
 
-                const podeEstatistica = !!cCard.querySelector('.camada-estatistica-check')?.checked;
-                const podeEditarTema = !!cCard.querySelector('.camada-editar-tema-check')?.checked;
+                const finalPodeEditar = podeVer ? ((podeEditarCamada || podeEditarTema) && (isSuperAdmin || adminCeiling.podeEditar || adminCeiling.podeEditarTema)) : false;
 
                 camadaRows.push({
                     user_id: userId,
                     theme_id: themeId,
                     pode_ver: podeVer,
-                    pode_editar: podeEditarCamada || podeEditarTema,
-                    pode_excluir: podeExcluir,
-                    pode_estatistica: podeEstatistica,
-                    pode_editar_tema: podeEditarTema
+                    pode_editar: finalPodeEditar,
+                    pode_excluir: podeVer ? podeExcluir : false,
+                    pode_estatistica: podeVer ? podeEstatistica : false,
+                    pode_editar_tema: podeVer ? podeEditarTema : false
                 });
             });
 
@@ -2598,11 +2817,21 @@
             const rasterRows = [];
             rasterCards.forEach(rCard => {
                 const rasterId = rCard.getAttribute('data-raster-id');
-                const podeVer = rCard.querySelector('.raster-ver-check')?.checked;
+                const rObj = (_allRasters || []).find(r => r.id === rasterId);
+                const rSigla = getEntitySigla(rObj ? (rObj.entidade || 'Prefeitura Municipal') : '');
+                const adminRasterPerm = currentAdminId ? _allRasterPerms[`${currentAdminId}:${rasterId}`] : null;
+                const adminHasRasterPerm = (rSigla === minhaSigla) || !!(adminRasterPerm && adminRasterPerm.pode_ver);
+                const canManageRaster = isSuperAdmin || adminHasRasterPerm;
+
+                let podeVer = !!rCard.querySelector('.raster-ver-check')?.checked;
+                if (!canManageRaster) {
+                    podeVer = false;
+                }
+
                 rasterRows.push({
                     user_id: userId,
                     raster_id: rasterId,
-                    pode_ver: !!podeVer,
+                    pode_ver: podeVer,
                     concedido_por: _currentUserProfile?.id || null
                 });
             });
@@ -2797,6 +3026,7 @@
         salvarUsuario,
         removerAcesso,
         toggleCamadaSubAbas,
+        onCamadaControlChange,
         onSubAbaChange,
         selectEntidadeFiltro,
         switchMainTab,
