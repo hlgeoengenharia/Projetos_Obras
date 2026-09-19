@@ -5745,6 +5745,21 @@
             } catch(e) {}
         }
 
+        // PERMISSÃO E CONDIÇÃO DE ABA (mesma regra do card do mapa). Isto roda na página do mapa, que é a
+        // única que conhece as permissões do usuário: o relatório só recebe o que ele pode ver, e os dados
+        // das abas ocultas nem chegam à página do relatório.
+        if (window.ReportData && Array.isArray(formTabs) && formTabs.length > 0) {
+            const tabOptions = window.currentFormOptions || {};
+            const canSeeTab = (tab) => (typeof window.canSeeFormTab === 'function')
+                ? window.canSeeFormTab(resolvedFormId, tab.id, tabOptions)
+                : true;
+            const shownTabs = window.ReportData.visibleTabs(formTabs, featureData || {}, { canSeeTab });
+            featureData = window.ReportData.filterData(featureData || {}, formTabs, shownTabs);
+            const shownIds = new Set(shownTabs.map(t => t.id));
+            formFields = (formFields || []).filter(f => !f.tabId || shownIds.has(f.tabId));
+            formTabs = shownTabs;
+        }
+
         const payload = {
             templateId: templateId,
             template: tpl || null,

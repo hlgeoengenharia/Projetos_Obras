@@ -625,11 +625,12 @@ const has1nCardReformulation = freshReportBuilderCode.includes('cfg-1n-source-ta
     freshReportBuilderCode.includes('btn-1n-scope-last');
 assertTest('Relatórios A4: Card "Vistoria Fotográfica & Anexos (1:N)" reformulado com seletor de abas 1:N, botões separados (Sintética vs Analítica) e escopo', has1nCardReformulation);
 
-const has1nViewRendering = freshRelatorioViewCode.includes('extract1nFeatureRecords') &&
+const has1nViewRendering = freshRelatorioViewCode.includes('renderSyntheticTable') &&
+    freshRelatorioViewCode.includes('renderAnalyticalLaudo') &&
     freshRelatorioViewCode.includes('case \'tabela_sintetica_1n\':') &&
     freshRelatorioViewCode.includes('case \'laudo_vistoria_fotos\':') &&
     freshRelatorioViewCode.includes('cfg-1n-syn-cols-container' === 'cfg-1n-syn-cols-container');
-assertTest('Relatórios A4: relatorio_view.html extrai dados reais 1:N e renderiza tanto Tabela Sintética quanto Laudo Analítico com fotos', has1nViewRendering);
+assertTest('Relatórios A4: relatorio_view.html lê os registros 1:N do schema do formulário e renderiza tanto Tabela Sintética quanto Laudo Analítico com fotos', has1nViewRendering);
 
 const freshReportBuilderCodeUpdated = fs.readFileSync('src/reportBuilder.js', 'utf8');
 const hasGridReorderAndResize = freshReportBuilderCodeUpdated.includes('initGridFieldsSortable') &&
@@ -708,7 +709,7 @@ const hasCard6ExistingInsertsAndRemoves = freshReportBuilderCodeUpdated.includes
     freshReportBuilderCodeUpdated.includes('removeFieldFromAnalytical1n');
 assertTest('Relatórios A4: Card 1:N permite adicionar campos a tabelas/laudos existentes e botões "x" na folha A4 para remover colunas e campos', hasCard6ExistingInsertsAndRemoves);
 
-const has1nViewCustomFieldsAndSorting = fs.readFileSync('relatorio_view.html', 'utf8').includes('extract1nFeatureRecords(bloco.sourceTabId, featureData, fields, sortOrder, groupByTab, tabOrder)') &&
+const has1nViewCustomFieldsAndSorting = fs.readFileSync('relatorio_view.html', 'utf8').includes('renderSyntheticTable(bloco, featureData)') &&
     fs.readFileSync('relatorio_view.html', 'utf8').includes('bloco.campos_selecionados') &&
     fs.readFileSync('relatorio_view.html', 'utf8').includes('bloco.ordenar_por_aba');
 assertTest('Relatórios A4: relatorio_view.html renderiza campos customizados, ordenação cronológica e agrupamento por aba para blocos 1:N', has1nViewCustomFieldsAndSorting);
@@ -726,15 +727,14 @@ assertTest('Relatórios A4: Tabela Sintética 1:N suporta densidade horizontal (
 
 const hasTabSequenceReordering = freshReportBuilderCodeUpdated.includes('move1nTabSequence') &&
     freshReportBuilderCodeUpdated.includes('cfg-1n-tab-sequence-container') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('tabOrder.findIndex');
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('bloco.ordem_abas');
 assertTest('Relatórios A4: Agrupamento 1:N suporta reordenar a sequência das abas com botões [↑] e [↓] na barra lateral e no relatório', hasTabSequenceReordering);
 
 const hasConclusionAndCompoundFields = freshReportBuilderCodeUpdated.includes('Conclusão da Vistoria') &&
     freshReportBuilderCodeUpdated.includes('Conclusão:') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('r.conclusao') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('Conclusão:') &&
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('FieldFormatter.toHtml(r.values[f.id]') &&
     fs.readFileSync('relatorio_view.html', 'utf8').includes('attachment');
-assertTest('Relatórios A4: Laudo 1:N exibe "Conclusão" na íntegra e formata campos compostos (links/documentos) com ícones e chips estruturados', hasConclusionAndCompoundFields);
+assertTest('Relatórios A4: Laudo 1:N exibe campos longos na íntegra e formata campos compostos (links/anexos) pelo formatador único', hasConclusionAndCompoundFields);
 
 const has1nCheckboxPersistence = freshReportBuilderCodeUpdated.includes('current1nSelectedFieldKeys') &&
     freshReportBuilderCodeUpdated.includes('on1nFieldCheckboxChange') &&
@@ -745,7 +745,7 @@ assertTest('Relatórios A4: Checkboxes de campos 1:N persistem seleção (on1nFi
 
 const hasCanonicalColumnDeduplication = freshReportBuilderCodeUpdated.includes('getCanonicalColId') &&
     freshReportBuilderCodeUpdated.includes('existingCol.fieldIds.push(f.id)') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('colObj.fieldIds');
+    fs.readFileSync('src/reportData.js', 'utf8').includes('col.fieldIds');
 assertTest('Relatórios A4: Tabela Sintética 1:N unifica colunas sinônimas/canônicas (getCanonicalColId) evitando duplicidade entre abas', hasCanonicalColumnDeduplication);
 
 const has1nMultiRecordInspectionPreview = freshReportBuilderCodeUpdated.includes('mockRecords') &&
@@ -772,12 +772,12 @@ assertTest('Relatórios A4: Laudo Analítico 1:N na Folha A4 conta com controles
 const hasLaudoMultiTabStructureAndStandardConclusion = freshReportBuilderCodeUpdated.includes('Aba / Ente:') &&
     freshReportBuilderCodeUpdated.includes('mockTabsAndRecords') &&
     freshReportBuilderCodeUpdated.includes('canonId === \'conclusao\'') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('isConclusion');
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('Aba / Ente:');
 assertTest('Relatórios A4: Laudo Analítico 1:N apresenta quebra analítica por aba com múltiplos registros e conclusão no formato padronizado de card', hasLaudoMultiTabStructureAndStandardConclusion);
 
 const hasFullCompound1nFields = freshReportBuilderCodeUpdated.includes('Processo IPL') &&
     freshReportBuilderCodeUpdated.includes('Registro RIP') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('linkItems.map');
+    fs.readFileSync('relatorio_view.html', 'utf8').includes('hiperlink_1n');
 assertTest('Relatórios A4: Campos com tipo de dados 1:N (hiperlinks, processos e anexos) são exibidos integralmente sem truncamento', hasFullCompound1nFields);
 
 const freshReportBuilderCodeFinal = fs.readFileSync('src/reportBuilder.js', 'utf8');
@@ -968,7 +968,9 @@ assertTest('Folha A4 Interativa: Drag & drop de campos na grade com alta precis�
 // ------------------------------------------------------------------------------
 [
     ['tests/fieldFormatter.test.js', 'Formatador único: cada tipo de campo é formatado pelo TIPO (CPF/CNPJ, IPL, EPOL, RIP, CEP, moeda, m², data, links, anexos), sem adivinhar por nome/rótulo/id'],
-    ['tests/viewerResolve.test.js', 'Visualizador: campo é lido pelo ID do schema; campo vazio nunca herda valor de outro campo nem de outra aba']
+    ['tests/viewerResolve.test.js', 'Visualizador: campo é lido pelo ID do schema; campo vazio nunca herda valor de outro campo nem de outra aba'],
+    ['tests/reportData.test.js', 'Camada de dados: abas visíveis (permissão e condição), registros 1:N e 1:1, colunas lidas pelo campo da própria aba, dados de aba oculta removidos'],
+    ['tests/viewerTables.test.js', 'Quadro Sintético e Laudo Analítico: colunas por campo, seleção de abas, quebra por linhas entre folhas, escape de HTML e aviso quando a aba escolhida não existe']
 ].forEach(([testFile, description]) => {
     let passed = true;
     let output = '';

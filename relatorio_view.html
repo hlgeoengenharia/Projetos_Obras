@@ -16,6 +16,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
     <script src="src/fieldFormatter.js"></script>
+    <script src="src/reportData.js"></script>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -190,53 +191,6 @@
             initReportViewer();
         });
 
-        function maskCpfCnpj(val) {
-            if (!val) return '';
-            const digits = String(val).replace(/\D/g, '');
-            if (digits.length === 11) {
-                return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-            } else if (digits.length === 14) {
-                return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
-            }
-            return String(val);
-        }
-
-        function maskCep(val) {
-            if (!val) return '';
-            const digits = String(val).replace(/\D/g, '');
-            if (digits.length === 8) {
-                return digits.replace(/^(\d{5})(\d{3})/, "$1-$2");
-            }
-            return String(val);
-        }
-
-        function maskEpol(val) {
-            if (!val) return '';
-            const digits = String(val).replace(/\D/g, '');
-            if (digits.length >= 5) {
-                return digits.substring(0, 4) + '.' + digits.substring(4, 11);
-            }
-            return String(val);
-        }
-
-        function maskRip(val) {
-            if (!val) return '';
-            const digits = String(val).replace(/\D/g, '');
-            if (digits.length >= 12) {
-                return digits.substring(0, 11) + '-' + digits.substring(11, 13);
-            }
-            return String(val);
-        }
-
-        function maskInscCabedelo(val) {
-            if (!val) return '';
-            const digits = String(val).replace(/\D/g, '');
-            if (digits.length === 19) {
-                return digits.replace(/(\d{1})(\d{4})(\d{3})(\d{2})(\d{4})(\d{4})(\d{1})/, "$1.$2.$3.$4.$5.$6.$7");
-            }
-            return String(val);
-        }
-
 
         function getOrgBadgeHtml(org) {
             const o = String(org || '').toUpperCase().trim();
@@ -313,31 +267,6 @@
          */
         function formatFieldValueForDisplay(val, fieldDef = {}) {
             return FieldFormatter.toText(val, fieldDef || {}, { geometryCenter: getGeometryCenter() });
-        }
-
-        function normalizeEnteTab(val) {
-            if (!val) return '';
-            const s = String(val).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (s.includes('mpf') || s.includes('minister') || s.includes('procurad')) return 'mpf';
-            if (s.includes('polic') || s === 'pf' || (s.includes('pf') && !s.includes('mpf'))) return 'pf';
-            if (s.includes('spu') || s.includes('patrimon')) return 'spu';
-            if (s.includes('munic') || s.includes('pref') || s.includes('pm') || s.includes('meio')) return 'municipio';
-            return s;
-        }
-
-        function parseDateToTimestamp(val) {
-            if (!val) return -Infinity;
-            const s = String(val).trim();
-            if (!s) return -Infinity;
-            const brMatch = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(.*)$/);
-            if (brMatch) {
-                const day = parseInt(brMatch[1], 10);
-                const month = parseInt(brMatch[2], 10) - 1;
-                const year = parseInt(brMatch[3], 10);
-                return new Date(year, month, day).getTime();
-            }
-            const t = Date.parse(s);
-            return isNaN(t) ? -Infinity : t;
         }
 
 
@@ -596,16 +525,14 @@
             const pageHeightPx = orient === 'landscape' ? 794 : 1123;
             const pageWidthPx = orient === 'landscape' ? 1123 : 794;
 
-            // Renderiza previamente os blocos de corpo
+            // Renderiza os blocos de corpo. Blocos "divisíveis" (tabelas longas) devolvem { split }.
             const renderedBodyBlocks = bodyBlocos.map((b, bIdx) => {
                 const globalIdx = blocos.indexOf(b);
-                return {
-                    bloco: b,
-                    html: renderSingleBlock(b, globalIdx >= 0 ? globalIdx : bIdx, featureData, featureGeometry, fields, tpl)
-                };
+                const out = renderSingleBlock(b, globalIdx >= 0 ? globalIdx : bIdx, featureData, featureGeometry, fields, tpl);
+                return (out && typeof out === 'object' && out.split) ? { bloco: b, split: out.split } : { bloco: b, html: out };
             });
 
-            // Medição inteligente de altura para distribuição em folhas
+            // Medição de altura para distribuição em folhas
             let measureBox = document.getElementById('a4-measure-stage');
             if (!measureBox) {
                 measureBox = document.createElement('div');
@@ -622,42 +549,58 @@
             const maxBodyHeightP1 = pageHeightPx - headerHeightPx - footerHeightPx - marginHeightPx;
             const maxBodyHeightP2 = pageHeightPx - (hdrBloco && hdrBloco.repetir_todas_folhas ? headerHeightPx : 15) - footerHeightPx - marginHeightPx;
 
-            let totalEstimatedHeight = 0;
-            const blockHeights = renderedBodyBlocks.map(rb => {
-                measureBox.innerHTML = rb.html;
-                const h = Math.max(40, measureBox.firstElementChild ? measureBox.firstElementChild.offsetHeight : measureBox.offsetHeight) + 20;
-                totalEstimatedHeight += h;
-                return h;
+            // Bloco comum: altura total. Bloco divisível: altura fixa (título + cabeçalho da tabela) e de cada linha.
+            const BLOCK_GAP = 20;
+            renderedBodyBlocks.forEach(rb => {
+                if (rb.split) {
+                    measureBox.innerHTML = rb.split.chunkHtml(rb.split.rowsHtml, true);
+                    const rowEls = Array.from(measureBox.querySelectorAll('[data-split-row]'));
+                    rb.rowHeights = rowEls.map(el => Math.max(1, Math.ceil(el.getBoundingClientRect().height)));
+                    const total = measureBox.firstElementChild ? measureBox.firstElementChild.offsetHeight : measureBox.offsetHeight;
+                    rb.overheadH = Math.max(0, total - rb.rowHeights.reduce((a, c) => a + c, 0));
+                } else {
+                    measureBox.innerHTML = rb.html;
+                    rb.h = Math.max(40, measureBox.firstElementChild ? measureBox.firstElementChild.offsetHeight : measureBox.offsetHeight) + BLOCK_GAP;
+                }
             });
             measureBox.innerHTML = '';
 
-            const pagesBlocks = [];
-            if (totalEstimatedHeight <= maxBodyHeightP1 || renderedBodyBlocks.length <= 1) {
-                pagesBlocks.push(renderedBodyBlocks);
-            } else {
-                let currentPage = [];
-                let currentAccum = 0;
-                let isFirstPage = true;
+            // Distribuição em folhas: blocos inteiros; tabelas longas quebram por linhas (sem cortar conteúdo)
+            const pagesBlocks = [[]];
+            let pageAcc = 0;
+            let pageLimit = maxBodyHeightP1;
+            const startNewPage = () => { pagesBlocks.push([]); pageAcc = 0; pageLimit = maxBodyHeightP2; };
+            const currentPage = () => pagesBlocks[pagesBlocks.length - 1];
 
-                renderedBodyBlocks.forEach((rb, i) => {
-                    const blockH = blockHeights[i];
-                    const limit = isFirstPage ? maxBodyHeightP1 : maxBodyHeightP2;
-
-                    if (currentPage.length > 0 && (currentAccum + blockH > limit)) {
-                        pagesBlocks.push(currentPage);
-                        currentPage = [rb];
-                        currentAccum = blockH;
-                        isFirstPage = false;
-                    } else {
-                        currentPage.push(rb);
-                        currentAccum += blockH;
-                    }
-                });
-
-                if (currentPage.length > 0) {
-                    pagesBlocks.push(currentPage);
+            renderedBodyBlocks.forEach(rb => {
+                if (!rb.split) {
+                    if (currentPage().length > 0 && pageAcc + rb.h > pageLimit) startNewPage();
+                    currentPage().push(rb);
+                    pageAcc += rb.h;
+                    return;
                 }
-            }
+                let rows = rb.split.rowsHtml.slice();
+                let heights = rb.rowHeights.slice();
+                let isFirstChunk = true;
+                while (rows.length > 0) {
+                    let room = pageLimit - pageAcc - rb.overheadH - BLOCK_GAP;
+                    if (room < heights[0] && currentPage().length > 0) {
+                        startNewPage();
+                        room = pageLimit - rb.overheadH - BLOCK_GAP;
+                    }
+                    let take = 0;
+                    let used = 0;
+                    while (take < rows.length && used + heights[take] <= room) { used += heights[take]; take++; }
+                    if (take === 0) take = 1; // linha maior que a folha: entra sozinha
+                    currentPage().push({ bloco: rb.bloco, html: rb.split.chunkHtml(rows.slice(0, take), isFirstChunk) });
+                    pageAcc += rb.overheadH + used + BLOCK_GAP;
+                    isFirstChunk = false;
+                    rows = rows.slice(take);
+                    heights = heights.slice(take);
+                    if (rows.length > 0) startNewPage();
+                }
+            });
+            if (pagesBlocks.length > 1 && pagesBlocks[pagesBlocks.length - 1].length === 0) pagesBlocks.pop();
 
             const totalPages = pagesBlocks.length;
 
@@ -677,7 +620,7 @@
                 pagesHtml += `
                     <div class="a4-page w-full text-slate-900 ${totalPages === 1 ? 'single-page' : ''}" 
                          data-page="${pageNum}"
-                         style="max-width: ${pageWidthPx}px; min-height: ${pageHeightPx}px; ${totalPages === 1 ? `height: ${pageHeightPx}px; max-height: ${pageHeightPx}px; overflow: hidden;` : ''}">
+                         style="max-width: ${pageWidthPx}px; min-height: ${pageHeightPx}px; ">
                         
                         <!-- Cabeçalho Institucional: Fora do corpo, acima da margem superior -->
                         ${showHeader ? renderHeaderSlotHtml(hdrBloco, tpl, mm.left, mm.right) : ''}
@@ -890,562 +833,12 @@
                     `;
 
                 case 'tabela_sintetica_1n': {
-                    const sortOrder = bloco.ordem_cronologica || 'desc';
-                    const groupByTab = !!bloco.ordenar_por_aba;
-                    const tabOrder = bloco.ordem_abas || [];
-                    let records = extract1nFeatureRecords(bloco.sourceTabId, featureData, fields, sortOrder, groupByTab, tabOrder);
-                    if (Array.isArray(bloco.abas_selecionadas) && bloco.abas_selecionadas.length > 0) {
-                        const normSel = new Set(bloco.abas_selecionadas.map(normalizeEnteTab));
-                        const selTabs = new Set(bloco.abas_selecionadas.map(s => String(s).toLowerCase()));
-                        const filtered = records.filter(r => {
-                            const rTab = String(r.sourceTab || r.tabId || r.org || r.tabTitle || (r.raw && r.raw._origTab) || '').toLowerCase();
-                            if (selTabs.has(rTab)) return true;
-                            const normR = normalizeEnteTab(r.sourceTab || r.org || r.tabTitle || (r.raw && r.raw._origTab));
-                            return normSel.has(normR);
-                        });
-                        records = filtered;
-                    }
-
-                    // Deduplicação estrita para MPF: garante no máximo 1 único registro consolidado (o mais recente)
-                    const dedupedRecords = [];
-                    let hasMpfRecord = false;
-                    records.forEach(r => {
-                        const rOrg = String(r.org || r.sourceTab || '').toLowerCase();
-                        if (rOrg.includes('mpf') || rOrg.includes('minist')) {
-                            if (!hasMpfRecord) {
-                                dedupedRecords.push(r);
-                                hasMpfRecord = true;
-                            }
-                        } else {
-                            dedupedRecords.push(r);
-                        }
-                    });
-                    records = dedupedRecords;
-
-                    const rawCols = bloco.colunas || ['aba', 'data', 'org', 'situacao_ocupacao', 'situacao_recuo', 'area_invadida', 'qtd_fotos'];
-                    const cols = rawCols.map(c => typeof c === 'object' ? c.id : c);
-                    const colLabelMap = {
-                        'aba': 'Aba / Ente',
-                        'data': 'Data',
-                        'org': 'Órgão / Entidade',
-                        'situacao_ocupacao': 'Situação Ocupação',
-                        'situacao_recuo': 'Situação Recuo',
-                        'area_invadida': 'Área Invadida',
-                        'qtd_fotos': 'Fotos'
-                    };
-                    rawCols.forEach(c => {
-                        if (typeof c === 'object' && c.id) {
-                            colLabelMap[c.id] = c.label || c.id;
-                        }
-                    });
-                    if (Array.isArray(fields)) {
-                        fields.forEach(f => {
-                            if (f && f.id && !colLabelMap[f.id]) {
-                                colLabelMap[f.id] = f.label || f.name || f.id;
-                            }
-                        });
-                    }
-
-                    const density = bloco.densidade || 'compact';
-                    const striping = bloco.zebrado || 'slate';
-
-                    let thDensityClass = 'py-1.5 px-2 text-[9.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300';
-                    let tdDensityClass = 'py-1.5 px-2 text-[10px] border-b border-slate-200';
-                    if (density === 'comfortable') {
-                        thDensityClass = 'p-2 text-[10.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300';
-                        tdDensityClass = 'p-2 text-[11px] border-b border-slate-200';
-                    } else if (density === 'ultracompact') {
-                        thDensityClass = 'py-0.5 px-1 text-[8.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300';
-                        tdDensityClass = 'py-0.5 px-1 text-[9px] font-medium border-b border-slate-200';
-                    }
-
-                    let tbodyHtml = '';
-                    if (records.length === 0) {
-                        tbodyHtml = `<tr><td colspan="${cols.length + 1}" class="p-4 text-center text-slate-400 italic bg-slate-50/50">Nenhuma vistoria ou registro 1:N cadastrado para este imóvel.</td></tr>`;
-                    } else {
-                        tbodyHtml = records.map((r, rIdx) => {
-                            const isOdd = rIdx % 2 === 1;
-                            let rowBg = isOdd ? 'bg-slate-50/70' : 'bg-white';
-                            if (striping === 'sky') {
-                                rowBg = isOdd ? 'bg-sky-50/50' : 'bg-white';
-                            } else if (striping === 'ente') {
-                                const tabLow = (r.sourceTab || r.org || '').toLowerCase();
-                                if (tabLow.includes('pf') || tabLow.includes('policia') || tabLow.includes('polícia')) {
-                                    rowBg = 'bg-blue-50/35';
-                                } else if (tabLow.includes('spu') || tabLow.includes('patrimonio') || tabLow.includes('patrimônio')) {
-                                    rowBg = 'bg-emerald-50/35';
-                                } else {
-                                    rowBg = isOdd ? 'bg-amber-50/35' : 'bg-white';
-                                }
-                            } else if (striping === 'white') {
-                                rowBg = 'bg-white';
-                            }
-
-                            return `
-                                <tr class="${rowBg} hover:bg-amber-50/40 transition-colors">
-                                    <td class="${tdDensityClass} border-r border-slate-200 text-center font-mono text-[10px] text-slate-400">${rIdx + 1}</td>
-                                    ${cols.map(c => {
-                                        if (c === 'aba') {
-                                            return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 whitespace-normal break-words">${getOrgBadgeHtml(r.sourceTab || r.org || 'Vistoria')}</td>`;
-                                        }
-                                        if (c === 'data') return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 font-medium text-slate-800 font-mono text-[10px] whitespace-normal break-words">${escapeHtml(r.formattedDate)}</td>`;
-                                        if (c === 'org') return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 whitespace-normal break-words">${getOrgBadgeHtml(r.org)}</td>`;
-                                        if (c === 'situacao_ocupacao') {
-                                            return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 whitespace-normal break-words">${getStatusBadgeHtml(r.situacaoOcupacao)}</td>`;
-                                        }
-                                        if (c === 'situacao_recuo') {
-                                            return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 whitespace-normal break-words">${getRecuoBadgeHtml(r.situacaoRecuo)}</td>`;
-                                        }
-                                        if (c === 'area_invadida') {
-                                            return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 font-mono font-bold text-right text-slate-800 text-[10.5px] whitespace-normal break-words">${r.areaInvadida > 0 ? (new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(r.areaInvadida) + ' m²') : '—'}</td>`;
-                                        }
-                                        if (c === 'qtd_fotos') {
-                                            const fotoCount = Array.isArray(r.photos) ? r.photos.length : 0;
-                                            const docCount = Array.isArray(r.links) ? r.links.length : 0;
-                                            let anexoLabel = '';
-                                            if (fotoCount > 0 && docCount > 0) anexoLabel = `📷 ${fotoCount} foto(s) + 📎 ${docCount} doc(s)`;
-                                            else if (fotoCount > 0) anexoLabel = `📷 ${fotoCount} foto(s)`;
-                                            else if (docCount > 0) anexoLabel = `📎 ${docCount} doc(s)`;
-                                            else anexoLabel = '<span class="text-slate-400 font-mono text-[10px]">—</span>';
-                                            return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 text-sky-700 font-semibold text-[10px] whitespace-normal break-words">${anexoLabel}</td>`;
-                                        }
-
-                                        // Lookup candidate keys from aliases if c is unified
-                                        const colObj = rawCols.find(col => (typeof col === 'object' ? col.id : col) === c);
-                                        const candidates = [c];
-                                        if (colObj && typeof colObj === 'object' && Array.isArray(colObj.fieldIds)) {
-                                            candidates.push(...colObj.fieldIds);
-                                        }
-                                        let customVal = null;
-                                        for (const cand of candidates) {
-                                            if (r[cand] !== undefined && r[cand] !== null) { customVal = r[cand]; break; }
-                                            if (r.raw && r.raw[cand] !== undefined && r.raw[cand] !== null) { customVal = r.raw[cand]; break; }
-                                        }
-                                        if (!customVal && c === 'conclusao') {
-                                            customVal = r.conclusao || r.observacao || null;
-                                        }
-                                        if (!customVal && c === 'links' && Array.isArray(r.links) && r.links.length > 0) {
-                                            customVal = r.links;
-                                        }
-                                        if (customVal === null && typeof resolveFieldValue === 'function') {
-                                            const candidateData = Object.assign({}, featureData || {}, r.raw || {}, r || {});
-                                            const candidateDef = (r.tabFields || fields || []).find(f => candidates.includes(f.id) || candidates.includes(f.name)) || (typeof colObj === 'object' ? colObj : { id: c });
-                                            const resolved = resolveFieldValue(candidateDef, candidateData, (r.tabFields || fields));
-                                            if (resolved !== '—') customVal = resolved;
-                                        }
-                                        
-                                        // Formatação inteligente para campos compostos (links, processos, listas)
-                                        if (Array.isArray(customVal) || (typeof customVal === 'string' && customVal.trim().startsWith('[') && customVal.includes('{'))) {
-                                            let parsed = Array.isArray(customVal) ? customVal : null;
-                                            if (!parsed) { try { parsed = JSON.parse(customVal); } catch(e){} }
-                                            if (Array.isArray(parsed) && parsed.length > 0) {
-                                                return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 whitespace-normal break-words"><div class="flex flex-col gap-0.5">${parsed.map(item => `<a href="${item.url || '#'}" target="_blank" class="inline-flex items-center gap-1 text-[9px] font-bold text-sky-700 bg-sky-50 px-1 py-0.5 rounded hover:underline"><span class="material-symbols-outlined text-[10px]">attachment</span>${escapeHtml(item.title || item.number || 'Anexo')}</a>`).join('')}</div></td>`;
-                                            }
-                                        }
-
-                                        const fDef = (r.tabFields || fields || []).find(f => f.id === c || f.name === c) || (typeof colObj === 'object' ? colObj : { id: c });
-                                        const formattedCustom = formatFieldValueForDisplay(customVal, fDef);
-
-                                        return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 text-slate-700 whitespace-normal break-words">${escapeHtml(String(formattedCustom))}</td>`;
-                                    }).join('')}
-                                </tr>
-                            `;
-                        }).join('');
-                    }
-
-                    return `
-                        <div class="mb-4 page-break-avoid">
-                            <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
-                                <span class="whitespace-pre-line">${(escapeHtml(bloco.titulo || 'Quadro Sintético de Vistorias (Histórico 1:N)')).replace(/\r?\n/g, '<br>')}</span>
-                                <div class="flex items-center gap-2 text-[10px] font-mono text-slate-500">
-                                    <span>${records.length} registro(s)</span>
-                                    <span>•</span>
-                                    <span>${sortOrder === 'asc' ? 'Antigo → Recente' : 'Recente → Antigo'}</span>
-                                    ${groupByTab ? '<span>• Por Aba</span>' : ''}
-                                </div>
-                            </div>
-                            <div class="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
-                                <table class="w-full text-left border-collapse">
-                                    <thead>
-                                        <tr class="bg-slate-100 border-b border-slate-200 text-slate-700">
-                                            <th class="${thDensityClass} border-r border-slate-200 w-8 text-center">#</th>
-                                            ${cols.map(c => `<th class="${thDensityClass} border-r last:border-r-0 border-slate-200 whitespace-normal break-words leading-tight">${escapeHtml(colLabelMap[c] || c)}</th>`).join('')}
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-slate-200">
-                                        ${tbodyHtml}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    `;
+                    return renderSyntheticTable(bloco, featureData);
                 }
 
                 case 'laudo_vistoria_fotos':
                 case 'galeria_fotos': {
-                    const sortOrder = bloco.ordem_cronologica || 'desc';
-                    const groupByTab = !!bloco.ordenar_por_aba;
-                    const tabOrder = bloco.ordem_abas || [];
-                    let records = extract1nFeatureRecords(bloco.sourceTabId, featureData, fields, sortOrder, groupByTab, tabOrder);
-                    const isSingleVistoria = bloco.escopo === 'ultima';
-                    if (isSingleVistoria && records.length > 0) {
-                        records = records.slice(0, 1);
-                    }
-
-                    const layout = bloco.layoutFotos || '2_cols';
-                    let gridClass = 'grid-cols-2';
-                    if (layout === '1_col') gridClass = 'grid-cols-1';
-                    if (layout === 'grid_4') gridClass = 'grid-cols-2 sm:grid-cols-4';
-
-                    const density = bloco.densidade || 'compact';
-                    const striping = bloco.zebrado || 'slate';
-
-                    let cardPaddingClass = 'p-3.5';
-                    let fieldGapClass = 'gap-2';
-                    if (density === 'comfortable') {
-                        cardPaddingClass = 'p-4 sm:p-5';
-                        fieldGapClass = 'gap-2.5';
-                    } else if (density === 'ultracompact') {
-                        cardPaddingClass = 'p-2.5';
-                        fieldGapClass = 'gap-1.5';
-                    }
-
-                    const rawCustomFields = Array.isArray(bloco.campos_selecionados) ? bloco.campos_selecionados : [];
-                    const hasExplicitSelectedTabs = Array.isArray(bloco.abas_selecionadas) && bloco.abas_selecionadas.length > 0;
-                    const selectedTabIds = new Set();
-                    if (hasExplicitSelectedTabs) {
-                        bloco.abas_selecionadas.forEach(id => selectedTabIds.add(String(id)));
-                    } else if (bloco.sourceTabId && bloco.sourceTabId !== 'consolidado') {
-                        selectedTabIds.add(String(bloco.sourceTabId));
-                    } else {
-                        rawCustomFields.forEach(cf => {
-                            const tId = (typeof cf === 'object' && cf.tabId) ? cf.tabId : (fields.find(f => f.id === (typeof cf === 'string' ? cf : (cf.rawId || cf.id)))?.tabId);
-                            if (tId) selectedTabIds.add(String(tId));
-                        });
-                    }
-
-                    if (selectedTabIds.size > 0 && records.length > 0) {
-                        const normSel = new Set(Array.from(selectedTabIds).map(normalizeEnteTab));
-                        const selSet = new Set(Array.from(selectedTabIds).map(s => String(s).toLowerCase()));
-                        records = records.filter(r => {
-                            const rTab = String(r.tabId || r.sourceTabId || r._origTab || r.sourceTab || r.org || r.tabTitle || '').toLowerCase();
-                            if (selSet.has(rTab)) return true;
-                            const normR = normalizeEnteTab(r.sourceTab || r.org || r.tabTitle || r.tabId || r._origTab);
-                            return normSel.has(normR);
-                        });
-                    }
-
-                    // Deduplicação estrita de MPF no Laudo Analítico (garante 1 único cartão para MPF)
-                    const dedupedLaudoRecords = [];
-                    let hasMpfLaudo = false;
-                    records.forEach(r => {
-                        const rNorm = normalizeEnteTab(r.sourceTab || r.org || r.tabTitle || r._origTab);
-                        if (rNorm === 'mpf') {
-                            if (!hasMpfLaudo) {
-                                dedupedLaudoRecords.push(r);
-                                hasMpfLaudo = true;
-                            }
-                        } else {
-                            dedupedLaudoRecords.push(r);
-                        }
-                    });
-                    records = dedupedLaudoRecords;
-
-                    const seenFieldKeys = new Set();
-                    let customFields = [];
-                    rawCustomFields.forEach(cf => {
-                        const cId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
-                        const cLabel = typeof cf === 'object' ? (cf.label || cf.id) : cId;
-                        const cTabId = typeof cf === 'object' ? (cf.tabId || '') : '';
-                        const uniqueKey = `${cTabId}:${cId}`;
-                        if (!seenFieldKeys.has(uniqueKey)) {
-                            seenFieldKeys.add(uniqueKey);
-                            customFields.push(typeof cf === 'object' ? { ...cf, id: cId, label: cLabel, tabId: cTabId } : { id: cId, label: cLabel, rawId: cId, tabId: cTabId });
-                        }
-                    });
-
-                    if (customFields.length === 0) {
-                        customFields = [
-                            { id: 'data', label: 'Data da Vistoria' },
-                            { id: 'situacao_ocupacao', label: 'Situação da Ocupação' },
-                            { id: 'situacao_recuo', label: 'Situação do Recuo' },
-                            { id: 'area_invadida', label: 'Área Invadida (m²)' },
-                            { id: 'conclusao', label: 'Conclusão da Vistoria' },
-                            { id: 'links', label: 'Processos Oficiais & Hiperlinks' }
-                        ];
-                    }
-                    // Conclusão: campo formatado na grade de atributos como os demais campos
-
-                    let contentHtml = '';
-                    if (records.length === 0) {
-                        contentHtml = `
-                            <div class="p-4 border border-dashed border-slate-300 rounded-lg bg-slate-50 text-center text-slate-500 text-xs">
-                                <span class="material-symbols-outlined text-[32px] text-slate-400 block mb-1">no_photography</span>
-                                <p class="font-bold">Nenhuma vistoria ou registro fotográfico encontrado para este imóvel.</p>
-                                <p class="text-[11px] text-slate-400">Cadastre fotos e vistorias nas abas 1:N para que sejam apresentadas neste laudo.</p>
-                            </div>
-                        `;
-                    } else {
-                        // Agrupamento estrito por aba para manter cada aba completamente separada na folha
-                        const tabGroupsMap = new Map();
-                        records.forEach(r => {
-                            const tKey = r.sourceTab || r.org || r.tabId || r._origTab || 'Vistorias';
-                            if (!tabGroupsMap.has(tKey)) {
-                                tabGroupsMap.set(tKey, {
-                                    title: tKey,
-                                    records: []
-                                });
-                            }
-                            tabGroupsMap.get(tKey).records.push(r);
-                        });
-
-                        contentHtml = `
-                            <div class="space-y-4">
-                                ${Array.from(tabGroupsMap.values()).map(tg => `
-                                    <div class="space-y-2.5">
-                                        <div class="flex items-center justify-between px-2.5 py-1.5 bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold text-slate-800 uppercase tracking-wide">
-                                            <div class="flex items-center gap-1.5">
-                                                <span class="material-symbols-outlined text-[16px] text-amber-500">folder_open</span>
-                                                <span>Aba / Ente: ${escapeHtml(tg.title)}</span>
-                                            </div>
-                                            <span class="text-[9.5px] font-mono font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">
-                                                ${tg.records.length} registro(s) analítico(s)
-                                            </span>
-                                        </div>
-                                        ${tg.records.map((r, rIdx) => {
-                                            const isIrreg = (r.situacaoOcupacao || '').toLowerCase().includes('irreg');
-                                            
-                                            // Cores de fundo do cartão de vistoria conforme o zebrado / tema do ente
-                                            let cardBgClass = 'bg-slate-50/50 border-slate-200';
-                                            if (striping === 'ente') {
-                                                const orgLow = (r.sourceTab || r.org || '').toLowerCase();
-                                                if (orgLow.includes('mpf') || orgLow.includes('minist')) {
-                                                    cardBgClass = 'bg-purple-50/40 border-purple-200';
-                                                } else if (orgLow.includes('policia') || orgLow.includes('polícia') || orgLow === 'pf' || (orgLow.includes('pf') && !orgLow.includes('mpf'))) {
-                                                    cardBgClass = 'bg-blue-50/40 border-blue-200';
-                                                } else if (orgLow.includes('spu') || orgLow.includes('patrimonio') || orgLow.includes('patrimônio')) {
-                                                    cardBgClass = 'bg-emerald-50/40 border-emerald-200';
-                                                } else if (orgLow.includes('pm') || orgLow.includes('prefeitura') || orgLow.includes('meio')) {
-                                                    cardBgClass = 'bg-amber-50/40 border-amber-200';
-                                                } else {
-                                                    cardBgClass = rIdx % 2 === 1 ? 'bg-slate-100/70 border-slate-300' : 'bg-white border-slate-200';
-                                                }
-                                            } else if (striping === 'sky') {
-                                                cardBgClass = rIdx % 2 === 1 ? 'bg-sky-50/50 border-sky-200' : 'bg-white border-slate-200';
-                                            } else if (striping === 'white') {
-                                                cardBgClass = 'bg-white border-slate-200';
-                                            } else {
-                                                cardBgClass = rIdx % 2 === 1 ? 'bg-slate-100/70 border-slate-300' : 'bg-white border-slate-200';
-                                            }
-
-                            let photosHtml = '';
-                            if (r.photos.length > 0) {
-                                photosHtml = `
-                                    <div class="grid ${gridClass} gap-3 pt-1">
-                                        ${r.photos.map(p => `
-                                            <div class="border border-slate-200 rounded-lg overflow-hidden bg-white flex flex-col shadow-2xs">
-                                                <div class="h-44 bg-slate-100 overflow-hidden cursor-pointer group relative" onclick="window.open('${p.url}', '_blank')">
-                                                    <img src="${p.url}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center text-slate-400 text-xs font-bold\\'><span class=\\'material-symbols-outlined text-[28px]\\'>broken_image</span></div>';" />
-                                                    <div class="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] font-mono px-1.5 py-0.5 rounded flex items-center gap-1">
-                                                        <span class="material-symbols-outlined text-[11px]">visibility</span> Ampliar
-                                                    </div>
-                                                </div>
-                                                <div class="p-2 text-[10.5px] space-y-0.5 text-slate-600">
-                                                    ${bloco.exibirLegenda !== false && p.title ? `<div class="font-bold text-slate-800 break-words">${escapeHtml(p.title)}</div>` : ''}
-                                                    ${bloco.exibirData !== false && p.date ? `<div class="text-slate-500">Data: ${escapeHtml(p.date)}</div>` : ''}
-                                                    ${bloco.exibirCoords !== false && p.coords ? `<div class="font-mono text-[9px] text-slate-500">GPS: ${escapeHtml(p.coords)}</div>` : ''}
-                                                    ${bloco.exibirResp !== false && p.resp ? `<div class="text-slate-500">Resp: ${escapeHtml(p.resp)}</div>` : ''}
-                                                </div>
-                                            </div>
-                                        `).join('')}
-                                    </div>
-                                `;
-                            } else {
-                                photosHtml = `
-                                    <div class="p-3 text-center text-slate-400 text-xs italic bg-slate-50 rounded-lg border border-dashed border-slate-200">
-                                        Nenhuma fotografia anexada a este registro de vistoria.
-                                    </div>
-                                `;
-                            }
-
-                            // Campos customizados selecionados para o laudo com larguras flexíveis
-                            let customFieldsHtml = '';
-                            const recTab = r.tabId || r.sourceTabId || r._origTab || r.sourceTab || r.org || r.tabTitle;
-                            const normRecTab = normalizeEnteTab(recTab);
-                            const fieldsForRec = customFields.filter(cf => {
-                                if (cf.tabId) {
-                                    const normCfTab = normalizeEnteTab(cf.tabId);
-                                    return normCfTab === normRecTab;
-                                }
-                                if (Array.isArray(r.tabFields) && r.tabFields.length > 0) {
-                                    return r.tabFields.some(tf => tf.id === cf.id || tf.name === cf.id || tf.label === cf.label);
-                                }
-                                return true;
-                            });
-
-                            let effectiveFields = [];
-                            if (fieldsForRec.length > 0) {
-                                effectiveFields = fieldsForRec;
-                            } else if (Array.isArray(r.tabFields) && r.tabFields.length > 0) {
-                                effectiveFields = r.tabFields.slice(0, 10).map(tf => ({ id: tf.id, label: tf.label || tf.id, tabId: r.tabId }));
-                            } else {
-                                effectiveFields = [
-                                    { id: 'data', label: 'Data da Vistoria' },
-                                    { id: 'situacao_ocupacao', label: 'Situação da Ocupação' },
-                                    { id: 'situacao_recuo', label: 'Situação do Recuo' },
-                                    { id: 'area_invadida', label: 'Área Invadida (m²)' },
-                                    { id: 'conclusao', label: 'Conclusão da Vistoria' },
-                                    { id: 'links', label: 'Processos Oficiais & Hiperlinks' }
-                                ];
-                            }
-                            if (effectiveFields.length > 0) {
-                                customFieldsHtml = `
-                                    <div class="flex flex-wrap ${fieldGapClass}">
-                                        ${effectiveFields.map(cf => {
-                                            const cId = typeof cf === 'object' ? cf.id : cf;
-                                            const cLabel = typeof cf === 'object' ? (cf.label || cf.id) : (fields.find(f => f.id === cId)?.label || cId);
-                                            const isConclusion = cId.toLowerCase().includes('conclus') || (cLabel && cLabel.toLowerCase().includes('conclus'));
-                                            const isLinks = cId.toLowerCase().includes('link') || (cLabel && cLabel.toLowerCase().includes('link')) || cId.toLowerCase().includes('process');
-                                            
-                                            const larguras = bloco.campos_larguras || {};
-                                            let pct = larguras[cId];
-                                            if (!pct) {
-                                                pct = (isConclusion || isLinks) ? 100 : 50;
-                                            }
-                                            pct = Math.round(pct);
-                                            const widthStyle = pct >= 98 ? '100%' : (pct >= 65 ? '66.666%' : (pct <= 28 ? '25%' : (pct <= 38 ? '33.333%' : '50%')));
-
-                                            let displayValHtml = '';
-                                            if (isConclusion) {
-                                                displayValHtml = `<div class="text-[10.5px] text-slate-700 leading-relaxed break-words whitespace-normal font-normal">${escapeHtml(r.conclusao || r.observacao || 'Constatada regularidade.')}</div>`;
-                                            } else if (isLinks || Array.isArray(r[cId])) {
-                                                const linkItems = Array.isArray(r[cId]) ? r[cId] : (r.links || []);
-                                                if (linkItems.length > 0) {
-                                                    displayValHtml = `
-                                                        <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
-                                                            ${linkItems.map(l => `
-                                                                <a href="${l.url || '#'}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-[9.5px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded hover:bg-sky-100">
-                                                                    <span class="material-symbols-outlined text-[11px]">attachment</span>
-                                                                    <span>${escapeHtml(l.title || 'Processo')}:</span>
-                                                                    <span class="font-mono">${escapeHtml(l.number || '#')}</span>
-                                                                </a>
-                                                            `).join('')}
-                                                        </div>
-                                                    `;
-                                                } else {
-                                                    displayValHtml = `<span class="text-slate-400 italic text-[10px]">Sem processos/links</span>`;
-                                                }
-                                            } else {
-                                                let val = (r[cId] !== undefined && r[cId] !== null) ? r[cId] : (r.raw && r.raw[cId] !== undefined && r.raw[cId] !== null ? r.raw[cId] : null);
-                                                if (val === null && typeof resolveFieldValue === 'function') {
-                                                    const candidateData = Object.assign({}, featureData || {}, r.raw || {}, r || {});
-                                                    val = resolveFieldValue({ id: cId, name: cId, label: cLabel }, candidateData, (r.tabFields || fields));
-                                                    if (val === '—') val = null;
-                                                }
-                                                if (val === null) {
-                                                    if (cId === 'data') val = r.formattedDate;
-                                                    else if (cId === 'situacao_ocupacao') val = r.situacaoOcupacao;
-                                                    else if (cId === 'situacao_recuo') val = r.situacaoRecuo;
-                                                    else if (cId === 'area_invadida') val = r.areaInvadida > 0 ? (r.areaInvadida.toFixed(2).replace('.', ',') + ' m²') : '—';
-                                                    else if (cId === 'org') val = r.org;
-                                                    else val = '—';
-                                                }
-                                                const tabFieldPool = r.tabFields || fields || [];
-                                                const fDef = tabFieldPool.find(f => f.id === cId || f.name === cId) || (typeof cf === 'object' ? cf : { id: cId, label: cLabel });
-                                                const formattedVal = formatFieldValueForDisplay(val, fDef);
-                                                displayValHtml = `<span class="font-mono text-slate-800 font-bold text-[10.5px] break-words whitespace-normal block">${escapeHtml(String(formattedVal))}</span>`;
-                                            }
-
-                                            return `
-                                                <div class="p-2 bg-white rounded-lg border border-slate-200 text-xs" 
-                                                     style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">
-                                                    <span class="font-bold text-slate-500 uppercase text-[9px] block truncate mb-0.5">${escapeHtml(cLabel)}:</span>
-                                                    ${displayValHtml}
-                                                </div>
-                                            `;
-                                        }).join('')}
-                                    </div>
-                                `;
-                            }
-
-                            // Relato Técnico / Conclusão & Observações dedicado
-                            let conclusionHtml = '';
-                            const relatorioTexto = r.conclusao || r.observacao || '';
-                            if (relatorioTexto && relatorioTexto.trim() !== '') {
-                                conclusionHtml = `
-                                    <div class="text-[11px] leading-relaxed text-slate-700 bg-slate-50/80 p-2.5 rounded-lg border border-slate-200">
-                                        <strong class="text-slate-900 block mb-1 flex items-center gap-1">
-                                            <span class="material-symbols-outlined text-[14px] text-primary">description</span> Relato Técnico / Conclusão & Observações:
-                                        </strong>
-                                        <div class="whitespace-pre-line">${escapeHtml(relatorioTexto)}</div>
-                                    </div>
-                                `;
-                            }
-
-                            // Processos Oficiais & Hiperlinks dedicados
-                            let linksBlockHtml = '';
-                            if (Array.isArray(r.links) && r.links.length > 0) {
-                                linksBlockHtml = `
-                                    <div class="pt-1 border-t border-slate-200/80">
-                                        <span class="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider block mb-1 flex items-center gap-1">
-                                            <span class="material-symbols-outlined text-[13px] text-sky-600">attachment</span> Processos Oficiais & Hiperlinks:
-                                        </span>
-                                        <div class="flex flex-wrap items-center gap-1.5">
-                                            ${r.links.map(l => `
-                                                <a href="${l.url || '#'}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-[9.5px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded hover:bg-sky-100">
-                                                    <span class="material-symbols-outlined text-[11px]">open_in_new</span>
-                                                    <span>${escapeHtml(l.title || 'Processo')}:</span>
-                                                    <span class="font-mono">${escapeHtml(l.number || '#')}</span>
-                                                </a>
-                                            `).join('')}
-                                        </div>
-                                    </div>
-                                `;
-                            }
-
-                            return `
-                                <div class="border rounded-xl ${cardPaddingClass} ${cardBgClass} space-y-2.5 shadow-2xs">
-                                    <!-- Cabeçalho da Vistoria com badge individual isolado -->
-                                    <div class="flex items-center justify-between border-b border-slate-200 pb-1.5 text-xs">
-                                        <div class="flex items-center gap-1.5 font-bold text-slate-800">
-                                            <span class="material-symbols-outlined text-[16px] text-sky-600">event_available</span>
-                                            <span>${escapeHtml(r.title || `Vistoria #${rIdx + 1} • ${r.formattedDate} (${r.sourceTab || r.org || 'Vistoria'})`)}</span>
-                                        </div>
-                                        <div class="flex items-center gap-1">
-                                            ${getOrgBadgeHtml(r.sourceTab || r.org || 'Vistoria')}
-                                        </div>
-                                    </div>
-
-                                    ${customFieldsHtml}
-
-                                    ${conclusionHtml}
-
-                                    ${linksBlockHtml}
-
-                                    ${photosHtml}
-                                </div>
-                            `;
-                        }).join('')}
-                                    </div>
-                                `).join('')}
-                            </div>
-                        `;
-                    }
-
-                    return `
-                        <div class="mb-4 page-break-avoid">
-                            <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">
-                                <span class="whitespace-pre-line">${(escapeHtml(bloco.titulo || 'Vistoria Fotográfica & Anexos (1:N)')).replace(/\r?\n/g, '<br>')}</span>
-                                <div class="flex items-center gap-2 text-[10px] font-mono text-slate-500">
-                                    <span>${isSingleVistoria ? 'Última Vistoria' : `${records.length} Vistoria(s)`}</span>
-                                    <span>•</span>
-                                    <span>${sortOrder === 'asc' ? 'Antigo → Recente' : 'Recente → Antigo'}</span>
-                                    ${groupByTab ? '<span>• Por Aba</span>' : ''}
-                                </div>
-                            </div>
-                            ${contentHtml}
-                        </div>
-                    `;
+                    return renderAnalyticalLaudo(bloco, featureData);
                 }
 
                 case 'rodape': {
@@ -1601,455 +994,239 @@
         /**
          * Extrai e normaliza registros 1:N da feição (vistorias, fotos, relatos, links).
          */
-        function extract1nFeatureRecords(sourceTabId, featureData, fields = [], sortOrder = 'desc', groupByTab = false, tabOrder = []) {
-            let rawRecords = [];
-            const isConsolidado = !sourceTabId || sourceTabId === 'consolidado';
+        // =====================================================================================
+        // QUADRO SINTÉTICO E LAUDO ANALÍTICO — guiados pelo schema do formulário (src/reportData.js)
+        //  • Abas: as que o usuário escolheu no bloco (por id ou título); sem escolha = todas as 1:N.
+        //  • Colunas: os campos escolhidos (por id). A origem da linha é o TÍTULO da aba.
+        //  • Valores: sempre formatados pelo TIPO do campo (src/fieldFormatter.js).
+        //  • Tabelas longas quebram por linhas entre as folhas (retornam { split }).
+        // =====================================================================================
 
-            if (isConsolidado) {
-                // Varre todas as abas e propriedades que contêm arrays de registros 1:N
-                for (const [key, val] of Object.entries(featureData || {})) {
-                    let parsed = null;
-                    if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'object') {
-                        parsed = val;
-                    } else if (typeof val === 'string' && val.trim().startsWith('[') && val.includes('{')) {
-                        try {
-                            const arr = JSON.parse(val);
-                            if (Array.isArray(arr) && arr.length > 0 && typeof arr[0] === 'object') parsed = arr;
-                        } catch(e) {}
-                    }
-                    if (parsed) {
-                        parsed.forEach(item => {
-                            if (item && typeof item === 'object') {
-                                rawRecords.push({ ...item, _origTab: key });
-                            }
-                        });
-                    }
-                }
-            } else {
-                let val = featureData ? featureData[sourceTabId] : null;
-                if (!val && featureData) {
-                    const cleanStr = s => String(s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
-                    const cleanTarget = cleanStr(sourceTabId);
-                    for (const [k, v] of Object.entries(featureData)) {
-                        if (cleanStr(k) === cleanTarget) {
-                            val = v;
-                            break;
-                        }
-                    }
-                    if (!val && typeof window !== 'undefined' && window.reportViewerFormTabs && Array.isArray(window.reportViewerFormTabs)) {
-                        const matchedTab = window.reportViewerFormTabs.find(t => cleanStr(t.id) === cleanTarget || cleanStr(t.title) === cleanTarget);
-                        if (matchedTab) {
-                            val = featureData[matchedTab.id] || featureData[matchedTab.title];
-                        }
-                    }
-                }
+        /** Converte a seleção do bloco (ids ou títulos de aba) nos ids das abas realmente disponíveis. */
+        function resolveTabIds(list, tabs) {
+            const out = [];
+            (Array.isArray(list) ? list : []).forEach(entry => {
+                const e = (entry && typeof entry === 'object') ? (entry.id || entry.tabId || entry.title) : entry;
+                const tab = tabs.find(t => String(t.id) === String(e)) ||
+                            tabs.find(t => ReportData.norm(t.title) === ReportData.norm(e));
+                if (tab && !out.includes(tab.id)) out.push(tab.id);
+            });
+            return out;
+        }
 
-                if (Array.isArray(val)) {
-                    rawRecords = val.map(it => ({ ...it, _origTab: sourceTabId }));
-                } else if (typeof val === 'string' && val.trim().startsWith('[')) {
-                    try { 
-                        const arr = JSON.parse(val) || [];
-                        rawRecords = (Array.isArray(arr) ? arr : []).map(it => ({ ...it, _origTab: sourceTabId }));
-                    } catch(e) { rawRecords = []; }
-                }
+        /** Abas visíveis (permissão e condição já aplicadas no snapshot; a condição é reaplicada por segurança). */
+        function getReportSchema(featureData) {
+            const tabs = ReportData.visibleTabs(window.reportViewerFormTabs || [], featureData);
+            return { tabs, fieldIndex: ReportData.buildFieldIndex(tabs) };
+        }
+
+        function getTableDensityClasses(density) {
+            if (density === 'comfortable') {
+                return { th: 'p-2 text-[10.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300', td: 'p-2 text-[11px] border-b border-slate-200' };
+            }
+            if (density === 'ultracompact') {
+                return { th: 'py-0.5 px-1 text-[8.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300', td: 'py-0.5 px-1 text-[9px] font-medium border-b border-slate-200' };
+            }
+            return { th: 'py-1.5 px-2 text-[9.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300', td: 'py-1.5 px-2 text-[10px] border-b border-slate-200' };
+        }
+
+        function reportBlockNotice(bloco, defaultTitle, message) {
+            return `
+                <div class="mb-4 page-break-avoid">
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2">
+                        ${FieldFormatter.escapeHtml(bloco.titulo || defaultTitle)}
+                    </div>
+                    <div class="p-4 text-center text-slate-400 italic text-xs border border-dashed border-slate-300 rounded-lg bg-slate-50/60">${FieldFormatter.escapeHtml(message)}</div>
+                </div>`;
+        }
+
+        const MSG_TABS_UNAVAILABLE = 'As abas escolhidas para este quadro não estão disponíveis (ocultas por permissão ou condição, ou removidas do formulário). Revise a seleção de abas no construtor.';
+
+        function renderSyntheticTable(bloco, featureData) {
+            const TITLE = 'Quadro Sintético de Vistorias (Histórico 1:N)';
+            const esc = FieldFormatter.escapeHtml;
+            const { tabs, fieldIndex } = getReportSchema(featureData);
+
+            const sortOrder = bloco.ordem_cronologica || 'desc';
+            const groupByTab = !!bloco.ordenar_por_aba;
+            const hasSelection = Array.isArray(bloco.abas_selecionadas) && bloco.abas_selecionadas.length > 0;
+            const tabIds = hasSelection ? resolveTabIds(bloco.abas_selecionadas, tabs) : [];
+            if (hasSelection && tabIds.length === 0) return reportBlockNotice(bloco, TITLE, MSG_TABS_UNAVAILABLE);
+
+            let records = ReportData.buildRecords(tabs, featureData, { tabIds });
+            records = ReportData.sortRecords(records, sortOrder, groupByTab, bloco.ordem_abas);
+            if (records.length === 0) {
+                return reportBlockNotice(bloco, TITLE, 'Nenhum registro cadastrado nas abas selecionadas para este imóvel.');
             }
 
-            // Garante inclusão de registro ministerial para MPF se a aba existir no formulário ou houver dados da feição
-            const availableTabsPool = (typeof window !== 'undefined' && window.reportViewerFormTabs && Array.isArray(window.reportViewerFormTabs)) ? window.reportViewerFormTabs : (Array.isArray(tabOrder) ? tabOrder : []);
-            const mpfTabDef = availableTabsPool.find(t => {
-                const s = String(typeof t === 'object' ? (t.id || t.title) : t).toLowerCase();
-                return s.includes('mpf') || s.includes('minist') || s.includes('procurad');
-            });
-            const hasMpfInRaw = rawRecords.some(r => {
-                const orgStr = String(r._origTab || r.org || r.tabId || '').toLowerCase();
-                return orgStr.includes('mpf') || orgStr.includes('minist');
-            });
-            const hasMpfDataInFeature = featureData && (
-                featureData.mpf || featureData.tab_mpf || featureData.ipl || featureData.Inquerito_Policial || featureData.distribuicao || featureData.designado ||
-                Object.keys(featureData).some(k => k.toLowerCase().includes('mpf') || k.toLowerCase().includes('inquerito'))
-            );
+            const rawCols = (Array.isArray(bloco.colunas) && bloco.colunas.length) ? bloco.colunas : ['aba', 'data', 'qtd_fotos'];
+            const cols = rawCols.map(c => ({
+                col: c,
+                id: (c && typeof c === 'object') ? c.id : c,
+                label: ReportData.columnLabel(c, fieldIndex)
+            }));
+            const ctx = { fieldIndex, geometryCenter: getGeometryCenter() };
+            const dens = getTableDensityClasses(bloco.densidade || 'compact');
+            const striping = bloco.zebrado || 'slate';
+            const NUMERIC = ['area_m2', 'length_m', 'volume_m3', 'currency'];
 
-            if (!hasMpfInRaw && (mpfTabDef || hasMpfDataInFeature || isConsolidado)) {
-                const mpfSubData = (featureData && (featureData.mpf || featureData.tab_mpf || (mpfTabDef && featureData[mpfTabDef.id]))) || {};
-                rawRecords.push({
-                    ...mpfSubData,
-                    _origTab: mpfTabDef ? (mpfTabDef.id || mpfTabDef.title) : 'MPF',
-                    _origTitle: 'MPF',
-                    sourceTab: 'MPF',
-                    org: 'MPF',
-                    _isConsolidatedMpf: true
+            const cellHtml = (c, r) => {
+                const cell = ReportData.cellFor(c.col, r, ctx);
+                if (c.id === 'aba' || c.id === 'org') return getOrgBadgeHtml(r.tabTitle);
+                if (c.id === 'situacao_ocupacao') return getStatusBadgeHtml(cell.text);
+                if (c.id === 'situacao_recuo') return getRecuoBadgeHtml(cell.text);
+                return cell.html;
+            };
+
+            const rowsHtml = records.map((r, i) => {
+                const odd = i % 2 === 1;
+                let rowBg = odd ? 'bg-slate-50/70' : 'bg-white';
+                if (striping === 'sky') rowBg = odd ? 'bg-sky-50/50' : 'bg-white';
+                else if (striping === 'white') rowBg = 'bg-white';
+                const tds = cols.map(c => {
+                    const field = ReportData.fieldForColumn(c.col, r, fieldIndex);
+                    const numeric = field && NUMERIC.includes(String(field.type || '').toLowerCase());
+                    return `<td class="${dens.td} border-r last:border-r-0 border-slate-200 whitespace-normal break-words ${numeric ? 'text-right font-mono' : 'text-slate-700'}">${cellHtml(c, r)}</td>`;
+                }).join('');
+                return `<tr data-split-row class="${rowBg}" style="page-break-inside: avoid;">
+                    <td class="${dens.td} border-r border-slate-200 text-center font-mono text-[10px] text-slate-400">${i + 1}</td>${tds}</tr>`;
+            });
+
+            const theadHtml = `<thead><tr class="bg-slate-100 border-b border-slate-200 text-slate-700">
+                <th class="${dens.th} border-r border-slate-200 w-8 text-center">#</th>
+                ${cols.map(c => `<th class="${dens.th} border-r last:border-r-0 border-slate-200 whitespace-normal break-words leading-tight">${esc(c.label)}</th>`).join('')}
+            </tr></thead>`;
+
+            const meta = `${records.length} registro(s) • ${sortOrder === 'asc' ? 'Antigo → Recente' : 'Recente → Antigo'}${groupByTab ? ' • Por Aba' : ''}`;
+            const chunkHtml = (rows, isFirst) => `
+                <div class="mb-4">
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
+                        <span class="whitespace-pre-line">${esc(bloco.titulo || TITLE)}${isFirst ? '' : ' (continuação)'}</span>
+                        <span class="text-[10px] font-mono text-slate-500 normal-case">${esc(meta)}</span>
+                    </div>
+                    <div class="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+                        <table class="w-full text-left border-collapse">${theadHtml}<tbody>${rows.join('')}</tbody></table>
+                    </div>
+                </div>`;
+
+            return { split: { rowsHtml, chunkHtml } };
+        }
+
+        function renderAnalyticalLaudo(bloco, featureData) {
+            const TITLE = 'Laudo Analítico e Caderno Fotográfico';
+            const esc = FieldFormatter.escapeHtml;
+            const { tabs, fieldIndex } = getReportSchema(featureData);
+
+            const sortOrder = bloco.ordem_cronologica || 'desc';
+            const groupByTab = !!bloco.ordenar_por_aba;
+
+            // Campos escolhidos (por id) e abas: escolhidas no bloco, ou deduzidas dos campos, ou todas as 1:N
+            const rawSel = Array.isArray(bloco.campos_selecionados) ? bloco.campos_selecionados : [];
+            const selFieldIds = rawSel.map(cf => (typeof cf === 'string') ? cf : (cf && (cf.rawId || cf.id))).filter(Boolean);
+            const hasTabSelection = Array.isArray(bloco.abas_selecionadas) && bloco.abas_selecionadas.length > 0;
+            let tabIds = hasTabSelection ? resolveTabIds(bloco.abas_selecionadas, tabs) : [];
+            if (!hasTabSelection && selFieldIds.length) {
+                selFieldIds.forEach(fid => {
+                    const ref = fieldIndex[fid];
+                    if (ref && !tabIds.includes(ref.tab.id)) tabIds.push(ref.tab.id);
                 });
             }
+            if (hasTabSelection && tabIds.length === 0) return reportBlockNotice(bloco, TITLE, MSG_TABS_UNAVAILABLE);
 
-            // Normaliza cada registro para garantir campos consistentes
-            const normalized = rawRecords.map((r, idx) => {
-                const availableTabs = (typeof window !== 'undefined' && window.reportViewerFormTabs && Array.isArray(window.reportViewerFormTabs)) ? window.reportViewerFormTabs : (Array.isArray(tabOrder) ? tabOrder : []);
-                const cleanStr = s => String(s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
-                const origKey = String(r._origTab || sourceTabId || '');
-                const cleanKey = cleanStr(origKey);
+            let records = ReportData.buildRecords(tabs, featureData, { tabIds });
+            records = ReportData.sortRecords(records, sortOrder, groupByTab, bloco.ordem_abas);
+            if (bloco.escopo === 'ultima') records = records.slice(0, 1);
+            if (records.length === 0) {
+                return reportBlockNotice(bloco, TITLE, 'Nenhum registro cadastrado nas abas selecionadas para este imóvel.');
+            }
 
-                let tabTitle = null;
-                let tabFields = [];
-                if (availableTabs.length > 0) {
-                    const foundTab = availableTabs.find(t => {
-                        const tId = typeof t === 'object' ? t.id : String(t);
-                        const tTitle = typeof t === 'object' ? t.title : String(t);
-                        return cleanStr(tId) === cleanKey || cleanStr(tTitle) === cleanKey || cleanKey.includes(cleanStr(tId)) || cleanStr(tId).includes(cleanKey);
-                    });
-                    if (foundTab && typeof foundTab === 'object') {
-                        if (foundTab.title && !foundTab.title.toLowerCase().startsWith('f_') && !foundTab.title.toLowerCase().startsWith('tab_')) tabTitle = foundTab.title;
-                        if (Array.isArray(foundTab.fields)) tabFields = foundTab.fields;
-                    }
-                }
+            const layout = bloco.layoutFotos || '2_cols';
+            const gridClass = layout === '1_col' ? 'grid-cols-1' : (layout === 'grid_4' ? 'grid-cols-4' : 'grid-cols-2');
+            const striping = bloco.zebrado || 'slate';
+            const larguras = bloco.campos_larguras || {};
+            const geometryCenter = getGeometryCenter();
+            const WIDE = ['textarea', 'hiperlink', 'hiperlink_1n', 'attachment', 'cep'];
 
-                // Busca título legível da aba nos campos do formulário
-                if ((!tabTitle || tabTitle.toLowerCase().startsWith('f_') || tabTitle.toLowerCase().startsWith('tab_')) && Array.isArray(fields)) {
-                    const fWithTab = fields.find(f => (f.tabId && cleanStr(f.tabId) === cleanKey) || (f.tabTitle && cleanStr(f.tabTitle) === cleanKey));
-                    if (fWithTab && fWithTab.tabTitle && !fWithTab.tabTitle.toLowerCase().startsWith('f_') && !fWithTab.tabTitle.toLowerCase().startsWith('tab_')) {
-                        tabTitle = fWithTab.tabTitle;
-                    }
-                }
+            const widthOf = (pct) => {
+                const p = Math.round(pct);
+                return p >= 98 ? '100%' : (p >= 65 ? '66.666%' : (p <= 28 ? '25%' : (p <= 38 ? '33.333%' : '50%')));
+            };
 
-                const isInternalId = (s) => {
-                    const str = String(s || '').trim();
-                    return !str || str.startsWith('f_') || str.startsWith('tab_') || str.startsWith('p_') || str.startsWith('TAB_') || str.startsWith('P_') || (/^[a-z0-9_]{7,}$/i.test(str) && !/^[A-Z]{2,4}$/.test(str));
-                };
+            const photosHtml = (r) => {
+                const photos = ReportData.recordPhotos(r);
+                if (photos.length === 0) return '';
+                return `<div class="grid ${gridClass} gap-3 pt-1">${photos.map(p => {
+                    const href = FieldFormatter.normalizeUrl(p.url);
+                    if (!href) return '';
+                    return `<div class="border border-slate-200 rounded-lg overflow-hidden bg-white flex flex-col shadow-2xs">
+                        <a href="${esc(href)}" target="_blank" rel="noopener noreferrer" class="block h-44 bg-slate-100 overflow-hidden">
+                            <img src="${esc(href)}" class="w-full h-full object-cover" alt="${esc(p.title)}" />
+                        </a>
+                        <div class="p-2 text-[10.5px] space-y-0.5 text-slate-600">
+                            ${bloco.exibirLegenda !== false && p.title ? `<div class="font-bold text-slate-800 break-words">${esc(p.title)}</div>` : ''}
+                            ${bloco.exibirData !== false && p.date ? `<div class="text-slate-500">Data: ${esc(p.date)}</div>` : ''}
+                            ${bloco.exibirResp !== false && p.author ? `<div class="text-slate-500">Resp: ${esc(p.author)}</div>` : ''}
+                        </div></div>`;
+                }).join('')}</div>`;
+            };
 
-                if (!tabTitle || isInternalId(tabTitle)) {
-                    if (cleanKey.includes('mpf') || cleanKey.includes('minister') || cleanKey.includes('procurad')) tabTitle = 'MPF';
-                    else if (cleanKey.includes('polic') || cleanKey === 'pf' || (cleanKey.includes('pf') && !cleanKey.includes('mpf'))) tabTitle = 'PF';
-                    else if (cleanKey.includes('spu') || cleanKey.includes('patrimon')) tabTitle = 'SPU';
-                    else if (cleanKey.includes('pm') || cleanKey.includes('munic') || cleanKey.includes('pref')) tabTitle = 'MUNICÍPIO';
-                    else {
-                        // Heurística profunda nos campos e valores do registro
-                        const rKeysStr = Object.keys(r).join(' ').toLowerCase();
-                        const rValsStr = Object.values(r).filter(v => typeof v === 'string').join(' ').toLowerCase();
-                        if (rKeysStr.includes('mpf') || rValsStr.includes('mpf') || rKeysStr.includes('ministerio') || rValsStr.includes('ministerio') || rKeysStr.includes('procurador') || rValsStr.includes('procurador')) {
-                            tabTitle = 'MPF';
-                        } else if (rKeysStr.includes('epol') || rValsStr.includes('epol') || rKeysStr.includes('delegad') || rValsStr.includes('inquerito')) {
-                            tabTitle = 'PF';
-                        } else if (rKeysStr.includes('rip') || rValsStr.includes('rip') || rKeysStr.includes('patrimonio') || rValsStr.includes('spu')) {
-                            tabTitle = 'SPU';
-                        } else if (rKeysStr.includes('prefeitura') || rKeysStr.includes('alvara') || rValsStr.includes('prefeitura') || rKeysStr.includes('munic') || rValsStr.includes('munic')) {
-                            tabTitle = 'MUNICÍPIO';
-                        }
-                    }
-                }
+            const cardHtml = (r, idx) => {
+                let cardBg = idx % 2 === 1 ? 'bg-slate-100/70 border-slate-300' : 'bg-white border-slate-200';
+                if (striping === 'sky') cardBg = idx % 2 === 1 ? 'bg-sky-50/50 border-sky-200' : 'bg-white border-slate-200';
+                else if (striping === 'white') cardBg = 'bg-white border-slate-200';
 
-                if (tabFields.length === 0 && Array.isArray(fields) && fields.length > 0) {
-                    tabFields = fields.filter(f => {
-                        if (f.tabId && cleanStr(f.tabId) === cleanKey) return true;
-                        if (f.tabTitle && cleanStr(f.tabTitle) === cleanKey) return true;
-                        return false;
-                    });
-                }
+                const fields = ReportData.recordFields(r, selFieldIds.length ? selFieldIds : null)
+                    .filter(f => String(f.type || '').toLowerCase() !== 'photo');
+                const cells = fields.map(f => {
+                    const type = String(f.type || '').toLowerCase();
+                    const pct = larguras[f.id] || (WIDE.includes(type) ? 100 : 50);
+                    const w = widthOf(pct);
+                    return `<div class="p-2 bg-white rounded-lg border border-slate-200 text-xs" style="flex: 0 0 ${w}; max-width: ${w}; width: ${w}; box-sizing: border-box;">
+                        <span class="font-bold text-slate-500 uppercase text-[9px] block truncate mb-0.5">${esc(f.label || f.name || f.id)}:</span>
+                        <div class="text-[10.5px] text-slate-800 font-semibold break-words whitespace-normal ${type === 'textarea' ? 'font-normal text-justify' : ''}">${FieldFormatter.toHtml(r.values[f.id], f, { geometryCenter })}</div>
+                    </div>`;
+                }).join('');
 
-                let org = tabTitle || r.org || r.orgao || r.entidade;
-                if (!org || isInternalId(org)) {
-                    const fWithTab = (Array.isArray(fields) ? fields : []).find(f => (f.tabId === origKey || cleanStr(f.tabId) === cleanKey) && f.tabTitle && !isInternalId(f.tabTitle));
-                    if (fWithTab && fWithTab.tabTitle) {
-                        org = fWithTab.tabTitle;
-                    } else if (tabTitle && !isInternalId(tabTitle)) {
-                        org = tabTitle;
-                    } else {
-                        const rStr = (Object.keys(r).join(' ') + ' ' + Object.values(r).join(' ')).toUpperCase();
-                        if (rStr.includes('MPF') || rStr.includes('MINIST') || (tpl && tpl.nome && tpl.nome.toUpperCase().includes('MPF'))) {
-                            org = 'MPF';
-                        } else {
-                            org = 'Vistoria';
-                        }
-                    }
-                }
+                return `<div class="border rounded-xl p-3 ${cardBg} space-y-2.5 shadow-2xs">
+                    <div class="flex items-center justify-between border-b border-slate-200 pb-1.5 text-xs">
+                        <div class="flex items-center gap-1.5 font-bold text-slate-800">
+                            <span class="material-symbols-outlined text-[16px] text-sky-600">event_available</span>
+                            <span>${esc(r.tabTitle)} • ${esc(r.dateText)}</span>
+                        </div>
+                        <div class="flex items-center gap-1">${getOrgBadgeHtml(r.tabTitle)}</div>
+                    </div>
+                    ${cells ? `<div class="flex flex-wrap gap-2">${cells}</div>` : '<div class="text-[10px] italic text-slate-400">Nenhum campo desta aba foi selecionado para o laudo.</div>'}
+                    ${photosHtml(r)}
+                </div>`;
+            };
 
-                // 1. Data da Vistoria
-                let rawDate = '';
-                for (const f of tabFields) {
-                    if (f.type === 'date' || (f.label && f.label.toLowerCase().includes('data')) || (f.id && f.id.toLowerCase().includes('data'))) {
-                        if (r[f.id]) { rawDate = r[f.id]; break; }
-                        if (f.name && r[f.name]) { rawDate = r[f.name]; break; }
-                    }
+            // Uma "unidade" por registro (a primeira de cada aba leva o título do grupo). Cada unidade é indivisível.
+            const perTabCount = {};
+            records.forEach(r => { perTabCount[r.tabId] = (perTabCount[r.tabId] || 0) + 1; });
+            const seenTab = {};
+            const rowsHtml = records.map((r, i) => {
+                let groupHeader = '';
+                if (!seenTab[r.tabId]) {
+                    seenTab[r.tabId] = true;
+                    groupHeader = `<div class="flex items-center justify-between px-2.5 py-1.5 bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold text-slate-800 uppercase tracking-wide mb-2">
+                        <div class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[16px] text-amber-500">folder_open</span><span>Aba / Ente: ${esc(r.tabTitle)}</span></div>
+                        <span class="text-[9.5px] font-mono font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">${perTabCount[r.tabId]} registro(s)</span>
+                    </div>`;
                 }
-                if (!rawDate) {
-                    for (const [k, v] of Object.entries(r)) {
-                        if (typeof v === 'string' && (k.toLowerCase().includes('data') || k.toLowerCase().includes('date') || /^\d{4}-\d{2}-\d{2}/.test(v.trim()) || /^\d{2}\/\d{2}\/\d{4}/.test(v.trim()))) {
-                            rawDate = v;
-                            break;
-                        }
-                    }
-                }
-                if (!rawDate) rawDate = r.data_vistoria || r.data || r.data_visita || r._created_at || '';
-                let formattedDate = '—';
-                let timestamp = 0;
-                if (rawDate) {
-                    timestamp = parseDateToTimestamp(rawDate) || 0;
-                    if (rawDate.includes('-')) {
-                        const parts = rawDate.split('T')[0].split('-');
-                        if (parts.length === 3) formattedDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
-                    } else {
-                        formattedDate = rawDate;
-                    }
-                }
-
-                // 2. Situação da Ocupação
-                let situacaoOcupacao = '—';
-                for (const f of tabFields) {
-                    const fLabel = (f.label || '').toLowerCase();
-                    if (fLabel.includes('ocupação') || fLabel.includes('ocupacao') || (f.id && f.id.toLowerCase().includes('ocupac'))) {
-                        if (r[f.id] !== undefined && String(r[f.id]).trim() !== '') {
-                            situacaoOcupacao = String(r[f.id]).trim();
-                            break;
-                        }
-                    }
-                }
-                if (situacaoOcupacao === '—') {
-                    for (const [k, v] of Object.entries(r)) {
-                        if (typeof v === 'string' && v.trim() !== '') {
-                            const vLow = v.toLowerCase();
-                            if (vLow === 'irregular' || vLow === 'regular' || vLow.includes('invasão') || vLow.includes('invasao') || vLow.includes('não conforme') || vLow.includes('nao conforme') || vLow === 'conforme') {
-                                situacaoOcupacao = v.trim();
-                                break;
-                            }
-                        }
-                    }
-                }
-                if (situacaoOcupacao === '—') {
-                    situacaoOcupacao = r.situacao_ocupacao || r.situacao || r.status || r.ocupacao || '—';
-                }
-
-                // 3. Situação do Recuo
-                let situacaoRecuo = '—';
-                for (const f of tabFields) {
-                    const fLabel = (f.label || '').toLowerCase();
-                    if (fLabel.includes('recuo') || (f.id && f.id.toLowerCase().includes('recuo'))) {
-                        if (r[f.id] !== undefined && String(r[f.id]).trim() !== '') {
-                            situacaoRecuo = String(r[f.id]).trim();
-                            break;
-                        }
-                    }
-                }
-                if (situacaoRecuo === '—') {
-                    for (const [k, v] of Object.entries(r)) {
-                        if (typeof v === 'string' && v.trim() !== '') {
-                            const vLow = v.toLowerCase();
-                            if (vLow.includes('já recuou') || vLow.includes('ja recuou') || vLow.includes('com recuo') || vLow.includes('sem recuo') || vLow.includes('não recuou') || vLow.includes('nao recuou') || vLow === 'recuado') {
-                                situacaoRecuo = v.trim();
-                                break;
-                            }
-                        }
-                    }
-                }
-                if (situacaoRecuo === '—') {
-                    situacaoRecuo = r.situacao_recuo || r.recuo || '—';
-                }
-
-                // 4. Área Invadida
-                let areaInvadida = 0;
-                let hasArea = false;
-                for (const f of tabFields) {
-                    const fLabel = (f.label || '').toLowerCase();
-                    if (fLabel.includes('área invadida') || fLabel.includes('area invadida') || (fLabel.includes('área') && f.type === 'area_m2') || (f.id && f.id.toLowerCase().includes('area_invadida'))) {
-                        if (r[f.id] !== undefined && r[f.id] !== '') {
-                            areaInvadida = parseFloat(String(r[f.id]).replace(/\./g, '').replace(',', '.')) || 0;
-                            hasArea = true;
-                            break;
-                        }
-                    }
-                }
-                if (!hasArea) {
-                    areaInvadida = parseFloat(r.area_invadida || r.area || 0) || 0;
-                }
-
-                // 5. Conclusão / Parecer / Relato / Observações
-                let conclusao = '';
-                for (const f of tabFields) {
-                    const fLabel = (f.label || '').toLowerCase();
-                    if (f.type === 'textarea' || fLabel.includes('conclus') || fLabel.includes('observa') || fLabel.includes('parecer') || fLabel.includes('relato') || fLabel.includes('descricao')) {
-                        if (r[f.id] && String(r[f.id]).trim() !== '') {
-                            conclusao = String(r[f.id]).trim();
-                            break;
-                        }
-                    }
-                }
-                if (!conclusao) {
-                    conclusao = r.conclusao || r.conclusão || r.observacao || r.parecer || r.relato || r.descricao || '';
-                }
-                if (!conclusao) {
-                    for (const [k, v] of Object.entries(r)) {
-                        if (typeof v === 'string' && v.trim().length > 15 && !v.startsWith('http') && !v.startsWith('data:') && !v.startsWith('{') && !v.startsWith('[')) {
-                            conclusao = v.trim();
-                            break;
-                        }
-                    }
-                }
-                let observacao = conclusao;
-                let resp = r.responsavel || r.fiscal || r.vistoriador || r.agente || '—';
-
-                // 6. Links e Processos Oficiais
-                let links = [];
-                for (const f of tabFields) {
-                    if (f.type === 'hiperlink' || f.type === 'hiperlink_1n' || (f.label && f.label.toLowerCase().includes('link'))) {
-                        const rawL = r[f.id];
-                        if (rawL) {
-                            if (Array.isArray(rawL)) links.push(...rawL);
-                            else if (typeof rawL === 'string' && rawL.startsWith('[')) { try { links.push(...JSON.parse(rawL)); } catch(e){} }
-                            else if (typeof rawL === 'string' && rawL.startsWith('{')) { try { links.push(JSON.parse(rawL)); } catch(e){} }
-                            else if (typeof rawL === 'object') links.push(rawL);
-                            else if (typeof rawL === 'string' && rawL.trim() !== '') links.push({ title: f.label, number: '', url: rawL });
-                        }
-                    }
-                    if (f.type === 'epol' || (f.label && f.label.toLowerCase().includes('epol'))) {
-                        const val = r[f.id];
-                        if (val) links.push({ title: 'Processo EPOL', number: maskEpol(String(val)), url: '#' });
-                    }
-                    if (f.type === 'rip' || (f.label && f.label.toLowerCase().includes('rip'))) {
-                        const val = r[f.id];
-                        if (val) links.push({ title: 'Registro RIP', number: maskRip(String(val)), url: '#' });
-                    }
-                }
-                if (r.epol || r.epol_1n) links.push({ title: 'Processo EPOL', number: maskEpol(String(r.epol || r.epol_1n)), url: '#' });
-                if (r.rip || r.rip_1n) links.push({ title: 'Registro RIP', number: maskRip(String(r.rip || r.rip_1n)), url: '#' });
-                if (Array.isArray(r.links)) links.push(...r.links);
-                else if (typeof r.links === 'string' && r.links.startsWith('[')) {
-                    try { links.push(...JSON.parse(r.links)); } catch(e) {}
-                }
-                if (r.hiperlink || r.hiperlinks) {
-                    const hl = r.hiperlink || r.hiperlinks;
-                    if (Array.isArray(hl)) links.push(...hl);
-                    else if (typeof hl === 'object') links.push(hl);
-                    else if (typeof hl === 'string') links.push({ title: 'Hiperlink', url: hl });
-                }
-
-                // 7. Fotografias
-                let photos = [];
-                const possiblePhotoKeys = ['fotos', 'foto', 'photos', 'photo', 'anexos', 'attachments', 'imagens', 'images'];
-                for (const pk of possiblePhotoKeys) {
-                    if (r[pk]) {
-                        const rawP = r[pk];
-                        if (Array.isArray(rawP)) {
-                            photos.push(...rawP);
-                        } else if (typeof rawP === 'string' && rawP.startsWith('[')) {
-                            try { photos.push(...JSON.parse(rawP)); } catch(e) {}
-                        } else if (typeof rawP === 'string' && rawP.trim() !== '') {
-                            photos.push({ url: rawP, title: 'Fotografia' });
-                        }
-                    }
-                }
-                if (photos.length === 0) {
-                    for (const [k, v] of Object.entries(r)) {
-                        if (typeof v === 'string' && (v.startsWith('data:image/') || v.includes('.jpg') || v.includes('.png') || v.includes('.webp') || v.includes('supabase.co/storage'))) {
-                            photos.push({ url: v, title: k });
-                        }
-                    }
-                }
-
-                const normalizedPhotos = photos.map((p, pIdx) => {
-                    const url = typeof p === 'string' ? p : (p.url || '');
-                    const title = (typeof p === 'object' && (p.title || p.name)) ? (p.title || p.name) : `Foto #${pIdx + 1}`;
-                    const pDate = (typeof p === 'object' && p.uploadedAt) ? new Date(p.uploadedAt).toLocaleDateString('pt-BR') : formattedDate;
-                    const coords = (typeof p === 'object' && p.coords) ? p.coords : (r.geolocation || r.coords || '');
-                    return { url, title, date: pDate, coords, resp };
-                }).filter(p => !!p.url);
-
-                const sourceTabName = tabTitle || r._origTab || sourceTabId || 'Geral';
-
-                return {
-                    id: r.id || `rec_${idx}`,
-                    timestamp,
-                    formattedDate,
-                    sourceTab: sourceTabName,
-                    tabTitle,
-                    tabFields,
-                    org,
-                    resp,
-                    situacaoOcupacao,
-                    situacaoRecuo,
-                    areaInvadida,
-                    conclusao,
-                    observacao,
-                    links,
-                    photos: normalizedPhotos,
-                    raw: r
-                };
+                return `<div data-split-row>${groupHeader}${cardHtml(r, i)}</div>`;
             });
 
-            // Consolidação cruzada inteligente para MPF:
-            // Herda a vistoria física mais recente realizada pelos órgãos parceiros (PF, SPU, Município)
-            let latestPartnerRecord = null;
-            let maxPartnerTs = -Infinity;
+            const meta = `${records.length} registro(s) • ${sortOrder === 'asc' ? 'Antigo → Recente' : 'Recente → Antigo'}`;
+            const chunkHtml = (rows, isFirst) => `
+                <div class="mb-4">
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">
+                        <span class="whitespace-pre-line">${esc(bloco.titulo || TITLE)}${isFirst ? '' : ' (continuação)'}</span>
+                        <span class="text-[10px] font-mono text-slate-500 normal-case">${esc(meta)}</span>
+                    </div>
+                    <div class="space-y-3">${rows.join('')}</div>
+                </div>`;
 
-            normalized.forEach(r => {
-                const rNorm = normalizeEnteTab(r.sourceTab || r.org || r.tabTitle || (r.raw && r.raw._origTab));
-                if (rNorm !== 'mpf') {
-                    const ts = r.timestamp || parseDateToTimestamp(r.formattedDate);
-                    if (ts > maxPartnerTs || (latestPartnerRecord === null && r.formattedDate && r.formattedDate !== '—')) {
-                        maxPartnerTs = ts;
-                        latestPartnerRecord = r;
-                    }
-                }
-            });
-
-            normalized.forEach(r => {
-                const rNorm = normalizeEnteTab(r.sourceTab || r.org || r.tabTitle || (r.raw && r.raw._origTab));
-                if (rNorm === 'mpf') {
-                    if (latestPartnerRecord) {
-                        if (!r.formattedDate || r.formattedDate === '—') {
-                            r.formattedDate = latestPartnerRecord.formattedDate;
-                            r.timestamp = latestPartnerRecord.timestamp;
-                        }
-                        if (!r.situacaoOcupacao || r.situacaoOcupacao === '—') {
-                            r.situacaoOcupacao = latestPartnerRecord.situacaoOcupacao;
-                        }
-                        if (!r.situacaoRecuo || r.situacaoRecuo === '—') {
-                            r.situacaoRecuo = latestPartnerRecord.situacaoRecuo;
-                        }
-                        if (!r.areaInvadida || r.areaInvadida === 0) {
-                            r.areaInvadida = latestPartnerRecord.areaInvadida;
-                        }
-                    }
-                    // Anexa campos específicos do MPF (IPL, Distribuição, Designado, Correlatos, etc.) no próprio registro
-                    const mpfKeys = [
-                        'ipl', 'Inquerito_Policial', 'numero_inquerito_policial', 'inquerito',
-                        'distribuicao', 'vara', 'vara_federal',
-                        'designado', 'procurador', 'procurador_designado',
-                        'correlatos', 'processos_correlatos', 'acp',
-                        'fase_investigacao', 'Fase_investigacao', 'fase',
-                        'providencia', 'providencias',
-                        'valor_pecunia', 'pecunia', 'valor_total', 'valor_formatado', 'area_pecunia',
-                        'observacoes', 'obs_pecunia', 'obs_inquerito_pf'
-                    ];
-                    mpfKeys.forEach(k => {
-                        if (r[k] === undefined && featureData && featureData[k] !== undefined) {
-                            r[k] = featureData[k];
-                        }
-                    });
-                }
-            });
-
-            normalized.sort((a, b) => {
-                if (groupByTab) {
-                    const tabA = (a.sourceTab || '').toLowerCase();
-                    const tabB = (b.sourceTab || '').toLowerCase();
-                    if (Array.isArray(tabOrder) && tabOrder.length > 0) {
-                        const idxA = tabOrder.findIndex(t => {
-                            const tid = (typeof t === 'object' ? (t.id || t.title) : String(t)).toLowerCase();
-                            return tid === tabA || tabA.includes(tid) || tid.includes(tabA);
-                        });
-                        const idxB = tabOrder.findIndex(t => {
-                            const tid = (typeof t === 'object' ? (t.id || t.title) : String(t)).toLowerCase();
-                            return tid === tabB || tabB.includes(tid) || tid.includes(tabB);
-                        });
-                        const posA = idxA !== -1 ? idxA : 999;
-                        const posB = idxB !== -1 ? idxB : 999;
-                        if (posA !== posB) return posA - posB;
-                    }
-                    if (tabA !== tabB) {
-                        return tabA.localeCompare(tabB);
-                    }
-                }
-                return sortOrder === 'asc' ? (a.timestamp - b.timestamp) : (b.timestamp - a.timestamp);
-            });
-
-            return normalized;
+            return { split: { rowsHtml, chunkHtml } };
         }
 
         /**
