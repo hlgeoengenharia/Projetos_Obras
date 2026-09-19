@@ -284,12 +284,12 @@
 
         /** Campos cujo valor ocupa várias linhas ou tem links: exibidos na íntegra (HTML), sem truncar. */
         function isRichField(f) {
-            return ['hiperlink', 'hiperlink_1n', 'attachment', 'epol_1n', 'rip_1n', 'textarea'].includes(FieldFormatter.canonicalType(f || {}));
+            return ['hiperlink', 'hiperlink_1n', 'attachment', 'photo', 'epol_1n', 'rip_1n', 'textarea'].includes(FieldFormatter.canonicalType(f || {}));
         }
 
-        function resolveFieldHtml(f, featureData) {
+        function resolveFieldHtml(f, featureData, fileMode) {
             if (!f || !featureData) return FieldFormatter.EMPTY;
-            return FieldFormatter.toHtml(readFieldRaw(f, featureData), f, { geometryCenter: getGeometryCenter() });
+            return FieldFormatter.toHtml(readFieldRaw(f, featureData), f, { geometryCenter: getGeometryCenter(), fileMode });
         }
 
         function resolveFieldValue(f, featureData, availableFields = []) {
@@ -662,6 +662,96 @@
             return `calc(${p}% - ${deduction}px)`;
         }
 
+        /**
+         * Grade de Atributos / Campos. Fotos e anexos respeitam a escolha do usuário por campo
+         * (bloco.campos_exibicao): 'lista' (título + nome do arquivo) ou 'imagem' (na íntegra, com metadados).
+         */
+        function renderAttributeGrid(bloco, featureData, fields) {
+            const fileModes = bloco.campos_exibicao || {};
+            const colCount = bloco.colunasLayout || 2;
+            const spans = bloco.campos_spans || {};
+            const larguras = bloco.campos_larguras || {};
+
+            const fieldsMap = new Map();
+            fields.forEach(f => {
+                fieldsMap.set(f.id, f);
+                if (f.name) fieldsMap.set(f.name, f);
+            });
+
+            const rawSel = Array.isArray(bloco.campos_selecionados) ? bloco.campos_selecionados : [];
+            let fldsToRender = rawSel
+                .map(item => typeof item === 'string' ? { id: item } : item)
+                .map(item => {
+                    const baseField = fieldsMap.get(item.id) || fieldsMap.get(item.name) || {};
+                    return { ...baseField, ...item };
+                })
+                .filter(f => f && (f.label || f.name));
+
+            if (fldsToRender.length === 0 && rawSel.length > 0) {
+                const selSet = new Set(rawSel.map(s => typeof s === 'string' ? s : s.id));
+                fldsToRender = fields.filter(f => selSet.has(f.id));
+            }
+            if (fldsToRender.length === 0) fldsToRender = fields.slice(0, 8);
+
+            if (colCount === 1) {
+                return `
+                    <div class="mb-4 page-break-avoid">
+                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
+                            <span class="whitespace-pre-line">${(escapeHtml(bloco.titulo || 'Dados Cadastrais')).replace(/\r?\n/g, '<br>')}</span>
+                        </div>
+                        <div class="divide-y divide-slate-200 border border-slate-200 rounded-lg overflow-hidden">
+                            ${fldsToRender.map(f => {
+                                const val = resolveFieldValue(f, featureData);
+                                if (isRichField(f)) {
+                                    return `
+                                    <div class="px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50">
+                                        <div class="font-bold text-slate-600">${escapeHtml(f.label)}:</div>
+                                        <div class="font-semibold text-slate-900 text-[11px] break-words whitespace-normal">${resolveFieldHtml(f, featureData, fileModes[f.id])}</div>
+                                    </div>`;
+                                }
+                                return `
+                                    <div class="flex items-center justify-between px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50">
+                                        <span class="font-bold text-slate-600 truncate">${escapeHtml(f.label)}:</span>
+                                        <span class="font-semibold text-slate-900 truncate font-mono text-[11px]">${escapeHtml(val)}</span>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="mb-4 page-break-avoid">
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
+                        <span class="whitespace-pre-line">${(escapeHtml(bloco.titulo || 'Dados Cadastrais')).replace(/\r?\n/g, '<br>')}</span>
+                    </div>
+                    <div class="flex flex-wrap gap-2.5">
+                        ${fldsToRender.map(f => {
+                            const val = resolveFieldValue(f, featureData);
+                            let pct = larguras[f.id];
+                            if (!pct) {
+                                const span = Math.min(spans[f.id] || f.colSpan || 1, colCount);
+                                if (span >= colCount) pct = 100;
+                                else if (colCount === 3 && span === 2) pct = 66;
+                                else pct = colCount === 3 ? 33 : 50;
+                            }
+                            pct = Math.round(pct);
+                            const widthStyle = getFieldWidthStyle(pct);
+                            const isLongText = pct >= 45 || String(val).length > 25 || (f.id && (f.id.includes('endereco') || f.id.includes('obs'))) || (f.label && (f.label.toLowerCase().includes('endereço') || f.label.toLowerCase().includes('observa')));
+                            return `
+                                <div class="p-2 border border-slate-200 rounded-lg bg-slate-50/50" 
+                                     style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">
+                                    <div class="text-[9.5px] uppercase font-bold text-slate-500 truncate">${escapeHtml(f.label)}</div>
+                                    <div class="text-xs font-bold text-slate-800 mt-0.5 ${(isLongText || isRichField(f)) ? 'break-words whitespace-normal leading-snug' : 'truncate'}">${isRichField(f) ? resolveFieldHtml(f, featureData, fileModes[f.id]) : escapeHtml(val)}</div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
         function renderSingleBlock(bloco, idx, featureData, featureGeometry, fields, tpl) {
             switch(bloco.tipo) {
                 case 'cabecalho':
@@ -702,88 +792,7 @@
                     `;
 
                 case 'grade_campos': {
-                    const colCount = bloco.colunasLayout || 2;
-                    const spans = bloco.campos_spans || {};
-                    const larguras = bloco.campos_larguras || {};
-
-                    const fieldsMap = new Map();
-                    fields.forEach(f => {
-                        fieldsMap.set(f.id, f);
-                        if (f.name) fieldsMap.set(f.name, f);
-                    });
-
-                    const rawSel = Array.isArray(bloco.campos_selecionados) ? bloco.campos_selecionados : [];
-                    let fldsToRender = rawSel
-                        .map(item => typeof item === 'string' ? { id: item } : item)
-                        .map(item => {
-                            const baseField = fieldsMap.get(item.id) || fieldsMap.get(item.name) || {};
-                            return { ...baseField, ...item };
-                        })
-                        .filter(f => f && (f.label || f.name));
-
-                    if (fldsToRender.length === 0 && rawSel.length > 0) {
-                        const selSet = new Set(rawSel.map(s => typeof s === 'string' ? s : s.id));
-                        fldsToRender = fields.filter(f => selSet.has(f.id));
-                    }
-                    if (fldsToRender.length === 0) fldsToRender = fields.slice(0, 8);
-
-                    if (colCount === 1) {
-                        return `
-                            <div class="mb-4 page-break-avoid">
-                                <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
-                                    <span class="whitespace-pre-line">${(escapeHtml(bloco.titulo || 'Dados Cadastrais')).replace(/\r?\n/g, '<br>')}</span>
-                                </div>
-                                <div class="divide-y divide-slate-200 border border-slate-200 rounded-lg overflow-hidden">
-                                    ${fldsToRender.map(f => {
-                                        const val = resolveFieldValue(f, featureData);
-                                        if (isRichField(f)) {
-                                            return `
-                                            <div class="px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50">
-                                                <div class="font-bold text-slate-600">${escapeHtml(f.label)}:</div>
-                                                <div class="font-semibold text-slate-900 text-[11px] break-words whitespace-normal">${resolveFieldHtml(f, featureData)}</div>
-                                            </div>`;
-                                        }
-                                        return `
-                                            <div class="flex items-center justify-between px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50">
-                                                <span class="font-bold text-slate-600 truncate">${escapeHtml(f.label)}:</span>
-                                                <span class="font-semibold text-slate-900 truncate font-mono text-[11px]">${escapeHtml(val)}</span>
-                                            </div>
-                                        `;
-                                    }).join('')}
-                                </div>
-                            </div>
-                        `;
-                    }
-
-                    return `
-                        <div class="mb-4 page-break-avoid">
-                            <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
-                                <span class="whitespace-pre-line">${(escapeHtml(bloco.titulo || 'Dados Cadastrais')).replace(/\r?\n/g, '<br>')}</span>
-                            </div>
-                            <div class="flex flex-wrap gap-2.5">
-                                ${fldsToRender.map(f => {
-                                    const val = resolveFieldValue(f, featureData);
-                                    let pct = larguras[f.id];
-                                    if (!pct) {
-                                        const span = Math.min(spans[f.id] || f.colSpan || 1, colCount);
-                                        if (span >= colCount) pct = 100;
-                                        else if (colCount === 3 && span === 2) pct = 66;
-                                        else pct = colCount === 3 ? 33 : 50;
-                                    }
-                                    pct = Math.round(pct);
-                                    const widthStyle = getFieldWidthStyle(pct);
-                                    const isLongText = pct >= 45 || String(val).length > 25 || (f.id && (f.id.includes('endereco') || f.id.includes('obs'))) || (f.label && (f.label.toLowerCase().includes('endereço') || f.label.toLowerCase().includes('observa')));
-                                    return `
-                                        <div class="p-2 border border-slate-200 rounded-lg bg-slate-50/50" 
-                                             style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">
-                                            <div class="text-[9.5px] uppercase font-bold text-slate-500 truncate">${escapeHtml(f.label)}</div>
-                                            <div class="text-xs font-bold text-slate-800 mt-0.5 ${(isLongText || isRichField(f)) ? 'break-words whitespace-normal leading-snug' : 'truncate'}">${isRichField(f) ? resolveFieldHtml(f, featureData) : escapeHtml(val)}</div>
-                                        </div>
-                                    `;
-                                }).join('')}
-                            </div>
-                        </div>
-                    `;
+                    return renderAttributeGrid(bloco, featureData, fields);
                 }
 
                 case 'mapa_estatico':
@@ -1164,6 +1173,8 @@
             const gridClass = layout === '1_col' ? 'grid-cols-1' : (layout === 'grid_4' ? 'grid-cols-4' : 'grid-cols-2');
             const striping = bloco.zebrado || 'slate';
             const larguras = bloco.campos_larguras || {};
+            const modes = bloco.campos_exibicao || {};   // { idDoCampo: 'lista' | 'imagem' }
+            const fileMeta = { titulo: bloco.exibirLegenda !== false, autor: bloco.exibirResp !== false, data: bloco.exibirData !== false };
             const geometryCenter = getGeometryCenter();
             const WIDE = ['textarea', 'hiperlink', 'hiperlink_1n', 'attachment', 'cep'];
 
@@ -1173,8 +1184,17 @@
             };
 
             const photosHtml = (r) => {
-                const photos = ReportData.recordPhotos(r);
-                if (photos.length === 0) return '';
+                // Campos de foto que o usuário mandou exibir como LISTA saem como texto (título + arquivo)
+                const listFields = (r.tab.fields || []).filter(f => String(f.type || '').toLowerCase() === 'photo' && modes[f.id] === 'lista');
+                const listHtml = listFields.map(f => {
+                    const v = FieldFormatter.toHtml(r.values[f.id], f, { fileMode: 'lista', fileMeta });
+                    if (v === FieldFormatter.EMPTY) return '';
+                    return `<div class="p-2 bg-white rounded-lg border border-slate-200 text-xs">
+                        <span class="font-bold text-slate-500 uppercase text-[9px] block mb-0.5">${esc(f.label || f.name || f.id)}:</span>
+                        <div class="text-[10.5px] text-slate-800 font-semibold break-words">${v}</div></div>`;
+                }).join('');
+                const photos = ReportData.recordPhotos(r, listFields.map(f => f.id));
+                if (photos.length === 0) return listHtml;
                 return `<div class="grid ${gridClass} gap-3 pt-1">${photos.map(p => {
                     const href = FieldFormatter.normalizeUrl(p.url);
                     if (!href) return '';
@@ -1187,7 +1207,7 @@
                             ${bloco.exibirData !== false && p.date ? `<div class="text-slate-500">Data: ${esc(p.date)}</div>` : ''}
                             ${bloco.exibirResp !== false && p.author ? `<div class="text-slate-500">Resp: ${esc(p.author)}</div>` : ''}
                         </div></div>`;
-                }).join('')}</div>`;
+                }).join('')}</div>` + listHtml;
             };
 
             const cardHtml = (r, idx) => {
@@ -1203,7 +1223,7 @@
                     const w = widthOf(pct);
                     return `<div class="p-2 bg-white rounded-lg border border-slate-200 text-xs" style="flex: 0 0 ${w}; max-width: ${w}; width: ${w}; box-sizing: border-box;">
                         <span class="font-bold text-slate-500 uppercase text-[9px] block truncate mb-0.5">${esc(f.label || f.name || f.id)}:</span>
-                        <div class="text-[10.5px] text-slate-800 font-semibold break-words whitespace-normal ${type === 'textarea' ? 'font-normal text-justify' : ''}">${FieldFormatter.toHtml(r.values[f.id], f, { geometryCenter })}</div>
+                        <div class="text-[10.5px] text-slate-800 font-semibold break-words whitespace-normal ${type === 'textarea' ? 'font-normal text-justify' : ''}">${FieldFormatter.toHtml(r.values[f.id], f, { geometryCenter, fileMode: modes[f.id], fileMeta })}</div>
                     </div>`;
                 }).join('');
 

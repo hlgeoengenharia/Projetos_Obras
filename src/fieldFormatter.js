@@ -246,6 +246,72 @@
         return link.number ? `${base} - ${link.number}` : base;
     }
 
+    // ---------------------------------------------------------------- fotos e anexos: Lista x Imagem
+    const IMAGE_EXT = /\.(jpe?g|png|gif|webp|bmp|svg|avif)$/i;
+
+    function isImageFile(file) {
+        const clean = (s) => String(s || '').split('?')[0].split('#')[0];
+        return IMAGE_EXT.test(clean(file.name)) || IMAGE_EXT.test(clean(file.url)) || /^image\//i.test(String(file.type || ''));
+    }
+
+    /** Modo padrão: foto → imagem na íntegra; anexo → lista (título + nome do arquivo). */
+    function defaultFileMode(type) {
+        return type === 'photo' ? 'imagem' : 'lista';
+    }
+
+    /** Legenda da imagem: título, nome do arquivo, quem enviou e quando (cada item pode ser desligado em meta). */
+    function fileMetaHtml(file, meta) {
+        const m = meta || {};
+        const parts = [];
+        const title = String(file.title || '').trim();
+        const name = String(file.name || '').trim();
+        if (m.titulo !== false && title) parts.push('<div style="font-weight:700">' + escapeHtml(title) + '</div>');
+        if (m.arquivo !== false && name && (m.titulo === false || !title || name !== title)) {
+            parts.push('<div style="font-family:monospace;font-size:9px">' + escapeHtml(name) + '</div>');
+        }
+        const author = String(file.uploadedBy || '').trim();
+        // "Usuário (Você)" e "Usuário Local" são valores provisórios do envio, sem significado no relatório
+        if (m.autor !== false && author && !/^usu[aá]rio\s*(\(voc[eê]\)|local)$/i.test(author)) {
+            parts.push('<div>Enviado por: ' + escapeHtml(author) + '</div>');
+        }
+        if (m.data !== false && file.uploadedAt) {
+            const d = new Date(file.uploadedAt);
+            if (!isNaN(d.getTime())) parts.push('<div>' + escapeHtml(d.toLocaleString('pt-BR')) + '</div>');
+        }
+        return parts.join('');
+    }
+
+    function fileListItemHtml(file) {
+        const href = normalizeUrl(file.url);
+        const name = escapeHtml(file.title || file.name || 'Arquivo');
+        const title = href
+            ? '<a href="' + escapeHtml(href) + '" target="_blank" rel="noopener noreferrer"><strong>' + name + '</strong></a>'
+            : '<strong>' + name + '</strong>';
+        const fileName = (file.title && file.name && file.title !== file.name) ? '<br><span>' + escapeHtml(file.name) + '</span>' : '';
+        return '<div class="ff-link" style="margin:0 0 3px 0">' + title + fileName + '</div>';
+    }
+
+    /**
+     * Fotos/anexos em HTML. mode 'lista': título + nome do arquivo (um por linha).
+     * mode 'imagem': a imagem na íntegra com legenda (título e metadados); arquivos que não são
+     * imagem (PDF, DOC...) continuam como item de lista.
+     */
+    function filesHtml(files, mode, meta) {
+        if (!files.length) return EMPTY;
+        if (mode !== 'imagem') return files.map(fileListItemHtml).join('');
+        const cells = files.map(file => {
+            const href = normalizeUrl(file.url);
+            if (!href || !isImageFile(file)) return '<div style="grid-column:1/-1">' + fileListItemHtml(file) + '</div>';
+            const caption = fileMetaHtml(file, meta);
+            return '<figure class="ff-figure" style="margin:0;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;background:#fff;page-break-inside:avoid">'
+                + '<a href="' + escapeHtml(href) + '" target="_blank" rel="noopener noreferrer" style="display:block;background:#f1f5f9">'
+                + '<img src="' + escapeHtml(href) + '" alt="' + escapeHtml(file.title || file.name || '') + '" style="display:block;width:100%;height:auto;max-height:260px;object-fit:contain"></a>'
+                + (caption ? '<figcaption style="padding:4px 6px;font-size:9.5px;line-height:1.35;color:#475569">' + caption + '</figcaption>' : '')
+                + '</figure>';
+        }).join('');
+        return '<div class="ff-files" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px">' + cells + '</div>';
+    }
+
     // ---------------------------------------------------------------- texto puro
     /**
      * Valor formatado em TEXTO PURO (tabelas, Word, PDF).
@@ -371,19 +437,9 @@
                 const links = parseLinks(value);
                 return links.length ? links.map(linkBlockHtml).join('') : EMPTY;
             }
-            case 'attachment': {
-                const files = parseFiles(value);
-                if (!files.length) return EMPTY;
-                return files.map(f => {
-                    const href = normalizeUrl(f.url);
-                    const name = escapeHtml(f.title || f.name || 'Arquivo');
-                    const title = href
-                        ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"><strong>${name}</strong></a>`
-                        : `<strong>${name}</strong>`;
-                    const file = (f.title && f.name && f.title !== f.name) ? `<br><span>${escapeHtml(f.name)}</span>` : '';
-                    return `<div class="ff-link" style="margin:0 0 3px 0">${title}${file}</div>`;
-                }).join('');
-            }
+            case 'photo':
+            case 'attachment':
+                return filesHtml(parseFiles(value), opts.fileMode || defaultFileMode(type), opts.fileMeta);
             case 'epol_1n':
             case 'rip_1n':
                 return escapeHtml(toText(value, field, opts)).replace(/, /g, '<br>');
@@ -406,6 +462,9 @@
         formatDMS,
         normalizeUrl,
         parseFiles,
+        isImageFile,
+        defaultFileMode,
+        filesHtml,
         parseLink,
         parseLinks,
         parseCep,

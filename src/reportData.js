@@ -252,7 +252,8 @@
         }
         const value = record.values[field.id];
         if (!FF) return { text: isEmpty(value) ? EMPTY : String(value), html: isEmpty(value) ? EMPTY : String(value) };
-        const opts = { geometryCenter: ctx.geometryCenter };
+        // Em tabelas, fotos e anexos sempre saem em lista compacta (título + arquivo)
+        const opts = { geometryCenter: ctx.geometryCenter, fileMode: 'lista' };
         return { text: FF.toText(value, field, opts), html: FF.toHtml(value, field, opts) };
     }
 
@@ -265,11 +266,12 @@
         return fields.filter(f => wanted.has(String(f.id)));
     }
 
-    /** Fotos do registro (campos do tipo 'photo'), sem as excluídas. */
-    function recordPhotos(record) {
+    /** Fotos do registro (campos do tipo 'photo'), sem as excluídas. skipFieldIds: campos a ignorar. */
+    function recordPhotos(record, skipFieldIds) {
         const out = [];
+        const skip = new Set((skipFieldIds || []).map(String));
         (record.tab.fields || []).forEach(f => {
-            if (String(f.type || '').toLowerCase() !== 'photo' || !FF) return;
+            if (String(f.type || '').toLowerCase() !== 'photo' || !FF || skip.has(String(f.id))) return;
             FF.parseFiles(record.values[f.id]).forEach(file => {
                 out.push({
                     url: file.url,

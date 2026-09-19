@@ -116,6 +116,31 @@ ok('attachment html mostra também o nome do arquivo', html(files, T('attachment
 ok('attachment excluído não aparece', !html(files, T('attachment')).includes('b.jpg'));
 eq('photo vazio', text('[]', T('photo')), '—');
 
+// modos de exibição de fotos e anexos: Lista x Imagem na íntegra
+const imgFiles = JSON.stringify([
+    { name: 'logo_MPF.jpg', url: 'https://x/logo_MPF.jpg', title: 'MPF', uploadedBy: 'Maria Souza', uploadedAt: '2026-08-14T15:00:00Z' },
+    { name: 'laudo.pdf', url: 'https://x/laudo.pdf', title: 'Laudo' }
+]);
+const asList = html(imgFiles, T('attachment'), { fileMode: 'lista' });
+ok('lista: sem imagem', !asList.includes('<img'));
+ok('lista: título e nome do arquivo (como no print)', asList.includes('<strong>MPF</strong>') && asList.includes('logo_MPF.jpg'));
+const asImg = html(imgFiles, T('attachment'), { fileMode: 'imagem' });
+ok('imagem: mostra a imagem na íntegra', asImg.includes('<img src="https://x/logo_MPF.jpg"'));
+ok('imagem: legenda com título, arquivo, autor e data',
+    asImg.includes('>MPF</div>') && asImg.includes('logo_MPF.jpg') && asImg.includes('Enviado por: Maria Souza') && /\d{2}\/\d{2}\/2026/.test(asImg));
+ok('imagem: PDF continua como item de lista, sem <img>', !asImg.includes('src="https://x/laudo.pdf"') && asImg.includes('Laudo'));
+ok('padrão do anexo é lista', !html(imgFiles, T('attachment')).includes('<img'));
+ok('padrão da foto é imagem', html(imgFiles, T('photo')).includes('<img'));
+ok('foto no modo lista mostra título e nome, sem imagem', !html(imgFiles, T('photo'), { fileMode: 'lista' }).includes('<img'));
+const noMeta = html(imgFiles, T('attachment'), { fileMode: 'imagem', fileMeta: { titulo: false, arquivo: false, autor: false, data: false } });
+ok('metadados podem ser desligados um a um', !noMeta.includes('Enviado por') && !noMeta.includes('figcaption'));
+ok('autor provisório "Usuário (Você)" não aparece no relatório',
+    !html(JSON.stringify([{ name: 'a.jpg', url: 'https://x/a.jpg', uploadedBy: 'Usuário (Você)' }]), T('photo')).includes('Enviado por'));
+ok('URL javascript: nunca vira imagem', !html(JSON.stringify([{ name: 'a.jpg', url: 'javascript:alert(1)' }]), T('photo'), { fileMode: 'imagem' }).includes('<img'));
+ok('título com HTML é escapado na legenda', html(JSON.stringify([{ name: 'a.jpg', url: 'https://x/a.jpg', title: '<b>x</b>' }]), T('photo')).includes('&lt;b&gt;x&lt;/b&gt;'));
+ok('isImageFile reconhece extensões e ignora ?query', F.isImageFile({ name: 'a.PNG' }) && F.isImageFile({ url: 'https://x/a.jpg?token=1' }) && !F.isImageFile({ name: 'a.pdf' }));
+eq('modo padrão por tipo', [F.defaultFileMode('photo'), F.defaultFileMode('attachment')], ['imagem', 'lista']);
+
 ok('epol_1n em HTML lista todos, um por linha', html('["20231234567","20241111111"]', T('epol_1n')) === '2023.1234567<br>2024.1111111');
 
 // ------------------------------------------------------------------ geolocalização

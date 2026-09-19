@@ -52,7 +52,8 @@ const hist = (p) => ([
     { id: `${p}_area`, label: 'Área invadida (m²)', type: 'area_m2' },
     { id: `${p}_obs`, label: 'Observações', type: 'textarea' },
     { id: `${p}_fotos`, label: 'Fotos', type: 'photo' },
-    { id: `${p}_links`, label: 'Processos', type: 'hiperlink_1n' }
+    { id: `${p}_links`, label: 'Processos', type: 'hiperlink_1n' },
+    { id: `${p}_anx`, label: 'Anexos', type: 'attachment' }
 ]);
 window.reportViewerFormTabs = [
     { id: 't_dados', title: 'Dados do Imóvel', isMultiple: false, fields: [{ id: 'f_prop', label: 'Proprietário', type: 'text' }] },
@@ -64,7 +65,8 @@ const data = {
     f_prop: 'Maria',
     t_pf: JSON.stringify([
         { pf_data: '2026-01-10', pf_ocup: 'Irregular', pf_area: '120.5', pf_obs: 'Constatada ocupação <b>irregular</b>.',
-          pf_links: JSON.stringify([{ title: 'Inquérito Civil', number: '1.24.000/2026', url: 'mpf.mp.br/ic' }, { title: 'Processo PF', url: 'pf.gov.br/p' }]) },
+          pf_links: JSON.stringify([{ title: 'Inquérito Civil', number: '1.24.000/2026', url: 'mpf.mp.br/ic' }, { title: 'Processo PF', url: 'pf.gov.br/p' }]),
+          pf_anx: JSON.stringify([{ name: 'logo_MPF.jpg', url: 'https://x/logo_MPF.jpg', title: 'MPF', uploadedBy: 'Joana Araujo', uploadedAt: '2026-08-14T15:00:00Z' }, { name: 'oficio.pdf', url: 'https://x/oficio.pdf', title: 'Ofício' }]) },
         { pf_data: '2026-08-15', pf_ocup: 'Regular', pf_area: '10,00',
           pf_fotos: JSON.stringify([{ url: 'https://x/1.jpg', title: 'Fachada' }]) }
     ]),
@@ -167,6 +169,34 @@ out = renderAnalyticalLaudo({ abas_selecionadas: ['t_pf'] }, data);
 full = out.split.chunkHtml(out.split.rowsHtml, true);
 ok('campo 1:N de link: título, número e endereço aparecem', full.includes('Inquérito Civil') && full.includes('1.24.000/2026') && full.includes('>mpf.mp.br/ic</a>'));
 ok('campo 1:N de link: todos os itens', full.includes('Processo PF') && full.includes('>pf.gov.br/p</a>'));
+
+// ---------------------------------------------------------------- fotos e anexos: Lista x Imagem, por campo
+out = renderAnalyticalLaudo({ abas_selecionadas: ['t_pf'] }, data);
+full = out.split.chunkHtml(out.split.rowsHtml, true);
+ok('anexo (padrão) em lista: título e nome do arquivo, sem imagem',
+    full.includes('<strong>MPF</strong>') && full.includes('logo_MPF.jpg') && !full.includes('src="https://x/logo_MPF.jpg"'));
+ok('foto (padrão) continua na grade de imagens do laudo', full.includes('src="https://x/1.jpg"'));
+
+out = renderAnalyticalLaudo({ abas_selecionadas: ['t_pf'], campos_exibicao: { pf_anx: 'imagem' } }, data);
+full = out.split.chunkHtml(out.split.rowsHtml, true);
+ok('anexo em modo imagem: mostra a imagem na íntegra', full.includes('src="https://x/logo_MPF.jpg"'));
+ok('imagem com título e metadados', full.includes('>MPF</div>') && full.includes('Enviado por: Joana Araujo'));
+ok('PDF do mesmo campo continua em lista', !full.includes('src="https://x/oficio.pdf"') && full.includes('Ofício'));
+
+out = renderAnalyticalLaudo({ abas_selecionadas: ['t_pf'], campos_exibicao: { pf_fotos: 'lista' } }, data);
+full = out.split.chunkHtml(out.split.rowsHtml, true);
+ok('foto em modo lista: sem imagem no laudo', !full.includes('src="https://x/1.jpg"'));
+ok('foto em modo lista: aparece o nome do arquivo', full.includes('1.jpg') && full.includes('Fotos:'));
+
+// metadados da imagem seguem os interruptores do laudo (legenda, data, responsável)
+out = renderAnalyticalLaudo({ abas_selecionadas: ['t_pf'], campos_exibicao: { pf_anx: 'imagem' }, exibirLegenda: false, exibirResp: false, exibirData: false }, data);
+full = out.split.chunkHtml(out.split.rowsHtml, true);
+ok('sem legenda/responsável/data: a imagem aparece sem esses metadados', full.includes('src="https://x/logo_MPF.jpg"') && !full.includes('Enviado por'));
+
+// tabelas (quadro sintético) sempre em lista compacta, nunca imagem
+out = renderSyntheticTable({ abas_selecionadas: ['t_pf'], colunas: ['aba', { id: 'anx', label: 'Anexos', fieldIds: ['pf_anx'] }] }, data);
+full = out.split.chunkHtml(out.split.rowsHtml, true);
+ok('quadro sintético: anexos em lista, sem imagem', full.includes('logo_MPF.jpg') && !full.includes('<img'));
 
 console.log(`viewerTables: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {

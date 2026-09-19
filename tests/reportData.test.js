@@ -140,6 +140,7 @@ eq('aba 1:1: coluna por campo', RD.cellFor({ id: 'ipl', fieldIds: ['f_ipl'] }, o
 
 // fotos do registro
 eq('fotos do registro (sem excluídas)', RD.recordPhotos(pf1).map(p => p.url), ['https://x/1.jpg']);
+eq('fotos: campos ignorados (exibidos como lista) ficam de fora', RD.recordPhotos(pf1, ['pf_fotos']).length, 0);
 eq('campos do registro restritos aos ids escolhidos', RD.recordFields(pf0, ['pf_obs', 'spu_obs']).map(f => f.id), ['pf_obs']);
 
 console.log(`reportData: ${total - failed}/${total} verificações passaram`);

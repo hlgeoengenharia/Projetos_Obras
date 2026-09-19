@@ -75,7 +75,7 @@ const load = new Function('state', 'window', 'document', 'ReportAdapter', 'onRer
     ${extractFunction('getFieldWidthStyle')}
     ${region}
     return { getLaudoPreviewTabs, renderLaudoPreview, renderLaudoTabSequenceList, ensureLaudoFieldSelection,
-             move1nLaudoTabSequence, getOrder: () => current1nTabOrder, setTemplate: (t) => { currentTemplate = t; } };
+             move1nLaudoTabSequence, isFileField, fileFieldMode, fileModeToggleHtml, setFieldFileMode, laudoSampleHtml, getOrder: () => current1nTabOrder, setTemplate: (t) => { currentTemplate = t; } };
 `);
 const api = load(state, window, document, ReportAdapter, () => { rerenders++; });
 
@@ -172,6 +172,40 @@ eq('mover o primeiro para cima não faz nada', api.getOrder().filter(id => id ==
 // ---------------------------------------------------------------- a mesma sequência vale na prévia
 html = api.renderLaudoPreview(tpl.blocos[0], 0, formFields);
 ok('prévia usa a nova sequência', html.indexOf('Aba / Ente: SPU') < html.indexOf('Aba / Ente: PF'));
+
+
+// ---------------------------------------------------------------- fotos/anexos: "Lista" x "Imagem na íntegra"
+const fotos = formFields.find(f => f.id === 'pf_fotos');
+const texto = formFields.find(f => f.id === 'pf_obs');
+const anexo = { id: 'pf_anexo', label: 'Anexos', type: 'attachment' };
+ok('só foto e anexo têm seletor', api.isFileField(fotos) && api.isFileField(anexo) && !api.isFileField(texto));
+eq('foto: padrão é imagem', api.fileFieldMode({}, fotos), 'imagem');
+eq('anexo: padrão é lista', api.fileFieldMode({}, anexo), 'lista');
+eq('escolha salva vale', api.fileFieldMode({ campos_exibicao: { pf_fotos: 'lista' } }, fotos), 'lista');
+eq('valor inválido cai no padrão', api.fileFieldMode({ campos_exibicao: { pf_fotos: 'x' } }, fotos), 'imagem');
+ok('seletor não aparece em campo comum', api.fileModeToggleHtml(0, texto, 'lista') === '');
+const tog = api.fileModeToggleHtml(3, fotos, 'lista');
+ok('seletor tem os dois botões e chama a ação', tog.includes('view_list') && tog.includes('>image<') && tog.includes("ReportBuilder.setFieldFileMode(3, 'pf_fotos', 'imagem', event)"));
+ok('amostra em lista mostra título + arquivo', api.laudoSampleHtml(anexo, 'lista').includes('arquivo-1'));
+ok('amostra em imagem mostra título, arquivo, autor e data', /Título/.test(api.laudoSampleHtml(anexo, 'imagem')) && api.laudoSampleHtml(anexo, 'imagem').includes('Enviado por'));
+
+bloco = { abas_selecionadas: ['t_pf'], campos_selecionados: [{ id: 'pf_obs', tabId: 't_pf' }] };
+const tplF = mkTemplate(bloco);
+api.setTemplate(tplF);
+html = api.renderLaudoPreview(bloco, 0, formFields);
+ok('laudo: foto em imagem por padrão (miniatura com legenda)', html.includes('Legenda da foto') && html.includes("'imagem', event"));
+const before = saved.length, rr = rerenders;
+api.setFieldFileMode(0, 'pf_fotos', 'lista', null);
+eq('escolha gravada em campos_exibicao', tplF.blocos[0].campos_exibicao, { pf_fotos: 'lista' });
+ok('modelo salvo e folha redesenhada', saved.length > before && rerenders > rr);
+html = api.renderLaudoPreview(tplF.blocos[0], 0, formFields);
+ok('laudo: modo lista troca a miniatura pela lista', !html.includes('Legenda da foto') && html.includes('arquivo-1'));
+api.setFieldFileMode(0, 'pf_fotos', 'invalido', null);
+eq('modo inválido é ignorado', tplF.blocos[0].campos_exibicao.pf_fotos, 'lista');
+
+// grade de atributos (renderA4Blocks): seletor e amostra por modo
+ok('grade de atributos usa o seletor e a amostra por modo',
+    src.includes('${fileModeToggleHtml(index, f, fileFieldMode(bloco, f))}') && src.includes('${isFileField(f)') && src.includes('setFieldFileMode,'));
 
 console.log(`builderLaudoPreview: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {

@@ -1533,14 +1533,25 @@
     }
 
     /** Como cada TIPO de campo será exibido no relatório (marcadores, não dados reais). */
-    function laudoSampleHtml(f) {
+    function laudoSampleHtml(f, fileMode) {
         const t = String(f.type || 'text').toLowerCase();
         const ph = (s) => `<span class="text-slate-400 italic font-normal">${escapeHtml(s)}</span>`;
         const link = (title, num, url) => `<div class="leading-snug mb-1"><strong>${title}</strong>${num ? ' - ' + num : ''}<br><span class="text-sky-700 break-all font-normal">${url}</span></div>`;
         switch (t) {
             case 'hiperlink': return link('Título', 'Número', 'https://endereço-do-link');
             case 'hiperlink_1n': return link('Título 1', 'Número 1', 'https://endereço-do-link-1') + link('Título 2', 'Número 2', 'https://endereço-do-link-2');
-            case 'attachment': return '<div class="leading-snug mb-1"><strong>Título do documento 1</strong><br><span class="font-mono text-[9px] font-normal">arquivo-1.pdf</span></div><div class="leading-snug"><strong>Título do documento 2</strong><br><span class="font-mono text-[9px] font-normal">arquivo-2.pdf</span></div>';
+            case 'attachment':
+            case 'photo': {
+                const mode = fileMode || (t === 'photo' ? 'imagem' : 'lista');
+                if (mode === 'imagem') {
+                    return '<div class="grid grid-cols-2 gap-1"><div class="border border-slate-200 rounded overflow-hidden bg-white">'
+                        + '<div class="h-14 bg-slate-100 flex items-center justify-center"><span class="material-symbols-outlined text-[24px] text-slate-300">image</span></div>'
+                        + '<div class="p-1 text-[9px] leading-tight text-slate-600 font-normal"><div class="font-bold text-slate-800">Título</div><div class="font-mono">arquivo.jpg</div><div>Enviado por: Nome</div><div>00/00/0000 00:00</div></div>'
+                        + '</div></div>';
+                }
+                return '<div class="leading-snug mb-1"><strong>Título do arquivo 1</strong><br><span class="font-mono text-[9px] font-normal">arquivo-1.jpg</span></div>'
+                    + '<div class="leading-snug"><strong>Título do arquivo 2</strong><br><span class="font-mono text-[9px] font-normal">arquivo-2.pdf</span></div>';
+            }
             case 'epol_1n': return '2023.0000001<br>2024.0000002';
             case 'rip_1n': return '00000000001-01<br>00000000002-02';
             case 'date': return '14/08/2026';
@@ -1562,6 +1573,46 @@
     }
 
     const LAUDO_WIDE_TYPES = ['textarea', 'hiperlink', 'hiperlink_1n', 'attachment', 'cep'];
+
+    // ---- Fotos e anexos: o usuário escolhe, por campo, "Lista" (título + nome do arquivo) ou "Imagem"
+    // na íntegra (com título e metadados). Guardado em bloco.campos_exibicao = { idDoCampo: 'lista'|'imagem' }.
+    function isFileField(f) {
+        const t = String((f && f.type) || '').toLowerCase();
+        return t === 'photo' || t === 'attachment';
+    }
+
+    /** Modo efetivo do campo: o escolhido; senão foto → imagem e anexo → lista. */
+    function fileFieldMode(bloco, f) {
+        const m = bloco && bloco.campos_exibicao ? bloco.campos_exibicao[f.id] : null;
+        if (m === 'lista' || m === 'imagem') return m;
+        return String(f.type || '').toLowerCase() === 'photo' ? 'imagem' : 'lista';
+    }
+
+    function fileModeToggleHtml(index, f, mode) {
+        if (!isFileField(f)) return '';
+        const fid = escapeHtml(f.id);
+        const btn = (m, icon, title) => '<button type="button" class="file-mode-btn px-1 py-0.5 rounded cursor-pointer transition-colors '
+            + (mode === m ? 'bg-sky-100 text-sky-700' : 'text-slate-400 hover:text-sky-600') + '"'
+            + ' onclick="ReportBuilder.setFieldFileMode(' + index + ", '" + fid + "', '" + m + "', event)\" title=\"" + title + '">'
+            + '<span class="material-symbols-outlined text-[13px] leading-none">' + icon + '</span></button>';
+        return '<div class="inline-flex items-center bg-white border border-slate-200 rounded p-0.5 shadow-2xs" title="Como exibir os arquivos deste campo">'
+            + btn('lista', 'view_list', 'Lista: título e nome do arquivo')
+            + btn('imagem', 'image', 'Imagem na íntegra, com título e metadados')
+            + '</div>';
+    }
+
+    function setFieldFileMode(blockIndex, fieldId, mode, evt) {
+        if (evt) { evt.stopPropagation(); evt.preventDefault(); }
+        if (mode !== 'lista' && mode !== 'imagem') return;
+        const bloco = currentTemplate && Array.isArray(currentTemplate.blocos) ? currentTemplate.blocos[blockIndex] : null;
+        if (!bloco) return;
+        if (!bloco.campos_exibicao) bloco.campos_exibicao = {};
+        bloco.campos_exibicao[fieldId] = mode;
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderA4Blocks();
+    }
 
     /**
      * Garante que o laudo tenha campos escolhidos que existam de verdade no formulário.
@@ -1667,6 +1718,7 @@
                                 <span class="text-[9.5px] uppercase font-extrabold text-slate-600 truncate" title="${escapeHtml(label)}">${escapeHtml(label)}:</span>
                             </div>
                             <div class="flex items-center gap-1 shrink-0">
+                                ${fileModeToggleHtml(index, f, fileFieldMode(bloco, f))}
                                 <div class="inline-flex items-center bg-white border border-slate-200 rounded p-0.5 shadow-2xs">
                                     <button type="button" class="field-width-dec-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 hover:bg-slate-100 rounded cursor-pointer transition-colors"
                                             onclick="ReportBuilder.changeFieldWidthStep(${index}, '${escapeHtml(fid)}', -1, event)" title="Diminuir largura do campo (-)">
@@ -1685,13 +1737,18 @@
                                 </button>
                             </div>
                         </div>
-                        <div class="text-[10.5px] text-slate-800 font-semibold break-words whitespace-normal">${laudoSampleHtml(f)}</div>
+                        <div class="text-[10.5px] text-slate-800 font-semibold break-words whitespace-normal">${laudoSampleHtml(f, fileFieldMode(bloco, f))}</div>
                     </div>`;
             }).join('');
 
-            const photosHtml = photoFields.length ? `
-                <div class="grid ${gridClass} gap-2.5 pt-1">
-                    ${photoFields.map(pf => `
+            const photosHtml = photoFields.length ? photoFields.map(pf => {
+                const pfMode = fileFieldMode(bloco, pf);
+                const header = `<div class="flex items-center justify-between gap-1 pt-1"><span class="text-[9.5px] uppercase font-extrabold text-slate-600 truncate">${escapeHtml(pf.label || 'Fotos')}:</span>${fileModeToggleHtml(index, pf, pfMode)}</div>`;
+                if (pfMode === 'lista') {
+                    return header + `<div class="p-2 bg-white rounded-lg border border-slate-200 text-[10.5px] text-slate-800 font-semibold">${laudoSampleHtml(pf, 'lista')}</div>`;
+                }
+                return header + `
+                    <div class="grid ${gridClass} gap-2.5">
                         <div class="border border-slate-200 rounded-lg overflow-hidden bg-white flex flex-col shadow-2xs">
                             <div class="h-24 bg-slate-100 flex items-center justify-center text-slate-400 text-xs font-bold relative">
                                 <span class="material-symbols-outlined text-[28px] text-slate-300">photo_camera</span>
@@ -1701,8 +1758,9 @@
                                 ${bloco.exibirLegenda !== false ? '<div class="font-bold text-slate-800 truncate">Legenda da foto</div>' : ''}
                                 ${bloco.exibirData !== false ? '<div>Data: 00/00/0000</div>' : ''}
                             </div>
-                        </div>`).join('')}
-                </div>` : '';
+                        </div>
+                    </div>`;
+            }).join('') : '';
 
             return `
                 <details open class="group/tab" data-tab-id="${escapeHtml(String(tab.id))}">
@@ -2027,7 +2085,8 @@
                                             <span class="font-bold text-slate-600 truncate">${escapeHtml(f.label)}:</span>
                                         </div>
                                         <div class="flex items-center gap-2">
-                                            <span class="font-semibold text-slate-900 truncate font-mono text-[11px]">[${escapeHtml(f.label)}]</span>
+                                            ${fileModeToggleHtml(index, f, fileFieldMode(bloco, f))}
+                                            <span class="font-semibold text-slate-900 truncate font-mono text-[11px]">[${escapeHtml(f.label)}]${isFileField(f) ? ' · ' + (fileFieldMode(bloco, f) === 'imagem' ? 'imagem' : 'lista') : ''}</span>
                                             <button type="button" 
                                                     class="field-remove-btn p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition-colors cursor-pointer print:hidden" 
                                                     onclick="ReportBuilder.removeFieldFromGrid(${index}, '${f.id}', event)" 
@@ -2081,6 +2140,7 @@
                                             </div>
 
                                             <div class="flex items-center gap-1 shrink-0">
+                                                ${fileModeToggleHtml(index, f, fileFieldMode(bloco, f))}
                                                 <!-- Stepper de Largura Direto: [-] [X%] [+] -->
                                                 <div class="inline-flex items-center bg-white dark:bg-slate-700/90 border border-slate-200 dark:border-slate-600 rounded-md p-0.5 shadow-2xs">
                                                     <button type="button" 
@@ -2113,9 +2173,11 @@
                                             </div>
                                         </div>
 
-                                        <div class="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 font-mono text-[11px] ${isExpanded ? 'break-words' : 'truncate'}">
+                                        ${isFileField(f)
+                                            ? `<div class="text-[10.5px] text-slate-800 font-semibold mt-1 break-words whitespace-normal">${laudoSampleHtml(f, fileFieldMode(bloco, f))}</div>`
+                                            : `<div class="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 font-mono text-[11px] ${isExpanded ? 'break-words' : 'truncate'}">
                                             [Valor de ${escapeHtml(f.label)}]
-                                        </div>
+                                        </div>`}
                                     </div>
                                 `;
                             }).join('')}
@@ -5650,6 +5712,7 @@
         set1nLaudoRowStriping,
         move1nTabSequence,
         move1nLaudoTabSequence,
+        setFieldFileMode,
         set1nSortOrder,
         set1nGroupByTab,
         toggleAll1nFieldsInDrawer,
