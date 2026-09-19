@@ -117,7 +117,7 @@ out = renderAnalyticalLaudo({ abas_selecionadas: ['t_pf'] }, data);
 ok('laudo devolve bloco divisível', out && out.split);
 eq('um cartão por registro da PF', out.split.rowsHtml.length, 2);
 full = out.split.chunkHtml(out.split.rowsHtml, true);
-ok('título da aba no cartão', full.includes('PF •'));
+ok('cartão do registro sem linha de ícone/data/sigla (relatório formal)', !full.includes('PF •') && !full.includes('event_available') && !full.includes('folder_open'));
 ok('cabeçalho do grupo com a contagem', full.includes('Aba / Ente: PF') && full.includes('2 registro(s)'));
 ok('HTML do dado é escapado', full.includes('&lt;b&gt;irregular&lt;/b&gt;') && !full.includes('<b>irregular</b>'));
 ok('foto com legenda', full.includes('https://x/1.jpg') && full.includes('Fachada'));

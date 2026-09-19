@@ -1766,7 +1766,6 @@
                 <details open class="group/tab" data-tab-id="${escapeHtml(String(tab.id))}">
                     <summary class="flex items-center justify-between px-2 py-1 bg-slate-100 rounded-lg border border-slate-200 text-xs cursor-pointer list-none">
                         <div class="flex items-center gap-1.5 font-bold text-slate-800 uppercase tracking-wide">
-                            <span class="material-symbols-outlined text-[16px] text-amber-500">folder_open</span>
                             <span class="cursor-text hover:bg-sky-50 px-1 rounded transition-colors" title="Duplo clique para editar o texto da aba"
                                   ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'custom_tab_title_${escapeHtml(String(tab.id))}')">${escapeHtml(tabTitle)}</span>
                         </div>
@@ -1946,8 +1945,8 @@
 
             html += `
                 <div class="report-block-item group relative transition-all print:border-none print:p-0 print:bg-transparent page-break-avoid w-full" data-block-id="${bloco.id || index}">
-                    <!-- Barra de Controle Flutuante no Hover (Posicionada à esquerda para não sobrepor metadados à direita) -->
-                    <div class="absolute -top-3.5 left-2 hidden group-hover:flex items-center gap-1 bg-slate-900/90 text-white rounded-lg shadow-md px-1.5 py-0.5 z-30 select-none print:hidden backdrop-blur-xs">
+                    <!-- Barra de Controle Flutuante no Hover (Posicionada à direita para não cobrir os campos que o usuário edita à esquerda) -->
+                    <div class="absolute -top-3.5 right-2 hidden group-hover:flex items-center gap-1 bg-slate-900/90 text-white rounded-lg shadow-md px-1.5 py-0.5 z-30 select-none print:hidden backdrop-blur-xs">
                         <div class="flex items-center gap-1 cursor-grab active:cursor-grabbing drag-handle text-slate-300 hover:text-white px-1" title="Arrastar Bloco">
                             <span class="material-symbols-outlined text-[15px]">drag_indicator</span>
                             <span class="text-[9px] font-mono uppercase">${getBlockTypeName(bloco.tipo)}</span>

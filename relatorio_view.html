@@ -1228,13 +1228,6 @@
                 }).join('');
 
                 return `<div class="border rounded-xl p-3 ${cardBg} space-y-2.5 shadow-2xs">
-                    <div class="flex items-center justify-between border-b border-slate-200 pb-1.5 text-xs">
-                        <div class="flex items-center gap-1.5 font-bold text-slate-800">
-                            <span class="material-symbols-outlined text-[16px] text-sky-600">event_available</span>
-                            <span>${esc(r.tabTitle)} • ${esc(r.dateText)}</span>
-                        </div>
-                        <div class="flex items-center gap-1">${getOrgBadgeHtml(r.tabTitle)}</div>
-                    </div>
                     ${cells ? `<div class="flex flex-wrap gap-2">${cells}</div>` : '<div class="text-[10px] italic text-slate-400">Nenhum campo desta aba foi selecionado para o laudo.</div>'}
                     ${photosHtml(r)}
                 </div>`;
@@ -1249,7 +1242,7 @@
                 if (!seenTab[r.tabId]) {
                     seenTab[r.tabId] = true;
                     groupHeader = `<div class="flex items-center justify-between px-2.5 py-1.5 bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold text-slate-800 uppercase tracking-wide mb-2">
-                        <div class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[16px] text-amber-500">folder_open</span><span>${esc(bloco['custom_tab_title_' + r.tabId] || ('Aba / Ente: ' + r.tabTitle))}</span></div>
+                        <div class="flex items-center gap-1.5"><span>${esc(bloco['custom_tab_title_' + r.tabId] || ('Aba / Ente: ' + r.tabTitle))}</span></div>
                         <span class="text-[9.5px] font-mono font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">${perTabCount[r.tabId]} registro(s)</span>
                     </div>`;
                 }
