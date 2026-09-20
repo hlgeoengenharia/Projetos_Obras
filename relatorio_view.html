@@ -218,6 +218,7 @@
         let renderArgs = null;        // últimos argumentos de renderBlocks (para repaginar sem perder o mapa)
         let keptMapWrap = null;       // elemento do mapa (com o Leaflet vivo) que sobrevive à repaginação
         let temporalController = null; // análise temporal (src/reportTemporal.js)
+        let mapPanelOpen = null;       // painel "Mapa" aberto? (null = ainda não decidido; decide pela largura da tela)
         let lastPontosKey = '';
         let repaginateTimer = null;
 
@@ -1479,7 +1480,7 @@
                 toggle.type = 'button';
                 toggle.className = 'no-print';
                 toggle.textContent = 'Mapa';
-                toggle.onclick = () => { panel.style.display = ''; toggle.style.display = 'none'; };
+                toggle.onclick = () => { mapPanelOpen = true; applyMapPanelVisibility(); };
                 document.body.appendChild(toggle);
             }
             const cfg = mapController.getConfig();
@@ -1578,13 +1579,24 @@
                     <div id="map-panel-status" style="margin-top:6px;color:#475569;min-height:16px"></div>
                 </div>`;
             panel.scrollTop = scrollTop;
-            panel.style.display = window.innerWidth < 1500 ? 'none' : '';
-            if (toggle) toggle.style.display = window.innerWidth < 1500 ? '' : 'none';
+            // só na primeira vez a largura da tela decide; depois vale o que o usuário abriu ou recolheu
+            if (mapPanelOpen === null) mapPanelOpen = window.innerWidth >= MAP_PANEL_MIN_WIDTH;
+            applyMapPanelVisibility();
+        }
+
+        // O painel ocupa 268 px à direita da folha (794 px): em telas estreitas começa recolhido, atrás do botão "Mapa".
+        const MAP_PANEL_MIN_WIDTH = 1360;
+        function applyMapPanelVisibility() {
+            const panel = document.getElementById('map-tools-panel');
+            const toggle = document.getElementById('map-tools-toggle');
+            // valores explícitos: '' devolveria o controle ao CSS, que esconde o botão por padrão
+            if (panel) panel.style.display = mapPanelOpen ? 'block' : 'none';
+            if (toggle) toggle.style.display = mapPanelOpen ? 'none' : 'block';
         }
 
         function mapPanelHide() {
-            document.getElementById('map-tools-panel').style.display = 'none';
-            document.getElementById('map-tools-toggle').style.display = '';
+            mapPanelOpen = false;
+            applyMapPanelVisibility();
         }
         function mapPanelSet(key, value) { if (mapController) mapController.setConfig({ [key]: value }); }
         function mapPanelDestaque(key, value) { if (mapController) mapController.setConfig({ destaque: { [key]: value } }); }
