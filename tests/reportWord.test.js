@@ -146,8 +146,8 @@ eq('sem folhas: converte o conteúdo inteiro', RW.buildDocument(E('div', {}, E('
 
 const arquivo = RW.wordFileHtml({ title: 'Ficha <X>', page: { widthMm: 297, heightMm: 420 }, margins: { top: 20, bottom: 20, left: 15, right: 15 } }, doc);
 ok('arquivo: papel A3 e margens do modelo', /size: 841\.9pt 1190\.6pt/.test(arquivo) && /margin: 20mm 15mm 20mm 15mm/.test(arquivo) && /mso-page-orientation: portrait/.test(arquivo));
-ok('arquivo: o rodapé fica FORA da seção (o Word o usa como rodapé e não o repete no texto)', arquivo.indexOf('mso-element:footer') > arquivo.indexOf('</div>\n<div style=\'mso-element:footer\'') - 1 && /<\/div>\n<div style='mso-element:footer' id=f1>/.test(arquivo) && !/Section1">[\s\S]*mso-element:footer[\s\S]*<\/div>\n<\/div>\n<div style='mso-element:footer'/.test(arquivo));
-ok('arquivo: título escapado, rodapé ligado à seção e cabeçalho antes do corpo', /<title>Ficha &lt;X&gt;<\/title>/.test(arquivo) && /mso-footer: f1/.test(arquivo) && /mso-element:footer/.test(arquivo) && arquivo.indexOf('CABEÇALHO') < arquivo.indexOf('corpo da 1ª'));
+ok('arquivo: o rodapé é uma tabela mso-element:footer FORA da seção (o <div> era repetido no fim do texto pelo Word)', /<\/div>\n<table id=f1 style='mso-element:footer'/.test(arquivo) && !/<div style='mso-element:footer'/.test(arquivo) && arquivo.indexOf('</div>\n<table id=f1') > arquivo.indexOf('corpo da 2ª'));
+ok('arquivo: título escapado, rodapé ligado à seção e cabeçalho antes do corpo', /<title>Ficha &lt;X&gt;<\/title>/.test(arquivo) && /mso-footer: f1/.test(arquivo) && /mso-element:footer/.test(arquivo) && /Emitido em 20\/09\/2026/.test(arquivo.split('mso-element:footer')[1]) && arquivo.indexOf('CABEÇALHO') < arquivo.indexOf('corpo da 1ª'));
 ok('arquivo: paisagem', /landscape/.test(RW.wordFileHtml({ title: 't', page: { widthMm: 420, heightMm: 297 } }, { body: '' })));
 
 console.log(`reportWord: ${total - failed}/${total} verificações passaram`);

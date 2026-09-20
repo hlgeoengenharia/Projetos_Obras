@@ -85,6 +85,8 @@
         roots.sort((a, b) => rank(a) - rank(b));
 
         ctx.save();
+        // o html2canvas devolve o contexto JÁ com a escala aplicada; sem zerar, os textos saem ampliados e fora do lugar
+        if (ctx.setTransform) ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(scale || 1, scale || 1);
         roots.forEach(r => paintTree(ctx, r, env, origin));
         ctx.restore();

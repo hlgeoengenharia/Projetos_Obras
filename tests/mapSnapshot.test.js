@@ -22,7 +22,7 @@ function fakeCtx() {
     const calls = [];
     const ctx = { calls, save() { calls.push(['save']); }, restore() { calls.push(['restore']); }, scale(a, b) { calls.push(['scale', a, b]); },
         beginPath() { calls.push(['beginPath']); }, closePath() {}, moveTo(x, y) { calls.push(['moveTo', x, y]); }, lineTo(x, y) { calls.push(['lineTo', x, y]); },
-        quadraticCurveTo() {}, rect(x, y, w, h) { calls.push(['rect', x, y, w, h]); }, fill() { calls.push(['fill', ctx.fillStyle]); }, stroke() { calls.push(['stroke', ctx.strokeStyle, ctx.lineWidth]); },
+        setTransform(...a) { calls.push(['setTransform', ...a]); }, quadraticCurveTo() {}, rect(x, y, w, h) { calls.push(['rect', x, y, w, h]); }, fill() { calls.push(['fill', ctx.fillStyle]); }, stroke() { calls.push(['stroke', ctx.strokeStyle, ctx.lineWidth]); },
         fillText(t, x, y) { calls.push(['fillText', t, x, y, ctx.font, ctx.fillStyle, ctx.textBaseline]); }, strokeText(t, x, y) { calls.push(['strokeText', t, x, y]); }, setLineDash() {} };
     return ctx;
 }
@@ -53,6 +53,7 @@ const ctx = fakeCtx();
 const n = MS.paintOverlays(ctx, mapa, env, 2);
 eq('sobreposições encontradas (rótulo, norte, escala, brilho, legenda oculta)', n, 5);
 eq('desenho na escala da captura', of(ctx, 'scale'), [['scale', 2, 2]]);
+ok('a escala que o html2canvas deixou no contexto é zerada ANTES de aplicar a nossa (senão os textos saem 2× maiores e deslocados)', ctx.calls.findIndex(c => c[0] === 'setTransform') >= 0 && JSON.stringify(of(ctx, 'setTransform')[0]) === JSON.stringify(['setTransform', 1, 0, 0, 1, 0, 0]) && ctx.calls.findIndex(c => c[0] === 'setTransform') < ctx.calls.findIndex(c => c[0] === 'scale'));
 const ft = of(ctx, 'fillText');
 const rot = ft.find(c => c[1] === '26,12 m');
 ok('texto do rótulo no centro vertical do retângulo do texto, relativo ao canto do mapa (374-100, 214-50+6)', rot && rot[2] === 274 && rot[3] === 170);
