@@ -312,10 +312,10 @@
         const orient = pd.heightMm < pd.widthMm ? 'landscape' : 'portrait';
         return "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>\n<head>\n<meta charset='utf-8'>\n<title>" + esc(opts.title) + "</title>\n" +
             "<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->\n<style>\n" +
-            '@page Section1 { size: ' + w + 'pt ' + h + 'pt; mso-page-orientation: ' + orient + '; margin: ' + m.top + 'mm ' + m.right + 'mm ' + m.bottom + 'mm ' + m.left + 'mm; mso-header-margin: 10mm; mso-footer-margin: 8mm; mso-footer: f1; mso-paper-source: 0; }\n' +
+            '@page Section1 { size: ' + w + 'pt ' + h + 'pt; mso-page-orientation: ' + orient + '; margin: ' + m.top + 'mm ' + m.right + 'mm ' + m.bottom + 'mm ' + m.left + 'mm; mso-header-margin: 10mm; mso-footer-margin: 8mm; ' + (opts.sinRodape ? '' : 'mso-footer: f1; ') + 'mso-paper-source: 0; }\n' +
             'div.Section1 { page: Section1; }\nbody { font-family: Arial, sans-serif; font-size: 11pt; color: #111827; }\np { margin: 0; }\ntable { border-collapse: collapse; }\nimg { border: 0; }\n</style>\n</head>\n<body>\n' +
             '<div class="Section1">\n' + (parts.header || '') + '\n' + (parts.body || '') + '\n</div>\n' +
-            "<table id=f1 style='mso-element:footer' border=0 cellspacing=0 cellpadding=0 width=\"100%\"><tr><td><div class=MsoFooter style='margin:0'>" + (parts.footer || '') + '</div></td></tr></table>\n</body>\n</html>';
+            (opts.sinRodape ? '' : "<table id=f1 style='mso-element:footer' border=0 cellspacing=0 cellpadding=0 width=\"100%\"><tr><td><div class=MsoFooter style='margin:0'>" + (parts.footer || '') + '</div></td></tr></table>\n') + '</body>\n</html>';
     }
 
     return { make, buildDocument, wordFileHtml, withPageFields, fieldSpan, inlineStyle, parseColor, colorHex, fontFamily };

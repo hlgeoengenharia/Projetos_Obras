@@ -22,6 +22,7 @@
     <script src="src/reportTemporal.js"></script>
     <script src="src/reportExport.js"></script>
     <script src="src/reportWord.js"></script>
+    <script src="src/reportDocx.js"></script>
     <script src="src/mapSnapshot.js"></script>
     <script src="src/verificarEmissao.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
@@ -1981,8 +1982,25 @@
                 rect: (el) => el.getBoundingClientRect(),
                 captures: caps
             });
-            const wordHtml = ReportWord.wordFileHtml({ title: docTitle, page: PageSize.dims(cfgPag), margins: cfgPag.margens_mm }, partes);
-            baixarArquivo(['\ufeff', ReportExport.toWordMhtml(wordHtml)], 'application/msword', docTitle.replace(/[\s\/\\:*?"<>|]+/g, '_') + '_' + (emissao.protocolo || Date.now()) + '.doc');
+            const dims = PageSize.dims(cfgPag);
+            // o corpo vai como HTML (MHTML com as imagens) dentro do .docx; o rodapé é escrito em OOXML, com campos de página
+            const wordHtml = ReportWord.wordFileHtml({ title: docTitle, page: dims, margins: cfgPag.margens_mm, sinRodape: true }, { header: partes.header, body: partes.body, footer: '' });
+            const ftrBloco = ((tpl && tpl.blocos) || []).find(b => b.tipo === 'rodape') || {};
+            const agora = new Date();
+            const qrUrl = qrDataUrl();
+            const bytes = ReportDocx.build({
+                mhtml: ReportExport.toWordMhtml(wordHtml),
+                page: dims,
+                margins: cfgPag.margens_mm,
+                footer: {
+                    data: 'Emitido em ' + agora.toLocaleDateString('pt-BR') + ' às ' + agora.toLocaleTimeString('pt-BR'),
+                    hash: emissao.hash ? emissao.hash.slice(0, 16) + '…' : '',
+                    qr: qrUrl ? ReportDocx.b64ToBytes(qrUrl.split(',')[1]) : null, qrExt: 'gif',
+                    mostrarData: ftrBloco.exibirDataHora !== false, mostrarHash: ftrBloco.exibirHash !== false,
+                    mostrarQr: ftrBloco.exibirQr !== false, mostrarPaginas: ftrBloco.numeracao !== false
+                }
+            });
+            baixarArquivo([bytes], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', docTitle.replace(/[\s\/\\:*?"<>|]+/g, '_') + '_' + (emissao.protocolo || Date.now()) + '.docx');
             if (falhas.length) alert('O Word foi gerado, mas ' + falhas.length + ' mapa(s) não puderam virar imagem (veja o aviso no lugar do mapa). Confira a conexão com a internet e tente de novo.');
         }
 

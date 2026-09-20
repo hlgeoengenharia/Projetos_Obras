@@ -139,7 +139,7 @@ async function runScenario(cfg) {
     sandbox.self = sandbox.window;
     vm.createContext(sandbox);
     localScripts.forEach(src => { try { vm.runInContext(read(src), sandbox, { filename: src }); } catch (e) { errors.push('script ' + src + ': ' + e.message); } });
-    ['PageSize', 'MapTools', 'ReportMap', 'ReportTemporal', 'ReportExport', 'ReportWord', 'MapSnapshot', 'VerificarEmissao', 'FieldFormatter', 'ReportData'].forEach(n => { if (windowStub[n]) sandbox[n] = windowStub[n]; });
+    ['PageSize', 'MapTools', 'ReportMap', 'ReportTemporal', 'ReportExport', 'ReportWord', 'ReportDocx', 'MapSnapshot', 'VerificarEmissao', 'FieldFormatter', 'ReportData'].forEach(n => { if (windowStub[n]) sandbox[n] = windowStub[n]; });
     sandbox.unhandled = [];
     try { vm.runInContext(pageScript, sandbox, { filename: 'relatorio_view.html(inline)' }); } catch (e) { errors.push('script da página: ' + e.stack); }
     (listeners.DOMContentLoaded || []).forEach(fn => { try { fn(); } catch (e) { errors.push('DOMContentLoaded: ' + e.stack); } });
@@ -234,29 +234,39 @@ async function runScenario(cfg) {
         r.listeners.beforeprint.forEach(fn => fn());
         r.listeners.afterprint.forEach(fn => fn());
 
-        // Word
+        // Word: .docx (ZIP) com o corpo em MHTML (altChunk) e o rodapé em OOXML
+        const lerDocx = (blobX) => {
+            const zipBytes = blobX.parts[0];
+            const arquivos = require('../src/reportDocx.js').unzip(zipBytes);
+            const txt = (n) => Buffer.from(arquivos[n] || []).toString('utf8');
+            return { arquivos, txt };
+        };
         await r.sandbox.gerarWord();
         const blob = r.captured.blobs[r.captured.blobs.length - 1];
-        const arquivo = blob.parts.join('');
-        eq('Word: tipo e registro da emissão', [blob.type, r.captured.registros.map(x => x.formato)], ['application/msword', ['impressao', 'word']]);
-        ok('Word: arquivo MHTML (multipart/related) com HTML e imagens', /MIME-Version: 1.0/.test(arquivo) && /multipart\/related/.test(arquivo) && /Content-Type: image\/png/.test(arquivo));
-        ok('Word: o mapa e o quadro da ortofoto viraram duas imagens', /imagem1\.png/.test(arquivo) && /imagem2\.png/.test(arquivo) && !/imagem3\.png/.test(arquivo));
-        const partes = arquivo.split(/--[^\r\n]*_Relatorio_[^\r\n]*/);
+        const docx = lerDocx(blob);
+        const arquivo = docx.txt('word/afchunk.mht');
+        eq('Word: .docx com o tipo certo e a emissão registrada como "word"', [blob.type, r.captured.registros.map(x => x.formato)], ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', ['impressao', 'word']]);
+        ok('Word: pacote com documento, corpo em HTML (altChunk), rodapé e QR', ['[Content_Types].xml', '_rels/.rels', 'word/document.xml', 'word/_rels/document.xml.rels', 'word/afchunk.mht', 'word/footer1.xml', 'word/media/qr.gif'].every(n => docx.arquivos[n]));
+        ok('Word: o corpo é MHTML (multipart/related) com HTML e imagens', /MIME-Version: 1.0/.test(arquivo) && /multipart\/related/.test(arquivo) && /Content-Type: image\/png/.test(arquivo));
+        ok('Word: o mapa e o quadro da ortofoto viraram duas imagens (o QR fica no rodapé, fora do corpo)', /imagem1\.png/.test(arquivo) && /imagem2\.png/.test(arquivo) && !/imagem3\.png/.test(arquivo));
         const htmlDoMhtml = (s) => Buffer.from(s.split('\r\n\r\n')[2].replace(/\s+/g, ''), 'base64').toString('utf8');
         const htmlWord = htmlDoMhtml(arquivo);
-        ok('Word: sem o mapa interativo dentro do HTML e com papel A4', !/id="map-wrap"|interactive-report-map|tmap-wrap-r1/.test(htmlWord) && /size: 595\.3pt 841\.9pt/.test(htmlWord));
+        ok('Word: sem o mapa interativo dentro do HTML', !/id="map-wrap"|interactive-report-map|tmap-wrap-r1/.test(htmlWord));
         ok('Word: o protocolo da emissão vai no documento', htmlWord.includes(est().protocolo));
-        ok('Word: o QR code do rodapé vai como imagem dentro do arquivo (GIF)', /Content-Type: image\/gif/.test(arquivo));
         ok('Word: quadros da análise temporal em tabela (sem grade CSS)', /<table[^>]*>[\s\S]*imagem|<td/.test(htmlWord) && !/display:grid/.test(htmlWord));
-        ok('Word: cabeçalho uma vez no topo, rodapé do Word com número de página e estilos escritos em cada elemento (sem depender de CSS)', (htmlWord.match(/FICHA CADASTRAL/g) || []).length === 1 && /mso-element:footer/.test(htmlWord) && /mso-field-code:" PAGE "/.test(htmlWord) && /font-size:[0-9]/.test(htmlWord) && !/class="[^"]*(flex|text-slate|bg-white)/.test(htmlWord.split('mso-element:footer')[0].split('<body>')[1] || ''));
+        ok('Word: cabeçalho uma vez no topo e estilos escritos em cada elemento (sem depender de CSS)', (htmlWord.match(/FICHA CADASTRAL/g) || []).length === 1 && /font-size:[0-9]/.test(htmlWord) && !/class="[^"]*(flex|text-slate|bg-white)/.test(htmlWord.split('<body>')[1] || ''));
+        ok('Word: o corpo NÃO leva rodapé em HTML (era ele que se repetia no fim do texto)', !/mso-element:footer|mso-footer:/.test(htmlWord) && !/Emitido em/.test(htmlWord));
+        const rodape = docx.txt('word/footer1.xml');
+        ok('Word: rodapé de verdade em OOXML, com data, SHA-256 e "Página X de Y" por campos PAGE e NUMPAGES', /Emitido em/.test(rodape) && new RegExp('SHA-256: ').test(rodape) && rodape.includes(est().hash.slice(0, 16)) && /w:instr=" PAGE "/.test(rodape) && /w:instr=" NUMPAGES "/.test(rodape));
+        ok('Word: o QR code é imagem do rodapé (relação e arquivo GIF)', /r:embed="rIdQr"/.test(rodape) && /media\/qr\.gif/.test(docx.txt('word/_rels/footer1.xml.rels')) && docx.arquivos['word/media/qr.gif'].length > 5);
+        ok('Word: papel A4 e margens do modelo no documento', /w:w="11906" w:h="16838"/.test(docx.txt('word/document.xml')) && /w:top="850"/.test(docx.txt('word/document.xml')) && /<w:footerReference w:type="default" r:id="rIdFooter"\/>/.test(docx.txt('word/document.xml')));
         eq('Word: sem avisos quando todas as capturas funcionam', r.captured.alerts, []);
         eq('exportar/imprimir não geram erro de execução', r.errors, []);
 
         // captura que falha (ex.: tiles sem CORS): o Word sai, com aviso no lugar do mapa
         const f = await runScenario(Object.assign({}, cen, { capturaFalha: true }));
         await f.sandbox.gerarWord();
-        const arqF = f.captured.blobs[f.captured.blobs.length - 1].parts.join('');
-        const htmlF = htmlDoMhtml(arqF);
+        const htmlF = htmlDoMhtml(lerDocx(f.captured.blobs[f.captured.blobs.length - 1]).txt('word/afchunk.mht'));
         ok('captura falhou: o Word sai mesmo assim, com aviso no lugar dos mapas e um alerta ao usuário', /não foi possível gerar a imagem/.test(htmlF) && !/id="map-wrap"/.test(htmlF) && f.captured.alerts.length === 1 && /2 mapa/.test(f.captured.alerts[0]));
         const sem = await runScenario(Object.assign({}, cen, { semHtml2canvas: true }));
         await sem.sandbox.gerarWord();
