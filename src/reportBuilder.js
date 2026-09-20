@@ -1142,7 +1142,7 @@
             <!-- CARD: MINI-MAPA CARTOGRÁFICO (SIG) -->
             ${isGeral ? '' : (() => {
                 const existingMap = (currentTemplate?.blocos || []).find(b => b.tipo === 'mapa_estatico');
-                const mcfg = window.MapTools ? window.MapTools.normalizeMapConfig(existingMap || {}) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90 };
+                const mcfg = window.MapTools ? window.MapTools.normalizeMapConfig(existingMap || {}) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90, medidas: { ativo: true, lados: true, total: true, perimetro: false } };
                 const chk = (id, label, checked) => `
                     <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
                         <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} class="rounded text-primary focus:ring-0" />
@@ -1187,6 +1187,16 @@
                         </div>
 
                         <div class="flex flex-col gap-1.5">
+                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Medidas da feição (o usuário edita com duplo clique)</label>
+                            <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                                ${chk('cfg-map-med-ativo', 'Mostrar medidas no mapa', mcfg.medidas.ativo)}
+                                ${chk('cfg-map-med-lados', 'Lados / trechos', mcfg.medidas.lados)}
+                                ${chk('cfg-map-med-total', 'Área (polígono), comprimento (linha) ou coordenada (ponto)', mcfg.medidas.total)}
+                                ${chk('cfg-map-med-perim', 'Perímetro (polígono)', mcfg.medidas.perimetro)}
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col gap-1.5">
                             <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Elementos e camadas</label>
                             <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
                                 ${chk('cfg-map-camadas', 'Permitir ligar as camadas ativas do mapa', mcfg.camadasVizinhas)}
@@ -1203,7 +1213,7 @@
 
                         <div class="p-2.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-[11px] text-slate-500 flex items-center gap-2">
                             <span class="material-symbols-outlined text-[16px] text-slate-400">history_toggle_off</span>
-                            <span><strong>Série multitemporal</strong> de ortofotos, <strong>medidas editáveis</strong> e <strong>pontos com tabela de coordenadas</strong>: próximas etapas.</span>
+                            <span><strong>Série multitemporal</strong> de ortofotos e <strong>pontos com tabela de coordenadas</strong>: próximas etapas.</span>
                         </div>
 
                         <button type="button" onclick="ReportBuilder.insertMapBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
@@ -2100,7 +2110,8 @@
 
                 // MAPA COM A FEIÇÃO REAL (pré-visualização esquemática; o mapa de verdade aparece no relatório)
                 {
-                    const mc = window.MapTools ? window.MapTools.normalizeMapConfig(bloco) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90 };
+                    const mc = window.MapTools ? window.MapTools.normalizeMapConfig(bloco) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90, medidas: { ativo: true, lados: true, total: true, perimetro: false } };
+                    const chip = (txt, pos) => `<span class="absolute ${pos} text-[9px] font-mono font-bold text-emerald-800 bg-white/90 border border-emerald-300 px-1 rounded">${txt}</span>`;
                     const bg = mc.baseMap === 'satelite' ? 'bg-slate-800' : (mc.baseMap === 'nenhum' ? 'bg-white' : 'bg-slate-200');
                     const px = Math.round(mc.alturaMm * 3.78);
                     return `
@@ -2113,6 +2124,8 @@
                             ${mc.destaque.ativo ? `
                                 <div class="relative flex items-center justify-center text-center" style="width: 34%; height: 46%; border: 3px solid ${escapeHtml(mc.destaque.cor)}; background: ${escapeHtml(mc.destaque.cor)}59; border-radius: 3px; box-shadow: ${mc.destaque.esmaecerEntorno ? '0 0 0 9999px rgba(255,255,255,0.6)' : 'none'};">
                                     <span class="text-[10px] font-bold ${mc.baseMap === 'satelite' ? 'text-white' : 'text-slate-800'}">Feição do relatório</span>
+                                    ${(mc.medidas.ativo && mc.medidas.lados) ? chip('25,40 m', '-top-3') + chip('25,10 m', '-bottom-3') + chip('40,20 m', '-left-9 top-1/2') + chip('39,80 m', '-right-9 top-1/2') : ''}
+                                    ${(mc.medidas.ativo && mc.medidas.total) ? chip('Área 1.012,40 m²', 'top-[58%]') : ''}
                                 </div>
                             ` : '<span class="text-[10px] text-slate-500">Destaque desligado</span>'}
                             ${mc.norte ? `
@@ -3368,11 +3381,15 @@
             norte: on('cfg-map-norte', true),
             escala: on('cfg-map-escala', true),
             projecao: on('cfg-map-proj', true),
-            alturaMm: Number(val('cfg-map-altura', 90))
+            alturaMm: Number(val('cfg-map-altura', 90)),
+            medidas: { ativo: on('cfg-map-med-ativo', true), lados: on('cfg-map-med-lados', true), total: on('cfg-map-med-total', true), perimetro: on('cfg-map-med-perim', false) }
         };
         const nota = val('cfg-map-note', '') || 'Delimitação cadastral georreferenciada.';
         const normalizado = window.MapTools ? window.MapTools.normalizeMapConfig({ mapa: config }) : config;
-        delete normalizado.vista; // a vista (zoom/posição) é do usuário, não do modelo
+        // vista (zoom/posição), textos editados e rótulos arrastados são do usuário, não do modelo
+        delete normalizado.vista;
+        delete normalizado.edicoes;
+        delete normalizado.posicoes;
 
         const existing = currentTemplate.blocos.find(b => b.tipo === 'mapa_estatico');
         if (existing) {

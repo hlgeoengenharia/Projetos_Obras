@@ -118,6 +118,10 @@
         #map-legend div { display: flex; align-items: center; gap: 5px; line-height: 1.5; }
         #map-legend i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; border: 1px solid rgba(0,0,0,.35); }
         .leaflet-container { font-family: inherit; }
+        .report-measure { background: transparent; border: 0; }
+        .report-measure-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; background: rgba(255,255,255,.92); color: #065f46; border: 1px solid #6ee7b7; border-radius: 4px; padding: 0 4px; font: 700 9px/14px monospace; cursor: text; }
+        .report-measure-label.edited { border-style: dashed; color: #92400e; border-color: #f59e0b; }
+        .report-measure-input { width: 120px; font: 700 9px monospace; border: 1px solid #059669; border-radius: 3px; padding: 0 3px; outline: none; }
         @media print {
             .leaflet-control-zoom, #map-tools-panel, #map-tools-toggle { display: none !important; }
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -1322,39 +1326,7 @@
                 console.error('[Mapa] Erro ao criar o mini-mapa:', e);
                 return;
             }
-            fillMapMeasureSummary(geometry);
             renderMapToolsPanel();
-        }
-
-        function fillMapMeasureSummary(geometry) {
-            const sides = document.getElementById('map-sides-text');
-            const areaEl = document.getElementById('map-area-text');
-            if (!geometry) { if (sides) sides.textContent = 'Feição sem geometria associada'; return; }
-            try {
-                if (typeof turf === 'undefined') return;
-                let g = geometry.type === 'Feature' ? geometry.geometry : geometry;
-                const kind = MapTools.geomKind(g);
-                if (kind === 'polygon') {
-                    const areaM2 = Math.round(turf.area(g) * 100) / 100;
-                    if (areaEl) areaEl.textContent = `Área: ${areaM2.toLocaleString('pt-BR')} m² (${(areaM2 / 10000).toFixed(4)} ha)`;
-                    const ring = g.type === 'Polygon' ? g.coordinates[0] : (g.coordinates[0] && g.coordinates[0][0]);
-                    if (ring && ring.length > 2 && sides) {
-                        let txt = '';
-                        for (let i = 0; i < ring.length - 1; i++) {
-                            const d = Math.round(turf.distance(turf.point(ring[i]), turf.point(ring[i + 1]), { units: 'meters' }) * 100) / 100;
-                            txt += `L${i + 1}: ${d}m  `;
-                        }
-                        sides.textContent = txt || 'Polígono fechado';
-                    }
-                } else if (kind === 'line') {
-                    const len = Math.round(turf.length({ type: 'Feature', properties: {}, geometry: g }, { units: 'kilometers' }) * 100000) / 100;
-                    if (sides) sides.textContent = 'Linha';
-                    if (areaEl) areaEl.textContent = `Comprimento: ${len.toLocaleString('pt-BR')} m`;
-                } else if (kind === 'point') {
-                    if (sides) sides.textContent = 'Ponto';
-                    if (areaEl) areaEl.textContent = '';
-                }
-            } catch (e) { console.warn('[Mapa] Resumo de medidas indisponível:', e); }
         }
 
         // ---------------- painel "Mapa" (só na tela; não sai na impressão)
@@ -1398,6 +1370,13 @@
                     ${chk('mp-esmaecer', 'Esmaecer o entorno', cfg.destaque.esmaecerEntorno, "mapPanelDestaque('esmaecerEntorno', this.checked)", kind !== 'polygon')}
                     <label class="row">Cor <input type="color" value="${esc(cfg.destaque.cor)}" oninput="mapPanelDestaque('cor', this.value)" style="width:34px;height:22px;padding:0;border:1px solid #cbd5e1"></label>
                     <label class="row">Preenchimento <input type="range" min="0" max="90" value="${Math.round(cfg.destaque.preenchimento * 100)}" oninput="mapPanelDestaque('preenchimento', this.value / 100)" style="flex:1"></label>
+                    <h4>Medidas da feição</h4>
+                    ${chk('mp-med', 'Mostrar medidas no mapa', cfg.medidas.ativo, "mapPanelMedidas('ativo', this.checked)")}
+                    ${chk('mp-med-lados', kind === 'line' ? 'Trechos' : 'Lados', cfg.medidas.lados, "mapPanelMedidas('lados', this.checked)", kind === 'point' || mapController.ladosOmitidos)}
+                    ${chk('mp-med-total', kind === 'polygon' ? 'Área' : (kind === 'line' ? 'Comprimento total' : 'Coordenada'), cfg.medidas.total, "mapPanelMedidas('total', this.checked)")}
+                    ${chk('mp-med-perim', 'Perímetro', cfg.medidas.perimetro, "mapPanelMedidas('perimetro', this.checked)", kind !== 'polygon')}
+                    <div style="color:#64748b;line-height:1.35;margin:3px 0 4px">Dê <b>dois cliques</b> numa medida para editar o texto (vazio restaura o calculado). Arraste para mudar de lugar.${mapController.ladosOmitidos ? ' <span style="color:#b45309">Mais de 80 lados: rótulos dos lados omitidos.</span>' : ''}</div>
+                    <button type="button" class="act" onclick="mapPanelResetMedidas()">Restaurar medidas calculadas</button>
                     <h4>Mapa base</h4>
                     <select onchange="mapPanelSet('baseMap', this.value)" style="width:100%;padding:5px;border:1px solid #cbd5e1;border-radius:8px">
                         <option value="osm" ${cfg.baseMap === 'osm' ? 'selected' : ''}>Ruas (OpenStreetMap)</option>
@@ -1426,6 +1405,8 @@
         }
         function mapPanelSet(key, value) { if (mapController) mapController.setConfig({ [key]: value }); }
         function mapPanelDestaque(key, value) { if (mapController) mapController.setConfig({ destaque: { [key]: value } }); }
+        function mapPanelMedidas(key, value) { if (mapController) mapController.setConfig({ medidas: { [key]: value } }); }
+        function mapPanelResetMedidas() { if (mapController) mapController.resetMeasures(); }
         function mapPanelLayer(id, on) { if (mapController) mapController.toggleLayer(id, on); }
 
         async function mapPanelSave() {

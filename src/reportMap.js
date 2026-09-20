@@ -4,7 +4,7 @@
 // Não conhece a página: os elementos de sobreposição (norte, escala/projeção, legenda) são achados pelos ids
 // abaixo, dentro de `doc`. Assim dá para testar com um Leaflet e um DOM simulados.
 //
-// Ids de sobreposição (opcionais): map-north, map-info-bar, map-legend
+// Ids de sobreposição (opcionais): map-north, map-info-bar, map-legend, map-sides-text, map-area-text (resumo sob o mapa)
 
 (function (root, factory) {
     if (typeof module === 'object' && module.exports) {
@@ -40,7 +40,8 @@
         const map = L.map(opts.container, { zoomControl: true, attributionControl: true, zoomSnap: 0.25 });
         if (map.attributionControl && map.attributionControl.setPrefix) map.attributionControl.setPrefix(false);
 
-        const state = { base: null, feature: null, mask: null, neighbors: {}, scaleControl: null };
+        const state = { base: null, feature: null, mask: null, neighbors: {}, scaleControl: null, markers: {} };
+        const measureData = MT.computeMeasures(opts.geometry || null); // { itens, ladosOmitidos }
         const tileLayers = {};
         Object.keys(TILES).forEach(k => {
             tileLayers[k] = L.tileLayer(TILES[k].url, { maxZoom: TILES[k].maxZoom, attribution: TILES[k].attribution, crossOrigin: true });
@@ -103,6 +104,96 @@
             if (state.feature.bringToFront) state.feature.bringToFront();
         }
 
+        // ------------------------------------------------------------ medidas (rótulos editáveis e arrastáveis)
+        function notify() { if (opts.onChange) opts.onChange(JSON.parse(JSON.stringify(cfg))); }
+
+        function visibleMeasures() {
+            const m = cfg.medidas;
+            if (!m.ativo) return [];
+            return MT.applyEdits(measureData.itens, cfg.edicoes).filter(it =>
+                (it.grupo === 'lados' && m.lados) || (it.grupo === 'total' && m.total) || (it.grupo === 'perimetro' && m.perimetro));
+        }
+
+        function clearMeasureMarkers() {
+            Object.keys(state.markers).forEach(id => { map.removeLayer(state.markers[id]); delete state.markers[id]; });
+        }
+
+        /** Grava (ou remove, se vazio/igual ao calculado) a edição de uma medida e redesenha. */
+        function setEdit(id, text, padrao) {
+            const limpo = MT.normalizeEdicoes({ [id]: text })[id];
+            const edicoes = Object.assign({}, cfg.edicoes);
+            if (!limpo || limpo === padrao) delete edicoes[id]; else edicoes[id] = limpo;
+            cfg.edicoes = edicoes;
+            apply();
+        }
+
+        /** Troca o rótulo por um campo de texto (Enter ou sair do campo grava; Esc cancela; vazio restaura o calculado). */
+        function startEdit(it) {
+            const mk = state.markers[it.id];
+            const root = mk && mk.getElement ? mk.getElement() : null;
+            const span = root && root.querySelector ? root.querySelector('span') : null;
+            if (!span || !doc) return;
+            if (mk.dragging && mk.dragging.disable) mk.dragging.disable();
+            const input = doc.createElement('input');
+            input.type = 'text';
+            input.value = it.texto;
+            input.maxLength = 60;
+            input.className = 'report-measure-input';
+            span.textContent = '';
+            span.appendChild(input);
+            if (input.focus) input.focus();
+            if (input.select) input.select();
+            let done = false;
+            const finish = (save) => {
+                if (done) return;
+                done = true;
+                if (save) setEdit(it.id, input.value, it.padrao); else applyMeasures();
+            };
+            const stop = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
+            input.addEventListener('keydown', (ev) => {
+                stop(ev);
+                if (ev.key === 'Enter') finish(true);
+                else if (ev.key === 'Escape') finish(false);
+            });
+            input.addEventListener('blur', () => finish(true));
+            ['mousedown', 'dblclick', 'click'].forEach(name => input.addEventListener(name, stop));
+        }
+
+        function applyMeasures() {
+            clearMeasureMarkers();
+            visibleMeasures().forEach(it => {
+                const p = cfg.posicoes[it.id];
+                const pos = p ? [p.lat, p.lng] : it.pos;
+                const dica = it.editado ? 'Editado (calculado: ' + it.padrao + ')' : 'Duplo clique para editar • arraste para mover';
+                const html = '<span class="report-measure-label' + (it.editado ? ' edited' : '') + '" style="top:' + it.dy + 'px" title="' + escapeHtml(dica) + '">' + escapeHtml(it.texto) + '</span>';
+                const icon = L.divIcon({ className: 'report-measure', html: html, iconSize: [0, 0] });
+                const mk = L.marker(pos, { icon: icon, draggable: true, keyboard: false, zIndexOffset: 1000 });
+                mk.addTo(map);
+                mk.on('dblclick', (e) => {
+                    if (L.DomEvent && L.DomEvent.stopPropagation && e) L.DomEvent.stopPropagation(e);
+                    startEdit(it);
+                });
+                mk.on('dragend', () => {
+                    const ll = mk.getLatLng();
+                    cfg.posicoes = Object.assign({}, cfg.posicoes, { [it.id]: { lat: ll.lat, lng: ll.lng } });
+                    notify();
+                });
+                state.markers[it.id] = mk;
+            });
+            // resumo sob o mapa (sempre visível; acompanha as edições)
+            const sidesEl = el('map-sides-text');
+            const areaEl = el('map-area-text');
+            const todas = MT.applyEdits(measureData.itens, cfg.edicoes);
+            if (sidesEl) {
+                const lados = todas.filter(i => i.grupo === 'lados').map(i => i.resumo);
+                sidesEl.textContent = !geometry ? 'Feição sem geometria associada'
+                    : (lados.length ? lados.join('  ') : (measureData.ladosOmitidos ? 'Mais de 80 lados: rótulos omitidos' : (kind === 'point' ? 'Ponto' : '')));
+            }
+            if (areaEl) {
+                areaEl.textContent = todas.filter(i => i.grupo === 'total' || i.grupo === 'perimetro').map(i => i.resumo).join(' • ');
+            }
+        }
+
         // ------------------------------------------------------------ sobreposições (norte, escala, projeção, legenda)
         function scaleText() {
             const lat = map.getCenter ? map.getCenter().lat : (center ? center[1] : -7);
@@ -145,8 +236,9 @@
             applyNeighbors();
             applyMask();
             applyFeature();
+            applyMeasures();
             applyOverlays();
-            if (opts.onChange) opts.onChange(JSON.parse(JSON.stringify(cfg)));
+            notify();
         }
 
         // ------------------------------------------------------------ enquadramento
@@ -179,6 +271,7 @@
             setConfig(patch) {
                 const next = Object.assign({}, cfg, patch || {});
                 next.destaque = Object.assign({}, cfg.destaque, (patch && patch.destaque) || {});
+                next.medidas = Object.assign({}, cfg.medidas, (patch && patch.medidas) || {});
                 cfg = MT.normalizeMapConfig({ mapa: next });
                 apply();
             },
@@ -191,7 +284,10 @@
             },
             /** Configuração completa para salvar (inclui a vista atual). */
             snapshot() {
-                return Object.assign({}, cfg, { camadasLigadas: cfg.camadasLigadas.slice(), destaque: Object.assign({}, cfg.destaque), vista: currentView() });
+                return Object.assign({}, cfg, {
+                    camadasLigadas: cfg.camadasLigadas.slice(), destaque: Object.assign({}, cfg.destaque), medidas: Object.assign({}, cfg.medidas),
+                    edicoes: Object.assign({}, cfg.edicoes), posicoes: Object.assign({}, cfg.posicoes), vista: currentView()
+                });
             },
             /** Volta ao que o modelo definiu e enquadra a feição de novo. */
             reset(baseConfig) {
@@ -200,6 +296,11 @@
                 frame();
                 apply();
             },
+            /** Apaga as edições e as posições dos rótulos (volta ao calculado). */
+            resetMeasures() { cfg.edicoes = {}; cfg.posicoes = {}; apply(); },
+            /** Itens de medida atuais (com as edições), para painel/teste. */
+            measures() { return MT.applyEdits(measureData.itens, cfg.edicoes); },
+            ladosOmitidos: measureData.ladosOmitidos,
             invalidate() { if (map.invalidateSize) map.invalidateSize(); },
             escapeHtml
         };

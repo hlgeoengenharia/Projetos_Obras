@@ -11,11 +11,35 @@ function ok(name, c) { total++; if (c) return; failed++; console.error(`  FALHOU
 function eq(name, a, e) { total++; if (JSON.stringify(a) === JSON.stringify(e)) return; failed++; console.error(`  FALHOU: ${name}\n     esperado: ${JSON.stringify(e)}\n     obtido:   ${JSON.stringify(a)}`); }
 
 // ---------------------------------------------------------------- Leaflet simulado
+function makeEl(tag) {
+    return {
+        tag, children: [], textContent: '', style: {}, listeners: {}, value: '', focused: false,
+        appendChild(c) { this.children.push(c); },
+        addEventListener(n, fn) { this.listeners[n] = fn; },
+        focus() { this.focused = true; }, select() {}
+    };
+}
+
 function makeL() {
     class Layer {
         constructor(kind, args) { this.kind = kind; this.args = args; }
         addTo(m) { m.layers.add(this); this.map = m; return this; }
         bringToFront() { this.front = true; }
+    }
+    class Marker extends Layer {
+        constructor(pos, o) {
+            super('marker', { pos, o });
+            this.handlers = {};
+            this.latlng = { lat: pos[0], lng: pos[1] };
+            this.draggingOff = false;
+            this.dragging = { disable: () => { this.draggingOff = true; } };
+            this.root = makeEl('div');
+            this.span = makeEl('span');
+            this.root.querySelector = (s) => (s === 'span' ? this.span : null);
+        }
+        on(ev, fn) { this.handlers[ev] = fn; return this; }
+        getLatLng() { return this.latlng; }
+        getElement() { return this.root; }
     }
     class Control {
         constructor(kind, o) { this.kind = kind; this.o = o; }
@@ -44,6 +68,8 @@ function makeL() {
         geoJSON: (d, o) => new Layer('geojson', { d, o }),
         polygon: (p, o) => new Layer('polygon', { p, o }),
         circleMarker: (ll, o) => new Layer('circle', { ll, o }),
+        divIcon: (o) => Object.assign({ divIcon: true }, o),
+        marker: (p, o) => new Marker(p, o),
         control: { scale: (o) => new Control('scale', o) }
     };
     return L;
@@ -51,8 +77,8 @@ function makeL() {
 
 function makeDoc(ids) {
     const els = {};
-    ids.forEach(id => { els[id] = { style: {}, innerHTML: '' }; });
-    return { els, getElementById: (id) => els[id] || null };
+    ids.forEach(id => { els[id] = { style: {}, innerHTML: '', textContent: '' }; });
+    return { els, getElementById: (id) => els[id] || null, createElement: (tag) => makeEl(tag) };
 }
 
 const poly = { type: 'Polygon', coordinates: [[[-34.84, -7.02], [-34.83, -7.02], [-34.83, -7.01], [-34.84, -7.01], [-34.84, -7.02]]] };
@@ -60,7 +86,7 @@ const camadas = [
     { id: '1', name: 'Lotes <vizinhos>', color: '#ff0000', kind: 'polygon', features: [{ type: 'Feature', properties: {}, geometry: poly }], truncated: false },
     { id: '4', name: 'Linhas', color: '#00ff00', kind: 'line', features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[-34.84, -7.02], [-34.83, -7.01]] } }], truncated: true }
 ];
-const ids = ['map-north', 'map-info-bar', 'map-legend'];
+const ids = ['map-north', 'map-info-bar', 'map-legend', 'map-sides-text', 'map-area-text'];
 
 function build(config, geometry, extra) {
     const L = makeL();
@@ -168,6 +194,98 @@ t = build({}, ponto);
 ok('ponto: destaque vira círculo', typeof t.layersOf('geojson')[0].args.o.pointToLayer === 'function' && t.layersOf('geojson')[0].args.o.pointToLayer({}, [0, 0]).kind === 'circle');
 t = build({}, null);
 ok('sem geometria: mapa abre num ponto padrão e nada é destacado', !!t.map.viewSet && t.layersOf('geojson').length === 0);
+
+// ---------------------------------------------------------------- medidas: rótulos, edição, arraste
+const marcadores = (tt) => tt.layersOf('marker');
+const label = (mk) => mk.args.o.icon.html;
+t = build({});
+eq('por padrão: 4 lados + área (perímetro desligado)', marcadores(t).map(m => label(m).replace(/<[^>]+>/g, '').replace(/[\d.]+,\d{2}/, 'N')), ['N m', 'N m', 'N m', 'N m', 'Área N m²']);
+ok('rótulo traz dica de duplo clique e arraste', /Duplo clique para editar/.test(label(marcadores(t)[0])));
+ok('rótulo é arrastável, sem teclado e acima das camadas', marcadores(t)[0].args.o.draggable === true && marcadores(t)[0].args.o.zIndexOffset === 1000);
+ok('resumo sob o mapa: lados L1..L4', /^L1: .* L4: /.test(t.doc.els['map-sides-text'].textContent));
+ok('resumo sob o mapa: área e perímetro', /Área: .* m² \(.* ha\)/.test(t.doc.els['map-area-text'].textContent) && /Perímetro: /.test(t.doc.els['map-area-text'].textContent));
+
+t.ctl.setConfig({ medidas: { ativo: false } });
+ok('medidas desligadas: sem rótulos no mapa, resumo continua', marcadores(t).length === 0 && /Área:/.test(t.doc.els['map-area-text'].textContent));
+t.ctl.setConfig({ medidas: { ativo: true, lados: false } });
+eq('só total: apenas a área', marcadores(t).length, 1);
+t.ctl.setConfig({ medidas: { lados: true, total: false } });
+eq('só lados: 4 rótulos', marcadores(t).length, 4);
+t.ctl.setConfig({ medidas: { total: true, perimetro: true } });
+ok('perímetro ligado: rótulo abaixo da área', marcadores(t).length === 6 && /top:16px/.test(label(marcadores(t)[5])) && /Perím\./.test(label(marcadores(t)[5])));
+
+// ---- editar com duplo clique
+t = build({});
+const mk0 = marcadores(t)[0];
+const textoOriginal = mk0.span.textContent || label(mk0).replace(/<[^>]+>/g, '');
+mk0.handlers.dblclick({});
+const campo = mk0.span.children[0];
+ok('duplo clique abre um campo de texto no lugar do rótulo', !!campo && campo.tag === 'input' && campo.focused === true && campo.value === textoOriginal && campo.maxLength === 60);
+ok('enquanto edita não arrasta', mk0.draggingOff === true);
+campo.value = '110,00 m (campo)';
+const mudancas = t.changes.length;
+campo.listeners.keydown({ key: 'Enter' });
+ok('Enter grava a edição', t.ctl.getConfig().edicoes['lado:0'] === '110,00 m (campo)' && t.changes.length > mudancas);
+ok('rótulo editado aparece marcado e com o valor calculado na dica', (() => { const h = label(marcadores(t)[0]); return /edited/.test(h) && /110,00 m \(campo\)/.test(h) && /calculado: /.test(h); })());
+ok('resumo sob o mapa acompanha a edição', /^110,00 m \(campo\)/.test(t.doc.els['map-sides-text'].textContent));
+
+// cancelar, restaurar e sair do campo
+marcadores(t)[0].handlers.dblclick({});
+let c2 = marcadores(t)[0].span.children[0];
+c2.value = 'outra coisa';
+c2.listeners.keydown({ key: 'Escape' });
+eq('Esc cancela e mantém a edição anterior', t.ctl.getConfig().edicoes['lado:0'], '110,00 m (campo)');
+marcadores(t)[0].handlers.dblclick({});
+c2 = marcadores(t)[0].span.children[0];
+c2.value = '   ';
+c2.listeners.keydown({ key: 'Enter' });
+ok('texto vazio restaura o valor calculado', t.ctl.getConfig().edicoes['lado:0'] === undefined && !/edited/.test(label(marcadores(t)[0])));
+marcadores(t)[1].handlers.dblclick({});
+c2 = marcadores(t)[1].span.children[0];
+c2.value = '99 m';
+c2.listeners.blur();
+eq('sair do campo grava', t.ctl.getConfig().edicoes['lado:1'], '99 m');
+c2.listeners.blur();
+eq('gravar duas vezes não duplica nem quebra', Object.keys(t.ctl.getConfig().edicoes), ['lado:1']);
+marcadores(t)[4].handlers.dblclick({});
+c2 = marcadores(t)[4].span.children[0];
+c2.value = marcadores(t)[4].span.textContent || c2.value;
+const areaPadrao = t.ctl.measures().find(m => m.id === 'area').texto;
+c2.value = areaPadrao;
+c2.listeners.keydown({ key: 'Enter' });
+ok('digitar o mesmo texto calculado não cria edição', t.ctl.getConfig().edicoes.area === undefined);
+marcadores(t)[4].handlers.dblclick({});
+c2 = marcadores(t)[4].span.children[0];
+c2.value = '<img src=x onerror=alert(1)> 1.000 m²';
+c2.listeners.keydown({ key: 'Enter' });
+ok('texto digitado é escapado no rótulo', !/<img/.test(label(marcadores(t)[4])) && /&lt;img/.test(label(marcadores(t)[4])));
+ok('edição de área vai para o resumo', /1\.000 m²/.test(t.doc.els['map-area-text'].textContent));
+c2 = null;
+
+// ---- arrastar o rótulo
+t = build({});
+const mk1 = marcadores(t)[1];
+mk1.latlng = { lat: -7.0131, lng: -34.8322 };
+mk1.handlers.dragend();
+eq('arrastar guarda a nova posição', t.ctl.getConfig().posicoes['lado:1'], { lat: -7.0131, lng: -34.8322 });
+eq('snapshot leva edições, posições e medidas', (() => { const s = t.ctl.snapshot(); return [Object.keys(s.posicoes), s.medidas.ativo, typeof s.edicoes]; })(), [['lado:1'], true, 'object']);
+const t3 = build({ mapa: { posicoes: { 'lado:1': { lat: -7.0131, lng: -34.8322 } }, edicoes: { area: '900 m²' } } });
+ok('posição e edição salvas voltam ao abrir', marcadores(t3)[1].args.pos[0] === -7.0131 && /900 m²/.test(label(marcadores(t3)[4])));
+t3.ctl.resetMeasures();
+ok('restaurar medidas apaga edições e posições', Object.keys(t3.ctl.getConfig().edicoes).length === 0 && Object.keys(t3.ctl.getConfig().posicoes).length === 0 && !/900/.test(label(marcadores(t3)[4])));
+const t4 = build({ mapa: { edicoes: { area: '900 m²' } } });
+t4.ctl.reset(MT.normalizeMapConfig({}));
+ok('restaurar padrão do modelo também limpa as medidas editadas', Object.keys(t4.ctl.getConfig().edicoes).length === 0);
+
+// ---- outros tipos de geometria
+t = build({}, { type: 'LineString', coordinates: [[-34.84, -7.02], [-34.84, -7.019], [-34.839, -7.019]] });
+ok('linha: trechos + comprimento', marcadores(t).length === 3 && /Comp\./.test(label(marcadores(t)[2])) && /^T1: /.test(t.doc.els['map-sides-text'].textContent) && /Comprimento:/.test(t.doc.els['map-area-text'].textContent));
+t = build({}, { type: 'Point', coordinates: [-34.835, -7.015] });
+ok('ponto: coordenada e nada de lados', marcadores(t).length === 1 && /-7\.015000, -34\.835000/.test(label(marcadores(t)[0])) && t.doc.els['map-sides-text'].textContent === 'Ponto');
+t = build({}, { type: 'Polygon', coordinates: [Array.from({ length: 101 }, (_, i) => { const a = i / 100 * 2 * Math.PI; return i === 100 ? [-34.839, -7.02] : [-34.84 + 0.001 * Math.cos(a), -7.02 + 0.001 * Math.sin(a)]; })] });
+ok('mais de 80 lados: só a área no mapa e aviso no resumo', marcadores(t).length === 1 && t.ctl.ladosOmitidos === true && /omitidos/.test(t.doc.els['map-sides-text'].textContent));
+t = build({}, null);
+ok('sem geometria: nenhuma medida e aviso no resumo', marcadores(t).length === 0 && t.doc.els['map-sides-text'].textContent === 'Feição sem geometria associada');
 
 console.log(`reportMap: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {

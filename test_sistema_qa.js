@@ -986,7 +986,7 @@ assertTest('Cadastros: "Tipo de Aba" inclui Relatórios (A4), aba sem campos que
 
 const viewerMapCode = fs.readFileSync('relatorio_view.html', 'utf8');
 const hasMiniMapViewer = viewerMapCode.includes('src/mapTools.js') && viewerMapCode.includes('src/reportMap.js') &&
-    viewerMapCode.includes('map-tools-panel') && viewerMapCode.includes('mapPanelSave') && viewerMapCode.includes('mapPanelReset');
+    viewerMapCode.includes('map-tools-panel') && viewerMapCode.includes('mapPanelSave') && viewerMapCode.includes('mapPanelReset') && viewerMapCode.includes('mapPanelMedidas') && viewerMapCode.includes('report-measure-input');
 const hasAjustesSql = fs.existsSync('supabase_relatorios_ajustes.sql') &&
     fs.readFileSync('supabase_relatorios_ajustes.sql', 'utf8').includes('ENABLE ROW LEVEL SECURITY') &&
     fs.readFileSync('supabase_relatorios_ajustes.sql', 'utf8').includes('user_id = auth.uid()') &&

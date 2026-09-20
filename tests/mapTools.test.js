@@ -95,6 +95,65 @@ eq('anel externo do polígono', MT.polygonOuterRings(poly).length, 1);
 eq('anéis de multipolígono', MT.polygonOuterRings({ type: 'MultiPolygon', coordinates: [poly.coordinates, poly.coordinates] }).length, 2);
 eq('ponto e linha não têm anel', [MT.polygonOuterRings({ type: 'Point', coordinates: [0, 0] }).length, MT.polygonOuterRings(null).length], [0, 0]);
 
+// ---------------------------------------------------------------- medidas da feição
+near('1° de latitude ≈ 111.195 m', MT.distanceM([0, 0], [0, 1]), 111194.93, 1);
+near('1° de longitude no equador ≈ 111.195 m', MT.distanceM([0, 0], [1, 0]), 111194.93, 1);
+near('longitude encolhe com a latitude (cos 60° = 0,5)', MT.distanceM([0, 60], [1, 60]), 111194.93 / 2, 30);
+eq('distância de ponto a si mesmo', MT.distanceM([-34.8, -7], [-34.8, -7]), 0);
+eq('formata no padrão brasileiro', [MT.fmtNumber(1012.4, 2), MT.fmtNumber(0.5, 4), MT.fmtNumber(-7.5, 1), MT.fmtNumber(1234567.891, 2), MT.fmtNumber(25, 0), MT.fmtNumber(-0.001, 2)], ['1.012,40', '0,5000', '-7,5', '1.234.567,89', '25', '0,00']);
+
+const quad = { type: 'Polygon', coordinates: [[[-34.84, -7.02], [-34.839, -7.02], [-34.839, -7.019], [-34.84, -7.019], [-34.84, -7.02]]] };
+const mq = MT.computeMeasures(quad);
+const byId = (m, id) => m.itens.find(i => i.id === id);
+eq('quadrilátero: 4 lados + área + perímetro', mq.itens.map(i => i.id), ['lado:0', 'lado:1', 'lado:2', 'lado:3', 'area', 'perimetro']);
+near('lado N-S ≈ 111,19 m', byId(mq, 'lado:1').valor, 111.195, 0.05);
+near('lado L-O ≈ 110,36 m (cos φ)', byId(mq, 'lado:0').valor, 111.195 * Math.cos(7.0195 * Math.PI / 180), 0.1);
+near('área ≈ produto dos lados', byId(mq, 'area').valor, 111.195 * 110.36, 15);
+near('perímetro = soma dos lados', byId(mq, 'perimetro').valor, mq.itens.slice(0, 4).reduce((s, i) => s + i.valor, 0), 1e-9);
+ok('textos no padrão brasileiro', /^\d+,\d{2} m$/.test(byId(mq, 'lado:0').texto) && /^Área [\d.]+,\d{2} m²$/.test(byId(mq, 'area').texto) && /^Perím\. /.test(byId(mq, 'perimetro').texto));
+ok('resumo da área traz hectares', /Área: .* m² \(.* ha\)/.test(byId(mq, 'area').resumo));
+eq('resumo dos lados numerados', byId(mq, 'lado:2').resumo.slice(0, 3), 'L3:');
+eq('lados por grupo', [byId(mq, 'lado:0').grupo, byId(mq, 'area').grupo, byId(mq, 'perimetro').grupo], ['lados', 'total', 'perimetro']);
+ok('lado é rotulado no meio do segmento', Math.abs(byId(mq, 'lado:0').pos[0] - -7.02) < 1e-9 && Math.abs(byId(mq, 'lado:0').pos[1] - -34.8395) < 1e-9);
+ok('área no centro do polígono; perímetro logo abaixo', Math.abs(byId(mq, 'area').pos[0] - -7.0195) < 1e-6 && byId(mq, 'perimetro').dy > 0);
+eq('sem omissão de lados', mq.ladosOmitidos, false);
+
+const comFuro = { type: 'Polygon', coordinates: [quad.coordinates[0], [[-34.8398, -7.0198], [-34.8398, -7.0192], [-34.8392, -7.0192], [-34.8392, -7.0198], [-34.8398, -7.0198]]] };
+ok('furo é descontado da área e não entra no perímetro', byId(MT.computeMeasures(comFuro), 'area').valor < byId(mq, 'area').valor * 0.75 && Math.abs(byId(MT.computeMeasures(comFuro), 'perimetro').valor - byId(mq, 'perimetro').valor) < 1e-9);
+
+const multi = { type: 'MultiPolygon', coordinates: [quad.coordinates, [[[-34.83, -7.02], [-34.829, -7.02], [-34.829, -7.019], [-34.83, -7.019], [-34.83, -7.02]]]] };
+const mm = MT.computeMeasures(multi);
+eq('multipolígono: lados numerados em sequência', mm.itens.filter(i => i.tipo === 'lado').map(i => i.id).slice(3, 6), ['lado:3', 'lado:4', 'lado:5']);
+near('multipolígono: área é a soma', byId(mm, 'area').valor, 2 * byId(mq, 'area').valor, 30);
+
+const muitos = { type: 'Polygon', coordinates: [Array.from({ length: 101 }, (_, i) => { const a = i / 100 * 2 * Math.PI; return i === 100 ? [-34.84 + 0.001, -7.02] : [-34.84 + 0.001 * Math.cos(a), -7.02 + 0.001 * Math.sin(a)]; })] };
+const mmany = MT.computeMeasures(muitos);
+ok('mais de 80 lados: rótulos dos lados omitidos, área e perímetro mantidos', mmany.ladosOmitidos === true && !mmany.itens.some(i => i.tipo === 'lado') && !!byId(mmany, 'area') && !!byId(mmany, 'perimetro'));
+
+const linha3 = { type: 'LineString', coordinates: [[-34.84, -7.02], [-34.84, -7.019], [-34.839, -7.019]] };
+const ml = MT.computeMeasures(linha3);
+eq('linha: trechos + comprimento (sem área nem perímetro)', ml.itens.map(i => i.id), ['trecho:0', 'trecho:1', 'comprimento']);
+near('comprimento = soma dos trechos', byId(ml, 'comprimento').valor, ml.itens[0].valor + ml.itens[1].valor, 1e-9);
+ok('comprimento é rotulado no meio do percurso', (() => { const p = byId(ml, 'comprimento').pos; return p[0] > -7.0195 && p[0] < -7.0185 && Math.abs(p[1] - -34.84) < 0.0006; })());
+eq('trecho tem resumo T1', ml.itens[0].resumo.slice(0, 3), 'T1:');
+
+eq('ponto: coordenada em graus decimais', MT.computeMeasures({ type: 'Point', coordinates: [-34.835, -7.015] }).itens.map(i => [i.id, i.texto]), [['coordenada', '-7.015000, -34.835000']]);
+eq('multiponto: uma coordenada por ponto', MT.computeMeasures({ type: 'MultiPoint', coordinates: [[-34.8, -7], [-34.7, -7.1]] }).itens.map(i => i.id), ['coordenada:0', 'coordenada:1']);
+eq('sem geometria: nada', MT.computeMeasures(null), { itens: [], ladosOmitidos: false });
+eq('aceita Feature', MT.computeMeasures({ type: 'Feature', geometry: quad }).itens.length, 6);
+
+const ed = MT.applyEdits(mq.itens, { 'lado:0': '110,00 m (medido em campo)' });
+eq('edição substitui texto e resumo e guarda o valor calculado', [ed[0].texto, ed[0].resumo, ed[0].editado, ed[0].padrao], ['110,00 m (medido em campo)', '110,00 m (medido em campo)', true, mq.itens[0].texto]);
+eq('medida sem edição não muda', [ed[1].texto === mq.itens[1].texto, ed[1].editado], [true, false]);
+
+// configuração das medidas, edições e posições dos rótulos
+eq('medidas ligadas por padrão, perímetro desligado', MT.normalizeMapConfig({}).medidas, { ativo: true, lados: true, total: true, perimetro: false });
+eq('medidas: o usuário pode desligar tudo ou só parte', [MT.mergeAjustes(c0, { medidas: { ativo: false } }).medidas.ativo, MT.mergeAjustes(c0, { medidas: { perimetro: true } }).medidas.perimetro, MT.mergeAjustes(c0, { medidas: { perimetro: true } }).medidas.lados], [false, true, true]);
+const e2 = MT.normalizeMapConfig({ mapa: { edicoes: { 'lado:1': '  20 m  ', area: 'x'.repeat(200), 'nao valido!': 'a', perimetro: '   ', trecho: 5, 'lado:2': 'a\nb' } } }).edicoes;
+eq('edições: limpa espaços, limita o tamanho, tira quebras e descarta o inválido/vazio', [e2['lado:1'], e2.area.length, e2['nao valido!'], e2.perimetro, e2.trecho, e2['lado:2']], ['20 m', 60, undefined, undefined, undefined, 'a b']);
+eq('posições: só coordenadas válidas', MT.normalizeMapConfig({ mapa: { posicoes: { 'lado:0': { lat: '-7.02', lng: -34.8 }, area: { lat: 999, lng: 0 }, perimetro: 'x' } } }).posicoes, { 'lado:0': { lat: -7.02, lng: -34.8 } });
+eq('ajustes trazem edições e posições', (() => { const a = MT.mergeAjustes(c0, { edicoes: { area: '1.000 m²' }, posicoes: { area: { lat: -7, lng: -34 } } }); return [a.edicoes, a.posicoes]; })(), [{ area: '1.000 m²' }, { area: { lat: -7, lng: -34 } }]);
+
 console.log(`mapTools: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {
     console.error(`${failed} falha(s)`);
