@@ -551,7 +551,7 @@
         } else {
             return {
                 id: 'rpt_' + Math.random().toString(36).substr(2, 9),
-                nome: `Diagnóstico Consolidado - ${formName}`,
+                nome: `Relatório Geral - ${formName}`,
                 tipo: 'geral',
                 form_id: formId,
                 disponibilizar_no_mapa: false,
@@ -572,27 +572,11 @@
                         exibirDataHora: true
                     },
                     {
-                        id: 'blk_kpis_' + Date.now(),
-                        tipo: 'kpi_cards',
-                        titulo: 'Indicadores Globais da Camada',
-                        metricas: [
-                            { rotulo: 'Total de Imóveis', operacao: 'COUNT', campo: '*' },
-                            { rotulo: 'Média de Área', operacao: 'AVG', campo: 'area' },
-                            { rotulo: 'Inadimplência', operacao: 'PERCENT', campo: 'status_iptu' }
-                        ]
-                    },
-                    {
                         id: 'blk_chart_' + Date.now(),
                         tipo: 'grafico_existente',
                         titulo: charts.length > 0 ? charts[0].title : 'Distribuição Estatística',
                         chart_id: charts.length > 0 ? charts[0].id : '',
                         layout: 'lado_a_lado'
-                    },
-                    {
-                        id: 'blk_table_' + Date.now(),
-                        tipo: 'tabela_sintetica',
-                        titulo: 'Quadro Sintético de Feições',
-                        colunas: fields.slice(0, 5).map(f => f.id)
                     },
                     {
                         id: 'blk_footer_' + Date.now(),

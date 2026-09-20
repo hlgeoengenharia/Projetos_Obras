@@ -7,6 +7,8 @@
     'use strict';
 
     let currentTemplate = null;
+    // 'individual' = fichas da feição (Relatórios Gerenciais A4 do cadastro); 'geral' = relatório gerencial da camada inteira
+    let builderScope = 'individual';
     let sortableInstance = null;
     let activeAccordionId = 'acc-layout'; // Card 0 aberto por padrão
     window._customUploadedLogoUrl = null;
@@ -14,18 +16,35 @@
     /**
      * Inicializa o construtor de relatórios para o formulário selecionado.
      */
-    function initReportBuilderTab(formId, formName = 'Formulário') {
+    /** Modelos do cadastro que pertencem ao escopo em edição (individual ou geral da camada). */
+    function getScopedTemplates(formId) {
+        const all = window.ReportAdapter ? window.ReportAdapter.getReportTemplates(formId) : [];
+        return (all || []).filter(t => builderScope === 'geral' ? t.tipo === 'geral' : t.tipo !== 'geral');
+    }
+
+    /** Dimensões da folha do modelo em edição (A4 ou A3, retrato ou paisagem). */
+    function pageDims() {
+        const cfg = currentTemplate && currentTemplate.config_pagina;
+        if (window.PageSize) return window.PageSize.dims(cfg);
+        const land = !!(cfg && cfg.orientacao === 'landscape');
+        return { name: 'A4', orient: land ? 'landscape' : 'portrait', widthMm: land ? 297 : 210, heightMm: land ? 210 : 297,
+                 widthPx: land ? 1123 : 794, heightPx: land ? 794 : 1123, cssPageSize: 'A4 ' + (land ? 'landscape' : 'portrait'),
+                 label: land ? '297 × 210 mm (Paisagem)' : '210 × 297 mm (Retrato)' };
+    }
+
+    function initReportBuilderTab(formId, formName = 'Formulário', opts) {
         if (!formId) return;
+        if (opts && opts.scope) builderScope = opts.scope === 'geral' ? 'geral' : 'individual';
 
         const container = document.getElementById('report-builder-container');
         if (!container) return;
 
-        const templates = window.ReportAdapter ? window.ReportAdapter.getReportTemplates(formId) : [];
+        const templates = getScopedTemplates(formId);
 
         if (templates.length > 0) {
             currentTemplate = JSON.parse(JSON.stringify(templates[0]));
         } else {
-            currentTemplate = window.ReportAdapter.createDefaultTemplate(formId, 'individual', formName);
+            currentTemplate = window.ReportAdapter.createDefaultTemplate(formId, builderScope, formName);
         }
 
         // Garante configurações padrão completas
@@ -69,8 +88,9 @@
         const container = document.getElementById('report-builder-container');
         if (!container) return;
 
-        const templates = window.ReportAdapter.getReportTemplates(formId);
-        const isIndividual = currentTemplate.tipo === 'individual';
+        const templates = getScopedTemplates(formId);
+        const isGeral = builderScope === 'geral';
+        const pd = pageDims();
         // o atalho no popup lista TODAS as abas do cadastro (inclusive a de Relatórios); as demais listas do módulo não
         const formTabs = window.ReportAdapter.getFormTabs ? window.ReportAdapter.getFormTabs(formId, { includeReportsTab: true }) : [];
 
@@ -83,7 +103,7 @@
                         <div class="flex flex-col min-w-[180px]">
                             <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Modelo de Relatório</label>
                             <select id="rpt-select-template" onchange="ReportBuilder.onTemplateChange(this.value)" class="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold dark:text-white focus:ring-2 focus:ring-primary/40 focus:outline-none">
-                                ${templates.map(t => `<option value="${t.id}" ${t.id === currentTemplate.id ? 'selected' : ''}>${t.nome} (${t.tipo === 'individual' ? 'Ficha Individual' : 'Consolidado Lote'})</option>`).join('')}
+                                ${templates.map(t => `<option value="${t.id}" ${t.id === currentTemplate.id ? 'selected' : ''}>${t.nome} (${t.tipo === 'geral' ? 'Relatório Geral da Camada' : 'Ficha Individual'})</option>`).join('')}
                                 <option value="__new__">+ Criar Novo Modelo de Relatório...</option>
                             </select>
                         </div>
@@ -94,7 +114,8 @@
                             <input type="text" id="rpt-template-name" value="${escapeHtml(currentTemplate.nome)}" oninput="ReportBuilder.updateTemplateName(this.value)" class="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold dark:text-white focus:ring-2 focus:ring-primary/40 focus:outline-none" placeholder="Ex: Ficha Cadastral Oficial..." />
                         </div>
 
-                        <!-- VÍNCULO COM O POPUP DO MAPA: EM QUAL ABA EXIBIR O ATALHO -->
+                        <!-- VÍNCULO COM O POPUP DO MAPA: EM QUAL ABA EXIBIR O ATALHO (só fichas individuais) -->
+                        ${isGeral ? '' : `
                         <div class="flex flex-col min-w-[220px]">
                             <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
                                 <span class="material-symbols-outlined text-[14px] text-primary dark:text-sky-400">near_me</span>
@@ -109,14 +130,18 @@
                                 <option value="none" ${currentTemplate.atalho_aba === 'none' ? 'selected' : ''}>🚫 Não exibir atalho no mapa</option>
                             </select>
                         </div>
+                        `}
                     </div>
 
                     <!-- Botões de Ação -->
                     <div class="flex items-center gap-2 self-end xl:self-center shrink-0">
-                        <button type="button" onclick="ReportBuilder.printReport()" class="flex items-center gap-1.5 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-white rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer" title="Visualizar ou Imprimir em A4">
-                            <span class="material-symbols-outlined text-[18px] text-primary dark:text-sky-400">print</span>
-                            <span>Imprimir A4 / PDF</span>
-                        </button>
+                        <div class="flex flex-col">
+                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Folha</label>
+                            <div class="inline-flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700" title="Tamanho do papel do relatório">
+                                <button type="button" onclick="ReportBuilder.setPageSize('A4')" class="px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${pd.name === 'A4' ? 'bg-primary text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-primary'}">A4</button>
+                                <button type="button" onclick="ReportBuilder.setPageSize('A3')" class="px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${pd.name === 'A3' ? 'bg-primary text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-primary'}">A3</button>
+                            </div>
+                        </div>
                         <button type="button" onclick="ReportBuilder.saveCurrentTemplate()" class="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="Salvar Modelo">
                             <span class="material-symbols-outlined text-[18px]">save</span>
                             <span>Salvar Modelo</span>
@@ -141,11 +166,11 @@
                         <div class="w-full mb-3 flex items-center justify-between px-2 text-xs">
                             <div class="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                                 <span class="material-symbols-outlined text-[17px] text-amber-500">edit_note</span>
-                                <span class="font-bold">Folha A4 Interativa:</span>
+                                <span class="font-bold">Folha ${pd.name} Interativa:</span>
                                 <span class="text-slate-400 text-[11px]">Dê duplo-clique em qualquer texto da folha para editar</span>
                             </div>
                             <div class="flex items-center gap-2">
-                                <span class="text-[11px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md" id="a4-dimension-indicator">210 × 297 mm</span>
+                                <span class="text-[11px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md" id="a4-dimension-indicator">${pd.label}</span>
                             </div>
                         </div>
 
@@ -211,21 +236,22 @@
         const footerSlot = document.getElementById('a4-footer-slot');
         if (!stage || !currentTemplate || !currentTemplate.config_pagina) return;
 
-        const orient = currentTemplate.config_pagina.orientacao || 'portrait';
+        const pd = pageDims();
+        const orient = pd.orient;
         const mm = currentTemplate.config_pagina.margens_mm || { top: 15, bottom: 15, left: 15, right: 15 };
 
         // 1mm = aprox 3.78px a 96 DPI
         const scaleFactor = 3.78;
-        let widthMm = (orient === 'landscape') ? 297 : 210;
-        let heightMm = (orient === 'landscape') ? 210 : 297;
-        let nominalWidthPx = Math.round(widthMm * scaleFactor); // 794px em retrato, 1123px em paisagem
-        let nominalHeightPx = Math.round(heightMm * scaleFactor); // 1123px em retrato, 794px em paisagem
+        let widthMm = pd.widthMm;
+        let heightMm = pd.heightMm;
+        let nominalWidthPx = pd.widthPx; // A4: 794px em retrato, 1123px em paisagem (A3: 1123px / 1588px)
+        let nominalHeightPx = pd.heightPx;
 
         // Folha sempre 100% visível, responsiva e sem cortes laterais:
         stage.style.width = '100%';
-        stage.style.maxWidth = (orient === 'landscape') ? `${nominalWidthPx}px` : '794px';
+        stage.style.maxWidth = `${nominalWidthPx}px`;
         stage.style.boxSizing = 'border-box';
-        stage.style.minHeight = (orient === 'landscape') ? `${nominalHeightPx}px` : '1050px';
+        stage.style.minHeight = (orient === 'landscape') ? `${nominalHeightPx}px` : `${Math.round(nominalHeightPx * 0.935)}px`;
         stage.style.padding = '0';
 
         const padTop = Math.round(mm.top * scaleFactor);
@@ -262,7 +288,7 @@
         // Atualiza a régua horizontal (com largura idêntica à folha e limites em percentual)
         if (ruler) {
             ruler.style.width = '100%';
-            ruler.style.maxWidth = (orient === 'landscape') ? `${nominalWidthPx}px` : '794px';
+            ruler.style.maxWidth = `${nominalWidthPx}px`;
             let rulerHtml = '';
             const stepMm = 10;
             const totalSteps = Math.floor(widthMm / stepMm);
@@ -280,12 +306,12 @@
         }
 
         if (breakInd) {
-            breakInd.style.maxWidth = (orient === 'landscape') ? `${nominalWidthPx}px` : '794px';
+            breakInd.style.maxWidth = `${nominalWidthPx}px`;
         }
 
         const indicator = document.getElementById('a4-dimension-indicator');
         if (indicator) {
-            indicator.textContent = orient === 'landscape' ? '297 × 210 mm (Paisagem)' : '210 × 297 mm (Retrato)';
+            indicator.textContent = pd.label;
         }
     }
 
@@ -299,6 +325,9 @@
         const multipleTabs = (window.ReportAdapter && window.ReportAdapter.getMultipleTabs) ? window.ReportAdapter.getMultipleTabs(formId) : [];
         const cfg = currentTemplate.config_pagina;
         const mm = cfg.margens_mm || { top: 15, bottom: 15, left: 15, right: 15 };
+        // Relatório Geral (camada inteira): só Cabeçalho, Caixa de texto livre, Gráficos do Dashboard e Rodapé (+ layout da folha)
+        const isGeral = builderScope === 'geral';
+        const pdPanel = pageDims();
 
         // Agrupamento ordenado de campos por Aba com inclusão de todas as abas
         const tabGroupsMap = new Map();
@@ -359,7 +388,7 @@
             <!-- CARD 0: CONFIGURAÇÃO DA FOLHA (LAYOUT DA PÁGINA) -->
             ${renderAccordionCard({
                 id: 'acc-layout',
-                title: 'Configuração da Folha (Layout A4)',
+                title: `Configuração da Folha (Layout ${pdPanel.name})`,
                 icon: 'settings_overscan',
                 badge: cfg.orientacao === 'landscape' ? 'Paisagem' : 'Retrato',
                 content: `
@@ -370,11 +399,11 @@
                             <div class="grid grid-cols-2 gap-2">
                                 <button type="button" onclick="ReportBuilder.updateOrientation('portrait')" class="flex items-center justify-center gap-1.5 p-2 rounded-xl border text-xs font-bold transition-all ${cfg.orientacao === 'portrait' ? 'bg-primary text-white border-primary shadow-xs' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'}">
                                     <span class="material-symbols-outlined text-[16px]">crop_portrait</span>
-                                    <span>Retrato (210×297)</span>
+                                    <span>Retrato (${pdPanel.name === 'A3' ? '297×420' : '210×297'})</span>
                                 </button>
                                 <button type="button" onclick="ReportBuilder.updateOrientation('landscape')" class="flex items-center justify-center gap-1.5 p-2 rounded-xl border text-xs font-bold transition-all ${cfg.orientacao === 'landscape' ? 'bg-primary text-white border-primary shadow-xs' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'}">
                                     <span class="material-symbols-outlined text-[16px]">crop_landscape</span>
-                                    <span>Paisagem (297×210)</span>
+                                    <span>Paisagem (${pdPanel.name === 'A3' ? '420×297' : '297×210'})</span>
                                 </button>
                             </div>
                         </div>
@@ -533,7 +562,7 @@
             })}
 
             <!-- CARD 2: GRADE DE ATRIBUTOS / CAMPOS (AGRUPADOS POR ABA) -->
-            ${(() => {
+            ${isGeral ? '' : (() => {
                 const existingGrids = (currentTemplate?.blocos || []).filter(b => b.tipo === 'grade_campos');
                 const hasExistingGrid = existingGrids.length > 0;
                 const activeGridFieldCount = hasExistingGrid ? (existingGrids[0].campos_selecionados?.length || 0) : 0;
@@ -650,7 +679,7 @@
             })()}
 
             <!-- CARD 6: QUADRO ANALÍTICO E SINTÉTICO -->
-            ${renderAccordionCard({
+            ${isGeral ? '' : renderAccordionCard({
                 id: 'acc-photos',
                 title: 'Quadro Analítico e Sintético',
                 icon: 'photo_library',
@@ -1111,7 +1140,7 @@
             })}
 
             <!-- CARD: MINI-MAPA CARTOGRÁFICO (RECURSOS AVANÇADOS) -->
-            ${renderAccordionCard({
+            ${isGeral ? '' : renderAccordionCard({
                 id: 'acc-map',
                 title: 'Mini-Mapa Cartográfico (SIG)',
                 icon: 'map',
@@ -1180,7 +1209,7 @@
             })}
 
             <!-- CARD: GRÁFICOS DO DASHBOARD -->
-            ${renderAccordionCard({
+            ${!isGeral ? '' : renderAccordionCard({
                 id: 'acc-charts',
                 title: 'Gráficos do Dashboard',
                 icon: 'pie_chart',
@@ -3013,6 +3042,18 @@
         const formId = currentTemplate.form_id;
         const panel = document.getElementById('accordion-blocks-panel');
         if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    /** Escolhe a folha do relatório: 'A4' ou 'A3'. */
+    function setPageSize(tamanho) {
+        if (!currentTemplate || !currentTemplate.config_pagina) return;
+        const novo = String(tamanho).toUpperCase() === 'A3' ? 'A3' : 'A4';
+        if (currentTemplate.config_pagina.tamanho === novo) return;
+        currentTemplate.config_pagina.tamanho = novo;
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderBuilderInterface(currentTemplate.form_id, currentTemplate.nome);
     }
 
     function setMarginPreset(tipo, mmValue) {
@@ -4998,7 +5039,7 @@
         if (!formId) return;
 
         if (selectedVal === '__new__') {
-            currentTemplate = window.ReportAdapter.createDefaultTemplate(formId, 'individual', 'Novo Modelo');
+            currentTemplate = window.ReportAdapter.createDefaultTemplate(formId, builderScope, builderScope === 'geral' ? 'Nova Camada' : 'Novo Modelo');
         } else {
             const templates = window.ReportAdapter.getReportTemplates(formId);
             const found = templates.find(t => t.id === selectedVal);
@@ -5023,7 +5064,7 @@
     function deleteCurrentTemplate() {
         if (!currentTemplate || !confirm(`Deseja realmente excluir o modelo "${currentTemplate.nome}"?`)) return;
         window.ReportAdapter.deleteReportTemplate(currentTemplate.id);
-        initReportBuilderTab(currentTemplate.form_id);
+        initReportBuilderTab(currentTemplate.form_id, undefined, { scope: builderScope });
     }
 
     /**
@@ -5043,7 +5084,8 @@
         const stage = document.getElementById('a4-sheet-stage');
         if (!stage) return;
 
-        const orient = (currentTemplate && currentTemplate.config_pagina) ? currentTemplate.config_pagina.orientacao : 'portrait';
+        const orient = pageDims().orient;
+        const pageCss = pageDims().cssPageSize;
 
         const printWin = window.open('', '_blank', 'width=950,height=1000');
         if (!printWin) {
@@ -5053,7 +5095,7 @@
 
         const styles = `
             <style>
-                @page { size: A4 ${orient}; margin: 0 !important; }
+                @page { size: ${pageCss}; margin: 0 !important; }
                 body { font-family: 'IBM Plex Sans', sans-serif; background: #fff; color: #111c2d; margin: 0; padding: 0; }
                 .print\\:hidden, button, .drag-handle, #a4-margin-guide, .a4-margin-guide { display: none !important; }
                 [contenteditable] { outline: none !important; border: none !important; }
@@ -5423,6 +5465,7 @@
         initReportBuilderTab,
         toggleAccordion,
         updateOrientation,
+        setPageSize,
         setMarginPreset,
         updateMargin,
         updateAtalhoAba,

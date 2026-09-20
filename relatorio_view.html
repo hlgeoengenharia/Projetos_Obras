@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+    <script src="src/pageSize.js"></script>
     <script src="src/fieldFormatter.js"></script>
     <script src="src/reportData.js"></script>
     
@@ -361,8 +362,9 @@
             document.getElementById('report-header-title').textContent = tpl.nome || 'Relatório da Feição';
             document.title = `${tpl.nome || 'Relatório'} - Feição`;
 
-            // Configura as dimensões da folha A4
-            const orient = (tpl.config_pagina && tpl.config_pagina.orientacao) || 'portrait';
+            // Configura as dimensões da folha (A4 ou A3, retrato ou paisagem)
+            const pd = PageSize.dims(tpl.config_pagina);
+            const orient = pd.orient;
             const mm = (tpl.config_pagina && tpl.config_pagina.margens_mm) || { top: 15, bottom: 15, left: 15, right: 15 };
             
             // Injeta regra @page dinâmica
@@ -374,24 +376,24 @@
             }
             pageStyle.textContent = `
                 @page {
-                    size: A4 ${orient};
+                    size: ${pd.cssPageSize};
                     margin: 0;
                 }
             `;
 
             const docContainer = document.getElementById('a4-document-container');
             if (docContainer) {
-                docContainer.style.maxWidth = orient === 'landscape' ? '1123px' : '794px';
+                docContainer.style.maxWidth = pd.widthPx + 'px';
                 docContainer.style.padding = '0';
                 docContainer.style.display = 'flex';
                 docContainer.style.flexDirection = 'column';
                 docContainer.style.alignItems = 'center';
             }
             document.documentElement.style.setProperty('--print-padding', `${mm.top}mm ${mm.right}mm ${mm.bottom}mm ${mm.left}mm`);
-            document.documentElement.style.setProperty('--page-width', orient === 'landscape' ? '1123px' : '794px');
-            document.documentElement.style.setProperty('--page-height', orient === 'landscape' ? '794px' : '1123px');
-            document.documentElement.style.setProperty('--print-page-width', orient === 'landscape' ? '297mm' : '210mm');
-            document.documentElement.style.setProperty('--print-page-height', orient === 'landscape' ? '210mm' : '297mm');
+            document.documentElement.style.setProperty('--page-width', pd.widthPx + 'px');
+            document.documentElement.style.setProperty('--page-height', pd.heightPx + 'px');
+            document.documentElement.style.setProperty('--print-page-width', pd.widthMm + 'mm');
+            document.documentElement.style.setProperty('--print-page-height', pd.heightMm + 'mm');
 
             // Injeta os blocos do relatório
             renderBlocks(tpl, featureData, featureGeometry);
@@ -524,10 +526,10 @@
             const ftrBloco = blocos.find(b => b.tipo === 'rodape');
             const bodyBlocos = blocos.filter(b => b.tipo !== 'cabecalho' && b.tipo !== 'rodape');
 
-            const orient = (tpl.config_pagina && tpl.config_pagina.orientacao) || 'portrait';
+            const pageDims = PageSize.dims(tpl.config_pagina);
             const mm = (tpl.config_pagina && tpl.config_pagina.margens_mm) || { top: 15, bottom: 15, left: 15, right: 15 };
-            const pageHeightPx = orient === 'landscape' ? 794 : 1123;
-            const pageWidthPx = orient === 'landscape' ? 1123 : 794;
+            const pageHeightPx = pageDims.heightPx;
+            const pageWidthPx = pageDims.widthPx;
 
             // Renderiza os blocos de corpo. Blocos "divisíveis" (tabelas longas) devolvem { split }.
             const renderedBodyBlocks = bodyBlocos.map((b, bIdx) => {

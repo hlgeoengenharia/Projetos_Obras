@@ -985,6 +985,8 @@ assertTest('Cadastros: "Tipo de Aba" inclui Relatórios (A4), aba sem campos que
     ['tests/viewerResolve.test.js', 'Visualizador: campo é lido pelo ID do schema; campo vazio nunca herda valor de outro campo nem de outra aba'],
     ['tests/reportData.test.js', 'Camada de dados: abas visíveis (permissão e condição), registros 1:N e 1:1, colunas lidas pelo campo da própria aba, dados de aba oculta removidos'],
     ['tests/builderLaudoPreview.test.js', 'Construtor: prévia do Laudo com uma seção ABERTA por aba (campos reais, arraste, largura, 1:N na íntegra) e sequência de abas (↑ ↓)'],
+    ['tests/pageSize.test.js', 'Tamanho da folha: A4 e A3 (retrato/paisagem) com dimensões em mm e px; modelos antigos caem em A4'],
+    ['tests/reportScope.test.js', 'Construtor: escopo Individual x Geral da camada (cards por escopo, sem "Gráficos do Dashboard" no individual) e seletor de folha A4 | A3'],
     ['tests/reportsTab.test.js', 'Aba do tipo "Relatórios (A4)": popup da feição lista só os botões dos modelos individuais do cadastro (sem campos, sem edição, nomes escapados)'],
     ['tests/viewerGrid.test.js', 'Grade de Atributos e Laudo: fotos/anexos por campo em "Lista" (título + arquivo) ou "Imagem na íntegra" (título e metadados), sem URLs inseguras'],
     ['tests/viewerTables.test.js', 'Quadro Sintético e Laudo Analítico: colunas por campo, seleção de abas, quebra por linhas entre folhas, escape de HTML e aviso quando a aba escolhida não existe']
