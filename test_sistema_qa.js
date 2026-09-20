@@ -507,12 +507,12 @@ if (reportBuilderExists) {
         reportBuilderCode.includes("id: 'acc-grid'") &&
         reportBuilderCode.includes("id: 'acc-map'") &&
         reportBuilderCode.includes("id: 'acc-charts'") &&
-        reportBuilderCode.includes("id: 'acc-kpis'") &&
+        !reportBuilderCode.includes("id: 'acc-kpis'") &&
         reportBuilderCode.includes("id: 'acc-photos'") &&
-        reportBuilderCode.includes("id: 'acc-table-syn'") &&
-        reportBuilderCode.includes("id: 'acc-table-ana'") &&
+        !reportBuilderCode.includes("id: 'acc-table-syn'") &&
+        !reportBuilderCode.includes("id: 'acc-table-ana'") &&
         reportBuilderCode.includes("id: 'acc-text-footer'");
-    assertTest('Relatórios A4: Todas as 10 Gavetas Acordeon (Cards 0 a 9) configuradas no painel lateral', hasTenAccordionCards);
+    assertTest('Relatórios A4: Gavetas Acordeon do painel lateral (sem os cards de KPIs, Tabela Sintética/Lote e Tabela Analítica Aprofundada)', hasTenAccordionCards);
 
     const hasA4CanvasStyles = reportBuilderCode.includes('a4-sheet-stage') &&
         reportBuilderCode.includes('page-break-avoid') &&
@@ -547,10 +547,8 @@ assertTest('Mapa / Formulário: Abas de atributos renderizam atalho de relatóri
 
 const reportBuilderCode = fs.existsSync('src/reportBuilder.js') ? fs.readFileSync('src/reportBuilder.js', 'utf8') : '';
 const hasReportBuilderAdvancedFeatures = reportBuilderCode.includes('updateAtalhoAba') &&
-    reportBuilderCode.includes('moveColumnOrder') &&
-    reportBuilderCode.includes('insertAnalyticalTableBlock') &&
     reportBuilderCode.includes('handleLogoUpload');
-assertTest('Relatórios A4: Recursos avançados (seletor de aba do popup, reordenação de colunas, tabela analítica e upload de brasão)', hasReportBuilderAdvancedFeatures);
+assertTest('Relatórios A4: Recursos avançados (seletor de aba do popup e upload de brasão)', hasReportBuilderAdvancedFeatures);
 const hasResponsiveA4Stage = reportBuilderCode.includes("boxSizing = 'border-box'") &&
     reportBuilderCode.includes("ruler.style.maxWidth") &&
     reportBuilderCode.includes("a4-page-break-indicator") &&
@@ -566,10 +564,12 @@ const hasFreeTextBox = reportBuilderCode.includes("id: 'acc-free-text'") &&
     reportBuilderCode.includes("renderMentionDropdown");
 assertTest('Relatórios A4: Card "Caixa de texto livre" implementado com formatação rica e autocomplete @', hasFreeTextBox);
 
-const hasGeralScope = reportBuilderCode.includes("switchType('geral')") &&
-    reportBuilderCode.includes("ReportBuilder.switchType('geral')") &&
-    !reportBuilderCode.includes("Lote / Geral");
-assertTest('Relatórios A4: Escopo renomeado de "Lote / Geral" para "Geral"', hasGeralScope);
+const hasGeralScope = !reportBuilderCode.includes("switchType('geral')") &&
+    !reportBuilderCode.includes('>Escopo<') &&
+    fs.readFileSync('index.html', 'utf8').includes('id="layer-stats-report-btn"') &&
+    fs.readFileSync('index.html', 'utf8').indexOf('id="layer-stats-report-btn"') < fs.readFileSync('index.html', 'utf8').indexOf('id="layer-stats-refresh-btn"') &&
+    fs.readFileSync('src/main.js', 'utf8').includes('window.openLayerGeneralReport');
+assertTest('Relatórios A4: Escopo "Geral" saiu do construtor e virou o botão "Relatório Geral" no Painel de Estatísticas da camada, ao lado de "Atualizar dados"', hasGeralScope);
 
 const relatorioViewExists = fs.existsSync('relatorio_view.html');
 assertTest('Relatórios A4: Arquivo dedicado relatorio_view.html existe', relatorioViewExists);

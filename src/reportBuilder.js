@@ -9,8 +9,6 @@
     let currentTemplate = null;
     let sortableInstance = null;
     let activeAccordionId = 'acc-layout'; // Card 0 aberto por padrão
-    let selectedSyntheticCols = [];
-    let selectedAnalyticalCols = [];
     window._customUploadedLogoUrl = null;
 
     /**
@@ -35,8 +33,6 @@
 
         // Inicializa colunas padrão para os cards de tabela
         const fields = window.ReportAdapter ? window.ReportAdapter.getFormFields(formId) : [];
-        selectedSyntheticCols = fields.slice(0, 5).map(f => f.id);
-        selectedAnalyticalCols = fields.slice(0, 7).map(f => f.id);
 
         renderBuilderInterface(formId, formName);
     }
@@ -96,19 +92,6 @@
                         <div class="flex flex-col flex-1 min-w-[200px]">
                             <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Nome do Documento</label>
                             <input type="text" id="rpt-template-name" value="${escapeHtml(currentTemplate.nome)}" oninput="ReportBuilder.updateTemplateName(this.value)" class="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold dark:text-white focus:ring-2 focus:ring-primary/40 focus:outline-none" placeholder="Ex: Ficha Cadastral Oficial..." />
-                        </div>
-
-                        <!-- Escopo: Individual vs Lote -->
-                        <div class="flex flex-col">
-                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Escopo</label>
-                            <div class="inline-flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
-                                <button type="button" onclick="ReportBuilder.switchType('individual')" class="px-3 py-1 rounded-lg text-xs font-bold transition-all ${isIndividual ? 'bg-primary text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-primary'}">
-                                    Individual
-                                </button>
-                                <button type="button" onclick="ReportBuilder.switchType('geral')" class="px-3 py-1 rounded-lg text-xs font-bold transition-all ${!isIndividual ? 'bg-primary text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-primary'}">
-                                    Geral
-                                </button>
-                            </div>
                         </div>
 
                         <!-- VÍNCULO COM O POPUP DO MAPA: EM QUAL ABA EXIBIR O ATALHO -->
@@ -666,63 +649,6 @@
                 });
             })()}
 
-            <!-- CARD 5: PAINEL DE KPIS / MÉDIAS ESTATÍSTICAS -->
-            ${renderAccordionCard({
-                id: 'acc-kpis',
-                title: 'Painel de KPIs / Médias Estatísticas',
-                icon: 'speed',
-                content: `
-                    <div class="flex flex-col gap-3">
-                        <p class="text-[11px] text-slate-500">Selecione os campos do cadastro e as métricas estatísticas que comporão os cartões de indicadores:</p>
-                        <div class="space-y-2 text-xs">
-                            <div class="p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" id="cfg-kpi-count" checked class="rounded text-primary focus:ring-0" />
-                                    <div>
-                                        <div class="font-bold text-slate-800 dark:text-slate-200">Total de Imóveis / Feições</div>
-                                        <div class="text-[10px] text-slate-400">Contagem de registros na camada</div>
-                                    </div>
-                                </label>
-                                <span class="font-mono text-[10px] font-bold text-slate-500 bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded">COUNT</span>
-                            </div>
-                            <div class="p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" id="cfg-kpi-area" checked class="rounded text-primary focus:ring-0" />
-                                    <div>
-                                        <div class="font-bold text-slate-800 dark:text-slate-200">Média de Área Territorial (m²)</div>
-                                        <div class="text-[10px] text-slate-400">Média aritmética da dimensão territorial</div>
-                                    </div>
-                                </label>
-                                <span class="font-mono text-[10px] font-bold text-slate-500 bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded">AVG</span>
-                            </div>
-                            <div class="p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" id="cfg-kpi-sum" checked class="rounded text-primary focus:ring-0" />
-                                    <div>
-                                        <div class="font-bold text-slate-800 dark:text-slate-200">Soma Total Territorial / Financeira</div>
-                                        <div class="text-[10px] text-slate-400">Somatório agregado dos lotes cadastrados</div>
-                                    </div>
-                                </label>
-                                <span class="font-mono text-[10px] font-bold text-slate-500 bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded">SUM</span>
-                            </div>
-                            <div class="p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" id="cfg-kpi-pct" checked class="rounded text-primary focus:ring-0" />
-                                    <div>
-                                        <div class="font-bold text-slate-800 dark:text-slate-200">Índice de Regularidade / Situação</div>
-                                        <div class="text-[10px] text-slate-400">Percentual proporcional de situação regular</div>
-                                    </div>
-                                </label>
-                                <span class="font-mono text-[10px] font-bold text-slate-500 bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded">PERCENT</span>
-                            </div>
-                        </div>
-                        <button type="button" onclick="ReportBuilder.insertKpiBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
-                            <span class="material-symbols-outlined text-[16px]">add_circle</span> Inserir Painel de KPIs na Folha
-                        </button>
-                    </div>
-                `
-            })}
-
             <!-- CARD 6: QUADRO ANALÍTICO E SINTÉTICO -->
             ${renderAccordionCard({
                 id: 'acc-photos',
@@ -1184,83 +1110,6 @@
                 `
             })}
 
-            <!-- CARD 7: TABELA SINTÉTICA / LOTE (COM REORDENAÇÃO DE COLUNAS) -->
-            ${renderAccordionCard({
-                id: 'acc-table-syn',
-                title: 'Tabela Sintética / Lote',
-                icon: 'table_chart',
-                badge: 'Reordenação de Colunas',
-                content: `
-                    <div class="flex flex-col gap-3">
-                        <p class="text-[11px] text-slate-500">Listagem tabular compacta de múltiplos imóveis. Selecione e reordene as colunas exatamente como deseja na tabela:</p>
-                        
-                        <!-- Lista de seleção de colunas -->
-                        <div class="max-h-40 overflow-y-auto space-y-1 p-2 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 custom-scrollbar text-xs">
-                            ${fields.map(f => {
-                                const isChecked = selectedSyntheticCols.includes(f.id);
-                                return `
-                                    <label class="flex items-center gap-2 p-1 rounded hover:bg-white dark:hover:bg-slate-800 cursor-pointer">
-                                        <input type="checkbox" onchange="ReportBuilder.toggleSyntheticCol('${f.id}', this.checked)" ${isChecked ? 'checked' : ''} class="rounded text-primary focus:ring-0" />
-                                        <span class="truncate flex-1">${f.label}</span>
-                                    </label>
-                                `;
-                            }).join('')}
-                        </div>
-
-                        <!-- Ordem Atual das Colunas (com botões de subir/descer) -->
-                        <div>
-                            <span class="text-[10px] font-bold uppercase text-slate-500 block mb-1">Sequência das Colunas Selecionadas:</span>
-                            <div id="syn-columns-order-list" class="flex flex-col gap-1 max-h-36 overflow-y-auto custom-scrollbar p-1.5 bg-slate-100 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                                ${renderSyntheticColumnsOrderList(fields)}
-                            </div>
-                        </div>
-
-                        <button type="button" onclick="ReportBuilder.insertTableBlock('sintetica')" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
-                            <span class="material-symbols-outlined text-[16px]">add_circle</span> Inserir Tabela Sintética na Folha
-                        </button>
-                    </div>
-                `
-            })}
-
-            <!-- CARD 8: TABELA ANALÍTICA APROFUNDADA (NOVO CARD) -->
-            ${renderAccordionCard({
-                id: 'acc-table-ana',
-                title: 'Tabela Analítica Aprofundada',
-                icon: 'view_list',
-                badge: 'Relatório Completo',
-                content: `
-                    <div class="flex flex-col gap-3">
-                        <p class="text-[11px] text-slate-500">Quadro detalhado para auditoria fiscal e laudos territoriais, com quebras hierárquicas e descrições longas:</p>
-                        
-                        <div>
-                            <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1">Agrupamento Principal (Quebra de Seção)</label>
-                            <select id="cfg-ana-group" class="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium">
-                                <option value="Bairro">Agrupar por Bairro</option>
-                                <option value="Setor">Agrupar por Setor Cadastral</option>
-                                <option value="Logradouro">Agrupar por Logradouro / Rua</option>
-                                <option value="Situação">Agrupar por Situação Cadastral</option>
-                                <option value="nenhum">Sem Agrupamento (Corrido)</option>
-                            </select>
-                        </div>
-
-                        <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                            <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
-                                <input type="checkbox" id="cfg-ana-subtotals" checked class="rounded text-primary focus:ring-0" />
-                                <span>Calcular Subtotais por Grupo (Área e Imóveis)</span>
-                            </label>
-                            <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
-                                <input type="checkbox" id="cfg-ana-desc" checked class="rounded text-primary focus:ring-0" />
-                                <span>Incluir Descrição Textual Longa / Histórico</span>
-                            </label>
-                        </div>
-
-                        <button type="button" onclick="ReportBuilder.insertAnalyticalTableBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
-                            <span class="material-symbols-outlined text-[16px]">add_circle</span> Inserir Tabela Analítica na Folha
-                        </button>
-                    </div>
-                `
-            })}
-
             <!-- CARD: MINI-MAPA CARTOGRÁFICO (RECURSOS AVANÇADOS) -->
             ${renderAccordionCard({
                 id: 'acc-map',
@@ -1442,29 +1291,6 @@
                 });
             })()}
         `;
-    }
-
-    function renderSyntheticColumnsOrderList(fields) {
-        if (!selectedSyntheticCols || selectedSyntheticCols.length === 0) {
-            return '<div class="text-[11px] text-slate-400 p-2 text-center">Nenhuma coluna selecionada</div>';
-        }
-        return selectedSyntheticCols.map((colId, idx) => {
-            const f = fields.find(item => item.id === colId);
-            const label = f ? f.label : colId;
-            return `
-                <div class="flex items-center justify-between gap-1 p-1.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-2xs">
-                    <span class="font-bold truncate text-[11px] text-slate-700 dark:text-slate-200">${idx + 1}. ${label}</span>
-                    <div class="flex items-center gap-0.5 shrink-0">
-                        <button type="button" onclick="ReportBuilder.moveColumnOrder(${idx}, -1)" ${idx === 0 ? 'disabled' : ''} class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white disabled:opacity-30 cursor-pointer" title="Subir">
-                            <span class="material-symbols-outlined text-[14px]">arrow_upward</span>
-                        </button>
-                        <button type="button" onclick="ReportBuilder.moveColumnOrder(${idx}, 1)" ${idx === selectedSyntheticCols.length - 1 ? 'disabled' : ''} class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white disabled:opacity-30 cursor-pointer" title="Descer">
-                            <span class="material-symbols-outlined text-[14px]">arrow_downward</span>
-                        </button>
-                    </div>
-                </div>
-            `;
-        }).join('');
     }
 
     /**
@@ -3562,16 +3388,6 @@
     }
 
     // --- MANIPULADORES DO CARD 5: KPIS ---
-    function insertKpiBlock() {
-        currentTemplate.blocos.push({
-            id: 'blk_kpi_' + Date.now(),
-            tipo: 'kpis',
-            titulo: 'Indicadores Territoriais (KPIs)',
-            metricas: ['count', 'area_avg', 'area_sum', 'regularidade']
-        });
-        renderA4Blocks();
-    }
-
     // --- MANIPULADORES DO CARD 6: VISTORIA FOTOGRÁFICA & ANEXOS 1:N ---
     let selectedPhotoLayout = '2_cols';
     let selected1nScope = 'todas';
@@ -4715,59 +4531,7 @@
     const insertPhotoBlock = insertAnalyticalPhotos1nBlock;
 
     // --- MANIPULADORES DO CARD 7: TABELA SINTÉTICA COM REORDENAÇÃO ---
-    function toggleSyntheticCol(colId, checked) {
-        if (checked) {
-            if (!selectedSyntheticCols.includes(colId)) selectedSyntheticCols.push(colId);
-        } else {
-            selectedSyntheticCols = selectedSyntheticCols.filter(c => c !== colId);
-        }
-        const fields = window.ReportAdapter.getFormFields(currentTemplate.form_id);
-        const orderList = document.getElementById('syn-columns-order-list');
-        if (orderList) orderList.innerHTML = renderSyntheticColumnsOrderList(fields);
-    }
-
-    function moveColumnOrder(index, direction) {
-        const targetIndex = index + direction;
-        if (targetIndex < 0 || targetIndex >= selectedSyntheticCols.length) return;
-        const item = selectedSyntheticCols.splice(index, 1)[0];
-        selectedSyntheticCols.splice(targetIndex, 0, item);
-        const fields = window.ReportAdapter.getFormFields(currentTemplate.form_id);
-        const orderList = document.getElementById('syn-columns-order-list');
-        if (orderList) orderList.innerHTML = renderSyntheticColumnsOrderList(fields);
-    }
-
-    function insertTableBlock(tipo = 'sintetica') {
-        const fields = window.ReportAdapter.getFormFields(currentTemplate.form_id);
-        const cols = (selectedSyntheticCols && selectedSyntheticCols.length > 0) ? selectedSyntheticCols : fields.slice(0, 5).map(f => f.id);
-
-        currentTemplate.blocos.push({
-            id: 'blk_tbl_' + Date.now(),
-            tipo: 'tabela_sintetica',
-            titulo: 'Quadro Sintético de Imóveis',
-            colunas: cols
-        });
-
-        renderA4Blocks();
-    }
-
     // --- MANIPULADORES DO CARD 8: TABELA ANALÍTICA APROFUNDADA ---
-    function insertAnalyticalTableBlock() {
-        const grupo = document.getElementById('cfg-ana-group')?.value || 'Bairro';
-        const subtotais = document.getElementById('cfg-ana-subtotals')?.checked ?? true;
-        const desc = document.getElementById('cfg-ana-desc')?.checked ?? true;
-
-        currentTemplate.blocos.push({
-            id: 'blk_ana_' + Date.now(),
-            tipo: 'tabela_analitica',
-            titulo: 'Quadro Analítico Aprofundado',
-            grupo: grupo,
-            exibirSubtotais: subtotais,
-            exibirDescricaoLonga: desc
-        });
-
-        renderA4Blocks();
-    }
-
     // --- MANIPULADORES DA CAIXA DE TEXTO LIVRE & @MENTIONS ---
     function insertFreeTextBlock() {
         const titulo = document.getElementById('cfg-free-text-title')?.value || '';
@@ -5229,12 +4993,6 @@
         currentTemplate.nome = name;
     }
 
-    function switchType(tipo) {
-        if (!currentTemplate) return;
-        currentTemplate.tipo = tipo;
-        renderBuilderInterface(currentTemplate.form_id, currentTemplate.nome);
-    }
-
     function onTemplateChange(selectedVal) {
         const formId = currentTemplate ? currentTemplate.form_id : null;
         if (!formId) return;
@@ -5675,8 +5433,6 @@
         selectMapMode,
         selectChartLayout,
         selectPhotoLayout,
-        toggleSyntheticCol,
-        moveColumnOrder,
         handleLogoUpload,
         insertHeaderBlock,
         setHeaderRepeatMode,
@@ -5692,7 +5448,6 @@
         closeFieldWidthPopover,
         insertMapBlock,
         insertChartBlock,
-        insertKpiBlock,
         selectPhotoLayout,
         select1nScope,
         on1nSourceTabChange,
@@ -5732,8 +5487,6 @@
         quickAddFieldToAnalytical1n,
         quickRemoveFieldFromAnalytical1n,
         removeSelectedFieldsFromExistingAnalytical1n,
-        insertTableBlock,
-        insertAnalyticalTableBlock,
         insertTextBlock,
         insertFreeTextBlock,
         execFormat,
@@ -5752,7 +5505,6 @@
         moveBlock,
         toggleDisponibilizarMapa,
         updateTemplateName,
-        switchType,
         onTemplateChange,
         saveCurrentTemplate,
         deleteCurrentTemplate,

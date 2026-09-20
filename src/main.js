@@ -8228,6 +8228,16 @@ window.handleStatToggle = function(themeId, chartIndex, checkbox) {
     }
 };
 
+// Relatório Geral (várias feições) da camada aberta no Painel de Estatísticas.
+// Ponto de entrada já disponível; a emissão do relatório geral ainda está em construção.
+window.openLayerGeneralReport = function() {
+    const themeId = window.activeLayerStatsThemeId;
+    if (!themeId) return;
+    const msg = 'Relatório Geral da camada: em construção. O botão já fica aqui, ao lado de "Atualizar dados", e será liberado na próxima etapa.';
+    if (typeof showSuccessToast === 'function') showSuccessToast(msg);
+    else alert(msg);
+};
+
 window.refreshActiveLayerStats = async function() {
     const themeId = window.activeLayerStatsThemeId;
     if (!themeId) return;
