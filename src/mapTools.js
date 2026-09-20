@@ -31,7 +31,8 @@
         medidas: { ativo: true, lados: true, total: true, perimetro: false }, // o que aparece sobre o mapa
         edicoes: {},             // { idDaMedida: 'texto que o usuário digitou' }
         posicoes: {},            // { idDaMedida: { lat, lng } } (rótulo arrastado)
-        pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false, ordem: [], titulos: {} } // pontos nos vértices
+        pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false, ordem: [], titulos: {} }, // pontos nos vértices
+        temporal: { ativo: false, ordem: 'asc', colunas: 2, alturaMm: 70, sincronizar: true, contorno: true, excluidas: [] } // série de ortofotos por data
     };
     const BASE_MAPS = ['osm', 'satelite', 'nenhum'];
 
@@ -70,7 +71,28 @@
             medidas: normalizeMedidas(src.medidas),
             edicoes: normalizeEdicoes(src.edicoes),
             posicoes: normalizePosicoes(src.posicoes),
-            pontos: normalizePontos(src.pontos)
+            pontos: normalizePontos(src.pontos),
+            temporal: normalizeTemporal(src.temporal)
+        };
+    }
+
+    function normalizeTemporal(x) {
+        const d = MAP_DEFAULTS.temporal;
+        x = x || {};
+        const seen = new Set();
+        const excluidas = [];
+        (Array.isArray(x.excluidas) ? x.excluidas : []).forEach(v => {
+            const s = String(v);
+            if (/^[A-Za-z0-9_-]{1,64}$/.test(s) && !seen.has(s) && excluidas.length < 200) { seen.add(s); excluidas.push(s); }
+        });
+        return {
+            ativo: x.ativo === undefined ? d.ativo : !!x.ativo,
+            ordem: x.ordem === 'desc' ? 'desc' : 'asc',
+            colunas: [1, 2, 3, 4].includes(Number(x.colunas)) ? Number(x.colunas) : d.colunas,
+            alturaMm: clamp(x.alturaMm, 40, 160, d.alturaMm),
+            sincronizar: x.sincronizar === undefined ? d.sincronizar : !!x.sincronizar,
+            contorno: x.contorno === undefined ? d.contorno : !!x.contorno,
+            excluidas
         };
     }
 
@@ -158,7 +180,8 @@
         return normalizeMapConfig({ mapa: Object.assign({}, config, ajustes, {
             destaque: Object.assign({}, config.destaque, ajustes.destaque || {}),
             medidas: Object.assign({}, config.medidas, ajustes.medidas || {}),
-            pontos: Object.assign({}, config.pontos, ajustes.pontos || {})
+            pontos: Object.assign({}, config.pontos, ajustes.pontos || {}),
+            temporal: Object.assign({}, config.temporal, ajustes.temporal || {})
         }) });
     }
 
@@ -536,6 +559,101 @@
         return out;
     }
 
+    // ------------------------------------------------------------------ ortofotos (análise temporal)
+    /**
+     * Data efetiva de uma ortofoto e a precisão dela — mesma regra do mapa principal (getRasterISODate):
+     * data_imagem (ou a guardada no navegador) > data completa no nome > só o ano no nome.
+     * Devolve { iso, precisao: 'dia' | 'ano' | null }.
+     */
+    function rasterDateInfo(r, stored) {
+        r = r || {};
+        const eff = r.data_imagem || stored;
+        if (eff) {
+            if (/^\d{4}-\d{2}-\d{2}/.test(String(eff))) return { iso: String(eff).slice(0, 10), precisao: 'dia' };
+            const dmy = String(eff).match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
+            if (dmy) return { iso: dmy[3] + '-' + dmy[2] + '-' + dmy[1], precisao: 'dia' };
+        }
+        if (r.nome) {
+            const full = String(r.nome).match(/(\d{2})[-/](\d{2})[-/](\d{4})/);
+            if (full) return { iso: full[3] + '-' + full[2] + '-' + full[1], precisao: 'dia' };
+            const year = String(r.nome).match(/(20\d{2})/);
+            if (year) return { iso: year[1] + '-01-01', precisao: 'ano' };
+        }
+        return { iso: null, precisao: null };
+    }
+
+    function fmtRasterDate(info) {
+        if (!info || !info.iso) return 'Data não informada';
+        if (info.precisao === 'ano') return info.iso.slice(0, 4);
+        return info.iso.slice(8, 10) + '/' + info.iso.slice(5, 7) + '/' + info.iso.slice(0, 4);
+    }
+
+    /** Coluna e linha do tile (esquema XYZ / Web Mercator) que contém o ponto. */
+    function tileXY(lat, lng, z) {
+        const n = Math.pow(2, z);
+        const x = Math.floor((lng + 180) / 360 * n);
+        const latRad = rad(lat);
+        const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+        return { x: Math.min(n - 1, Math.max(0, x)), y: Math.min(n - 1, Math.max(0, y)) };
+    }
+
+    function tileUrl(template, x, y, z) {
+        return String(template).replace('{s}', 'a').replace('{z}', z).replace('{x}', x).replace('{y}', y);
+    }
+
+    /** Zoom em que se testa se existe imagem: perto do nível mais útil, dentro dos limites da ortofoto. */
+    function probeZoom(r) {
+        const zmin = Number(r && r.zoomMin) || 12;
+        const zmax = Number(r && r.zoomMax) || 22;
+        return Math.min(zmax, Math.max(zmin, 17));
+    }
+
+    function rasterBBox(bbox) {
+        if (!Array.isArray(bbox) || bbox.length !== 2 || !Array.isArray(bbox[0]) || !Array.isArray(bbox[1])) return null;
+        const a = Number(bbox[0][0]), b = Number(bbox[0][1]), c = Number(bbox[1][0]), d = Number(bbox[1][1]);
+        if (![a, b, c, d].every(isFinite)) return null;
+        return [Math.min(b, d), Math.min(a, c), Math.max(b, d), Math.max(a, c)]; // [minLng, minLat, maxLng, maxLat]
+    }
+
+    /**
+     * Ortofotos que podem cobrir a feição, já com data e precisão. Recebe os registros de imagens_raster
+     * (só os que o usuário pode ver). Com bbox conhecido, descarta as que não cruzam a feição; ortofotos em
+     * tiles (bbox vazio) ficam com cobertura desconhecida — o relatório testa se há imagem no local.
+     * opts: { storedDate(id) => string|null }
+     */
+    function buildOrtofotoList(rasters, geometry, opts) {
+        opts = opts || {};
+        const fb = geometryBBox(geometry);
+        if (!fb) return [];
+        const out = [];
+        (rasters || []).forEach(r => {
+            if (!r || !r.url_imagem) return;
+            const rb = rasterBBox(r.bbox);
+            if (rb && !bboxIntersects(rb, fb)) return;
+            const info = rasterDateInfo(r, typeof opts.storedDate === 'function' ? opts.storedDate(r.id) : null);
+            out.push({
+                id: String(r.id), nome: r.nome || 'Ortofoto', dataISO: info.iso, precisao: info.precisao, dataTxt: fmtRasterDate(info),
+                url: r.url_imagem, tipo: r.tipo || ((String(r.url_imagem).indexOf('{z}') >= 0) ? 'xyz_tiles' : 'imagem'),
+                zoomMin: r.zoom_min || 12, zoomMax: r.zoom_max || 22, bbox: rb ? r.bbox : null,
+                opacidade: r.opacidade === undefined || r.opacidade === null ? 1 : Math.min(1, Math.max(0.1, Number(r.opacidade) || 1)),
+                coberturaConhecida: !!rb
+            });
+        });
+        return out;
+    }
+
+    /** Ordena por data ('asc' = mais antiga primeiro). Sem data vai sempre para o fim. */
+    function sortOrtofotos(lista, ordem) {
+        const dir = ordem === 'desc' ? -1 : 1;
+        return lista.slice().sort((a, b) => {
+            if (!a.dataISO && !b.dataISO) return String(a.nome).localeCompare(String(b.nome));
+            if (!a.dataISO) return 1;
+            if (!b.dataISO) return -1;
+            const c = a.dataISO.localeCompare(b.dataISO);
+            return c !== 0 ? c * dir : String(a.nome).localeCompare(String(b.nome));
+        });
+    }
+
     // ------------------------------------------------------------------ projeção e escala
     /** Zona UTM e identificação do sistema (SIRGAS 2000 no Brasil). */
     function projectionInfo(lat, lng) {
@@ -632,6 +750,7 @@
         MAP_DEFAULTS, BASE_MAPS,
         normalizeMapConfig, mergeAjustes,
         geometryBBox, bboxCenter, expandBBoxMeters, bboxIntersects, roundCoords, geomKind,
+        normalizeTemporal, rasterDateInfo, fmtRasterDate, tileXY, tileUrl, probeZoom, rasterBBox, buildOrtofotoList, sortOrtofotos,
         COORD_SYSTEMS, normalizePontos, latLngToUtm, utmToLatLng, fmtGms, coordHeaders, coordCells, coordSystemLabel, azimuthDeg, fmtAzimuth, vertices, defaultPointTitle, pointRows,
         distanceM, ringAreaM2, polygonAreaM2, lineLengthM, fmtNumber, computeMeasures, applyEdits, normalizeMedidas, normalizeEdicoes, normalizePosicoes,
         projectionInfo, scaleDenominator, niceScale, approxScale, formatScale, polygonOuterRings, normalizeVista,

@@ -1142,7 +1142,7 @@
             <!-- CARD: MINI-MAPA CARTOGRÁFICO (SIG) -->
             ${isGeral ? '' : (() => {
                 const existingMap = (currentTemplate?.blocos || []).find(b => b.tipo === 'mapa_estatico');
-                const mcfg = window.MapTools ? window.MapTools.normalizeMapConfig(existingMap || {}) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90, medidas: { ativo: true, lados: true, total: true, perimetro: false }, pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false } };
+                const mcfg = window.MapTools ? window.MapTools.normalizeMapConfig(existingMap || {}) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90, medidas: { ativo: true, lados: true, total: true, perimetro: false }, pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false }, temporal: { ativo: false, ordem: 'asc', colunas: 2, alturaMm: 70, sincronizar: true, contorno: true, excluidas: [] } };
                 const chk = (id, label, checked) => `
                     <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
                         <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} class="rounded text-primary focus:ring-0" />
@@ -1223,9 +1223,25 @@
                             <input type="text" id="cfg-map-note" value="${escapeHtml(existingMap?.notaTecnica || 'Delimitação cadastral georreferenciada em conformidade com o sistema cartográfico municipal e SIRGAS 2000.')}" class="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs dark:text-white focus:outline-none focus:ring-1 focus:ring-primary" />
                         </div>
 
-                        <div class="p-2.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-[11px] text-slate-500 flex items-center gap-2">
-                            <span class="material-symbols-outlined text-[16px] text-slate-400">history_toggle_off</span>
-                            <span><strong>Série multitemporal</strong> de ortofotos: próxima etapa.</span>
+                        <div class="flex flex-col gap-1.5">
+                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Análise temporal (ortofotos por data)</label>
+                            <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                                ${chk('cfg-map-temp-ativo', 'Gerar um mapa para cada ortofoto que cubra a feição', mcfg.temporal.ativo)}
+                                <div class="grid grid-cols-3 gap-2">
+                                    <select id="cfg-map-temp-ordem" class="px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl dark:text-white">
+                                        <option value="asc" ${mcfg.temporal.ordem === 'asc' ? 'selected' : ''}>Antiga → recente</option>
+                                        <option value="desc" ${mcfg.temporal.ordem === 'desc' ? 'selected' : ''}>Recente → antiga</option>
+                                    </select>
+                                    <select id="cfg-map-temp-cols" class="px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl dark:text-white">
+                                        ${[1, 2, 3, 4].map(v => `<option value="${v}" ${Number(mcfg.temporal.colunas) === v ? 'selected' : ''}>${v} coluna${v > 1 ? 's' : ''}</option>`).join('')}
+                                    </select>
+                                    <select id="cfg-map-temp-altura" class="px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl dark:text-white">
+                                        ${[50, 70, 90, 120].map(v => `<option value="${v}" ${Number(mcfg.temporal.alturaMm) === v ? 'selected' : ''}>${v} mm</option>`).join('')}
+                                    </select>
+                                </div>
+                                ${chk('cfg-map-temp-contorno', 'Contorno da feição em cada imagem', mcfg.temporal.contorno)}
+                                ${chk('cfg-map-temp-sync', 'Mover/aproximar um quadro move todos', mcfg.temporal.sincronizar)}
+                            </div>
                         </div>
 
                         <button type="button" onclick="ReportBuilder.insertMapBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
@@ -2122,7 +2138,7 @@
 
                 // MAPA COM A FEIÇÃO REAL (pré-visualização esquemática; o mapa de verdade aparece no relatório)
                 {
-                    const mc = window.MapTools ? window.MapTools.normalizeMapConfig(bloco) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90, medidas: { ativo: true, lados: true, total: true, perimetro: false }, pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false } };
+                    const mc = window.MapTools ? window.MapTools.normalizeMapConfig(bloco) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90, medidas: { ativo: true, lados: true, total: true, perimetro: false }, pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false }, temporal: { ativo: false, ordem: 'asc', colunas: 2, alturaMm: 70, sincronizar: true, contorno: true, excluidas: [] } };
                     const chip = (txt, pos) => `<span class="absolute ${pos} text-[9px] font-mono font-bold text-emerald-800 bg-white/90 border border-emerald-300 px-1 rounded">${txt}</span>`;
                     const bg = mc.baseMap === 'satelite' ? 'bg-slate-800' : (mc.baseMap === 'nenhum' ? 'bg-white' : 'bg-slate-200');
                     const px = Math.round(mc.alturaMm * 3.78);
@@ -2152,6 +2168,7 @@
                                 </div>` : ''}
                             ${mc.baseMap !== 'nenhum' ? `<div class="absolute bottom-2 right-2 text-[8px] text-slate-600 bg-white/80 px-1 rounded">${mc.baseMap === 'satelite' ? 'Imagens © Esri' : '© OpenStreetMap'}</div>` : ''}
                         </div>
+                        ${mc.temporal && mc.temporal.ativo ? `<div class="mt-1.5 text-[10px] text-slate-500 px-1 flex items-center gap-1"><span class="material-symbols-outlined text-[13px] text-amber-600">history_toggle_off</span>Análise temporal: um mapa por ortofoto que cubra a feição (${mc.temporal.colunas} coluna(s), ${mc.temporal.ordem === 'desc' ? 'recente → antiga' : 'antiga → recente'}) sai abaixo do mapa.</div>` : ''}
                         ${mc.pontos && mc.pontos.ativo ? `<div class="mt-1.5 text-[10px] text-slate-500 px-1 flex items-center gap-1"><span class="material-symbols-outlined text-[13px] text-rose-500">location_on</span>O usuário marca pontos nos vértices; a tabela${mc.pontos.memorial ? ' com memorial descritivo' : ''} sai abaixo do mapa (${escapeHtml((window.MapTools ? (window.MapTools.COORD_SYSTEMS.find(s => s.id === mc.pontos.sistema) || {}).label : '') || 'SIRGAS 2000 / UTM')}).</div>` : ''}
                         <div class="mt-1.5 text-[10px] text-slate-500 font-mono px-1">
                             <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'notaTecnica')">${(escapeHtml(bloco.notaTecnica || 'Delimitação cadastral georreferenciada.')).replace(/\r?\n/g, '<br>')}</span>
@@ -3396,7 +3413,8 @@
             projecao: on('cfg-map-proj', true),
             alturaMm: Number(val('cfg-map-altura', 90)),
             medidas: { ativo: on('cfg-map-med-ativo', true), lados: on('cfg-map-med-lados', true), total: on('cfg-map-med-total', true), perimetro: on('cfg-map-med-perim', false) },
-            pontos: { ativo: on('cfg-map-pts-ativo', false), sistema: val('cfg-map-pts-sistema', 'utm'), tabela: on('cfg-map-pts-tab', true), memorial: on('cfg-map-pts-mem', false) }
+            pontos: { ativo: on('cfg-map-pts-ativo', false), sistema: val('cfg-map-pts-sistema', 'utm'), tabela: on('cfg-map-pts-tab', true), memorial: on('cfg-map-pts-mem', false) },
+            temporal: { ativo: on('cfg-map-temp-ativo', false), ordem: val('cfg-map-temp-ordem', 'asc'), colunas: Number(val('cfg-map-temp-cols', 2)), alturaMm: Number(val('cfg-map-temp-altura', 70)), contorno: on('cfg-map-temp-contorno', true), sincronizar: on('cfg-map-temp-sync', true) }
         };
         const nota = val('cfg-map-note', '') || 'Delimitação cadastral georreferenciada.';
         const normalizado = window.MapTools ? window.MapTools.normalizeMapConfig({ mapa: config }) : config;
@@ -3405,6 +3423,7 @@
         delete normalizado.edicoes;
         delete normalizado.posicoes;
         if (normalizado.pontos) { normalizado.pontos.ordem = []; normalizado.pontos.titulos = {}; } // os pontos marcados são do usuário
+        if (normalizado.temporal) normalizado.temporal.excluidas = []; // as ortofotos retiradas também
 
         const existing = currentTemplate.blocos.find(b => b.tipo === 'mapa_estatico');
         if (existing) {
@@ -5441,6 +5460,7 @@
         // MINI-MAPA: camadas ATIVAS no mapa (e que o usuário pode ver) ao redor da feição, só geometria.
         // O relatório é outra janela e não conhece o mapa; por isso a página do mapa entrega esses dados prontos.
         let camadasMapa = [];
+        let ortofotosMapa = [];
         let featureKeyMapa = '';
         try {
             const activeProps = (window.activeFeatureLayer && window.activeFeatureLayer.feature && window.activeFeatureLayer.feature.properties) || featureData || {};
@@ -5454,7 +5474,13 @@
                     });
                 }
             }
-        } catch(e) { camadasMapa = []; }
+            // ANÁLISE TEMPORAL: ortofotos que o usuário pode ver e que podem cobrir a feição (com data e precisão)
+            if (window.MapTools && Array.isArray(window.rasterLayers) && tpl && Array.isArray(tpl.blocos) && tpl.blocos.some(b => b.tipo === 'mapa_estatico')) {
+                ortofotosMapa = window.MapTools.buildOrtofotoList(window.rasterLayers, featureGeometry, {
+                    storedDate: (id) => { try { return localStorage.getItem('raster_date_' + id); } catch (e) { return null; } }
+                }).slice(0, 24);
+            }
+        } catch(e) { camadasMapa = []; ortofotosMapa = []; }
 
         const payload = {
             templateId: templateId,
@@ -5466,6 +5492,7 @@
             featureGeometry: featureGeometry || null,
             featureKey: featureKeyMapa,
             camadasMapa: camadasMapa,
+            ortofotos: ortofotosMapa,
             timestamp: Date.now()
         };
         const persistPayload = () => {

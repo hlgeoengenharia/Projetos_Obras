@@ -987,7 +987,8 @@ assertTest('Cadastros: "Tipo de Aba" inclui Relatórios (A4), aba sem campos que
 const viewerMapCode = fs.readFileSync('relatorio_view.html', 'utf8');
 const hasMiniMapViewer = viewerMapCode.includes('src/mapTools.js') && viewerMapCode.includes('src/reportMap.js') &&
     viewerMapCode.includes('map-tools-panel') && viewerMapCode.includes('mapPanelSave') && viewerMapCode.includes('mapPanelReset') && viewerMapCode.includes('mapPanelMedidas') && viewerMapCode.includes('report-measure-input') &&
-    viewerMapCode.includes('mapPanelPontos') && viewerMapCode.includes('tabela_pontos_mapa') && viewerMapCode.includes('repaginateKeepingMap');
+    viewerMapCode.includes('mapPanelPontos') && viewerMapCode.includes('tabela_pontos_mapa') && viewerMapCode.includes('repaginateKeepingMap') &&
+    viewerMapCode.includes('src/reportTemporal.js') && viewerMapCode.includes('mapa_temporal_series') && viewerMapCode.includes('mapPanelTemporal') && viewerMapCode.includes('makeOrtofotoProbe');
 const hasAjustesSql = fs.existsSync('supabase_relatorios_ajustes.sql') &&
     fs.readFileSync('supabase_relatorios_ajustes.sql', 'utf8').includes('ENABLE ROW LEVEL SECURITY') &&
     fs.readFileSync('supabase_relatorios_ajustes.sql', 'utf8').includes('user_id = auth.uid()') &&
@@ -1012,6 +1013,7 @@ assertTest('Mini-Mapa: o relatório gerado tem o painel "Mapa" (destaque, camada
     ['tests/builderLaudoPreview.test.js', 'Construtor: prévia do Laudo com uma seção ABERTA por aba (campos reais, arraste, largura, 1:N na íntegra) e sequência de abas (↑ ↓)'],
     ['tests/mapTools.test.js', 'Mini-mapa: configuração normalizada, ajustes do usuário, bbox, projeção SIRGAS 2000 UTM, escala e recorte das camadas ativas ao redor da feição'],
     ['tests/reportMap.test.js', 'Mini-mapa (Leaflet simulado): destaque, esmaecer entorno, mapa base, camadas ligáveis com legenda, norte, escala, projeção, crédito do mapa e vista salva'],
+    ['tests/reportTemporal.test.js', 'Análise temporal: um quadro por ortofoto (ordem por data, cobertura testada no local, colunas, sincronia, contorno, mapas vivos na repaginação)'],
     ['tests/viewerPoints.test.js', 'Tabela de pontos e memorial descritivo no relatório: coordenadas por sistema, azimute/distância, fechamento do polígono, quebra entre folhas e escape de HTML'],
     ['tests/reportAjustes.test.js', 'Ajustes do usuário no relatório: salva por modelo + feição no servidor com reserva no navegador e circuito fechado quando a tabela não existe'],
     ['tests/pageSize.test.js', 'Tamanho da folha: A4 e A3 (retrato/paisagem) com dimensões em mm e px; modelos antigos caem em A4'],

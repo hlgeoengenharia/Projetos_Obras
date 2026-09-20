@@ -18,6 +18,7 @@
     <script src="src/pageSize.js"></script>
     <script src="src/mapTools.js"></script>
     <script src="src/reportMap.js"></script>
+    <script src="src/reportTemporal.js"></script>
     <script src="src/fieldFormatter.js"></script>
     <script src="src/reportData.js"></script>
     
@@ -121,6 +122,9 @@
         .report-measure { background: transparent; border: 0; }
         .report-measure-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; background: rgba(255,255,255,.92); color: #065f46; border: 1px solid #6ee7b7; border-radius: 4px; padding: 0 4px; font: 700 9px/14px monospace; cursor: text; }
         .report-measure-label.edited { border-style: dashed; color: #92400e; border-color: #f59e0b; }
+        .report-tframe-title { display: flex; justify-content: space-between; gap: 6px; background: #0f172a; color: #fff; padding: 2px 7px; border-radius: 6px 6px 0 0; font: 700 9.5px/16px monospace; }
+        .report-tframe-title span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .report-tframe-wrap { border: 1px solid #cbd5e1; border-top: 0; background: #e2e8f0; position: relative; overflow: hidden; border-radius: 0 0 6px 6px; }
         .report-vertex-handle { cursor: pointer; }
         @media print { .report-vertex-handle { display: none !important; } }
         .report-point { background: transparent; border: 0; }
@@ -212,6 +216,7 @@
         let mapBloco = null;          // bloco 'mapa_estatico' do modelo
         let renderArgs = null;        // últimos argumentos de renderBlocks (para repaginar sem perder o mapa)
         let keptMapWrap = null;       // elemento do mapa (com o Leaflet vivo) que sobrevive à repaginação
+        let temporalController = null; // análise temporal (src/reportTemporal.js)
         let lastPontosKey = '';
         let repaginateTimer = null;
 
@@ -561,7 +566,10 @@
             // a tabela de pontos (e o memorial) entra logo depois do mapa, com quebra entre folhas
             const bodyBlocos = blocos.filter(b => b.tipo !== 'cabecalho' && b.tipo !== 'rodape').reduce((acc, b) => {
                 acc.push(b);
-                if (b.tipo === 'mapa_estatico') acc.push({ tipo: 'tabela_pontos_mapa', id: 'pts_' + (b.id || ''), _sintetico: true });
+                if (b.tipo === 'mapa_estatico') {
+                    acc.push({ tipo: 'tabela_pontos_mapa', id: 'pts_' + (b.id || ''), _sintetico: true });
+                    acc.push({ tipo: 'mapa_temporal_series', id: 'tmp_' + (b.id || ''), _sintetico: true });
+                }
                 return acc;
             }, []);
 
@@ -696,6 +704,7 @@
                     initReportMiniMap(featureGeometry);
                 }, 100);
             }
+            if (temporalController) temporalController.attach();
         }
 
         function getFieldWidthStyle(pct) {
@@ -870,6 +879,9 @@
 
                 case 'tabela_pontos_mapa':
                     return renderPointsTable();
+
+                case 'mapa_temporal_series':
+                    return temporalController ? temporalController.block() : '';
 
                 case 'caixa_texto_livre':
                 case 'texto_livre':
@@ -1355,8 +1367,46 @@
                 return;
             }
             renderMapToolsPanel();
-            // pontos já salvos: a tabela precisa entrar na paginação
-            if (mapController.pointRows().rows.length && config.pontos.ativo && config.pontos.tabela) scheduleRepaginate();
+            // análise temporal: ortofotos que a página do mapa entregou (só as que o usuário pode ver)
+            const ortofotos = (reportPayload && Array.isArray(reportPayload.ortofotos)) ? reportPayload.ortofotos : [];
+            if (ortofotos.length) {
+                temporalController = ReportTemporal.create({
+                    L, MapTools, geometry, ortofotos, config: config.temporal, corContorno: config.destaque.cor,
+                    probe: makeOrtofotoProbe(geometry),
+                    onStructureChange: () => { renderMapToolsPanel(); scheduleRepaginate(); },
+                    onChange: () => renderMapToolsPanel()
+                });
+                if (config.temporal.ativo) temporalController.start();
+            }
+            renderMapToolsPanel();
+            // pontos e série temporal já salvos: os blocos precisam entrar na paginação
+            const temPontos = mapController.pointRows().rows.length && config.pontos.ativo && config.pontos.tabela;
+            if (temPontos || (temporalController && config.temporal.ativo)) scheduleRepaginate();
+        }
+
+        // Ortofotos em tiles não informam a área que cobrem: pede o tile do centro da feição; se não existe, o quadro sai.
+        function makeOrtofotoProbe(geometry) {
+            const bb = MapTools.geometryBBox(geometry);
+            const c = bb ? MapTools.bboxCenter(bb) : null;
+            return (o) => new Promise(resolve => {
+                if (!c) { resolve(null); return; }
+                const z = MapTools.probeZoom(o);
+                const t = MapTools.tileXY(c[1], c[0], z);
+                const img = new Image();
+                let done = false;
+                const fin = (v) => { if (!done) { done = true; clearTimeout(timer); resolve(v); } };
+                const timer = setTimeout(() => fin(null), 8000);
+                img.onload = () => fin(true);
+                img.onerror = () => fin(false);
+                img.src = MapTools.tileUrl(o.url, t.x, t.y, z);
+            });
+        }
+
+        // ajustes completos para salvar: mapa + série temporal
+        function snapshotCompleto() {
+            const s = mapController.snapshot();
+            if (temporalController) s.temporal = temporalController.snapshot();
+            return s;
         }
 
         // ---------------- pontos nos vértices: tabela (com memorial) e repaginação
@@ -1439,6 +1489,30 @@
             const pontosRows = mapController.pointRows().rows;
             const scrollTop = panel.scrollTop;
             const chk = (id, label, checked, handler, disabled) => `<label class="row ${disabled ? 'off' : ''}"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="${handler}"> ${label}</label>`;
+            const tc = temporalController;
+            const tcfg = tc ? tc.getConfig() : null;
+            const statusTxt = { 'verificando': 'verificando…', 'sem-cobertura': 'sem imagem no local' };
+            const temporalHtml = !tc
+                ? '<div style="color:#64748b">Nenhuma ortofoto disponível para esta feição.</div>'
+                : `${chk('mp-temp', 'Análise temporal (uma imagem por data)', tcfg.ativo, "mapPanelTemporal('ativo', this.checked)")}
+                    <div style="display:flex;gap:4px;margin:3px 0">
+                        <select onchange="mapPanelTemporal('ordem', this.value)" style="flex:1;padding:4px;border:1px solid #cbd5e1;border-radius:8px">
+                            <option value="asc" ${tcfg.ordem === 'asc' ? 'selected' : ''}>Antiga → recente</option>
+                            <option value="desc" ${tcfg.ordem === 'desc' ? 'selected' : ''}>Recente → antiga</option>
+                        </select>
+                        <select onchange="mapPanelTemporal('colunas', this.value)" style="width:96px;padding:4px;border:1px solid #cbd5e1;border-radius:8px">
+                            ${[1, 2, 3, 4].map(v => `<option value="${v}" ${tcfg.colunas === v ? 'selected' : ''}>${v} coluna${v > 1 ? 's' : ''}</option>`).join('')}
+                        </select>
+                    </div>
+                    ${chk('mp-temp-cont', 'Contorno da feição', tcfg.contorno, "mapPanelTemporal('contorno', this.checked)")}
+                    ${chk('mp-temp-sync', 'Mover um quadro move todos', tcfg.sincronizar, "mapPanelTemporal('sincronizar', this.checked)")}
+                    <div style="border:1px solid #e2e8f0;border-radius:8px;padding:4px;margin-top:3px">${tc.list().map(x => `
+                        <label class="row ${x.status === 'sem-cobertura' ? 'off' : ''}" title="${esc(x.nome)}">
+                            <input type="checkbox" ${x.incluida ? 'checked' : ''} ${x.status === 'sem-cobertura' ? 'disabled' : ''} onchange="mapPanelOrtofoto('${esc(x.id)}', this.checked)">
+                            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.nome)}</span>
+                            <span style="color:#64748b;font-size:10px">${esc(x.dataTxt)}</span>
+                            ${statusTxt[x.status] ? `<span style="color:#b45309;font-size:10px">${statusTxt[x.status]}</span>` : ''}
+                        </label>`).join('')}</div>`;
             const camadasHtml = !cfg.camadasVizinhas
                 ? '<div style="color:#64748b">O modelo não permite camadas neste mapa.</div>'
                 : (camadas.length
@@ -1482,6 +1556,8 @@
                             <button type="button" title="Descer" onclick="mapPanelMover('${esc(r.vid)}', 1)" ${i === pontosRows.length - 1 ? 'disabled' : ''} style="border:0;background:none;cursor:pointer">▼</button>
                             <button type="button" title="Remover" onclick="mapPanelRemover('${esc(r.vid)}')" style="border:0;background:none;cursor:pointer;color:#b91c1c">×</button>
                         </div>`).join('')}</div>` : ''}
+                    <h4>Análise temporal (ortofotos)</h4>
+                    ${temporalHtml}
                     <h4>Mapa base</h4>
                     <select onchange="mapPanelSet('baseMap', this.value)" style="width:100%;padding:5px;border:1px solid #cbd5e1;border-radius:8px">
                         <option value="osm" ${cfg.baseMap === 'osm' ? 'selected' : ''}>Ruas (OpenStreetMap)</option>
@@ -1517,6 +1593,8 @@
         function mapPanelRenomear(vid, txt) { if (mapController) mapController.renamePoint(vid, txt); }
         function mapPanelMover(vid, dir) { if (mapController) mapController.movePoint(vid, dir); }
         function mapPanelRemover(vid) { if (mapController) mapController.removePoint(vid); }
+        function mapPanelTemporal(key, value) { if (temporalController) temporalController.setConfig({ [key]: key === 'colunas' ? Number(value) : value }); }
+        function mapPanelOrtofoto(id, on) { if (temporalController) temporalController.toggle(id, on); }
         function mapPanelMedidas(key, value) { if (mapController) mapController.setConfig({ medidas: { [key]: value } }); }
         function mapPanelResetMedidas() { if (mapController) mapController.resetMeasures(); }
         function mapPanelLayer(id, on) { if (mapController) mapController.toggleLayer(id, on); }
@@ -1525,7 +1603,7 @@
             const status = document.getElementById('map-panel-status');
             if (!mapController) return;
             if (status) status.textContent = 'Salvando…';
-            const r = await persistMapAjustes(mapController.snapshot());
+            const r = await persistMapAjustes(snapshotCompleto());
             if (!status) return;
             if (!r.ok) status.textContent = r.motivo === 'sem-feicao' ? 'Salve a feição no mapa antes de guardar ajustes.' : 'Não foi possível salvar.';
             else status.textContent = r.remoto ? 'Ajustes salvos.' : 'Ajustes salvos neste navegador (servidor indisponível).';
@@ -1534,6 +1612,7 @@
         function mapPanelReset() {
             if (!mapController || !mapBaseConfig) return;
             mapController.reset(mapBaseConfig);
+            if (temporalController) temporalController.setConfig(Object.assign({}, mapBaseConfig.temporal, { excluidas: [] }));
             renderMapToolsPanel();
             const status = document.getElementById('map-panel-status');
             if (status) status.textContent = 'Padrão do modelo restaurado (falta salvar para guardar).';

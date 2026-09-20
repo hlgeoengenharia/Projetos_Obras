@@ -63,14 +63,16 @@ ok('A4 marcado por padrão', /setPageSize\('A4'\)"[^>]*bg-primary/.test(html) &&
 ok('folha A4 no título', has(html, 'Folha A4 Interativa') && has(html, '210 × 297 mm (Retrato)'));
 
 // ---------------------------------------------------------------- Mini-Mapa (card do Relatório Individual)
-ok('card do mapa tem destaque, mapa base, camadas, norte, escala e projeção', ['cfg-map-pts-ativo', 'cfg-map-pts-sistema', 'cfg-map-pts-tab', 'cfg-map-pts-mem', 'cfg-map-med-ativo', 'cfg-map-med-lados', 'cfg-map-med-total', 'cfg-map-med-perim', 'cfg-map-destaque', 'cfg-map-esmaecer', 'cfg-map-cor', 'cfg-map-base', 'cfg-map-camadas', 'cfg-map-norte', 'cfg-map-escala', 'cfg-map-proj', 'cfg-map-altura'].every(id => has(html, 'id="' + id + '"')));
+ok('card do mapa tem destaque, mapa base, camadas, norte, escala e projeção', ['cfg-map-temp-ativo', 'cfg-map-temp-ordem', 'cfg-map-temp-cols', 'cfg-map-temp-altura', 'cfg-map-temp-contorno', 'cfg-map-temp-sync', 'cfg-map-pts-ativo', 'cfg-map-pts-sistema', 'cfg-map-pts-tab', 'cfg-map-pts-mem', 'cfg-map-med-ativo', 'cfg-map-med-lados', 'cfg-map-med-total', 'cfg-map-med-perim', 'cfg-map-destaque', 'cfg-map-esmaecer', 'cfg-map-cor', 'cfg-map-base', 'cfg-map-camadas', 'cfg-map-norte', 'cfg-map-escala', 'cfg-map-proj', 'cfg-map-altura'].every(id => has(html, 'id="' + id + '"')));
 ok('card explica que o usuário ajusta no relatório', has(html, 'painel <em>Mapa</em> do relatório'));
 ok('o modelo padrão já traz o mapa na folha: o botão é "Atualizar"', has(html, 'Atualizar o Mini-Mapa da Folha'));
+ok('card não diz mais que a série temporal é "próxima etapa"', !has(html, 'próxima etapa'));
 ok('modo "Série Multitemporal" com dados de mentira saiu', !has(html, 'Série Multitemporal</button>') && !has(html, 'Voo Aerofotogramétrico'));
 Object.assign(inputs, {
     'cfg-map-destaque': { checked: true }, 'cfg-map-esmaecer': { checked: true }, 'cfg-map-cor': { value: '#ff8800' },
     'cfg-map-base': { value: 'satelite' }, 'cfg-map-camadas': { checked: false }, 'cfg-map-norte': { checked: false },
     'cfg-map-escala': { checked: true }, 'cfg-map-proj': { checked: true },
+    'cfg-map-temp-ativo': { checked: true }, 'cfg-map-temp-ordem': { value: 'desc' }, 'cfg-map-temp-cols': { value: '3' }, 'cfg-map-temp-altura': { value: '90' }, 'cfg-map-temp-contorno': { checked: false }, 'cfg-map-temp-sync': { checked: true },
     'cfg-map-pts-ativo': { checked: true }, 'cfg-map-pts-sistema': { value: 'geo_gms' }, 'cfg-map-pts-tab': { checked: true }, 'cfg-map-pts-mem': { checked: true },
     'cfg-map-med-ativo': { checked: true }, 'cfg-map-med-lados': { checked: false }, 'cfg-map-med-total': { checked: true }, 'cfg-map-med-perim': { checked: true }, 'cfg-map-altura': { value: '120' }, 'cfg-map-note': { value: 'Nota X' }
 });
@@ -81,6 +83,7 @@ let mapas = tplMapa.blocos.filter(b => b.tipo === 'mapa_estatico');
 eq('grava a configuração escolhida no UNICO bloco de mapa', [mapas.length, mapas[0].mapa.destaque.cor, mapas[0].mapa.destaque.esmaecerEntorno, mapas[0].mapa.baseMap, mapas[0].mapa.camadasVizinhas, mapas[0].mapa.norte, mapas[0].mapa.alturaMm, mapas[0].notaTecnica], [1, '#ff8800', true, 'satelite', false, false, 120, 'Nota X']);
 eq('medidas escolhidas ficam no modelo', mapas[0].mapa.medidas, { ativo: true, lados: false, total: true, perimetro: true });
 eq('pontos: padrão do modelo (sem os pontos do usuário)', [mapas[0].mapa.pontos.ativo, mapas[0].mapa.pontos.sistema, mapas[0].mapa.pontos.tabela, mapas[0].mapa.pontos.memorial, mapas[0].mapa.pontos.ordem, mapas[0].mapa.pontos.titulos], [true, 'geo_gms', true, true, [], {}]);
+eq('análise temporal: padrão do modelo (sem ortofotos retiradas pelo usuário)', mapas[0].mapa.temporal, { ativo: true, ordem: 'desc', colunas: 3, alturaMm: 90, sincronizar: true, contorno: false, excluidas: [] });
 ok('a vista, os textos editados e os rótulos arrastados (do usuário) não vão para o modelo', !('vista' in mapas[0].mapa) && !('edicoes' in mapas[0].mapa) && !('posicoes' in mapas[0].mapa));
 inputs['cfg-map-cor'].value = '#0000ff';
 RB.insertMapBlock();
@@ -92,6 +95,7 @@ ok('card passa a mostrar "Atualizar" e os valores salvos', has(container.innerHT
 RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
 const folha = sheet['a4-blocks-list'].innerHTML;
 ok('prévia na folha é esquemática e reflete a configuração', has(folha, 'Pré-visualização esquemática') && has(folha, 'Imagens © Esri') && has(folha, 'border: 3px solid #0000ff') && has(folha, 'height: 454px'));
+ok('prévia avisa da análise temporal (colunas e ordem)', has(folha, 'Análise temporal: um mapa por ortofoto') && has(folha, '3 coluna(s)') && has(folha, 'recente → antiga'));
 ok('prévia avisa que o usuário marca pontos e cita o memorial e o sistema', has(folha, 'marca pontos nos vértices') && has(folha, 'com memorial descritivo') && has(folha, 'graus, minutos e segundos'));
 ok('prévia mostra a área (medidas ligadas) e não os lados (desligados)', has(folha, 'Área 1.012,40 m²') && !has(folha, '25,40 m'));
 Object.keys(inputs).forEach(k => delete inputs[k]);
@@ -135,6 +139,36 @@ ok('geral não aparece como atalho no popup', todos.filter(t => t.tipo === 'gera
 
 RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
 ok('voltando ao individual, o modelo geral não aparece na lista', !has(container.innerHTML, 'Relatório Geral'));
+
+// ---------------------------------------------------------------- dados que a página do mapa entrega ao relatório
+{
+    const tplMapa = RA.getReportTemplates('f1')[0];
+    const quadG = { type: 'Polygon', coordinates: [[[-34.84, -7.02], [-34.839, -7.02], [-34.839, -7.019], [-34.84, -7.019], [-34.84, -7.02]]] };
+    const sq = (x, y, s) => ({ type: 'Polygon', coordinates: [[[x, y], [x + s, y], [x + s, y + s], [x, y + s], [x, y]]] });
+    window.themes = [
+        { id: 'A', name: 'Lotes', color: '#ff0000', visible: true, features: [{ properties: { id_banco: 10 }, geometry: quadG }, { properties: { id_banco: 11 }, geometry: sq(-34.8398, -7.0198, 0.0003) }] },
+        { id: 'B', name: 'Desligada', visible: false, features: [{ properties: {}, geometry: sq(-34.84, -7.02, 0.001) }] },
+        { id: 'C', name: 'Sem permissão', visible: true, features: [{ properties: {}, geometry: sq(-34.84, -7.02, 0.001) }] }
+    ];
+    window.userCanOnTheme = (id) => id !== 'C';
+    window.rasterLayers = [
+        { id: 'r1', nome: 'Ortofoto_10-02-2026', url_imagem: 'https://s/{z}/{x}/{y}.png', tipo: 'xyz_tiles', bbox: [], visivel: false },
+        { id: 'r9', nome: 'Voo longe', url_imagem: 'https://img/longe.webp', bbox: [[-10, -40], [-9, -39]], visivel: false }
+    ];
+    window.activeFeatureLayer = { feature: { properties: { id_banco: 10 }, geometry: quadG } };
+    const store = {};
+    ctx.sessionStorage = { setItem: (k, v) => { store['s:' + k] = v; }, getItem: (k) => store['s:' + k] || null };
+    window.sessionStorage = ctx.sessionStorage;
+    let aberta = null;
+    window.open = (url) => { aberta = url; };
+    window.openFeatureReportPage(tplMapa.id, { id_banco: 10, nome: 'x' }, quadG);
+    const payload = JSON.parse(store['s:constructive_active_report_payload'] || 'null');
+    ok('relatório abre em nova janela com o modelo certo', !!aberta && aberta.includes('relatorio_view.html') && aberta.includes(encodeURIComponent(tplMapa.id)));
+    ok('payload leva a chave da feição', !!payload && payload.featureKey === '10');
+    eq('camadas: só as ATIVAS e PERMITIDAS, sem a própria feição', payload.camadasMapa.map(c => [c.id, c.features.length]), [['A', 1]]);
+    eq('ortofotos: as que podem cobrir a feição (bbox longe fica de fora), com data', payload.ortofotos.map(o => [o.id, o.dataTxt, o.coberturaConhecida]), [['r1', '10/02/2026', false]]);
+    ok('só geometria vai (sem atributos) e cor válida', Object.keys(payload.camadasMapa[0].features[0].properties).length === 0 && payload.camadasMapa[0].color === '#ff0000');
+}
 
 console.log(`reportScope: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {

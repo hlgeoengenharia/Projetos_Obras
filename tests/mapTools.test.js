@@ -218,6 +218,51 @@ eq('memorial com 2 pontos de polígono não fecha', [rowsD.fecha, rowsD.rows[1].
 eq('ponto que não existe mais é ignorado', MT.pointRows(quad, { sistema: 'utm', ordem: ['v:0', 'v:99'], titulos: {} }).rows.length, 1);
 ok('pontos escolhidos continuam valendo com mais de 400 vértices', (() => { const g = { type: 'LineString', coordinates: Array.from({ length: 401 }, (_, i) => [-34.8 + i * 1e-5, -7]) }; return MT.pointRows(g, { sistema: 'geo_dec', ordem: ['v:400'], titulos: {} }).rows.length === 1; })());
 
+// ---------------------------------------------------------------- ortofotos (análise temporal)
+const tcfg = MT.normalizeMapConfig({}).temporal;
+eq('temporal: desligada, mais antiga primeiro, 2 colunas, contorno e sincronia', [tcfg.ativo, tcfg.ordem, tcfg.colunas, tcfg.sincronizar, tcfg.contorno, tcfg.excluidas], [false, 'asc', 2, true, true, []]);
+const tc2 = MT.normalizeMapConfig({ mapa: { temporal: { ativo: true, ordem: 'x', colunas: 9, alturaMm: 5, excluidas: ['a1', 'a1', 'b 2', 7, '../x', 'ok_2'] } } }).temporal;
+eq('temporal: valores inválidos voltam ao padrão/limite; ids repetidos ou suspeitos saem', [tc2.ordem, tc2.colunas, tc2.alturaMm, tc2.excluidas], ['asc', 2, 40, ['a1', '7', 'ok_2']]);
+eq('temporal: ajustes do usuário', (() => { const a = MT.mergeAjustes(c0, { temporal: { ativo: true, excluidas: ['r1'], ordem: 'desc' } }).temporal; return [a.ativo, a.excluidas, a.ordem, a.colunas]; })(), [true, ['r1'], 'desc', 2]);
+
+eq('data: data_imagem em ISO', MT.rasterDateInfo({ data_imagem: '2026-02-10' }), { iso: '2026-02-10', precisao: 'dia' });
+eq('data: data_imagem em DD/MM/AAAA', MT.rasterDateInfo({ data_imagem: '10/02/2026' }), { iso: '2026-02-10', precisao: 'dia' });
+eq('data: guardada no navegador quando não há data_imagem', MT.rasterDateInfo({ nome: 'x' }, '2025-05-01'), { iso: '2025-05-01', precisao: 'dia' });
+eq('data: completa no nome do arquivo', MT.rasterDateInfo({ nome: 'Ortofoto_10-02-2026' }), { iso: '2026-02-10', precisao: 'dia' });
+eq('data: só o ano no nome', MT.rasterDateInfo({ nome: 'Base Cabedelo 2021' }), { iso: '2021-01-01', precisao: 'ano' });
+eq('data: nada a aproveitar', MT.rasterDateInfo({ nome: 'Levantamento' }), { iso: null, precisao: null });
+eq('data: data_imagem vence o nome', MT.rasterDateInfo({ data_imagem: '2024-03-04', nome: 'Ortofoto_10-02-2026' }).iso, '2024-03-04');
+eq('texto da data', [MT.fmtRasterDate({ iso: '2026-02-10', precisao: 'dia' }), MT.fmtRasterDate({ iso: '2021-01-01', precisao: 'ano' }), MT.fmtRasterDate({ iso: null })], ['10/02/2026', '2021', 'Data não informada']);
+
+eq('tile: origem', [MT.tileXY(0, 0, 0), MT.tileXY(0, 0, 1)], [{ x: 0, y: 0 }, { x: 1, y: 1 }]);
+eq('tile: canto noroeste', MT.tileXY(80, -179, 1), { x: 0, y: 0 });
+const tk = MT.tileXY(-7.019, -34.833, 17);
+eq('tile: Cabedelo no zoom 17 (conta independente, com asinh)', tk, { x: Math.floor((-34.833 + 180) / 360 * 131072), y: Math.floor((1 - Math.asinh(Math.tan(-7.019 * Math.PI / 180)) / Math.PI) / 2 * 131072) });
+ok('tile: linha coerente com a latitude (hemisfério sul fica na metade de baixo)', tk.y > 65536 && tk.y < 68500);
+eq('url do tile', MT.tileUrl('https://x.co/{z}/{x}/{y}.png', 3, 4, 5), 'https://x.co/5/3/4.png');
+eq('url do tile com subdomínio', MT.tileUrl('https://{s}.x.co/{z}/{x}/{y}.png', 3, 4, 5), 'https://a.x.co/5/3/4.png');
+eq('zoom de teste respeita os limites da ortofoto', [MT.probeZoom({ zoomMin: 14, zoomMax: 22 }), MT.probeZoom({ zoomMin: 18, zoomMax: 22 }), MT.probeZoom({ zoomMin: 10, zoomMax: 15 }), MT.probeZoom({})], [17, 18, 15, 17]);
+eq('bbox de ortofoto (canto sul-oeste, canto norte-leste) → [minLng,minLat,maxLng,maxLat]', MT.rasterBBox([[-7.03, -34.85], [-7.0, -34.82]]), [-34.85, -7.03, -34.82, -7.0]);
+eq('bbox vazio ou inválido', [MT.rasterBBox([]), MT.rasterBBox(null), MT.rasterBBox([[1, 2]]), MT.rasterBBox([['a', 'b'], ['c', 'd']])], [null, null, null, null]);
+
+const rasters = [
+    { id: 'r1', nome: 'Ortofoto_10-02-2026', url_imagem: 'https://s/{z}/{x}/{y}.png', tipo: 'xyz_tiles', bbox: [], zoom_min: 14, zoom_max: 22, opacidade: 0.9 },
+    { id: 'r2', nome: 'Base Cabedelo 2021', url_imagem: 'https://s2/{z}/{x}/{y}.png', tipo: 'xyz_tiles', bbox: [], data_imagem: null },
+    { id: 'r3', nome: 'Voo longe', url_imagem: 'https://img/longe.webp', bbox: [[-10, -40], [-9, -39]] },
+    { id: 'r4', nome: 'Voo cobre', url_imagem: 'https://img/cobre.webp', bbox: [[-7.03, -34.85], [-7.0, -34.82]], data_imagem: '2023-07-01' },
+    { id: 'r5', nome: 'Sem data', url_imagem: 'https://s5/{z}/{x}/{y}.png' },
+    { id: 'r6', nome: 'Sem url', url_imagem: '' }
+];
+const lst = MT.buildOrtofotoList(rasters, quad, { storedDate: (id) => (id === 'r5' ? null : null) });
+eq('lista: descarta sem URL e as que não cruzam a feição (bbox conhecido)', lst.map(o => o.id), ['r1', 'r2', 'r4', 'r5']);
+eq('lista: cobertura conhecida só onde há bbox', lst.map(o => o.coberturaConhecida), [false, false, true, false]);
+eq('lista: data e precisão', lst.map(o => [o.dataTxt, o.precisao]), [['10/02/2026', 'dia'], ['2021', 'ano'], ['01/07/2023', 'dia'], ['Data não informada', null]]);
+eq('lista: tipo, zoom e opacidade normalizados', [lst[0].tipo, lst[0].zoomMin, lst[0].zoomMax, lst[0].opacidade, lst[2].tipo, lst[3].zoomMax, lst[3].opacidade], ['xyz_tiles', 14, 22, 0.9, 'imagem', 22, 1]);
+eq('lista: sem geometria não há o que cruzar', MT.buildOrtofotoList(rasters, null, {}), []);
+eq('ordem: mais antiga primeiro; sem data no fim', MT.sortOrtofotos(lst, 'asc').map(o => o.id), ['r2', 'r4', 'r1', 'r5']);
+eq('ordem: mais recente primeiro; sem data continua no fim', MT.sortOrtofotos(lst, 'desc').map(o => o.id), ['r1', 'r4', 'r2', 'r5']);
+eq('ordenar não altera a lista original', lst.map(o => o.id), ['r1', 'r2', 'r4', 'r5']);
+
 console.log(`mapTools: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {
     console.error(`${failed} falha(s)`);
