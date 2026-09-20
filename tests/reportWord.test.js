@@ -32,7 +32,7 @@ const conv = (captures) => RW.make(env(captures));
 eq('cor rgb → hex', [RW.colorHex('rgb(15, 23, 42)'), RW.colorHex('rgb(255, 255, 255)'), RW.colorHex('#0f172a'), RW.colorHex('#fff')], ['#0f172a', '#ffffff', '#0f172a', '#ffffff']);
 eq('transparente e alfa zero não geram cor', [RW.colorHex('rgba(0, 0, 0, 0)'), RW.colorHex('transparent'), RW.colorHex(''), RW.colorHex('blue-ish')], [null, null, null, null]);
 eq('cor translúcida é misturada com o branco', RW.colorHex('rgba(0, 0, 0, 0.5)'), '#808080');
-eq('família: mono vira Courier New, o resto Arial', [RW.fontFamily('ui-monospace, "IBM Plex Mono"'), RW.fontFamily('Inter, sans-serif')], ["'Courier New', monospace", 'Arial, sans-serif']);
+eq('família: mono vira Consolas (com Courier New de reserva), o resto Arial', [RW.fontFamily('ui-monospace, "IBM Plex Mono"'), RW.fontFamily('Inter, sans-serif')], ["Consolas, 'Courier New', monospace", 'Arial, sans-serif']);
 
 let h = conv().node(E('div', { st: { fontSize: '12px', fontWeight: '700', color: 'rgb(15, 23, 42)', textAlign: 'center' } }, T('Título')));
 ok('texto: tamanho em pt (12px = 9pt), negrito, cor e alinhamento em linha', /font-size:9pt/.test(h) && /font-weight:bold/.test(h) && /color:#0f172a/.test(h) && /text-align:center/.test(h) && />Título<\/div>$/.test(h));
@@ -96,6 +96,24 @@ ok('alinhamento vertical central vira valign=middle', /valign="middle"/.test(h))
 h = conv().node(E('div', { st: { display: 'flex' }, r: R(0, 0, 100, 20) }, T('só texto')));
 ok('flex só com texto não perde o texto', /só texto/.test(h));
 
+// cabeçalho: logo que só tinha um ícone (removido) não deixa recuo vazio antes do título
+const cab = E('div', { st: { display: 'flex' }, r: R(0, 0, 700, 60) },
+    E('div', { r: R(0, 0, 56, 56) }, E('span', { cls: 'material-symbols-outlined' }, T('account_balance'))),
+    E('div', { r: R(68, 0, 500, 56) }, E('div', { st: { fontWeight: '700' } }, T('PREFEITURA MUNICIPAL')), E('div', { st: { fontSize: '20px' } }, T('FICHA CADASTRAL'))));
+h = conv().node(cab);
+ok('ícone removido: nenhuma célula vazia/recuo antes do título (ele começa na margem)', (h.match(/<td/g) || []).length === 2 && /^<div[^>]*><table[^>]*><tr><td[^>]*width:71\.4%/.test(h) && /PREFEITURA MUNICIPAL/.test(h) && !/<td[^>]*>&nbsp;<\/td><td/.test(h.split('PREFEITURA')[0]));
+const logoImg = E('div', { st: { display: 'flex' }, r: R(0, 0, 700, 60) }, E('div', { r: R(0, 0, 56, 56) }, E('img', { r: R(0, 0, 56, 56), attrs: { src: 'data:image/png;base64,QQ==' } })), E('div', { r: R(68, 0, 500, 56) }, T('Título')));
+h = conv().node(logoImg);
+ok('logo em imagem de verdade continua na célula da esquerda', /<img /.test(h) && h.indexOf('<img') < h.indexOf('Título') && (h.match(/<td/g) || []).length >= 3);
+const dir = E('div', { st: { display: 'flex' }, r: R(0, 0, 400, 20) }, E('span', { r: R(300, 0, 100, 20) }, T('à direita')));
+ok('conteúdo propositalmente à direita mantém o espaço à esquerda (só o vazio é que some)', /<td[^>]*width:75%[^>]*>&nbsp;<\/td>/.test(conv().node(dir)));
+// linha única não quebra no Word
+const emissao = E('div', { st: { display: 'flex' }, r: R(0, 0, 300, 14) }, E('span', { st: { fontSize: '10px' }, r: R(0, 0, 60, 12) }, T('Emissão:')), E('span', { st: { fontSize: '10px' }, r: R(64, 0, 90, 12) }, T('20/09/2026 19:07')));
+h = conv().node(emissao);
+eq('o que cabia em uma linha na tela não quebra no Word (nowrap nas duas células)', (h.match(/white-space:nowrap[^"]*"[^>]*><span/g) || []).length, 2);
+const longo = E('div', { st: { display: 'flex' }, r: R(0, 0, 300, 60) }, E('div', { st: { fontSize: '10px' }, r: R(0, 0, 100, 40) }, T('texto que na tela ocupa várias linhas')));
+ok('o que já ocupava várias linhas na tela pode quebrar', !/white-space:nowrap/.test(conv().node(longo)));
+
 // ---------------------------------------------------------------- imagens e capturas
 h = conv().node(E('img', { r: R(0, 0, 120, 80), attrs: { src: 'https://x/foto.jpg', alt: 'Foto <1>' } }));
 eq('imagem: tamanho vindo do layout e alt escapado', h, '<img src="https://x/foto.jpg" width="120" height="80" alt="Foto &lt;1&gt;" />');
@@ -128,6 +146,7 @@ eq('sem folhas: converte o conteúdo inteiro', RW.buildDocument(E('div', {}, E('
 
 const arquivo = RW.wordFileHtml({ title: 'Ficha <X>', page: { widthMm: 297, heightMm: 420 }, margins: { top: 20, bottom: 20, left: 15, right: 15 } }, doc);
 ok('arquivo: papel A3 e margens do modelo', /size: 841\.9pt 1190\.6pt/.test(arquivo) && /margin: 20mm 15mm 20mm 15mm/.test(arquivo) && /mso-page-orientation: portrait/.test(arquivo));
+ok('arquivo: o rodapé fica FORA da seção (o Word o usa como rodapé e não o repete no texto)', arquivo.indexOf('mso-element:footer') > arquivo.indexOf('</div>\n<div style=\'mso-element:footer\'') - 1 && /<\/div>\n<div style='mso-element:footer' id=f1>/.test(arquivo) && !/Section1">[\s\S]*mso-element:footer[\s\S]*<\/div>\n<\/div>\n<div style='mso-element:footer'/.test(arquivo));
 ok('arquivo: título escapado, rodapé ligado à seção e cabeçalho antes do corpo', /<title>Ficha &lt;X&gt;<\/title>/.test(arquivo) && /mso-footer: f1/.test(arquivo) && /mso-element:footer/.test(arquivo) && arquivo.indexOf('CABEÇALHO') < arquivo.indexOf('corpo da 1ª'));
 ok('arquivo: paisagem', /landscape/.test(RW.wordFileHtml({ title: 't', page: { widthMm: 420, heightMm: 297 } }, { body: '' })));
 

@@ -58,7 +58,7 @@
     // ------------------------------------------------------------------ estilo em linha
     function fontFamily(ff) {
         const s = String(ff || '').toLowerCase();
-        if (/mono|courier|consolas/.test(s)) return "'Courier New', monospace";
+        if (/mono|courier|consolas/.test(s)) return "Consolas, 'Courier New', monospace";
         return 'Arial, sans-serif';
     }
 
@@ -120,6 +120,12 @@
         if (typeof c === 'string') return c.split(/\s+/).indexOf(name) >= 0;
         if (c && typeof c.baseVal === 'string') return c.baseVal.split(/\s+/).indexOf(name) >= 0;
         return false;
+    }
+
+    /** HTML que só tem marcas (sem texto nem imagem): um ícone removido deixa isso para trás. */
+    function visuallyEmpty(html) {
+        if (/<img/i.test(html)) return false;
+        return String(html).replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim() === '';
     }
 
     // ------------------------------------------------------------------ conversão
@@ -209,11 +215,17 @@
                 prevBottom = row.bottom;
                 let cursor = innerLeft;
                 let cells = '';
+                let colapsar = false; // depois de um item vazio, o próximo encosta no lugar dele (sem recuo fantasma)
                 row.items.forEach(it => {
                     if (!it.r) { cells += '<td valign="' + align + '">' + esc(String(it.k.nodeValue).replace(/\s+/g, ' ')) + '</td>'; return; }
-                    const gap = it.r.left - cursor;
+                    const conteudo = node(it.k);
+                    if (visuallyEmpty(conteudo)) { colapsar = true; cursor = it.r.right; return; }
+                    const gap = colapsar ? 0 : it.r.left - cursor;
+                    colapsar = false;
                     if (gap > 4) cells += '<td style="width:' + r1(gap / innerWidth * 100) + '%">&nbsp;</td>';
-                    cells += '<td valign="' + align + '" style="width:' + r1(it.r.width / innerWidth * 100) + '%;padding:0">' + node(it.k) + '</td>';
+                    // o que cabia numa linha na tela não pode quebrar no Word (as fontes dele são um pouco mais largas)
+                    const linhaUnica = it.r.height <= px(cs(it.k).fontSize) * 1.9;
+                    cells += '<td valign="' + align + '" style="width:' + r1(it.r.width / innerWidth * 100) + '%;padding:0' + (linhaUnica ? ';white-space:nowrap' : '') + '">' + conteudo + '</td>';
                     cursor = it.r.right;
                 });
                 const rest = innerLeft + innerWidth - cursor;
@@ -302,8 +314,8 @@
             "<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->\n<style>\n" +
             '@page Section1 { size: ' + w + 'pt ' + h + 'pt; mso-page-orientation: ' + orient + '; margin: ' + m.top + 'mm ' + m.right + 'mm ' + m.bottom + 'mm ' + m.left + 'mm; mso-header-margin: 10mm; mso-footer-margin: 8mm; mso-footer: f1; mso-paper-source: 0; }\n' +
             'div.Section1 { page: Section1; }\nbody { font-family: Arial, sans-serif; font-size: 11pt; color: #111827; }\np { margin: 0; }\ntable { border-collapse: collapse; }\nimg { border: 0; }\n</style>\n</head>\n<body>\n' +
-            '<div class="Section1">\n' + (parts.header || '') + '\n' + (parts.body || '') + '\n' +
-            "<div style='mso-element:footer' id=f1><div class=MsoFooter style='margin:0'>" + (parts.footer || '') + '</div></div>\n</div>\n</body>\n</html>';
+            '<div class="Section1">\n' + (parts.header || '') + '\n' + (parts.body || '') + '\n</div>\n' +
+            "<div style='mso-element:footer' id=f1><div class=MsoFooter style='margin:0'>" + (parts.footer || '') + '</div></div>\n</body>\n</html>';
     }
 
     return { make, buildDocument, wordFileHtml, withPageFields, fieldSpan, inlineStyle, parseColor, colorHex, fontFamily };
