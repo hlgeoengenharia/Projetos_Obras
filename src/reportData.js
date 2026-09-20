@@ -33,6 +33,10 @@
         return !!(tab && (tab.isNative || tab.tabType === 'orcamento_nativo' || tab.id === 'orcamento_obra'));
     }
 
+    function isReportsTab(tab) {
+        return !!(tab && (tab.tabType === 'reports' || tab.isReportsTab));
+    }
+
     function isConsolidatedTab(tab) {
         return !!(tab && (tab.tabType === 'consolidated' || tab.isConsolidated));
     }
@@ -61,7 +65,7 @@
     function visibleTabs(tabs, data, opts) {
         opts = opts || {};
         return (Array.isArray(tabs) ? tabs : []).filter(tab => {
-            if (!tab || isNativeTab(tab)) return false;
+            if (!tab || isNativeTab(tab) || isReportsTab(tab)) return false;
             if (typeof opts.canSeeTab === 'function' && !opts.canSeeTab(tab)) return false;
             return evaluateTabCondition(tab, data);
         });
@@ -140,7 +144,7 @@
             ? new Set(opts.tabIds.map(String)) : null;
         const out = [];
         (tabs || []).forEach(tab => {
-            if (!tab || isNativeTab(tab) || isConsolidatedTab(tab)) return;
+            if (!tab || isNativeTab(tab) || isConsolidatedTab(tab) || isReportsTab(tab)) return;
             if (selected && !selected.has(String(tab.id))) return;
             if (!selected && !tab.isMultiple) return;
             if (tab.isMultiple) {
@@ -289,6 +293,7 @@
         EMPTY,
         norm,
         isNativeTab,
+        isReportsTab,
         isConsolidatedTab,
         evaluateTabCondition,
         visibleTabs,

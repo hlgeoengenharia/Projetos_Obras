@@ -111,7 +111,8 @@
             } catch(e) {}
         }
 
-        return tabs.map(t => {
+        // a aba de Relatórios (A4) só guarda botões: nunca é fonte de dados de relatório
+        return tabs.filter(t => !(t && (t.tabType === 'reports' || t.isReportsTab))).map(t => {
             const isConsolidated = t.tabType === 'consolidated' || t.tabType === 'cross_tabs' || !!t.isConsolidated || 
                                    (t.title && (t.title.toUpperCase().includes('HISTÓRICO') || t.title.toUpperCase().includes('HISTORICO')));
             const isMulti = !!t.isMultiple || (t.title && (t.title.toUpperCase().includes('VISTORIA') || t.title.toUpperCase().includes('FOTO') || t.title.toUpperCase().includes('ANEXO')));

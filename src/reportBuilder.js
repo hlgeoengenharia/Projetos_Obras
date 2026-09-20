@@ -1517,7 +1517,7 @@
         const tabsMeta = (window.ReportAdapter && window.ReportAdapter.getFormTabs) ? window.ReportAdapter.getFormTabs(formId) : [];
         const groups = new Map();
         (tabsMeta || []).forEach(t => {
-            if (t.tabType === 'consolidated' || t.isConsolidated || t.tabType === 'orcamento_nativo' || t.isNative) return;
+            if (t.tabType === 'consolidated' || t.isConsolidated || t.tabType === 'orcamento_nativo' || t.isNative || t.tabType === 'reports' || t.isReportsTab) return;
             groups.set(t.id, { id: t.id, title: t.title || 'Aba', isMultiple: !!t.isMultiple, fields: [] });
         });
         (fields || []).forEach(f => {

@@ -585,7 +585,7 @@ if (relatorioViewExists) {
     assertTest('Relatórios A4: relatorio_view.html possui botões (Word e Imprimir/PDF, sem botão PDF redundante), mapa SIG interativo e textos editáveis', hasRelatorioViewFeatures);
 }
 
-const hasDynamicPopupShortcut = formRendererCode.includes('matchingTpl.nome') &&
+const hasDynamicPopupShortcut = formRendererCode.includes('tpl.nome') &&
     formRendererCode.includes('openFeatureReportPage') &&
     freshIndexHtml.includes('openFeatureReportPage');
 assertTest('Relatórios A4: Atalho no popup exibe título dinâmico do relatório e conecta à página interativa', hasDynamicPopupShortcut);
@@ -970,6 +970,13 @@ const hasLaudoTabSequenceOption = freshReportBuilderJs.includes('Sequência das 
     updatedRelatorioViewHtml.includes('sortRecords(records, sortOrder, true, bloco.ordem_abas)');
 assertTest('Relatórios A4: Laudo Analítico permite definir a sequência das abas (↑ ↓) e o relatório sempre agrupa por aba nessa ordem', hasLaudoTabSequenceOption);
 
+const settingsHtmlForReportsTab = fs.readFileSync('settings.html', 'utf8');
+const hasReportsTabType = settingsHtmlForReportsTab.includes('btn-type-reports') &&
+    settingsHtmlForReportsTab.includes("updateActiveTabType('reports')") &&
+    settingsHtmlForReportsTab.includes("tabType = 'reports'") &&
+    settingsHtmlForReportsTab.includes('tab-reports-settings');
+assertTest('Cadastros: "Tipo de Aba" inclui Relatórios (A4), aba sem campos que recebe apenas os botões dos relatórios', hasReportsTabType);
+
 // ------------------------------------------------------------------------------
 // RELATÓRIOS A4 — TESTES DE COMPORTAMENTO (executam o código de verdade, sem inspecionar texto)
 // ------------------------------------------------------------------------------
@@ -978,6 +985,7 @@ assertTest('Relatórios A4: Laudo Analítico permite definir a sequência das ab
     ['tests/viewerResolve.test.js', 'Visualizador: campo é lido pelo ID do schema; campo vazio nunca herda valor de outro campo nem de outra aba'],
     ['tests/reportData.test.js', 'Camada de dados: abas visíveis (permissão e condição), registros 1:N e 1:1, colunas lidas pelo campo da própria aba, dados de aba oculta removidos'],
     ['tests/builderLaudoPreview.test.js', 'Construtor: prévia do Laudo com uma seção ABERTA por aba (campos reais, arraste, largura, 1:N na íntegra) e sequência de abas (↑ ↓)'],
+    ['tests/reportsTab.test.js', 'Aba do tipo "Relatórios (A4)": popup da feição lista só os botões dos modelos individuais do cadastro (sem campos, sem edição, nomes escapados)'],
     ['tests/viewerGrid.test.js', 'Grade de Atributos e Laudo: fotos/anexos por campo em "Lista" (título + arquivo) ou "Imagem na íntegra" (título e metadados), sem URLs inseguras'],
     ['tests/viewerTables.test.js', 'Quadro Sintético e Laudo Analítico: colunas por campo, seleção de abas, quebra por linhas entre folhas, escape de HTML e aviso quando a aba escolhida não existe']
 ].forEach(([testFile, description]) => {

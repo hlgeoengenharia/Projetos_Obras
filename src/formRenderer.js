@@ -121,26 +121,41 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
             </div>`;
         }
 
-        // Verifica se há modelo de relatório A4 configurado para exibir atalho nesta aba específica ou em todas
-        let reportShortcutHtml = '';
-        try {
-            const rawTpls = (typeof window.ReportAdapter !== 'undefined' && window.ReportAdapter.getReportTemplates)
-                ? window.ReportAdapter.getReportTemplates(formId)
-                : JSON.parse(localStorage.getItem('constructive_report_templates') || '[]');
-            const matchingTpl = (rawTpls || []).find(t => t.form_id === formId && (t.atalho_aba === tab.id || t.atalho_aba === 'todas'));
-            if (matchingTpl) {
-                const reportTitle = (matchingTpl.nome || 'Relatório A4').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                reportShortcutHtml = `
-                    <button type="button" onclick="if (typeof window.printActiveFeatureReport === 'function') window.printActiveFeatureReport('${matchingTpl.id}'); else if (typeof window.openFeatureReportPage === 'function') window.openFeatureReportPage('${matchingTpl.id}', (typeof window.activeFeatureData !== 'undefined' ? window.activeFeatureData : (window.currentFormFeatureData || (window.activeFeatureLayer && window.activeFeatureLayer.feature ? window.activeFeatureLayer.feature.properties : {}))), (window.activeFeatureLayer && window.activeFeatureLayer.feature ? window.activeFeatureLayer.feature.geometry : null)); else alert('Módulo de Relatórios não carregado.');" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-lg font-bold text-xs shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer" title="Emitir ${reportTitle}">
+        // Aba de Relatórios: só recebe os botões dos modelos A4 (sem campos, sem edição)
+        const isReportsTab = tab.tabType === 'reports' || !!tab.isReportsTab;
+
+        // Botão de emissão de um modelo de relatório A4
+        const reportButtonHtml = (tpl) => {
+            const reportTitle = (tpl.nome || 'Relatório A4').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return `
+                    <button type="button" onclick="if (typeof window.printActiveFeatureReport === 'function') window.printActiveFeatureReport('${tpl.id}'); else if (typeof window.openFeatureReportPage === 'function') window.openFeatureReportPage('${tpl.id}', (typeof window.activeFeatureData !== 'undefined' ? window.activeFeatureData : (window.currentFormFeatureData || (window.activeFeatureLayer && window.activeFeatureLayer.feature ? window.activeFeatureLayer.feature.properties : {}))), (window.activeFeatureLayer && window.activeFeatureLayer.feature ? window.activeFeatureLayer.feature.geometry : null)); else alert('Módulo de Relatórios não carregado.');" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-lg font-bold text-xs shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer" title="Emitir ${reportTitle}">
                         <span class="material-symbols-outlined text-[18px]">description</span>
                         <span>${reportTitle}</span>
                     </button>
                 `;
+        };
+
+        // Verifica se há modelo de relatório A4 configurado para exibir atalho nesta aba específica ou em todas
+        let reportShortcutHtml = '';
+        let reportsTabHtml = '';
+        try {
+            const rawTpls = (typeof window.ReportAdapter !== 'undefined' && window.ReportAdapter.getReportTemplates)
+                ? window.ReportAdapter.getReportTemplates(formId)
+                : JSON.parse(localStorage.getItem('constructive_report_templates') || '[]');
+            if (isReportsTab) {
+                // todos os relatórios individuais do cadastro que não foram marcados como "Não exibir atalho no mapa"
+                const available = (rawTpls || []).filter(t => t.form_id === formId && t.tipo !== 'geral' && t.atalho_aba !== 'none');
+                reportsTabHtml = available.length
+                    ? `<div class="flex flex-wrap items-center justify-center gap-2 mb-2">${available.map(reportButtonHtml).join('')}</div>`
+                    : `<div class="text-xs text-slate-500 dark:text-slate-400 text-center py-4">Nenhum relatório A4 disponível para este cadastro.</div>`;
+            } else {
+                const matchingTpl = (rawTpls || []).find(t => t.form_id === formId && (t.atalho_aba === tab.id || t.atalho_aba === 'todas'));
+                if (matchingTpl) reportShortcutHtml = reportButtonHtml(matchingTpl);
             }
         } catch(e) {}
 
         // Render Edit and Report buttons inside the tab if not in edit mode
-        if (!isEditMode && (!isConsolidated && (!isOrcamento || (tab.fields && tab.fields.length > 0)) || reportShortcutHtml)) {
+        if (!isEditMode && !isReportsTab && (!isConsolidated && (!isOrcamento || (tab.fields && tab.fields.length > 0)) || reportShortcutHtml)) {
             html += `
             <div class="flex flex-wrap items-center justify-center gap-2 mb-4">
                 ${(canEditThisTab && !isConsolidated && (!isOrcamento || (tab.fields && tab.fields.length > 0))) ? `
@@ -153,7 +168,9 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
             </div>`;
         }
 
-        if (isConsolidated) {
+        if (isReportsTab) {
+            html += reportsTabHtml;
+        } else if (isConsolidated) {
             html += renderConsolidatedHistoryTab(tab, featureData, visibleTabs, isTabEditMode);
         } else if (tab.isMultiple) {
             html += renderMultipleTab(tab, featureData, isTabEditMode);
@@ -207,7 +224,7 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
             html += `</div>`;
         }
         
-        if (isTabEditMode) {
+        if (isTabEditMode && !isReportsTab) {
             html += `
             <div class="mt-6 pt-4 border-t border-slate-200/50 dark:border-slate-700/50 flex flex-col-reverse sm:flex-row justify-end gap-3">
                 <button type="button" onclick="cancelFeatureEdit()" class="px-5 py-2.5 bg-slate-100/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-white/10 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition-colors shadow-sm w-full sm:w-auto text-sm">

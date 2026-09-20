@@ -143,6 +143,12 @@ eq('fotos do registro (sem excluídas)', RD.recordPhotos(pf1).map(p => p.url), [
 eq('fotos: campos ignorados (exibidos como lista) ficam de fora', RD.recordPhotos(pf1, ['pf_fotos']).length, 0);
 eq('campos do registro restritos aos ids escolhidos', RD.recordFields(pf0, ['pf_obs', 'spu_obs']).map(f => f.id), ['pf_obs']);
 
+// aba de Relatórios (A4): só botões, nunca fonte de dados
+const tabsRel = tabs.concat([{ id: 't_rel', title: 'Relatórios', tabType: 'reports', isReportsTab: true, fields: [] }]);
+eq('aba de relatórios não entra nas abas visíveis', RD.visibleTabs(tabsRel, data).map(t => t.id).includes('t_rel'), false);
+eq('aba de relatórios nunca gera registros (nem por seleção explícita)', RD.buildRecords(tabsRel, data, { tabIds: ['t_rel'] }).length, 0);
+eq('isReportsTab reconhece a aba', [RD.isReportsTab(tabsRel[tabsRel.length - 1]), RD.isReportsTab(tabs[0])], [true, false]);
+
 console.log(`reportData: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {
     console.error(`${failed} falha(s)`);
