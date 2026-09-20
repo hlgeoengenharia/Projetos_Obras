@@ -32,7 +32,14 @@
         edicoes: {},             // { idDaMedida: 'texto que o usuário digitou' }
         posicoes: {},            // { idDaMedida: { lat, lng } } (rótulo arrastado)
         pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false, ordem: [], titulos: {} }, // pontos nos vértices
-        temporal: { ativo: false, ordem: 'asc', colunas: 2, alturaMm: 70, sincronizar: true, contorno: true, excluidas: [] } // série de ortofotos por data
+        temporal: { ativo: false, ordem: 'asc', colunas: 2, alturaMm: 70, sincronizar: true, contorno: true, excluidas: [] }, // série de ortofotos por data
+        rotulos: { ativo: false, campo: 'rotulo' },                          // texto sobre as feições vizinhas ('rotulo' = Quadra/Lote; 'titulo' = nome principal)
+        confrontantes: { ativo: false, camada: '', tolM: 3, nomes: false },  // quem faz divisa com cada lado
+        referencia: { ativo: false, camada: '' },                             // distância e sobreposição com uma camada de referência (ex.: LPM)
+        comparacaoArea: { ativo: false, campo: '' },                          // área cadastral x área calculada
+        situacao: { ativo: false },                                           // mapa de situação (localização) no canto
+        quadriculado: { ativo: false, espacamento: 0 },                       // grade de coordenadas UTM (0 = automático)
+        anotacoes: []                                                         // textos livres no mapa: { id, lat, lng, texto }
     };
     const BASE_MAPS = ['osm', 'satelite', 'nenhum'];
 
@@ -72,8 +79,53 @@
             edicoes: normalizeEdicoes(src.edicoes),
             posicoes: normalizePosicoes(src.posicoes),
             pontos: normalizePontos(src.pontos),
-            temporal: normalizeTemporal(src.temporal)
+            temporal: normalizeTemporal(src.temporal),
+            rotulos: normalizeRotulos(src.rotulos),
+            confrontantes: normalizeConfrontantes(src.confrontantes),
+            referencia: normalizeReferencia(src.referencia),
+            comparacaoArea: normalizeComparacaoArea(src.comparacaoArea),
+            situacao: { ativo: !!(src.situacao && src.situacao.ativo) },
+            quadriculado: normalizeQuadriculado(src.quadriculado),
+            anotacoes: normalizeAnotacoes(src.anotacoes)
         };
+    }
+
+    const ID_REF = /^[A-Za-z0-9_.:-]{1,64}$/;
+    function bool(v, d) { return v === undefined ? d : !!v; }
+
+    function normalizeRotulos(x) {
+        x = x || {};
+        return { ativo: bool(x.ativo, false), campo: x.campo === 'titulo' ? 'titulo' : 'rotulo' };
+    }
+    function normalizeConfrontantes(x) {
+        x = x || {};
+        return { ativo: bool(x.ativo, false), camada: ID_REF.test(String(x.camada || '')) ? String(x.camada) : '', tolM: clamp(x.tolM, 0.5, 20, 3), nomes: bool(x.nomes, false) };
+    }
+    function normalizeReferencia(x) {
+        x = x || {};
+        return { ativo: bool(x.ativo, false), camada: ID_REF.test(String(x.camada || '')) ? String(x.camada) : '' };
+    }
+    function normalizeComparacaoArea(x) {
+        x = x || {};
+        return { ativo: bool(x.ativo, false), campo: ID_REF.test(String(x.campo || '')) ? String(x.campo) : '' };
+    }
+    function normalizeQuadriculado(x) {
+        x = x || {};
+        const e = Number(x.espacamento);
+        return { ativo: bool(x.ativo, false), espacamento: [10, 20, 50, 100, 200, 500, 1000].indexOf(e) >= 0 ? e : 0 };
+    }
+    function normalizeAnotacoes(a) {
+        const out = [];
+        (Array.isArray(a) ? a : []).forEach(x => {
+            if (!x || out.length >= 30) return;
+            const lat = Number(x.lat), lng = Number(x.lng);
+            const texto = String(x.texto === undefined ? '' : x.texto).replace(/[\r\n]+/g, ' ').trim().slice(0, 80);
+            if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || !texto) return;
+            const id = /^a[0-9]{1,4}$/.test(String(x.id)) ? String(x.id) : 'a' + (out.length + 1);
+            if (out.some(o => o.id === id)) return;
+            out.push({ id: id, lat: lat, lng: lng, texto: texto });
+        });
+        return out;
     }
 
     function normalizeTemporal(x) {
@@ -181,7 +233,13 @@
             destaque: Object.assign({}, config.destaque, ajustes.destaque || {}),
             medidas: Object.assign({}, config.medidas, ajustes.medidas || {}),
             pontos: Object.assign({}, config.pontos, ajustes.pontos || {}),
-            temporal: Object.assign({}, config.temporal, ajustes.temporal || {})
+            temporal: Object.assign({}, config.temporal, ajustes.temporal || {}),
+            rotulos: Object.assign({}, config.rotulos, ajustes.rotulos || {}),
+            confrontantes: Object.assign({}, config.confrontantes, ajustes.confrontantes || {}),
+            referencia: Object.assign({}, config.referencia, ajustes.referencia || {}),
+            comparacaoArea: Object.assign({}, config.comparacaoArea, ajustes.comparacaoArea || {}),
+            situacao: Object.assign({}, config.situacao, ajustes.situacao || {}),
+            quadriculado: Object.assign({}, config.quadriculado, ajustes.quadriculado || {})
         }) });
     }
 
@@ -654,6 +712,215 @@
         });
     }
 
+    // ------------------------------------------------------------------ análises espaciais (plano local em metros: vale para distâncias de centenas de metros)
+    function localProjector(lat0, lng0) {
+        const kx = M_PER_DEG_LAT * Math.cos(rad(lat0));
+        return (c) => [(c[0] - lng0) * kx, (c[1] - lat0) * M_PER_DEG_LAT];
+    }
+
+    function ptSegDist(p, a, b) {
+        const dx = b[0] - a[0], dy = b[1] - a[1];
+        const l2 = dx * dx + dy * dy;
+        let k = l2 === 0 ? 0 : ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2;
+        k = Math.max(0, Math.min(1, k));
+        return Math.hypot(p[0] - (a[0] + k * dx), p[1] - (a[1] + k * dy));
+    }
+
+    function cross(o, a, b) { return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]); }
+    function segIntersect(a, b, c, d) {
+        const d1 = cross(c, d, a), d2 = cross(c, d, b), d3 = cross(a, b, c), d4 = cross(a, b, d);
+        return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+    }
+    function segSegDist(a, b, c, d) {
+        if (segIntersect(a, b, c, d)) return 0;
+        return Math.min(ptSegDist(a, c, d), ptSegDist(b, c, d), ptSegDist(c, a, b), ptSegDist(d, a, b));
+    }
+
+    function pointInRing(p, ring) {
+        let inside = false;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+            if (((yi > p[1]) !== (yj > p[1])) && (p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi)) inside = !inside;
+        }
+        return inside;
+    }
+
+    /** Geometria em partes planas: { rings: [anéis externos], segs: [[p,q]...] (contornos e linhas), pts } */
+    function planarParts(geometry, proj) {
+        const g = geometry && geometry.type === 'Feature' ? geometry.geometry : geometry;
+        const out = { rings: [], segs: [], pts: [] };
+        if (!g) return out;
+        const line = (c) => { const p = c.map(proj); for (let i = 0; i < p.length - 1; i++) out.segs.push([p[i], p[i + 1]]); return p; };
+        if (g.type === 'Polygon' || g.type === 'MultiPolygon') {
+            (g.type === 'Polygon' ? [g.coordinates] : g.coordinates).forEach(poly => poly.forEach((r, i) => { const p = line(r); if (i === 0) out.rings.push(p); }));
+        } else if (g.type === 'LineString') line(g.coordinates);
+        else if (g.type === 'MultiLineString') g.coordinates.forEach(line);
+        else if (g.type === 'Point') out.pts.push(proj(g.coordinates));
+        else if (g.type === 'MultiPoint') g.coordinates.forEach(c => out.pts.push(proj(c)));
+        return out;
+    }
+
+    function insideAny(p, parts) { return parts.rings.some(r => pointInRing(p, r)); }
+
+    /** Distância mínima (m) entre dois conjuntos planares; 0 se se tocam, cruzam ou um contém o outro. */
+    function partsDistance(A, B) {
+        const pa = A.pts.concat(A.segs.map(s => s[0]));
+        const pb = B.pts.concat(B.segs.map(s => s[0]));
+        if (pa.some(p => insideAny(p, B)) || pb.some(p => insideAny(p, A))) return 0;
+        let best = Infinity;
+        A.segs.forEach(s => {
+            B.segs.forEach(u => { const d = segSegDist(s[0], s[1], u[0], u[1]); if (d < best) best = d; });
+            B.pts.forEach(p => { const d = ptSegDist(p, s[0], s[1]); if (d < best) best = d; });
+        });
+        A.pts.forEach(p => {
+            B.segs.forEach(u => { const d = ptSegDist(p, u[0], u[1]); if (d < best) best = d; });
+            B.pts.forEach(q => { const d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (d < best) best = d; });
+        });
+        return best;
+    }
+
+    /** Distância de um ponto planar até uma geometria (0 se dentro de um polígono). */
+    function pointToPartsDist(p, parts) {
+        if (insideAny(p, parts)) return 0;
+        let best = Infinity;
+        parts.segs.forEach(s => { const d = ptSegDist(p, s[0], s[1]); if (d < best) best = d; });
+        parts.pts.forEach(q => { const d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (d < best) best = d; });
+        return best;
+    }
+
+    function centerProj(geometry) {
+        const bb = geometryBBox(geometry) || [0, 0, 0, 0];
+        const c = bboxCenter(bb);
+        return localProjector(c[1], c[0]);
+    }
+
+    /**
+     * Quem faz divisa com cada lado do polígono (mesma numeração lado:0, lado:1... das medidas).
+     * camada: { features: [{ geometry, properties: { r, t } }] }. Um vizinho conta como confrontante do lado
+     * quando pelo menos minFracao do lado está a até tolM metros dele.
+     */
+    function confrontantes(geometry, camada, opts) {
+        opts = opts || {};
+        const tol = opts.tolM === undefined ? 3 : opts.tolM;
+        const minFr = opts.minFracao === undefined ? 0.2 : opts.minFracao;
+        const g = geometry && geometry.type === 'Feature' ? geometry.geometry : geometry;
+        const polys = g && g.type === 'Polygon' ? [g.coordinates] : (g && g.type === 'MultiPolygon' ? g.coordinates : []);
+        if (!polys.length || !camada || !Array.isArray(camada.features)) return [];
+        const proj = centerProj(geometry);
+        const viz = camada.features.map(f => ({ f: f, parts: planarParts(f.geometry, proj), bb: geometryBBox(f.geometry) }));
+        const rows = [];
+        let k = 0;
+        polys.forEach(rings => {
+            const ring = rings[0] || [];
+            for (let i = 0; i < ring.length - 1; i++, k++) {
+                const a = ring[i], b = ring[i + 1];
+                const len = distanceM(a, b);
+                const n = Math.max(2, Math.min(40, Math.ceil(len)));
+                const samples = [];
+                for (let s = 0; s <= n; s++) samples.push(proj([a[0] + (b[0] - a[0]) * s / n, a[1] + (b[1] - a[1]) * s / n]));
+                const ex = expandBBoxMeters(geometryBBox({ type: 'LineString', coordinates: [a, b] }), tol + 1);
+                const achados = [];
+                viz.forEach(v => {
+                    if (!bboxIntersects(v.bb, ex)) return;
+                    const perto = samples.filter(p => pointToPartsDist(p, v.parts) <= tol).length;
+                    const fr = perto / samples.length;
+                    if (fr >= minFr) achados.push({ r: (v.f.properties && v.f.properties.r) || '', t: (v.f.properties && v.f.properties.t) || '', fracao: Math.round(fr * 100) / 100 });
+                });
+                achados.sort((x, y) => y.fracao - x.fracao);
+                rows.push({ id: 'lado:' + k, rotuloLado: 'L' + (k + 1), comprimento: len, azimute: azimuthDeg(a, b), confrontantes: achados.slice(0, 4) });
+            }
+        });
+        return rows;
+    }
+
+    /** Menor distância da feição a qualquer feição da camada de referência (alcance = limite do recorte enviado). */
+    function distanciaCamada(geometry, camada) {
+        if (!camada || !Array.isArray(camada.features) || !camada.features.length) return null;
+        const proj = centerProj(geometry);
+        const A = planarParts(geometry, proj);
+        let best = null;
+        camada.features.forEach(f => {
+            const d = partsDistance(A, planarParts(f.geometry, proj));
+            if (best === null || d < best.metros) best = { metros: d, r: (f.properties && f.properties.r) || '', t: (f.properties && f.properties.t) || '' };
+        });
+        return { metros: best.metros, intersecta: best.metros === 0, r: best.r, t: best.t };
+    }
+
+    /**
+     * Área (m²) da feição que se sobrepõe à camada de referência, e o percentual da feição.
+     * Usa o Turf (turf.intersect/turf.area), injetado porque roda no navegador.
+     */
+    function sobreposicaoCamada(geometry, camada, turf) {
+        if (!turf || !camada || !Array.isArray(camada.features)) return null;
+        const g = geometry && geometry.type === 'Feature' ? geometry.geometry : geometry;
+        if (!g || !/Polygon/.test(g.type)) return null;
+        const total = (g.type === 'Polygon' ? [g.coordinates] : g.coordinates).reduce((s, r) => s + polygonAreaM2(r), 0);
+        let soma = 0;
+        camada.features.forEach(f => {
+            if (!f.geometry || !/Polygon/.test(f.geometry.type)) return;
+            try {
+                const inter = turf.intersect({ type: 'Feature', properties: {}, geometry: g }, { type: 'Feature', properties: {}, geometry: f.geometry });
+                if (inter) soma += turf.area(inter);
+            } catch (e) { /* geometria inválida: ignora */ }
+        });
+        return { areaM2: soma, pct: total > 0 ? soma / total * 100 : 0, totalM2: total };
+    }
+
+    /** Número digitado no formato brasileiro ou cru ('1.234,56' | '720.62' | 550,26). */
+    function parseNumeroBR(v) {
+        if (typeof v === 'number') return isFinite(v) ? v : null;
+        let s = String(v === undefined || v === null ? '' : v).trim().replace(/[^0-9,.\-]/g, '');
+        if (!s) return null;
+        if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
+        const n = parseFloat(s);
+        return isFinite(n) ? n : null;
+    }
+
+    /** Área cadastral x calculada. alerta = diferença acima da tolerância (%). */
+    function compararAreas(cadastroRaw, calculadaM2, tolPct) {
+        const cad = parseNumeroBR(cadastroRaw);
+        if (cad === null || !(calculadaM2 >= 0)) return null;
+        const dif = calculadaM2 - cad;
+        const pct = cad > 0 ? dif / cad * 100 : null;
+        return { cadastro: cad, calculada: calculadaM2, diferenca: dif, pct: pct, alerta: pct === null ? false : Math.abs(pct) > (tolPct === undefined ? 1 : tolPct) };
+    }
+
+    // ------------------------------------------------------------------ quadriculado UTM
+    function autoGridSpacing(extentM) {
+        const alvo = extentM / 5;
+        const opcoes = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
+        let best = opcoes[0];
+        opcoes.forEach(o => { if (Math.abs(o - alvo) < Math.abs(best - alvo)) best = o; });
+        return best;
+    }
+
+    /**
+     * Linhas do quadriculado UTM sobre o retângulo [minLng,minLat,maxLng,maxLat].
+     * Devolve { espacamento, zona, linhas: [{ tipo:'e'|'n', valor, pts:[[lat,lng]...] }] }
+     */
+    function gradeUTM(bbox, espacamento) {
+        const c = bboxCenter(bbox);
+        const pj = projectionInfo(c[1], c[0]);
+        const south = c[1] < 0;
+        const cantos = [[bbox[0], bbox[1]], [bbox[2], bbox[1]], [bbox[2], bbox[3]], [bbox[0], bbox[3]]].map(p => latLngToUtm(p[1], p[0], pj.zone));
+        const es = cantos.map(u => u.e), ns = cantos.map(u => u.n);
+        const eMin = Math.min.apply(null, es), eMax = Math.max.apply(null, es), nMin = Math.min.apply(null, ns), nMax = Math.max.apply(null, ns);
+        const esp = espacamento || autoGridSpacing(Math.max(eMax - eMin, nMax - nMin));
+        const linhas = [];
+        const passos = 6;
+        for (let e = Math.ceil(eMin / esp) * esp; e <= eMax && linhas.length < 80; e += esp) {
+            const pts = [];
+            for (let i = 0; i <= passos; i++) { const ll = utmToLatLng(e, nMin + (nMax - nMin) * i / passos, pj.zone, south); pts.push([ll.lat, ll.lng]); }
+            linhas.push({ tipo: 'e', valor: e, pts: pts });
+        }
+        for (let n = Math.ceil(nMin / esp) * esp; n <= nMax && linhas.length < 160; n += esp) {
+            const pts = [];
+            for (let i = 0; i <= passos; i++) { const ll = utmToLatLng(eMin + (eMax - eMin) * i / passos, n, pj.zone, south); pts.push([ll.lat, ll.lng]); }
+            linhas.push({ tipo: 'n', valor: n, pts: pts });
+        }
+        return { espacamento: esp, zona: pj.zone, linhas: linhas };
+    }
+
     // ------------------------------------------------------------------ projeção e escala
     /** Zona UTM e identificação do sistema (SIRGAS 2000 no Brasil). */
     function projectionInfo(lat, lng) {
@@ -733,7 +1000,14 @@
                 if (!bboxIntersects(fb, area)) return;
                 total++;
                 if (feats.length < max) {
-                    feats.push({ type: 'Feature', properties: {}, geometry: { type: f.geometry.type, coordinates: roundCoords(f.geometry.coordinates, 6) } });
+                    // rótulos (r = Quadra/Lote, t = nome principal) só vêm se a página do mapa os liberou para este usuário
+                    const props = {};
+                    if (typeof opts.labelFn === 'function') {
+                        const l = opts.labelFn(theme, f) || {};
+                        if (l.r) props.r = String(l.r).slice(0, 40);
+                        if (l.t) props.t = String(l.t).slice(0, 60);
+                    }
+                    feats.push({ type: 'Feature', properties: props, geometry: { type: f.geometry.type, coordinates: roundCoords(f.geometry.coordinates, 6) } });
                 }
             });
             if (feats.length) {
@@ -752,6 +1026,7 @@
         geometryBBox, bboxCenter, expandBBoxMeters, bboxIntersects, roundCoords, geomKind,
         normalizeTemporal, rasterDateInfo, fmtRasterDate, tileXY, tileUrl, probeZoom, rasterBBox, buildOrtofotoList, sortOrtofotos,
         COORD_SYSTEMS, normalizePontos, latLngToUtm, utmToLatLng, fmtGms, coordHeaders, coordCells, coordSystemLabel, azimuthDeg, fmtAzimuth, vertices, defaultPointTitle, pointRows,
+        localProjector, confrontantes, distanciaCamada, sobreposicaoCamada, parseNumeroBR, compararAreas, autoGridSpacing, gradeUTM, normalizeAnotacoes, normalizeRotulos, normalizeConfrontantes, normalizeReferencia, normalizeComparacaoArea, normalizeQuadriculado,
         distanceM, ringAreaM2, polygonAreaM2, lineLengthM, fmtNumber, computeMeasures, applyEdits, normalizeMedidas, normalizeEdicoes, normalizePosicoes,
         projectionInfo, scaleDenominator, niceScale, approxScale, formatScale, polygonOuterRings, normalizeVista,
         featureKey, collectNearbyLayers

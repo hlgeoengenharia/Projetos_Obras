@@ -62,9 +62,14 @@ function makeL() {
         getCenter() { return this.center; }
         getZoom() { return this.zoom; }
         getContainer() { return this.cont; }
+        getBounds() { const c = this.center; return { getWest: () => c.lng - 0.0012, getSouth: () => c.lat - 0.001, getEast: () => c.lng + 0.0012, getNorth: () => c.lat + 0.001 }; }
     }
+    const created = [];
     const L = {
-        map: (c, o) => new FakeMap(c, o),
+        __maps: created,
+        polyline: (p, o) => new Layer('polyline', { p, o }),
+        rectangle: (b, o) => new Layer('rectangle', { b, o }),
+        map: (c, o) => { const m = new FakeMap(c, o); created.push(m); return m; },
         tileLayer: (u, o) => new Layer('tile', { u, o }),
         geoJSON: (d, o) => new Layer('geojson', { d, o }),
         polygon: (p, o) => new Layer('polygon', { p, o }),
@@ -87,7 +92,7 @@ const camadas = [
     { id: '1', name: 'Lotes <vizinhos>', color: '#ff0000', kind: 'polygon', features: [{ type: 'Feature', properties: {}, geometry: poly }], truncated: false },
     { id: '4', name: 'Linhas', color: '#00ff00', kind: 'line', features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[-34.84, -7.02], [-34.83, -7.01]] } }], truncated: true }
 ];
-const ids = ['map-north', 'map-info-bar', 'map-legend', 'map-sides-text', 'map-area-text'];
+const ids = ['map-north', 'map-info-bar', 'map-legend', 'map-sides-text', 'map-area-text', 'map-locator'];
 
 function build(config, geometry, extra) {
     const L = makeL();
@@ -385,6 +390,92 @@ eq('depois da saída: vértices livres voltam', [handles(t).length, pontosMk(t).
 const nAntes = t.changes.length;
 t.ctl.setExportMode(false);
 eq('repetir o mesmo modo não redesenha', t.changes.length, nAntes);
+
+// ---------------------------------------------------------------- rótulos das feições vizinhas
+const camadasRot = [
+    { id: '1', name: 'Lotes', color: '#ff0000', kind: 'polygon', features: [{ type: 'Feature', properties: { r: 'Quadra E • Lote 02', t: 'Beltrano <b>' }, geometry: poly }, { type: 'Feature', properties: {}, geometry: poly }], truncated: false }
+];
+const nlabels = (tt) => tt.layersOf('marker').filter(m => m.args.o.icon.className === 'report-nlabel');
+t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefined, { camadas: camadasRot });
+eq('rótulo (Quadra/Lote) no centro de cada feição que tem rótulo', [nlabels(t).length, nlabels(t)[0].args.o.icon.html.replace(/<[^>]+>/g, '')], [1, 'Quadra E • Lote 02']);
+ok('rótulo fica no centro da feição e não é clicável', nlabels(t)[0].args.pos[0] === -7.015 && nlabels(t)[0].args.pos[1] === -34.835 && nlabels(t)[0].args.o.interactive === false);
+t.ctl.setConfig({ rotulos: { campo: 'titulo' } });
+ok('campo "nome principal" com o texto escapado', nlabels(t).length === 1 && /Beltrano &lt;b&gt;/.test(nlabels(t)[0].args.o.icon.html) && !/<b>/.test(nlabels(t)[0].args.o.icon.html));
+t.ctl.setConfig({ rotulos: { ativo: false } });
+eq('rótulos desligados', nlabels(t).length, 0);
+t.ctl.setConfig({ rotulos: { ativo: true, campo: 'rotulo' } });
+t.ctl.toggleLayer('1', false);
+eq('camada desligada: sem rótulos', nlabels(t).length, 0);
+const enorme = [{ id: '9', name: 'Enorme', color: '#00f', kind: 'polygon', features: Array.from({ length: 300 }, () => ({ type: 'Feature', properties: { r: 'x' }, geometry: poly })), truncated: false }];
+t = build({ mapa: { camadasLigadas: ['9'], rotulos: { ativo: true } } }, undefined, { camadas: enorme });
+eq('camada com mais de 250 rótulos: ficam de fora (poluição)', nlabels(t).length, 0);
+t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefined, { camadas: camadasRot });
+
+// ---------------------------------------------------------------- quadriculado
+t = build({});
+eq('quadriculado desligado: nada desenhado', t.layersOf('polyline').length, 0);
+t.ctl.setConfig({ quadriculado: { ativo: true, espacamento: 50 } });
+const linhasG = t.layersOf('polyline');
+ok('quadriculado ligado: linhas tracejadas, sem clique', linhasG.length > 4 && linhasG.every(l => l.args.o.dashArray && l.args.o.interactive === false));
+const glabels = (tt) => tt.layersOf('marker').filter(m => m.args.o.icon.className === 'report-glabel');
+ok('cada linha traz o valor da coordenada (E/N) no padrão brasileiro', glabels(t).length === linhasG.length && glabels(t).every(m => /^(E|N) [\d.]+$/.test(m.args.o.icon.html.replace(/<[^>]+>/g, ''))));
+const n0 = linhasG.length;
+t.map.center = { lat: -7.0, lng: -34.9 };
+t.map.handlers.moveend();
+ok('mover o mapa redesenha a grade (e não acumula linhas antigas)', t.layersOf('polyline').length > 0 && t.layersOf('polyline').length < n0 * 3);
+t.ctl.setConfig({ quadriculado: { ativo: false } });
+eq('desligar remove linhas e valores', [t.layersOf('polyline').length, glabels(t).length], [0, 0]);
+
+// ---------------------------------------------------------------- mapa de situação
+t = build({});
+ok('situação desligada: caixa escondida e nenhum mapa extra', t.doc.els['map-locator'].style.display === 'none' && t.L.__maps.length === 1);
+t.ctl.setConfig({ situacao: { ativo: true } });
+const loc = t.L.__maps[1];
+ok('situação ligada: mapa pequeno criado na caixa, sem interação e sem controles', t.doc.els['map-locator'].style.display === '' && !!loc && loc.options.zoomControl === false && loc.options.dragging === false && loc.options.attributionControl === false);
+ok('situação: fundo de ruas, ponto da feição e retângulo do que o mapa principal mostra', Array.from(loc.layers).some(l => l.kind === 'tile') && Array.from(loc.layers).some(l => l.kind === 'circle') && Array.from(loc.layers).some(l => l.kind === 'rectangle'));
+eq('situação: 6 níveis de zoom abaixo do mapa principal, centrada na feição', [loc.zoom, loc.center.lat, loc.center.lng], [12, -7.015, -34.835]);
+t.map.zoom = 19; t.map.handlers.zoomend();
+eq('situação acompanha o zoom do mapa principal', loc.zoom, 13);
+eq('a caixa não cria um segundo mapa a cada movimento', t.L.__maps.length, 2);
+ok('só um retângulo (o antigo é removido)', Array.from(loc.layers).filter(l => l.kind === 'rectangle').length === 1);
+t.ctl.setConfig({ situacao: { ativo: false } });
+eq('situação desligada de novo: caixa escondida', t.doc.els['map-locator'].style.display, 'none');
+
+// ---------------------------------------------------------------- anotações de texto
+const notas = (tt) => tt.layersOf('marker').filter(m => m.args.o.icon.className === 'report-note');
+t = build({});
+const id1 = t.ctl.addNote('Muro de arrimo');
+eq('nova anotação no centro do mapa', [id1, notas(t).length, notas(t)[0].args.pos], ['a1', 1, [-7.015, -34.835]]);
+ok('anotação arrastável e com dica', notas(t)[0].args.o.draggable === true && /Duplo clique/.test(notas(t)[0].args.o.icon.html));
+const id2 = t.ctl.addNote('');
+eq('sem texto vira "Anotação"; segundo id', [id2, t.ctl.getConfig().anotacoes[1].texto], ['a2', 'Anotação']);
+notas(t)[0].latlng = { lat: -7.0141, lng: -34.8341 };
+notas(t)[0].handlers.dragend();
+eq('arrastar guarda a nova posição', [t.ctl.getConfig().anotacoes[0].lat, t.ctl.getConfig().anotacoes[0].lng], [-7.0141, -34.8341]);
+notas(t)[0].handlers.dblclick({});
+const cN = notas(t)[0].span.children[0];
+ok('duplo clique abre o campo com o texto', !!cN && cN.value === 'Muro de arrimo' && notas(t)[0].draggingOff === true);
+cN.value = 'Muro <i>novo</i>';
+cN.listeners.keydown({ key: 'Enter' });
+ok('Enter grava e o texto é escapado', t.ctl.getConfig().anotacoes[0].texto === 'Muro <i>novo</i>' && /Muro &lt;i&gt;novo&lt;\/i&gt;/.test(notas(t)[0].args.o.icon.html) && !/<i>/.test(notas(t)[0].args.o.icon.html));
+notas(t)[0].handlers.dblclick({});
+notas(t)[0].span.children[0].value = '   ';
+notas(t)[0].span.children[0].listeners.keydown({ key: 'Enter' });
+eq('texto vazio apaga a anotação', [t.ctl.getConfig().anotacoes.map(a => a.id), notas(t).length], [['a2'], 1]);
+notas(t)[0].handlers.dblclick({});
+notas(t)[0].span.children[0].listeners.keydown({ key: 'Escape' });
+eq('Esc cancela', t.ctl.getConfig().anotacoes[0].texto, 'Anotação');
+t.ctl.removeNote('a2');
+eq('remover', [t.ctl.getConfig().anotacoes.length, notas(t).length], [0, 0]);
+t.ctl.addNote('x');
+const idNovo = t.ctl.addNote('y');
+eq('ids não se repetem depois de remover', idNovo, 'a2');
+const tN = build({ mapa: { anotacoes: [{ id: 'a1', lat: -7.01, lng: -34.83, texto: 'Salva' }] } });
+ok('anotações salvas voltam ao abrir e entram no snapshot', notas(tN).length === 1 && tN.ctl.snapshot().anotacoes[0].texto === 'Salva');
+tN.ctl.reset(MT.normalizeMapConfig({}));
+eq('restaurar padrão do modelo limpa as anotações', notas(tN).length, 0);
+const lotado = build({ mapa: { anotacoes: Array.from({ length: 30 }, (_, i) => ({ lat: -7, lng: -34, texto: 't' + i })) } });
+eq('limite de 30 anotações', lotado.ctl.addNote('mais uma'), null);
 
 console.log(`reportMap: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {

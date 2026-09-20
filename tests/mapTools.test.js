@@ -263,6 +263,86 @@ eq('ordem: mais antiga primeiro; sem data no fim', MT.sortOrtofotos(lst, 'asc').
 eq('ordem: mais recente primeiro; sem data continua no fim', MT.sortOrtofotos(lst, 'desc').map(o => o.id), ['r1', 'r4', 'r2', 'r5']);
 eq('ordenar não altera a lista original', lst.map(o => o.id), ['r1', 'r2', 'r4', 'r5']);
 
+// ---------------------------------------------------------------- extras: configuração
+const ex0 = MT.normalizeMapConfig({});
+eq('extras: tudo desligado por padrão', [ex0.rotulos.ativo, ex0.confrontantes.ativo, ex0.referencia.ativo, ex0.comparacaoArea.ativo, ex0.situacao.ativo, ex0.quadriculado.ativo, ex0.anotacoes], [false, false, false, false, false, false, []]);
+eq('rótulos: campo válido ou padrão', [MT.normalizeMapConfig({ mapa: { rotulos: { campo: 'titulo' } } }).rotulos.campo, MT.normalizeMapConfig({ mapa: { rotulos: { campo: 'x' } } }).rotulos.campo], ['titulo', 'rotulo']);
+const cf = MT.normalizeMapConfig({ mapa: { confrontantes: { ativo: true, camada: 'abc-1', tolM: 999, nomes: 1 } } }).confrontantes;
+eq('confrontantes: tolerância limitada, camada válida', [cf.ativo, cf.camada, cf.tolM, cf.nomes], [true, 'abc-1', 20, true]);
+eq('camada com caracteres suspeitos é descartada', [MT.normalizeMapConfig({ mapa: { confrontantes: { camada: '../x' } } }).confrontantes.camada, MT.normalizeMapConfig({ mapa: { referencia: { camada: 'a b' } } }).referencia.camada, MT.normalizeMapConfig({ mapa: { comparacaoArea: { campo: '<x>' } } }).comparacaoArea.campo], ['', '', '']);
+eq('quadriculado: espaçamento só dos valores permitidos (0 = automático)', [MT.normalizeMapConfig({ mapa: { quadriculado: { espacamento: 100 } } }).quadriculado.espacamento, MT.normalizeMapConfig({ mapa: { quadriculado: { espacamento: 77 } } }).quadriculado.espacamento], [100, 0]);
+const an = MT.normalizeMapConfig({ mapa: { anotacoes: [{ id: 'a1', lat: -7, lng: -34, texto: '  Muro  ' }, { id: 'a1', lat: -7, lng: -34, texto: 'repetido' }, { lat: 999, lng: 0, texto: 'x' }, { lat: -7, lng: -34, texto: '   ' }, { lat: -7.1, lng: -34.1, texto: 'a\nb' }, 'lixo'] } }).anotacoes;
+eq('anotações: limpas, sem duplicar id, sem coordenada inválida nem texto vazio', an.map(x => [x.id, x.texto]), [['a1', 'Muro'], ['a2', 'a b']]);
+eq('anotações: no máximo 30', MT.normalizeMapConfig({ mapa: { anotacoes: Array.from({ length: 50 }, (_, i) => ({ lat: -7, lng: -34, texto: 't' + i })) } }).anotacoes.length, 30);
+eq('ajustes trazem os extras', (() => { const a = MT.mergeAjustes(ex0, { rotulos: { ativo: true }, quadriculado: { ativo: true, espacamento: 50 }, anotacoes: [{ lat: -7, lng: -34, texto: 'x' }], situacao: { ativo: true } }); return [a.rotulos.ativo, a.rotulos.campo, a.quadriculado.espacamento, a.anotacoes.length, a.situacao.ativo]; })(), [true, 'rotulo', 50, 1, true]);
+
+// rótulos das camadas vizinhas (só quando a página do mapa libera)
+const comRot = MT.collectNearbyLayers([{ id: 'L', name: 'Lotes', visible: true, features: [{ properties: { id_banco: 1, nome: 'Fulano' }, geometry: sq(-34.8398, -7.0198, 0.0003) }] }], quad, { labelFn: (th, f) => ({ r: 'Quadra 06 • Lote 08', t: f.properties.nome }) });
+eq('camada leva o rótulo e o nome por feição', [comRot[0].features[0].properties.r, comRot[0].features[0].properties.t], ['Quadra 06 • Lote 08', 'Fulano']);
+eq('sem labelFn (dados restritos): nenhum atributo vai', Object.keys(MT.collectNearbyLayers([{ id: 'L', name: 'Lotes', visible: true, features: [{ properties: { nome: 'Fulano' }, geometry: sq(-34.8398, -7.0198, 0.0003) }] }], quad, {})[0].features[0].properties).length, 0);
+eq('rótulos são limitados em tamanho', MT.collectNearbyLayers([{ id: 'L', name: 'x', visible: true, features: [{ properties: {}, geometry: sq(-34.8398, -7.0198, 0.0003) }] }], quad, { labelFn: () => ({ r: 'r'.repeat(99), t: 't'.repeat(99) }) })[0].features[0].properties.r.length, 40);
+
+// ---------------------------------------------------------------- geometria plana: distância, confrontantes
+// lote de 30 m x 20 m (aprox.) e vizinhos ao redor
+const dLat = 20 / 111195, dLng = 30 / (111195 * Math.cos(7.02 * Math.PI / 180));
+const lote = { type: 'Polygon', coordinates: [[[-34.84, -7.02], [-34.84 + dLng, -7.02], [-34.84 + dLng, -7.02 + dLat], [-34.84, -7.02 + dLat], [-34.84, -7.02]]] };
+const retan = (x0, y0, x1, y1) => ({ type: 'Polygon', coordinates: [[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]] });
+const gap = 0.0000001; // vizinhos colados
+const viz = { features: [
+    { geometry: retan(-34.84 + dLng + gap, -7.02, -34.84 + 2 * dLng, -7.02 + dLat), properties: { r: 'Quadra E • Lote 02', t: 'Beltrano' } },           // leste
+    { geometry: retan(-34.84 - dLng, -7.02, -34.84 - gap, -7.02 + dLat), properties: { r: 'Quadra E • Lote 00', t: 'Ciclano' } },                    // oeste
+    { geometry: retan(-34.84, -7.02 + dLat + gap, -34.84 + dLng, -7.02 + 2 * dLat), properties: { r: 'Quadra D • Lote 09' } },                        // norte
+    { geometry: retan(-34.84 + dLng + 0.0002, -7.02 + 0.0004, -34.84 + dLng + 0.0004, -7.02 + 0.0006), properties: { r: 'Longe' } }                   // longe
+] };
+const conf = MT.confrontantes(lote, viz, { tolM: 3 });
+eq('confrontantes: um registro por lado, com a mesma numeração das medidas', conf.map(c => c.id), ['lado:0', 'lado:1', 'lado:2', 'lado:3']);
+eq('confrontantes: lado sul (lado:0) sem vizinho, norte (lado:2) com Quadra D', [conf[0].confrontantes.length, conf[2].confrontantes.map(x => x.r)], [0, ['Quadra D • Lote 09']]);
+eq('confrontantes: leste (lado:1) e oeste (lado:3)', [conf[1].confrontantes.map(x => x.r), conf[3].confrontantes.map(x => x.r)], [['Quadra E • Lote 02'], ['Quadra E • Lote 00']]);
+ok('confrontantes: vizinho distante não entra e o nome (t) acompanha', !conf.some(c => c.confrontantes.some(x => x.r === 'Longe')) && conf[1].confrontantes[0].t === 'Beltrano');
+ok('confrontantes: lados com comprimento e azimute', conf[0].rotuloLado === 'L1' && Math.abs(conf[0].comprimento - 30) < 0.5 && Math.abs(conf[0].azimute - 90) < 0.5 && Math.abs(conf[1].comprimento - 20) < 0.5);
+ok('confrontantes: fração do lado que encosta', conf[1].confrontantes[0].fracao > 0.9);
+const so2 = MT.confrontantes(lote, viz, { tolM: 3, minFracao: 1.1 });
+ok('confrontantes: exigência maior que 100% não devolve ninguém', so2.every(c => c.confrontantes.length === 0));
+const canto = { features: [{ geometry: retan(-34.84 + dLng + gap, -7.02 - dLat, -34.84 + 2 * dLng, -7.02 - gap), properties: { r: 'Só no canto' } }] };
+ok('vizinho que só toca o canto não vira confrontante do lado (menos de 20% encosta)', MT.confrontantes(lote, canto, { tolM: 3 }).every(c => c.confrontantes.length === 0));
+eq('sem polígono ou sem camada: nada', [MT.confrontantes({ type: 'Point', coordinates: [0, 0] }, viz), MT.confrontantes(lote, null)], [[], []]);
+eq('confrontantes de multipolígono continuam a numeração', MT.confrontantes({ type: 'MultiPolygon', coordinates: [lote.coordinates, retan(-34.83, -7.02, -34.8295, -7.0195).coordinates] }, { features: [] }).map(c => c.id).slice(3, 6), ['lado:3', 'lado:4', 'lado:5']);
+
+// distância à camada de referência
+const lpm = { features: [{ geometry: { type: 'LineString', coordinates: [[-34.84 + dLng + 50 / (111195 * Math.cos(7.02 * Math.PI / 180)), -7.03], [-34.84 + dLng + 50 / (111195 * Math.cos(7.02 * Math.PI / 180)), -7.01]] }, properties: { r: 'LPM' } }] };
+const dist = MT.distanciaCamada(lote, lpm);
+ok('distância à linha de referência (~50 m a leste do lote)', Math.abs(dist.metros - 50) < 1 && dist.intersecta === false && dist.r === 'LPM');
+const lpmCruza = { features: [{ geometry: { type: 'LineString', coordinates: [[-34.84 + dLng / 2, -7.03], [-34.84 + dLng / 2, -7.01]] }, properties: {} }] };
+ok('linha que atravessa o lote: distância 0 e intersecta', (() => { const d = MT.distanciaCamada(lote, lpmCruza); return d.metros === 0 && d.intersecta === true; })());
+ok('feição dentro de um polígono de referência: distância 0', MT.distanciaCamada(lote, { features: [{ geometry: retan(-34.85, -7.03, -34.8, -7.0), properties: {} }] }).metros === 0);
+ok('polígono vizinho separado: distância entre contornos', (() => { const d = MT.distanciaCamada(lote, { features: [{ geometry: retan(-34.84 + dLng + 20 / (111195 * Math.cos(7.02 * Math.PI / 180)), -7.02, -34.84 + 2 * dLng, -7.02 + dLat), properties: {} }] }); return Math.abs(d.metros - 20) < 1; })());
+ok('escolhe a mais próxima entre várias', (() => { const d = MT.distanciaCamada(lote, { features: [lpm.features[0], { geometry: { type: 'Point', coordinates: [-34.84 + dLng + 5 / (111195 * Math.cos(7.02 * Math.PI / 180)), -7.02] }, properties: { r: 'Marco' } }] }); return d.r === 'Marco' && Math.abs(d.metros - 5) < 0.5; })());
+eq('sem camada ou vazia: nulo', [MT.distanciaCamada(lote, null), MT.distanciaCamada(lote, { features: [] })], [null, null]);
+
+// sobreposição (o Turf é injetado)
+const turfFalso = { intersect: (a, b) => (b.geometry.type === 'Polygon' && b.geometry.coordinates[0][0][0] < -34.85 ? null : { type: 'Feature', geometry: b.geometry }), area: () => 100 };
+const sob = MT.sobreposicaoCamada(lote, { features: [{ geometry: retan(-34.84, -7.02, -34.8399, -7.0199), properties: {} }, { geometry: retan(-34.86, -7.02, -34.85, -7.0199), properties: {} }, { geometry: { type: 'LineString', coordinates: [[0, 0], [1, 1]] }, properties: {} }] }, turfFalso);
+ok('sobreposição soma só as interseções e dá o percentual da feição', sob.areaM2 === 100 && Math.abs(sob.totalM2 - 600) < 15 && Math.abs(sob.pct - 100 / sob.totalM2 * 100) < 1e-9);
+eq('sobreposição sem Turf, sem polígono ou sem camada: nulo', [MT.sobreposicaoCamada(lote, { features: [] }, null), MT.sobreposicaoCamada({ type: 'Point', coordinates: [0, 0] }, { features: [] }, turfFalso), MT.sobreposicaoCamada(lote, null, turfFalso)], [null, null, null]);
+eq('erro do Turf numa geometria não derruba as outras', MT.sobreposicaoCamada(lote, { features: [{ geometry: retan(0, 0, 1, 1), properties: {} }, { geometry: retan(-34.84, -7.02, -34.8399, -7.0199), properties: {} }] }, { intersect: (a, b) => { if (b.geometry.coordinates[0][0][0] === 0) throw new Error('inválida'); return { type: 'Feature' }; }, area: () => 40 }).areaM2, 40);
+
+// área cadastral x calculada
+eq('número no padrão brasileiro e cru', [MT.parseNumeroBR('550,26'), MT.parseNumeroBR('1.012,40'), MT.parseNumeroBR('720.62'), MT.parseNumeroBR(' 550,26 m² '), MT.parseNumeroBR(''), MT.parseNumeroBR('abc'), MT.parseNumeroBR(12.5)], [550.26, 1012.4, 720.62, 550.26, null, null, 12.5]);
+const cmp = MT.compararAreas('550,26', 560);
+ok('área calculada maior que a cadastral: diferença, percentual e alerta acima de 1%', Math.abs(cmp.diferenca - 9.74) < 1e-9 && Math.abs(cmp.pct - 1.7702) < 0.001 && cmp.alerta === true);
+eq('dentro da tolerância não alerta', MT.compararAreas('550,26', 552).alerta, false);
+eq('tolerância própria', [MT.compararAreas('100', 103, 5).alerta, MT.compararAreas('100', 103, 2).alerta], [false, true]);
+eq('sem valor cadastral: nulo; cadastro zero não divide', [MT.compararAreas('', 100), MT.compararAreas('0', 100).pct, MT.compararAreas('0', 100).alerta], [null, null, false]);
+
+// quadriculado UTM
+eq('espaçamento automático (~5 linhas na extensão)', [MT.autoGridSpacing(60), MT.autoGridSpacing(500), MT.autoGridSpacing(5000)], [10, 100, 1000]);
+const gr = MT.gradeUTM([-34.8412, -7.0211, -34.8388, -7.0189], 50);
+eq('grade: zona 25 e espaçamento pedido', [gr.zona, gr.espacamento], [25, 50]);
+ok('grade: linhas de E e de N, todas múltiplas do espaçamento', gr.linhas.some(l => l.tipo === 'e') && gr.linhas.some(l => l.tipo === 'n') && gr.linhas.every(l => l.valor % 50 === 0));
+ok('grade: cada linha tem pontos dentro do retângulo (com folga de curvatura)', gr.linhas.every(l => l.pts.length === 7 && l.pts.every(p => p[0] > -7.0215 && p[0] < -7.0185 && p[1] > -34.8416 && p[1] < -34.8384)));
+ok('grade: linhas de E são quase verticais e as de N quase horizontais', (() => { const e = gr.linhas.find(l => l.tipo === 'e'), n = gr.linhas.find(l => l.tipo === 'n'); return Math.abs(e.pts[0][1] - e.pts[6][1]) < 5e-5 && Math.abs(n.pts[0][0] - n.pts[6][0]) < 5e-5; })());
+ok('grade automática também funciona', MT.gradeUTM([-34.8412, -7.0211, -34.8388, -7.0189]).espacamento > 0);
+
 console.log(`mapTools: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {
     console.error(`${failed} falha(s)`);

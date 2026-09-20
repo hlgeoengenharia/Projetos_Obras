@@ -63,7 +63,7 @@ ok('A4 marcado por padrão', /setPageSize\('A4'\)"[^>]*bg-primary/.test(html) &&
 ok('folha A4 no título', has(html, 'Folha A4 Interativa') && has(html, '210 × 297 mm (Retrato)'));
 
 // ---------------------------------------------------------------- Mini-Mapa (card do Relatório Individual)
-ok('card do mapa tem destaque, mapa base, camadas, norte, escala e projeção', ['cfg-map-temp-ativo', 'cfg-map-temp-ordem', 'cfg-map-temp-cols', 'cfg-map-temp-altura', 'cfg-map-temp-contorno', 'cfg-map-temp-sync', 'cfg-map-pts-ativo', 'cfg-map-pts-sistema', 'cfg-map-pts-tab', 'cfg-map-pts-mem', 'cfg-map-med-ativo', 'cfg-map-med-lados', 'cfg-map-med-total', 'cfg-map-med-perim', 'cfg-map-destaque', 'cfg-map-esmaecer', 'cfg-map-cor', 'cfg-map-base', 'cfg-map-camadas', 'cfg-map-norte', 'cfg-map-escala', 'cfg-map-proj', 'cfg-map-altura'].every(id => has(html, 'id="' + id + '"')));
+ok('card do mapa tem destaque, mapa base, camadas, norte, escala e projeção', ['cfg-map-x-rotulos', 'cfg-map-x-confr', 'cfg-map-x-ref', 'cfg-map-x-area', 'cfg-map-x-sit', 'cfg-map-x-grade', 'cfg-map-temp-ativo', 'cfg-map-temp-ordem', 'cfg-map-temp-cols', 'cfg-map-temp-altura', 'cfg-map-temp-contorno', 'cfg-map-temp-sync', 'cfg-map-pts-ativo', 'cfg-map-pts-sistema', 'cfg-map-pts-tab', 'cfg-map-pts-mem', 'cfg-map-med-ativo', 'cfg-map-med-lados', 'cfg-map-med-total', 'cfg-map-med-perim', 'cfg-map-destaque', 'cfg-map-esmaecer', 'cfg-map-cor', 'cfg-map-base', 'cfg-map-camadas', 'cfg-map-norte', 'cfg-map-escala', 'cfg-map-proj', 'cfg-map-altura'].every(id => has(html, 'id="' + id + '"')));
 ok('card explica que o usuário ajusta no relatório', has(html, 'painel <em>Mapa</em> do relatório'));
 ok('o modelo padrão já traz o mapa na folha: o botão é "Atualizar"', has(html, 'Atualizar o Mini-Mapa da Folha'));
 ok('card não diz mais que a série temporal é "próxima etapa"', !has(html, 'próxima etapa'));
@@ -72,6 +72,7 @@ Object.assign(inputs, {
     'cfg-map-destaque': { checked: true }, 'cfg-map-esmaecer': { checked: true }, 'cfg-map-cor': { value: '#ff8800' },
     'cfg-map-base': { value: 'satelite' }, 'cfg-map-camadas': { checked: false }, 'cfg-map-norte': { checked: false },
     'cfg-map-escala': { checked: true }, 'cfg-map-proj': { checked: true },
+    'cfg-map-x-rotulos': { checked: true }, 'cfg-map-x-confr': { checked: true }, 'cfg-map-x-ref': { checked: false }, 'cfg-map-x-area': { checked: true }, 'cfg-map-x-sit': { checked: true }, 'cfg-map-x-grade': { checked: false },
     'cfg-map-temp-ativo': { checked: true }, 'cfg-map-temp-ordem': { value: 'desc' }, 'cfg-map-temp-cols': { value: '3' }, 'cfg-map-temp-altura': { value: '90' }, 'cfg-map-temp-contorno': { checked: false }, 'cfg-map-temp-sync': { checked: true },
     'cfg-map-pts-ativo': { checked: true }, 'cfg-map-pts-sistema': { value: 'geo_gms' }, 'cfg-map-pts-tab': { checked: true }, 'cfg-map-pts-mem': { checked: true },
     'cfg-map-med-ativo': { checked: true }, 'cfg-map-med-lados': { checked: false }, 'cfg-map-med-total': { checked: true }, 'cfg-map-med-perim': { checked: true }, 'cfg-map-altura': { value: '120' }, 'cfg-map-note': { value: 'Nota X' }
@@ -84,6 +85,7 @@ eq('grava a configuração escolhida no UNICO bloco de mapa', [mapas.length, map
 eq('medidas escolhidas ficam no modelo', mapas[0].mapa.medidas, { ativo: true, lados: false, total: true, perimetro: true });
 eq('pontos: padrão do modelo (sem os pontos do usuário)', [mapas[0].mapa.pontos.ativo, mapas[0].mapa.pontos.sistema, mapas[0].mapa.pontos.tabela, mapas[0].mapa.pontos.memorial, mapas[0].mapa.pontos.ordem, mapas[0].mapa.pontos.titulos], [true, 'geo_gms', true, true, [], {}]);
 eq('análise temporal: padrão do modelo (sem ortofotos retiradas pelo usuário)', mapas[0].mapa.temporal, { ativo: true, ordem: 'desc', colunas: 3, alturaMm: 90, sincronizar: true, contorno: false, excluidas: [] });
+eq('extras: padrão do modelo (camada e campo são escolhidos pelo usuário no relatório)', [mapas[0].mapa.rotulos.ativo, mapas[0].mapa.confrontantes.ativo, mapas[0].mapa.confrontantes.camada, mapas[0].mapa.referencia.ativo, mapas[0].mapa.comparacaoArea.ativo, mapas[0].mapa.comparacaoArea.campo, mapas[0].mapa.situacao.ativo, mapas[0].mapa.quadriculado.ativo, mapas[0].mapa.anotacoes], [true, true, '', false, true, '', true, false, []]);
 ok('a vista, os textos editados e os rótulos arrastados (do usuário) não vão para o modelo', !('vista' in mapas[0].mapa) && !('edicoes' in mapas[0].mapa) && !('posicoes' in mapas[0].mapa));
 inputs['cfg-map-cor'].value = '#0000ff';
 RB.insertMapBlock();
@@ -168,6 +170,24 @@ ok('voltando ao individual, o modelo geral não aparece na lista', !has(containe
     eq('camadas: só as ATIVAS e PERMITIDAS, sem a própria feição', payload.camadasMapa.map(c => [c.id, c.features.length]), [['A', 1]]);
     eq('ortofotos: as que podem cobrir a feição (bbox longe fica de fora), com data', payload.ortofotos.map(o => [o.id, o.dataTxt, o.coberturaConhecida]), [['r1', '10/02/2026', false]]);
     ok('só geometria vai (sem atributos) e cor válida', Object.keys(payload.camadasMapa[0].features[0].properties).length === 0 && payload.camadasMapa[0].color === '#ff0000');
+
+    // rótulos (Quadra/Lote e nome principal) das feições vizinhas: só com permissão de ver os dados da camada
+    window.getFeaturePropertyValue = (th, f, k) => (f.properties || {})[k];
+    window.getThemeFieldLabel = (th, k) => k;
+    window.canUserSeeThemeData = (th) => th.id !== 'A2';
+    window.themes = [
+        { id: 'A', name: 'Lotes', visible: true, disp1: 'Lote', disp2: 'Quadra', mainTitle: 'Proprietário', features: [{ properties: { id_banco: 10 }, geometry: quadG }, { properties: { id_banco: 11, Lote: '02', Quadra: 'E', 'Proprietário': 'Beltrano' }, geometry: sq(-34.8398, -7.0198, 0.0003) }] },
+        { id: 'A2', name: 'Restrita', visible: true, features: [{ properties: { Lote: '09', 'Proprietário': 'Sigiloso' }, geometry: sq(-34.8398, -7.0198, 0.0003) }] }
+    ];
+    window.userCanOnTheme = () => true;
+    window.openFeatureReportPage(tplMapa.id, { id_banco: 10 }, quadG);
+    const p2 = JSON.parse(store['s:constructive_active_report_payload']);
+    const camA = p2.camadasMapa.find(c => c.id === 'A'), camR = p2.camadasMapa.find(c => c.id === 'A2');
+    eq('rótulo da feição vizinha: Quadra • Lote e o nome principal', [camA.features[0].properties.r, camA.features[0].properties.t], ['Quadra E • Lote 02', 'Beltrano']);
+    eq('camada cujos dados o usuário não pode ver: a geometria vai, sem rótulo nem nome', [camR.features.length, Object.keys(camR.features[0].properties).length], [1, 0]);
+    window.getFeaturePropertyValue = undefined;
+    window.openFeatureReportPage(tplMapa.id, { id_banco: 10 }, quadG);
+    ok('sem a função de leitura de atributos da página do mapa: sem rótulos, sem erro', Object.keys(JSON.parse(store['s:constructive_active_report_payload']).camadasMapa[0].features[0].properties).length === 0);
 }
 
 console.log(`reportScope: ${total - failed}/${total} verificações passaram`);

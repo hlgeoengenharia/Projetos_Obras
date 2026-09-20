@@ -128,6 +128,14 @@
         .report-tframe-title { display: flex; justify-content: space-between; gap: 6px; background: #0f172a; color: #fff; padding: 2px 7px; border-radius: 6px 6px 0 0; font: 700 9.5px/16px monospace; }
         .report-tframe-title span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .report-tframe-wrap { border: 1px solid #cbd5e1; border-top: 0; background: #e2e8f0; position: relative; overflow: hidden; border-radius: 0 0 6px 6px; }
+        #map-locator { top: 8px; left: 46px; width: 128px; height: 128px; border: 2px solid #0f172a; border-radius: 6px; background: #e2e8f0; overflow: hidden; display: none; }
+        .report-nlabel, .report-glabel { background: transparent; border: 0; pointer-events: none; }
+        .report-nlabel span { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; font: 700 8px/10px monospace; color: #0f172a; text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; }
+        .report-glabel span { position: absolute; white-space: nowrap; font: 8px/10px monospace; color: #1e293b; background: rgba(255,255,255,.85); padding: 0 2px; }
+        .report-glabel span.e { transform: translate(-50%, -110%); }
+        .report-glabel span.n { transform: translate(2px, -50%); }
+        .report-note { background: transparent; border: 0; }
+        .report-note-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; background: #fef9c3; color: #713f12; border: 1px solid #eab308; border-radius: 4px; padding: 0 5px; font: 700 9px/14px sans-serif; cursor: text; }
         .report-vertex-handle { cursor: pointer; }
         @media print { .report-vertex-handle { display: none !important; } }
         .report-point { background: transparent; border: 0; }
@@ -577,6 +585,8 @@
                 acc.push(b);
                 if (b.tipo === 'mapa_estatico') {
                     acc.push({ tipo: 'tabela_pontos_mapa', id: 'pts_' + (b.id || ''), _sintetico: true });
+                    acc.push({ tipo: 'tabela_confrontantes_mapa', id: 'conf_' + (b.id || ''), _sintetico: true });
+                    acc.push({ tipo: 'analise_mapa', id: 'ana_' + (b.id || ''), _sintetico: true });
                     acc.push({ tipo: 'mapa_temporal_series', id: 'tmp_' + (b.id || ''), _sintetico: true });
                 }
                 return acc;
@@ -873,6 +883,7 @@
                                 <div id="map-north" class="report-map-overlay"><span class="material-symbols-outlined" style="font-size:18px;color:#fbbf24">navigation</span><span>N</span></div>
                                 <div id="map-info-bar" class="report-map-overlay"></div>
                                 <div id="map-legend" class="report-map-overlay"></div>
+                                <div id="map-locator" class="report-map-overlay"></div>
                             </div>
                             <!-- Dimensões da feição -->
                             <div id="map-dimensions-summary" class="mt-1.5 p-2 bg-slate-50 border border-slate-200 rounded-lg flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono">
@@ -889,6 +900,12 @@
 
                 case 'tabela_pontos_mapa':
                     return renderPointsTable();
+
+                case 'tabela_confrontantes_mapa':
+                    return renderConfrontantesTable();
+
+                case 'analise_mapa':
+                    return renderAnaliseMapa();
 
                 case 'mapa_temporal_series':
                     return temporalController ? temporalController.block() : '';
@@ -1370,7 +1387,7 @@
             const camadas = (reportPayload && Array.isArray(reportPayload.camadasMapa)) ? reportPayload.camadasMapa : [];
 
             try {
-                lastPontosKey = JSON.stringify(config.pontos);
+                lastPontosKey = blocosKey(config);
                 mapController = ReportMap.create({ L, MapTools, container: 'interactive-report-map', geometry, camadas, config, onChange: onMapChange });
             } catch (e) {
                 console.error('[Mapa] Erro ao criar o mini-mapa:', e);
@@ -1391,7 +1408,8 @@
             renderMapToolsPanel();
             // pontos e série temporal já salvos: os blocos precisam entrar na paginação
             const temPontos = mapController.pointRows().rows.length && config.pontos.ativo && config.pontos.tabela;
-            if (temPontos || (temporalController && config.temporal.ativo)) scheduleRepaginate();
+            const temAnalises = (config.confrontantes.ativo && config.confrontantes.camada) || (config.referencia.ativo && config.referencia.camada) || (config.comparacaoArea.ativo && config.comparacaoArea.campo);
+            if (temPontos || temAnalises || (temporalController && config.temporal.ativo)) scheduleRepaginate();
         }
 
         // Ortofotos em tiles não informam a área que cobrem: pede o tile do centro da feição; se não existe, o quadro sai.
@@ -1422,7 +1440,7 @@
         // ---------------- pontos nos vértices: tabela (com memorial) e repaginação
         function onMapChange(cfg) {
             scheduleEmissao();
-            const key = JSON.stringify(cfg.pontos);
+            const key = blocosKey(cfg);
             if (key === lastPontosKey) return;
             lastPontosKey = key;
             if (!mapController) return; // ainda montando
@@ -1441,6 +1459,96 @@
             const y = window.scrollY;
             renderBlocks(renderArgs.tpl, renderArgs.featureData, renderArgs.featureGeometry);
             window.scrollTo(0, y);
+        }
+
+        /** O que muda a paginação: pontos, confrontantes, referência e comparação de área. */
+        function blocosKey(cfg) {
+            return JSON.stringify([cfg.pontos, cfg.confrontantes, cfg.referencia, cfg.comparacaoArea]);
+        }
+
+        function camadasDoPayload() {
+            return (reportPayload && Array.isArray(reportPayload.camadasMapa)) ? reportPayload.camadasMapa : [];
+        }
+
+        function areaEmLinha(txt) { return escapeHtml(txt); }
+
+        /** Quem faz divisa com cada lado do polígono (camada escolhida no painel; nomes só se o usuário quiser). */
+        function renderConfrontantesTable() {
+            if (!mapController || !renderArgs) return '';
+            const c = mapController.getConfig().confrontantes;
+            if (!c.ativo || !c.camada) return '';
+            const cam = camadasDoPayload().find(x => String(x.id) === c.camada);
+            if (!cam) return '';
+            const rows = MapTools.confrontantes(renderArgs.featureGeometry, cam, { tolM: c.tolM });
+            if (!rows.length) return '';
+            const esc = escapeHtml;
+            const nomeDe = (x) => {
+                const r = x.r || '';
+                const t = c.nomes ? (x.t || '') : '';
+                return esc(r && t ? r + ' — ' + t : (r || t || 'sem identificação'));
+            };
+            const rowsHtml = rows.map((r, i) => `<tr data-split-row class="${i % 2 ? 'bg-slate-50/70' : 'bg-white'}" style="page-break-inside: avoid;">
+                <td class="px-2 py-1 border-r border-slate-200 font-bold text-[10px] text-slate-800">${esc(r.rotuloLado)}</td>
+                <td class="px-2 py-1 border-r border-slate-200 font-mono text-[10px] text-right">${MapTools.fmtNumber(r.comprimento, 2)}</td>
+                <td class="px-2 py-1 border-r border-slate-200 font-mono text-[10px] text-right">${esc(MapTools.fmtAzimuth(r.azimute))}</td>
+                <td class="px-2 py-1 text-[10px]">${r.confrontantes.length ? r.confrontantes.map(nomeDe).join('; ') : '<span class="text-slate-400 italic">Sem confrontante identificado (via pública ou área livre)</span>'}</td></tr>`);
+            const thead = `<thead><tr class="bg-slate-100 border-b border-slate-200 text-slate-700">${['Lado', 'Comprimento (m)', 'Azimute', 'Confrontante(s)'].map(h => `<th class="px-2 py-1 border-r last:border-r-0 border-slate-200 text-[9.5px] font-bold uppercase tracking-wide leading-tight">${h}</th>`).join('')}</tr></thead>`;
+            const meta = `camada: ${cam.name} • divisa = feição a até ${MapTools.fmtNumber(c.tolM, 1)} m de, no mínimo, 20% do lado${cam.truncated ? ' • camada recortada pelo limite de envio' : ''}`;
+            const chunkHtml = (rs, isFirst) => `
+                <div class="mb-4">
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between gap-3">
+                        <span>Confrontantes${isFirst ? '' : ' (continuação)'}</span>
+                        <span class="text-[9.5px] font-mono text-slate-500 normal-case text-right">${esc(meta)}</span>
+                    </div>
+                    <div class="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+                        <table class="w-full text-left border-collapse">${thead}<tbody>${rs.join('')}</tbody></table>
+                    </div>
+                </div>`;
+            return { split: { rowsHtml, chunkHtml } };
+        }
+
+        /** Área cadastral x calculada e distância/sobreposição com a camada de referência. */
+        function renderAnaliseMapa() {
+            if (!mapController || !renderArgs) return '';
+            const cfg = mapController.getConfig();
+            const linhas = [];
+            const geom = renderArgs.featureGeometry;
+            const fmt = MapTools.fmtNumber;
+
+            if (cfg.comparacaoArea.ativo && cfg.comparacaoArea.campo) {
+                const campo = ((reportPayload && reportPayload.formFields) || []).find(f => (f.id || f.name) === cfg.comparacaoArea.campo);
+                const areaItem = MapTools.computeMeasures(geom).itens.find(i => i.id === 'area');
+                const cmp = campo && areaItem ? MapTools.compararAreas(readFieldRaw(campo, renderArgs.featureData), areaItem.valor) : null;
+                if (cmp) {
+                    const sinal = cmp.diferenca >= 0 ? '+' : '−';
+                    linhas.push({ aviso: cmp.alerta, html: `<b>Área:</b> cadastral (${areaEmLinha(campo.label || campo.name || 'campo')}) ${fmt(cmp.cadastro, 2)} m² • calculada pela geometria ${fmt(cmp.calculada, 2)} m² • diferença ${sinal}${fmt(Math.abs(cmp.diferenca), 2)} m²${cmp.pct === null ? '' : ` (${sinal}${fmt(Math.abs(cmp.pct), 2)}%)`}${cmp.alerta ? ' — <b>divergência acima de 1%</b>' : ''}` });
+                }
+            }
+
+            if (cfg.referencia.ativo && cfg.referencia.camada) {
+                const cam = camadasDoPayload().find(x => String(x.id) === cfg.referencia.camada);
+                if (cam) {
+                    const d = MapTools.distanciaCamada(geom, cam);
+                    if (d) {
+                        const alvo = d.r ? ` (${escapeHtml(d.r)})` : '';
+                        let txt;
+                        if (d.intersecta) {
+                            const s = MapTools.sobreposicaoCamada(geom, cam, window.turf);
+                            txt = `A feição <b>intersecta</b> a camada <b>${escapeHtml(cam.name)}</b>${alvo}${s && s.areaM2 > 0 ? `: área sobreposta ${fmt(s.areaM2, 2)} m² (${fmt(s.pct, 2)}% da feição)` : ''}.`;
+                        } else {
+                            txt = `Distância até a camada <b>${escapeHtml(cam.name)}</b>${alvo}: <b>${fmt(d.metros, 2)} m</b>.`;
+                        }
+                        linhas.push({ aviso: d.intersecta, html: txt + (cam.truncated ? ' <i>(camada recortada pelo limite de envio)</i>' : '') });
+                    } else {
+                        linhas.push({ aviso: false, html: `Camada <b>${escapeHtml(cam.name)}</b>: nenhuma feição num raio de 400 m da feição.` });
+                    }
+                }
+            }
+            if (!linhas.length) return '';
+            return `<div class="mb-4 page-break-avoid">
+                <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2">Análises da Feição</div>
+                <div class="space-y-1">${linhas.map(l => `<div class="text-[10.5px] p-2 rounded-lg border ${l.aviso ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-white border-slate-200 text-slate-800'}">${l.html}</div>`).join('')}</div>
+            </div>`;
         }
 
         function renderPointsTable() {
@@ -1500,6 +1608,32 @@
             const pontosRows = mapController.pointRows().rows;
             const scrollTop = panel.scrollTop;
             const chk = (id, label, checked, handler, disabled) => `<label class="row ${disabled ? 'off' : ''}"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="${handler}"> ${label}</label>`;
+            const cams = camadasDoPayload();
+            const camOpts = (sel) => '<option value="">Escolha a camada…</option>' + cams.map(c => `<option value="${esc(c.id)}" ${String(sel) === String(c.id) ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+            const temRotulo = cams.some(c => c.features.some(f => f.properties && f.properties.r));
+            const temNome = cams.some(c => c.features.some(f => f.properties && f.properties.t));
+            const camposArea = ((reportPayload && reportPayload.formFields) || []).filter(f => ['area_m2', 'number'].includes(String(f.type || '').toLowerCase()));
+            const notas = mapController.getConfig().anotacoes;
+            const sel = (onchange, html) => `<select onchange="${onchange}" style="width:100%;padding:4px;border:1px solid #cbd5e1;border-radius:8px;margin:2px 0">${html}</select>`;
+            const extrasHtml = `
+                ${chk('mp-x-rot', 'Rótulos nas feições vizinhas', cfg.rotulos.ativo, "mapPanelExtra('rotulos', 'ativo', this.checked)", !temRotulo)}
+                ${(cfg.rotulos.ativo && temNome) ? sel("mapPanelExtra('rotulos', 'campo', this.value)", `<option value="rotulo" ${cfg.rotulos.campo === 'rotulo' ? 'selected' : ''}>Mostrar Quadra/Lote</option><option value="titulo" ${cfg.rotulos.campo === 'titulo' ? 'selected' : ''}>Mostrar o nome principal</option>`) : ''}
+                ${!temRotulo ? '<div style="color:#64748b;margin-bottom:3px">Sem rótulos nas camadas ativas (ou sem permissão de ver os dados delas).</div>' : ''}
+                ${chk('mp-x-conf', 'Tabela de confrontantes', cfg.confrontantes.ativo, "mapPanelExtra('confrontantes', 'ativo', this.checked)", kind !== 'polygon' || !cams.length)}
+                ${cfg.confrontantes.ativo ? sel("mapPanelExtra('confrontantes', 'camada', this.value)", camOpts(cfg.confrontantes.camada)) + (temNome ? chk('mp-x-conf-n', 'Incluir o nome do vizinho', cfg.confrontantes.nomes, "mapPanelExtra('confrontantes', 'nomes', this.checked)") : '') : ''}
+                ${chk('mp-x-ref', 'Distância e sobreposição (camada de referência)', cfg.referencia.ativo, "mapPanelExtra('referencia', 'ativo', this.checked)", !cams.length)}
+                ${cfg.referencia.ativo ? sel("mapPanelExtra('referencia', 'camada', this.value)", camOpts(cfg.referencia.camada)) : ''}
+                ${chk('mp-x-area', 'Área cadastral × área calculada', cfg.comparacaoArea.ativo, "mapPanelExtra('comparacaoArea', 'ativo', this.checked)", kind !== 'polygon' || !camposArea.length)}
+                ${cfg.comparacaoArea.ativo ? sel("mapPanelExtra('comparacaoArea', 'campo', this.value)", '<option value="">Campo da área cadastral…</option>' + camposArea.map(f => `<option value="${esc(f.id || f.name)}" ${cfg.comparacaoArea.campo === (f.id || f.name) ? 'selected' : ''}>${esc(f.label || f.name || f.id)}</option>`).join('')) : ''}
+                ${chk('mp-x-sit', 'Mapa de situação (localização)', cfg.situacao.ativo, "mapPanelExtra('situacao', 'ativo', this.checked)")}
+                ${chk('mp-x-grade', 'Quadriculado UTM', cfg.quadriculado.ativo, "mapPanelExtra('quadriculado', 'ativo', this.checked)")}
+                ${cfg.quadriculado.ativo ? sel("mapPanelExtra('quadriculado', 'espacamento', Number(this.value))", [0, 10, 20, 50, 100, 200, 500, 1000].map(v => `<option value="${v}" ${cfg.quadriculado.espacamento === v ? 'selected' : ''}>${v ? 'Grade de ' + v + ' m' : 'Espaçamento automático'}</option>`).join('')) : ''}
+                <button type="button" class="act" style="margin-top:5px" onclick="mapPanelNotaAdd()">+ Anotação de texto no centro do mapa</button>
+                ${notas.length ? `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:4px;margin-top:4px">${notas.map(n => `
+                    <div style="display:flex;align-items:center;gap:3px;padding:2px 0">
+                        <input type="text" value="${esc(n.texto)}" maxlength="80" onchange="mapPanelNotaRenomear('${esc(n.id)}', this.value)" style="flex:1;min-width:0;padding:2px 5px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px">
+                        <button type="button" title="Remover" onclick="mapPanelNotaRemover('${esc(n.id)}')" style="border:0;background:none;cursor:pointer;color:#b91c1c">×</button>
+                    </div>`).join('')}</div>` : ''}`;
             const tc = temporalController;
             const tcfg = tc ? tc.getConfig() : null;
             const statusTxt = { 'verificando': 'verificando…', 'sem-cobertura': 'sem imagem no local' };
@@ -1569,6 +1703,8 @@
                         </div>`).join('')}</div>` : ''}
                     <h4>Análise temporal (ortofotos)</h4>
                     ${temporalHtml}
+                    <h4>Extras do mapa</h4>
+                    ${extrasHtml}
                     <h4>Mapa base</h4>
                     <select onchange="mapPanelSet('baseMap', this.value)" style="width:100%;padding:5px;border:1px solid #cbd5e1;border-radius:8px">
                         <option value="osm" ${cfg.baseMap === 'osm' ? 'selected' : ''}>Ruas (OpenStreetMap)</option>
@@ -1617,6 +1753,10 @@
         function mapPanelRenomear(vid, txt) { if (mapController) mapController.renamePoint(vid, txt); }
         function mapPanelMover(vid, dir) { if (mapController) mapController.movePoint(vid, dir); }
         function mapPanelRemover(vid) { if (mapController) mapController.removePoint(vid); }
+        function mapPanelExtra(grupo, prop, value) { if (mapController) mapController.setConfig({ [grupo]: { [prop]: value } }); }
+        function mapPanelNotaAdd() { if (mapController) { mapController.addNote(''); renderMapToolsPanel(); } }
+        function mapPanelNotaRenomear(id, txt) { if (mapController) { mapController.renameNote(id, txt); renderMapToolsPanel(); } }
+        function mapPanelNotaRemover(id) { if (mapController) { mapController.removeNote(id); renderMapToolsPanel(); } }
         function mapPanelTemporal(key, value) { if (temporalController) temporalController.setConfig({ [key]: key === 'colunas' ? Number(value) : value }); }
         function mapPanelOrtofoto(id, on) { if (temporalController) temporalController.toggle(id, on); }
         function mapPanelMedidas(key, value) { if (mapController) mapController.setConfig({ medidas: { [key]: value } }); }

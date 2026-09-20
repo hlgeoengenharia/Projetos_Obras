@@ -1142,7 +1142,7 @@
             <!-- CARD: MINI-MAPA CARTOGRÁFICO (SIG) -->
             ${isGeral ? '' : (() => {
                 const existingMap = (currentTemplate?.blocos || []).find(b => b.tipo === 'mapa_estatico');
-                const mcfg = window.MapTools ? window.MapTools.normalizeMapConfig(existingMap || {}) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90, medidas: { ativo: true, lados: true, total: true, perimetro: false }, pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false }, temporal: { ativo: false, ordem: 'asc', colunas: 2, alturaMm: 70, sincronizar: true, contorno: true, excluidas: [] } };
+                const mcfg = window.MapTools ? window.MapTools.normalizeMapConfig(existingMap || {}) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90, medidas: { ativo: true, lados: true, total: true, perimetro: false }, pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false }, temporal: { ativo: false, ordem: 'asc', colunas: 2, alturaMm: 70, sincronizar: true, contorno: true, excluidas: [] }, rotulos: { ativo: false, campo: 'rotulo' }, confrontantes: { ativo: false }, referencia: { ativo: false }, comparacaoArea: { ativo: false }, situacao: { ativo: false }, quadriculado: { ativo: false } };
                 const chk = (id, label, checked) => `
                     <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
                         <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} class="rounded text-primary focus:ring-0" />
@@ -1205,6 +1205,18 @@
                                 </select>
                                 ${chk('cfg-map-pts-tab', 'Tabela de pontos sob o mapa', mcfg.pontos.tabela)}
                                 ${chk('cfg-map-pts-mem', 'Memorial descritivo (azimute e distância)', mcfg.pontos.memorial)}
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col gap-1.5">
+                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Extras do mapa (o usuário liga/desliga no relatório)</label>
+                            <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                                ${chk('cfg-map-x-rotulos', 'Rótulos (Quadra/Lote) nas feições vizinhas', mcfg.rotulos.ativo)}
+                                ${chk('cfg-map-x-confr', 'Tabela de confrontantes (quem faz divisa com cada lado)', mcfg.confrontantes.ativo)}
+                                ${chk('cfg-map-x-ref', 'Distância e sobreposição com uma camada de referência (ex.: LPM)', mcfg.referencia.ativo)}
+                                ${chk('cfg-map-x-area', 'Área cadastral × área calculada', mcfg.comparacaoArea.ativo)}
+                                ${chk('cfg-map-x-sit', 'Mapa de situação (localização) no canto', mcfg.situacao.ativo)}
+                                ${chk('cfg-map-x-grade', 'Quadriculado de coordenadas UTM', mcfg.quadriculado.ativo)}
                             </div>
                         </div>
 
@@ -2138,7 +2150,7 @@
 
                 // MAPA COM A FEIÇÃO REAL (pré-visualização esquemática; o mapa de verdade aparece no relatório)
                 {
-                    const mc = window.MapTools ? window.MapTools.normalizeMapConfig(bloco) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90, medidas: { ativo: true, lados: true, total: true, perimetro: false }, pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false }, temporal: { ativo: false, ordem: 'asc', colunas: 2, alturaMm: 70, sincronizar: true, contorno: true, excluidas: [] } };
+                    const mc = window.MapTools ? window.MapTools.normalizeMapConfig(bloco) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90, medidas: { ativo: true, lados: true, total: true, perimetro: false }, pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false }, temporal: { ativo: false, ordem: 'asc', colunas: 2, alturaMm: 70, sincronizar: true, contorno: true, excluidas: [] }, rotulos: { ativo: false, campo: 'rotulo' }, confrontantes: { ativo: false }, referencia: { ativo: false }, comparacaoArea: { ativo: false }, situacao: { ativo: false }, quadriculado: { ativo: false } };
                     const chip = (txt, pos) => `<span class="absolute ${pos} text-[9px] font-mono font-bold text-emerald-800 bg-white/90 border border-emerald-300 px-1 rounded">${txt}</span>`;
                     const bg = mc.baseMap === 'satelite' ? 'bg-slate-800' : (mc.baseMap === 'nenhum' ? 'bg-white' : 'bg-slate-200');
                     const px = Math.round(mc.alturaMm * 3.78);
@@ -3414,6 +3426,12 @@
             alturaMm: Number(val('cfg-map-altura', 90)),
             medidas: { ativo: on('cfg-map-med-ativo', true), lados: on('cfg-map-med-lados', true), total: on('cfg-map-med-total', true), perimetro: on('cfg-map-med-perim', false) },
             pontos: { ativo: on('cfg-map-pts-ativo', false), sistema: val('cfg-map-pts-sistema', 'utm'), tabela: on('cfg-map-pts-tab', true), memorial: on('cfg-map-pts-mem', false) },
+            rotulos: { ativo: on('cfg-map-x-rotulos', false), campo: 'rotulo' },
+            confrontantes: { ativo: on('cfg-map-x-confr', false) },
+            referencia: { ativo: on('cfg-map-x-ref', false) },
+            comparacaoArea: { ativo: on('cfg-map-x-area', false) },
+            situacao: { ativo: on('cfg-map-x-sit', false) },
+            quadriculado: { ativo: on('cfg-map-x-grade', false) },
             temporal: { ativo: on('cfg-map-temp-ativo', false), ordem: val('cfg-map-temp-ordem', 'asc'), colunas: Number(val('cfg-map-temp-cols', 2)), alturaMm: Number(val('cfg-map-temp-altura', 70)), contorno: on('cfg-map-temp-contorno', true), sincronizar: on('cfg-map-temp-sync', true) }
         };
         const nota = val('cfg-map-note', '') || 'Delimitação cadastral georreferenciada.';
@@ -3424,6 +3442,7 @@
         delete normalizado.posicoes;
         if (normalizado.pontos) { normalizado.pontos.ordem = []; normalizado.pontos.titulos = {}; } // os pontos marcados são do usuário
         if (normalizado.temporal) normalizado.temporal.excluidas = []; // as ortofotos retiradas também
+        normalizado.anotacoes = []; // as anotações de texto são do usuário
 
         const existing = currentTemplate.blocos.find(b => b.tipo === 'mapa_estatico');
         if (existing) {
@@ -5468,9 +5487,24 @@
                 featureKeyMapa = window.MapTools.featureKey(activeProps) || window.MapTools.featureKey(featureData);
                 const temMapa = tpl && Array.isArray(tpl.blocos) && tpl.blocos.some(b => b.tipo === 'mapa_estatico');
                 if (temMapa && Array.isArray(window.themes)) {
+                    // Rótulo (Quadra/Lote) e nome principal de cada feição vizinha: os mesmos que a lista lateral mostra,
+                    // e só de camadas cujos DADOS o usuário pode ver (a geometria sozinha não revela atributos).
+                    const rotulos = (theme, f) => {
+                        try {
+                            if (typeof window.canUserSeeThemeData === 'function' && !window.canUserSeeThemeData(theme)) return null;
+                            if (typeof window.getFeaturePropertyValue !== 'function') return null;
+                            const lab = (k) => (typeof window.getThemeFieldLabel === 'function' ? window.getThemeFieldLabel(theme, k) : k);
+                            const partes = [];
+                            if (theme.disp2Active !== false) { const v = window.getFeaturePropertyValue(theme, f, theme.disp2 || 'Quadra'); if (v) partes.push(lab(theme.disp2 || 'Quadra') + ' ' + v); }
+                            if (theme.disp1Active !== false) { const v = window.getFeaturePropertyValue(theme, f, theme.disp1 || 'Lote'); if (v) partes.push(lab(theme.disp1 || 'Lote') + ' ' + v); }
+                            const titulo = window.getFeaturePropertyValue(theme, f, theme.mainTitle || 'Proprietário');
+                            return { r: partes.join(' • '), t: titulo ? String(titulo) : '' };
+                        } catch (e) { return null; }
+                    };
                     camadasMapa = window.MapTools.collectNearbyLayers(window.themes, featureGeometry, {
                         excludeKey: featureKeyMapa,
-                        canSee: (id) => (typeof window.userCanOnTheme !== 'function') || window.userCanOnTheme(id, 'ver')
+                        canSee: (id) => (typeof window.userCanOnTheme !== 'function') || window.userCanOnTheme(id, 'ver'),
+                        labelFn: rotulos
                     });
                 }
             }

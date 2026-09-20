@@ -988,7 +988,8 @@ const viewerMapCode = fs.readFileSync('relatorio_view.html', 'utf8');
 const hasMiniMapViewer = viewerMapCode.includes('src/mapTools.js') && viewerMapCode.includes('src/reportMap.js') &&
     viewerMapCode.includes('map-tools-panel') && viewerMapCode.includes('mapPanelSave') && viewerMapCode.includes('mapPanelReset') && viewerMapCode.includes('mapPanelMedidas') && viewerMapCode.includes('report-measure-input') &&
     viewerMapCode.includes('mapPanelPontos') && viewerMapCode.includes('tabela_pontos_mapa') && viewerMapCode.includes('repaginateKeepingMap') &&
-    viewerMapCode.includes('src/reportTemporal.js') && viewerMapCode.includes('mapa_temporal_series') && viewerMapCode.includes('mapPanelTemporal') && viewerMapCode.includes('makeOrtofotoProbe');
+    viewerMapCode.includes('src/reportTemporal.js') && viewerMapCode.includes('mapa_temporal_series') && viewerMapCode.includes('mapPanelTemporal') && viewerMapCode.includes('makeOrtofotoProbe') &&
+    viewerMapCode.includes('tabela_confrontantes_mapa') && viewerMapCode.includes('analise_mapa') && viewerMapCode.includes('mapPanelExtra') && viewerMapCode.includes('map-locator');
 const hasAjustesSql = fs.existsSync('supabase_relatorios_ajustes.sql') &&
     fs.readFileSync('supabase_relatorios_ajustes.sql', 'utf8').includes('ENABLE ROW LEVEL SECURITY') &&
     fs.readFileSync('supabase_relatorios_ajustes.sql', 'utf8').includes('user_id = auth.uid()') &&
@@ -1020,6 +1021,7 @@ assertTest('Mini-Mapa: o relatório gerado tem o painel "Mapa" (destaque, camada
     ['tests/reportExport.test.js', 'Emissão e exportação: SHA-256 (vetores conhecidos), protocolo, Word A4/A3 em MHTML com imagens embutidas, mapas viram imagem e quadros viram tabela'],
     ['tests/viewerSmoke.test.js', 'Visualizador inteiro (script real com DOM simulado): folhas, mini-mapa, painel "Mapa" (aberto/recolhido, botão visível), pontos e análise temporal em vários cenários, sem erro de execução'],
     ['tests/reportTemporal.test.js', 'Análise temporal: um quadro por ortofoto (ordem por data, cobertura testada no local, colunas, sincronia, contorno, mapas vivos na repaginação)'],
+    ['tests/viewerAnalises.test.js', 'Análises do relatório: confrontantes por lado, área cadastral x calculada, distância e sobreposição com camada de referência (escape, avisos, recorte)'],
     ['tests/viewerPoints.test.js', 'Tabela de pontos e memorial descritivo no relatório: coordenadas por sistema, azimute/distância, fechamento do polígono, quebra entre folhas e escape de HTML'],
     ['tests/reportAjustes.test.js', 'Ajustes do usuário no relatório: salva por modelo + feição no servidor com reserva no navegador e circuito fechado quando a tabela não existe'],
     ['tests/pageSize.test.js', 'Tamanho da folha: A4 e A3 (retrato/paisagem) com dimensões em mm e px; modelos antigos caem em A4'],

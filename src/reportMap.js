@@ -4,7 +4,7 @@
 // Não conhece a página: os elementos de sobreposição (norte, escala/projeção, legenda) são achados pelos ids
 // abaixo, dentro de `doc`. Assim dá para testar com um Leaflet e um DOM simulados.
 //
-// Ids de sobreposição (opcionais): map-north, map-info-bar, map-legend, map-sides-text, map-area-text (resumo sob o mapa)
+// Ids de sobreposição (opcionais): map-north, map-info-bar, map-legend, map-locator (mapa de situação), map-sides-text, map-area-text (resumo sob o mapa)
 
 (function (root, factory) {
     if (typeof module === 'object' && module.exports) {
@@ -41,7 +41,7 @@
         const map = L.map(opts.container, { zoomControl: true, attributionControl: true, zoomSnap: 0.25, preferCanvas: true });
         if (map.attributionControl && map.attributionControl.setPrefix) map.attributionControl.setPrefix(false);
 
-        const state = { base: null, feature: null, mask: null, neighbors: {}, scaleControl: null, markers: {}, pts: {}, exporting: false };
+        const state = { base: null, feature: null, mask: null, neighbors: {}, scaleControl: null, markers: {}, pts: {}, nlabels: {}, grid: [], notes: {}, locator: null, exporting: false };
         const vertData = MT.vertices(opts.geometry || null); // vértices onde o usuário pode marcar pontos
         const measureData = MT.computeMeasures(opts.geometry || null); // { itens, ladosOmitidos }
         const tileLayers = {};
@@ -66,12 +66,37 @@
             }
         }
 
+        // texto sobre cada feição da camada (Quadra/Lote ou nome principal), no centro dela; camadas enormes ficam sem rótulo
+        const MAX_ROTULOS = 250;
+        function addNeighborLabels(c) {
+            if (!cfg.rotulos.ativo) return;
+            const key = cfg.rotulos.campo === 'titulo' ? 't' : 'r';
+            const itens = c.features.filter(x => x.properties && x.properties[key]);
+            if (!itens.length || itens.length > MAX_ROTULOS) return;
+            const list = [];
+            itens.forEach(x => {
+                const bb = MT.geometryBBox(x.geometry);
+                if (!bb) return;
+                const ct = MT.bboxCenter(bb);
+                const icon = L.divIcon({ className: 'report-nlabel', html: '<span>' + escapeHtml(x.properties[key]) + '</span>', iconSize: [0, 0] });
+                const mk = L.marker([ct[1], ct[0]], { icon: icon, interactive: false, keyboard: false });
+                mk.addTo(map);
+                list.push(mk);
+            });
+            state.nlabels[String(c.id)] = list;
+        }
+        function clearNeighborLabels() {
+            Object.keys(state.nlabels).forEach(id => { state.nlabels[id].forEach(m => map.removeLayer(m)); delete state.nlabels[id]; });
+        }
+
         function applyNeighbors() {
+            clearNeighborLabels();
             Object.keys(state.neighbors).forEach(id => { map.removeLayer(state.neighbors[id]); delete state.neighbors[id]; });
             if (!cfg.camadasVizinhas) return;
             const on = new Set(cfg.camadasLigadas.map(String));
             camadas.forEach(c => {
                 if (!on.has(String(c.id))) return;
+                addNeighborLabels(c);
                 const st = { color: c.color, weight: 1.5, fillColor: c.color, fillOpacity: 0.08, opacity: 0.9 };
                 const layer = L.geoJSON({ type: 'FeatureCollection', features: c.features }, {
                     style: () => st,
@@ -202,6 +227,70 @@
             }
         }
 
+        // ------------------------------------------------------------ quadriculado UTM (acompanha o enquadramento)
+        function clearGrid() { state.grid.forEach(l => map.removeLayer(l)); state.grid = []; }
+        function applyGrid() {
+            clearGrid();
+            if (!cfg.quadriculado.ativo || !map.getBounds) return;
+            const b = map.getBounds();
+            const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+            const g = MT.gradeUTM(bbox, cfg.quadriculado.espacamento || 0);
+            g.linhas.forEach(l => {
+                const pl = L.polyline(l.pts, { color: '#1e293b', weight: 0.8, opacity: 0.65, dashArray: '4 4', interactive: false });
+                pl.addTo(map);
+                state.grid.push(pl);
+                // valor da coordenada na ponta: E embaixo, N à esquerda
+                const p = l.pts[0];
+                const txt = (l.tipo === 'e' ? 'E ' : 'N ') + MT.fmtNumber(l.valor, 0);
+                const icon = L.divIcon({ className: 'report-glabel', html: '<span class="' + (l.tipo === 'e' ? 'e' : 'n') + '">' + escapeHtml(txt) + '</span>', iconSize: [0, 0] });
+                const mk = L.marker(p, { icon: icon, interactive: false, keyboard: false });
+                mk.addTo(map);
+                state.grid.push(mk);
+            });
+        }
+
+        // ------------------------------------------------------------ mapa de situação (mapa pequeno com a visão geral)
+        function applySituacao() {
+            const box = el('map-locator');
+            show(box, !!cfg.situacao.ativo && !!box);
+            if (!cfg.situacao.ativo || !box) return;
+            if (!state.locator) {
+                const lm = L.map(box, { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false, preferCanvas: true });
+                L.tileLayer(TILES.osm.url, { maxZoom: 19, crossOrigin: true }).addTo(lm);
+                const ct = center || [-34.8, -7];
+                if (L.circleMarker) L.circleMarker([ct[1], ct[0]], { radius: 4, color: '#dc2626', weight: 2, fillColor: '#dc2626', fillOpacity: 1, interactive: false }).addTo(lm);
+                state.locator = { map: lm, rect: null };
+            }
+            const lm = state.locator.map;
+            if (lm.invalidateSize) lm.invalidateSize();
+            const ct = center || [-34.8, -7];
+            lm.setView([ct[1], ct[0]], Math.max(1, Math.round(map.getZoom()) - 6), { animate: false });
+            if (state.locator.rect) { lm.removeLayer(state.locator.rect); state.locator.rect = null; }
+            if (L.rectangle && map.getBounds) state.locator.rect = L.rectangle(map.getBounds(), { color: '#dc2626', weight: 1.5, fill: false, interactive: false }).addTo(lm);
+        }
+
+        // ------------------------------------------------------------ anotações de texto (arraste = mover; duplo clique = editar)
+        function clearNotes() { Object.keys(state.notes).forEach(id => { map.removeLayer(state.notes[id]); delete state.notes[id]; }); }
+        function applyNotes() {
+            clearNotes();
+            cfg.anotacoes.forEach(n => {
+                const html = '<span class="report-note-label" title="Duplo clique para editar • arraste para mover">' + escapeHtml(n.texto) + '</span>';
+                const icon = L.divIcon({ className: 'report-note', html: html, iconSize: [0, 0] });
+                const mk = L.marker([n.lat, n.lng], { icon: icon, draggable: true, keyboard: false, zIndexOffset: 1600 });
+                mk.addTo(map);
+                mk.on('dblclick', (e) => {
+                    if (L.DomEvent && L.DomEvent.stopPropagation && e) L.DomEvent.stopPropagation(e);
+                    editInline(mk, '.report-note-label', n.texto, (txt) => api.renameNote(n.id, txt), applyNotes);
+                });
+                mk.on('dragend', () => {
+                    const ll = mk.getLatLng();
+                    cfg.anotacoes = cfg.anotacoes.map(x => x.id === n.id ? Object.assign({}, x, { lat: ll.lat, lng: ll.lng }) : x);
+                    notify();
+                });
+                state.notes[n.id] = mk;
+            });
+        }
+
         // ------------------------------------------------------------ pontos nos vértices
         function clearPointLayers() {
             Object.keys(state.pts).forEach(k => { map.removeLayer(state.pts[k]); delete state.pts[k]; });
@@ -284,7 +373,10 @@
             applyFeature();
             applyMeasures();
             applyPoints();
+            applyGrid();
+            applyNotes();
             applyOverlays();
+            applySituacao();
             notify();
         }
 
@@ -303,8 +395,10 @@
             return { lat: c.lat, lng: c.lng, zoom: map.getZoom() };
         }
 
-        map.on('zoomend', applyOverlays);
-        map.on('moveend', applyOverlays);
+        // ao mover/aproximar: escala, grade e a caixa do mapa de situação acompanham (sem notificar mudança de configuração)
+        function onView() { applyOverlays(); applyGrid(); applySituacao(); }
+        map.on('zoomend', onView);
+        map.on('moveend', onView);
 
         const api = {
             map,
@@ -317,6 +411,7 @@
                 next.destaque = Object.assign({}, cfg.destaque, (patch && patch.destaque) || {});
                 next.medidas = Object.assign({}, cfg.medidas, (patch && patch.medidas) || {});
                 next.pontos = Object.assign({}, cfg.pontos, (patch && patch.pontos) || {});
+                ['rotulos', 'confrontantes', 'referencia', 'comparacaoArea', 'situacao', 'quadriculado'].forEach(k => { next[k] = Object.assign({}, cfg[k], (patch && patch[k]) || {}); });
                 cfg = MT.normalizeMapConfig({ mapa: next });
                 apply();
             },
@@ -332,7 +427,10 @@
                 return Object.assign({}, cfg, {
                     camadasLigadas: cfg.camadasLigadas.slice(), destaque: Object.assign({}, cfg.destaque), medidas: Object.assign({}, cfg.medidas),
                     edicoes: Object.assign({}, cfg.edicoes), posicoes: Object.assign({}, cfg.posicoes),
-                    pontos: Object.assign({}, cfg.pontos, { ordem: cfg.pontos.ordem.slice(), titulos: Object.assign({}, cfg.pontos.titulos) }), vista: currentView()
+                    pontos: Object.assign({}, cfg.pontos, { ordem: cfg.pontos.ordem.slice(), titulos: Object.assign({}, cfg.pontos.titulos) }),
+                    rotulos: Object.assign({}, cfg.rotulos), confrontantes: Object.assign({}, cfg.confrontantes), referencia: Object.assign({}, cfg.referencia),
+                    comparacaoArea: Object.assign({}, cfg.comparacaoArea), situacao: Object.assign({}, cfg.situacao), quadriculado: Object.assign({}, cfg.quadriculado),
+                    anotacoes: cfg.anotacoes.map(a => Object.assign({}, a)), vista: currentView()
                 });
             },
             /** Volta ao que o modelo definiu e enquadra a feição de novo. */
@@ -386,6 +484,25 @@
                 setPontos({ ativo: true, ordem: vertData.itens.map(v => v.id) });
             },
             clearPoints() { setPontos({ ordem: [], titulos: {} }); },
+            // ---- anotações de texto
+            /** Nova anotação no centro do mapa (ou onde for pedido). Devolve o id. */
+            addNote(texto, lat, lng) {
+                const c = map.getCenter();
+                const usados = cfg.anotacoes.map(a => Number(a.id.slice(1)));
+                let n = 1; while (usados.indexOf(n) >= 0) n++;
+                const nova = MT.normalizeAnotacoes([{ id: 'a' + n, lat: lat === undefined ? c.lat : lat, lng: lng === undefined ? c.lng : lng, texto: texto || 'Anotação' }]);
+                if (!nova.length || cfg.anotacoes.length >= 30) return null;
+                cfg.anotacoes = cfg.anotacoes.concat(nova);
+                apply();
+                return nova[0].id;
+            },
+            /** Renomeia; texto vazio apaga a anotação. */
+            renameNote(id, texto) {
+                const limpo = MT.normalizeAnotacoes([{ id: id, lat: 0, lng: 0, texto: texto }]);
+                cfg.anotacoes = limpo.length ? cfg.anotacoes.map(a => a.id === id ? Object.assign({}, a, { texto: limpo[0].texto }) : a) : cfg.anotacoes.filter(a => a.id !== id);
+                apply();
+            },
+            removeNote(id) { cfg.anotacoes = cfg.anotacoes.filter(a => a.id !== id); apply(); },
             /** Liga/desliga o modo de saída (impressão, PNG, Word): sem marcadores de vértice livres. */
             setExportMode(on) { if (state.exporting === !!on) return; state.exporting = !!on; applyPoints(); },
             /** Redesenha tudo (depois que a página trocou os elementos de sobreposição). */

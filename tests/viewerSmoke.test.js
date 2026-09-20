@@ -232,6 +232,33 @@ async function runScenario(cfg) {
         eq('PNG do mapa: baixa um arquivo image/png', [r.captured.downloads.length - antes, r.captured.blobs[r.captured.blobs.length - 1].type], [1, 'image/png']);
     }
 
+    // ---- extras do mapa ligados: confrontantes, análises, rótulos, situação, quadriculado e anotações
+    {
+        const dLat = 20 / 111195, dLng = 30 / (111195 * Math.cos(7.02 * Math.PI / 180));
+        const lote = { type: 'Polygon', coordinates: [[[-34.84, -7.02], [-34.84 + dLng, -7.02], [-34.84 + dLng, -7.02 + dLat], [-34.84, -7.02 + dLat], [-34.84, -7.02]]] };
+        const vizinho = { type: 'Polygon', coordinates: [[[-34.84 + dLng + 1e-7, -7.02], [-34.84 + 2 * dLng, -7.02], [-34.84 + 2 * dLng, -7.02 + dLat], [-34.84 + dLng + 1e-7, -7.02 + dLat], [-34.84 + dLng + 1e-7, -7.02]]] };
+        const camLotes = { id: 'L1', name: 'Lotes', color: '#f00', kind: 'polygon', truncated: false, features: [{ type: 'Feature', properties: { r: 'Quadra E • Lote 02', t: 'Beltrano' }, geometry: vizinho }] };
+        const mapa = {
+            rotulos: { ativo: true }, confrontantes: { ativo: true, camada: 'L1' }, referencia: { ativo: true, camada: 'L1' },
+            comparacaoArea: { ativo: true, campo: 'f_area' }, situacao: { ativo: true }, quadriculado: { ativo: true, espacamento: 50 },
+            anotacoes: [{ id: 'a1', lat: -7.0195, lng: -34.8395, texto: 'Muro' }], camadasLigadas: ['L1']
+        };
+        const r = await runScenario({ opener: true, payload: { templateId: 'rpt_smoke', template: tplWith(mapa), formId: 'f1', formFields: [{ id: 'f_area', label: 'Área do terreno', type: 'area_m2' }], formTabs: [], featureData: { id_banco: 10, f_area: '560,00' }, featureGeometry: lote, featureKey: '10', camadasMapa: [camLotes] } });
+        eq('extras ligados: nenhum erro de execução', r.errors, []);
+        ok('extras: tabela de confrontantes e análises entram na folha', /Confrontantes/.test(r.doc) && /Quadra E • Lote 02/.test(r.doc) && /Análises da Feição/.test(r.doc));
+        ok('extras: o mapa de situação foi criado na caixa própria', r.mapsCreated.some(m => m.container && m.container.id === 'map-locator'));
+        ok('extras: painel traz a seção "Extras do mapa" com as camadas e o campo de área', /Extras do mapa/.test(r.panel) && /Rótulos nas feições vizinhas/.test(r.panel) && /Tabela de confrontantes/.test(r.panel) && /Área do terreno/.test(r.panel) && /Muro/.test(r.panel));
+        ok('extras: caixa do mapa de situação existe no bloco do mapa', /id="map-locator"/.test(r.doc));
+        // mudar a camada de confrontantes repagina e mantém tudo funcionando
+        r.sandbox.mapPanelExtra('confrontantes', 'nomes', true);
+        await r.settle(6);
+        ok('extras: incluir o nome do vizinho atualiza a tabela', /Beltrano/.test(r.registry['a4-document-container']._html));
+        r.sandbox.mapPanelNotaAdd();
+        await r.settle(4);
+        ok('extras: anotação nova aparece no painel', (r.registry['map-tools-panel']._html.match(/Anotação/g) || []).length >= 1);
+        eq('extras: nenhum erro depois das mudanças', r.errors, []);
+    }
+
     console.log(`viewerSmoke: ${total - failed}/${total} verificações passaram`);
     if (failed > 0) {
         console.error(`${failed} falha(s)`);
