@@ -63,6 +63,19 @@ ok('segundo ponto com nome padrão P2', chunk.includes('>P2<'));
 ok('primeira parte não diz "continuação"; as seguintes dizem', !/continuação/.test(chunk) && /continuação/.test(out.split.chunkHtml(out.split.rowsHtml, false)));
 ok('a tabela repete o cabeçalho a cada parte', /<thead>/.test(out.split.chunkHtml([out.split.rowsHtml[1]], false)));
 
+// tabela centralizada e editável por duplo clique
+{
+    api.setController(controllerFor({ ativo: true, sistema: 'utm', memorial: true, ordem: ['v:0', 'v:1', 'v:2'], titulos: { 'v:0': 'M-01' }, textos: { titulo: 'Descrição <dos> limites', 'v:1:az': '10° 00\' 00"', 'v:0:c1': '7.999.999,00' } }));
+    const o2 = api.renderPointsTable();
+    const c2 = o2.split.chunkHtml(o2.split.rowsHtml, true);
+    const celulas = o2.split.rowsHtml.join('');
+    ok('todas as células e cabeçalhos centralizados (nenhum alinhado à direita ou à esquerda)', !/text-right|text-left/.test(celulas + (c2.match(/<thead>[\s\S]*<\/thead>/) || [''])[0]) && (c2.match(/<th [^>]*text-center/g) || []).length === 5 && (celulas.match(/<td [^>]*text-center/g) || []).length === 15);
+    ok('cada texto da tabela é editável por duplo clique (nome, coordenadas, azimute, distância)', ['v:0:t', 'v:0:c0', 'v:0:c1', 'v:0:az', 'v:0:dist', 'v:2:dist'].every(k => celulas.includes('data-pt-edit="' + k + '"')));
+    ok('título editável e texto do usuário escapado', c2.includes('data-pt-edit="titulo"') && c2.includes('Descrição &lt;dos&gt; limites') && !/Memorial Descritivo/.test(c2));
+    ok('textos editados aparecem na tabela', celulas.includes('7.999.999,00') && celulas.includes('10° 00\' 00&quot;'));
+    ok('a parte seguinte (continuação) mantém o título editado', /Descrição &lt;dos&gt; limites<\/span><span> \(continuação\)/.test(o2.split.chunkHtml(o2.split.rowsHtml, false)));
+}
+
 // ---------------------------------------------------------------- memorial descritivo
 api.setController(controllerFor({ ativo: true, sistema: 'geo_gms', memorial: true, ordem: ['v:0', 'v:1', 'v:2', 'v:3'] }));
 out = api.renderPointsTable();

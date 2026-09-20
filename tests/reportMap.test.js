@@ -354,8 +354,8 @@ ok('sem geometria: nenhuma medida e aviso no resumo', marcadores(t).length === 0
 
 // ---------------------------------------------------------------- pontos nos vértices
 const handles = (tt) => tt.layersOf('circle');
-const pontosMk = (tt) => tt.layersOf('marker').filter(m => m.args.o.icon.className === 'report-point');
-const nomeDoPonto = (mk) => mk.args.o.icon.html.replace(/<[^>]+>/g, '');
+const pontosMk = (tt) => tt.layersOf('marker').filter(m => m.args.o.icon.className === 'report-point' && /report-point-label/.test(m.args.o.icon.html)); // só os nomes (a bolinha é outro marcador)
+const nomeDoPonto = (mk) => mk.args.o.icon.html.replace(/<span class="report-rot[^>]*>[^<]*<\/span>/, '').replace(/<[^>]+>/g, '');
 t = build({});
 ok('pontos desligados: nenhum vértice clicável', handles(t).length === 0 && pontosMk(t).length === 0);
 t.ctl.setConfig({ pontos: { ativo: true } });
@@ -370,6 +370,48 @@ handles(t)[0].handlers.click();
 eq('a sequência segue a ordem dos cliques', [t.ctl.getConfig().pontos.ordem, pontosMk(t).map(nomeDoPonto)], [['v:2', 'v:0'], ['P1', 'P2']]);
 t.ctl.addPoint('v:2');
 eq('marcar de novo o mesmo vértice não duplica', t.ctl.getConfig().pontos.ordem, ['v:2', 'v:0']);
+
+// nome do ponto: separado da bolinha, sem card, arrastável, com giro e estilo
+{
+    const b = build({ mapa: { pontos: { ativo: true, ordem: ['v:0', 'v:1'] } } });
+    const rotulos = b.layersOf('marker').filter(m => /report-point-label/.test(m.args.o.icon.html));
+    const bolinhas = b.layersOf('marker').filter(m => /report-point-dot/.test(m.args.o.icon.html));
+    eq('cada ponto tem a bolinha (no vértice, sem interação) e o nome (arrastável) como marcadores separados', [rotulos.length, bolinhas.length, bolinhas[0].args.o.interactive, rotulos[0].args.o.draggable], [2, 2, false, true]);
+    const h = rotulos[0].args.o.icon.html;
+    ok('nome sem card, com estilo, giro e ícone de girar; nasce ao lado do vértice', !/border|background/.test(h) && /font-weight:700;font-style:normal;text-decoration:none/.test(h) && /rotate\(0deg\)/.test(h) && /left:16px;top:-13px/.test(h) && /report-rot no-print/.test(h) && rotulos[0].args.pos[0] === bolinhas[0].args.pos[0]);
+    // arrastar o nome
+    rotulos[0].latlng = { lat: -7.0123, lng: -34.8321 };
+    rotulos[0].handlers.dragend();
+    eq('arrastar o nome guarda a posição (chave do vértice)', b.ctl.getConfig().posicoes['v:0'], { lat: -7.0123, lng: -34.8321 });
+    b.ctl.setConfig({ pontos: { estilo: { n: false, i: true, s: true } } });
+    const depois = b.layersOf('marker').filter(m => /report-point-label/.test(m.args.o.icon.html))[0];
+    ok('depois de arrastado o nome fica onde foi solto, sem o afastamento padrão', depois.args.pos[0] === -7.0123 && /left:0px;top:0px/.test(depois.args.o.icon.html));
+    ok('estilo do nome do ponto (itálico e sublinhado, sem negrito)', /font-weight:400;font-style:italic;text-decoration:underline/.test(b.layersOf('marker').filter(m => /report-point-label/.test(m.args.o.icon.html))[0].args.o.icon.html));
+    b.ctl.setConfig({ rotacoes: { 'v:1': 45 } });
+    ok('giro do nome do ponto guardado', /rotate\(45deg\)/.test(b.layersOf('marker').filter(m => /report-point-label/.test(m.args.o.icon.html))[1].args.o.icon.html));
+    b.ctl.resetMeasures();
+    eq('restaurar medidas não mexe na posição e no giro dos pontos', [b.ctl.getConfig().posicoes['v:0'] !== undefined, b.ctl.getConfig().rotacoes['v:1']], [true, 45]);
+    b.ctl.removePoint('v:0');
+    b.ctl.removePoint('v:1');
+    eq('tirar o ponto apaga posição e giro dele', [b.ctl.getConfig().posicoes['v:0'], b.ctl.getConfig().rotacoes['v:1']], [undefined, undefined]);
+}
+// textos editados da tabela
+{
+    const b = build({ mapa: { pontos: { ativo: true, ordem: ['v:0', 'v:1', 'v:2'], memorial: true } } });
+    b.ctl.setTabelaTexto('v:0:az', '  45° 00\' 00"  ');
+    b.ctl.setTabelaTexto('v:1:c0', '123');
+    b.ctl.setTabelaTexto('titulo', 'Descrição dos limites');
+    eq('texto da tabela editado (limpo) e guardado', [b.ctl.pointRows().rows[0].azimute, b.ctl.pointRows().rows[1].cells[0], b.ctl.pointRows().tituloTabela], ['45° 00\' 00"', '123', 'Descrição dos limites']);
+    b.ctl.setTabelaTexto('titulo', '');
+    eq('vazio restaura o calculado', [b.ctl.getConfig().pontos.textos.titulo, b.ctl.pointRows().tituloTabela], [undefined, '']);
+    b.ctl.movePoint('v:2', -1);
+    eq('mudar a sequência descarta só as edições de azimute/distância (recalculados); coordenadas ficam', [b.ctl.getConfig().pontos.textos['v:0:az'], b.ctl.getConfig().pontos.textos['v:1:c0']], [undefined, '123']);
+    b.ctl.setTabelaTexto('v:0:dist', '10,00');
+    b.ctl.setConfig({ pontos: { sistema: 'geo_dec' } });
+    eq('trocar o sistema de coordenadas descarta as edições das colunas de coordenadas', [b.ctl.getConfig().pontos.textos['v:1:c0'], b.ctl.getConfig().pontos.textos['v:0:dist']], [undefined, '10,00']);
+    b.ctl.clearPoints();
+    eq('limpar pontos apaga também os textos editados', b.ctl.getConfig().pontos.textos, {});
+}
 
 // linhas da tabela
 eq('tabela reflete os pontos e a ordem', t.ctl.pointRows().rows.map(r => [r.vid, r.titulo]), [['v:2', 'P1'], ['v:0', 'P2']]);

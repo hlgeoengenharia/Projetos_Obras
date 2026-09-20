@@ -147,7 +147,7 @@
         @media print { .report-vertex-handle { display: none !important; } }
         .report-point { background: transparent; border: 0; }
         .report-point-dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #dc2626; border: 2px solid #fff; box-shadow: 0 0 0 1px #7f1d1d; }
-        .report-point-label { position: absolute; left: 7px; top: -18px; white-space: nowrap; background: rgba(255,255,255,.94); color: #7f1d1d; border: 1px solid #fca5a5; border-radius: 4px; padding: 0 4px; font: 700 9px/14px monospace; cursor: text; }
+        .report-point-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: #7f1d1d; font: 10px/14px monospace; text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; cursor: move; }
         .report-measure-input { width: 120px; font: 700 9px monospace; border: 1px solid #059669; border-radius: 3px; padding: 0 3px; outline: none; }
         @media print {
             .leaflet-control-zoom, #map-tools-panel, #map-tools-toggle { display: none !important; }
@@ -1575,20 +1575,22 @@
             if (!pr.rows.length) return '';
             const esc = escapeHtml;
             const heads = ['Ponto'].concat(pr.headers, pr.memorial ? ['Azimute até o ponto seguinte', 'Distância (m)'] : []);
-            const alignNum = pr.sistema === 'utm' || pr.memorial;
+            // tudo centralizado; dois cliques em qualquer texto da tabela (título, nome, coordenadas, azimute, distância) para editar
+            const ed = (key, txt, cls) => `<td class="px-2 py-1 border-r border-slate-200 text-center ${cls} pt-editavel" data-pt-edit="${esc(key)}" title="Duplo clique para editar (vazio restaura o calculado)">${esc(txt)}</td>`;
             const rowsHtml = pr.rows.map((r, i) => {
-                const cells = r.cells.map(c => `<td class="px-2 py-1 border-r border-slate-200 font-mono text-[10px] ${alignNum ? 'text-right' : ''}">${esc(c)}</td>`).join('');
-                const mem = pr.memorial ? `<td class="px-2 py-1 border-r border-slate-200 font-mono text-[10px] text-right">${esc(r.azimute)}</td><td class="px-2 py-1 font-mono text-[10px] text-right">${esc(r.distancia)}</td>` : '';
-                return `<tr data-split-row class="${i % 2 ? 'bg-slate-50/70' : 'bg-white'}" style="page-break-inside: avoid;"><td class="px-2 py-1 border-r border-slate-200 font-bold text-[10px] text-slate-800">${esc(r.titulo)}</td>${cells}${mem}</tr>`;
+                const cells = r.cells.map((c, k) => ed(r.vid + ':c' + k, c, 'font-mono text-[10px]')).join('');
+                const mem = pr.memorial ? ed(r.vid + ':az', r.azimute, 'font-mono text-[10px]') + ed(r.vid + ':dist', r.distancia, 'font-mono text-[10px]').replace('border-r ', '') : '';
+                return `<tr data-split-row class="${i % 2 ? 'bg-slate-50/70' : 'bg-white'}" style="page-break-inside: avoid;">${ed(r.vid + ':t', r.titulo, 'font-bold text-[10px] text-slate-800')}${cells}${mem}</tr>`;
             });
-            const thead = `<thead><tr class="bg-slate-100 border-b border-slate-200 text-slate-700">${heads.map(h => `<th class="px-2 py-1 border-r last:border-r-0 border-slate-200 text-[9.5px] font-bold uppercase tracking-wide leading-tight">${esc(h)}</th>`).join('')}</tr></thead>`;
-            const titulo = pr.memorial ? 'Memorial Descritivo — Tabela de Pontos' : 'Tabela de Pontos';
+            const thead = `<thead><tr class="bg-slate-100 border-b border-slate-200 text-slate-700">${heads.map(h => `<th class="px-2 py-1 border-r last:border-r-0 border-slate-200 text-center text-[9.5px] font-bold uppercase tracking-wide leading-tight">${esc(h)}</th>`).join('')}</tr></thead>`;
+            const tituloPadrao = pr.memorial ? 'Memorial Descritivo — Tabela de Pontos' : 'Tabela de Pontos';
+            const titulo = pr.tituloTabela || tituloPadrao;
             const nota = pr.memorial ? ` • azimutes a partir do Norte, distâncias em linha reta${pr.fecha ? ', fechando no primeiro ponto' : ''}` : '';
             const meta = `${pr.rows.length} ponto(s) • ${pr.sistemaLabel}${nota}`;
             const chunkHtml = (rows, isFirst) => `
                 <div class="mb-4">
                     <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between gap-3">
-                        <span class="whitespace-pre-line">${esc(titulo)}${isFirst ? '' : ' (continuação)'}</span>
+                        <span class="whitespace-pre-line pt-editavel" data-pt-edit="titulo" title="Duplo clique para editar (vazio restaura o título padrão)">${esc(titulo)}</span>${isFirst ? '' : '<span> (continuação)</span>'}
                         <span class="text-[9.5px] font-mono text-slate-500 normal-case text-right">${esc(meta)}</span>
                     </div>
                     <div class="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
@@ -1709,8 +1711,8 @@
                     <button type="button" class="act" onclick="mapPanelResetMedidas()">Restaurar medidas calculadas</button>
                     </div>
                     <h4 data-sec-h="pontos" class="${secH('pontos')}" onclick="mapPanelSecao('pontos')">Pontos nos vértices<span class="chev">&#9662;</span></h4><div data-sec="pontos" class="sec-body" style="display:${secD('pontos')}">
-                    ${chk('mp-pts', 'Marcar pontos nos vértices', cfg.pontos.ativo, "mapPanelPontos('ativo', this.checked)", mapController.vertexCount === 0)}
-                    <div style="color:#64748b;line-height:1.35;margin:2px 0 4px">Clique num vértice (círculo branco) para marcar; dois cliques no ponto para renomear. A tabela sai logo abaixo do mapa.${mapController.verticesOmitidos ? ' <span style="color:#b45309">Mais de 400 vértices: marcadores omitidos.</span>' : ''}</div>
+                    ${chkN('mp-pts', 'Marcar pontos nos vértices', cfg.pontos.ativo, "mapPanelPontos('ativo', this.checked)", mapController.vertexCount === 0, nis('pontos', '', cfg.pontos.estilo))}
+                    <div style="color:#64748b;line-height:1.35;margin:2px 0 4px">Clique num vértice (círculo branco) para marcar. O nome do ponto pode ser arrastado, girado (ícone ↻) e renomeado com dois cliques. A tabela sai logo abaixo do mapa; dois cliques em qualquer texto dela para editar.${mapController.verticesOmitidos ? ' <span style="color:#b45309">Mais de 400 vértices: marcadores omitidos.</span>' : ''}</div>
                     <select onchange="mapPanelPontos('sistema', this.value)" style="width:100%;padding:5px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:3px">
                         ${MapTools.COORD_SYSTEMS.map(s => `<option value="${s.id}" ${cfg.pontos.sistema === s.id ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}
                     </select>
@@ -1785,6 +1787,37 @@
             panel.querySelectorAll('[data-sec]').forEach(d => { d.style.display = d.getAttribute('data-sec') === mapPanelSecaoAberta ? 'block' : 'none'; });
             panel.querySelectorAll('[data-sec-h]').forEach(h => { h.classList.toggle('open', h.getAttribute('data-sec-h') === mapPanelSecaoAberta); });
         }
+
+        // edição por duplo clique dos textos da tabela de pontos (título, nome, coordenadas, azimute, distância)
+        function editarTextoTabelaPontos(td) {
+            if (!mapController || !td || td.querySelector('input')) return;
+            const chave = td.getAttribute('data-pt-edit');
+            const atual = td.textContent;
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = atual;
+            input.maxLength = 80;
+            input.className = 'pt-edit-input';
+            input.style.cssText = 'width:100%;min-width:60px;font:inherit;text-align:center;border:1px solid #059669;border-radius:3px;padding:0 2px;outline:none';
+            td.textContent = '';
+            td.appendChild(input);
+            input.focus();
+            input.select();
+            let feito = false;
+            const fim = (grava) => {
+                if (feito) return;
+                feito = true;
+                if (!grava || input.value === atual) { td.textContent = atual; return; }
+                if (/:t$/.test(chave)) mapController.renamePoint(chave.slice(0, -2), input.value);
+                else mapController.setTabelaTexto(chave, input.value);
+            };
+            input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') fim(true); else if (ev.key === 'Escape') fim(false); });
+            input.addEventListener('blur', () => fim(true));
+        }
+        document.addEventListener('dblclick', (ev) => {
+            const td = ev.target && ev.target.closest ? ev.target.closest('[data-pt-edit]') : null;
+            if (td) editarTextoTabelaPontos(td);
+        });
 
         function mapPanelHide() {
             mapPanelOpen = false;

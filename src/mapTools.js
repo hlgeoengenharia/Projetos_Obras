@@ -32,7 +32,7 @@
         rotacoes: {},            // { idDoTexto: graus } (texto girado pelo usuário; sem ele vale o alinhamento automático)
         edicoes: {},             // { idDaMedida: 'texto que o usuário digitou' }
         posicoes: {},            // { idDaMedida: { lat, lng } } (rótulo arrastado)
-        pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false, ordem: [], titulos: {} }, // pontos nos vértices
+        pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false, ordem: [], titulos: {}, estilo: { n: true, i: false, s: false }, textos: {} }, // pontos nos vértices; textos = células e título da tabela editados pelo usuário
         temporal: { ativo: false, ordem: 'asc', colunas: 2, alturaMm: 70, sincronizar: true, contorno: true, excluidas: [] }, // série de ortofotos por data
         rotulos: { ativo: false, campo: 'rotulo' },                          // texto sobre as feições vizinhas ('rotulo' = Quadra/Lote; 'titulo' = nome principal)
         confrontantes: { ativo: false, camada: '', tolM: 3, nomes: false },  // quem faz divisa com cada lado
@@ -176,12 +176,23 @@
                 if (txt) titulos[k] = txt;
             });
         }
+        // textos da tabela escritos pelo usuário: 'titulo' (cabeçalho da tabela) ou 'v:N:c0..c9 | az | dist' (célula do ponto)
+        const textos = {};
+        if (p.textos && typeof p.textos === 'object') {
+            Object.keys(p.textos).forEach(k => {
+                if (!/^(titulo|v:[0-9]+:(c[0-9]|az|dist))$/.test(k) || typeof p.textos[k] !== 'string') return;
+                const txt = p.textos[k].replace(/[\r\n]+/g, ' ').trim().slice(0, 80);
+                if (txt) textos[k] = txt;
+            });
+        }
         return {
             ativo: p.ativo === undefined ? d.ativo : !!p.ativo,
             sistema: COORD_SYSTEMS.some(s => s.id === p.sistema) ? p.sistema : d.sistema,
             tabela: p.tabela === undefined ? d.tabela : !!p.tabela,
             memorial: p.memorial === undefined ? d.memorial : !!p.memorial,
-            ordem, titulos
+            ordem, titulos,
+            estilo: normalizeEstilo(p.estilo, d.estilo),
+            textos
         };
     }
 
@@ -642,17 +653,21 @@
         const fecha = !!g && /Polygon/.test(g.type) && ordem.length >= 3;
         const rows = ordem.map((id, i) => {
             const v = byId[id];
-            const row = { vid: id, titulo: (pontos.titulos && pontos.titulos[id]) || defaultPointTitle(i), lat: v.lat, lng: v.lng, cells: coordCells(v.lat, v.lng, pontos.sistema) };
+            const tx = pontos.textos || {};
+            const row = { vid: id, titulo: (pontos.titulos && pontos.titulos[id]) || defaultPointTitle(i), lat: v.lat, lng: v.lng, cells: coordCells(v.lat, v.lng, pontos.sistema).map((c, k) => tx[id + ':c' + k] || c), editados: [] };
+            Object.keys(tx).forEach(k => { if (k.indexOf(id + ':') === 0) row.editados.push(k.slice(id.length + 1)); });
             if (pontos.memorial) {
                 const next = i < ordem.length - 1 ? byId[ordem[i + 1]] : (fecha ? byId[ordem[0]] : null);
                 if (next) {
                     row.azimute = fmtAzimuth(azimuthDeg([v.lng, v.lat], [next.lng, next.lat]));
                     row.distancia = fmtNumber(distanceM([v.lng, v.lat], [next.lng, next.lat]), 2);
                 } else { row.azimute = '—'; row.distancia = '—'; }
+                if (tx[id + ':az']) row.azimute = tx[id + ':az'];
+                if (tx[id + ':dist']) row.distancia = tx[id + ':dist'];
             }
             return row;
         });
-        return { sistema: pontos.sistema, sistemaLabel: coordSystemLabel(pontos.sistema, proj), headers: coordHeaders(pontos.sistema, proj), memorial: !!pontos.memorial, fecha: fecha, rows: rows, proj: proj };
+        return { tituloTabela: (pontos.textos && pontos.textos.titulo) || '', sistema: pontos.sistema, sistemaLabel: coordSystemLabel(pontos.sistema, proj), headers: coordHeaders(pontos.sistema, proj), memorial: !!pontos.memorial, fecha: fecha, rows: rows, proj: proj };
     }
 
     function allVertexList(geometry) {

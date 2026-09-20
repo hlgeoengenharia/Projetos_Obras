@@ -42,6 +42,16 @@ eq('estilo do texto: padrão negrito; o que vier sobrepõe', [MT.normalizeEstilo
 eq('medidas: estilo por grupo normalizado', MT.normalizeMapConfig({ mapa: { medidas: { estilo: { lados: { n: false, i: true }, perimetro: { s: true } } } } }).medidas.estilo, { lados: { n: false, i: true, s: false }, total: { n: true, i: false, s: false }, perimetro: { n: true, i: false, s: true } });
 eq('giros: ids válidos, graus no intervalo (-180, 180] e uma casa decimal', MT.normalizeRotacoes({ 'lado:0': 190, 'lado:1': -370.26, area: 45, 'lixo!': 3, perimetro: 'x', 'lado:2': 180 }), { 'lado:0': -170, 'lado:1': -10.3, area: 45, 'lado:2': 180 });
 eq('giros voltam pelos ajustes do usuário', MT.mergeAjustes(MT.normalizeMapConfig({}), { rotacoes: { area: 30 } }).rotacoes, { area: 30 });
+// pontos: estilo do nome e textos editados da tabela
+eq('pontos: estilo padrão em negrito e sem textos editados', [MT.normalizeMapConfig({}).pontos.estilo, MT.normalizeMapConfig({}).pontos.textos], [{ n: true, i: false, s: false }, {}]);
+eq('pontos: textos editados só com chaves válidas (título e células dos pontos), limpos e limitados', MT.normalizePontos({ textos: { titulo: '  Memorial  ', 'v:1:az': 'N 10° E', 'v:2:c0': '123', 'v:2:c99': 'x', 'v:2:xx': 'y', lixo: 'z', 'v:3:dist': '', 'v:4:dist': 'a'.repeat(200) } }).textos, { titulo: 'Memorial', 'v:1:az': 'N 10° E', 'v:2:c0': '123', 'v:4:dist': 'a'.repeat(80) });
+{
+    const quad = { type: 'Polygon', coordinates: [[[-34.84, -7.02], [-34.839, -7.02], [-34.839, -7.019], [-34.84, -7.019], [-34.84, -7.02]]] };
+    const base = MT.pointRows(quad, MT.normalizePontos({ ordem: ['v:0', 'v:1', 'v:2'], memorial: true }));
+    const ed = MT.pointRows(quad, MT.normalizePontos({ ordem: ['v:0', 'v:1', 'v:2'], memorial: true, textos: { titulo: 'Meu memorial', 'v:0:c0': '999.999,99', 'v:0:az': '90°', 'v:1:dist': '111,11' } }));
+    eq('linha da tabela usa o texto editado; o resto continua calculado', [ed.rows[0].cells[0], ed.rows[0].cells[1] === base.rows[0].cells[1], ed.rows[0].azimute, ed.rows[0].distancia === base.rows[0].distancia, ed.rows[1].distancia, ed.rows[1].azimute === base.rows[1].azimute], ['999.999,99', true, '90°', true, '111,11', true]);
+    eq('linha informa quais textos foram editados; título da tabela vem do usuário', [ed.rows[0].editados.sort(), ed.rows[2].editados, ed.tituloTabela, base.tituloTabela], [['az', 'c0'], [], 'Meu memorial', '']);
+}
 eq('base satélite e nenhum são aceitas', [MT.normalizeMapConfig({ mapa: { baseMap: 'satelite' } }).baseMap, MT.normalizeMapConfig({ mapa: { baseMap: 'nenhum' } }).baseMap], ['satelite', 'nenhum']);
 
 const aj = MT.mergeAjustes(c0, { norte: false, baseMap: 'satelite', camadasLigadas: [7, 'b'], destaque: { esmaecerEntorno: true }, lixo: 1 });

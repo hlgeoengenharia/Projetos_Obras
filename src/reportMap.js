@@ -26,6 +26,7 @@
         return 'font-weight:' + (e.n ? 700 : 400) + ';font-style:' + (e.i ? 'italic' : 'normal') + ';text-decoration:' + (e.s ? 'underline' : 'none') + ';';
     }
     function labelTransform(deg) { return 'translate(-50%,-50%) rotate(' + (Number(deg) || 0) + 'deg)'; }
+    const POINT_LABEL_OFFSET = [16, -13]; // px: onde o nome do ponto nasce em relação ao vértice
     const ROT_HANDLE = '<span class="report-rot no-print" title="Girar (arraste; Shift = de 15 em 15°) • dois cliques voltam ao automático">&#8635;</span>';
 
     function escapeHtml(s) {
@@ -260,6 +261,7 @@
             if (r[id] === undefined) delete rotacoes[id]; else rotacoes[id] = r[id];
             cfg.rotacoes = rotacoes;
             applyMeasures();
+            applyPoints();
             notify();
         }
         function clearRotation(id) {
@@ -267,6 +269,7 @@
             delete rotacoes[id];
             cfg.rotacoes = rotacoes;
             applyMeasures();
+            applyPoints();
             notify();
         }
 
@@ -383,8 +386,25 @@
 
         function pointRowsNow() { return MT.pointRows(geometry, cfg.pontos); }
 
+        /**
+         * Normaliza o novo estado dos pontos em relação ao anterior: trocar a sequência recalcula azimutes/distâncias e
+         * trocar o sistema muda as colunas (as edições dessas células não valem mais); pontos que saíram perdem posição e giro.
+         */
+        function aplicarPontos(next) {
+            const ant = cfg.pontos;
+            const textos = Object.assign({}, next.textos || {});
+            const mudouOrdem = JSON.stringify(next.ordem) !== JSON.stringify(ant.ordem);
+            const mudouSistema = next.sistema !== ant.sistema;
+            Object.keys(textos).forEach(k => { if ((mudouOrdem && /:(az|dist)$/.test(k)) || (mudouSistema && /:c[0-9]$/.test(k))) delete textos[k]; });
+            cfg.pontos = MT.normalizePontos(Object.assign({}, next, { textos: textos }));
+            const vivos = new Set(cfg.pontos.ordem);
+            const solta = (m) => { const out = {}; Object.keys(m).forEach(k => { if (!/^v:/.test(k) || vivos.has(k)) out[k] = m[k]; }); return out; };
+            cfg.posicoes = solta(cfg.posicoes);
+            cfg.rotacoes = solta(cfg.rotacoes);
+        }
+
         function setPontos(patch) {
-            cfg.pontos = MT.normalizePontos(Object.assign({}, cfg.pontos, patch));
+            aplicarPontos(Object.assign({}, cfg.pontos, patch));
             apply();
         }
 
@@ -400,17 +420,29 @@
                 h.on('click', () => api.addPoint(v.id));
                 state.pts['h:' + v.id] = h;
             });
-            // pontos marcados: nome editável com duplo clique
+            // pontos marcados: a bolinha fica no vértice; o nome é um texto à parte (arrastar move, ↻ gira, dois cliques renomeiam)
             pointRowsNow().rows.forEach(r => {
-                const html = '<span class="report-point-dot"></span><span class="report-point-label" title="Duplo clique para renomear">' + escapeHtml(r.titulo) + '</span>';
-                const icon = L.divIcon({ className: 'report-point', html: html, iconSize: [0, 0] });
-                const mk = L.marker([r.lat, r.lng], { icon: icon, draggable: false, keyboard: false, zIndexOffset: 1500 });
+                const dot = L.marker([r.lat, r.lng], { icon: L.divIcon({ className: 'report-point', html: '<span class="report-point-dot"></span>', iconSize: [0, 0] }), interactive: false, keyboard: false, zIndexOffset: 1400 });
+                dot.addTo(map);
+                state.pts['d:' + r.vid] = dot;
+                const p = cfg.posicoes[r.vid];
+                const pos = p ? [p.lat, p.lng] : [r.lat, r.lng];
+                const off = p ? [0, 0] : POINT_LABEL_OFFSET; // sem posição escolhida, o nome fica ao lado do ponto
+                const rot = cfg.rotacoes[r.vid] !== undefined ? cfg.rotacoes[r.vid] : 0;
+                const html = '<span class="report-point-label" style="left:' + off[0] + 'px;top:' + off[1] + 'px;transform:' + labelTransform(rot) + ';' + estiloCss(cfg.pontos.estilo) + '" title="Duplo clique para renomear • arraste para mover">' + escapeHtml(r.titulo) + ROT_HANDLE + '</span>';
+                const mk = L.marker(pos, { icon: L.divIcon({ className: 'report-point', html: html, iconSize: [0, 0] }), draggable: true, keyboard: false, zIndexOffset: 1500 });
                 mk.addTo(map);
                 mk.on('dblclick', (e) => {
                     if (L.DomEvent && L.DomEvent.stopPropagation && e) L.DomEvent.stopPropagation(e);
                     editInline(mk, '.report-point-label', r.titulo, (txt) => api.renamePoint(r.vid, txt), applyPoints);
                 });
+                mk.on('dragend', () => {
+                    const ll = mk.getLatLng();
+                    cfg.posicoes = Object.assign({}, cfg.posicoes, { [r.vid]: { lat: ll.lat, lng: ll.lng } });
+                    notify();
+                });
                 state.pts['p:' + r.vid] = mk;
+                wireRotate(mk, '.report-point-label', () => rot, (deg) => setRotation(r.vid, deg), () => clearRotation(r.vid));
             });
         }
 
@@ -497,7 +529,9 @@
                 next.medidas = Object.assign({}, cfg.medidas, (patch && patch.medidas) || {});
                 next.pontos = Object.assign({}, cfg.pontos, (patch && patch.pontos) || {});
                 ['rotulos', 'confrontantes', 'referencia', 'comparacaoArea', 'situacao', 'quadriculado'].forEach(k => { next[k] = Object.assign({}, cfg[k], (patch && patch[k]) || {}); });
-                cfg = MT.normalizeMapConfig({ mapa: next });
+                const pontosNovos = next.pontos;
+                cfg = MT.normalizeMapConfig({ mapa: Object.assign({}, next, { pontos: cfg.pontos }) }); // o resto normalizado; os pontos passam por aplicarPontos
+                aplicarPontos(pontosNovos);
                 apply();
             },
             /** Liga/desliga uma camada vizinha pelo id. */
@@ -526,7 +560,11 @@
                 apply();
             },
             /** Apaga as edições e as posições dos rótulos (volta ao calculado). */
-            resetMeasures() { cfg.edicoes = {}; cfg.posicoes = {}; cfg.rotacoes = {}; apply(); },
+            resetMeasures() {
+                // só as medidas: a posição e o giro dos nomes dos pontos (v:N) ficam
+                const soPontos = (m) => { const out = {}; Object.keys(m).forEach(k => { if (/^v:/.test(k)) out[k] = m[k]; }); return out; };
+                cfg.edicoes = {}; cfg.posicoes = soPontos(cfg.posicoes); cfg.rotacoes = soPontos(cfg.rotacoes); apply();
+            },
             /** Itens de medida atuais (com as edições), para painel/teste. */
             measures() { return MT.applyEdits(measureData.itens, cfg.edicoes); },
             ladosOmitidos: measureData.ladosOmitidos,
@@ -569,7 +607,14 @@
                 if (vertData.omitidos) return;
                 setPontos({ ativo: true, ordem: vertData.itens.map(v => v.id) });
             },
-            clearPoints() { setPontos({ ordem: [], titulos: {} }); },
+            clearPoints() { setPontos({ ordem: [], titulos: {}, textos: {} }); },
+            /** Texto da tabela de pontos escrito pelo usuário: 'titulo' ou 'v:N:c0|az|dist'. Vazio volta ao calculado. */
+            setTabelaTexto(chave, texto) {
+                const textos = Object.assign({}, cfg.pontos.textos);
+                const limpo = MT.normalizePontos({ textos: { [chave]: texto } }).textos[chave];
+                if (limpo) textos[chave] = limpo; else delete textos[chave];
+                setPontos({ textos: textos });
+            },
             // ---- anotações de texto
             /** Nova anotação no centro do mapa (ou onde for pedido). Devolve o id. */
             addNote(texto, lat, lng) {
