@@ -75,7 +75,8 @@
 
         const templates = window.ReportAdapter.getReportTemplates(formId);
         const isIndividual = currentTemplate.tipo === 'individual';
-        const formTabs = window.ReportAdapter.getFormTabs ? window.ReportAdapter.getFormTabs(formId) : [];
+        // o atalho no popup lista TODAS as abas do cadastro (inclusive a de Relatórios); as demais listas do módulo não
+        const formTabs = window.ReportAdapter.getFormTabs ? window.ReportAdapter.getFormTabs(formId, { includeReportsTab: true }) : [];
 
         container.innerHTML = `
             <div class="flex flex-col gap-6 w-full font-sans">

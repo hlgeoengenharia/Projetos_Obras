@@ -77,7 +77,8 @@
      * @param {string} formId ID do formulário
      * @returns {Array<{id: string, title: string, isMultiple: boolean, tabType: string}>}
      */
-    function getFormTabs(formId) {
+    function getFormTabs(formId, opts) {
+        const includeReportsTab = !!(opts && opts.includeReportsTab);
         if (!formId) return [];
         const formsList = (typeof forms !== 'undefined' && Array.isArray(forms)) ? forms :
             ((typeof allForms !== 'undefined' && Array.isArray(allForms)) ? allForms :
@@ -112,7 +113,7 @@
         }
 
         // a aba de Relatórios (A4) só guarda botões: nunca é fonte de dados de relatório
-        return tabs.filter(t => !(t && (t.tabType === 'reports' || t.isReportsTab))).map(t => {
+        return tabs.filter(t => includeReportsTab || !(t && (t.tabType === 'reports' || t.isReportsTab))).map(t => {
             const isConsolidated = t.tabType === 'consolidated' || t.tabType === 'cross_tabs' || !!t.isConsolidated || 
                                    (t.title && (t.title.toUpperCase().includes('HISTÓRICO') || t.title.toUpperCase().includes('HISTORICO')));
             const isMulti = !!t.isMultiple || (t.title && (t.title.toUpperCase().includes('VISTORIA') || t.title.toUpperCase().includes('FOTO') || t.title.toUpperCase().includes('ANEXO')));
@@ -121,6 +122,7 @@
                 title: t.title || 'Aba Geral',
                 isMultiple: isMulti,
                 isConsolidated: isConsolidated,
+                isReportsTab: t.tabType === 'reports' || !!t.isReportsTab,
                 tabType: t.tabType || (isConsolidated ? 'consolidated' : (isMulti ? 'multiple' : 'regular')),
                 fields: Array.isArray(t.fields) ? t.fields.map(f => ({
                     id: f.id || f.name,

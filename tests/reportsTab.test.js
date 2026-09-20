@@ -67,6 +67,24 @@ const edit = render(tabs, tpls, true);
 const relEdit = edit.slice(edit.indexOf('id="acc-content-t_rel"'));
 ok('modo edição não abre campos nem "Salvar" na aba de relatórios', !relEdit.includes('saveFeatureData') && relEdit.includes('Ficha Individual'));
 
+
+// ---------------------------------------------------------------- "Atalho no Popup da Feição" lista TODAS as abas
+{
+    const win = { forms: [{ id: 'f1', tabs }], localStorage: { getItem: () => '[]' } };
+    const ctx = { window: win, localStorage: win.localStorage, forms: win.forms, console };
+    ctx.self = ctx;
+    vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'reportAdapter.js'), 'utf8'), ctx);
+    const A = win.ReportAdapter || ctx.ReportAdapter;
+    ok('adaptador carregou', !!A && typeof A.getFormTabs === 'function');
+    if (A) {
+        ok('listas de dados do módulo não incluem a aba de Relatórios', !A.getFormTabs('f1').some(x => x.id === 't_rel'));
+        const todas = A.getFormTabs('f1', { includeReportsTab: true });
+        ok('o atalho do popup enxerga todas as abas, inclusive a de Relatórios', todas.map(x => x.id).join() === 't1,t_rel');
+        ok('aba de relatórios vem sinalizada', todas.find(x => x.id === 't_rel').isReportsTab === true);
+    }
+}
+
 console.log(`reportsTab: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {
     console.error(`${failed} falha(s)`);
