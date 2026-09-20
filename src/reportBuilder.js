@@ -1142,7 +1142,7 @@
             <!-- CARD: MINI-MAPA CARTOGRÁFICO (SIG) -->
             ${isGeral ? '' : (() => {
                 const existingMap = (currentTemplate?.blocos || []).find(b => b.tipo === 'mapa_estatico');
-                const mcfg = window.MapTools ? window.MapTools.normalizeMapConfig(existingMap || {}) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90, medidas: { ativo: true, lados: true, total: true, perimetro: false } };
+                const mcfg = window.MapTools ? window.MapTools.normalizeMapConfig(existingMap || {}) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90, medidas: { ativo: true, lados: true, total: true, perimetro: false }, pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false } };
                 const chk = (id, label, checked) => `
                     <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
                         <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} class="rounded text-primary focus:ring-0" />
@@ -1197,6 +1197,18 @@
                         </div>
 
                         <div class="flex flex-col gap-1.5">
+                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Pontos nos vértices (tabela de coordenadas e memorial)</label>
+                            <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                                ${chk('cfg-map-pts-ativo', 'Permitir marcar pontos nos vértices', mcfg.pontos.ativo)}
+                                <select id="cfg-map-pts-sistema" class="w-full px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl dark:text-white">
+                                    ${(window.MapTools ? window.MapTools.COORD_SYSTEMS : [{ id: 'utm', label: 'SIRGAS 2000 / UTM' }]).map(s => `<option value="${s.id}" ${mcfg.pontos.sistema === s.id ? 'selected' : ''}>${escapeHtml(s.label)}</option>`).join('')}
+                                </select>
+                                ${chk('cfg-map-pts-tab', 'Tabela de pontos sob o mapa', mcfg.pontos.tabela)}
+                                ${chk('cfg-map-pts-mem', 'Memorial descritivo (azimute e distância)', mcfg.pontos.memorial)}
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col gap-1.5">
                             <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Elementos e camadas</label>
                             <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
                                 ${chk('cfg-map-camadas', 'Permitir ligar as camadas ativas do mapa', mcfg.camadasVizinhas)}
@@ -1213,7 +1225,7 @@
 
                         <div class="p-2.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-[11px] text-slate-500 flex items-center gap-2">
                             <span class="material-symbols-outlined text-[16px] text-slate-400">history_toggle_off</span>
-                            <span><strong>Série multitemporal</strong> de ortofotos e <strong>pontos com tabela de coordenadas</strong>: próximas etapas.</span>
+                            <span><strong>Série multitemporal</strong> de ortofotos: próxima etapa.</span>
                         </div>
 
                         <button type="button" onclick="ReportBuilder.insertMapBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
@@ -2110,7 +2122,7 @@
 
                 // MAPA COM A FEIÇÃO REAL (pré-visualização esquemática; o mapa de verdade aparece no relatório)
                 {
-                    const mc = window.MapTools ? window.MapTools.normalizeMapConfig(bloco) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90, medidas: { ativo: true, lados: true, total: true, perimetro: false } };
+                    const mc = window.MapTools ? window.MapTools.normalizeMapConfig(bloco) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90, medidas: { ativo: true, lados: true, total: true, perimetro: false }, pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false } };
                     const chip = (txt, pos) => `<span class="absolute ${pos} text-[9px] font-mono font-bold text-emerald-800 bg-white/90 border border-emerald-300 px-1 rounded">${txt}</span>`;
                     const bg = mc.baseMap === 'satelite' ? 'bg-slate-800' : (mc.baseMap === 'nenhum' ? 'bg-white' : 'bg-slate-200');
                     const px = Math.round(mc.alturaMm * 3.78);
@@ -2140,6 +2152,7 @@
                                 </div>` : ''}
                             ${mc.baseMap !== 'nenhum' ? `<div class="absolute bottom-2 right-2 text-[8px] text-slate-600 bg-white/80 px-1 rounded">${mc.baseMap === 'satelite' ? 'Imagens © Esri' : '© OpenStreetMap'}</div>` : ''}
                         </div>
+                        ${mc.pontos && mc.pontos.ativo ? `<div class="mt-1.5 text-[10px] text-slate-500 px-1 flex items-center gap-1"><span class="material-symbols-outlined text-[13px] text-rose-500">location_on</span>O usuário marca pontos nos vértices; a tabela${mc.pontos.memorial ? ' com memorial descritivo' : ''} sai abaixo do mapa (${escapeHtml((window.MapTools ? (window.MapTools.COORD_SYSTEMS.find(s => s.id === mc.pontos.sistema) || {}).label : '') || 'SIRGAS 2000 / UTM')}).</div>` : ''}
                         <div class="mt-1.5 text-[10px] text-slate-500 font-mono px-1">
                             <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'notaTecnica')">${(escapeHtml(bloco.notaTecnica || 'Delimitação cadastral georreferenciada.')).replace(/\r?\n/g, '<br>')}</span>
                         </div>
@@ -3382,7 +3395,8 @@
             escala: on('cfg-map-escala', true),
             projecao: on('cfg-map-proj', true),
             alturaMm: Number(val('cfg-map-altura', 90)),
-            medidas: { ativo: on('cfg-map-med-ativo', true), lados: on('cfg-map-med-lados', true), total: on('cfg-map-med-total', true), perimetro: on('cfg-map-med-perim', false) }
+            medidas: { ativo: on('cfg-map-med-ativo', true), lados: on('cfg-map-med-lados', true), total: on('cfg-map-med-total', true), perimetro: on('cfg-map-med-perim', false) },
+            pontos: { ativo: on('cfg-map-pts-ativo', false), sistema: val('cfg-map-pts-sistema', 'utm'), tabela: on('cfg-map-pts-tab', true), memorial: on('cfg-map-pts-mem', false) }
         };
         const nota = val('cfg-map-note', '') || 'Delimitação cadastral georreferenciada.';
         const normalizado = window.MapTools ? window.MapTools.normalizeMapConfig({ mapa: config }) : config;
@@ -3390,6 +3404,7 @@
         delete normalizado.vista;
         delete normalizado.edicoes;
         delete normalizado.posicoes;
+        if (normalizado.pontos) { normalizado.pontos.ordem = []; normalizado.pontos.titulos = {}; } // os pontos marcados são do usuário
 
         const existing = currentTemplate.blocos.find(b => b.tipo === 'mapa_estatico');
         if (existing) {

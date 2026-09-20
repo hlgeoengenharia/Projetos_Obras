@@ -22,8 +22,9 @@ function makeEl(tag) {
 
 function makeL() {
     class Layer {
-        constructor(kind, args) { this.kind = kind; this.args = args; }
+        constructor(kind, args) { this.kind = kind; this.args = args; this.handlers = {}; }
         addTo(m) { m.layers.add(this); this.map = m; return this; }
+        on(ev, fn) { this.handlers[ev] = fn; return this; }
         bringToFront() { this.front = true; }
     }
     class Marker extends Layer {
@@ -35,7 +36,7 @@ function makeL() {
             this.dragging = { disable: () => { this.draggingOff = true; } };
             this.root = makeEl('div');
             this.span = makeEl('span');
-            this.root.querySelector = (s) => (s === 'span' ? this.span : null);
+            this.root.querySelector = () => this.span;
         }
         on(ev, fn) { this.handlers[ev] = fn; return this; }
         getLatLng() { return this.latlng; }
@@ -286,6 +287,90 @@ t = build({}, { type: 'Polygon', coordinates: [Array.from({ length: 101 }, (_, i
 ok('mais de 80 lados: só a área no mapa e aviso no resumo', marcadores(t).length === 1 && t.ctl.ladosOmitidos === true && /omitidos/.test(t.doc.els['map-sides-text'].textContent));
 t = build({}, null);
 ok('sem geometria: nenhuma medida e aviso no resumo', marcadores(t).length === 0 && t.doc.els['map-sides-text'].textContent === 'Feição sem geometria associada');
+
+// ---------------------------------------------------------------- pontos nos vértices
+const handles = (tt) => tt.layersOf('circle');
+const pontosMk = (tt) => tt.layersOf('marker').filter(m => m.args.o.icon.className === 'report-point');
+const nomeDoPonto = (mk) => mk.args.o.icon.html.replace(/<[^>]+>/g, '');
+t = build({});
+ok('pontos desligados: nenhum vértice clicável', handles(t).length === 0 && pontosMk(t).length === 0);
+t.ctl.setConfig({ pontos: { ativo: true } });
+eq('pontos ligados: um marcador clicável por vértice (4)', handles(t).length, 4);
+ok('marcador de vértice é clicável e não repassa o clique ao mapa', handles(t)[0].args.o.interactive === true && handles(t)[0].args.o.bubblingMouseEvents === false);
+
+handles(t)[2].handlers.click();
+eq('clicar no vértice marca o ponto', t.ctl.getConfig().pontos.ordem, ['v:2']);
+ok('vértice marcado deixa de ser marcador livre e vira ponto nomeado P1', handles(t).length === 3 && pontosMk(t).length === 1 && nomeDoPonto(pontosMk(t)[0]) === 'P1');
+ok('ponto fica na posição do vértice', pontosMk(t)[0].args.pos[0] === -7.01 && pontosMk(t)[0].args.pos[1] === -34.83);
+handles(t)[0].handlers.click();
+eq('a sequência segue a ordem dos cliques', [t.ctl.getConfig().pontos.ordem, pontosMk(t).map(nomeDoPonto)], [['v:2', 'v:0'], ['P1', 'P2']]);
+t.ctl.addPoint('v:2');
+eq('marcar de novo o mesmo vértice não duplica', t.ctl.getConfig().pontos.ordem, ['v:2', 'v:0']);
+
+// linhas da tabela
+eq('tabela reflete os pontos e a ordem', t.ctl.pointRows().rows.map(r => [r.vid, r.titulo]), [['v:2', 'P1'], ['v:0', 'P2']]);
+ok('tabela traz as coordenadas UTM do vértice', t.ctl.pointRows().rows[1].cells.join('|') === MT.coordCells(-7.02, -34.84, 'utm').join('|'));
+
+// renomear com duplo clique
+pontosMk(t)[0].handlers.dblclick({});
+const campoP = pontosMk(t)[0].span.children[0];
+ok('duplo clique no ponto abre o campo com o nome atual', !!campoP && campoP.value === 'P1' && campoP.focused === true);
+campoP.value = 'Marco M-01';
+campoP.listeners.keydown({ key: 'Enter' });
+eq('Enter grava o nome do ponto', [t.ctl.getConfig().pontos.titulos['v:2'], nomeDoPonto(pontosMk(t)[0]), t.ctl.pointRows().rows[0].titulo], ['Marco M-01', 'Marco M-01', 'Marco M-01']);
+ok('o outro ponto continua com o nome padrão', nomeDoPonto(pontosMk(t)[1]) === 'P2');
+pontosMk(t)[0].handlers.dblclick({});
+pontosMk(t)[0].span.children[0].value = 'a<b>c';
+pontosMk(t)[0].span.children[0].listeners.keydown({ key: 'Enter' });
+ok('nome digitado é escapado no rótulo do ponto', /a&lt;b&gt;c/.test(pontosMk(t)[0].args.o.icon.html) && !/<b>/.test(pontosMk(t)[0].args.o.icon.html));
+pontosMk(t)[0].handlers.dblclick({});
+pontosMk(t)[0].span.children[0].value = 'P1';
+pontosMk(t)[0].span.children[0].listeners.keydown({ key: 'Enter' });
+eq('nome igual ao padrão volta ao padrão', t.ctl.getConfig().pontos.titulos['v:2'], undefined);
+pontosMk(t)[0].handlers.dblclick({});
+pontosMk(t)[0].span.children[0].value = 'qualquer';
+pontosMk(t)[0].span.children[0].listeners.keydown({ key: 'Escape' });
+eq('Esc cancela a renomeação', t.ctl.getConfig().pontos.titulos['v:2'], undefined);
+
+// reordenar e remover
+t.ctl.movePoint('v:0', -1);
+eq('subir um ponto muda a sequência e os nomes padrão acompanham', [t.ctl.getConfig().pontos.ordem, t.ctl.pointRows().rows.map(r => r.titulo)], [['v:0', 'v:2'], ['P1', 'P2']]);
+t.ctl.movePoint('v:0', -1);
+eq('subir o primeiro não faz nada', t.ctl.getConfig().pontos.ordem, ['v:0', 'v:2']);
+t.ctl.movePoint('v:0', 1);
+eq('descer', t.ctl.getConfig().pontos.ordem, ['v:2', 'v:0']);
+t.ctl.renamePoint('v:0', 'Marco final');
+t.ctl.removePoint('v:2');
+eq('remover ponto o devolve aos vértices livres e renumera', [t.ctl.getConfig().pontos.ordem, handles(t).length, t.ctl.pointRows().rows[0].titulo], [['v:0'], 3, 'Marco final']);
+t.ctl.removePoint('v:0');
+eq('remover o ponto apaga também o nome dele', t.ctl.getConfig().pontos.titulos, {});
+t.ctl.markAllPoints();
+eq('marcar todos os vértices', [t.ctl.getConfig().pontos.ordem, handles(t).length, pontosMk(t).length], [['v:0', 'v:1', 'v:2', 'v:3'], 0, 4]);
+t.ctl.clearPoints();
+eq('limpar pontos', [t.ctl.getConfig().pontos.ordem, handles(t).length], [[], 4]);
+
+// sistema de coordenadas, memorial e persistência
+t.ctl.addPoint('v:0'); t.ctl.addPoint('v:1'); t.ctl.addPoint('v:2');
+t.ctl.setConfig({ pontos: { sistema: 'geo_gms', memorial: true } });
+const linhasM = t.ctl.pointRows();
+ok('memorial no sistema GMS: coordenadas, azimute e distância', /°/.test(linhasM.rows[0].cells[0]) && /°/.test(linhasM.rows[0].azimute) && /\d,\d{2}$/.test(linhasM.rows[0].distancia) && linhasM.memorial === true);
+const snapP = t.ctl.snapshot();
+eq('snapshot guarda pontos, sistema e memorial', [snapP.pontos.ordem, snapP.pontos.sistema, snapP.pontos.memorial, snapP.pontos.ativo], [['v:0', 'v:1', 'v:2'], 'geo_gms', true, true]);
+const tP = build({ mapa: { pontos: snapP.pontos } });
+ok('pontos salvos voltam ao abrir', pontosMk(tP).length === 3 && handles(tP).length === 1);
+tP.ctl.reset(MT.normalizeMapConfig({}));
+eq('restaurar padrão do modelo limpa os pontos do usuário', tP.ctl.getConfig().pontos.ordem, []);
+
+// pontos e o tipo de geometria
+t = build({ mapa: { pontos: { ativo: true } } }, { type: 'LineString', coordinates: [[-34.84, -7.02], [-34.84, -7.019], [-34.839, -7.019]] });
+eq('linha: vértices são os pontos do traçado', handles(t).length, 3);
+t = build({ mapa: { pontos: { ativo: true } } }, { type: 'Point', coordinates: [-34.835, -7.015] });
+eq('ponto: um vértice', handles(t).length, 1);
+const muitosVert = { type: 'LineString', coordinates: Array.from({ length: 401 }, (_, i) => [-34.84 + i * 1e-5, -7.02]) };
+t = build({ mapa: { pontos: { ativo: true, ordem: ['v:400'] } } }, muitosVert);
+ok('mais de 400 vértices: sem marcadores livres, "marcar todos" não faz nada, ponto salvo continua', handles(t).length === 0 && t.ctl.verticesOmitidos === true && (t.ctl.markAllPoints(), t.ctl.getConfig().pontos.ordem.length === 1) && t.ctl.pointRows().rows.length === 1);
+t = build({ mapa: { pontos: { ativo: true } } }, null);
+ok('sem geometria: sem vértices', handles(t).length === 0 && t.ctl.pointRows().rows.length === 0);
 
 console.log(`reportMap: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {

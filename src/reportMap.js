@@ -40,7 +40,8 @@
         const map = L.map(opts.container, { zoomControl: true, attributionControl: true, zoomSnap: 0.25 });
         if (map.attributionControl && map.attributionControl.setPrefix) map.attributionControl.setPrefix(false);
 
-        const state = { base: null, feature: null, mask: null, neighbors: {}, scaleControl: null, markers: {} };
+        const state = { base: null, feature: null, mask: null, neighbors: {}, scaleControl: null, markers: {}, pts: {} };
+        const vertData = MT.vertices(opts.geometry || null); // vértices onde o usuário pode marcar pontos
         const measureData = MT.computeMeasures(opts.geometry || null); // { itens, ladosOmitidos }
         const tileLayers = {};
         Object.keys(TILES).forEach(k => {
@@ -127,16 +128,18 @@
             apply();
         }
 
-        /** Troca o rótulo por um campo de texto (Enter ou sair do campo grava; Esc cancela; vazio restaura o calculado). */
-        function startEdit(it) {
-            const mk = state.markers[it.id];
+        /**
+         * Troca o rótulo de um marcador por um campo de texto: Enter ou sair do campo grava (onCommit(texto));
+         * Esc cancela (onCancel). Serve às medidas e aos nomes dos pontos.
+         */
+        function editInline(mk, selector, atual, onCommit, onCancel) {
             const root = mk && mk.getElement ? mk.getElement() : null;
-            const span = root && root.querySelector ? root.querySelector('span') : null;
+            const span = root && root.querySelector ? root.querySelector(selector) : null;
             if (!span || !doc) return;
             if (mk.dragging && mk.dragging.disable) mk.dragging.disable();
             const input = doc.createElement('input');
             input.type = 'text';
-            input.value = it.texto;
+            input.value = atual;
             input.maxLength = 60;
             input.className = 'report-measure-input';
             span.textContent = '';
@@ -147,7 +150,7 @@
             const finish = (save) => {
                 if (done) return;
                 done = true;
-                if (save) setEdit(it.id, input.value, it.padrao); else applyMeasures();
+                if (save) onCommit(input.value); else onCancel();
             };
             const stop = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
             input.addEventListener('keydown', (ev) => {
@@ -157,6 +160,10 @@
             });
             input.addEventListener('blur', () => finish(true));
             ['mousedown', 'dblclick', 'click'].forEach(name => input.addEventListener(name, stop));
+        }
+
+        function startEdit(it) {
+            editInline(state.markers[it.id], 'span', it.texto, (txt) => setEdit(it.id, txt, it.padrao), applyMeasures);
         }
 
         function applyMeasures() {
@@ -192,6 +199,44 @@
             if (areaEl) {
                 areaEl.textContent = todas.filter(i => i.grupo === 'total' || i.grupo === 'perimetro').map(i => i.resumo).join(' • ');
             }
+        }
+
+        // ------------------------------------------------------------ pontos nos vértices
+        function clearPointLayers() {
+            Object.keys(state.pts).forEach(k => { map.removeLayer(state.pts[k]); delete state.pts[k]; });
+        }
+
+        function pointRowsNow() { return MT.pointRows(geometry, cfg.pontos); }
+
+        function setPontos(patch) {
+            cfg.pontos = MT.normalizePontos(Object.assign({}, cfg.pontos, patch));
+            apply();
+        }
+
+        function applyPoints() {
+            clearPointLayers();
+            if (!cfg.pontos.ativo) return;
+            const chosen = new Set(cfg.pontos.ordem);
+            // vértices ainda livres: clique marca o ponto
+            vertData.itens.forEach(v => {
+                if (chosen.has(v.id)) return;
+                const h = L.circleMarker([v.lat, v.lng], { radius: 5, color: '#334155', weight: 1.5, fillColor: '#ffffff', fillOpacity: 1, interactive: true, bubblingMouseEvents: false, className: 'report-vertex-handle' });
+                h.addTo(map);
+                h.on('click', () => api.addPoint(v.id));
+                state.pts['h:' + v.id] = h;
+            });
+            // pontos marcados: nome editável com duplo clique
+            pointRowsNow().rows.forEach(r => {
+                const html = '<span class="report-point-dot"></span><span class="report-point-label" title="Duplo clique para renomear">' + escapeHtml(r.titulo) + '</span>';
+                const icon = L.divIcon({ className: 'report-point', html: html, iconSize: [0, 0] });
+                const mk = L.marker([r.lat, r.lng], { icon: icon, draggable: false, keyboard: false, zIndexOffset: 1500 });
+                mk.addTo(map);
+                mk.on('dblclick', (e) => {
+                    if (L.DomEvent && L.DomEvent.stopPropagation && e) L.DomEvent.stopPropagation(e);
+                    editInline(mk, '.report-point-label', r.titulo, (txt) => api.renamePoint(r.vid, txt), applyPoints);
+                });
+                state.pts['p:' + r.vid] = mk;
+            });
         }
 
         // ------------------------------------------------------------ sobreposições (norte, escala, projeção, legenda)
@@ -237,6 +282,7 @@
             applyMask();
             applyFeature();
             applyMeasures();
+            applyPoints();
             applyOverlays();
             notify();
         }
@@ -259,10 +305,7 @@
         map.on('zoomend', applyOverlays);
         map.on('moveend', applyOverlays);
 
-        frame();
-        apply();
-
-        return {
+        const api = {
             map,
             projection: proj,
             kind,
@@ -272,6 +315,7 @@
                 const next = Object.assign({}, cfg, patch || {});
                 next.destaque = Object.assign({}, cfg.destaque, (patch && patch.destaque) || {});
                 next.medidas = Object.assign({}, cfg.medidas, (patch && patch.medidas) || {});
+                next.pontos = Object.assign({}, cfg.pontos, (patch && patch.pontos) || {});
                 cfg = MT.normalizeMapConfig({ mapa: next });
                 apply();
             },
@@ -286,7 +330,8 @@
             snapshot() {
                 return Object.assign({}, cfg, {
                     camadasLigadas: cfg.camadasLigadas.slice(), destaque: Object.assign({}, cfg.destaque), medidas: Object.assign({}, cfg.medidas),
-                    edicoes: Object.assign({}, cfg.edicoes), posicoes: Object.assign({}, cfg.posicoes), vista: currentView()
+                    edicoes: Object.assign({}, cfg.edicoes), posicoes: Object.assign({}, cfg.posicoes),
+                    pontos: Object.assign({}, cfg.pontos, { ordem: cfg.pontos.ordem.slice(), titulos: Object.assign({}, cfg.pontos.titulos) }), vista: currentView()
                 });
             },
             /** Volta ao que o modelo definiu e enquadra a feição de novo. */
@@ -302,8 +347,51 @@
             measures() { return MT.applyEdits(measureData.itens, cfg.edicoes); },
             ladosOmitidos: measureData.ladosOmitidos,
             invalidate() { if (map.invalidateSize) map.invalidateSize(); },
-            escapeHtml
+            escapeHtml,
+
+            // ---- pontos nos vértices (tabela de coordenadas e memorial)
+            vertexCount: vertData.total,
+            verticesOmitidos: vertData.omitidos,
+            pointRows: pointRowsNow,
+            /** Marca um vértice como ponto (vai para o fim da sequência). */
+            addPoint(id) {
+                if (cfg.pontos.ordem.indexOf(id) >= 0) return;
+                setPontos({ ordem: cfg.pontos.ordem.concat([id]) });
+            },
+            removePoint(id) {
+                const titulos = Object.assign({}, cfg.pontos.titulos);
+                delete titulos[id];
+                setPontos({ ordem: cfg.pontos.ordem.filter(x => x !== id), titulos: titulos });
+            },
+            /** Sobe (-1) ou desce (+1) um ponto na sequência. */
+            movePoint(id, dir) {
+                const ordem = cfg.pontos.ordem.slice();
+                const i = ordem.indexOf(id);
+                const j = i + (dir < 0 ? -1 : 1);
+                if (i < 0 || j < 0 || j >= ordem.length) return;
+                ordem.splice(j, 0, ordem.splice(i, 1)[0]);
+                setPontos({ ordem: ordem });
+            },
+            /** Renomeia um ponto; vazio ou igual ao nome padrão (P1, P2...) volta ao padrão. */
+            renamePoint(id, text) {
+                const pos = cfg.pontos.ordem.indexOf(id);
+                const limpo = MT.normalizePontos({ titulos: { [id]: text }, ordem: [id] }).titulos[id];
+                const titulos = Object.assign({}, cfg.pontos.titulos);
+                if (!limpo || pos < 0 || limpo === MT.defaultPointTitle(pos)) delete titulos[id]; else titulos[id] = limpo;
+                setPontos({ titulos: titulos });
+            },
+            markAllPoints() {
+                if (vertData.omitidos) return;
+                setPontos({ ativo: true, ordem: vertData.itens.map(v => v.id) });
+            },
+            clearPoints() { setPontos({ ordem: [], titulos: {} }); },
+            /** Redesenha tudo (depois que a página trocou os elementos de sobreposição). */
+            refresh() { apply(); }
         };
+
+        frame();
+        apply();
+        return api;
     }
 
     return { create, TILES };

@@ -154,6 +154,70 @@ eq('edições: limpa espaços, limita o tamanho, tira quebras e descarta o invá
 eq('posições: só coordenadas válidas', MT.normalizeMapConfig({ mapa: { posicoes: { 'lado:0': { lat: '-7.02', lng: -34.8 }, area: { lat: 999, lng: 0 }, perimetro: 'x' } } }).posicoes, { 'lado:0': { lat: -7.02, lng: -34.8 } });
 eq('ajustes trazem edições e posições', (() => { const a = MT.mergeAjustes(c0, { edicoes: { area: '1.000 m²' }, posicoes: { area: { lat: -7, lng: -34 } } }); return [a.edicoes, a.posicoes]; })(), [{ area: '1.000 m²' }, { area: { lat: -7, lng: -34 } }]);
 
+// ---------------------------------------------------------------- coordenadas
+const u0 = MT.latLngToUtm(-7.018950, -34.833140);
+eq('UTM confere com a ferramenta de medição do sistema (zona 25S)', [u0.zone, u0.hemisphere, u0.e.toFixed(2), u0.n.toFixed(2)], [25, 'S', '297502.24', '9223760.33']);
+const back = MT.utmToLatLng(u0.e, u0.n, 25, true);
+near('UTM → lat/lng volta ao ponto (lat)', back.lat, -7.018950, 1e-8);
+near('UTM → lat/lng volta ao ponto (lng)', back.lng, -34.833140, 1e-8);
+const uN = MT.latLngToUtm(2.8, -60.67);
+eq('hemisfério norte: sem falso norte', [uN.zone, uN.hemisphere, uN.n < 1000000], [20, 'N', true]);
+const bN = MT.utmToLatLng(uN.e, uN.n, 20, false);
+near('ida e volta no hemisfério norte', bN.lat, 2.8, 1e-8);
+near('meridiano central: E = 500000 (zona 25 → -33°)', MT.latLngToUtm(-7, -33, 25).e, 500000, 1e-6);
+near('logo ao sul do equador: N ≈ 10.000.000 - 11 m (falso norte do hemisfério sul)', MT.latLngToUtm(-0.0001, -33, 25).n, 10000000 - 11.06, 0.1);
+eq('GMS da ferramenta de medição (com segundos decimais)', [MT.fmtGms(-7.01895, 'N', 'S'), MT.fmtGms(-34.83314, 'L', 'O')], ["7° 01' 08,22\" S", "34° 49' 59,30\" O"]);
+eq('GMS arredonda 59,999" para o minuto seguinte', MT.fmtGms(10.999999999, 'N', 'S'), "11° 00' 00,00\" N");
+eq('células no sistema escolhido', [MT.coordCells(-7.01895, -34.83314, 'utm'), MT.coordCells(-7.01895, -34.83314, 'geo_dec'), MT.coordCells(-7.01895, -34.83314, 'geo_gms')],
+    [['297.502,24', '9.223.760,33'], ['-7,018950', '-34,833140'], ["7° 01' 08,22\" S", "34° 49' 59,30\" O"]]);
+eq('WGS 84 em graus decimais usa os mesmos números', MT.coordCells(-7.01895, -34.83314, 'wgs84_dec'), ['-7,018950', '-34,833140']);
+eq('cabeçalhos', [MT.coordHeaders('utm'), MT.coordHeaders('geo_gms')], [['E (m)', 'N (m)'], ['Latitude', 'Longitude']]);
+eq('rótulo do sistema UTM traz zona e EPSG', MT.coordSystemLabel('utm', MT.projectionInfo(-7.019, -34.833)), 'SIRGAS 2000 / UTM zona 25S (EPSG:31985)');
+eq('sistemas disponíveis (sem SAD69)', MT.COORD_SYSTEMS.map(s => s.id), ['utm', 'geo_dec', 'geo_gms', 'wgs84_dec']);
+
+// azimute
+near('azimute para Norte = 0°', MT.azimuthDeg([-34.8, -7.0], [-34.8, -6.9]), 0, 1e-6);
+near('azimute para Leste ≈ 90°', MT.azimuthDeg([-34.8, -7.0], [-34.7, -7.0]), 90, 0.05);
+near('azimute para Sul = 180°', MT.azimuthDeg([-34.8, -7.0], [-34.8, -7.1]), 180, 1e-6);
+near('azimute para Oeste ≈ 270°', MT.azimuthDeg([-34.8, -7.0], [-34.9, -7.0]), 270, 0.05);
+eq('azimute em graus, minutos e segundos', [MT.fmtAzimuth(45.5083333), MT.fmtAzimuth(359.99999), MT.fmtAzimuth(0)], ["45° 30' 30\"", "0° 00' 00\"", "0° 00' 00\""]);
+
+// ---------------------------------------------------------------- vértices
+const vq = MT.vertices(quad);
+eq('vértices do polígono: sem repetir o ponto de fechamento', vq.itens.map(v => v.id), ['v:0', 'v:1', 'v:2', 'v:3']);
+eq('vértice 0 é o primeiro ponto', [vq.itens[0].lat, vq.itens[0].lng], [-7.02, -34.84]);
+eq('multipolígono numera em sequência', MT.vertices(multi).itens.length, 8);
+eq('linha: todos os vértices', MT.vertices(linha3).itens.length, 3);
+eq('ponto: um vértice', MT.vertices({ type: 'Point', coordinates: [-34.8, -7] }).itens.length, 1);
+ok('feição sem geometria não tem vértices', MT.vertices(null).itens.length === 0);
+ok('mais de 400 vértices: marcadores omitidos', (() => { const g = { type: 'LineString', coordinates: Array.from({ length: 401 }, (_, i) => [-34.8 + i * 1e-5, -7]) }; const v = MT.vertices(g); return v.omitidos === true && v.itens.length === 0 && v.total === 401; })());
+
+// ---------------------------------------------------------------- pontos e memorial
+const pn = MT.normalizeMapConfig({}).pontos;
+eq('pontos: desligados, UTM, com tabela e sem memorial', [pn.ativo, pn.sistema, pn.tabela, pn.memorial, pn.ordem], [false, 'utm', true, false, []]);
+const pn2 = MT.normalizeMapConfig({ mapa: { pontos: { ativo: true, sistema: 'sad69', ordem: ['v:2', 'v:0', 'v:2', 'x', 5, 'v:1'], titulos: { 'v:0': '  Marco M-01 ', 'v:9': 'a'.repeat(99), lixo: 'x', 'v:1': '   ' } } } }).pontos;
+eq('pontos: sistema inválido volta ao padrão; ordem sem duplicados nem ids inválidos; títulos limpos e limitados', [pn2.sistema, pn2.ordem, pn2.titulos['v:0'], pn2.titulos['v:9'].length, pn2.titulos.lixo, pn2.titulos['v:1']], ['utm', ['v:2', 'v:0', 'v:1'], 'Marco M-01', 40, undefined, undefined]);
+eq('ajustes trazem os pontos do usuário', MT.mergeAjustes(c0, { pontos: { ativo: true, ordem: ['v:1', 'v:3'] } }).pontos.ordem, ['v:1', 'v:3']);
+eq('ajustes não apagam o sistema do modelo', MT.mergeAjustes(MT.normalizeMapConfig({ mapa: { pontos: { sistema: 'geo_gms' } } }), { pontos: { ativo: true } }).pontos.sistema, 'geo_gms');
+
+const rows0 = MT.pointRows(quad, { sistema: 'utm', memorial: false, ordem: ['v:2', 'v:0'], titulos: { 'v:0': 'Marco 01' } });
+eq('tabela: pontos na ordem escolhida, título padrão pela posição', rows0.rows.map(r => [r.vid, r.titulo]), [['v:2', 'P1'], ['v:0', 'Marco 01']]);
+eq('tabela: coordenadas UTM', rows0.rows[1].cells, MT.coordCells(-7.02, -34.84, 'utm'));
+eq('tabela: cabeçalhos e rótulo do sistema', [rows0.headers, rows0.sistemaLabel], [['E (m)', 'N (m)'], 'SIRGAS 2000 / UTM zona 25S (EPSG:31985)']);
+ok('sem memorial não há azimute nem distância', rows0.rows[0].azimute === undefined && rows0.memorial === false);
+const rows1 = MT.pointRows(quad, { sistema: 'geo_dec', memorial: true, ordem: ['v:0', 'v:1', 'v:2', 'v:3'], titulos: {} });
+eq('memorial: polígono fecha voltando ao primeiro ponto', [rows1.fecha, rows1.rows.length], [true, 4]);
+near('memorial: azimute do lado L→O... v:0→v:1 é para Leste (~90°)', parseInt(rows1.rows[0].azimute, 10), 90, 1);
+eq('memorial: v:1→v:2 vai para o Norte (0°)', rows1.rows[1].azimute.split('°')[0], '0');
+ok('memorial: último ponto volta ao primeiro (v:3→v:0 para o Sul, 180°)', rows1.rows[3].azimute.split('°')[0] === '180');
+eq('memorial: distância do lado N-S ≈ 111,19 m', rows1.rows[1].distancia, MT.fmtNumber(MT.distanceM([-34.839, -7.02], [-34.839, -7.019]), 2));
+const rowsL = MT.pointRows(linha3, { sistema: 'utm', memorial: true, ordem: ['v:0', 'v:1', 'v:2'], titulos: {} });
+eq('memorial em linha: o último ponto não tem seguinte', [rowsL.fecha, rowsL.rows[2].azimute, rowsL.rows[2].distancia], [false, '—', '—']);
+const rowsD = MT.pointRows(quad, { sistema: 'utm', memorial: true, ordem: ['v:0', 'v:1'], titulos: {} });
+eq('memorial com 2 pontos de polígono não fecha', [rowsD.fecha, rowsD.rows[1].azimute], [false, '—']);
+eq('ponto que não existe mais é ignorado', MT.pointRows(quad, { sistema: 'utm', ordem: ['v:0', 'v:99'], titulos: {} }).rows.length, 1);
+ok('pontos escolhidos continuam valendo com mais de 400 vértices', (() => { const g = { type: 'LineString', coordinates: Array.from({ length: 401 }, (_, i) => [-34.8 + i * 1e-5, -7]) }; return MT.pointRows(g, { sistema: 'geo_dec', ordem: ['v:400'], titulos: {} }).rows.length === 1; })());
+
 console.log(`mapTools: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {
     console.error(`${failed} falha(s)`);

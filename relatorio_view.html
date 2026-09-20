@@ -121,6 +121,11 @@
         .report-measure { background: transparent; border: 0; }
         .report-measure-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; background: rgba(255,255,255,.92); color: #065f46; border: 1px solid #6ee7b7; border-radius: 4px; padding: 0 4px; font: 700 9px/14px monospace; cursor: text; }
         .report-measure-label.edited { border-style: dashed; color: #92400e; border-color: #f59e0b; }
+        .report-vertex-handle { cursor: pointer; }
+        @media print { .report-vertex-handle { display: none !important; } }
+        .report-point { background: transparent; border: 0; }
+        .report-point-dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #dc2626; border: 2px solid #fff; box-shadow: 0 0 0 1px #7f1d1d; }
+        .report-point-label { position: absolute; left: 7px; top: -18px; white-space: nowrap; background: rgba(255,255,255,.94); color: #7f1d1d; border: 1px solid #fca5a5; border-radius: 4px; padding: 0 4px; font: 700 9px/14px monospace; cursor: text; }
         .report-measure-input { width: 120px; font: 700 9px monospace; border: 1px solid #059669; border-radius: 3px; padding: 0 3px; outline: none; }
         @media print {
             .leaflet-control-zoom, #map-tools-panel, #map-tools-toggle { display: none !important; }
@@ -205,6 +210,10 @@
         let mapController = null;     // controlador do mini-mapa (src/reportMap.js)
         let mapBaseConfig = null;     // configuração definida no modelo
         let mapBloco = null;          // bloco 'mapa_estatico' do modelo
+        let renderArgs = null;        // últimos argumentos de renderBlocks (para repaginar sem perder o mapa)
+        let keptMapWrap = null;       // elemento do mapa (com o Leaflet vivo) que sobrevive à repaginação
+        let lastPontosKey = '';
+        let repaginateTimer = null;
 
         window.addEventListener('DOMContentLoaded', () => {
             initReportViewer();
@@ -548,7 +557,13 @@
             const blocos = tpl.blocos || [];
             const hdrBloco = blocos.find(b => b.tipo === 'cabecalho');
             const ftrBloco = blocos.find(b => b.tipo === 'rodape');
-            const bodyBlocos = blocos.filter(b => b.tipo !== 'cabecalho' && b.tipo !== 'rodape');
+            renderArgs = { tpl: tpl, featureData: featureData, featureGeometry: featureGeometry };
+            // a tabela de pontos (e o memorial) entra logo depois do mapa, com quebra entre folhas
+            const bodyBlocos = blocos.filter(b => b.tipo !== 'cabecalho' && b.tipo !== 'rodape').reduce((acc, b) => {
+                acc.push(b);
+                if (b.tipo === 'mapa_estatico') acc.push({ tipo: 'tabela_pontos_mapa', id: 'pts_' + (b.id || ''), _sintetico: true });
+                return acc;
+            }, []);
 
             const pageDims = PageSize.dims(tpl.config_pagina);
             const mm = (tpl.config_pagina && tpl.config_pagina.margens_mm) || { top: 15, bottom: 15, left: 15, right: 15 };
@@ -560,7 +575,7 @@
                 const globalIdx = blocos.indexOf(b);
                 const out = renderSingleBlock(b, globalIdx >= 0 ? globalIdx : bIdx, featureData, featureGeometry, fields, tpl);
                 return (out && typeof out === 'object' && out.split) ? { bloco: b, split: out.split } : { bloco: b, html: out };
-            });
+            }).filter(rb => !(rb.bloco._sintetico && !rb.split && !rb.html)); // sem pontos, a tabela não ocupa espaço
 
             // Medição de altura para distribuição em folhas
             let measureBox = document.getElementById('a4-measure-stage');
@@ -668,10 +683,19 @@
 
             docContainer.innerHTML = pagesHtml;
 
-            // Inicializa o Mini-Mapa Leaflet Interativo (com os ajustes que o usuário já salvou)
-            setTimeout(() => {
-                initReportMiniMap(featureGeometry);
-            }, 100);
+            if (mapController && keptMapWrap) {
+                // repaginação: o mapa (Leaflet vivo) volta para o novo lugar, sem recarregar nada
+                const fresh = document.getElementById('map-wrap');
+                if (fresh) fresh.replaceWith(keptMapWrap);
+                keptMapWrap = null;
+                mapController.invalidate();
+                mapController.refresh();
+            } else {
+                // Inicializa o Mini-Mapa Leaflet Interativo (com os ajustes que o usuário já salvou)
+                setTimeout(() => {
+                    initReportMiniMap(featureGeometry);
+                }, 100);
+            }
         }
 
         function getFieldWidthStyle(pct) {
@@ -825,7 +849,7 @@
                                 <span class="whitespace-pre-line">${(escapeHtml(bloco.titulo || 'Delimitação Cartográfica do Imóvel')).replace(/\r?\n/g, '<br>')}</span>
                             </div>
                             <!-- Mini-mapa Leaflet (configurado no painel "Mapa" à direita) -->
-                            <div class="relative rounded-lg overflow-hidden border border-slate-300 shadow-xs" style="height: ${mapPx}px;">
+                            <div id="map-wrap" class="relative rounded-lg overflow-hidden border border-slate-300 shadow-xs" style="height: ${mapPx}px;">
                                 <div id="interactive-report-map" class="w-full bg-slate-200 z-0" style="height: ${mapPx}px;"></div>
                                 <div id="map-north" class="report-map-overlay"><span class="material-symbols-outlined" style="font-size:18px;color:#fbbf24">navigation</span><span>N</span></div>
                                 <div id="map-info-bar" class="report-map-overlay"></div>
@@ -843,6 +867,9 @@
                         </div>
                     `;
                 }
+
+                case 'tabela_pontos_mapa':
+                    return renderPointsTable();
 
                 case 'caixa_texto_livre':
                 case 'texto_livre':
@@ -1321,12 +1348,69 @@
             const camadas = (reportPayload && Array.isArray(reportPayload.camadasMapa)) ? reportPayload.camadasMapa : [];
 
             try {
-                mapController = ReportMap.create({ L, MapTools, container: 'interactive-report-map', geometry, camadas, config });
+                lastPontosKey = JSON.stringify(config.pontos);
+                mapController = ReportMap.create({ L, MapTools, container: 'interactive-report-map', geometry, camadas, config, onChange: onMapChange });
             } catch (e) {
                 console.error('[Mapa] Erro ao criar o mini-mapa:', e);
                 return;
             }
             renderMapToolsPanel();
+            // pontos já salvos: a tabela precisa entrar na paginação
+            if (mapController.pointRows().rows.length && config.pontos.ativo && config.pontos.tabela) scheduleRepaginate();
+        }
+
+        // ---------------- pontos nos vértices: tabela (com memorial) e repaginação
+        function onMapChange(cfg) {
+            const key = JSON.stringify(cfg.pontos);
+            if (key === lastPontosKey) return;
+            lastPontosKey = key;
+            if (!mapController) return; // ainda montando
+            renderMapToolsPanel();
+            scheduleRepaginate();
+        }
+
+        function scheduleRepaginate() {
+            clearTimeout(repaginateTimer);
+            repaginateTimer = setTimeout(repaginateKeepingMap, 120);
+        }
+
+        function repaginateKeepingMap() {
+            if (!renderArgs || !mapController) return;
+            keptMapWrap = document.getElementById('map-wrap');
+            const y = window.scrollY;
+            renderBlocks(renderArgs.tpl, renderArgs.featureData, renderArgs.featureGeometry);
+            window.scrollTo(0, y);
+        }
+
+        function renderPointsTable() {
+            if (!mapController) return '';
+            const cfg = mapController.getConfig();
+            if (!cfg.pontos.ativo || !cfg.pontos.tabela) return '';
+            const pr = mapController.pointRows();
+            if (!pr.rows.length) return '';
+            const esc = escapeHtml;
+            const heads = ['Ponto'].concat(pr.headers, pr.memorial ? ['Azimute até o ponto seguinte', 'Distância (m)'] : []);
+            const alignNum = pr.sistema === 'utm' || pr.memorial;
+            const rowsHtml = pr.rows.map((r, i) => {
+                const cells = r.cells.map(c => `<td class="px-2 py-1 border-r border-slate-200 font-mono text-[10px] ${alignNum ? 'text-right' : ''}">${esc(c)}</td>`).join('');
+                const mem = pr.memorial ? `<td class="px-2 py-1 border-r border-slate-200 font-mono text-[10px] text-right">${esc(r.azimute)}</td><td class="px-2 py-1 font-mono text-[10px] text-right">${esc(r.distancia)}</td>` : '';
+                return `<tr data-split-row class="${i % 2 ? 'bg-slate-50/70' : 'bg-white'}" style="page-break-inside: avoid;"><td class="px-2 py-1 border-r border-slate-200 font-bold text-[10px] text-slate-800">${esc(r.titulo)}</td>${cells}${mem}</tr>`;
+            });
+            const thead = `<thead><tr class="bg-slate-100 border-b border-slate-200 text-slate-700">${heads.map(h => `<th class="px-2 py-1 border-r last:border-r-0 border-slate-200 text-[9.5px] font-bold uppercase tracking-wide leading-tight">${esc(h)}</th>`).join('')}</tr></thead>`;
+            const titulo = pr.memorial ? 'Memorial Descritivo — Tabela de Pontos' : 'Tabela de Pontos';
+            const nota = pr.memorial ? ` • azimutes a partir do Norte, distâncias em linha reta${pr.fecha ? ', fechando no primeiro ponto' : ''}` : '';
+            const meta = `${pr.rows.length} ponto(s) • ${pr.sistemaLabel}${nota}`;
+            const chunkHtml = (rows, isFirst) => `
+                <div class="mb-4">
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between gap-3">
+                        <span class="whitespace-pre-line">${esc(titulo)}${isFirst ? '' : ' (continuação)'}</span>
+                        <span class="text-[9.5px] font-mono text-slate-500 normal-case text-right">${esc(meta)}</span>
+                    </div>
+                    <div class="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+                        <table class="w-full text-left border-collapse">${thead}<tbody>${rows.join('')}</tbody></table>
+                    </div>
+                </div>`;
+            return { split: { rowsHtml, chunkHtml } };
         }
 
         // ---------------- painel "Mapa" (só na tela; não sai na impressão)
@@ -1352,6 +1436,8 @@
             const camadas = (reportPayload && Array.isArray(reportPayload.camadasMapa)) ? reportPayload.camadasMapa : [];
             const on = new Set(cfg.camadasLigadas.map(String));
             const esc = escapeHtml;
+            const pontosRows = mapController.pointRows().rows;
+            const scrollTop = panel.scrollTop;
             const chk = (id, label, checked, handler, disabled) => `<label class="row ${disabled ? 'off' : ''}"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="${handler}"> ${label}</label>`;
             const camadasHtml = !cfg.camadasVizinhas
                 ? '<div style="color:#64748b">O modelo não permite camadas neste mapa.</div>'
@@ -1377,6 +1463,25 @@
                     ${chk('mp-med-perim', 'Perímetro', cfg.medidas.perimetro, "mapPanelMedidas('perimetro', this.checked)", kind !== 'polygon')}
                     <div style="color:#64748b;line-height:1.35;margin:3px 0 4px">Dê <b>dois cliques</b> numa medida para editar o texto (vazio restaura o calculado). Arraste para mudar de lugar.${mapController.ladosOmitidos ? ' <span style="color:#b45309">Mais de 80 lados: rótulos dos lados omitidos.</span>' : ''}</div>
                     <button type="button" class="act" onclick="mapPanelResetMedidas()">Restaurar medidas calculadas</button>
+                    <h4>Pontos nos vértices</h4>
+                    ${chk('mp-pts', 'Marcar pontos nos vértices', cfg.pontos.ativo, "mapPanelPontos('ativo', this.checked)", mapController.vertexCount === 0)}
+                    <div style="color:#64748b;line-height:1.35;margin:2px 0 4px">Clique num vértice (círculo branco) para marcar; dois cliques no ponto para renomear. A tabela sai logo abaixo do mapa.${mapController.verticesOmitidos ? ' <span style="color:#b45309">Mais de 400 vértices: marcadores omitidos.</span>' : ''}</div>
+                    <select onchange="mapPanelPontos('sistema', this.value)" style="width:100%;padding:5px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:3px">
+                        ${MapTools.COORD_SYSTEMS.map(s => `<option value="${s.id}" ${cfg.pontos.sistema === s.id ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}
+                    </select>
+                    ${chk('mp-pts-tab', 'Tabela de pontos', cfg.pontos.tabela, "mapPanelPontos('tabela', this.checked)")}
+                    ${chk('mp-pts-mem', 'Memorial (azimute e distância)', cfg.pontos.memorial, "mapPanelPontos('memorial', this.checked)")}
+                    <div style="display:flex;gap:6px;margin:5px 0">
+                        <button type="button" class="act" onclick="mapPanelMarcarTodos()" ${(mapController.verticesOmitidos || !cfg.pontos.ativo) ? 'disabled style="opacity:.5"' : ''}>Marcar todos</button>
+                        <button type="button" class="act" onclick="mapPanelLimparPontos()">Limpar pontos</button>
+                    </div>
+                    ${pontosRows.length ? `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:4px">${pontosRows.map((r, i) => `
+                        <div style="display:flex;align-items:center;gap:3px;padding:2px 0">
+                            <input type="text" value="${esc(r.titulo)}" maxlength="40" onchange="mapPanelRenomear('${esc(r.vid)}', this.value)" style="flex:1;min-width:0;padding:2px 5px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px">
+                            <button type="button" title="Subir" onclick="mapPanelMover('${esc(r.vid)}', -1)" ${i === 0 ? 'disabled' : ''} style="border:0;background:none;cursor:pointer">▲</button>
+                            <button type="button" title="Descer" onclick="mapPanelMover('${esc(r.vid)}', 1)" ${i === pontosRows.length - 1 ? 'disabled' : ''} style="border:0;background:none;cursor:pointer">▼</button>
+                            <button type="button" title="Remover" onclick="mapPanelRemover('${esc(r.vid)}')" style="border:0;background:none;cursor:pointer;color:#b91c1c">×</button>
+                        </div>`).join('')}</div>` : ''}
                     <h4>Mapa base</h4>
                     <select onchange="mapPanelSet('baseMap', this.value)" style="width:100%;padding:5px;border:1px solid #cbd5e1;border-radius:8px">
                         <option value="osm" ${cfg.baseMap === 'osm' ? 'selected' : ''}>Ruas (OpenStreetMap)</option>
@@ -1395,6 +1500,7 @@
                     </div>
                     <div id="map-panel-status" style="margin-top:6px;color:#475569;min-height:16px"></div>
                 </div>`;
+            panel.scrollTop = scrollTop;
             panel.style.display = window.innerWidth < 1500 ? 'none' : '';
             if (toggle) toggle.style.display = window.innerWidth < 1500 ? '' : 'none';
         }
@@ -1405,6 +1511,12 @@
         }
         function mapPanelSet(key, value) { if (mapController) mapController.setConfig({ [key]: value }); }
         function mapPanelDestaque(key, value) { if (mapController) mapController.setConfig({ destaque: { [key]: value } }); }
+        function mapPanelPontos(key, value) { if (mapController) mapController.setConfig({ pontos: { [key]: value } }); }
+        function mapPanelMarcarTodos() { if (mapController) mapController.markAllPoints(); }
+        function mapPanelLimparPontos() { if (mapController) mapController.clearPoints(); }
+        function mapPanelRenomear(vid, txt) { if (mapController) mapController.renamePoint(vid, txt); }
+        function mapPanelMover(vid, dir) { if (mapController) mapController.movePoint(vid, dir); }
+        function mapPanelRemover(vid) { if (mapController) mapController.removePoint(vid); }
         function mapPanelMedidas(key, value) { if (mapController) mapController.setConfig({ medidas: { [key]: value } }); }
         function mapPanelResetMedidas() { if (mapController) mapController.resetMeasures(); }
         function mapPanelLayer(id, on) { if (mapController) mapController.toggleLayer(id, on); }

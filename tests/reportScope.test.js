@@ -63,7 +63,7 @@ ok('A4 marcado por padrão', /setPageSize\('A4'\)"[^>]*bg-primary/.test(html) &&
 ok('folha A4 no título', has(html, 'Folha A4 Interativa') && has(html, '210 × 297 mm (Retrato)'));
 
 // ---------------------------------------------------------------- Mini-Mapa (card do Relatório Individual)
-ok('card do mapa tem destaque, mapa base, camadas, norte, escala e projeção', ['cfg-map-med-ativo', 'cfg-map-med-lados', 'cfg-map-med-total', 'cfg-map-med-perim', 'cfg-map-destaque', 'cfg-map-esmaecer', 'cfg-map-cor', 'cfg-map-base', 'cfg-map-camadas', 'cfg-map-norte', 'cfg-map-escala', 'cfg-map-proj', 'cfg-map-altura'].every(id => has(html, 'id="' + id + '"')));
+ok('card do mapa tem destaque, mapa base, camadas, norte, escala e projeção', ['cfg-map-pts-ativo', 'cfg-map-pts-sistema', 'cfg-map-pts-tab', 'cfg-map-pts-mem', 'cfg-map-med-ativo', 'cfg-map-med-lados', 'cfg-map-med-total', 'cfg-map-med-perim', 'cfg-map-destaque', 'cfg-map-esmaecer', 'cfg-map-cor', 'cfg-map-base', 'cfg-map-camadas', 'cfg-map-norte', 'cfg-map-escala', 'cfg-map-proj', 'cfg-map-altura'].every(id => has(html, 'id="' + id + '"')));
 ok('card explica que o usuário ajusta no relatório', has(html, 'painel <em>Mapa</em> do relatório'));
 ok('o modelo padrão já traz o mapa na folha: o botão é "Atualizar"', has(html, 'Atualizar o Mini-Mapa da Folha'));
 ok('modo "Série Multitemporal" com dados de mentira saiu', !has(html, 'Série Multitemporal</button>') && !has(html, 'Voo Aerofotogramétrico'));
@@ -71,6 +71,7 @@ Object.assign(inputs, {
     'cfg-map-destaque': { checked: true }, 'cfg-map-esmaecer': { checked: true }, 'cfg-map-cor': { value: '#ff8800' },
     'cfg-map-base': { value: 'satelite' }, 'cfg-map-camadas': { checked: false }, 'cfg-map-norte': { checked: false },
     'cfg-map-escala': { checked: true }, 'cfg-map-proj': { checked: true },
+    'cfg-map-pts-ativo': { checked: true }, 'cfg-map-pts-sistema': { value: 'geo_gms' }, 'cfg-map-pts-tab': { checked: true }, 'cfg-map-pts-mem': { checked: true },
     'cfg-map-med-ativo': { checked: true }, 'cfg-map-med-lados': { checked: false }, 'cfg-map-med-total': { checked: true }, 'cfg-map-med-perim': { checked: true }, 'cfg-map-altura': { value: '120' }, 'cfg-map-note': { value: 'Nota X' }
 });
 RB.insertMapBlock();
@@ -79,6 +80,7 @@ let tplMapa = RA.getReportTemplates('f1')[0];
 let mapas = tplMapa.blocos.filter(b => b.tipo === 'mapa_estatico');
 eq('grava a configuração escolhida no UNICO bloco de mapa', [mapas.length, mapas[0].mapa.destaque.cor, mapas[0].mapa.destaque.esmaecerEntorno, mapas[0].mapa.baseMap, mapas[0].mapa.camadasVizinhas, mapas[0].mapa.norte, mapas[0].mapa.alturaMm, mapas[0].notaTecnica], [1, '#ff8800', true, 'satelite', false, false, 120, 'Nota X']);
 eq('medidas escolhidas ficam no modelo', mapas[0].mapa.medidas, { ativo: true, lados: false, total: true, perimetro: true });
+eq('pontos: padrão do modelo (sem os pontos do usuário)', [mapas[0].mapa.pontos.ativo, mapas[0].mapa.pontos.sistema, mapas[0].mapa.pontos.tabela, mapas[0].mapa.pontos.memorial, mapas[0].mapa.pontos.ordem, mapas[0].mapa.pontos.titulos], [true, 'geo_gms', true, true, [], {}]);
 ok('a vista, os textos editados e os rótulos arrastados (do usuário) não vão para o modelo', !('vista' in mapas[0].mapa) && !('edicoes' in mapas[0].mapa) && !('posicoes' in mapas[0].mapa));
 inputs['cfg-map-cor'].value = '#0000ff';
 RB.insertMapBlock();
@@ -90,6 +92,7 @@ ok('card passa a mostrar "Atualizar" e os valores salvos', has(container.innerHT
 RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
 const folha = sheet['a4-blocks-list'].innerHTML;
 ok('prévia na folha é esquemática e reflete a configuração', has(folha, 'Pré-visualização esquemática') && has(folha, 'Imagens © Esri') && has(folha, 'border: 3px solid #0000ff') && has(folha, 'height: 454px'));
+ok('prévia avisa que o usuário marca pontos e cita o memorial e o sistema', has(folha, 'marca pontos nos vértices') && has(folha, 'com memorial descritivo') && has(folha, 'graus, minutos e segundos'));
 ok('prévia mostra a área (medidas ligadas) e não os lados (desligados)', has(folha, 'Área 1.012,40 m²') && !has(folha, '25,40 m'));
 Object.keys(inputs).forEach(k => delete inputs[k]);
 

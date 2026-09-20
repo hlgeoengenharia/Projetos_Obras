@@ -30,7 +30,8 @@
         vista: null,             // { lat, lng, zoom } salvo pelo usuário; sem ele o mapa enquadra a feição
         medidas: { ativo: true, lados: true, total: true, perimetro: false }, // o que aparece sobre o mapa
         edicoes: {},             // { idDaMedida: 'texto que o usuário digitou' }
-        posicoes: {}             // { idDaMedida: { lat, lng } } (rótulo arrastado)
+        posicoes: {},            // { idDaMedida: { lat, lng } } (rótulo arrastado)
+        pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false, ordem: [], titulos: {} } // pontos nos vértices
     };
     const BASE_MAPS = ['osm', 'satelite', 'nenhum'];
 
@@ -68,7 +69,42 @@
             vista: normalizeVista(src.vista),
             medidas: normalizeMedidas(src.medidas),
             edicoes: normalizeEdicoes(src.edicoes),
-            posicoes: normalizePosicoes(src.posicoes)
+            posicoes: normalizePosicoes(src.posicoes),
+            pontos: normalizePontos(src.pontos)
+        };
+    }
+
+    const COORD_SYSTEMS = [
+        { id: 'utm', label: 'SIRGAS 2000 / UTM' },
+        { id: 'geo_dec', label: 'SIRGAS 2000 geográfica (graus decimais)' },
+        { id: 'geo_gms', label: 'SIRGAS 2000 geográfica (graus, minutos e segundos)' },
+        { id: 'wgs84_dec', label: 'WGS 84 (graus decimais)' }
+    ];
+    const MAX_PONTOS = 500;
+    const MAX_TITULO = 40;
+
+    function normalizePontos(p) {
+        const d = MAP_DEFAULTS.pontos;
+        p = p || {};
+        const ids = new Set();
+        const ordem = [];
+        (Array.isArray(p.ordem) ? p.ordem : []).forEach(v => {
+            if (typeof v === 'string' && /^v:[0-9]+$/.test(v) && !ids.has(v) && ordem.length < MAX_PONTOS) { ids.add(v); ordem.push(v); }
+        });
+        const titulos = {};
+        if (p.titulos && typeof p.titulos === 'object') {
+            Object.keys(p.titulos).forEach(k => {
+                if (!/^v:[0-9]+$/.test(k) || typeof p.titulos[k] !== 'string') return;
+                const txt = p.titulos[k].replace(/[\r\n]+/g, ' ').trim().slice(0, MAX_TITULO);
+                if (txt) titulos[k] = txt;
+            });
+        }
+        return {
+            ativo: p.ativo === undefined ? d.ativo : !!p.ativo,
+            sistema: COORD_SYSTEMS.some(s => s.id === p.sistema) ? p.sistema : d.sistema,
+            tabela: p.tabela === undefined ? d.tabela : !!p.tabela,
+            memorial: p.memorial === undefined ? d.memorial : !!p.memorial,
+            ordem, titulos
         };
     }
 
@@ -121,7 +157,8 @@
         if (!ajustes || typeof ajustes !== 'object') return config;
         return normalizeMapConfig({ mapa: Object.assign({}, config, ajustes, {
             destaque: Object.assign({}, config.destaque, ajustes.destaque || {}),
-            medidas: Object.assign({}, config.medidas, ajustes.medidas || {})
+            medidas: Object.assign({}, config.medidas, ajustes.medidas || {}),
+            pontos: Object.assign({}, config.pontos, ajustes.pontos || {})
         }) });
     }
 
@@ -333,6 +370,172 @@
         });
     }
 
+    // ------------------------------------------------------------------ coordenadas (UTM, graus decimais, GMS)
+    const GRS80_A = 6378137;
+    const GRS80_F = 1 / 298.257222101;
+    const UTM_K0 = 0.9996;
+
+    function utmCentralMeridian(zone) { return (zone - 1) * 6 - 180 + 3; }
+
+    /** lat/lng (graus) → UTM (E, N em metros; SIRGAS 2000/GRS80). Zona automática se não informada. */
+    function latLngToUtm(lat, lng, zone) {
+        zone = zone || projectionInfo(lat, lng).zone;
+        const south = lat < 0;
+        const n = GRS80_F / (2 - GRS80_F);
+        const A = GRS80_A / (1 + n) * (1 + n * n / 4 + Math.pow(n, 4) / 64);
+        const a1 = n / 2 - 2 * n * n / 3 + 5 * Math.pow(n, 3) / 16;
+        const a2 = 13 * n * n / 48 - 3 * Math.pow(n, 3) / 5;
+        const a3 = 61 * Math.pow(n, 3) / 240;
+        const phi = rad(lat);
+        const dl = rad(lng - utmCentralMeridian(zone));
+        const q = 2 * Math.sqrt(n) / (1 + n);
+        const tt = Math.sinh(Math.atanh(Math.sin(phi)) - q * Math.atanh(q * Math.sin(phi)));
+        const xi0 = Math.atan2(tt, Math.cos(dl));
+        const eta0 = Math.atanh(Math.sin(dl) / Math.sqrt(1 + tt * tt));
+        const al = [a1, a2, a3];
+        let xi = xi0, eta = eta0;
+        al.forEach((a, i) => {
+            const j = i + 1;
+            xi += a * Math.sin(2 * j * xi0) * Math.cosh(2 * j * eta0);
+            eta += a * Math.cos(2 * j * xi0) * Math.sinh(2 * j * eta0);
+        });
+        return { zone, hemisphere: south ? 'S' : 'N', e: 500000 + UTM_K0 * A * eta, n: UTM_K0 * A * xi + (south ? 10000000 : 0) };
+    }
+
+    /** UTM → lat/lng (graus). */
+    function utmToLatLng(e, nn, zone, south) {
+        const n = GRS80_F / (2 - GRS80_F);
+        const A = GRS80_A / (1 + n) * (1 + n * n / 4 + Math.pow(n, 4) / 64);
+        const b = [n / 2 - 2 * n * n / 3 + 37 * Math.pow(n, 3) / 96, n * n / 48 + Math.pow(n, 3) / 15, 17 * Math.pow(n, 3) / 480];
+        const d = [2 * n - 2 * n * n / 3 - 2 * Math.pow(n, 3), 7 * n * n / 3 - 8 * Math.pow(n, 3) / 5, 56 * Math.pow(n, 3) / 15];
+        const xi = (nn - (south ? 10000000 : 0)) / (UTM_K0 * A);
+        const eta = (e - 500000) / (UTM_K0 * A);
+        let xi1 = xi, eta1 = eta;
+        b.forEach((bj, i) => {
+            const j = i + 1;
+            xi1 -= bj * Math.sin(2 * j * xi) * Math.cosh(2 * j * eta);
+            eta1 -= bj * Math.cos(2 * j * xi) * Math.sinh(2 * j * eta);
+        });
+        const chi = Math.asin(Math.sin(xi1) / Math.cosh(eta1));
+        let phi = chi;
+        d.forEach((dj, i) => { phi += dj * Math.sin(2 * (i + 1) * chi); });
+        const lam = rad(utmCentralMeridian(zone)) + Math.atan2(Math.sinh(eta1), Math.cos(xi1));
+        return { lat: phi * 180 / Math.PI, lng: lam * 180 / Math.PI };
+    }
+
+    function pad2(n) { return n < 10 ? '0' + n : String(n); }
+
+    /** Graus, minutos e segundos: 7° 01' 08,22" S */
+    function fmtGms(value, posChar, negChar, casasSeg) {
+        casasSeg = casasSeg === undefined ? 2 : casasSeg;
+        const abs = Math.abs(value);
+        let d = Math.floor(abs);
+        let m = Math.floor((abs - d) * 60);
+        let s = ((abs - d) * 60 - m) * 60;
+        s = Number(s.toFixed(casasSeg));
+        if (s >= 60) { s = 0; m += 1; }
+        if (m >= 60) { m = 0; d += 1; }
+        const sTxt = (s < 10 ? '0' : '') + s.toFixed(casasSeg).replace('.', ',').replace(/^0(\d)/, '0$1');
+        return d + '° ' + pad2(m) + "' " + sTxt + '" ' + (value < 0 ? negChar : posChar);
+    }
+
+    /** Cabeçalhos das colunas de coordenada para o sistema escolhido. */
+    function coordHeaders(sistema, proj) {
+        if (sistema === 'utm') return ['E (m)', 'N (m)'];
+        return ['Latitude', 'Longitude'];
+    }
+
+    /** Células de coordenada (texto) para lat/lng no sistema escolhido. */
+    function coordCells(lat, lng, sistema) {
+        if (sistema === 'utm') {
+            const u = latLngToUtm(lat, lng);
+            return [fmtNumber(u.e, 2), fmtNumber(u.n, 2)];
+        }
+        if (sistema === 'geo_gms') return [fmtGms(lat, 'N', 'S'), fmtGms(lng, 'L', 'O')];
+        return [fmtNumber(lat, 6), fmtNumber(lng, 6)]; // geo_dec e wgs84_dec (SIRGAS 2000 e WGS 84 diferem em centímetros)
+    }
+
+    function coordSystemLabel(sistema, proj) {
+        if (sistema === 'utm') return (proj ? proj.datum + ' / UTM zona ' + proj.zone + proj.hemisphere : 'SIRGAS 2000 / UTM') + (proj && proj.epsg ? ' (EPSG:' + proj.epsg + ')' : '');
+        const s = COORD_SYSTEMS.find(x => x.id === sistema);
+        return s ? s.label : sistema;
+    }
+
+    /** Azimute (graus, 0–360, a partir do Norte no sentido horário) de a para b, ambos [lng, lat]. */
+    function azimuthDeg(a, b) {
+        const p1 = rad(a[1]), p2 = rad(b[1]), dl = rad(b[0] - a[0]);
+        const y = Math.sin(dl) * Math.cos(p2);
+        const x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+        return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+
+    function fmtAzimuth(deg) {
+        let d = Math.floor(deg);
+        let m = Math.floor((deg - d) * 60);
+        let s = Math.round(((deg - d) * 60 - m) * 60);
+        if (s >= 60) { s = 0; m += 1; }
+        if (m >= 60) { m = 0; d += 1; }
+        if (d >= 360) d = 0;
+        return d + '° ' + pad2(m) + "' " + pad2(s) + '"';
+    }
+
+    const MAX_VERTICES = 400; // acima disso os marcadores de vértice ficam de fora (poluição e lentidão)
+
+    /**
+     * Vértices da feição: { itens: [{ id:'v:0', lat, lng }], omitidos }. Polígonos: anéis externos sem repetir o ponto de fechamento.
+     */
+    function vertices(geometry) {
+        const all = allVertexList(geometry);
+        return all.length > MAX_VERTICES ? { itens: [], omitidos: true, total: all.length } : { itens: all, omitidos: false, total: all.length };
+    }
+
+    function defaultPointTitle(i) { return 'P' + (i + 1); }
+
+    /**
+     * Linhas da tabela de pontos, na ordem escolhida pelo usuário.
+     * Com memorial: azimute e distância até o ponto seguinte (polígono fecha voltando ao primeiro).
+     */
+    function pointRows(geometry, pontos, opts) {
+        const byId = {};
+        // com muitos vértices os marcadores ficam de fora, mas os pontos já escolhidos continuam valendo
+        allVertexList(geometry).forEach(v => { byId[v.id] = v; });
+        const bbox = geometryBBox(geometry);
+        const c = bbox ? bboxCenter(bbox) : [-34.8, -7];
+        const proj = projectionInfo(c[1], c[0]);
+        const ordem = (pontos.ordem || []).filter(id => byId[id]);
+        const g = geometry && geometry.type === 'Feature' ? geometry.geometry : geometry;
+        const fecha = !!g && /Polygon/.test(g.type) && ordem.length >= 3;
+        const rows = ordem.map((id, i) => {
+            const v = byId[id];
+            const row = { vid: id, titulo: (pontos.titulos && pontos.titulos[id]) || defaultPointTitle(i), lat: v.lat, lng: v.lng, cells: coordCells(v.lat, v.lng, pontos.sistema) };
+            if (pontos.memorial) {
+                const next = i < ordem.length - 1 ? byId[ordem[i + 1]] : (fecha ? byId[ordem[0]] : null);
+                if (next) {
+                    row.azimute = fmtAzimuth(azimuthDeg([v.lng, v.lat], [next.lng, next.lat]));
+                    row.distancia = fmtNumber(distanceM([v.lng, v.lat], [next.lng, next.lat]), 2);
+                } else { row.azimute = '—'; row.distancia = '—'; }
+            }
+            return row;
+        });
+        return { sistema: pontos.sistema, sistemaLabel: coordSystemLabel(pontos.sistema, proj), headers: coordHeaders(pontos.sistema, proj), memorial: !!pontos.memorial, fecha: fecha, rows: rows, proj: proj };
+    }
+
+    function allVertexList(geometry) {
+        // mesma numeração de vertices(), sem o limite
+        const g = geometry && geometry.type === 'Feature' ? geometry.geometry : geometry;
+        const out = [];
+        if (!g) return out;
+        const push = (c) => out.push({ id: 'v:' + out.length, lat: c[1], lng: c[0] });
+        const ring = (r) => { const n = r.length > 1 && r[0][0] === r[r.length - 1][0] && r[0][1] === r[r.length - 1][1] ? r.length - 1 : r.length; for (let i = 0; i < n; i++) push(r[i]); };
+        if (g.type === 'Polygon') ring(g.coordinates[0] || []);
+        else if (g.type === 'MultiPolygon') g.coordinates.forEach(p => ring(p[0] || []));
+        else if (g.type === 'LineString') g.coordinates.forEach(push);
+        else if (g.type === 'MultiLineString') g.coordinates.forEach(l => l.forEach(push));
+        else if (g.type === 'Point') push(g.coordinates);
+        else if (g.type === 'MultiPoint') g.coordinates.forEach(push);
+        return out;
+    }
+
     // ------------------------------------------------------------------ projeção e escala
     /** Zona UTM e identificação do sistema (SIRGAS 2000 no Brasil). */
     function projectionInfo(lat, lng) {
@@ -429,6 +632,7 @@
         MAP_DEFAULTS, BASE_MAPS,
         normalizeMapConfig, mergeAjustes,
         geometryBBox, bboxCenter, expandBBoxMeters, bboxIntersects, roundCoords, geomKind,
+        COORD_SYSTEMS, normalizePontos, latLngToUtm, utmToLatLng, fmtGms, coordHeaders, coordCells, coordSystemLabel, azimuthDeg, fmtAzimuth, vertices, defaultPointTitle, pointRows,
         distanceM, ringAreaM2, polygonAreaM2, lineLengthM, fmtNumber, computeMeasures, applyEdits, normalizeMedidas, normalizeEdicoes, normalizePosicoes,
         projectionInfo, scaleDenominator, niceScale, approxScale, formatScale, polygonOuterRings, normalizeVista,
         featureKey, collectNearbyLayers
