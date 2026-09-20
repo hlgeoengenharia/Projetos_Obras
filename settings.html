@@ -1224,7 +1224,7 @@
           </button>
         </div>
 
-        <div class="mb-6" id="form-name-block">
+        <div class="mb-6">
           <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Nome do Formulário</label>
           <input type="text" id="form-name" class="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:text-white transition-colors" placeholder="Ex: Cadastro de Imóveis, Vistoria Ambiental..." />
         </div>
@@ -1241,7 +1241,11 @@
           </button>
           <button type="button" id="builder-nav-reports" onclick="switchBuilderModule('reports')" class="flex items-center gap-2 px-4 py-2.5 rounded-t-xl font-bold text-xs sm:text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all cursor-pointer">
             <span class="material-symbols-outlined text-[18px]">picture_as_pdf</span>
-            <span id="builder-nav-reports-label">Relatórios Gerenciais (A4)</span>
+            <span id="builder-nav-reports-label">Relatório Individual</span>
+          </button>
+          <button type="button" id="builder-nav-reports-geral" onclick="switchBuilderModule('reports-geral')" class="flex items-center gap-2 px-4 py-2.5 rounded-t-xl font-bold text-xs sm:text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all cursor-pointer" title="Relatório gerencial da camada inteira (gráficos do Dashboard, cabeçalho, texto e rodapé)">
+            <span class="material-symbols-outlined text-[18px]">summarize</span>
+            <span>Relatório Geral</span>
           </button>
         </div>
 
@@ -1290,7 +1294,7 @@
                         <span class="material-symbols-outlined text-[17px]">analytics</span> Histórico Consolidado (Cross-Tabs)
                      </button>
                      <button type="button" id="btn-type-reports" onclick="updateActiveTabType('reports')" class="px-3.5 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5">
-                        <span class="material-symbols-outlined text-[17px]">description</span> Relatórios (A4)
+                        <span class="material-symbols-outlined text-[17px]">description</span> Relatórios
                      </button>
                   </div>
               </div>
@@ -1300,8 +1304,8 @@
                   <div class="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 rounded-xl p-4 text-xs text-emerald-950 dark:text-emerald-200 flex items-start gap-3">
                       <span class="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-[22px] shrink-0">description</span>
                       <div>
-                          <strong class="font-bold text-sm block mb-1">Aba de Relatórios (A4)</strong>
-                          Esta aba não tem campos. No popup da feição ela mostra apenas os <strong>botões dos Relatórios Gerenciais (A4)</strong> deste cadastro, exceto os marcados como <em>"Não exibir atalho no mapa"</em>. Novos relatórios aparecem aqui automaticamente.
+                          <strong class="font-bold text-sm block mb-1">Aba de Relatórios</strong>
+                          Esta aba não tem campos. No popup da feição ela mostra apenas os <strong>botões dos Relatórios Individuais</strong> deste cadastro, exceto os marcados como <em>"Não exibir atalho no mapa"</em>. Novos relatórios aparecem aqui automaticamente.
                       </div>
                   </div>
               </div>
@@ -1533,7 +1537,7 @@
       </div>
       <!-- Fim Módulo 2 (Dashboard) -->
 
-      <!-- MÓDULO 3: Relatórios Gerenciais (A4 Drag-and-Drop) -->
+      <!-- MÓDULO 3: Relatório Individual e Relatório Geral (Drag-and-Drop; o mesmo construtor, com escopos diferentes) -->
       <div id="builder-module-reports" class="hidden">
         <div id="report-builder-container"></div>
       </div>
@@ -3452,11 +3456,6 @@
               <button onclick="previewForm('${form.id}')" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-700/60 rounded-lg transition-colors tooltip cursor-pointer" title="Visualizar">
                 <span class="material-symbols-outlined text-[19px] sm:text-[20px]">visibility</span>
               </button>
-              ${isBound ? `
-              <button onclick="openLayerGeneralReportBuilder('${form.id}')" class="p-2 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-slate-700/60 rounded-lg transition-colors tooltip cursor-pointer" title="Relatório Geral da camada (Dashboard + Relatório Gerencial)">
-                <span class="material-symbols-outlined text-[19px] sm:text-[20px]">summarize</span>
-              </button>
-              ` : ''}
               <button onclick="editForm('${form.id}')" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-700/60 rounded-lg transition-colors tooltip cursor-pointer" title="Editar">
                 <span class="material-symbols-outlined text-[19px] sm:text-[20px]">edit</span>
               </button>
@@ -4247,29 +4246,13 @@
        activeTab.fields = fields;
      }
 
-     // 'form' = editor do cadastro (3 módulos); 'geral' = Relatório Geral da camada (Dashboard + Relatório Gerencial)
-    let builderScope = 'form';
-    let builderScopeLayerName = '';
-
-    function applyBuilderScopeUI() {
-       const geral = builderScope === 'geral';
-       const navFields = document.getElementById('builder-nav-fields');
-       const nameBlock = document.getElementById('form-name-block');
-       const reportsLabel = document.getElementById('builder-nav-reports-label');
-       if (navFields) navFields.classList.toggle('hidden', geral);
-       if (nameBlock) nameBlock.classList.toggle('hidden', geral);
-       if (reportsLabel) reportsLabel.textContent = geral ? 'Relatório Gerencial' : 'Relatórios Gerenciais (A4)';
-       if (geral) {
-          const title = document.getElementById('builder-title');
-          if (title) title.innerText = 'Relatório Geral — ' + (builderScopeLayerName || 'Camada');
-       }
-    }
-
-    function switchBuilderModule(moduleName) {
-       if (builderScope === 'geral' && moduleName === 'fields') moduleName = 'dashboard';
+     function switchBuilderModule(moduleName) {
+       // 'reports' = Relatório Individual; 'reports-geral' = Relatório Geral da camada (mesmo construtor, outro escopo)
+       const isReportsModule = moduleName === 'reports' || moduleName === 'reports-geral';
        const navFields = document.getElementById('builder-nav-fields');
        const navDash = document.getElementById('builder-nav-dashboard');
        const navReports = document.getElementById('builder-nav-reports');
+       const navReportsGeral = document.getElementById('builder-nav-reports-geral');
 
        const modFields = document.getElementById('builder-module-fields');
        const modDash = document.getElementById('builder-module-dashboard');
@@ -4281,30 +4264,19 @@
        if (navFields) navFields.className = (moduleName === 'fields') ? activeNavClass : inactiveNavClass;
        if (navDash) navDash.className = (moduleName === 'dashboard') ? activeNavClass : inactiveNavClass;
        if (navReports) navReports.className = (moduleName === 'reports') ? activeNavClass : inactiveNavClass;
+       if (navReportsGeral) navReportsGeral.className = (moduleName === 'reports-geral') ? activeNavClass : inactiveNavClass;
 
        if (modFields) modFields.classList.toggle('hidden', moduleName !== 'fields');
        if (modDash) modDash.classList.toggle('hidden', moduleName !== 'dashboard');
-       if (modReports) modReports.classList.toggle('hidden', moduleName !== 'reports');
+       if (modReports) modReports.classList.toggle('hidden', !isReportsModule);
 
-       if (moduleName === 'reports' && window.ReportBuilder && typeof window.ReportBuilder.initReportBuilderTab === 'function') {
+       if (isReportsModule && window.ReportBuilder && typeof window.ReportBuilder.initReportBuilderTab === 'function') {
            const formName = document.getElementById('form-name') ? document.getElementById('form-name').value : 'Formulário';
-           window.ReportBuilder.initReportBuilderTab(currentFormId, formName, { scope: builderScope === 'geral' ? 'geral' : 'individual' });
+           window.ReportBuilder.initReportBuilderTab(currentFormId, formName, { scope: moduleName === 'reports-geral' ? 'geral' : 'individual' });
        }
      }
 
-    /** Abre o editor do Relatório Geral da camada vinculada ao cadastro (só Dashboard Estatístico + Relatório Gerencial). */
-    function openLayerGeneralReportBuilder(formId) {
-       const bound = (typeof themesForForms !== 'undefined' ? themesForForms : []).find(t => t.formId && String(t.formId) === String(formId));
-       editForm(formId);
-       builderScope = 'geral';
-       builderScopeLayerName = bound ? (bound.name || 'Camada Vetorial') : '';
-       applyBuilderScopeUI();
-       switchBuilderModule('dashboard');
-    }
-
     function openFormBuilder() {
-      builderScope = 'form';
-      applyBuilderScopeUI();
       currentFormId = generateUUID();
       document.getElementById('form-name').value = '';
       document.getElementById('builder-title').innerText = 'Novo Formulário';
@@ -4331,8 +4303,6 @@
     }
 
     function closeFormBuilder() {
-      builderScope = 'form';
-      applyBuilderScopeUI();
       document.getElementById('forms-view').classList.remove('hidden');
       document.getElementById('form-builder-view').classList.add('hidden');
     }
@@ -4341,8 +4311,6 @@
       const form = forms.find(f => f.id === id || (isOrcamentoForm(id) && isOrcamentoForm(f)));
       if (!form) return;
       
-      builderScope = 'form';
-      applyBuilderScopeUI();
       currentFormId = isOrcamentoForm(form) ? ORCAMENTO_OBRA_FORM_ID : form.id;
       document.getElementById('form-name').value = form.name;
       document.getElementById('builder-title').innerText = isOrcamentoForm(form) ? 'Configurar Template: Orçamento de Obra (SINAPI / Caixa)' : 'Editar Formulário';

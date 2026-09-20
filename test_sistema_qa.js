@@ -524,7 +524,14 @@ const freshSettingsHtml = fs.readFileSync('settings.html', 'utf8');
 const hasSettingsReportsTab = freshSettingsHtml.includes('id="builder-module-reports"') &&
     freshSettingsHtml.includes('id="builder-nav-reports"') &&
     freshSettingsHtml.includes('switchBuilderModule');
-assertTest('Cadastros (settings.html): Abas do Construtor (Formulário, Dashboard, Relatórios A4) integradas', hasSettingsReportsTab);
+assertTest('Cadastros (settings.html): Abas do Construtor (Campos, Dashboard, Relatório Individual e Relatório Geral) integradas', hasSettingsReportsTab);
+
+const hasReportGeralTab = freshSettingsHtml.includes('id="builder-nav-reports-geral"') &&
+    freshSettingsHtml.includes("switchBuilderModule('reports-geral')") &&
+    freshSettingsHtml.includes('Relatório Individual') &&
+    freshSettingsHtml.includes('>Relatório Geral<') &&
+    !freshSettingsHtml.includes('openLayerGeneralReportBuilder');
+assertTest('Cadastros: aba "Relatório Geral" (ícone summarize) ao lado de "Relatório Individual" no editor do formulário; sem ícone de relatório no cartão do cadastro', hasReportGeralTab);
 
 const freshIndexHtml = fs.readFileSync('index.html', 'utf8');
 const hasIndexReportIntegration = freshIndexHtml.includes('id="btn-print-feature-report"') &&
