@@ -176,7 +176,7 @@ async function runScenario(cfg) {
         ok(`[${n}] folhas montadas`, /a4-page/.test(r.doc));
         ok(`[${n}] bloco do mini-mapa na folha`, /id="map-wrap"/.test(r.doc) && /id="interactive-report-map"/.test(r.doc));
         ok(`[${n}] Leaflet criado no contêiner do mapa`, r.mapsCreated.some(m => m.container === 'interactive-report-map'));
-        ok(`[${n}] painel "Mapa" existe e traz as seções`, /Mapa do relatório/.test(r.panel) && ['Feição em destaque', 'Medidas da feição', 'Pontos nos vértices', 'Análise temporal', 'Camadas ativas no mapa'].every(s => r.panel.includes(s)));
+        ok(`[${n}] painel "Mapa" existe e traz as seções`, /Configurações do Mapa/.test(r.panel) && !/Mapa do relatório/.test(r.panel) && ['Feição em destaque', 'Medidas da feição', 'Pontos nos vértices', 'Análise temporal', 'Extras do mapa', 'Mapa base', 'Camadas ativas no mapa', 'Elementos do mapa', 'Exportar'].every(s => r.panel.includes(s)));
         if (c.payload.ortofotos && c.payload.ortofotos.length) ok(`[${n}] painel lista a ortofoto`, /Ortofoto_10-02-2026/.test(r.panel));
         const temporalLigada = JSON.stringify(c.payload.template.blocos[1].mapa).includes('"temporal"') || (c.ajustes && c.ajustes.temporal && c.ajustes.temporal.ativo);
         if (temporalLigada) ok(`[${n}] quadro da análise temporal na folha e mapa criado`, /Análise Multitemporal de Ortofotos/.test(r.doc) && r.mapsCreated.some(m => m.container && m.container.id === 'tmap-r1'));
@@ -198,6 +198,33 @@ async function runScenario(cfg) {
         eq('mudar uma opção (o painel é redesenhado) não fecha o painel que o usuário abriu', estreita.registry['map-tools-panel'].style.display, 'block');
         estreita.sandbox.mapPanelHide();
         eq('recolher volta ao botão', [estreita.registry['map-tools-panel'].style.display, estreita.registry['map-tools-toggle'].style.display], ['none', 'block']);
+    }
+
+    // ---- painel em sanfona: uma seção aberta por vez; clicar na aberta recolhe; a escolha resiste ao redesenho do painel
+    {
+        const r = await runScenario({ width: 1900, opener: true, payload: cenarios[3].payload });
+        const abertas = () => (r.panel_() .match(/data-sec="([a-z]+)" class="sec-body" style="display:block"/g) || []).map(s => /data-sec="([a-z]+)"/.exec(s)[1]);
+        r.panel_ = () => r.registry['map-tools-panel']._html;
+        const cabecalhos = (r.panel_().match(/data-sec-h="[a-z]+"/g) || []).length;
+        eq('sanfona: nove títulos (feição, medidas, pontos, temporal, extras, base, camadas, elementos, exportar)', cabecalhos, 9);
+        eq('sanfona: ao abrir só "Feição em destaque" está aberta', abertas(), ['destaque']);
+        r.sandbox.mapPanelSecao('medidas');
+        r.sandbox.renderMapToolsPanel();
+        eq('sanfona: abrir outra recolhe a anterior (e vale após redesenhar)', abertas(), ['medidas']);
+        r.sandbox.mapPanelSecao('medidas');
+        r.sandbox.renderMapToolsPanel();
+        eq('sanfona: clicar na seção aberta a recolhe', abertas(), []);
+        r.sandbox.mapPanelSecao('base');
+        r.sandbox.renderMapToolsPanel();
+        ok('mapa base lista as ortofotos ativas do projeto', abertas()[0] === 'base' && /<optgroup label="Ortofotos ativas no projeto">/.test(r.panel_()) && /value="ortofoto:r1"/.test(r.panel_()) && /Ortofoto_10-02-2026/.test(r.panel_()));
+        r.sandbox.mapPanelSet('baseMap', 'ortofoto:r1');
+        r.sandbox.renderMapToolsPanel();
+        ok('escolher a ortofoto como base mantém a escolha no painel', /value="ortofoto:r1" selected/.test(r.panel_()));
+        r.sandbox.mapPanelSecao('destaque');
+        r.sandbox.mapPanelDestaque('esmaecerEntorno', true);
+        r.sandbox.renderMapToolsPanel();
+        ok('esmaecer ligado mostra o regulador de intensidade (padrão 60)', /id="mp-esmaecer-int"[^>]*value="60"/.test(r.panel_()));
+        eq('sem erro de execução na sanfona', r.errors, []);
     }
 
     // ---- emissão (protocolo + SHA-256) e exportação (PNG/Word/impressão)

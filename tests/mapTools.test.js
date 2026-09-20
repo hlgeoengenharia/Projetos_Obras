@@ -22,6 +22,8 @@ eq('modelo legado (exibirNorte/exibirEscala) é respeitado', (() => { const c = 
 eq('bloco.mapa vence o legado', MT.normalizeMapConfig({ exibirNorte: false, mapa: { norte: true } }).norte, true);
 const sujo = MT.normalizeMapConfig({ mapa: { baseMap: 'xyz', alturaMm: 9999, destaque: { cor: 'vermelho', espessura: -3, preenchimento: 5 } } });
 eq('valores inválidos voltam ao padrão / limites', [sujo.baseMap, sujo.alturaMm, sujo.destaque.cor, sujo.destaque.espessura, sujo.destaque.preenchimento], ['osm', 220, '#10b981', 1, 0.9]);
+eq('esmaecimento do entorno: padrão 0,6 e limites 0,1 a 0,95', [c0.destaque.opacidadeEntorno, MT.normalizeMapConfig({ mapa: { destaque: { opacidadeEntorno: 5 } } }).destaque.opacidadeEntorno, MT.normalizeMapConfig({ mapa: { destaque: { opacidadeEntorno: 0 } } }).destaque.opacidadeEntorno, MT.normalizeMapConfig({ mapa: { destaque: { opacidadeEntorno: 0.3 } } }).destaque.opacidadeEntorno], [0.6, 0.95, 0.1, 0.3]);
+eq('mapa base pode ser uma ortofoto ("ortofoto:id"); id estranho volta ao padrão', [MT.normalizeMapConfig({ mapa: { baseMap: 'ortofoto:abc-12' } }).baseMap, MT.normalizeMapConfig({ mapa: { baseMap: 'ortofoto:<x>' } }).baseMap, MT.normalizeMapConfig({ mapa: { baseMap: 'ortofoto:' } }).baseMap], ['ortofoto:abc-12', 'osm', 'osm']);
 eq('base satélite e nenhum são aceitas', [MT.normalizeMapConfig({ mapa: { baseMap: 'satelite' } }).baseMap, MT.normalizeMapConfig({ mapa: { baseMap: 'nenhum' } }).baseMap], ['satelite', 'nenhum']);
 
 const aj = MT.mergeAjustes(c0, { norte: false, baseMap: 'satelite', camadasLigadas: [7, 'b'], destaque: { esmaecerEntorno: true }, lixo: 1 });

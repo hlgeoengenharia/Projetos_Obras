@@ -152,7 +152,11 @@
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
         #map-tools-panel { position: fixed; top: 84px; right: 12px; width: 268px; max-height: calc(100vh - 100px); overflow-y: auto; z-index: 1200; background: #fff; border: 1px solid #cbd5e1; border-radius: 14px; box-shadow: 0 10px 30px rgba(15,23,42,.18); font-size: 12px; color: #0f172a; }
-        #map-tools-panel h4 { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #64748b; font-weight: 800; margin: 10px 0 4px; }
+        #map-tools-panel h4 { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #475569; font-weight: 800; margin: 0; padding: 9px 2px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; user-select: none; }
+        #map-tools-panel h4:hover { color: #0f172a; }
+        #map-tools-panel h4 .chev { font-size: 12px; transition: transform .15s; }
+        #map-tools-panel h4.open .chev { transform: rotate(180deg); }
+        #map-tools-panel .sec-body { padding: 6px 2px 8px; border-bottom: 1px solid #e2e8f0; }
         #map-tools-panel label.row { display: flex; align-items: center; gap: 7px; padding: 2px 0; cursor: pointer; }
         #map-tools-panel label.row.off { opacity: .45; cursor: not-allowed; }
         #map-tools-panel button.act { width: 100%; padding: 7px 8px; border-radius: 9px; font-weight: 700; font-size: 12px; cursor: pointer; border: 1px solid #cbd5e1; background: #f8fafc; }
@@ -1394,7 +1398,7 @@
 
             try {
                 lastPontosKey = blocosKey(config);
-                mapController = ReportMap.create({ L, MapTools, container: 'interactive-report-map', geometry, camadas, config, onChange: onMapChange });
+                mapController = ReportMap.create({ L, MapTools, container: 'interactive-report-map', geometry, camadas, ortofotos: (reportPayload && Array.isArray(reportPayload.ortofotos)) ? reportPayload.ortofotos : [], config, onChange: onMapChange });
             } catch (e) {
                 console.error('[Mapa] Erro ao criar o mini-mapa:', e);
                 return;
@@ -1613,6 +1617,8 @@
             const esc = escapeHtml;
             const pontosRows = mapController.pointRows().rows;
             const scrollTop = panel.scrollTop;
+            const secH = (id) => (mapPanelSecaoAberta === id ? 'open' : '');
+            const secD = (id) => (mapPanelSecaoAberta === id ? 'block' : 'none');
             const chk = (id, label, checked, handler, disabled) => `<label class="row ${disabled ? 'off' : ''}"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="${handler}"> ${label}</label>`;
             const cams = camadasDoPayload();
             const camOpts = (sel) => '<option value="">Escolha a camada…</option>' + cams.map(c => `<option value="${esc(c.id)}" ${String(sel) === String(c.id) ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
@@ -1664,6 +1670,7 @@
                             <span style="color:#64748b;font-size:10px">${esc(x.dataTxt)}</span>
                             ${statusTxt[x.status] ? `<span style="color:#b45309;font-size:10px">${statusTxt[x.status]}</span>` : ''}
                         </label>`).join('')}</div>`;
+            const ortofotosBase = (reportPayload && Array.isArray(reportPayload.ortofotos)) ? reportPayload.ortofotos : [];
             const camadasHtml = !cfg.camadasVizinhas
                 ? '<div style="color:#64748b">O modelo não permite camadas neste mapa.</div>'
                 : (camadas.length
@@ -1672,23 +1679,26 @@
 
             panel.innerHTML = `
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #e2e8f0">
-                    <strong style="font-size:13px">Mapa do relatório</strong>
+                    <strong style="font-size:13px">Configurações do Mapa</strong>
                     <button type="button" onclick="mapPanelHide()" style="border:0;background:none;cursor:pointer;font-size:16px;line-height:1" title="Recolher">×</button>
                 </div>
-                <div style="padding:2px 12px 12px">
-                    <h4>Feição em destaque</h4>
+                <div style="padding:0 12px 12px">
+                    <h4 data-sec-h="destaque" class="${secH('destaque')}" onclick="mapPanelSecao('destaque')">Feição em destaque<span class="chev">&#9662;</span></h4><div data-sec="destaque" class="sec-body" style="display:${secD('destaque')}">
                     ${chk('mp-destaque', 'Destacar a feição', cfg.destaque.ativo, "mapPanelDestaque('ativo', this.checked)")}
                     ${chk('mp-esmaecer', 'Esmaecer o entorno', cfg.destaque.esmaecerEntorno, "mapPanelDestaque('esmaecerEntorno', this.checked)", kind !== 'polygon')}
+                    ${cfg.destaque.esmaecerEntorno && kind === 'polygon' ? `<label class="row">Intensidade do esmaecimento <input type="range" id="mp-esmaecer-int" min="10" max="95" value="${Math.round(cfg.destaque.opacidadeEntorno * 100)}" oninput="mapPanelDestaque('opacidadeEntorno', this.value / 100)" style="flex:1"></label>` : ''}
                     <label class="row">Cor <input type="color" value="${esc(cfg.destaque.cor)}" oninput="mapPanelDestaque('cor', this.value)" style="width:34px;height:22px;padding:0;border:1px solid #cbd5e1"></label>
                     <label class="row">Preenchimento <input type="range" min="0" max="90" value="${Math.round(cfg.destaque.preenchimento * 100)}" oninput="mapPanelDestaque('preenchimento', this.value / 100)" style="flex:1"></label>
-                    <h4>Medidas da feição</h4>
+                    </div>
+                    <h4 data-sec-h="medidas" class="${secH('medidas')}" onclick="mapPanelSecao('medidas')">Medidas da feição<span class="chev">&#9662;</span></h4><div data-sec="medidas" class="sec-body" style="display:${secD('medidas')}">
                     ${chk('mp-med', 'Mostrar medidas no mapa', cfg.medidas.ativo, "mapPanelMedidas('ativo', this.checked)")}
                     ${chk('mp-med-lados', kind === 'line' ? 'Trechos' : 'Lados', cfg.medidas.lados, "mapPanelMedidas('lados', this.checked)", kind === 'point' || mapController.ladosOmitidos)}
                     ${chk('mp-med-total', kind === 'polygon' ? 'Área' : (kind === 'line' ? 'Comprimento total' : 'Coordenada'), cfg.medidas.total, "mapPanelMedidas('total', this.checked)")}
                     ${chk('mp-med-perim', 'Perímetro', cfg.medidas.perimetro, "mapPanelMedidas('perimetro', this.checked)", kind !== 'polygon')}
                     <div style="color:#64748b;line-height:1.35;margin:3px 0 4px">Dê <b>dois cliques</b> numa medida para editar o texto (vazio restaura o calculado). Arraste para mudar de lugar.${mapController.ladosOmitidos ? ' <span style="color:#b45309">Mais de 80 lados: rótulos dos lados omitidos.</span>' : ''}</div>
                     <button type="button" class="act" onclick="mapPanelResetMedidas()">Restaurar medidas calculadas</button>
-                    <h4>Pontos nos vértices</h4>
+                    </div>
+                    <h4 data-sec-h="pontos" class="${secH('pontos')}" onclick="mapPanelSecao('pontos')">Pontos nos vértices<span class="chev">&#9662;</span></h4><div data-sec="pontos" class="sec-body" style="display:${secD('pontos')}">
                     ${chk('mp-pts', 'Marcar pontos nos vértices', cfg.pontos.ativo, "mapPanelPontos('ativo', this.checked)", mapController.vertexCount === 0)}
                     <div style="color:#64748b;line-height:1.35;margin:2px 0 4px">Clique num vértice (círculo branco) para marcar; dois cliques no ponto para renomear. A tabela sai logo abaixo do mapa.${mapController.verticesOmitidos ? ' <span style="color:#b45309">Mais de 400 vértices: marcadores omitidos.</span>' : ''}</div>
                     <select onchange="mapPanelPontos('sistema', this.value)" style="width:100%;padding:5px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:3px">
@@ -1707,24 +1717,33 @@
                             <button type="button" title="Descer" onclick="mapPanelMover('${esc(r.vid)}', 1)" ${i === pontosRows.length - 1 ? 'disabled' : ''} style="border:0;background:none;cursor:pointer">▼</button>
                             <button type="button" title="Remover" onclick="mapPanelRemover('${esc(r.vid)}')" style="border:0;background:none;cursor:pointer;color:#b91c1c">×</button>
                         </div>`).join('')}</div>` : ''}
-                    <h4>Análise temporal (ortofotos)</h4>
+                    </div>
+                    <h4 data-sec-h="temporal" class="${secH('temporal')}" onclick="mapPanelSecao('temporal')">Análise temporal (ortofotos)<span class="chev">&#9662;</span></h4><div data-sec="temporal" class="sec-body" style="display:${secD('temporal')}">
                     ${temporalHtml}
-                    <h4>Extras do mapa</h4>
+                    </div>
+                    <h4 data-sec-h="extras" class="${secH('extras')}" onclick="mapPanelSecao('extras')">Extras do mapa<span class="chev">&#9662;</span></h4><div data-sec="extras" class="sec-body" style="display:${secD('extras')}">
                     ${extrasHtml}
-                    <h4>Mapa base</h4>
+                    </div>
+                    <h4 data-sec-h="base" class="${secH('base')}" onclick="mapPanelSecao('base')">Mapa base<span class="chev">&#9662;</span></h4><div data-sec="base" class="sec-body" style="display:${secD('base')}">
                     <select onchange="mapPanelSet('baseMap', this.value)" style="width:100%;padding:5px;border:1px solid #cbd5e1;border-radius:8px">
                         <option value="osm" ${cfg.baseMap === 'osm' ? 'selected' : ''}>Ruas (OpenStreetMap)</option>
                         <option value="satelite" ${cfg.baseMap === 'satelite' ? 'selected' : ''}>Satélite</option>
                         <option value="nenhum" ${cfg.baseMap === 'nenhum' ? 'selected' : ''}>Sem mapa base</option>
+                        ${ortofotosBase.length ? `<optgroup label="Ortofotos ativas no projeto">${ortofotosBase.map(x => `<option value="ortofoto:${esc(x.id)}" ${cfg.baseMap === 'ortofoto:' + x.id ? 'selected' : ''}>${esc(x.nome)}${x.dataTxt ? ' — ' + esc(x.dataTxt) : ''}</option>`).join('')}</optgroup>` : ''}
                     </select>
-                    <h4>Camadas ativas no mapa</h4>
+                    ${/^ortofoto:/.test(cfg.baseMap) ? '<div style="color:#64748b;line-height:1.35;margin-top:3px">A ortofoto fica sobre o satélite, que preenche o que ela não cobre.</div>' : ''}
+                    </div>
+                    <h4 data-sec-h="camadas" class="${secH('camadas')}" onclick="mapPanelSecao('camadas')">Camadas ativas no mapa<span class="chev">&#9662;</span></h4><div data-sec="camadas" class="sec-body" style="display:${secD('camadas')}">
                     ${camadasHtml}
-                    <h4>Elementos do mapa</h4>
+                    </div>
+                    <h4 data-sec-h="elementos" class="${secH('elementos')}" onclick="mapPanelSecao('elementos')">Elementos do mapa<span class="chev">&#9662;</span></h4><div data-sec="elementos" class="sec-body" style="display:${secD('elementos')}">
                     ${chk('mp-norte', 'Norte', cfg.norte, "mapPanelSet('norte', this.checked)")}
                     ${chk('mp-escala', 'Escala', cfg.escala, "mapPanelSet('escala', this.checked)")}
                     ${chk('mp-proj', 'Sistema de projeção', cfg.projecao, "mapPanelSet('projecao', this.checked)")}
-                    <h4>Exportar</h4>
+                    </div>
+                    <h4 data-sec-h="exportar" class="${secH('exportar')}" onclick="mapPanelSecao('exportar')">Exportar<span class="chev">&#9662;</span></h4><div data-sec="exportar" class="sec-body" style="display:${secD('exportar')}">
                     <button type="button" class="act" onclick="exportarMapaPng()">Salvar o mapa como imagem (PNG)</button>
+                    </div>
                     <div style="display:flex;gap:6px;margin-top:12px">
                         <button type="button" class="act primary" onclick="mapPanelSave()">Salvar ajustes</button>
                         <button type="button" class="act" onclick="mapPanelReset()">Restaurar</button>
@@ -1745,6 +1764,16 @@
             // valores explícitos: '' devolveria o controle ao CSS, que esconde o botão por padrão
             if (panel) panel.style.display = mapPanelOpen ? 'block' : 'none';
             if (toggle) toggle.style.display = mapPanelOpen ? 'none' : 'block';
+        }
+
+        // sanfona: só uma seção aberta; clicar na aberta recolhe. Vale entre redesenhos do painel.
+        let mapPanelSecaoAberta = 'destaque';
+        function mapPanelSecao(id) {
+            mapPanelSecaoAberta = mapPanelSecaoAberta === id ? null : id;
+            const panel = document.getElementById('map-tools-panel');
+            if (!panel) return;
+            panel.querySelectorAll('[data-sec]').forEach(d => { d.style.display = d.getAttribute('data-sec') === mapPanelSecaoAberta ? 'block' : 'none'; });
+            panel.querySelectorAll('[data-sec-h]').forEach(h => { h.classList.toggle('open', h.getAttribute('data-sec-h') === mapPanelSecaoAberta); });
         }
 
         function mapPanelHide() {

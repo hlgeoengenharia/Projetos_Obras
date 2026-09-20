@@ -19,8 +19,8 @@
 
     // ------------------------------------------------------------------ configuração do mapa
     const MAP_DEFAULTS = {
-        destaque: { ativo: true, cor: '#10b981', espessura: 3, preenchimento: 0.35, esmaecerEntorno: false },
-        baseMap: 'osm',          // 'osm' | 'satelite' | 'nenhum'
+        destaque: { ativo: true, cor: '#10b981', espessura: 3, preenchimento: 0.35, esmaecerEntorno: false, opacidadeEntorno: 0.6 },
+        baseMap: 'osm',          // 'osm' | 'satelite' | 'nenhum' | 'ortofoto:<id>' (ortofoto ativa no projeto)
         camadasVizinhas: true,   // permite ao usuário ligar as camadas ativas do mapa
         camadasLigadas: [],      // ids das camadas vizinhas ligadas
         norte: true,
@@ -65,9 +65,10 @@
                 cor: isHexColor(sd.cor) ? sd.cor : d.destaque.cor,
                 espessura: clamp(sd.espessura, 1, 8, d.destaque.espessura),
                 preenchimento: clamp(sd.preenchimento, 0, 0.9, d.destaque.preenchimento),
-                esmaecerEntorno: !!sd.esmaecerEntorno
+                esmaecerEntorno: !!sd.esmaecerEntorno,
+                opacidadeEntorno: clamp(sd.opacidadeEntorno, 0.1, 0.95, d.destaque.opacidadeEntorno)
             },
-            baseMap: BASE_MAPS.includes(src.baseMap) ? src.baseMap : d.baseMap,
+            baseMap: (BASE_MAPS.includes(src.baseMap) || /^ortofoto:[A-Za-z0-9_.:-]{1,64}$/.test(String(src.baseMap || ''))) ? src.baseMap : d.baseMap,
             camadasVizinhas: src.camadasVizinhas === undefined ? d.camadasVizinhas : !!src.camadasVizinhas,
             camadasLigadas: Array.isArray(src.camadasLigadas) ? src.camadasLigadas.map(String) : [],
             norte: src.norte !== undefined ? !!src.norte : (legadoNorte !== undefined ? !!legadoNorte : d.norte),

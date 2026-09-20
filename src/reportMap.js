@@ -34,6 +34,7 @@
         const MT = opts.MapTools;
         const doc = opts.doc || (typeof document !== 'undefined' ? document : null);
         const camadas = Array.isArray(opts.camadas) ? opts.camadas : [];
+        const ortofotos = Array.isArray(opts.ortofotos) ? opts.ortofotos : []; // ortofotos ativas no projeto (opção de mapa base)
         const geometry = opts.geometry || null;
         let cfg = JSON.parse(JSON.stringify(opts.config));
 
@@ -41,7 +42,7 @@
         const map = L.map(opts.container, { zoomControl: true, attributionControl: true, zoomSnap: 0.25, preferCanvas: true });
         if (map.attributionControl && map.attributionControl.setPrefix) map.attributionControl.setPrefix(false);
 
-        const state = { base: null, feature: null, mask: null, neighbors: {}, scaleControl: null, markers: {}, pts: {}, nlabels: {}, grid: [], notes: {}, locator: null, exporting: false };
+        const state = { base: null, orto: null, feature: null, mask: null, neighbors: {}, scaleControl: null, markers: {}, pts: {}, nlabels: {}, grid: [], notes: {}, locator: null, exporting: false };
         const vertData = MT.vertices(opts.geometry || null); // vértices onde o usuário pode marcar pontos
         const measureData = MT.computeMeasures(opts.geometry || null); // { itens, ladosOmitidos }
         const tileLayers = {};
@@ -58,10 +59,34 @@
         function show(e, on) { if (e && e.style) e.style.display = on ? '' : 'none'; }
 
         // ------------------------------------------------------------ camadas do mapa
+        // Ortofoto como mapa base: vai sobre o satélite, que preenche o que ela não cobre
+        const ortoLayers = {};
+        function ortofotoDoBase() {
+            const m = /^ortofoto:(.+)$/.exec(String(cfg.baseMap || ''));
+            return m ? ortofotos.find(o => String(o.id) === m[1]) || null : null;
+        }
+        function ortoLayer(o) {
+            if (!ortoLayers[o.id]) {
+                if (o.tipo === 'xyz_tiles' || String(o.url).indexOf('{z}') >= 0) {
+                    ortoLayers[o.id] = L.tileLayer(o.url, { minZoom: 1, minNativeZoom: o.zoomMin, maxNativeZoom: o.zoomMax, maxZoom: 24, opacity: o.opacidade, attribution: 'Ortofoto: ' + o.nome, crossOrigin: true });
+                } else if (o.bbox) {
+                    ortoLayers[o.id] = L.imageOverlay(o.url, o.bbox, { opacity: o.opacidade, crossOrigin: true, attribution: 'Ortofoto: ' + o.nome });
+                }
+            }
+            return ortoLayers[o.id] || null;
+        }
         function applyBase() {
             if (state.base) { map.removeLayer(state.base); state.base = null; }
-            if (cfg.baseMap !== 'nenhum' && tileLayers[cfg.baseMap]) {
-                state.base = tileLayers[cfg.baseMap];
+            if (state.orto) { map.removeLayer(state.orto); state.orto = null; }
+            const o = ortofotoDoBase();
+            if (o) {
+                state.base = tileLayers.satelite;
+                state.base.addTo(map);
+                state.orto = ortoLayer(o);
+                if (state.orto) state.orto.addTo(map);
+            } else if (cfg.baseMap !== 'nenhum') {
+                // ortofoto que não está mais disponível volta para o mapa de ruas
+                state.base = tileLayers[cfg.baseMap] || tileLayers.osm;
                 state.base.addTo(map);
             }
         }
@@ -115,7 +140,7 @@
             if (!rings.length) return; // só polígonos têm "entorno" a esmaecer
             const world = [[-90, -540], [-90, 540], [90, 540], [90, -540]];
             const holes = rings.map(r => r.map(p => [p[1], p[0]]));
-            state.mask = L.polygon([world].concat(holes), { stroke: false, fillColor: '#ffffff', fillOpacity: 0.6, interactive: false });
+            state.mask = L.polygon([world].concat(holes), { stroke: false, fillColor: '#ffffff', fillOpacity: cfg.destaque.opacidadeEntorno, interactive: false });
             state.mask.addTo(map);
         }
 

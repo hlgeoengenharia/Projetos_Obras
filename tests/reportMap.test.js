@@ -135,6 +135,9 @@ eq('cor inválida é ignorada', t.layersOf('geojson')[0].args.o.style().color, '
 t.ctl.setConfig({ destaque: { esmaecerEntorno: true } });
 ok('esmaecer entorno: máscara com o polígono como buraco', t.layersOf('polygon').length === 1 && t.layersOf('polygon')[0].args.p.length === 2);
 ok('máscara fica abaixo do destaque (adicionada antes)', Array.from(t.map.layers).findIndex(l => l.kind === 'polygon') < Array.from(t.map.layers).findIndex(l => l.kind === 'geojson'));
+eq('esmaecer: intensidade padrão 0,6', t.layersOf('polygon')[0].args.o.fillOpacity, 0.6);
+t.ctl.setConfig({ destaque: { opacidadeEntorno: 0.85 } });
+eq('esmaecer: o regulador muda a intensidade da máscara', [t.layersOf('polygon').length, t.layersOf('polygon')[0].args.o.fillOpacity], [1, 0.85]);
 t.ctl.setConfig({ destaque: { ativo: false } });
 ok('sem destaque não há máscara', t.layersOf('polygon').length === 0);
 
@@ -145,6 +148,18 @@ t.ctl.setConfig({ baseMap: 'nenhum' });
 ok('sem mapa base: nenhum tile e fundo branco', t.layersOf('tile').length === 0 && t.map.cont.style.background === '#ffffff');
 t.ctl.setConfig({ baseMap: 'osm' });
 ok('volta ao OSM', t.layersOf('tile').length === 1);
+{
+    const orto = { id: 'r9', nome: 'Ortofoto 2026', url: 'https://s/{z}/{x}/{y}.png', tipo: 'xyz_tiles', zoomMin: 14, zoomMax: 22, bbox: null, opacidade: 1 };
+    const b = build({ mapa: { baseMap: 'ortofoto:r9' } }, undefined, { ortofotos: [orto] });
+    ok('ortofoto como mapa base: satélite por baixo e a ortofoto por cima, com crédito', b.layersOf('tile').length === 2 && /arcgisonline/.test(b.layersOf('tile')[0].args.u) && b.layersOf('tile')[1].args.u === orto.url && /Ortofoto 2026/.test(b.layersOf('tile')[1].args.o.attribution));
+    b.ctl.setConfig({ baseMap: 'osm' });
+    ok('trocar para ruas tira a ortofoto', b.layersOf('tile').length === 1 && /openstreetmap/.test(b.layersOf('tile')[0].args.u));
+    b.ctl.setConfig({ baseMap: 'ortofoto:r9' });
+    b.ctl.setConfig({ baseMap: 'nenhum' });
+    ok('sem mapa base tira também a ortofoto', b.layersOf('tile').length === 0);
+    const sem = build({ mapa: { baseMap: 'ortofoto:r9' } }, undefined, { ortofotos: [] });
+    ok('ortofoto que não está mais ativa: cai no mapa de ruas', sem.layersOf('tile').length === 1 && /openstreetmap/.test(sem.layersOf('tile')[0].args.u));
+}
 
 // ---------------------------------------------------------------- camadas vizinhas
 t = build({});
