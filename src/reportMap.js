@@ -37,10 +37,11 @@
         const geometry = opts.geometry || null;
         let cfg = JSON.parse(JSON.stringify(opts.config));
 
-        const map = L.map(opts.container, { zoomControl: true, attributionControl: true, zoomSnap: 0.25 });
+        // preferCanvas: os vetores vão para um canvas, que a captura da imagem (Word/PNG) copia sem deslocamento
+        const map = L.map(opts.container, { zoomControl: true, attributionControl: true, zoomSnap: 0.25, preferCanvas: true });
         if (map.attributionControl && map.attributionControl.setPrefix) map.attributionControl.setPrefix(false);
 
-        const state = { base: null, feature: null, mask: null, neighbors: {}, scaleControl: null, markers: {}, pts: {} };
+        const state = { base: null, feature: null, mask: null, neighbors: {}, scaleControl: null, markers: {}, pts: {}, exporting: false };
         const vertData = MT.vertices(opts.geometry || null); // vértices onde o usuário pode marcar pontos
         const measureData = MT.computeMeasures(opts.geometry || null); // { itens, ladosOmitidos }
         const tileLayers = {};
@@ -217,9 +218,9 @@
             clearPointLayers();
             if (!cfg.pontos.ativo) return;
             const chosen = new Set(cfg.pontos.ordem);
-            // vértices ainda livres: clique marca o ponto
+            // vértices ainda livres: clique marca o ponto (somem na impressão e na exportação da imagem)
             vertData.itens.forEach(v => {
-                if (chosen.has(v.id)) return;
+                if (chosen.has(v.id) || state.exporting) return;
                 const h = L.circleMarker([v.lat, v.lng], { radius: 5, color: '#334155', weight: 1.5, fillColor: '#ffffff', fillOpacity: 1, interactive: true, bubblingMouseEvents: false, className: 'report-vertex-handle' });
                 h.addTo(map);
                 h.on('click', () => api.addPoint(v.id));
@@ -385,6 +386,8 @@
                 setPontos({ ativo: true, ordem: vertData.itens.map(v => v.id) });
             },
             clearPoints() { setPontos({ ordem: [], titulos: {} }); },
+            /** Liga/desliga o modo de saída (impressão, PNG, Word): sem marcadores de vértice livres. */
+            setExportMode(on) { if (state.exporting === !!on) return; state.exporting = !!on; applyPoints(); },
             /** Redesenha tudo (depois que a página trocou os elementos de sobreposição). */
             refresh() { apply(); }
         };

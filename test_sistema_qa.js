@@ -1001,6 +1001,10 @@ assertTest('Segurança: relatorios_templates sem acesso anônimo (script de cria
     templatesSecSql.includes('REVOKE ALL ON public.relatorios_templates FROM anon') &&
     !/TO\s+authenticated\s*,\s*anon/i.test(semComentariosSql(templatesSecSql)) &&
     /TO\s+authenticated/i.test(semComentariosSql(templatesSecSql)));
+const emissoesSql = fs.existsSync('supabase_relatorios_emissoes.sql') ? fs.readFileSync('supabase_relatorios_emissoes.sql', 'utf8') : '';
+assertTest('Emissões: tabela relatorios_emissoes com RLS por usuário, sem acesso anônimo e sem alterar/apagar (trilha de auditoria)', emissoesSql.includes('ENABLE ROW LEVEL SECURITY') && emissoesSql.includes('user_id = auth.uid()') && emissoesSql.includes('REVOKE ALL ON public.relatorios_emissoes FROM anon') && emissoesSql.includes('REVOKE UPDATE, DELETE'));
+const viewerExportCode = fs.readFileSync('relatorio_view.html', 'utf8');
+assertTest('Relatório: protocolo e SHA-256 reais (sem valores fixos), impressão e Word passam pela emissão, mapas exportados como imagem', viewerExportCode.includes('src/reportExport.js') && viewerExportCode.includes('html2canvas') && viewerExportCode.includes('imprimirRelatorio') && viewerExportCode.includes('capturarMapasDoRelatorio') && viewerExportCode.includes('data-emissao="hash"') && !viewerExportCode.includes('8a4f91e') && !viewerExportCode.includes("slice(-6).toUpperCase()"));
 assertTest('Mini-Mapa: o relatório gerado tem o painel "Mapa" (destaque, camadas, base, norte/escala/projeção, salvar e restaurar) e a tabela de ajustes com RLS por usuário', hasMiniMapViewer && hasAjustesSql);
 
 // ------------------------------------------------------------------------------
@@ -1013,6 +1017,7 @@ assertTest('Mini-Mapa: o relatório gerado tem o painel "Mapa" (destaque, camada
     ['tests/builderLaudoPreview.test.js', 'Construtor: prévia do Laudo com uma seção ABERTA por aba (campos reais, arraste, largura, 1:N na íntegra) e sequência de abas (↑ ↓)'],
     ['tests/mapTools.test.js', 'Mini-mapa: configuração normalizada, ajustes do usuário, bbox, projeção SIRGAS 2000 UTM, escala e recorte das camadas ativas ao redor da feição'],
     ['tests/reportMap.test.js', 'Mini-mapa (Leaflet simulado): destaque, esmaecer entorno, mapa base, camadas ligáveis com legenda, norte, escala, projeção, crédito do mapa e vista salva'],
+    ['tests/reportExport.test.js', 'Emissão e exportação: SHA-256 (vetores conhecidos), protocolo, Word A4/A3 em MHTML com imagens embutidas, mapas viram imagem e quadros viram tabela'],
     ['tests/viewerSmoke.test.js', 'Visualizador inteiro (script real com DOM simulado): folhas, mini-mapa, painel "Mapa" (aberto/recolhido, botão visível), pontos e análise temporal em vários cenários, sem erro de execução'],
     ['tests/reportTemporal.test.js', 'Análise temporal: um quadro por ortofoto (ordem por data, cobertura testada no local, colunas, sincronia, contorno, mapas vivos na repaginação)'],
     ['tests/viewerPoints.test.js', 'Tabela de pontos e memorial descritivo no relatório: coordenadas por sistema, azimute/distância, fechamento do polígono, quebra entre folhas e escape de HTML'],

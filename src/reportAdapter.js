@@ -672,8 +672,51 @@
         }
     }
 
+    // =====================================================================================
+    // EMISSÕES: cada vez que o usuário imprime ou exporta, fica registrado protocolo + SHA-256 do conteúdo
+    // (tabela relatorios_emissoes no Supabase, com reserva no navegador).
+    // =====================================================================================
+    const STORAGE_KEY_EMISSOES = 'constructive_report_emissoes';
+    const STORAGE_KEY_EMISSOES_REMOTE = 'constructive_report_emissoes_remote';
+    let isRemoteEmissoesTableAvailable = (function() {
+        try { if (localStorage.getItem(STORAGE_KEY_EMISSOES_REMOTE) === 'false') return false; } catch(e) {}
+        return null;
+    })();
+
+    /** Registra a emissão. Devolve { ok, remoto }. Emitir de novo o mesmo conteúdo no mesmo dia não duplica. */
+    async function registrarEmissao(emissao) {
+        if (!emissao || !emissao.protocolo || !emissao.hash) return { ok: false, remoto: false };
+        const registro = {
+            protocolo: String(emissao.protocolo), hash: String(emissao.hash), template_id: emissao.templateId ? String(emissao.templateId) : null,
+            feature_key: emissao.featureKey ? String(emissao.featureKey) : null, form_id: emissao.formId ? String(emissao.formId) : null,
+            formato: emissao.formato ? String(emissao.formato) : null
+        };
+        try {
+            const lista = JSON.parse(localStorage.getItem(STORAGE_KEY_EMISSOES) || '[]');
+            if (!lista.some(r => r.protocolo === registro.protocolo && r.formato === registro.formato)) {
+                lista.push(Object.assign({ emitido_em: new Date().toISOString() }, registro));
+                localStorage.setItem(STORAGE_KEY_EMISSOES, JSON.stringify(lista.slice(-200)));
+            }
+        } catch(e) { /* sem armazenamento local: segue para o servidor */ }
+        if (isRemoteEmissoesTableAvailable === false || typeof supabaseClient === 'undefined' || !supabaseClient) return { ok: true, remoto: false };
+        try {
+            const { error } = await supabaseClient.from('relatorios_emissoes').upsert(registro, { onConflict: 'protocolo,formato,user_id', ignoreDuplicates: true });
+            if (error) {
+                if (isMissingTableError(error)) {
+                    isRemoteEmissoesTableAvailable = false;
+                    try { localStorage.setItem(STORAGE_KEY_EMISSOES_REMOTE, 'false'); } catch(e) {}
+                }
+                return { ok: true, remoto: false };
+            }
+            return { ok: true, remoto: true };
+        } catch(e) {
+            return { ok: true, remoto: false };
+        }
+    }
+
     // Exportação global desacoplada
     window.ReportAdapter = {
+        registrarEmissao,
         getAjustes,
         saveAjustes,
         getFormFields,

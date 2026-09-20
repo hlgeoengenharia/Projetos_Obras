@@ -32,6 +32,15 @@ function fakeClient(opts) {
     return {
         rows, calls,
         from(table) {
+            if (table === 'relatorios_emissoes') {
+                return {
+                    async upsert(row, o) {
+                        calls.emissoes = (calls.emissoes || 0) + 1; calls.emissaoArgs = { row, o };
+                        if (opts.missingEmissoes) return { error: { code: 'PGRST205', message: 'not found' } };
+                        return { error: null };
+                    }
+                };
+            }
             if (table !== 'relatorios_ajustes') throw new Error('tabela inesperada ' + table);
             return {
                 select() {
@@ -99,6 +108,29 @@ function fakeClient(opts) {
     eq('sem Supabase: navegador', [r.ok, r.remoto], [true, false]);
     eq('sem Supabase: lê do navegador', await A.getAjustes('rpt1', '10'), { projecao: false });
     eq('chave vazia não salva nem lê', [(await A.saveAjustes('rpt1', '', 'f', {})).ok, await A.getAjustes('', '10')], [false, null]);
+
+    // ---------------------------------------------------------------- emissões (protocolo + SHA-256)
+    const em = { protocolo: '20260920-7F83B165', hash: '7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069', templateId: 'rpt1', featureKey: '10', formId: 'f1', formato: 'impressao' };
+    const cliE = fakeClient();
+    ({ A, store } = makeEnv(cliE));
+    r = await A.registrarEmissao(em);
+    eq('emissão registrada no servidor', [r.ok, r.remoto], [true, true]);
+    eq('linha enviada com protocolo, hash, modelo, feição e formato (sem user_id: o banco preenche)', [cliE.calls.emissaoArgs.row.protocolo, cliE.calls.emissaoArgs.row.hash.length, cliE.calls.emissaoArgs.row.template_id, cliE.calls.emissaoArgs.row.feature_key, cliE.calls.emissaoArgs.row.formato, 'user_id' in cliE.calls.emissaoArgs.row], ['20260920-7F83B165', 64, 'rpt1', '10', 'impressao', false]);
+    eq('conflito é ignorado (não duplica nem altera o registro)', cliE.calls.emissaoArgs.o, { onConflict: 'protocolo,formato,user_id', ignoreDuplicates: true });
+    await A.registrarEmissao(em);
+    eq('reemitir o mesmo protocolo/formato não duplica no navegador', JSON.parse(store['constructive_report_emissoes']).length, 1);
+    await A.registrarEmissao(Object.assign({}, em, { formato: 'word' }));
+    eq('outro formato do mesmo protocolo é outro registro', JSON.parse(store['constructive_report_emissoes']).length, 2);
+    r = await A.registrarEmissao({ protocolo: '', hash: 'x' });
+    eq('sem protocolo ou hash não registra', r, { ok: false, remoto: false });
+    const cliM = fakeClient({ missingEmissoes: true });
+    ({ A, store } = makeEnv(cliM));
+    r = await A.registrarEmissao(em);
+    eq('sem a tabela: fica no navegador e fecha o circuito', [r.ok, r.remoto, store['constructive_report_emissoes_remote']], [true, false, 'false']);
+    await A.registrarEmissao(Object.assign({}, em, { formato: 'word' }));
+    eq('circuito fechado: não insiste no servidor', cliM.calls.emissoes, 1);
+    ({ A } = makeEnv(null));
+    eq('sem Supabase: navegador', (await A.registrarEmissao(em)).remoto, false);
 
     console.log(`reportAjustes: ${total - failed}/${total} verificações passaram`);
     if (failed > 0) {

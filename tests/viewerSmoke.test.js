@@ -32,7 +32,7 @@ function tplWith(mapa, extraBlocks) {
         id: 'rpt_smoke', nome: 'Ficha Individual', tipo: 'individual', form_id: 'f1',
         config_pagina: { tamanho: 'A4', orientacao: 'portrait', margens_mm: { top: 15, bottom: 15, left: 15, right: 15 } },
         blocos: [
-            { id: 'h', tipo: 'cabecalho', titulo: 'FICHA CADASTRAL', subtitulo: 'Prefeitura' },
+            { id: 'h', tipo: 'cabecalho', titulo: 'FICHA CADASTRAL', subtitulo: 'Prefeitura', exibirProtocolo: true, exibirDataHora: true },
             { id: 'm', tipo: 'mapa_estatico', titulo: 'Delimitação Cartográfica', mapa: mapa, notaTecnica: 'Nota técnica X' },
             { id: 'g', tipo: 'grade_campos', titulo: 'Dados', colunasLayout: 2, campos_selecionados: [] }
         ].concat(extraBlocks || [], [{ id: 'f', tipo: 'rodape', numeracao: true }])
@@ -50,6 +50,7 @@ async function runScenario(cfg) {
             appendChild(c) { this.children.push(c); if (c && c.id) registry[c.id] = c; return c; },
             removeChild() {}, remove() { if (this.id) delete registry[this.id]; },
             replaceWith(o) { if (this.id) registry[this.id] = o; },
+            cloneNode() { const c = makeEl(tag); c._html = this._html; return c; },
             querySelector: () => null, querySelectorAll: () => [],
             getBoundingClientRect: () => ({ height: 120, width: 700 }),
             get offsetHeight() { return 120; },
@@ -69,7 +70,8 @@ async function runScenario(cfg) {
     const documentStub = {
         body: makeEl('body'), documentElement: { style: { setProperty() {} } }, head: makeEl('head'), title: '',
         getElementById: (id) => registry[id] || null, createElement: (tag) => makeEl(tag),
-        querySelector: () => null, querySelectorAll: () => [], addEventListener() {}
+        querySelector: () => null, addEventListener() {},
+        querySelectorAll: (sel) => (String(sel).includes('report-tframe-wrap') ? Object.values(registry).filter(e => e.id && e.id.startsWith('tmap-wrap-')) : [])
     };
 
     const mapsCreated = [];
@@ -87,37 +89,45 @@ async function runScenario(cfg) {
     const timers = [];
     const listeners = {};
     // janela de origem (a página do mapa) com o adaptador de ajustes, como no uso real
-    const opener = cfg.opener ? { closed: false, ReportAdapter: { getAjustes: async () => cfg.ajustes || null, saveAjustes: async () => ({ ok: true, remoto: false }) } } : null;
+    const captured = { blobs: [], alerts: [], registros: [], prints: 0, downloads: [] };
+    const opener = cfg.opener ? { closed: false, ReportAdapter: { getAjustes: async () => cfg.ajustes || null, saveAjustes: async () => ({ ok: true, remoto: false }), registrarEmissao: async (e) => { captured.registros.push(e); return { ok: true, remoto: false }; } } } : null;
     const windowStub = {
         addEventListener: (ev, fn) => { (listeners[ev] = listeners[ev] || []).push(fn); },
         location: { search: '?templateId=rpt_smoke', href: '' }, localStorage: storage, sessionStorage: storage, opener,
-        innerWidth: cfg.width || 1900, scrollY: 0, scrollTo() {}, print() {}, getSelection: () => ({ removeAllRanges() {}, addRange() {} })
+        innerWidth: cfg.width || 1900, scrollY: 0, scrollTo() {}, print() { captured.prints++; }, getSelection: () => ({ removeAllRanges() {}, addRange() {} })
     };
     const sandbox = {
         window: windowStub, document: documentStub, localStorage: storage, sessionStorage: storage, L: Lstub, navigator: {},
         console: { log() {}, info() {}, warn() {}, error: (...a) => { errors.push(a.map(String).join(' ')); } },
         setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].fn = null; },
         Image: function () { Object.defineProperty(this, 'src', { set: () => {} }); },
-        alert() {}, confirm: () => true, URL, Blob: function () {}
+        alert: (m) => captured.alerts.push(String(m)), confirm: () => true,
+        URL: { createObjectURL: (b) => { captured.downloads.push(b); return 'blob:x'; }, revokeObjectURL() {} },
+        Blob: function (parts, opts) { this.parts = parts; this.type = opts && opts.type; captured.blobs.push(this); },
+        crypto: require('crypto').webcrypto, TextEncoder, btoa, atob,
+        html2canvas: cfg.semHtml2canvas ? undefined : async () => { if (cfg.capturaFalha) throw new Error('CORS'); return { toDataURL: () => 'data:image/png;base64,QUJD' }; }
     };
     sandbox.self = sandbox.window;
     vm.createContext(sandbox);
     localScripts.forEach(src => { try { vm.runInContext(read(src), sandbox, { filename: src }); } catch (e) { errors.push('script ' + src + ': ' + e.message); } });
-    ['PageSize', 'MapTools', 'ReportMap', 'ReportTemporal', 'FieldFormatter', 'ReportData'].forEach(n => { if (windowStub[n]) sandbox[n] = windowStub[n]; });
+    ['PageSize', 'MapTools', 'ReportMap', 'ReportTemporal', 'ReportExport', 'FieldFormatter', 'ReportData'].forEach(n => { if (windowStub[n]) sandbox[n] = windowStub[n]; });
     sandbox.unhandled = [];
     try { vm.runInContext(pageScript, sandbox, { filename: 'relatorio_view.html(inline)' }); } catch (e) { errors.push('script da página: ' + e.stack); }
     (listeners.DOMContentLoaded || []).forEach(fn => { try { fn(); } catch (e) { errors.push('DOMContentLoaded: ' + e.stack); } });
 
     const onRej = (e) => errors.push('promessa rejeitada: ' + (e && e.stack || e));
-    process.on('unhandledRejection', onRej);
-    for (let i = 0; i < 14; i++) {
-        const fila = timers.splice(0, timers.length);
-        fila.forEach(tm => { if (tm.fn) { try { tm.fn(); } catch (e) { errors.push('timer: ' + e.stack); } } });
-        await new Promise(r => setImmediate(r));
-        await new Promise(r => setImmediate(r));
+    async function settle(n) {
+        process.on('unhandledRejection', onRej);
+        for (let i = 0; i < (n || 14); i++) {
+            const fila = timers.splice(0, timers.length);
+            fila.forEach(tm => { if (tm.fn) { try { tm.fn(); } catch (e) { errors.push('timer: ' + e.stack); } } });
+            await new Promise(r => setImmediate(r));
+            await new Promise(r => setTimeout(r, 4)); // o SHA-256 (WebCrypto) termina em outra thread
+        }
+        process.removeListener('unhandledRejection', onRej);
     }
-    process.removeListener('unhandledRejection', onRej);
-    return { sandbox, registry, errors, mapsCreated, doc: registry['a4-document-container']._html, panel: registry['map-tools-panel'] ? registry['map-tools-panel']._html : '' };
+    await settle(14);
+    return { sandbox, registry, errors, mapsCreated, captured, listeners, settle, doc: registry['a4-document-container']._html, panel: registry['map-tools-panel'] ? registry['map-tools-panel']._html : '' };
 }
 
 (async () => {
@@ -159,6 +169,67 @@ async function runScenario(cfg) {
         eq('mudar uma opção (o painel é redesenhado) não fecha o painel que o usuário abriu', estreita.registry['map-tools-panel'].style.display, 'block');
         estreita.sandbox.mapPanelHide();
         eq('recolher volta ao botão', [estreita.registry['map-tools-panel'].style.display, estreita.registry['map-tools-toggle'].style.display], ['none', 'block']);
+    }
+
+    // ---- emissão (protocolo + SHA-256) e exportação (PNG/Word/impressão)
+    {
+        const hoje = new Date();
+        const pad = (n) => (n < 10 ? '0' : '') + n;
+        const ymd = '' + hoje.getFullYear() + pad(hoje.getMonth() + 1) + pad(hoje.getDate());
+        const cen = { opener: true, payload: { templateId: 'rpt_smoke', template: tplWith({ temporal: { ativo: true } }), formId: 'f1', formFields: [], formTabs: [], featureData: { id_banco: 10, nome: 'Fulano' }, featureGeometry: quad, featureKey: '10', camadasMapa: [camadaA], ortofotos: [orto1] } };
+        const r = await runScenario(cen);
+        const est = () => r.sandbox.eval ? null : require('vm').runInContext('emissao', r.sandbox);
+        let em = est();
+        ok('SHA-256 real calculado ao abrir (64 caracteres hexadecimais)', /^[0-9a-f]{64}$/.test(em.hash));
+        ok('protocolo no formato AAAAMMDD-XXXXXXXX com a data de hoje e o começo do hash', new RegExp('^' + ymd + '-[0-9A-F]{8}$').test(em.protocolo) && em.protocolo.slice(9) === em.hash.slice(0, 8).toUpperCase());
+        ok('cabeçalho e rodapé usam o protocolo e o hash calculados', r.doc.includes('data-emissao="protocolo"') && r.doc.includes('data-emissao="hash"') && !/8a4f91e/.test(r.doc));
+
+        // o hash acompanha o conteúdo
+        const h0 = em.hash;
+        r.sandbox.mapPanelSet('norte', false);
+        await r.settle(4);
+        ok('mudar uma opção do mapa muda o hash', est().hash !== h0 && /^[0-9a-f]{64}$/.test(est().hash));
+        r.sandbox.mapPanelSet('norte', true);
+        await r.settle(4);
+        eq('voltando ao estado anterior, o hash volta a ser o mesmo (determinístico)', est().hash, h0);
+
+        // impressão
+        await r.sandbox.imprimirRelatorio();
+        eq('imprimir: chama a impressão uma vez', r.captured.prints, 1);
+        eq('imprimir: registra a emissão com protocolo, hash, modelo e feição', r.captured.registros.map(x => [x.formato, x.protocolo === est().protocolo, x.hash === est().hash, x.templateId, x.featureKey]), [['impressao', true, true, 'rpt_smoke', '10']]);
+        r.listeners.beforeprint.forEach(fn => fn());
+        r.listeners.afterprint.forEach(fn => fn());
+
+        // Word
+        await r.sandbox.gerarWord();
+        const blob = r.captured.blobs[r.captured.blobs.length - 1];
+        const arquivo = blob.parts.join('');
+        eq('Word: tipo e registro da emissão', [blob.type, r.captured.registros.map(x => x.formato)], ['application/msword', ['impressao', 'word']]);
+        ok('Word: arquivo MHTML (multipart/related) com HTML e imagens', /MIME-Version: 1.0/.test(arquivo) && /multipart\/related/.test(arquivo) && /Content-Type: image\/png/.test(arquivo));
+        ok('Word: o mapa e o quadro da ortofoto viraram duas imagens', /imagem1\.png/.test(arquivo) && /imagem2\.png/.test(arquivo) && !/imagem3\.png/.test(arquivo));
+        const partes = arquivo.split(/--[^\r\n]*_Relatorio_[^\r\n]*/);
+        const htmlDoMhtml = (s) => Buffer.from(s.split('\r\n\r\n')[2].replace(/\s+/g, ''), 'base64').toString('utf8');
+        const htmlWord = htmlDoMhtml(arquivo);
+        ok('Word: sem o mapa interativo dentro do HTML e com papel A4', !/id="map-wrap"|interactive-report-map|tmap-wrap-r1/.test(htmlWord) && /size: 595\.3pt 841\.9pt/.test(htmlWord));
+        ok('Word: o protocolo da emissão vai no documento', htmlWord.includes(est().protocolo));
+        ok('Word: quadros da análise temporal em tabela (sem grade CSS)', /<table[^>]*>[\s\S]*imagem|<td/.test(htmlWord) && !/display:grid/.test(htmlWord));
+        eq('Word: sem avisos quando todas as capturas funcionam', r.captured.alerts, []);
+        eq('exportar/imprimir não geram erro de execução', r.errors, []);
+
+        // captura que falha (ex.: tiles sem CORS): o Word sai, com aviso no lugar do mapa
+        const f = await runScenario(Object.assign({}, cen, { capturaFalha: true }));
+        await f.sandbox.gerarWord();
+        const arqF = f.captured.blobs[f.captured.blobs.length - 1].parts.join('');
+        const htmlF = htmlDoMhtml(arqF);
+        ok('captura falhou: o Word sai mesmo assim, com aviso no lugar dos mapas e um alerta ao usuário', /não foi possível gerar a imagem/.test(htmlF) && !/id="map-wrap"/.test(htmlF) && f.captured.alerts.length === 1 && /2 mapa/.test(f.captured.alerts[0]));
+        const sem = await runScenario(Object.assign({}, cen, { semHtml2canvas: true }));
+        await sem.sandbox.gerarWord();
+        ok('sem a biblioteca de captura (sem internet): o Word sai com aviso', sem.captured.alerts.length === 1 && sem.captured.blobs.length >= 1);
+
+        // PNG do mapa
+        const antes = r.captured.downloads.length;
+        await r.sandbox.exportarMapaPng();
+        eq('PNG do mapa: baixa um arquivo image/png', [r.captured.downloads.length - antes, r.captured.blobs[r.captured.blobs.length - 1].type], [1, 'image/png']);
     }
 
     console.log(`viewerSmoke: ${total - failed}/${total} verificações passaram`);

@@ -20,6 +20,8 @@
     <script src="src/mapTools.js"></script>
     <script src="src/reportMap.js"></script>
     <script src="src/reportTemporal.js"></script>
+    <script src="src/reportExport.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="src/fieldFormatter.js"></script>
     <script src="src/reportData.js"></script>
     
@@ -189,7 +191,7 @@
             </button>
 
             <!-- Botão Imprimir -->
-            <button type="button" onclick="window.print()" class="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="Imprimir em impressora ou salvar como PDF">
+            <button type="button" onclick="imprimirRelatorio()" class="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="Imprimir em impressora ou salvar como PDF">
                 <span class="material-symbols-outlined text-[17px]">print</span>
                 <span>Imprimir</span>
             </button>
@@ -218,6 +220,9 @@
         let renderArgs = null;        // últimos argumentos de renderBlocks (para repaginar sem perder o mapa)
         let keptMapWrap = null;       // elemento do mapa (com o Leaflet vivo) que sobrevive à repaginação
         let temporalController = null; // análise temporal (src/reportTemporal.js)
+        let emissao = { hash: '', protocolo: '', erro: '' }; // protocolo e SHA-256 da emissão (recalculados quando o conteúdo muda)
+        const emissaoData = new Date();                       // dia da emissão (entra no protocolo)
+        let emissaoTimer = null;
         let mapPanelOpen = null;       // painel "Mapa" aberto? (null = ainda não decidido; decide pela largura da tela)
         let lastPontosKey = '';
         let repaginateTimer = null;
@@ -333,6 +338,8 @@
         }
 
         function initReportViewer() {
+            const docBox = document.getElementById('a4-document-container');
+            if (docBox) docBox.addEventListener('input', () => scheduleEmissao());
             // Recupera o payload de dados salvo pela aplicação principal
             try {
                 const raw = sessionStorage.getItem('constructive_active_report_payload') || 
@@ -473,7 +480,7 @@
                                 ${hdrBloco.exibirProtocolo ? `
                                     <div class="flex items-center gap-1 font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/60">
                                         <span class="text-slate-400 font-normal">Protocolo:</span>
-                                        <span>#${(hdrBloco.id || '2026').slice(-6).toUpperCase()}</span>
+                                        <span data-emissao="protocolo">${emissaoTexto('protocolo')}</span>
                                     </div>
                                 ` : ''}
                             </div>
@@ -505,7 +512,7 @@
                     <div class="border-t border-slate-300 pt-2 text-[10px] text-slate-500 flex items-center justify-between font-mono page-break-avoid w-full">
                         <div>
                             ${ftrBloco.exibirDataHora !== false ? `Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}` : ''}
-                            ${ftrBloco.exibirHash !== false ? `<span class="ml-2 font-bold text-slate-600">SHA-256: ${(ftrBloco.id || '8a4f91e').slice(-8)}...</span>` : ''}
+                            ${ftrBloco.exibirHash !== false ? `<span class="ml-2 font-bold text-slate-600">SHA-256: <span data-emissao="hash" title="${emissaoTitulo()}">${emissaoTexto('hash')}</span></span>` : ''}
                         </div>
                         <div class="font-bold text-slate-700">
                             ${pageText}
@@ -707,6 +714,7 @@
                 }, 100);
             }
             if (temporalController) temporalController.attach();
+            scheduleEmissao();
         }
 
         function getFieldWidthStyle(pct) {
@@ -824,7 +832,7 @@
                                     ${bloco.exibirProtocolo ? `
                                         <div class="flex items-center gap-1 font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/60">
                                             <span class="text-slate-400 font-normal">Protocolo:</span>
-                                            <span>#${(bloco.id || '2026').slice(-6).toUpperCase()}</span>
+                                            <span data-emissao="protocolo">${emissaoTexto('protocolo')}</span>
                                         </div>
                                     ` : ''}
                                 </div>
@@ -922,7 +930,7 @@
                         <div class="border-t border-slate-300 pt-2 mt-auto text-[10px] text-slate-500 flex items-center justify-between font-mono page-break-avoid w-full">
                             <div>
                                 ${bloco.exibirDataHora !== false ? `Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}` : ''}
-                                ${bloco.exibirHash !== false ? `<span class="ml-2 font-bold text-slate-600">SHA-256: 8a4f91e...</span>` : ''}
+                                ${bloco.exibirHash !== false ? `<span class="ml-2 font-bold text-slate-600">SHA-256: <span data-emissao="hash" title="${emissaoTitulo()}">${emissaoTexto('hash')}</span></span>` : ''}
                             </div>
                             <div class="font-bold text-slate-700">
                                 ${bloco.numeracao !== false ? pageText : ''}
@@ -1375,8 +1383,8 @@
                 temporalController = ReportTemporal.create({
                     L, MapTools, geometry, ortofotos, config: config.temporal, corContorno: config.destaque.cor,
                     probe: makeOrtofotoProbe(geometry),
-                    onStructureChange: () => { renderMapToolsPanel(); scheduleRepaginate(); },
-                    onChange: () => renderMapToolsPanel()
+                    onStructureChange: () => { renderMapToolsPanel(); scheduleRepaginate(); scheduleEmissao(); },
+                    onChange: () => { renderMapToolsPanel(); scheduleEmissao(); }
                 });
                 if (config.temporal.ativo) temporalController.start();
             }
@@ -1413,6 +1421,7 @@
 
         // ---------------- pontos nos vértices: tabela (com memorial) e repaginação
         function onMapChange(cfg) {
+            scheduleEmissao();
             const key = JSON.stringify(cfg.pontos);
             if (key === lastPontosKey) return;
             lastPontosKey = key;
@@ -1572,6 +1581,8 @@
                     ${chk('mp-norte', 'Norte', cfg.norte, "mapPanelSet('norte', this.checked)")}
                     ${chk('mp-escala', 'Escala', cfg.escala, "mapPanelSet('escala', this.checked)")}
                     ${chk('mp-proj', 'Sistema de projeção', cfg.projecao, "mapPanelSet('projecao', this.checked)")}
+                    <h4>Exportar</h4>
+                    <button type="button" class="act" onclick="exportarMapaPng()">Salvar o mapa como imagem (PNG)</button>
                     <div style="display:flex;gap:6px;margin-top:12px">
                         <button type="button" class="act primary" onclick="mapPanelSave()">Salvar ajustes</button>
                         <button type="button" class="act" onclick="mapPanelReset()">Restaurar</button>
@@ -1635,8 +1646,10 @@
         window.addEventListener('beforeprint', () => {
             window._savedDocTitle = document.title;
             document.title = '';
+            if (mapController) mapController.setExportMode(true); // vértices livres não saem no papel
         });
         window.addEventListener('afterprint', () => {
+            if (mapController) mapController.setExportMode(false);
             if (window._savedDocTitle) {
                 document.title = window._savedDocTitle;
             }
@@ -1646,86 +1659,159 @@
             window.print();
         }
 
-        /**
-         * Gera download de arquivo .doc formatado nativamente para Microsoft Word
-         */
-        function gerarWord() {
-            const docElement = document.getElementById('a4-document-container');
-            if (!docElement) return;
+        // =====================================================================================
+        // EMISSÃO: protocolo + SHA-256 do conteúdo, calculados a partir do que está na folha
+        // =====================================================================================
+        function emissaoTexto(kind) {
+            if (emissao.erro) return kind === 'protocolo' ? 'indisponível' : 'indisponível';
+            if (!emissao.hash) return 'a gerar…';
+            return kind === 'protocolo' ? '#' + emissao.protocolo : emissao.hash.slice(0, 16) + '…';
+        }
+        function emissaoTitulo() {
+            return emissao.erro ? escapeHtml(emissao.erro) : escapeHtml(emissao.hash || '');
+        }
 
-            // Clona o elemento para limpar botões e elementos no-print
-            const clone = docElement.cloneNode(true);
-            clone.querySelectorAll('.no-print').forEach(el => el.remove());
+        function aplicarEmissaoNoDom() {
+            document.querySelectorAll('[data-emissao="protocolo"]').forEach(e => { e.textContent = emissaoTexto('protocolo'); });
+            document.querySelectorAll('[data-emissao="hash"]').forEach(e => { e.textContent = emissaoTexto('hash'); e.title = emissao.hash || emissao.erro || ''; });
+        }
 
-            const htmlBody = clone.innerHTML;
-            const docTitle = document.getElementById('report-header-title')?.textContent || 'Relatorio_Oficial';
+        /** Tudo que o hash garante: modelo, feição, ajustes do mapa (com o zoom atual) e textos editados na folha. */
+        function coletarConteudoParaHash() {
+            const args = renderArgs || {};
+            const snap = mapController ? snapshotCompleto() : null;
+            const temporal = snap ? snap.temporal : null;
+            if (snap) delete snap.temporal;
+            return {
+                template: args.tpl, featureKey: mapAjusteIds().key, featureData: args.featureData, geometry: args.featureGeometry,
+                mapa: snap, temporal: temporal,
+                textos: Array.from(document.querySelectorAll('.free-text-editable')).map(e => e.textContent || '')
+            };
+        }
 
-            const wordHtml = `
-                <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-                <head>
-                    <meta charset='utf-8'>
-                    <title>${escapeHtml(docTitle)}</title>
-                    <!--[if gte mso 9]>
-                    <xml>
-                        <w:WordDocument>
-                            <w:View>Print</w:View>
-                            <w:Zoom>100</w:Zoom>
-                            <w:DoNotOptimizeForBrowser/>
-                        </w:WordDocument>
-                    </xml>
-                    <![endif]-->
-                    <style>
-                        @page Section1 {
-                            size: 595.3pt 841.9pt;
-                            margin: 2.0cm 2.0cm 2.0cm 2.0cm;
-                            mso-header-margin: 35.4pt;
-                            mso-footer-margin: 35.4pt;
-                            mso-paper-source: 0;
-                        }
-                        div.Section1 { page: Section1; }
-                        body {
-                            font-family: 'Arial', sans-serif;
-                            font-size: 11pt;
-                            color: #111827;
-                        }
-                        table {
-                            width: 100%;
-                            border-collapse: collapse;
-                            margin-bottom: 12pt;
-                        }
-                        th, td {
-                            border: 1px solid #cbd5e1;
-                            padding: 6pt;
-                            font-size: 10pt;
-                        }
-                        th {
-                            background-color: #f1f5f9;
-                            font-weight: bold;
-                        }
-                        h1, h2, h3 {
-                            color: #0f172a;
-                        }
-                    </style>
-                </head>
-                <body>
-                    <div class="Section1">
-                        ${htmlBody}
-                    </div>
-                </body>
-                </html>
-            `;
+        async function calcularEmissao() {
+            try {
+                const hash = await ReportExport.sha256Hex(ReportExport.buildHashContent(coletarConteudoParaHash()));
+                emissao = { hash: hash, protocolo: ReportExport.makeProtocol(hash, emissaoData), erro: '' };
+            } catch (e) {
+                emissao = { hash: '', protocolo: '', erro: (e && e.message) || 'SHA-256 indisponível' };
+            }
+            aplicarEmissaoNoDom();
+            return emissao;
+        }
 
-            const blob = new Blob(['\ufeff', wordHtml], {
-                type: 'application/msword;charset=utf-8'
+        function scheduleEmissao() {
+            clearTimeout(emissaoTimer);
+            emissaoTimer = setTimeout(() => { calcularEmissao(); }, 400);
+        }
+
+        /** Recalcula na hora (o conteúdo pode ter mudado há instantes) e registra a emissão. */
+        async function emitirEregistrar(formato) {
+            clearTimeout(emissaoTimer);
+            const em = await calcularEmissao();
+            if (em.hash) {
+                const adapter = getOpenerAdapter();
+                const ids = mapAjusteIds();
+                if (adapter && typeof adapter.registrarEmissao === 'function') {
+                    try { await adapter.registrarEmissao({ protocolo: em.protocolo, hash: em.hash, templateId: ids.tplId, featureKey: ids.key, formId: ids.formId, formato: formato }); } catch (e) { /* o registro não impede a emissão */ }
+                }
+            }
+            return em;
+        }
+
+        async function imprimirRelatorio() {
+            await emitirEregistrar('impressao');
+            window.print();
+        }
+
+        // =====================================================================================
+        // IMAGEM DO MAPA (PNG e Word)
+        // =====================================================================================
+        /** Captura um elemento (mapa com camadas, rótulos, norte, escala e legenda) como imagem PNG. */
+        async function capturarElemento(el, escala) {
+            if (typeof html2canvas !== 'function') throw new Error('html2canvas não carregou (sem internet?)');
+            const r = el.getBoundingClientRect();
+            const canvas = await html2canvas(el, {
+                useCORS: true, backgroundColor: '#ffffff', scale: escala || 2, logging: false,
+                ignoreElements: (n) => !!(n.classList && (n.classList.contains('leaflet-control-zoom') || n.classList.contains('no-print')))
             });
+            return { dataUrl: canvas.toDataURL('image/png'), w: r.width, h: r.height };
+        }
 
+        /** Captura o mapa principal e os quadros da análise temporal. Devolve { id: captura | null }. */
+        async function capturarMapasDoRelatorio() {
+            const ids = ['map-wrap'];
+            document.querySelectorAll('.report-tframe-wrap').forEach(e => { if (e.id) ids.push(e.id); });
+            const caps = {};
+            if (mapController) mapController.setExportMode(true);
+            try {
+                for (const id of ids) {
+                    const el = document.getElementById(id);
+                    if (!el) continue;
+                    try { caps[id] = await capturarElemento(el, 2); }
+                    catch (e) { console.warn('[Exportação] Falha ao capturar ' + id + ':', e); caps[id] = null; }
+                }
+            } finally {
+                if (mapController) mapController.setExportMode(false);
+            }
+            return caps;
+        }
+
+        function baixarArquivo(conteudo, tipo, nome) {
+            const blob = new Blob(conteudo, { type: tipo });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
-            link.download = `${docTitle.replace(/[\s\/\\:*?"<>|]+/g, '_')}_${Date.now()}.doc`;
+            link.download = nome;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            URL.revokeObjectURL(link.href);
+            setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+        }
+
+        async function exportarMapaPng() {
+            const status = document.getElementById('map-panel-status');
+            try {
+                const el = document.getElementById('map-wrap');
+                if (!el) throw new Error('mapa não encontrado');
+                if (status) status.textContent = 'Gerando imagem…';
+                if (mapController) mapController.setExportMode(true);
+                let cap;
+                try { cap = await capturarElemento(el, 2); } finally { if (mapController) mapController.setExportMode(false); }
+                const bin = atob(cap.dataUrl.split(',')[1]);
+                const bytes = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                baixarArquivo([bytes], 'image/png', 'mapa_' + (emissao.protocolo || Date.now()) + '.png');
+                if (status) status.textContent = 'Imagem do mapa salva.';
+            } catch (e) {
+                console.warn('[Exportação] PNG do mapa:', e);
+                if (status) status.textContent = 'Não foi possível gerar a imagem do mapa (' + ((e && e.message) || 'erro') + ').';
+            }
+        }
+
+        /**
+         * Word: os mapas entram como IMAGEM (capturada da tela), os quadros da análise temporal viram tabela e o
+         * arquivo é um MHTML (.doc) com as imagens dentro, que o Word abre normalmente.
+         */
+        async function gerarWord() {
+            const docElement = document.getElementById('a4-document-container');
+            if (!docElement) return;
+            await emitirEregistrar('word');
+            const caps = await capturarMapasDoRelatorio();
+            const falhas = Object.keys(caps).filter(id => !caps[id]);
+
+            const clone = docElement.cloneNode(true);
+            clone.querySelectorAll('.no-print').forEach(el => el.remove());
+            const tpl = renderArgs && renderArgs.tpl;
+            const cfgPag = (tpl && tpl.config_pagina) || {};
+            const docTitle = document.getElementById('report-header-title')?.textContent || 'Relatorio_Oficial';
+            const wordHtml = ReportExport.wordDocumentHtml({
+                title: docTitle,
+                bodyHtml: ReportExport.prepareWordBody(clone.innerHTML, caps),
+                page: PageSize.dims(cfgPag),
+                margins: cfgPag.margens_mm
+            });
+            baixarArquivo(['\ufeff', ReportExport.toWordMhtml(wordHtml)], 'application/msword', docTitle.replace(/[\s\/\\:*?"<>|]+/g, '_') + '_' + (emissao.protocolo || Date.now()) + '.doc');
+            if (falhas.length) alert('O Word foi gerado, mas ' + falhas.length + ' mapa(s) não puderam virar imagem (veja o aviso no lugar do mapa). Confira a conexão com a internet e tente de novo.');
         }
 
         function escapeHtml(str) {

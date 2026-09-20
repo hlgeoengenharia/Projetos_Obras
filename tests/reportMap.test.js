@@ -372,6 +372,20 @@ ok('mais de 400 vértices: sem marcadores livres, "marcar todos" não faz nada, 
 t = build({ mapa: { pontos: { ativo: true } } }, null);
 ok('sem geometria: sem vértices', handles(t).length === 0 && t.ctl.pointRows().rows.length === 0);
 
+// ---------------------------------------------------------------- modo de saída (impressão / imagem)
+t = build({ mapa: { pontos: { ativo: true, ordem: ['v:1'] } } });
+eq('vetores em canvas (a captura de imagem copia canvas sem deslocamento)', t.map.options.preferCanvas, true);
+eq('antes da saída: 3 vértices livres + 1 ponto', [handles(t).length, pontosMk(t).length], [3, 1]);
+t.ctl.setExportMode(true);
+eq('na saída: nenhum vértice livre, o ponto marcado continua', [handles(t).length, pontosMk(t).length], [0, 1]);
+t.ctl.addPoint('v:3');
+eq('na saída, marcar ponto não traz os vértices livres de volta', [handles(t).length, pontosMk(t).length], [0, 2]);
+t.ctl.setExportMode(false);
+eq('depois da saída: vértices livres voltam', [handles(t).length, pontosMk(t).length], [2, 2]);
+const nAntes = t.changes.length;
+t.ctl.setExportMode(false);
+eq('repetir o mesmo modo não redesenha', t.changes.length, nAntes);
+
 console.log(`reportMap: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {
     console.error(`${failed} falha(s)`);

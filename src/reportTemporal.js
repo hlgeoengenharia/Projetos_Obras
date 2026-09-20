@@ -105,7 +105,7 @@
         function createMap(o) {
             const container = el('tmap-' + o.id);
             if (!container) return null;
-            const map = L.map(container, { zoomControl: false, attributionControl: true, zoomSnap: 0.25 });
+            const map = L.map(container, { zoomControl: false, attributionControl: true, zoomSnap: 0.25, preferCanvas: true });
             if (map.attributionControl && map.attributionControl.setPrefix) map.attributionControl.setPrefix(false);
             let layer;
             if (o.tipo === 'xyz_tiles' || String(o.url).indexOf('{z}') >= 0) {
