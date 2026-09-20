@@ -16,6 +16,8 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
     <script src="src/pageSize.js"></script>
+    <script src="src/mapTools.js"></script>
+    <script src="src/reportMap.js"></script>
     <script src="src/fieldFormatter.js"></script>
     <script src="src/reportData.js"></script>
     
@@ -108,6 +110,25 @@
             }
         }
 
+        /* Mini-mapa: sobreposições impressas junto com o mapa */
+        .report-map-overlay { position: absolute; z-index: 500; pointer-events: none; }
+        #map-north { top: 8px; right: 8px; background: rgba(0,0,0,.72); color: #fff; padding: 4px 6px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; font: 700 10px monospace; line-height: 1; }
+        #map-info-bar { bottom: 34px; left: 8px; background: rgba(0,0,0,.72); color: #fff; padding: 3px 7px; border-radius: 5px; font: 9px monospace; display: flex; gap: 6px; align-items: center; max-width: 70%; flex-wrap: wrap; }
+        #map-legend { bottom: 22px; right: 8px; background: rgba(255,255,255,.92); border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 7px; font: 9px sans-serif; color: #0f172a; max-width: 45%; }
+        #map-legend div { display: flex; align-items: center; gap: 5px; line-height: 1.5; }
+        #map-legend i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; border: 1px solid rgba(0,0,0,.35); }
+        .leaflet-container { font-family: inherit; }
+        @media print {
+            .leaflet-control-zoom, #map-tools-panel, #map-tools-toggle { display: none !important; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        }
+        #map-tools-panel { position: fixed; top: 84px; right: 12px; width: 268px; max-height: calc(100vh - 100px); overflow-y: auto; z-index: 1200; background: #fff; border: 1px solid #cbd5e1; border-radius: 14px; box-shadow: 0 10px 30px rgba(15,23,42,.18); font-size: 12px; color: #0f172a; }
+        #map-tools-panel h4 { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #64748b; font-weight: 800; margin: 10px 0 4px; }
+        #map-tools-panel label.row { display: flex; align-items: center; gap: 7px; padding: 2px 0; cursor: pointer; }
+        #map-tools-panel label.row.off { opacity: .45; cursor: not-allowed; }
+        #map-tools-panel button.act { width: 100%; padding: 7px 8px; border-radius: 9px; font-weight: 700; font-size: 12px; cursor: pointer; border: 1px solid #cbd5e1; background: #f8fafc; }
+        #map-tools-panel button.act.primary { background: #059669; border-color: #059669; color: #fff; }
+        #map-tools-toggle { position: fixed; top: 84px; right: 12px; z-index: 1200; background: #0f172a; color: #fff; border-radius: 999px; padding: 7px 12px; font-size: 12px; font-weight: 700; cursor: pointer; display: none; box-shadow: 0 6px 18px rgba(15,23,42,.3); }
         .mention-rendered {
             font-weight: 600;
             color: #0f172a;
@@ -177,10 +198,9 @@
 
     <script>
         let reportPayload = null;
-        let leafletMapInstance = null;
-        let activePolygonLayer = null;
-        let currentBaseTileLayer = null;
-        let currentMapMode = 'streets';
+        let mapController = null;     // controlador do mini-mapa (src/reportMap.js)
+        let mapBaseConfig = null;     // configuração definida no modelo
+        let mapBloco = null;          // bloco 'mapa_estatico' do modelo
 
         window.addEventListener('DOMContentLoaded', () => {
             initReportViewer();
@@ -644,9 +664,9 @@
 
             docContainer.innerHTML = pagesHtml;
 
-            // Inicializa o Mini-Mapa Leaflet Interativo
+            // Inicializa o Mini-Mapa Leaflet Interativo (com os ajustes que o usuário já salvou)
             setTimeout(() => {
-                initInteractiveLeafletMap(featureGeometry);
+                initReportMiniMap(featureGeometry);
             }, 100);
         }
 
@@ -791,48 +811,34 @@
                     return renderAttributeGrid(bloco, featureData, fields);
                 }
 
-                case 'mapa_estatico':
+                case 'mapa_estatico': {
+                    mapBloco = bloco;
+                    const mcfg = MapTools.normalizeMapConfig(bloco);
+                    const mapPx = Math.round(mcfg.alturaMm * 3.78);
                     return `
                         <div class="mb-4 page-break-avoid">
                             <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
                                 <span class="whitespace-pre-line">${(escapeHtml(bloco.titulo || 'Delimitação Cartográfica do Imóvel')).replace(/\r?\n/g, '<br>')}</span>
-                                <div class="no-print flex items-center gap-1.5">
-                                    <button type="button" onclick="toggleMapBasemap()" class="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded flex items-center gap-1 cursor-pointer">
-                                        <span class="material-symbols-outlined text-[13px]">layers</span>
-                                        <span id="btn-basemap-label">Satélite</span>
-                                    </button>
-                                </div>
                             </div>
-                            <!-- Container do Mapa Leaflet Interativo -->
-                            <div class="relative rounded-lg overflow-hidden border border-slate-300 shadow-xs">
-                                <div id="interactive-report-map" class="w-full h-64 bg-slate-900 z-0"></div>
-                                
-                                <!-- Rosa dos Ventos -->
-                                ${bloco.exibirNorte ? `
-                                    <div class="absolute top-2.5 right-2.5 z-[400] bg-black/70 backdrop-blur-xs p-1.5 rounded-lg flex flex-col items-center text-white text-[9px] font-bold pointer-events-none">
-                                        <span class="material-symbols-outlined text-[18px] text-amber-400">navigation</span>
-                                        <span>N</span>
-                                    </div>
-                                ` : ''}
-
-                                <!-- Barra de Escala e Datum -->
-                                <div class="absolute bottom-2 left-2 z-[400] bg-black/70 backdrop-blur-xs px-2 py-1 rounded text-white text-[9px] font-mono flex items-center gap-2 pointer-events-none">
-                                    <span>SIRGAS 2000 UTM Fuso 25S</span>
-                                    <span>•</span>
-                                    <span id="map-scale-text">Escala ${bloco.escala || '1:2.500'}</span>
-                                </div>
+                            <!-- Mini-mapa Leaflet (configurado no painel "Mapa" à direita) -->
+                            <div class="relative rounded-lg overflow-hidden border border-slate-300 shadow-xs" style="height: ${mapPx}px;">
+                                <div id="interactive-report-map" class="w-full bg-slate-200 z-0" style="height: ${mapPx}px;"></div>
+                                <div id="map-north" class="report-map-overlay"><span class="material-symbols-outlined" style="font-size:18px;color:#fbbf24">navigation</span><span>N</span></div>
+                                <div id="map-info-bar" class="report-map-overlay"></div>
+                                <div id="map-legend" class="report-map-overlay"></div>
                             </div>
-                            
-                            <!-- Dimensões Perimetrais Calculadas -->
-                            <div id="map-dimensions-summary" class="mt-1.5 p-2 bg-slate-50 border border-slate-200 rounded-lg flex flex-wrap items-center justify-between text-xs font-mono text-slate-700">
+                            <!-- Dimensões da feição -->
+                            <div id="map-dimensions-summary" class="mt-1.5 p-2 bg-slate-50 border border-slate-200 rounded-lg flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono">
                                 <div class="flex items-center gap-1.5">
                                     <span class="font-bold text-emerald-700">Georreferenciamento:</span>
                                     <span id="map-sides-text">Processando lados do polígono...</span>
                                 </div>
                                 <div id="map-area-text" class="font-bold text-slate-900">Área: —</div>
                             </div>
+                            ${bloco.notaTecnica ? `<div class="mt-1 text-[9.5px] text-slate-500 font-mono px-1">${escapeHtml(bloco.notaTecnica)}</div>` : ''}
                         </div>
                     `;
+                }
 
                 case 'caixa_texto_livre':
                 case 'texto_livre':
@@ -1258,93 +1264,186 @@
             return { split: { rowsHtml, chunkHtml } };
         }
 
-        /**
-         * Inicializa o Mini-Mapa Interativo Leaflet
-         */
-        function initInteractiveLeafletMap(geometry) {
-            const mapContainer = document.getElementById('interactive-report-map');
-            if (!mapContainer || typeof L === 'undefined') return;
+        // =====================================================================================
+        // MINI-MAPA DO RELATÓRIO: configuração do modelo + ajustes do usuário (salvos por relatório + feição)
+        // =====================================================================================
+        const AJUSTES_STORAGE_KEY = 'constructive_report_ajustes';
 
-            leafletMapInstance = L.map('interactive-report-map', {
-                zoomControl: true,
-                attributionControl: false
-            });
-
-            // Camadas base
-            const streetsLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
-            const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
-            
-            currentBaseTileLayer = streetsLayer;
-            streetsLayer.addTo(leafletMapInstance);
-
-            window._reportMapStreets = streetsLayer;
-            window._reportMapSatellite = satelliteLayer;
-
-            if (geometry) {
-                try {
-                    activePolygonLayer = L.geoJSON(geometry, {
-                        style: {
-                            color: '#10b981',
-                            weight: 3,
-                            fillColor: '#34d399',
-                            fillOpacity: 0.35
-                        }
-                    }).addTo(leafletMapInstance);
-
-                    leafletMapInstance.fitBounds(activePolygonLayer.getBounds(), { padding: [30, 30] });
-
-                    // Medição via Turf.js
-                    if (typeof turf !== 'undefined') {
-                        let turfGeom = geometry;
-                        if (turfGeom.type === 'Feature') turfGeom = turfGeom.geometry;
-
-                        const areaM2 = Math.round(turf.area(turfGeom) * 100) / 100;
-                        document.getElementById('map-area-text').textContent = `Área: ${areaM2.toLocaleString('pt-BR')} m² (${(areaM2 / 10000).toFixed(4)} ha)`;
-
-                        // Calcula segmentos
-                        const coords = turfGeom.coordinates && turfGeom.coordinates[0];
-                        if (coords && coords.length > 2) {
-                            let sidesText = '';
-                            for (let i = 0; i < coords.length - 1; i++) {
-                                const p1 = coords[i];
-                                const p2 = coords[i + 1];
-                                const distM = Math.round(turf.distance(turf.point(p1), turf.point(p2), { units: 'meters' }) * 100) / 100;
-                                sidesText += `L${i + 1}: ${distM}m  `;
-                            }
-                            document.getElementById('map-sides-text').textContent = sidesText || 'Polígono Fechado';
-                        }
-                    }
-                } catch(e) {
-                    console.error('[Leaflet] Erro ao renderizar geometria:', e);
-                    leafletMapInstance.setView([-7.115, -34.863], 15);
-                }
-            } else {
-                leafletMapInstance.setView([-7.115, -34.863], 15);
-                document.getElementById('map-sides-text').textContent = 'Feição sem geometria associada';
-            }
-
-            // Atualiza texto de escala ao dar zoom
-            leafletMapInstance.on('zoomend', () => {
-                const z = leafletMapInstance.getZoom();
-                const scaleEst = Math.round(591657550.5 / Math.pow(2, z));
-                document.getElementById('map-scale-text').textContent = `Zoom ${z} • Escala ~1:${scaleEst.toLocaleString('pt-BR')}`;
-            });
+        function getOpenerAdapter() {
+            try {
+                return (window.opener && !window.opener.closed && window.opener.ReportAdapter) ? window.opener.ReportAdapter : null;
+            } catch (e) { return null; }
         }
 
-        function toggleMapBasemap() {
-            if (!leafletMapInstance) return;
-            const btn = document.getElementById('btn-basemap-label');
-            if (currentMapMode === 'streets') {
-                leafletMapInstance.removeLayer(window._reportMapStreets);
-                window._reportMapSatellite.addTo(leafletMapInstance);
-                currentMapMode = 'satellite';
-                if (btn) btn.textContent = 'Ruas';
-            } else {
-                leafletMapInstance.removeLayer(window._reportMapSatellite);
-                window._reportMapStreets.addTo(leafletMapInstance);
-                currentMapMode = 'streets';
-                if (btn) btn.textContent = 'Satélite';
+        function mapAjusteIds() {
+            const tplId = (reportPayload && (reportPayload.templateId || (reportPayload.template && reportPayload.template.id))) || '';
+            const key = (reportPayload && reportPayload.featureKey) || MapTools.featureKey(reportPayload && reportPayload.featureData) || '';
+            return { tplId: String(tplId), key: String(key), formId: (reportPayload && reportPayload.formId) || '' };
+        }
+
+        async function loadMapAjustes() {
+            const { tplId, key } = mapAjusteIds();
+            if (!tplId || !key) return null;
+            const adapter = getOpenerAdapter();
+            if (adapter && typeof adapter.getAjustes === 'function') {
+                try { return await adapter.getAjustes(tplId, key); } catch (e) { /* cai para o navegador */ }
             }
+            try { return (JSON.parse(localStorage.getItem(AJUSTES_STORAGE_KEY) || '{}') || {})[tplId + '|' + key] || null; } catch (e) { return null; }
+        }
+
+        async function persistMapAjustes(ajustes) {
+            const { tplId, key, formId } = mapAjusteIds();
+            if (!tplId || !key) return { ok: false, motivo: 'sem-feicao' };
+            const adapter = getOpenerAdapter();
+            if (adapter && typeof adapter.saveAjustes === 'function') {
+                try { return await adapter.saveAjustes(tplId, key, formId, ajustes); } catch (e) { /* cai para o navegador */ }
+            }
+            try {
+                const all = JSON.parse(localStorage.getItem(AJUSTES_STORAGE_KEY) || '{}') || {};
+                all[tplId + '|' + key] = ajustes;
+                localStorage.setItem(AJUSTES_STORAGE_KEY, JSON.stringify(all));
+                return { ok: true, remoto: false };
+            } catch (e) { return { ok: false, motivo: 'erro' }; }
+        }
+
+        async function initReportMiniMap(geometry) {
+            const mapContainer = document.getElementById('interactive-report-map');
+            if (!mapContainer || typeof L === 'undefined' || !mapBloco) return;
+
+            mapBaseConfig = MapTools.normalizeMapConfig(mapBloco);
+            let ajustes = null;
+            try { ajustes = await loadMapAjustes(); } catch (e) {}
+            const config = MapTools.mergeAjustes(mapBaseConfig, ajustes);
+            const camadas = (reportPayload && Array.isArray(reportPayload.camadasMapa)) ? reportPayload.camadasMapa : [];
+
+            try {
+                mapController = ReportMap.create({ L, MapTools, container: 'interactive-report-map', geometry, camadas, config });
+            } catch (e) {
+                console.error('[Mapa] Erro ao criar o mini-mapa:', e);
+                return;
+            }
+            fillMapMeasureSummary(geometry);
+            renderMapToolsPanel();
+        }
+
+        function fillMapMeasureSummary(geometry) {
+            const sides = document.getElementById('map-sides-text');
+            const areaEl = document.getElementById('map-area-text');
+            if (!geometry) { if (sides) sides.textContent = 'Feição sem geometria associada'; return; }
+            try {
+                if (typeof turf === 'undefined') return;
+                let g = geometry.type === 'Feature' ? geometry.geometry : geometry;
+                const kind = MapTools.geomKind(g);
+                if (kind === 'polygon') {
+                    const areaM2 = Math.round(turf.area(g) * 100) / 100;
+                    if (areaEl) areaEl.textContent = `Área: ${areaM2.toLocaleString('pt-BR')} m² (${(areaM2 / 10000).toFixed(4)} ha)`;
+                    const ring = g.type === 'Polygon' ? g.coordinates[0] : (g.coordinates[0] && g.coordinates[0][0]);
+                    if (ring && ring.length > 2 && sides) {
+                        let txt = '';
+                        for (let i = 0; i < ring.length - 1; i++) {
+                            const d = Math.round(turf.distance(turf.point(ring[i]), turf.point(ring[i + 1]), { units: 'meters' }) * 100) / 100;
+                            txt += `L${i + 1}: ${d}m  `;
+                        }
+                        sides.textContent = txt || 'Polígono fechado';
+                    }
+                } else if (kind === 'line') {
+                    const len = Math.round(turf.length({ type: 'Feature', properties: {}, geometry: g }, { units: 'kilometers' }) * 100000) / 100;
+                    if (sides) sides.textContent = 'Linha';
+                    if (areaEl) areaEl.textContent = `Comprimento: ${len.toLocaleString('pt-BR')} m`;
+                } else if (kind === 'point') {
+                    if (sides) sides.textContent = 'Ponto';
+                    if (areaEl) areaEl.textContent = '';
+                }
+            } catch (e) { console.warn('[Mapa] Resumo de medidas indisponível:', e); }
+        }
+
+        // ---------------- painel "Mapa" (só na tela; não sai na impressão)
+        function renderMapToolsPanel() {
+            if (!mapController) return;
+            let panel = document.getElementById('map-tools-panel');
+            let toggle = document.getElementById('map-tools-toggle');
+            if (!panel) {
+                panel = document.createElement('div');
+                panel.id = 'map-tools-panel';
+                panel.className = 'no-print';
+                document.body.appendChild(panel);
+                toggle = document.createElement('button');
+                toggle.id = 'map-tools-toggle';
+                toggle.type = 'button';
+                toggle.className = 'no-print';
+                toggle.textContent = 'Mapa';
+                toggle.onclick = () => { panel.style.display = ''; toggle.style.display = 'none'; };
+                document.body.appendChild(toggle);
+            }
+            const cfg = mapController.getConfig();
+            const kind = mapController.kind;
+            const camadas = (reportPayload && Array.isArray(reportPayload.camadasMapa)) ? reportPayload.camadasMapa : [];
+            const on = new Set(cfg.camadasLigadas.map(String));
+            const esc = escapeHtml;
+            const chk = (id, label, checked, handler, disabled) => `<label class="row ${disabled ? 'off' : ''}"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="${handler}"> ${label}</label>`;
+            const camadasHtml = !cfg.camadasVizinhas
+                ? '<div style="color:#64748b">O modelo não permite camadas neste mapa.</div>'
+                : (camadas.length
+                    ? camadas.map(c => `<label class="row"><input type="checkbox" ${on.has(String(c.id)) ? 'checked' : ''} onchange="mapPanelLayer('${esc(c.id)}', this.checked)"><i style="display:inline-block;width:12px;height:8px;border-radius:2px;background:${esc(c.color)}"></i><span style="flex:1">${esc(c.name)}</span>${c.truncated ? '<span title="Parte das feições ficou de fora (limite de envio)" style="color:#b45309">*</span>' : ''}</label>`).join('')
+                    : '<div style="color:#64748b">Nenhuma outra camada estava ativa no mapa ao abrir este relatório.</div>');
+
+            panel.innerHTML = `
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #e2e8f0">
+                    <strong style="font-size:13px">Mapa do relatório</strong>
+                    <button type="button" onclick="mapPanelHide()" style="border:0;background:none;cursor:pointer;font-size:16px;line-height:1" title="Recolher">×</button>
+                </div>
+                <div style="padding:2px 12px 12px">
+                    <h4>Feição em destaque</h4>
+                    ${chk('mp-destaque', 'Destacar a feição', cfg.destaque.ativo, "mapPanelDestaque('ativo', this.checked)")}
+                    ${chk('mp-esmaecer', 'Esmaecer o entorno', cfg.destaque.esmaecerEntorno, "mapPanelDestaque('esmaecerEntorno', this.checked)", kind !== 'polygon')}
+                    <label class="row">Cor <input type="color" value="${esc(cfg.destaque.cor)}" oninput="mapPanelDestaque('cor', this.value)" style="width:34px;height:22px;padding:0;border:1px solid #cbd5e1"></label>
+                    <label class="row">Preenchimento <input type="range" min="0" max="90" value="${Math.round(cfg.destaque.preenchimento * 100)}" oninput="mapPanelDestaque('preenchimento', this.value / 100)" style="flex:1"></label>
+                    <h4>Mapa base</h4>
+                    <select onchange="mapPanelSet('baseMap', this.value)" style="width:100%;padding:5px;border:1px solid #cbd5e1;border-radius:8px">
+                        <option value="osm" ${cfg.baseMap === 'osm' ? 'selected' : ''}>Ruas (OpenStreetMap)</option>
+                        <option value="satelite" ${cfg.baseMap === 'satelite' ? 'selected' : ''}>Satélite</option>
+                        <option value="nenhum" ${cfg.baseMap === 'nenhum' ? 'selected' : ''}>Sem mapa base</option>
+                    </select>
+                    <h4>Camadas ativas no mapa</h4>
+                    ${camadasHtml}
+                    <h4>Elementos do mapa</h4>
+                    ${chk('mp-norte', 'Norte', cfg.norte, "mapPanelSet('norte', this.checked)")}
+                    ${chk('mp-escala', 'Escala', cfg.escala, "mapPanelSet('escala', this.checked)")}
+                    ${chk('mp-proj', 'Sistema de projeção', cfg.projecao, "mapPanelSet('projecao', this.checked)")}
+                    <div style="display:flex;gap:6px;margin-top:12px">
+                        <button type="button" class="act primary" onclick="mapPanelSave()">Salvar ajustes</button>
+                        <button type="button" class="act" onclick="mapPanelReset()">Restaurar</button>
+                    </div>
+                    <div id="map-panel-status" style="margin-top:6px;color:#475569;min-height:16px"></div>
+                </div>`;
+            panel.style.display = window.innerWidth < 1500 ? 'none' : '';
+            if (toggle) toggle.style.display = window.innerWidth < 1500 ? '' : 'none';
+        }
+
+        function mapPanelHide() {
+            document.getElementById('map-tools-panel').style.display = 'none';
+            document.getElementById('map-tools-toggle').style.display = '';
+        }
+        function mapPanelSet(key, value) { if (mapController) mapController.setConfig({ [key]: value }); }
+        function mapPanelDestaque(key, value) { if (mapController) mapController.setConfig({ destaque: { [key]: value } }); }
+        function mapPanelLayer(id, on) { if (mapController) mapController.toggleLayer(id, on); }
+
+        async function mapPanelSave() {
+            const status = document.getElementById('map-panel-status');
+            if (!mapController) return;
+            if (status) status.textContent = 'Salvando…';
+            const r = await persistMapAjustes(mapController.snapshot());
+            if (!status) return;
+            if (!r.ok) status.textContent = r.motivo === 'sem-feicao' ? 'Salve a feição no mapa antes de guardar ajustes.' : 'Não foi possível salvar.';
+            else status.textContent = r.remoto ? 'Ajustes salvos.' : 'Ajustes salvos neste navegador (servidor indisponível).';
+        }
+
+        function mapPanelReset() {
+            if (!mapController || !mapBaseConfig) return;
+            mapController.reset(mapBaseConfig);
+            renderMapToolsPanel();
+            const status = document.getElementById('map-panel-status');
+            if (status) status.textContent = 'Padrão do modelo restaurado (falta salvar para guardar).';
         }
 
         // Garante que o navegador não imprima cabeçalhos/rodapés nativos indesejados (como 'about:blank', títulos ou data/hora do sistema)

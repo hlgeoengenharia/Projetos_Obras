@@ -1139,74 +1139,80 @@
                 `
             })}
 
-            <!-- CARD: MINI-MAPA CARTOGRÁFICO (RECURSOS AVANÇADOS) -->
-            ${isGeral ? '' : renderAccordionCard({
-                id: 'acc-map',
-                title: 'Mini-Mapa Cartográfico (SIG)',
-                icon: 'map',
-                badge: 'Precisão Cartográfica',
-                content: `
+            <!-- CARD: MINI-MAPA CARTOGRÁFICO (SIG) -->
+            ${isGeral ? '' : (() => {
+                const existingMap = (currentTemplate?.blocos || []).find(b => b.tipo === 'mapa_estatico');
+                const mcfg = window.MapTools ? window.MapTools.normalizeMapConfig(existingMap || {}) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90 };
+                const chk = (id, label, checked) => `
+                    <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
+                        <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} class="rounded text-primary focus:ring-0" />
+                        <span>${label}</span>
+                    </label>`;
+                return renderAccordionCard({
+                    id: 'acc-map',
+                    title: 'Mini-Mapa Cartográfico (SIG)',
+                    icon: 'map',
+                    badge: existingMap ? 'Na folha' : 'Precisão Cartográfica',
+                    content: `
                     <div class="flex flex-col gap-3">
-                        <!-- Seletor de Modo: Atual vs Temporal Ortofotos -->
+                        <p class="text-[11px] text-slate-500">O mapa é montado com a feição real quando o relatório é aberto. O que você marcar aqui é o <strong>padrão</strong>; o usuário pode mudar tudo no painel <em>Mapa</em> do relatório e salvar.</p>
+
                         <div class="flex flex-col gap-1.5">
-                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Modo de Visualização Cartográfica</label>
-                            <div class="grid grid-cols-2 gap-2">
-                                <button type="button" id="btn-map-mode-current" onclick="ReportBuilder.selectMapMode('atual')" class="p-2 rounded-xl border text-xs font-bold text-center transition-all bg-primary text-white border-primary shadow-xs cursor-pointer">
-                                    Mapa Estático Atual
-                                </button>
-                                <button type="button" id="btn-map-mode-temporal" onclick="ReportBuilder.selectMapMode('temporal')" class="p-2 rounded-xl border text-xs font-bold text-center transition-all bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer">
-                                    Série Multitemporal
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Opções Específicas do Modo Temporal -->
-                        <div id="cfg-map-temporal-options" class="hidden p-3 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl flex flex-col gap-2">
-                            <div class="flex items-center gap-1.5 text-xs font-bold text-amber-900 dark:text-amber-200">
-                                <span class="material-symbols-outlined text-[16px]">history_toggle_subpath</span>
-                                <span>Sequência Cronológica Decrescente</span>
-                            </div>
-                            <p class="text-[11px] text-amber-800/80 dark:text-amber-300/80">Identifica ortofotos sobrepostas com datas distintas e gera quadros comparativos do mais recente para o mais antigo, com o vetor destacado em cada um.</p>
-                            <label class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer pt-1">
-                                <input type="checkbox" id="cfg-map-temporal-highlight" checked class="rounded text-primary focus:ring-0" />
-                                <span>Destacar polígono vetorizado com cota em cada voo</span>
-                            </label>
-                        </div>
-
-                        <!-- Elementos de Medição e Cartografia -->
-                        <div class="flex flex-col gap-1.5 pt-1">
-                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Elementos Cartográficos e Medições</label>
+                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Feição em destaque</label>
                             <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
-                                    <input type="checkbox" id="cfg-map-cotas" checked class="rounded text-primary focus:ring-0" />
-                                    <span class="font-semibold text-emerald-700 dark:text-emerald-400">Cotas perimetrais (comprimento dos lados em metros)</span>
+                                ${chk('cfg-map-destaque', 'Destacar a feição no mapa', mcfg.destaque.ativo)}
+                                ${chk('cfg-map-esmaecer', 'Esmaecer o entorno (só polígonos)', mcfg.destaque.esmaecerEntorno)}
+                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                                    <span>Cor do destaque</span>
+                                    <input type="color" id="cfg-map-cor" value="${escapeHtml(mcfg.destaque.cor)}" class="w-9 h-6 p-0 border border-slate-300 rounded" />
                                 </label>
-                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
-                                    <input type="checkbox" id="cfg-map-area" checked class="rounded text-primary focus:ring-0" />
-                                    <span>Cálculo automático de Área Total (m² e hectares)</span>
-                                </label>
-                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
-                                    <input type="checkbox" id="cfg-map-norte" checked class="rounded text-primary focus:ring-0" />
-                                    <span>Rosa dos Ventos (Seta de Norte Verdadeiro)</span>
-                                </label>
-                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
-                                    <input type="checkbox" id="cfg-map-escala" checked class="rounded text-primary focus:ring-0" />
-                                    <span>Barra de Escala Gráfica e Datum SIRGAS 2000 UTM</span>
-                                </label>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Mapa base</label>
+                                <select id="cfg-map-base" class="w-full px-2 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl dark:text-white">
+                                    <option value="osm" ${mcfg.baseMap === 'osm' ? 'selected' : ''}>Ruas (OpenStreetMap)</option>
+                                    <option value="satelite" ${mcfg.baseMap === 'satelite' ? 'selected' : ''}>Satélite</option>
+                                    <option value="nenhum" ${mcfg.baseMap === 'nenhum' ? 'selected' : ''}>Sem mapa base</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Altura do mapa</label>
+                                <select id="cfg-map-altura" class="w-full px-2 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl dark:text-white">
+                                    ${[60, 90, 120, 160, 200].map(v => `<option value="${v}" ${Number(mcfg.alturaMm) === v ? 'selected' : ''}>${v} mm</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col gap-1.5">
+                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Elementos e camadas</label>
+                            <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                                ${chk('cfg-map-camadas', 'Permitir ligar as camadas ativas do mapa', mcfg.camadasVizinhas)}
+                                ${chk('cfg-map-norte', 'Norte', mcfg.norte)}
+                                ${chk('cfg-map-escala', 'Escala (gráfica e aproximada)', mcfg.escala)}
+                                ${chk('cfg-map-proj', 'Sistema de projeção (SIRGAS 2000 / UTM)', mcfg.projecao)}
                             </div>
                         </div>
 
                         <div>
                             <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1">Anotações Técnicas / Nota Cartográfica</label>
-                            <input type="text" id="cfg-map-note" value="Delimitação cadastral georreferenciada em conformidade com o sistema cartográfico municipal e SIRGAS 2000." class="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl" />
+                            <input type="text" id="cfg-map-note" value="${escapeHtml(existingMap?.notaTecnica || 'Delimitação cadastral georreferenciada em conformidade com o sistema cartográfico municipal e SIRGAS 2000.')}" class="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs dark:text-white focus:outline-none focus:ring-1 focus:ring-primary" />
+                        </div>
+
+                        <div class="p-2.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-[11px] text-slate-500 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-[16px] text-slate-400">history_toggle_off</span>
+                            <span><strong>Série multitemporal</strong> de ortofotos, <strong>medidas editáveis</strong> e <strong>pontos com tabela de coordenadas</strong>: próximas etapas.</span>
                         </div>
 
                         <button type="button" onclick="ReportBuilder.insertMapBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
-                            <span class="material-symbols-outlined text-[16px]">add_circle</span> Inserir Mini-Mapa na Folha
+                            <span class="material-symbols-outlined text-[16px]">${existingMap ? 'sync' : 'add_circle'}</span> ${existingMap ? 'Atualizar o Mini-Mapa da Folha' : 'Inserir Mini-Mapa na Folha'}
                         </button>
                     </div>
-                `
-            })}
+                    `
+                });
+            })()}
 
             <!-- CARD: GRÁFICOS DO DASHBOARD -->
             ${!isGeral ? '' : renderAccordionCard({
@@ -2092,54 +2098,41 @@
                     `;
                 }
 
-                // MODO MAPA ESTÁTICO ATUAL
-                return `
+                // MAPA COM A FEIÇÃO REAL (pré-visualização esquemática; o mapa de verdade aparece no relatório)
+                {
+                    const mc = window.MapTools ? window.MapTools.normalizeMapConfig(bloco) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90 };
+                    const bg = mc.baseMap === 'satelite' ? 'bg-slate-800' : (mc.baseMap === 'nenhum' ? 'bg-white' : 'bg-slate-200');
+                    const px = Math.round(mc.alturaMm * 3.78);
+                    return `
                     <div class="mb-4">
                         <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
                             <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(escapeHtml(bloco.titulo || 'Delimitação Cartográfica do Imóvel')).replace(/\r?\n/g, '<br>')}</span>
-                            <span class="text-[10px] font-mono text-slate-400">Escala ${bloco.escala || '1:2.500'}</span>
+                            <span class="text-[10px] font-mono text-slate-400">Pré-visualização esquemática</span>
                         </div>
-                        <div class="h-56 bg-slate-950 border border-slate-300 rounded-lg relative flex items-center justify-center overflow-hidden">
-                            <!-- Polígono no mapa com cotas dos lados -->
-                            <div class="w-36 h-28 border-2 border-emerald-400 bg-emerald-500/25 rounded relative flex items-center justify-center text-center shadow-lg">
-                                <span class="text-xs font-bold text-white drop-shadow">
-                                    Feição Georreferenciada<br>
-                                    <span class="text-[10px] font-mono text-emerald-300">Área: 1.012,40 m²</span>
-                                </span>
-                                ${bloco.exibirCotas ? `
-                                    <span class="absolute -top-3.5 text-[9px] font-mono text-emerald-300 bg-black/60 px-1 rounded">25.40 m</span>
-                                    <span class="absolute -bottom-3.5 text-[9px] font-mono text-emerald-300 bg-black/60 px-1 rounded">25.10 m</span>
-                                    <span class="absolute -left-6 top-1/2 -translate-y-1/2 text-[9px] font-mono text-emerald-300 bg-black/60 px-1 rounded">40.20 m</span>
-                                    <span class="absolute -right-6 top-1/2 -translate-y-1/2 text-[9px] font-mono text-emerald-300 bg-black/60 px-1 rounded">39.80 m</span>
-                                ` : ''}
-                            </div>
-
-                            <!-- Rosa dos Ventos (Norte) -->
-                            ${bloco.exibirNorte ? `
-                                <div class="absolute top-2.5 right-2.5 bg-black/60 p-1.5 rounded-lg flex flex-col items-center text-white text-[9px] font-bold">
-                                    <span class="material-symbols-outlined text-[20px] text-amber-400">navigation</span>
-                                    <span>N</span>
+                        <div class="${bg} border border-slate-300 rounded-lg relative flex items-center justify-center overflow-hidden" style="height: ${px}px;">
+                            ${mc.destaque.ativo ? `
+                                <div class="relative flex items-center justify-center text-center" style="width: 34%; height: 46%; border: 3px solid ${escapeHtml(mc.destaque.cor)}; background: ${escapeHtml(mc.destaque.cor)}59; border-radius: 3px; box-shadow: ${mc.destaque.esmaecerEntorno ? '0 0 0 9999px rgba(255,255,255,0.6)' : 'none'};">
+                                    <span class="text-[10px] font-bold ${mc.baseMap === 'satelite' ? 'text-white' : 'text-slate-800'}">Feição do relatório</span>
                                 </div>
-                            ` : ''}
-
-                            <!-- Barra de Escala Gráfica e Datum -->
-                            ${bloco.exibirEscala ? `
+                            ` : '<span class="text-[10px] text-slate-500">Destaque desligado</span>'}
+                            ${mc.norte ? `
+                                <div class="absolute top-2 right-2 bg-black/70 p-1 rounded-lg flex flex-col items-center text-white text-[9px] font-bold">
+                                    <span class="material-symbols-outlined text-[18px] text-amber-400">navigation</span><span>N</span>
+                                </div>` : ''}
+                            ${(mc.escala || mc.projecao) ? `
                                 <div class="absolute bottom-2 left-2 bg-black/70 px-2 py-1 rounded text-white text-[9px] font-mono flex items-center gap-2">
-                                    <div class="w-16 h-1 bg-white border border-black"></div>
-                                    <span>50 m</span>
-                                    <span class="text-slate-400">|</span>
-                                    <span>SIRGAS 2000 UTM Zone 25S</span>
-                                </div>
-                            ` : ''}
+                                    ${mc.escala ? '<div class="w-14 h-1 bg-white border border-black"></div><span>Escala</span>' : ''}
+                                    ${(mc.escala && mc.projecao) ? '<span class="text-slate-400">|</span>' : ''}
+                                    ${mc.projecao ? '<span>SIRGAS 2000 / UTM (zona da feição)</span>' : ''}
+                                </div>` : ''}
+                            ${mc.baseMap !== 'nenhum' ? `<div class="absolute bottom-2 right-2 text-[8px] text-slate-600 bg-white/80 px-1 rounded">${mc.baseMap === 'satelite' ? 'Imagens © Esri' : '© OpenStreetMap'}</div>` : ''}
                         </div>
-
-                        <!-- Nota Técnica Editável -->
-                        <div class="mt-1.5 text-[10px] text-slate-500 font-mono flex items-center justify-between px-1">
+                        <div class="mt-1.5 text-[10px] text-slate-500 font-mono px-1">
                             <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'notaTecnica')">${(escapeHtml(bloco.notaTecnica || 'Delimitação cadastral georreferenciada.')).replace(/\r?\n/g, '<br>')}</span>
-                            <span>Precisão SIG</span>
                         </div>
                     </div>
-                `;
+                    `;
+                }
 
             case 'grafico_existente': {
                 const isSide = bloco.layout === 'lado_a_lado';
@@ -3362,43 +3355,45 @@
     // --- MANIPULADORES DO CARD 3: MINI-MAPA ---
     let currentMapMode = 'atual';
     function selectMapMode(mode) {
-        currentMapMode = mode;
-        const btnCurrent = document.getElementById('btn-map-mode-current');
-        const btnTemp = document.getElementById('btn-map-mode-temporal');
-        const optTemp = document.getElementById('cfg-map-temporal-options');
-
-        if (mode === 'temporal') {
-            if (btnTemp) btnTemp.className = 'p-2 rounded-xl border text-xs font-bold text-center transition-all bg-primary text-white border-primary shadow-xs cursor-pointer';
-            if (btnCurrent) btnCurrent.className = 'p-2 rounded-xl border text-xs font-bold text-center transition-all bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer';
-            if (optTemp) optTemp.classList.remove('hidden');
-        } else {
-            if (btnCurrent) btnCurrent.className = 'p-2 rounded-xl border text-xs font-bold text-center transition-all bg-primary text-white border-primary shadow-xs cursor-pointer';
-            if (btnTemp) btnTemp.className = 'p-2 rounded-xl border text-xs font-bold text-center transition-all bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer';
-            if (optTemp) optTemp.classList.add('hidden');
-        }
+        currentMapMode = mode === 'temporal' ? 'atual' : mode; // série multitemporal: próxima etapa
     }
 
     function insertMapBlock() {
-        const cotas = document.getElementById('cfg-map-cotas')?.checked ?? true;
-        const area = document.getElementById('cfg-map-area')?.checked ?? true;
-        const norte = document.getElementById('cfg-map-norte')?.checked ?? true;
-        const escala = document.getElementById('cfg-map-escala')?.checked ?? true;
-        const nota = document.getElementById('cfg-map-note')?.value || 'Delimitação cadastral georreferenciada.';
+        const val = (id, fallback) => document.getElementById(id)?.value ?? fallback;
+        const on = (id, fallback) => document.getElementById(id)?.checked ?? fallback;
+        const config = {
+            destaque: { ativo: on('cfg-map-destaque', true), cor: val('cfg-map-cor', '#10b981'), esmaecerEntorno: on('cfg-map-esmaecer', false) },
+            baseMap: val('cfg-map-base', 'osm'),
+            camadasVizinhas: on('cfg-map-camadas', true),
+            norte: on('cfg-map-norte', true),
+            escala: on('cfg-map-escala', true),
+            projecao: on('cfg-map-proj', true),
+            alturaMm: Number(val('cfg-map-altura', 90))
+        };
+        const nota = val('cfg-map-note', '') || 'Delimitação cadastral georreferenciada.';
+        const normalizado = window.MapTools ? window.MapTools.normalizeMapConfig({ mapa: config }) : config;
+        delete normalizado.vista; // a vista (zoom/posição) é do usuário, não do modelo
 
-        currentTemplate.blocos.push({
-            id: 'blk_map_' + Date.now(),
-            tipo: 'mapa_estatico',
-            titulo: currentMapMode === 'temporal' ? 'Análise Multitemporal de Ortofotos' : 'Delimitação Cartográfica do Imóvel',
-            modo: currentMapMode,
-            exibirCotas: cotas,
-            exibirArea: area,
-            exibirNorte: norte,
-            exibirEscala: escala,
-            notaTecnica: nota,
-            escala: '1:2.500'
-        });
-
+        const existing = currentTemplate.blocos.find(b => b.tipo === 'mapa_estatico');
+        if (existing) {
+            existing.mapa = normalizado;
+            existing.notaTecnica = nota;
+            delete existing.modo;
+        } else {
+            currentTemplate.blocos.push({
+                id: 'blk_map_' + Date.now(),
+                tipo: 'mapa_estatico',
+                titulo: 'Delimitação Cartográfica do Imóvel',
+                mapa: normalizado,
+                notaTecnica: nota
+            });
+        }
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
         renderA4Blocks();
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && currentTemplate.form_id) panel.innerHTML = renderAccordionPanel(currentTemplate.form_id);
     }
 
     // --- MANIPULADORES DO CARD 4: GRÁFICOS ---
@@ -5411,6 +5406,24 @@
             formTabs = shownTabs;
         }
 
+        // MINI-MAPA: camadas ATIVAS no mapa (e que o usuário pode ver) ao redor da feição, só geometria.
+        // O relatório é outra janela e não conhece o mapa; por isso a página do mapa entrega esses dados prontos.
+        let camadasMapa = [];
+        let featureKeyMapa = '';
+        try {
+            const activeProps = (window.activeFeatureLayer && window.activeFeatureLayer.feature && window.activeFeatureLayer.feature.properties) || featureData || {};
+            if (window.MapTools) {
+                featureKeyMapa = window.MapTools.featureKey(activeProps) || window.MapTools.featureKey(featureData);
+                const temMapa = tpl && Array.isArray(tpl.blocos) && tpl.blocos.some(b => b.tipo === 'mapa_estatico');
+                if (temMapa && Array.isArray(window.themes)) {
+                    camadasMapa = window.MapTools.collectNearbyLayers(window.themes, featureGeometry, {
+                        excludeKey: featureKeyMapa,
+                        canSee: (id) => (typeof window.userCanOnTheme !== 'function') || window.userCanOnTheme(id, 'ver')
+                    });
+                }
+            }
+        } catch(e) { camadasMapa = []; }
+
         const payload = {
             templateId: templateId,
             template: tpl || null,
@@ -5419,13 +5432,25 @@
             formTabs: formTabs,
             featureData: featureData || {},
             featureGeometry: featureGeometry || null,
+            featureKey: featureKeyMapa,
+            camadasMapa: camadasMapa,
             timestamp: Date.now()
         };
-        try {
-            sessionStorage.setItem('constructive_active_report_payload', JSON.stringify(payload));
-            localStorage.setItem('constructive_active_report_payload', JSON.stringify(payload));
-        } catch(e) {
-            console.error('[ReportBuilder] Erro ao salvar payload do relatório:', e);
+        const persistPayload = () => {
+            try {
+                const json = JSON.stringify(payload);
+                sessionStorage.setItem('constructive_active_report_payload', json);
+                localStorage.setItem('constructive_active_report_payload', json);
+                return true;
+            } catch(e) { return false; }
+        };
+        // Se as camadas vizinhas não couberem no armazenamento do navegador, reduz até caber (a feição e os dados vão sempre)
+        if (!persistPayload()) {
+            payload.camadasMapa = payload.camadasMapa.map(c => Object.assign({}, c, { features: c.features.slice(0, 200), truncated: true }));
+            if (!persistPayload()) {
+                payload.camadasMapa = [];
+                if (!persistPayload()) console.error('[ReportBuilder] Erro ao salvar payload do relatório.');
+            }
         }
         window.open(`relatorio_view.html?templateId=${encodeURIComponent(templateId)}`, '_blank');
     }

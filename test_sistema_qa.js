@@ -586,8 +586,8 @@ if (relatorioViewExists) {
     const hasRelatorioViewFeatures = !relatorioViewCode.includes('Gerar PDF') && relatorioViewCode.includes('window.print()') &&
         relatorioViewCode.includes('Gerar Word') &&
         relatorioViewCode.includes('gerarWord') &&
-        relatorioViewCode.includes('initInteractiveLeafletMap') &&
-        relatorioViewCode.includes('L.map') &&
+        relatorioViewCode.includes('initReportMiniMap') &&
+        relatorioViewCode.includes('ReportMap.create') &&
         relatorioViewCode.includes('contenteditable="true"');
     assertTest('Relatórios A4: relatorio_view.html possui botões (Word e Imprimir/PDF, sem botão PDF redundante), mapa SIG interativo e textos editáveis', hasRelatorioViewFeatures);
 }
@@ -984,6 +984,15 @@ const hasReportsTabType = settingsHtmlForReportsTab.includes('btn-type-reports')
     settingsHtmlForReportsTab.includes('tab-reports-settings');
 assertTest('Cadastros: "Tipo de Aba" inclui Relatórios (A4), aba sem campos que recebe apenas os botões dos relatórios', hasReportsTabType);
 
+const viewerMapCode = fs.readFileSync('relatorio_view.html', 'utf8');
+const hasMiniMapViewer = viewerMapCode.includes('src/mapTools.js') && viewerMapCode.includes('src/reportMap.js') &&
+    viewerMapCode.includes('map-tools-panel') && viewerMapCode.includes('mapPanelSave') && viewerMapCode.includes('mapPanelReset');
+const hasAjustesSql = fs.existsSync('supabase_relatorios_ajustes.sql') &&
+    fs.readFileSync('supabase_relatorios_ajustes.sql', 'utf8').includes('ENABLE ROW LEVEL SECURITY') &&
+    fs.readFileSync('supabase_relatorios_ajustes.sql', 'utf8').includes('user_id = auth.uid()') &&
+    !fs.readFileSync('supabase_relatorios_ajustes.sql', 'utf8').includes('TO authenticated, anon');
+assertTest('Mini-Mapa: o relatório gerado tem o painel "Mapa" (destaque, camadas, base, norte/escala/projeção, salvar e restaurar) e a tabela de ajustes com RLS por usuário', hasMiniMapViewer && hasAjustesSql);
+
 // ------------------------------------------------------------------------------
 // RELATÓRIOS A4 — TESTES DE COMPORTAMENTO (executam o código de verdade, sem inspecionar texto)
 // ------------------------------------------------------------------------------
@@ -992,6 +1001,9 @@ assertTest('Cadastros: "Tipo de Aba" inclui Relatórios (A4), aba sem campos que
     ['tests/viewerResolve.test.js', 'Visualizador: campo é lido pelo ID do schema; campo vazio nunca herda valor de outro campo nem de outra aba'],
     ['tests/reportData.test.js', 'Camada de dados: abas visíveis (permissão e condição), registros 1:N e 1:1, colunas lidas pelo campo da própria aba, dados de aba oculta removidos'],
     ['tests/builderLaudoPreview.test.js', 'Construtor: prévia do Laudo com uma seção ABERTA por aba (campos reais, arraste, largura, 1:N na íntegra) e sequência de abas (↑ ↓)'],
+    ['tests/mapTools.test.js', 'Mini-mapa: configuração normalizada, ajustes do usuário, bbox, projeção SIRGAS 2000 UTM, escala e recorte das camadas ativas ao redor da feição'],
+    ['tests/reportMap.test.js', 'Mini-mapa (Leaflet simulado): destaque, esmaecer entorno, mapa base, camadas ligáveis com legenda, norte, escala, projeção, crédito do mapa e vista salva'],
+    ['tests/reportAjustes.test.js', 'Ajustes do usuário no relatório: salva por modelo + feição no servidor com reserva no navegador e circuito fechado quando a tabela não existe'],
     ['tests/pageSize.test.js', 'Tamanho da folha: A4 e A3 (retrato/paisagem) com dimensões em mm e px; modelos antigos caem em A4'],
     ['tests/reportScope.test.js', 'Construtor: escopo Individual x Geral da camada (cards por escopo, sem "Gráficos do Dashboard" no individual) e seletor de folha A4 | A3'],
     ['tests/reportsTab.test.js', 'Aba do tipo "Relatórios (A4)": popup da feição lista só os botões dos modelos individuais do cadastro (sem campos, sem edição, nomes escapados)'],

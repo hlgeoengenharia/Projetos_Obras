@@ -513,14 +513,17 @@
                         id: 'blk_map_' + Date.now(),
                         tipo: 'mapa_estatico',
                         titulo: 'Identificação Cartográfica e Delimitação Geográfica',
-                        modoExibicao: 'atual', // 'atual' ou 'temporal'
-                        exibirCamadaFundo: true,
-                        exibirCotas: true,
-                        exibirNorte: true,
-                        exibirEscala: true,
-                        escala: '1:2.500',
-                        sistema: 'SIRGAS 2000 / UTM zone 25S',
-                        textoTecnico: 'Delimitação perimetral georreferenciada em conformidade com a base cartográfica cadastral municipal.'
+                        // padrão do mini-mapa (o usuário ajusta no relatório e salva); ver src/mapTools.js
+                        mapa: {
+                            destaque: { ativo: true, cor: '#10b981', espessura: 3, preenchimento: 0.35, esmaecerEntorno: false },
+                            baseMap: 'osm',
+                            camadasVizinhas: true,
+                            norte: true,
+                            escala: true,
+                            projecao: true,
+                            alturaMm: 90
+                        },
+                        notaTecnica: 'Delimitação perimetral georreferenciada em conformidade com a base cartográfica cadastral municipal.'
                     },
                     {
                         id: 'blk_grid_' + Date.now(),
@@ -590,8 +593,89 @@
         }
     }
 
+    // =====================================================================================
+    // AJUSTES DO USUÁRIO NO RELATÓRIO GERADO (por modelo + feição)
+    // Guardados no Supabase (tabela relatorios_ajustes, só o próprio usuário enxerga) e, sempre, no navegador.
+    // =====================================================================================
+    const STORAGE_KEY_AJUSTES = 'constructive_report_ajustes';
+    const STORAGE_KEY_AJUSTES_REMOTE = 'constructive_report_ajustes_remote';
+    let isRemoteAjustesTableAvailable = (function() {
+        try { if (localStorage.getItem(STORAGE_KEY_AJUSTES_REMOTE) === 'false') return false; } catch(e) {}
+        return null;
+    })();
+
+    function ajusteId(templateId, featureKey) { return String(templateId) + '|' + String(featureKey); }
+
+    function readLocalAjustes() {
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY_AJUSTES) || '{}') || {}; } catch(e) { return {}; }
+    }
+
+    function isMissingTableError(error) {
+        return !!error && (error.code === '42P01' || error.code === 'PGRST205' || error.code === 'PGRST204' || error.code === 'PGRST200' ||
+            error.status === 404 || (error.message && error.message.toLowerCase().includes('not found')));
+    }
+
+    function remoteAjustesEnabled() {
+        return isRemoteAjustesTableAvailable !== false && typeof supabaseClient !== 'undefined' && !!supabaseClient;
+    }
+
+    /** Ajustes salvos para este modelo + feição (servidor primeiro; se indisponível, o navegador). */
+    async function getAjustes(templateId, featureKey) {
+        if (!templateId || !featureKey) return null;
+        const local = readLocalAjustes()[ajusteId(templateId, featureKey)] || null;
+        if (!remoteAjustesEnabled()) return local;
+        try {
+            const { data, error } = await supabaseClient.from('relatorios_ajustes').select('ajustes')
+                .eq('template_id', String(templateId)).eq('feature_key', String(featureKey)).maybeSingle();
+            if (error) {
+                if (isMissingTableError(error)) {
+                    isRemoteAjustesTableAvailable = false;
+                    try { localStorage.setItem(STORAGE_KEY_AJUSTES_REMOTE, 'false'); } catch(e) {}
+                }
+                return local;
+            }
+            return (data && data.ajustes) ? data.ajustes : local;
+        } catch(e) {
+            return local;
+        }
+    }
+
+    /** Salva os ajustes. Devolve { ok, remoto }: remoto=false quando ficou só neste navegador. */
+    async function saveAjustes(templateId, featureKey, formId, ajustes) {
+        if (!templateId || !featureKey) return { ok: false, remoto: false };
+        try {
+            const all = readLocalAjustes();
+            all[ajusteId(templateId, featureKey)] = ajustes;
+            localStorage.setItem(STORAGE_KEY_AJUSTES, JSON.stringify(all));
+        } catch(e) { /* navegador sem armazenamento: segue para o servidor */ }
+        if (!remoteAjustesEnabled()) return { ok: true, remoto: false };
+        try {
+            const { error } = await supabaseClient.from('relatorios_ajustes').upsert({
+                template_id: String(templateId),
+                feature_key: String(featureKey),
+                form_id: formId ? String(formId) : null,
+                ajustes: ajustes,
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'template_id,feature_key,user_id' });
+            if (error) {
+                if (isMissingTableError(error)) {
+                    isRemoteAjustesTableAvailable = false;
+                    try { localStorage.setItem(STORAGE_KEY_AJUSTES_REMOTE, 'false'); } catch(e) {}
+                } else {
+                    console.warn('[reportAdapter] Aviso ao salvar ajustes do relatório:', error);
+                }
+                return { ok: true, remoto: false };
+            }
+            return { ok: true, remoto: true };
+        } catch(e) {
+            return { ok: true, remoto: false };
+        }
+    }
+
     // Exportação global desacoplada
     window.ReportAdapter = {
+        getAjustes,
+        saveAjustes,
         getFormFields,
         getFormTabs,
         getMultipleTabs,

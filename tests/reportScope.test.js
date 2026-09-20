@@ -17,9 +17,12 @@ const read = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
 // ---------------------------------------------------------------- ambiente
 const store = {};
 const container = { innerHTML: '' };
+const inputs = {}; // campos do card do mapa simulados por id
+const sheetEl = () => ({ innerHTML: '', style: {}, classList: { add() {}, remove() {}, toggle() {} }, querySelectorAll: () => [], querySelector: () => null, appendChild() {}, addEventListener() {} });
+const sheet = { 'a4-blocks-list': sheetEl(), 'a4-header-slot': sheetEl(), 'a4-footer-slot': sheetEl() };
 const stub = () => ({ style: {}, classList: { add() {}, remove() {}, toggle() {} }, innerHTML: '', textContent: '', addEventListener() {}, querySelectorAll: () => [], querySelector: () => null });
 const document = {
-    getElementById: (id) => (id === 'report-builder-container' ? container : null),
+    getElementById: (id) => (id === 'report-builder-container' ? container : (inputs[id] || sheet[id] || null)),
     querySelectorAll: () => [],
     querySelector: () => null,
     activeElement: null,
@@ -38,7 +41,7 @@ window.window = window;
 const ctx = { window, document, localStorage, forms, console, setTimeout: () => 0, clearTimeout() {}, alert() {}, confirm: () => true, navigator: {} };
 ctx.self = window;
 vm.createContext(ctx);
-['src/pageSize.js', 'src/reportAdapter.js', 'src/reportBuilder.js'].forEach(f => vm.runInContext(read(f), ctx, { filename: f }));
+['src/pageSize.js', 'src/mapTools.js', 'src/reportAdapter.js', 'src/reportBuilder.js'].forEach(f => vm.runInContext(read(f), ctx, { filename: f }));
 const RB = window.ReportBuilder;
 const RA = window.ReportAdapter;
 ok('construtor e adaptador carregaram', !!RB && !!RA && !!window.PageSize);
@@ -58,6 +61,34 @@ ok('não há mais seletor Escopo nem botão Imprimir A4 / PDF', !has(html, '>Esc
 ok('seletor de folha A4 | A3', has(html, "ReportBuilder.setPageSize('A4')") && has(html, "ReportBuilder.setPageSize('A3')"));
 ok('A4 marcado por padrão', /setPageSize\('A4'\)"[^>]*bg-primary/.test(html) && !/setPageSize\('A3'\)"[^>]*bg-primary/.test(html));
 ok('folha A4 no título', has(html, 'Folha A4 Interativa') && has(html, '210 × 297 mm (Retrato)'));
+
+// ---------------------------------------------------------------- Mini-Mapa (card do Relatório Individual)
+ok('card do mapa tem destaque, mapa base, camadas, norte, escala e projeção', ['cfg-map-destaque', 'cfg-map-esmaecer', 'cfg-map-cor', 'cfg-map-base', 'cfg-map-camadas', 'cfg-map-norte', 'cfg-map-escala', 'cfg-map-proj', 'cfg-map-altura'].every(id => has(html, 'id="' + id + '"')));
+ok('card explica que o usuário ajusta no relatório', has(html, 'painel <em>Mapa</em> do relatório'));
+ok('o modelo padrão já traz o mapa na folha: o botão é "Atualizar"', has(html, 'Atualizar o Mini-Mapa da Folha'));
+ok('modo "Série Multitemporal" com dados de mentira saiu', !has(html, 'Série Multitemporal</button>') && !has(html, 'Voo Aerofotogramétrico'));
+Object.assign(inputs, {
+    'cfg-map-destaque': { checked: true }, 'cfg-map-esmaecer': { checked: true }, 'cfg-map-cor': { value: '#ff8800' },
+    'cfg-map-base': { value: 'satelite' }, 'cfg-map-camadas': { checked: false }, 'cfg-map-norte': { checked: false },
+    'cfg-map-escala': { checked: true }, 'cfg-map-proj': { checked: true }, 'cfg-map-altura': { value: '120' }, 'cfg-map-note': { value: 'Nota X' }
+});
+RB.insertMapBlock();
+RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+let tplMapa = RA.getReportTemplates('f1')[0];
+let mapas = tplMapa.blocos.filter(b => b.tipo === 'mapa_estatico');
+eq('grava a configuração escolhida no UNICO bloco de mapa', [mapas.length, mapas[0].mapa.destaque.cor, mapas[0].mapa.destaque.esmaecerEntorno, mapas[0].mapa.baseMap, mapas[0].mapa.camadasVizinhas, mapas[0].mapa.norte, mapas[0].mapa.alturaMm, mapas[0].notaTecnica], [1, '#ff8800', true, 'satelite', false, false, 120, 'Nota X']);
+ok('a vista do usuário (zoom/posição) não vai para o modelo', !('vista' in mapas[0].mapa) || mapas[0].mapa.vista === undefined);
+inputs['cfg-map-cor'].value = '#0000ff';
+RB.insertMapBlock();
+RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+tplMapa = RA.getReportTemplates('f1')[0];
+mapas = tplMapa.blocos.filter(b => b.tipo === 'mapa_estatico');
+eq('clicar de novo ATUALIZA o mesmo mapa (não duplica)', [mapas.length, mapas[0].mapa.destaque.cor], [1, '#0000ff']);
+ok('card passa a mostrar "Atualizar" e os valores salvos', has(container.innerHTML, 'Atualizar o Mini-Mapa da Folha') && has(container.innerHTML, 'value="#0000ff"'));
+RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+const folha = sheet['a4-blocks-list'].innerHTML;
+ok('prévia na folha é esquemática e reflete a configuração', has(folha, 'Pré-visualização esquemática') && has(folha, 'Imagens © Esri') && has(folha, 'border: 3px solid #0000ff') && has(folha, 'height: 454px'));
+Object.keys(inputs).forEach(k => delete inputs[k]);
 
 // ---------------------------------------------------------------- A3
 RB.setPageSize('A3');
