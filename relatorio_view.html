@@ -21,6 +21,7 @@
     <script src="src/reportMap.js"></script>
     <script src="src/reportTemporal.js"></script>
     <script src="src/reportExport.js"></script>
+    <script src="src/reportWord.js"></script>
     <script src="src/verificarEmissao.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -1955,17 +1956,17 @@
             const caps = await capturarMapasDoRelatorio();
             const falhas = Object.keys(caps).filter(id => !caps[id]);
 
-            const clone = docElement.cloneNode(true);
-            clone.querySelectorAll('.no-print').forEach(el => el.remove());
             const tpl = renderArgs && renderArgs.tpl;
             const cfgPag = (tpl && tpl.config_pagina) || {};
             const docTitle = document.getElementById('report-header-title')?.textContent || 'Relatorio_Oficial';
-            const wordHtml = ReportExport.wordDocumentHtml({
-                title: docTitle,
-                bodyHtml: ReportExport.prepareWordBody(clone.innerHTML, caps),
-                page: PageSize.dims(cfgPag),
-                margins: cfgPag.margens_mm
+            // A folha viva (com o layout calculado pelo navegador) vira HTML de Word: estilos em cada elemento,
+            // flex/grid como tabelas, mapas como imagem, cabeçalho no topo e rodapé do Word com número de página.
+            const partes = ReportWord.buildDocument(docElement, {
+                cs: (el) => window.getComputedStyle(el),
+                rect: (el) => el.getBoundingClientRect(),
+                captures: caps
             });
+            const wordHtml = ReportWord.wordFileHtml({ title: docTitle, page: PageSize.dims(cfgPag), margins: cfgPag.margens_mm }, partes);
             baixarArquivo(['\ufeff', ReportExport.toWordMhtml(wordHtml)], 'application/msword', docTitle.replace(/[\s\/\\:*?"<>|]+/g, '_') + '_' + (emissao.protocolo || Date.now()) + '.doc');
             if (falhas.length) alert('O Word foi gerado, mas ' + falhas.length + ' mapa(s) não puderam virar imagem (veja o aviso no lugar do mapa). Confira a conexão com a internet e tente de novo.');
         }

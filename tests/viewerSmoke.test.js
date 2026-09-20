@@ -39,6 +39,31 @@ function tplWith(mapa, extraBlocks) {
     };
 }
 
+// HTML → árvore de nós (o suficiente para o conversor do Word: tags, atributos, texto)
+function parseHtmlTree(html) {
+    const VOID = new Set(['br', 'img', 'input', 'hr', 'meta', 'link']);
+    const mk = (tag) => ({ nodeType: 1, tagName: tag.toUpperCase(), id: '', className: '', attrs: {}, childNodes: [], _style: {}, getAttribute(n) { return this.attrs[n]; }, get src() { return this.attrs.src; }, getBoundingClientRect() { return { left: 0, top: 0, right: 300, bottom: 40, width: 300, height: 40 }; } });
+    const root = mk('div');
+    const stack = [root];
+    const re = /<!--[\s\S]*?-->|<(\/?)([a-zA-Z][a-zA-Z0-9]*)((?:\s+[^>]*?)?)\s*(\/?)>|([^<]+)/g;
+    let m;
+    while ((m = re.exec(html))) {
+        if (m[5] !== undefined) { stack[stack.length - 1].childNodes.push({ nodeType: 3, nodeValue: m[5].replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&') }); continue; }
+        if (m[2] === undefined) continue; // comentário
+        const tag = m[2].toLowerCase();
+        if (m[1]) { for (let i = stack.length - 1; i > 0; i--) if (stack[i].tagName.toLowerCase() === tag) { stack.length = i; break; } continue; }
+        const el = mk(tag);
+        String(m[3] || '').replace(/([a-zA-Z_:-]+)(?:="([^"]*)")?/g, (mm, k, v) => { el.attrs[k] = v === undefined ? '' : v; return mm; });
+        el.id = el.attrs.id || '';
+        el.className = el.attrs.class || '';
+        String(el.attrs.style || '').split(';').forEach(d => { const i = d.indexOf(':'); if (i > 0) el._style[d.slice(0, i).trim().replace(/-([a-z])/g, (x, c) => c.toUpperCase())] = d.slice(i + 1).trim(); });
+        stack[stack.length - 1].childNodes.push(el);
+        if (!VOID.has(tag) && !m[4]) stack.push(el);
+    }
+    return root.childNodes;
+}
+const BASE_CS = { display: 'block', visibility: 'visible', position: 'static', fontFamily: 'Inter', fontSize: '12px', fontWeight: '400', fontStyle: 'normal', color: 'rgb(0, 0, 0)', backgroundColor: 'rgba(0, 0, 0, 0)', textAlign: 'start', lineHeight: 'normal', whiteSpace: 'normal', textTransform: 'none', borderTopWidth: '0px', borderRightWidth: '0px', borderBottomWidth: '0px', borderLeftWidth: '0px', paddingTop: '0px', paddingRight: '0px', paddingBottom: '0px', paddingLeft: '0px', marginTop: '0px', marginBottom: '0px', flexDirection: 'row', alignItems: 'normal' };
+
 async function runScenario(cfg) {
     const registry = {};
     const errors = [];
@@ -57,7 +82,8 @@ async function runScenario(cfg) {
             get firstElementChild() { return { offsetHeight: 120 }; },
             focus() {}, select() {}, click() {},
             set innerHTML(v) { this._html = String(v); indexIds(this._html); },
-            get innerHTML() { return this._html; }
+            get innerHTML() { return this._html; },
+            get childNodes() { return this.id === 'a4-document-container' ? parseHtmlTree(this._html) : []; }
         };
         if (id) registry[id] = el;
         return el;
@@ -94,10 +120,12 @@ async function runScenario(cfg) {
     const windowStub = {
         addEventListener: (ev, fn) => { (listeners[ev] = listeners[ev] || []).push(fn); },
         location: { search: '?templateId=rpt_smoke', href: 'http://localhost:8080/relatorio_view.html?templateId=rpt_smoke' }, localStorage: storage, sessionStorage: storage, opener,
+        getComputedStyle: (el) => Object.assign({}, BASE_CS, el._style || {}),
         innerWidth: cfg.width || 1900, scrollY: 0, scrollTo() {}, print() { captured.prints++; }, getSelection: () => ({ removeAllRanges() {}, addRange() {} })
     };
     const sandbox = {
         window: windowStub, document: documentStub, localStorage: storage, sessionStorage: storage, L: Lstub, navigator: {},
+        getComputedStyle: (el) => Object.assign({}, BASE_CS, el._style || {}),
         console: { log() {}, info() {}, warn() {}, error: (...a) => { errors.push(a.map(String).join(' ')); } },
         setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].fn = null; },
         Image: function () { Object.defineProperty(this, 'src', { set: () => {} }); },
@@ -111,7 +139,7 @@ async function runScenario(cfg) {
     sandbox.self = sandbox.window;
     vm.createContext(sandbox);
     localScripts.forEach(src => { try { vm.runInContext(read(src), sandbox, { filename: src }); } catch (e) { errors.push('script ' + src + ': ' + e.message); } });
-    ['PageSize', 'MapTools', 'ReportMap', 'ReportTemporal', 'ReportExport', 'VerificarEmissao', 'FieldFormatter', 'ReportData'].forEach(n => { if (windowStub[n]) sandbox[n] = windowStub[n]; });
+    ['PageSize', 'MapTools', 'ReportMap', 'ReportTemporal', 'ReportExport', 'ReportWord', 'VerificarEmissao', 'FieldFormatter', 'ReportData'].forEach(n => { if (windowStub[n]) sandbox[n] = windowStub[n]; });
     sandbox.unhandled = [];
     try { vm.runInContext(pageScript, sandbox, { filename: 'relatorio_view.html(inline)' }); } catch (e) { errors.push('script da página: ' + e.stack); }
     (listeners.DOMContentLoaded || []).forEach(fn => { try { fn(); } catch (e) { errors.push('DOMContentLoaded: ' + e.stack); } });
@@ -220,6 +248,7 @@ async function runScenario(cfg) {
         ok('Word: o protocolo da emissão vai no documento', htmlWord.includes(est().protocolo));
         ok('Word: o QR code do rodapé vai como imagem dentro do arquivo (GIF)', /Content-Type: image\/gif/.test(arquivo));
         ok('Word: quadros da análise temporal em tabela (sem grade CSS)', /<table[^>]*>[\s\S]*imagem|<td/.test(htmlWord) && !/display:grid/.test(htmlWord));
+        ok('Word: cabeçalho uma vez no topo, rodapé do Word com número de página e estilos escritos em cada elemento (sem depender de CSS)', (htmlWord.match(/FICHA CADASTRAL/g) || []).length === 1 && /mso-element:footer/.test(htmlWord) && /mso-field-code:" PAGE "/.test(htmlWord) && /font-size:[0-9]/.test(htmlWord) && !/class="[^"]*(flex|text-slate|bg-white)/.test(htmlWord.split('mso-element:footer')[0].split('<body>')[1] || ''));
         eq('Word: sem avisos quando todas as capturas funcionam', r.captured.alerts, []);
         eq('exportar/imprimir não geram erro de execução', r.errors, []);
 
