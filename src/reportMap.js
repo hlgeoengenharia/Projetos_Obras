@@ -20,6 +20,14 @@
         satelite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Imagens © Esri, Maxar, Earthstar Geographics', maxZoom: 19 }
     };
 
+    /** CSS do estilo do texto (negrito, itálico, sublinhado) — em linha, para a captura do mapa ler o estilo real. */
+    function estiloCss(e) {
+        e = e || {};
+        return 'font-weight:' + (e.n ? 700 : 400) + ';font-style:' + (e.i ? 'italic' : 'normal') + ';text-decoration:' + (e.s ? 'underline' : 'none') + ';';
+    }
+    function labelTransform(deg) { return 'translate(-50%,-50%) rotate(' + (Number(deg) || 0) + 'deg)'; }
+    const ROT_HANDLE = '<span class="report-rot no-print" title="Girar (arraste; Shift = de 15 em 15°) • dois cliques voltam ao automático">&#8635;</span>';
+
     function escapeHtml(s) {
         return String(s === undefined || s === null ? '' : s)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -213,6 +221,55 @@
             ['mousedown', 'dblclick', 'click'].forEach(name => input.addEventListener(name, stop));
         }
 
+        /**
+         * Liga o ícone de girar de um texto: arrastar gira em torno do centro do texto (Shift = passos de 15°);
+         * ao soltar, commit(graus). Dois cliques no ícone chamam clear() (volta ao automático).
+         */
+        function wireRotate(mk, labelSel, current, commit, clear) {
+            const root = mk && mk.getElement ? mk.getElement() : null;
+            if (!root || !root.querySelector || !doc) return;
+            const h = root.querySelector('.report-rot');
+            const lab = root.querySelector(labelSel);
+            if (!h || !lab || !h.addEventListener) return;
+            const stop = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
+            ['mousedown', 'touchstart', 'click'].forEach(n => h.addEventListener(n, stop));
+            h.addEventListener('dblclick', (ev) => { stop(ev); clear(); });
+            h.addEventListener('pointerdown', (ev) => {
+                stop(ev);
+                if (ev.preventDefault) ev.preventDefault();
+                if (mk.dragging && mk.dragging.disable) mk.dragging.disable();
+                let deg = current();
+                const move = (e) => {
+                    const r = lab.getBoundingClientRect();
+                    deg = Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180 / Math.PI;
+                    if (e.shiftKey) deg = Math.round(deg / 15) * 15;
+                    lab.style.transform = labelTransform(deg);
+                };
+                const up = () => {
+                    doc.removeEventListener('pointermove', move);
+                    doc.removeEventListener('pointerup', up);
+                    commit(deg);
+                };
+                if (doc.addEventListener) { doc.addEventListener('pointermove', move); doc.addEventListener('pointerup', up); }
+            });
+        }
+
+        function setRotation(id, deg) {
+            const r = MT.normalizeRotacoes({ [id]: deg });
+            const rotacoes = Object.assign({}, cfg.rotacoes);
+            if (r[id] === undefined) delete rotacoes[id]; else rotacoes[id] = r[id];
+            cfg.rotacoes = rotacoes;
+            applyMeasures();
+            notify();
+        }
+        function clearRotation(id) {
+            const rotacoes = Object.assign({}, cfg.rotacoes);
+            delete rotacoes[id];
+            cfg.rotacoes = rotacoes;
+            applyMeasures();
+            notify();
+        }
+
         function startEdit(it) {
             editInline(state.markers[it.id], 'span', it.texto, (txt) => setEdit(it.id, txt, it.padrao), applyMeasures);
         }
@@ -222,8 +279,10 @@
             visibleMeasures().forEach(it => {
                 const p = cfg.posicoes[it.id];
                 const pos = p ? [p.lat, p.lng] : it.pos;
+                const off = p || !it.off ? [0, 0] : it.off; // depois de arrastado, o texto fica exatamente onde foi solto
+                const rot = cfg.rotacoes[it.id] !== undefined ? cfg.rotacoes[it.id] : (it.ang || 0);
                 const dica = it.editado ? 'Editado (calculado: ' + it.padrao + ')' : 'Duplo clique para editar • arraste para mover';
-                const html = '<span class="report-measure-label' + (it.editado ? ' edited' : '') + '" style="top:' + it.dy + 'px" title="' + escapeHtml(dica) + '">' + escapeHtml(it.texto) + '</span>';
+                const html = '<span class="report-measure-label' + (it.editado ? ' edited' : '') + '" style="left:' + off[0] + 'px;top:' + (it.dy + off[1]) + 'px;transform:' + labelTransform(rot) + ';' + estiloCss(cfg.medidas.estilo[it.grupo]) + '" title="' + escapeHtml(dica) + '">' + escapeHtml(it.texto) + ROT_HANDLE + '</span>';
                 const icon = L.divIcon({ className: 'report-measure', html: html, iconSize: [0, 0] });
                 const mk = L.marker(pos, { icon: icon, draggable: true, keyboard: false, zIndexOffset: 1000 });
                 mk.addTo(map);
@@ -237,6 +296,7 @@
                     notify();
                 });
                 state.markers[it.id] = mk;
+                wireRotate(mk, '.report-measure-label', () => rot, (deg) => setRotation(it.id, deg), () => clearRotation(it.id));
             });
             // resumo sob o mapa (sempre visível; acompanha as edições)
             const sidesEl = el('map-sides-text');
@@ -450,8 +510,8 @@
             /** Configuração completa para salvar (inclui a vista atual). */
             snapshot() {
                 return Object.assign({}, cfg, {
-                    camadasLigadas: cfg.camadasLigadas.slice(), destaque: Object.assign({}, cfg.destaque), medidas: Object.assign({}, cfg.medidas),
-                    edicoes: Object.assign({}, cfg.edicoes), posicoes: Object.assign({}, cfg.posicoes),
+                    camadasLigadas: cfg.camadasLigadas.slice(), destaque: Object.assign({}, cfg.destaque), medidas: JSON.parse(JSON.stringify(cfg.medidas)),
+                    edicoes: Object.assign({}, cfg.edicoes), posicoes: Object.assign({}, cfg.posicoes), rotacoes: Object.assign({}, cfg.rotacoes),
                     pontos: Object.assign({}, cfg.pontos, { ordem: cfg.pontos.ordem.slice(), titulos: Object.assign({}, cfg.pontos.titulos) }),
                     rotulos: Object.assign({}, cfg.rotulos), confrontantes: Object.assign({}, cfg.confrontantes), referencia: Object.assign({}, cfg.referencia),
                     comparacaoArea: Object.assign({}, cfg.comparacaoArea), situacao: Object.assign({}, cfg.situacao), quadriculado: Object.assign({}, cfg.quadriculado),
@@ -466,12 +526,13 @@
                 apply();
             },
             /** Apaga as edições e as posições dos rótulos (volta ao calculado). */
-            resetMeasures() { cfg.edicoes = {}; cfg.posicoes = {}; apply(); },
+            resetMeasures() { cfg.edicoes = {}; cfg.posicoes = {}; cfg.rotacoes = {}; apply(); },
             /** Itens de medida atuais (com as edições), para painel/teste. */
             measures() { return MT.applyEdits(measureData.itens, cfg.edicoes); },
             ladosOmitidos: measureData.ladosOmitidos,
             invalidate() { if (map.invalidateSize) map.invalidateSize(); },
             escapeHtml,
+            estiloCss,
 
             // ---- pontos nos vértices (tabela de coordenadas e memorial)
             vertexCount: vertData.total,

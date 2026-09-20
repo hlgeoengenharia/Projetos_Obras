@@ -97,17 +97,27 @@
         return st.display !== 'none' && st.visibility !== 'hidden' && String(st.opacity) !== '0';
     }
 
-    function paintTree(ctx, el, env, origin) {
+    /** Giro (rad) da matriz de transformação calculada ("matrix(a, b, ...)"), 0 se não houver. */
+    function rotationOf(st) {
+        const m = /^matrix(?:3d)?\(([^)]+)\)$/.exec(String((st && st.transform) || '').trim());
+        if (!m) return 0;
+        const v = m[1].split(',').map(parseFloat);
+        return isFinite(v[0]) && isFinite(v[1]) ? Math.atan2(v[1], v[0]) : 0;
+    }
+
+    function paintTree(ctx, el, env, origin, ang) {
+        if (hasClass(el, 'no-print')) return; // ícones de edição (girar etc.) não vão para a imagem
         const st = env.cs(el);
         if (!visible(st)) return;
         const r = env.rect(el);
         const x = r.left - origin.left, y = r.top - origin.top;
-        if (r.width > 0 && r.height > 0) paintBox(ctx, st, x, y, r.width, r.height);
+        const a = (ang || 0) + rotationOf(st);
+        if (!a && r.width > 0 && r.height > 0) paintBox(ctx, st, x, y, r.width, r.height);
         Array.prototype.forEach.call(el.childNodes || [], n => {
-            if (n.nodeType === 3) paintText(ctx, n, st, env, origin);
+            if (n.nodeType === 3) paintText(ctx, n, st, env, origin, a);
             else if (n.nodeType === 1) {
                 if (hasClass(n, 'material-symbols-outlined')) paintIcon(ctx, n, env, origin);
-                else paintTree(ctx, n, env, origin);
+                else paintTree(ctx, n, env, origin, a);
             }
         });
     }
@@ -140,7 +150,7 @@
     }
 
     /** O texto é desenhado no centro vertical do retângulo que o navegador calculou para ele. */
-    function paintText(ctx, node, st, env, origin) {
+    function paintText(ctx, node, st, env, origin, ang) {
         let t = String(node.nodeValue === undefined || node.nodeValue === null ? '' : node.nodeValue).replace(/\s+/g, ' ').trim();
         if (!t) return;
         if (st.textTransform === 'uppercase') t = t.toUpperCase();
@@ -148,8 +158,18 @@
         if (!r || !(r.width > 0)) return;
         ctx.font = fontString(st);
         ctx.textBaseline = 'middle';
-        ctx.textAlign = 'left';
-        const x = r.left - origin.left, y = r.top - origin.top + r.height / 2;
+        // texto girado: o retângulo é o da caixa que envolve o texto girado; o centro dele é o centro do texto
+        const girado = !!ang;
+        let x = r.left - origin.left, y = r.top - origin.top + r.height / 2;
+        if (girado) {
+            ctx.save();
+            ctx.translate(x + r.width / 2, y);
+            ctx.rotate(ang);
+            ctx.textAlign = 'center';
+            x = 0; y = 0;
+        } else {
+            ctx.textAlign = 'left';
+        }
         // brilho branco ao redor (rótulos sobre o mapa)
         if (/#fff|255,\s*255,\s*255/i.test(String(st.textShadow || ''))) {
             ctx.lineJoin = 'round'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.95)';
@@ -157,6 +177,15 @@
         }
         ctx.fillStyle = colorCss(st.color) || '#000';
         ctx.fillText(t, x, y);
+        // sublinhado (o canvas não tem)
+        if (/underline/.test(String(st.textDecorationLine || st.textDecoration || ''))) {
+            const fs = px(st.fontSize) || 12;
+            const w = ctx.measureText ? ctx.measureText(t).width : t.length * fs * 0.6;
+            const x0 = girado ? x - w / 2 : x;
+            ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = Math.max(1, fs / 12);
+            ctx.beginPath(); ctx.moveTo(x0, y + fs * 0.5); ctx.lineTo(x0 + w, y + fs * 0.5); ctx.stroke();
+        }
+        if (girado) ctx.restore();
     }
 
     /** Ícone de fonte: só o norte ("navigation") é desenhado, como seta; os demais são ignorados. */
@@ -192,5 +221,5 @@
         return { dataUrl: canvas.toDataURL('image/png'), w: r.width, h: r.height };
     }
 
-    return { isOverlay, shouldIgnore, paintOverlays, paintTree, capture, colorCss, fontString, OVERLAY_CLASSES, OVERLAY_IDS };
+    return { isOverlay, shouldIgnore, paintOverlays, paintTree, rotationOf, capture, colorCss, fontString, OVERLAY_CLASSES, OVERLAY_IDS };
 });

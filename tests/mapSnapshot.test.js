@@ -22,6 +22,7 @@ function fakeCtx() {
     const calls = [];
     const ctx = { calls, save() { calls.push(['save']); }, restore() { calls.push(['restore']); }, scale(a, b) { calls.push(['scale', a, b]); },
         beginPath() { calls.push(['beginPath']); }, closePath() {}, moveTo(x, y) { calls.push(['moveTo', x, y]); }, lineTo(x, y) { calls.push(['lineTo', x, y]); },
+        translate(x, y) { calls.push(['translate', x, y]); }, rotate(a) { calls.push(['rotate', a]); }, measureText(t) { return { width: t.length * 5 }; },
         setTransform(...a) { calls.push(['setTransform', ...a]); }, quadraticCurveTo() {}, rect(x, y, w, h) { calls.push(['rect', x, y, w, h]); }, fill() { calls.push(['fill', ctx.fillStyle]); }, stroke() { calls.push(['stroke', ctx.strokeStyle, ctx.lineWidth]); },
         fillText(t, x, y) { calls.push(['fillText', t, x, y, ctx.font, ctx.fillStyle, ctx.textBaseline]); }, strokeText(t, x, y) { calls.push(['strokeText', t, x, y]); }, setLineDash() {} };
     return ctx;
@@ -75,6 +76,29 @@ eq('espaços recolhidos, texto vazio ignorado e caixa alta aplicada', of(ctx2, '
 const ctx3 = fakeCtx();
 MS.paintOverlays(ctx3, E('div', { r: R(0, 0, 100, 100) }, E('div', { id: 'map-info-bar', r: R(0, 0, 10, 10) }, T('sem retângulo', null), T('largura zero', R(0, 0, 0, 0)))), env, 1);
 eq('texto sem retângulo calculado não é desenhado (nunca em posição inventada)', of(ctx3, 'fillText').length, 0);
+
+// ---------------------------------------------------------------- texto girado, sem card, sublinhado e ícone de girar
+{
+    const th = -30 * Math.PI / 180;
+    const matriz = 'matrix(' + Math.cos(th).toFixed(4) + ', ' + Math.sin(th).toFixed(4) + ', ' + (-Math.sin(th)).toFixed(4) + ', ' + Math.cos(th).toFixed(4) + ', 0, 0)';
+    const lado = E('div', { cls: 'leaflet-marker-icon report-measure', r: R(400, 220, 0, 0) },
+        E('span', { cls: 'report-measure-label', st: { transform: matriz, fontWeight: '400', fontStyle: 'italic', textDecorationLine: 'underline', textShadow: 'rgb(255, 255, 255) 0px 0px 2px' }, r: R(370, 200, 60, 40) },
+            T('26,12 m', R(372, 204, 56, 32)),
+            E('span', { cls: 'report-rot no-print', r: R(430, 215, 15, 15) }, T('\u21bb', R(431, 216, 10, 12)))));
+    const c = fakeCtx();
+    MS.paintOverlays(c, E('div', { r: R(100, 50, 600, 340) }, lado), env, 2);
+    const t = of(c, 'fillText');
+    eq('só o texto é desenhado (o ícone de girar não vai para a imagem)', t.map(x => x[1]), ['26,12 m']);
+    eq('o giro da matriz vira rotate() do canvas, em torno do centro do texto', [of(c, 'translate')[0], Math.round(of(c, 'rotate')[0][1] * 1000) / 1000], [['translate', 300, 170 + 0], Math.round(th * 1000) / 1000]);
+    ok('texto girado: desenhado em (0, 0), centralizado, com fonte itálica normal e o brilho branco', t[0][2] === 0 && t[0][3] === 0 && /italic normal 9px/.test(t[0][4]) && of(c, 'strokeText').length === 1);
+    ok('sublinhado desenhado à parte (linha na largura do texto)', of(c, 'lineTo').some(x => x[1] === 17.5 && x[2] > 0) && of(c, 'moveTo').some(x => x[1] === -17.5));
+    ok('sem caixa (card) para o texto girado', of(c, 'fill').length === 0 && of(c, 'rect').length === 0);
+    eq('salva/restaura em par (o giro não vaza para os outros textos)', [of(c, 'save').length, of(c, 'restore').length], [2, 2]);
+    eq('rotationOf lê a matriz; sem matriz, zero', [Math.round(MS.rotationOf({ transform: matriz }) * 1000) / 1000, MS.rotationOf({ transform: 'none' }), MS.rotationOf({ transform: 'matrix(1, 0, 0, 1, 40, 12)' }) + 0], [Math.round(th * 1000) / 1000, 0, 0]);
+    const sub = fakeCtx();
+    MS.paintOverlays(sub, E('div', { r: R(0, 0, 100, 100) }, E('div', { cls: 'report-point', r: R(10, 10, 0, 0) }, E('span', { st: { textDecoration: 'underline' }, r: R(10, 10, 40, 12) }, T('P1', R(10, 10, 40, 12))))), env, 1);
+    ok('sublinhado também no texto sem giro (a partir do início do texto)', of(sub, 'moveTo').some(x => x[1] === 10) && of(sub, 'lineTo').some(x => x[1] === 20));
+}
 
 // ---------------------------------------------------------------- captura em duas etapas
 (async () => {

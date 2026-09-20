@@ -28,7 +28,8 @@
         projecao: true,
         alturaMm: 90,            // altura do mapa na folha
         vista: null,             // { lat, lng, zoom } salvo pelo usuário; sem ele o mapa enquadra a feição
-        medidas: { ativo: true, lados: true, total: true, perimetro: false }, // o que aparece sobre o mapa
+        medidas: { ativo: true, lados: true, total: true, perimetro: false, estilo: { lados: { n: true, i: false, s: false }, total: { n: true, i: false, s: false }, perimetro: { n: true, i: false, s: false } } }, // o que aparece sobre o mapa e o estilo do texto (negrito, itálico, sublinhado)
+        rotacoes: {},            // { idDoTexto: graus } (texto girado pelo usuário; sem ele vale o alinhamento automático)
         edicoes: {},             // { idDaMedida: 'texto que o usuário digitou' }
         posicoes: {},            // { idDaMedida: { lat, lng } } (rótulo arrastado)
         pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false, ordem: [], titulos: {} }, // pontos nos vértices
@@ -79,6 +80,7 @@
             medidas: normalizeMedidas(src.medidas),
             edicoes: normalizeEdicoes(src.edicoes),
             posicoes: normalizePosicoes(src.posicoes),
+            rotacoes: normalizeRotacoes(src.rotacoes),
             pontos: normalizePontos(src.pontos),
             temporal: normalizeTemporal(src.temporal),
             rotulos: normalizeRotulos(src.rotulos),
@@ -183,15 +185,39 @@
         };
     }
 
+    /** Estilo do texto no mapa: negrito, itálico e sublinhado (o que não vier usa o padrão). */
+    function normalizeEstilo(x, def) {
+        x = x || {};
+        def = def || { n: true, i: false, s: false };
+        return { n: x.n === undefined ? !!def.n : !!x.n, i: x.i === undefined ? !!def.i : !!x.i, s: x.s === undefined ? !!def.s : !!x.s };
+    }
+
     function normalizeMedidas(m) {
         const d = MAP_DEFAULTS.medidas;
         m = m || {};
+        const est = m.estilo || {};
         return {
             ativo: m.ativo === undefined ? d.ativo : !!m.ativo,
             lados: m.lados === undefined ? d.lados : !!m.lados,
             total: m.total === undefined ? d.total : !!m.total,
-            perimetro: m.perimetro === undefined ? d.perimetro : !!m.perimetro
+            perimetro: m.perimetro === undefined ? d.perimetro : !!m.perimetro,
+            estilo: { lados: normalizeEstilo(est.lados, d.estilo.lados), total: normalizeEstilo(est.total, d.estilo.total), perimetro: normalizeEstilo(est.perimetro, d.estilo.perimetro) }
         };
+    }
+
+    /** Giro dos textos: graus no intervalo (-180, 180], uma casa decimal. */
+    function normalizeRotacoes(p) {
+        const out = {};
+        if (!p || typeof p !== 'object') return out;
+        Object.keys(p).forEach(k => {
+            if (!validId(k)) return;
+            let g = Number(p[k]);
+            if (!isFinite(g)) return;
+            g = ((g % 360) + 360) % 360;
+            if (g > 180) g -= 360;
+            out[k] = Math.round(g * 10) / 10;
+        });
+        return out;
     }
 
     const MAX_EDIT_LEN = 60;
@@ -387,12 +413,38 @@
         return [last[1], last[0]];
     }
 
+    /** Giro (graus, sentido horário, texto sempre de cabeça para cima: -90 a 90) que alinha o texto à aresta a→b, em [lng, lat]. */
+    function edgeAngleCss(a, b) {
+        const dx = b[0] - a[0];
+        const dy = (b[1] - a[1]) / Math.cos(rad((a[1] + b[1]) / 2)); // no mapa (Mercator) 1° de latitude pesa 1/cos(lat) a mais na tela
+        let ang = -Math.atan2(dy, dx) * 180 / Math.PI;
+        if (ang > 90) ang -= 180; else if (ang <= -90) ang += 180;
+        return Math.round(ang * 10) / 10;
+    }
+
+    /** Afastamento (px de tela) perpendicular à aresta a→b. lado: +1 = para a direita de quem percorre a aresta (fora de um anel anti-horário). */
+    function edgeOffsetPx(a, b, lado, px) {
+        const dx = b[0] - a[0];
+        const dy = (b[1] - a[1]) / Math.cos(rad((a[1] + b[1]) / 2));
+        const len = Math.hypot(dx, dy) || 1;
+        const nx = dy / len * lado, ny = dx / len * lado; // normal à direita, em coordenadas de tela (y para baixo)
+        return [Math.round(nx * px * 10) / 10, Math.round(ny * px * 10) / 10];
+    }
+
+    /** Sentido do anel: +1 anti-horário, -1 horário (em lng/lat). */
+    function ringSign(ring) {
+        let s = 0;
+        for (let i = 0; i < ring.length - 1; i++) s += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
+        return s >= 0 ? 1 : -1;
+    }
+
     const MAX_LADOS = 80; // acima disso os rótulos dos lados viram poluição visual: ficam de fora
 
     /**
      * Medidas da feição, prontas para virar rótulos no mapa.
      * Devolve { itens, ladosOmitidos }. Cada item:
-     *   { id, grupo: 'lados'|'total'|'perimetro', tipo, valor, texto, resumo, pos:[lat,lng], dy }
+     *   { id, grupo: 'lados'|'total'|'perimetro', tipo, valor, texto, resumo, pos:[lat,lng], dy, ang?, off? }
+     * (lados e trechos trazem ang = giro que alinha o texto à aresta e off = afastamento em px para fora da feição)
      * ids: lado:0.., trecho:0.., area, perimetro, comprimento, coordenada[:k]
      */
     function computeMeasures(geometry) {
@@ -408,11 +460,12 @@
             const lados = [];
             polys.forEach(rings => {
                 const outer = rings[0] || [];
+                const sinal = ringSign(outer); // o texto do lado fica do lado de fora da feição
                 area += polygonAreaM2(rings);
                 for (let i = 0; i < outer.length - 1; i++) {
                     const d = distanceM(outer[i], outer[i + 1]);
                     perim += d;
-                    lados.push({ id: 'lado:' + nLados, grupo: 'lados', tipo: 'lado', valor: d, texto: fmtNumber(d, 2) + ' m', resumo: 'L' + (nLados + 1) + ': ' + fmtNumber(d, 2) + ' m', pos: midLatLng(outer[i], outer[i + 1]), dy: 0 });
+                    lados.push({ id: 'lado:' + nLados, grupo: 'lados', tipo: 'lado', valor: d, texto: fmtNumber(d, 2) + ' m', resumo: 'L' + (nLados + 1) + ': ' + fmtNumber(d, 2) + ' m', pos: midLatLng(outer[i], outer[i + 1]), dy: 0, ang: edgeAngleCss(outer[i], outer[i + 1]), off: edgeOffsetPx(outer[i], outer[i + 1], sinal, 9) });
                     nLados++;
                 }
             });
@@ -427,7 +480,7 @@
                 total += lineLengthM(coords);
                 for (let i = 0; i < coords.length - 1; i++) {
                     const d = distanceM(coords[i], coords[i + 1]);
-                    trechos.push({ id: 'trecho:' + nTrechos, grupo: 'lados', tipo: 'trecho', valor: d, texto: fmtNumber(d, 2) + ' m', resumo: 'T' + (nTrechos + 1) + ': ' + fmtNumber(d, 2) + ' m', pos: midLatLng(coords[i], coords[i + 1]), dy: 0 });
+                    trechos.push({ id: 'trecho:' + nTrechos, grupo: 'lados', tipo: 'trecho', valor: d, texto: fmtNumber(d, 2) + ' m', resumo: 'T' + (nTrechos + 1) + ': ' + fmtNumber(d, 2) + ' m', pos: midLatLng(coords[i], coords[i + 1]), dy: 0, ang: edgeAngleCss(coords[i], coords[i + 1]), off: edgeOffsetPx(coords[i], coords[i + 1], edgeOffsetPx(coords[i], coords[i + 1], 1, 1)[1] > 0 ? -1 : 1, 9) });
                     nTrechos++;
                 }
             });
@@ -1023,7 +1076,7 @@
 
     return {
         MAP_DEFAULTS, BASE_MAPS,
-        normalizeMapConfig, mergeAjustes,
+        normalizeMapConfig, mergeAjustes, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
         geometryBBox, bboxCenter, expandBBoxMeters, bboxIntersects, roundCoords, geomKind,
         normalizeTemporal, rasterDateInfo, fmtRasterDate, tileXY, tileUrl, probeZoom, rasterBBox, buildOrtofotoList, sortOrtofotos,
         COORD_SYSTEMS, normalizePontos, latLngToUtm, utmToLatLng, fmtGms, coordHeaders, coordCells, coordSystemLabel, azimuthDeg, fmtAzimuth, vertices, defaultPointTitle, pointRows,

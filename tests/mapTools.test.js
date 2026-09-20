@@ -24,6 +24,24 @@ const sujo = MT.normalizeMapConfig({ mapa: { baseMap: 'xyz', alturaMm: 9999, des
 eq('valores inválidos voltam ao padrão / limites', [sujo.baseMap, sujo.alturaMm, sujo.destaque.cor, sujo.destaque.espessura, sujo.destaque.preenchimento], ['osm', 220, '#10b981', 1, 0.9]);
 eq('esmaecimento do entorno: padrão 0,6 e limites 0,1 a 0,95', [c0.destaque.opacidadeEntorno, MT.normalizeMapConfig({ mapa: { destaque: { opacidadeEntorno: 5 } } }).destaque.opacidadeEntorno, MT.normalizeMapConfig({ mapa: { destaque: { opacidadeEntorno: 0 } } }).destaque.opacidadeEntorno, MT.normalizeMapConfig({ mapa: { destaque: { opacidadeEntorno: 0.3 } } }).destaque.opacidadeEntorno], [0.6, 0.95, 0.1, 0.3]);
 eq('mapa base pode ser uma ortofoto ("ortofoto:id"); id estranho volta ao padrão', [MT.normalizeMapConfig({ mapa: { baseMap: 'ortofoto:abc-12' } }).baseMap, MT.normalizeMapConfig({ mapa: { baseMap: 'ortofoto:<x>' } }).baseMap, MT.normalizeMapConfig({ mapa: { baseMap: 'ortofoto:' } }).baseMap], ['ortofoto:abc-12', 'osm', 'osm']);
+// giro e afastamento dos textos dos lados
+eq('giro do texto alinhado à aresta: leste 0°, nordeste -45° (no equador), norte 90° (de cabeça para cima), oeste 0°', [MT.edgeAngleCss([0, 0], [1, 0]) + 0, MT.edgeAngleCss([0, 0], [1, 1]), MT.edgeAngleCss([0, 0], [0, 1]), MT.edgeAngleCss([1, 0], [0, 0]) + 0], [0, -45, 90, 0]);
+ok('o giro nunca deixa o texto de cabeça para baixo (sempre entre -90 e 90)', [[0, 0, 1, -1], [0, 0, -1, -1], [0, 0, -1, 1], [0, 0, 0.2, -3]].every(([a, b, c, d]) => { const g = MT.edgeAngleCss([a, b], [c, d]); return g > -90.01 && g <= 90; }));
+{
+    const ccw = { type: 'Polygon', coordinates: [[[0, 0], [0.001, 0], [0.001, 0.001], [0, 0.001], [0, 0]]] };
+    const cw = { type: 'Polygon', coordinates: [[[0, 0], [0, 0.001], [0.001, 0.001], [0.001, 0], [0, 0]]] };
+    const lados = (g) => MT.computeMeasures(g).itens.filter(i => i.grupo === 'lados');
+    const a = lados(ccw), b = lados(cw);
+    ok('lados do polígono trazem giro e afastamento; área e perímetro não', a.every(i => typeof i.ang === 'number' && Array.isArray(i.off)) && MT.computeMeasures(ccw).itens.filter(i => i.grupo !== 'lados').every(i => i.ang === undefined && i.off === undefined));
+    ok('anel anti-horário: o texto da base vai para baixo e o do topo para cima (fora da feição)', a[0].off[1] > 8 && a[2].off[1] < -8 && Math.abs(a[1].off[0]) > 8 && a[1].off[0] > 0 && a[3].off[0] < -8);
+    ok('anel horário: mesmo resultado (sempre para fora)', b[0].off[0] < -8 && b[1].off[1] < -8 && b[2].off[0] > 8 && b[3].off[1] > 8);
+    const linha = lados({ type: 'LineString', coordinates: [[0, 0], [0.001, 0]] })[0];
+    ok('trecho de linha: texto acima da linha', linha.off[1] < -8 && linha.ang === 0);
+}
+eq('estilo do texto: padrão negrito; o que vier sobrepõe', [MT.normalizeEstilo({}), MT.normalizeEstilo({ n: false, s: 1 }), MT.normalizeEstilo(null, { n: false, i: true, s: false })], [{ n: true, i: false, s: false }, { n: false, i: false, s: true }, { n: false, i: true, s: false }]);
+eq('medidas: estilo por grupo normalizado', MT.normalizeMapConfig({ mapa: { medidas: { estilo: { lados: { n: false, i: true }, perimetro: { s: true } } } } }).medidas.estilo, { lados: { n: false, i: true, s: false }, total: { n: true, i: false, s: false }, perimetro: { n: true, i: false, s: true } });
+eq('giros: ids válidos, graus no intervalo (-180, 180] e uma casa decimal', MT.normalizeRotacoes({ 'lado:0': 190, 'lado:1': -370.26, area: 45, 'lixo!': 3, perimetro: 'x', 'lado:2': 180 }), { 'lado:0': -170, 'lado:1': -10.3, area: 45, 'lado:2': 180 });
+eq('giros voltam pelos ajustes do usuário', MT.mergeAjustes(MT.normalizeMapConfig({}), { rotacoes: { area: 30 } }).rotacoes, { area: 30 });
 eq('base satélite e nenhum são aceitas', [MT.normalizeMapConfig({ mapa: { baseMap: 'satelite' } }).baseMap, MT.normalizeMapConfig({ mapa: { baseMap: 'nenhum' } }).baseMap], ['satelite', 'nenhum']);
 
 const aj = MT.mergeAjustes(c0, { norte: false, baseMap: 'satelite', camadasLigadas: [7, 'b'], destaque: { esmaecerEntorno: true }, lixo: 1 });
@@ -149,7 +167,7 @@ eq('edição substitui texto e resumo e guarda o valor calculado', [ed[0].texto,
 eq('medida sem edição não muda', [ed[1].texto === mq.itens[1].texto, ed[1].editado], [true, false]);
 
 // configuração das medidas, edições e posições dos rótulos
-eq('medidas ligadas por padrão, perímetro desligado', MT.normalizeMapConfig({}).medidas, { ativo: true, lados: true, total: true, perimetro: false });
+eq('medidas ligadas por padrão, perímetro desligado', (({ estilo, ...resto }) => resto)(MT.normalizeMapConfig({}).medidas), { ativo: true, lados: true, total: true, perimetro: false });
 eq('medidas: o usuário pode desligar tudo ou só parte', [MT.mergeAjustes(c0, { medidas: { ativo: false } }).medidas.ativo, MT.mergeAjustes(c0, { medidas: { perimetro: true } }).medidas.perimetro, MT.mergeAjustes(c0, { medidas: { perimetro: true } }).medidas.lados], [false, true, true]);
 const e2 = MT.normalizeMapConfig({ mapa: { edicoes: { 'lado:1': '  20 m  ', area: 'x'.repeat(200), 'nao valido!': 'a', perimetro: '   ', trecho: 5, 'lado:2': 'a\nb' } } }).edicoes;
 eq('edições: limpa espaços, limita o tamanho, tira quebras e descarta o inválido/vazio', [e2['lado:1'], e2.area.length, e2['nao valido!'], e2.perimetro, e2.trecho, e2['lado:2']], ['20 m', 60, undefined, undefined, undefined, 'a b']);

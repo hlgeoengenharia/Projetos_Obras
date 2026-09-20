@@ -227,6 +227,22 @@ async function runScenario(cfg) {
         eq('sem erro de execução na sanfona', r.errors, []);
     }
 
+    // ---- medidas: negrito / itálico / sublinhado pelo painel
+    {
+        const r = await runScenario({ width: 1900, opener: true, payload: cenarios[3].payload });
+        const cfg = () => require('vm').runInContext('mapController.getConfig()', r.sandbox);
+        const painel = () => r.registry['map-tools-panel']._html;
+        ok('painel: cada linha de medida tem os botões N, I e S', (painel().match(/class="nis"/g) || []).length >= 4 && /mapPanelEstilo\('medidas', 'lados', 'i'\)/.test(painel()) && /mapPanelEstilo\('medidas', 'todos', 'n'\)/.test(painel()));
+        r.sandbox.mapPanelEstilo('medidas', 'lados', 'i');
+        eq('botão I dos lados liga o itálico só nos lados', [cfg().medidas.estilo.lados.i, cfg().medidas.estilo.total.i], [true, false]);
+        ok('o botão aparece marcado depois de clicar', /class="on" onclick="mapPanelEstilo\('medidas', 'lados', 'i'\)"/.test(painel()));
+        r.sandbox.mapPanelEstilo('medidas', 'todos', 's');
+        eq('botão do "Mostrar medidas no mapa" vale para os três grupos', ['lados', 'total', 'perimetro'].map(g => cfg().medidas.estilo[g].s), [true, true, true]);
+        r.sandbox.mapPanelEstilo('medidas', 'todos', 's');
+        eq('clicar de novo desliga em todos', ['lados', 'total', 'perimetro'].map(g => cfg().medidas.estilo[g].s), [false, false, false]);
+        eq('sem erro de execução', r.errors, []);
+    }
+
     // ---- emissão (protocolo + SHA-256) e exportação (PNG/Word/impressão)
     {
         const hoje = new Date();

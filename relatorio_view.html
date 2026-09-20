@@ -128,8 +128,10 @@
         #map-legend i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; border: 1px solid rgba(0,0,0,.35); }
         .leaflet-container { font-family: inherit; }
         .report-measure { background: transparent; border: 0; }
-        .report-measure-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; background: rgba(255,255,255,.92); color: #065f46; border: 1px solid #6ee7b7; border-radius: 4px; padding: 0 4px; font: 700 9px/14px monospace; cursor: text; }
-        .report-measure-label.edited { border-style: dashed; color: #92400e; border-color: #f59e0b; }
+        .report-measure-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: #065f46; font: 10px/14px monospace; text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; cursor: move; }
+        .report-measure-label.edited { color: #92400e; }
+        .report-rot { position: absolute; left: 100%; top: 50%; margin-left: 5px; transform: translateY(-50%); width: 15px; height: 15px; border-radius: 50%; background: #0f172a; color: #fff; font: 11px/15px sans-serif; text-align: center; text-shadow: none; cursor: grab; display: none; }
+        .report-measure-label:hover .report-rot, .report-point-label:hover .report-rot, .report-nlabel-l:hover .report-rot { display: block; }
         .report-tframe-title { display: flex; justify-content: space-between; gap: 6px; background: #0f172a; color: #fff; padding: 2px 7px; border-radius: 6px 6px 0 0; font: 700 9.5px/16px monospace; }
         .report-tframe-title span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .report-tframe-wrap { border: 1px solid #cbd5e1; border-top: 0; background: #e2e8f0; position: relative; overflow: hidden; border-radius: 0 0 6px 6px; }
@@ -159,6 +161,10 @@
         #map-tools-panel .sec-body { padding: 6px 2px 8px; border-bottom: 1px solid #e2e8f0; }
         #map-tools-panel label.row { display: flex; align-items: center; gap: 7px; padding: 2px 0; cursor: pointer; }
         #map-tools-panel label.row.off { opacity: .45; cursor: not-allowed; }
+        #map-tools-panel .rowx { display: flex; align-items: center; gap: 4px; }
+        #map-tools-panel .nis { display: inline-flex; gap: 2px; flex: none; }
+        #map-tools-panel .nis button { width: 20px; height: 20px; padding: 0; border: 1px solid #cbd5e1; background: #fff; border-radius: 5px; font-size: 11px; line-height: 1; cursor: pointer; color: #0f172a; }
+        #map-tools-panel .nis button.on { background: #0f172a; border-color: #0f172a; color: #fff; }
         #map-tools-panel button.act { width: 100%; padding: 7px 8px; border-radius: 9px; font-weight: 700; font-size: 12px; cursor: pointer; border: 1px solid #cbd5e1; background: #f8fafc; }
         #map-tools-panel button.act.primary { background: #059669; border-color: #059669; color: #fff; }
         #map-tools-toggle { position: fixed; top: 84px; right: 12px; z-index: 1200; background: #0f172a; color: #fff; border-radius: 999px; padding: 7px 12px; font-size: 12px; font-weight: 700; cursor: pointer; display: none; box-shadow: 0 6px 18px rgba(15,23,42,.3); }
@@ -1620,6 +1626,10 @@
             const secH = (id) => (mapPanelSecaoAberta === id ? 'open' : '');
             const secD = (id) => (mapPanelSecaoAberta === id ? 'block' : 'none');
             const chk = (id, label, checked, handler, disabled) => `<label class="row ${disabled ? 'off' : ''}"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="${handler}"> ${label}</label>`;
+            const nis = (alvo, grupo, e) => '<span class="nis">' + [['n', '<b>N</b>', 'Negrito'], ['i', '<i>I</i>', 'Itálico'], ['s', '<u>S</u>', 'Sublinhado']].map(([k, l, t]) => `<button type="button" title="${t}" class="${e[k] ? 'on' : ''}" onclick="mapPanelEstilo('${alvo}', '${grupo}', '${k}')">${l}</button>`).join('') + '</span>';
+            const chkN = (id, label, checked, handler, disabled, nisHtml) => `<div class="rowx"><label class="row ${disabled ? 'off' : ''}" style="flex:1;min-width:0"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="${handler}"> ${label}</label>${nisHtml}</div>`;
+            const estM = cfg.medidas.estilo;
+            const estTodos = { n: ['lados', 'total', 'perimetro'].every(g => estM[g].n), i: ['lados', 'total', 'perimetro'].every(g => estM[g].i), s: ['lados', 'total', 'perimetro'].every(g => estM[g].s) };
             const cams = camadasDoPayload();
             const camOpts = (sel) => '<option value="">Escolha a camada…</option>' + cams.map(c => `<option value="${esc(c.id)}" ${String(sel) === String(c.id) ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
             const temRotulo = cams.some(c => c.features.some(f => f.properties && f.properties.r));
@@ -1691,11 +1701,11 @@
                     <label class="row">Preenchimento <input type="range" min="0" max="90" value="${Math.round(cfg.destaque.preenchimento * 100)}" oninput="mapPanelDestaque('preenchimento', this.value / 100)" style="flex:1"></label>
                     </div>
                     <h4 data-sec-h="medidas" class="${secH('medidas')}" onclick="mapPanelSecao('medidas')">Medidas da feição<span class="chev">&#9662;</span></h4><div data-sec="medidas" class="sec-body" style="display:${secD('medidas')}">
-                    ${chk('mp-med', 'Mostrar medidas no mapa', cfg.medidas.ativo, "mapPanelMedidas('ativo', this.checked)")}
-                    ${chk('mp-med-lados', kind === 'line' ? 'Trechos' : 'Lados', cfg.medidas.lados, "mapPanelMedidas('lados', this.checked)", kind === 'point' || mapController.ladosOmitidos)}
-                    ${chk('mp-med-total', kind === 'polygon' ? 'Área' : (kind === 'line' ? 'Comprimento total' : 'Coordenada'), cfg.medidas.total, "mapPanelMedidas('total', this.checked)")}
-                    ${chk('mp-med-perim', 'Perímetro', cfg.medidas.perimetro, "mapPanelMedidas('perimetro', this.checked)", kind !== 'polygon')}
-                    <div style="color:#64748b;line-height:1.35;margin:3px 0 4px">Dê <b>dois cliques</b> numa medida para editar o texto (vazio restaura o calculado). Arraste para mudar de lugar.${mapController.ladosOmitidos ? ' <span style="color:#b45309">Mais de 80 lados: rótulos dos lados omitidos.</span>' : ''}</div>
+                    ${chkN('mp-med', 'Mostrar medidas no mapa', cfg.medidas.ativo, "mapPanelMedidas('ativo', this.checked)", false, nis('medidas', 'todos', estTodos))}
+                    ${chkN('mp-med-lados', kind === 'line' ? 'Trechos' : 'Lados', cfg.medidas.lados, "mapPanelMedidas('lados', this.checked)", kind === 'point' || mapController.ladosOmitidos, nis('medidas', 'lados', estM.lados))}
+                    ${chkN('mp-med-total', kind === 'polygon' ? 'Área' : (kind === 'line' ? 'Comprimento total' : 'Coordenada'), cfg.medidas.total, "mapPanelMedidas('total', this.checked)", false, nis('medidas', 'total', estM.total))}
+                    ${chkN('mp-med-perim', 'Perímetro', cfg.medidas.perimetro, "mapPanelMedidas('perimetro', this.checked)", kind !== 'polygon', nis('medidas', 'perimetro', estM.perimetro))}
+                    <div style="color:#64748b;line-height:1.35;margin:3px 0 4px">Os textos já saem alinhados às arestas. Dê <b>dois cliques</b> numa medida para editar o texto (vazio restaura o calculado); arraste para mudar de lugar; use o ícone ↻ (ao passar o mouse) para girar, e dois cliques nele voltam ao alinhamento automático.${mapController.ladosOmitidos ? ' <span style="color:#b45309">Mais de 80 lados: rótulos dos lados omitidos.</span>' : ''}</div>
                     <button type="button" class="act" onclick="mapPanelResetMedidas()">Restaurar medidas calculadas</button>
                     </div>
                     <h4 data-sec-h="pontos" class="${secH('pontos')}" onclick="mapPanelSecao('pontos')">Pontos nos vértices<span class="chev">&#9662;</span></h4><div data-sec="pontos" class="sec-body" style="display:${secD('pontos')}">
@@ -1781,6 +1791,23 @@
             applyMapPanelVisibility();
         }
         function mapPanelSet(key, value) { if (mapController) mapController.setConfig({ [key]: value }); }
+        // negrito / itálico / sublinhado: alvo 'medidas' (por grupo ou 'todos') ou 'pontos' / 'rotulos' (estilo único)
+        function mapPanelEstilo(alvo, grupo, k) {
+            if (!mapController) return;
+            const cfg = mapController.getConfig();
+            if (alvo === 'medidas') {
+                const est = cfg.medidas.estilo;
+                const gs = grupo === 'todos' ? ['lados', 'total', 'perimetro'] : [grupo];
+                const novo = !gs.every(g => est[g][k]);
+                gs.forEach(g => { est[g][k] = novo; });
+                mapController.setConfig({ medidas: { estilo: est } });
+            } else {
+                const est = Object.assign({}, cfg[alvo].estilo);
+                est[k] = !est[k];
+                mapController.setConfig({ [alvo]: { estilo: est } });
+            }
+            renderMapToolsPanel();
+        }
         function mapPanelDestaque(key, value) { if (mapController) mapController.setConfig({ destaque: { [key]: value } }); }
         function mapPanelPontos(key, value) { if (mapController) mapController.setConfig({ pontos: { [key]: value } }); }
         function mapPanelMarcarTodos() { if (mapController) mapController.markAllPoints(); }

@@ -218,7 +218,7 @@ ok('sem geometria: mapa abre num ponto padrão e nada é destacado', !!t.map.vie
 
 // ---------------------------------------------------------------- medidas: rótulos, edição, arraste
 const marcadores = (tt) => tt.layersOf('marker');
-const label = (mk) => mk.args.o.icon.html;
+const label = (mk) => mk.args.o.icon.html.replace(/<span class="report-rot[^>]*>[^<]*<\/span>/, ''); // sem o ícone de girar
 t = build({});
 eq('por padrão: 4 lados + área (perímetro desligado)', marcadores(t).map(m => label(m).replace(/<[^>]+>/g, '').replace(/[\d.]+,\d{2}/, 'N')), ['N m', 'N m', 'N m', 'N m', 'Área N m²']);
 ok('rótulo traz dica de duplo clique e arraste', /Duplo clique para editar/.test(label(marcadores(t)[0])));
@@ -307,6 +307,50 @@ t = build({}, { type: 'Polygon', coordinates: [Array.from({ length: 101 }, (_, i
 ok('mais de 80 lados: só a área no mapa e aviso no resumo', marcadores(t).length === 1 && t.ctl.ladosOmitidos === true && /omitidos/.test(t.doc.els['map-sides-text'].textContent));
 t = build({}, null);
 ok('sem geometria: nenhuma medida e aviso no resumo', marcadores(t).length === 0 && t.doc.els['map-sides-text'].textContent === 'Feição sem geometria associada');
+
+// ---------------------------------------------------------------- medidas: giro, alinhamento e estilo do texto
+{
+    const w = build({});
+    const mk = marcadores(w)[0];
+    const html = mk.args.o.icon.html;
+    ok('rótulo de lado já sai girado (alinhado à aresta) e afastado da linha, sem o card antigo', /transform:translate\(-50%,-50%\) rotate\(-?[\d.]+deg\)/.test(html) && /left:-?[\d.]+px;top:-?[\d.]+px/.test(html) && !/border|background/.test(html));
+    ok('rótulo traz o ícone de girar (fora da imagem exportada: no-print)', /class="report-rot no-print"/.test(html));
+    ok('padrão: negrito, sem itálico nem sublinhado', /font-weight:700;font-style:normal;text-decoration:none/.test(html));
+    w.ctl.setConfig({ medidas: { estilo: { lados: { n: false, i: true, s: true }, total: { n: true, i: false, s: false }, perimetro: { n: true, i: false, s: false } } } });
+    ok('estilo dos lados: sem negrito, itálico e sublinhado', /font-weight:400;font-style:italic;text-decoration:underline/.test(marcadores(w)[0].args.o.icon.html));
+    ok('estilo é por grupo: a área continua em negrito', /font-weight:700;font-style:normal;text-decoration:none/.test(marcadores(w).find(m => /Área/.test(m.args.o.icon.html)).args.o.icon.html));
+    w.ctl.setConfig({ rotacoes: { 'lado:0': 33 } });
+    ok('giro salvo vale no lugar do automático', /rotate\(33deg\)/.test(marcadores(w)[0].args.o.icon.html) && !/rotate\(33deg\)/.test(marcadores(w)[1].args.o.icon.html));
+    w.ctl.resetMeasures();
+    ok('restaurar medidas também tira os giros', Object.keys(w.ctl.getConfig().rotacoes).length === 0 && !/rotate\(33deg\)/.test(marcadores(w)[0].args.o.icon.html));
+    w.ctl.setConfig({ medidas: { lados: false, total: false } });
+    ok('desligar o grupo tira os textos', marcadores(w).length === 0);
+}
+{
+    // arrastar o ícone de girar: o ângulo vem da posição do ponteiro em relação ao centro do texto
+    const eventos = {};
+    const docE = makeDoc(ids);
+    docE.addEventListener = (n, fn) => { eventos[n] = fn; };
+    docE.removeEventListener = (n) => { delete eventos[n]; };
+    const w = build({}, undefined, { doc: docE });
+    const mk = marcadores(w)[0];
+    mk.span.getBoundingClientRect = () => ({ left: 100, top: 100, width: 20, height: 10 });
+    mk.span.style = {};
+    const sem = { stopPropagation() {}, preventDefault() {} };
+    ok('o ícone de girar impede o arraste do texto e o duplo clique de edição', typeof mk.span.listeners.pointerdown === 'function' && typeof mk.span.listeners.mousedown === 'function' && typeof mk.span.listeners.dblclick === 'function');
+    mk.span.listeners.pointerdown(sem);
+    ok('durante o giro o arraste do marcador fica desligado', mk.draggingOff === true);
+    eventos.pointermove({ clientX: 110, clientY: 155 }); // 50 px abaixo do centro (110, 105): 90°
+    eq('ao girar, o texto acompanha o ponteiro', mk.span.style.transform, 'translate(-50%,-50%) rotate(90deg)');
+    eventos.pointermove({ clientX: 125, clientY: 95, shiftKey: true }); // ~ -34° → passo de 15° = -30°
+    eq('Shift trava o giro em passos de 15°', mk.span.style.transform, 'translate(-50%,-50%) rotate(-30deg)');
+    eventos.pointerup({});
+    eq('ao soltar, o giro é guardado e a configuração notificada', [w.ctl.getConfig().rotacoes['lado:0'], w.changes.length > 1, Object.keys(eventos)], [-30, true, []]);
+    ok('o texto é redesenhado com o giro guardado', /rotate\(-30deg\)/.test(marcadores(w)[0].args.o.icon.html));
+    const mk2 = marcadores(w)[0];
+    mk2.span.listeners.dblclick(sem);
+    ok('dois cliques no ícone voltam ao alinhamento automático', w.ctl.getConfig().rotacoes['lado:0'] === undefined && !/rotate\(-30deg\)/.test(marcadores(w)[0].args.o.icon.html));
+}
 
 // ---------------------------------------------------------------- pontos nos vértices
 const handles = (tt) => tt.layersOf('circle');
