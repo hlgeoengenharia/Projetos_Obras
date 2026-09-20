@@ -21,6 +21,8 @@
     <script src="src/reportMap.js"></script>
     <script src="src/reportTemporal.js"></script>
     <script src="src/reportExport.js"></script>
+    <script src="src/verificarEmissao.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="src/fieldFormatter.js"></script>
     <script src="src/reportData.js"></script>
@@ -522,8 +524,9 @@
                             ${ftrBloco.exibirDataHora !== false ? `Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}` : ''}
                             ${ftrBloco.exibirHash !== false ? `<span class="ml-2 font-bold text-slate-600">SHA-256: <span data-emissao="hash" title="${emissaoTitulo()}">${emissaoTexto('hash')}</span></span>` : ''}
                         </div>
-                        <div class="font-bold text-slate-700">
-                            ${pageText}
+                        <div class="font-bold text-slate-700 flex items-center gap-2">
+                            ${ftrBloco.exibirQr !== false ? `<img data-emissao="qr" alt="QR code de verificação de autenticidade" title="Aponte a câmera para verificar a autenticidade" style="width:36px;height:36px;image-rendering:pixelated;${emissao.protocolo ? '' : 'display:none;'}" ${emissao.protocolo ? `src="${qrDataUrl()}"` : ''}>` : ''}
+                            <span>${pageText}</span>
                         </div>
                     </div>
                 </div>
@@ -1811,7 +1814,20 @@
             return emissao.erro ? escapeHtml(emissao.erro) : escapeHtml(emissao.hash || '');
         }
 
+        /** QR code (imagem GIF embutida) que leva à página de verificação com o protocolo. Vazio se ainda não há protocolo. */
+        function qrDataUrl() {
+            if (!emissao.protocolo || typeof qrcode !== 'function' || typeof VerificarEmissao === 'undefined') return '';
+            try {
+                const qr = qrcode(0, 'M');
+                qr.addData(VerificarEmissao.verificationUrl(window.location.href, emissao.protocolo));
+                qr.make();
+                return qr.createDataURL(4, 0);
+            } catch (e) { return ''; }
+        }
+
         function aplicarEmissaoNoDom() {
+            const qr = qrDataUrl();
+            document.querySelectorAll('[data-emissao="qr"]').forEach(e => { if (qr) { e.src = qr; e.style.display = ''; } else { e.style.display = 'none'; } });
             document.querySelectorAll('[data-emissao="protocolo"]').forEach(e => { e.textContent = emissaoTexto('protocolo'); });
             document.querySelectorAll('[data-emissao="hash"]').forEach(e => { e.textContent = emissaoTexto('hash'); e.title = emissao.hash || emissao.erro || ''; });
         }

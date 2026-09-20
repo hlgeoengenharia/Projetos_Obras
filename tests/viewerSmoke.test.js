@@ -89,11 +89,11 @@ async function runScenario(cfg) {
     const timers = [];
     const listeners = {};
     // janela de origem (a página do mapa) com o adaptador de ajustes, como no uso real
-    const captured = { blobs: [], alerts: [], registros: [], prints: 0, downloads: [] };
+    const captured = { blobs: [], alerts: [], registros: [], prints: 0, downloads: [], qrData: '' };
     const opener = cfg.opener ? { closed: false, ReportAdapter: { getAjustes: async () => cfg.ajustes || null, saveAjustes: async () => ({ ok: true, remoto: false }), registrarEmissao: async (e) => { captured.registros.push(e); return { ok: true, remoto: false }; } } } : null;
     const windowStub = {
         addEventListener: (ev, fn) => { (listeners[ev] = listeners[ev] || []).push(fn); },
-        location: { search: '?templateId=rpt_smoke', href: '' }, localStorage: storage, sessionStorage: storage, opener,
+        location: { search: '?templateId=rpt_smoke', href: 'http://localhost:8080/relatorio_view.html?templateId=rpt_smoke' }, localStorage: storage, sessionStorage: storage, opener,
         innerWidth: cfg.width || 1900, scrollY: 0, scrollTo() {}, print() { captured.prints++; }, getSelection: () => ({ removeAllRanges() {}, addRange() {} })
     };
     const sandbox = {
@@ -102,15 +102,16 @@ async function runScenario(cfg) {
         setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].fn = null; },
         Image: function () { Object.defineProperty(this, 'src', { set: () => {} }); },
         alert: (m) => captured.alerts.push(String(m)), confirm: () => true,
-        URL: { createObjectURL: (b) => { captured.downloads.push(b); return 'blob:x'; }, revokeObjectURL() {} },
+        URL: Object.assign(class extends URL {}, { createObjectURL: (b) => { captured.downloads.push(b); return 'blob:x'; }, revokeObjectURL() {} }),
         Blob: function (parts, opts) { this.parts = parts; this.type = opts && opts.type; captured.blobs.push(this); },
         crypto: require('crypto').webcrypto, TextEncoder, btoa, atob,
+        qrcode: () => ({ addData(t) { captured.qrData = t; }, make() {}, createDataURL() { return 'data:image/gif;base64,R0lGODlhAQABAAAAACw='; } }),
         html2canvas: cfg.semHtml2canvas ? undefined : async () => { if (cfg.capturaFalha) throw new Error('CORS'); return { toDataURL: () => 'data:image/png;base64,QUJD' }; }
     };
     sandbox.self = sandbox.window;
     vm.createContext(sandbox);
     localScripts.forEach(src => { try { vm.runInContext(read(src), sandbox, { filename: src }); } catch (e) { errors.push('script ' + src + ': ' + e.message); } });
-    ['PageSize', 'MapTools', 'ReportMap', 'ReportTemporal', 'ReportExport', 'FieldFormatter', 'ReportData'].forEach(n => { if (windowStub[n]) sandbox[n] = windowStub[n]; });
+    ['PageSize', 'MapTools', 'ReportMap', 'ReportTemporal', 'ReportExport', 'VerificarEmissao', 'FieldFormatter', 'ReportData'].forEach(n => { if (windowStub[n]) sandbox[n] = windowStub[n]; });
     sandbox.unhandled = [];
     try { vm.runInContext(pageScript, sandbox, { filename: 'relatorio_view.html(inline)' }); } catch (e) { errors.push('script da página: ' + e.stack); }
     (listeners.DOMContentLoaded || []).forEach(fn => { try { fn(); } catch (e) { errors.push('DOMContentLoaded: ' + e.stack); } });
@@ -193,6 +194,11 @@ async function runScenario(cfg) {
         await r.settle(4);
         eq('voltando ao estado anterior, o hash volta a ser o mesmo (determinístico)', est().hash, h0);
 
+        // QR code de verificação no rodapé: aponta para verificar.html com o protocolo
+        ok('QR code: endereço de verificação com o protocolo desta emissão', r.captured.qrData === 'http://localhost:8080/verificar.html?p=' + est().protocolo);
+        await r.sandbox.repaginateKeepingMap();
+        ok('rodapé traz o QR (imagem GIF embutida) depois que o protocolo existe', /data-emissao="qr"[^>]*src="data:image\/gif;base64,/.test(r.registry['a4-document-container']._html));
+
         // impressão
         await r.sandbox.imprimirRelatorio();
         eq('imprimir: chama a impressão uma vez', r.captured.prints, 1);
@@ -212,6 +218,7 @@ async function runScenario(cfg) {
         const htmlWord = htmlDoMhtml(arquivo);
         ok('Word: sem o mapa interativo dentro do HTML e com papel A4', !/id="map-wrap"|interactive-report-map|tmap-wrap-r1/.test(htmlWord) && /size: 595\.3pt 841\.9pt/.test(htmlWord));
         ok('Word: o protocolo da emissão vai no documento', htmlWord.includes(est().protocolo));
+        ok('Word: o QR code do rodapé vai como imagem dentro do arquivo (GIF)', /Content-Type: image\/gif/.test(arquivo));
         ok('Word: quadros da análise temporal em tabela (sem grade CSS)', /<table[^>]*>[\s\S]*imagem|<td/.test(htmlWord) && !/display:grid/.test(htmlWord));
         eq('Word: sem avisos quando todas as capturas funcionam', r.captured.alerts, []);
         eq('exportar/imprimir não geram erro de execução', r.errors, []);

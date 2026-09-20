@@ -27,7 +27,7 @@ try {
         console.log("Supabase client initialized (sessionStorage scoped).");
 
         const currentPath = window.location.pathname;
-        const isPublicPage = currentPath.endsWith('login.html') || currentPath.endsWith('register.html') || currentPath.endsWith('signup.html') || currentPath.endsWith('forgot-password.html') || currentPath.endsWith('reset-password.html');
+        const isPublicPage = currentPath.endsWith('login.html') || currentPath.endsWith('register.html') || currentPath.endsWith('signup.html') || currentPath.endsWith('forgot-password.html') || currentPath.endsWith('reset-password.html') || currentPath.endsWith('verificar.html');
 
         // Monitoramento Proativo de Sessão
         supabaseClient.auth.onAuthStateChange(async (event, session) => {

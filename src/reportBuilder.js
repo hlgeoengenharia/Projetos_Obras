@@ -1329,6 +1329,10 @@
                                     <span>Código de Validação e Autenticidade (SHA-256)</span>
                                 </label>
                                 <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
+                                    <input type="checkbox" id="cfg-ftr-qr" ${(existingFtr ? existingFtr.exibirQr !== false : true) ? 'checked' : ''} onchange="ReportBuilder.updateFooterProperty('exibirQr', this.checked)" class="rounded text-primary focus:ring-0 cursor-pointer" />
+                                    <span>QR code para verificar a autenticidade online</span>
+                                </label>
+                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
                                     <input type="checkbox" id="cfg-ftr-date" ${(existingFtr ? existingFtr.exibirDataHora !== false : true) ? 'checked' : ''} onchange="ReportBuilder.updateFooterProperty('exibirDataHora', this.checked)" class="rounded text-primary focus:ring-0 cursor-pointer" />
                                     <span>Carimbo Temporal com Data e Hora</span>
                                 </label>
@@ -2735,7 +2739,7 @@
                     <div class="text-[10px] text-slate-500 flex items-center justify-between font-mono w-full">
                         <div>
                             ${bloco.exibirDataHora !== false ? `Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}` : ''}
-                            ${bloco.exibirHash !== false ? `<span class="ml-2 font-bold text-slate-600">SHA-256: 7f83b1657ff1...</span>` : ''}
+                            ${bloco.exibirHash !== false ? `<span class="ml-2 font-bold text-slate-600">SHA-256: 7f83b1657ff1...</span>` : ''}${bloco.exibirQr !== false ? `<span class="ml-2 text-slate-500">[QR code de verificação]</span>` : ''}
                         </div>
                         <div class="font-bold text-slate-700">
                             ${bloco.numeracao !== false ? pageLabel : ''}
@@ -4980,6 +4984,7 @@
     function insertFooterBlock() {
         const pages = document.getElementById('cfg-ftr-pages')?.checked ?? true;
         const hash = document.getElementById('cfg-ftr-hash')?.checked ?? true;
+        const qr = document.getElementById('cfg-ftr-qr')?.checked ?? true;
         const date = document.getElementById('cfg-ftr-date')?.checked ?? true;
         const startSecond = document.getElementById('cfg-ftr-page-start-second')?.checked;
         const startMode = startSecond ? 'segunda' : 'primeira';
@@ -4992,6 +4997,7 @@
             tipo: 'rodape',
             numeracao: pages,
             exibirHash: hash,
+            exibirQr: qr,
             exibirDataHora: date,
             inicio_numeracao: startMode
         });

@@ -64,6 +64,7 @@ ok('folha A4 no título', has(html, 'Folha A4 Interativa') && has(html, '210 × 
 
 // ---------------------------------------------------------------- Mini-Mapa (card do Relatório Individual)
 ok('card do mapa tem destaque, mapa base, camadas, norte, escala e projeção', ['cfg-map-x-rotulos', 'cfg-map-x-confr', 'cfg-map-x-ref', 'cfg-map-x-area', 'cfg-map-x-sit', 'cfg-map-x-grade', 'cfg-map-temp-ativo', 'cfg-map-temp-ordem', 'cfg-map-temp-cols', 'cfg-map-temp-altura', 'cfg-map-temp-contorno', 'cfg-map-temp-sync', 'cfg-map-pts-ativo', 'cfg-map-pts-sistema', 'cfg-map-pts-tab', 'cfg-map-pts-mem', 'cfg-map-med-ativo', 'cfg-map-med-lados', 'cfg-map-med-total', 'cfg-map-med-perim', 'cfg-map-destaque', 'cfg-map-esmaecer', 'cfg-map-cor', 'cfg-map-base', 'cfg-map-camadas', 'cfg-map-norte', 'cfg-map-escala', 'cfg-map-proj', 'cfg-map-altura'].every(id => has(html, 'id="' + id + '"')));
+ok('rodapé oficial: opção do QR code de verificação', has(html, 'id="cfg-ftr-qr"') && has(html, 'QR code para verificar a autenticidade online'));
 ok('card explica que o usuário ajusta no relatório', has(html, 'painel <em>Mapa</em> do relatório'));
 ok('o modelo padrão já traz o mapa na folha: o botão é "Atualizar"', has(html, 'Atualizar o Mini-Mapa da Folha'));
 ok('card não diz mais que a série temporal é "próxima etapa"', !has(html, 'próxima etapa'));

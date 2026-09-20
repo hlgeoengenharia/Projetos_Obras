@@ -40,3 +40,34 @@ REVOKE UPDATE, DELETE ON public.relatorios_emissoes FROM authenticated;
 GRANT SELECT, INSERT ON public.relatorios_emissoes TO authenticated;
 
 COMMENT ON TABLE public.relatorios_emissoes IS 'Emissões de relatório individual (impressão/exportação): protocolo e SHA-256 do conteúdo.';
+
+-- ==============================================================================
+-- VERIFICAÇÃO PÚBLICA DE AUTENTICIDADE (verificar.html / QR code do rodapé)
+-- ==============================================================================
+-- Qualquer pessoa (inclusive sem login) pode perguntar "este protocolo existe? este SHA-256 confere?".
+-- A função só devolve: se existe, quando e em que formato foi emitido, e se o SHA-256 informado confere.
+-- NÃO devolve usuário, modelo, feição nem nenhum dado do relatório. A tabela continua fechada ao anônimo.
+-- Observação: não há limite de tentativas; o protocolo tem 8 caracteres hexadecimais + a data, então a
+-- função só confirma existência (nunca lista) e não revela conteúdo.
+
+CREATE OR REPLACE FUNCTION public.verificar_emissao(p_protocolo text, p_hash text DEFAULT NULL)
+RETURNS TABLE (encontrado boolean, emitido_em timestamptz, formato text, hash_confere boolean)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT true,
+           e.emitido_em,
+           e.formato,
+           CASE WHEN p_hash IS NULL OR length(p_hash) < 8 THEN NULL
+                ELSE (e.hash LIKE (lower(regexp_replace(p_hash, '[^0-9a-fA-F]', '', 'g')) || '%'))
+           END
+    FROM public.relatorios_emissoes e
+    WHERE e.protocolo = upper(trim(p_protocolo))
+    ORDER BY e.emitido_em ASC
+    LIMIT 1;
+$$;
+
+REVOKE ALL ON FUNCTION public.verificar_emissao(text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.verificar_emissao(text, text) TO anon, authenticated;

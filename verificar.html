@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verificação de Autenticidade de Relatório</title>
+    <link rel="icon" type="image/png" href="assets/logo.png">
+    <style>
+        :root { color-scheme: light; }
+        body { margin: 0; background: #f1f5f9; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: #0f172a; }
+        main { max-width: 560px; margin: 0 auto; padding: 32px 16px; }
+        .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; box-shadow: 0 6px 24px rgba(15,23,42,.06); }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        p.sub { margin: 0 0 20px; color: #64748b; font-size: 13px; }
+        label { display: block; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #475569; margin: 14px 0 4px; }
+        input { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font: 14px ui-monospace, Consolas, monospace; }
+        small { color: #64748b; font-size: 12px; }
+        button { margin-top: 18px; width: 100%; padding: 11px; border: 0; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; }
+        button:disabled { opacity: .6; cursor: wait; }
+        #resultado { margin-top: 18px; padding: 14px 16px; border-radius: 12px; font-size: 14px; line-height: 1.45; display: none; }
+        #resultado h2 { margin: 0 0 4px; font-size: 16px; }
+        #resultado.ok { display: block; background: #ecfdf5; border: 1px solid #6ee7b7; color: #065f46; }
+        #resultado.aviso { display: block; background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; }
+        #resultado.erro { display: block; background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
+        footer { margin-top: 16px; font-size: 12px; color: #64748b; text-align: center; }
+    </style>
+</head>
+<body>
+<main>
+    <div class="card">
+        <h1>Verificação de autenticidade</h1>
+        <p class="sub">Confirme se um relatório impresso ou exportado foi emitido pelo sistema.</p>
+
+        <label for="protocolo">Protocolo</label>
+        <input id="protocolo" type="text" placeholder="20260920-7F83B165" autocomplete="off" spellcheck="false">
+        <small>Está no topo do relatório (ou no QR code do rodapé).</small>
+
+        <label for="hash">Código SHA-256 (opcional)</label>
+        <input id="hash" type="text" placeholder="7f83b1657ff1fc53…" autocomplete="off" spellcheck="false">
+        <small>Está no rodapé. Com ele, confirma-se que o conteúdo não foi alterado.</small>
+
+        <button id="verificar" type="button">Verificar</button>
+        <div id="resultado" role="status" aria-live="polite"></div>
+    </div>
+    <footer>A consulta só informa se o protocolo existe e quando foi registrado; nenhum dado do relatório é exibido.</footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+<script src="src/verificarEmissao.js"></script>
+<script>
+    const $ = (id) => document.getElementById(id);
+    const params = new URLSearchParams(location.search);
+    if (params.get('p')) $('protocolo').value = params.get('p');
+    if (params.get('h')) $('hash').value = params.get('h');
+
+    function mostrar(r) {
+        const box = $('resultado');
+        box.className = r.estado === 'ok' ? 'ok' : (r.estado === 'hash-diverge' ? 'erro' : 'aviso');
+        box.innerHTML = '<h2></h2><div></div>';
+        box.querySelector('h2').textContent = r.titulo;
+        box.querySelector('div').textContent = r.texto;
+    }
+
+    async function verificar() {
+        const p = VerificarEmissao.normalizeProtocolo($('protocolo').value);
+        const h = $('hash').value.trim();
+        if (!p || (h && !VerificarEmissao.normalizeHash(h))) { mostrar(VerificarEmissao.interpretar($('protocolo').value, h, [])); return; }
+        const btn = $('verificar');
+        btn.disabled = true;
+        try {
+            if (typeof supabaseClient === 'undefined' || !supabaseClient) throw new Error('sem conexão com o servidor');
+            const { data, error } = await supabaseClient.rpc('verificar_emissao', { p_protocolo: p, p_hash: VerificarEmissao.normalizeHash(h) });
+            if (error) throw error;
+            mostrar(VerificarEmissao.interpretar(p, h, data));
+        } catch (e) {
+            mostrar({ estado: 'erro', titulo: 'Não foi possível verificar agora', texto: 'Tente novamente em instantes. (' + ((e && e.message) || 'erro de conexão') + ')' });
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    $('verificar').addEventListener('click', verificar);
+    ['protocolo', 'hash'].forEach(id => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') verificar(); }));
+    if (params.get('p')) verificar();
+</script>
+</body>
+</html>
