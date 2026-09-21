@@ -175,8 +175,8 @@
                                 <span class="text-slate-400 text-[11px]">Dê duplo-clique em qualquer texto da folha para editar</span>
                             </div>
                             <div class="flex items-center gap-2">
-                                <button type="button" id="btn-folha-real" onclick="ReportBuilder.alternarFolhaReal()" class="flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-semibold cursor-pointer transition-colors" title="Mostra a própria página do relatório (mapa, paginação e tudo) como folha de edição">
-                                    <span class="material-symbols-outlined text-[14px]">web</span><span id="btn-folha-real-texto">Página real (beta)</span>
+                                <button type="button" id="btn-folha-real" onclick="ReportBuilder.alternarFolhaReal()" class="flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-semibold cursor-pointer transition-colors" title="Ligado: a folha é a própria página do relatório (mapa, paginação e tudo). Desligado: folha clássica (esquemática).">
+                                    <span class="material-symbols-outlined text-[14px]">web</span><span id="btn-folha-real-texto">Página real</span>
                                 </button>
                                 <span class="text-[11px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md" id="a4-dimension-indicator">${pd.label}</span>
                             </div>
@@ -250,11 +250,12 @@
     let folhaRealTimer = null;
 
     function folhaRealAtiva() {
-        try { return localStorage.getItem(CHAVE_FOLHA_REAL) === '1' && !!(window.ReportPreview); } catch (e) { return false; }
+        // padrão: a página real (só volta à folha clássica quem escolheu isso no botão)
+        try { return localStorage.getItem(CHAVE_FOLHA_REAL) !== '0' && !!(window.ReportPreview); } catch (e) { return !!(window.ReportPreview); }
     }
 
     function alternarFolhaReal() {
-        try { localStorage.setItem(CHAVE_FOLHA_REAL, localStorage.getItem(CHAVE_FOLHA_REAL) === '1' ? '0' : '1'); } catch (e) { /* sem armazenamento: fica como está */ }
+        try { localStorage.setItem(CHAVE_FOLHA_REAL, folhaRealAtiva() ? '0' : '1'); } catch (e) { /* sem armazenamento: fica como está */ }
         aplicarModoFolha();
         renderA4Blocks();
     }

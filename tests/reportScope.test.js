@@ -314,9 +314,9 @@ ok('voltando ao individual, o modelo geral não aparece na lista', !has(containe
     const tpl = RA.getReportTemplates('f1')[0];
     tpl.blocos = [{ id: 'h1', tipo: 'cabecalho', titulo: 'Ficha' }, { id: 'g1', tipo: 'grade_campos', titulo: 'Dados', colunasLayout: 2, campos_selecionados: ['a'] }];
     RA.saveReportTemplate(tpl);
-    delete store.constructive_folha_real;
+    store.constructive_folha_real = '0';
     RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
-    ok('página real desligada por padrão: folha clássica visível, iframe sem endereço', !classica.cls.has('hidden') && real.cls.has('hidden') && !('src' in attrs));
+    ok('quem escolheu a folha clássica a mantém: clássica visível, iframe sem endereço', !classica.cls.has('hidden') && real.cls.has('hidden') && !('src' in attrs));
 
     RB.alternarFolhaReal();
     eq('ligar a página real: guarda a escolha, esconde a folha clássica e aponta o iframe para o relatório em modo edição', [store.constructive_folha_real, classica.cls.has('hidden'), real.cls.has('hidden'), attrs.src], ['1', true, false, 'relatorio_view.html?modo=edicao']);
@@ -353,6 +353,9 @@ ok('voltando ao individual, o modelo geral não aparece na lista', !has(containe
 
     RB.alternarFolhaReal();
     eq('desligar volta à folha clássica', [store.constructive_folha_real, classica.cls.has('hidden'), real.cls.has('hidden')], ['0', false, true]);
+    delete store.constructive_folha_real;
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+    ok('sem escolha guardada, a página real é o padrão (folha clássica escondida)', classica.cls.has('hidden') && !real.cls.has('hidden'));
     ['a4-real-frame', 'btn-folha-real'].forEach(k => delete sheet[k]);
     if (antes.classica) sheet['a4-classica'] = antes.classica; else delete sheet['a4-classica'];
     if (antes.real) sheet['a4-real'] = antes.real; else delete sheet['a4-real'];
