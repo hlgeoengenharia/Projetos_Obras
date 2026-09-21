@@ -117,7 +117,12 @@
             return `calc(${p}% - ${deduction}px)`;
         }
 
-        function renderAttributeGrid(bloco, featureData, fields) {
+        function renderAttributeGrid(bloco, featureData, fields, opts) {
+            // opts.edit (só no construtor): mesmo desenho e mesmos dados, com os controles de edição por cima:
+            //   titleClass/titleAttrs: título editável   headerExtra: dica ao lado do título
+            //   containerAttrs: atributos da grade (índice do bloco)   fieldAttrs(f, pct): atributos de cada campo (id e índice)
+            //   lead(f, pct, modo): alça de arrastar   tail(f, pct, modo): largura, formato do arquivo e remover   (modo: 'linha' | 'card')
+            const edit = (opts && opts.edit) || null;
             const fileModes = bloco.campos_exibicao || {};
             const colCount = bloco.colunasLayout || 2;
             const spans = bloco.campos_spans || {};
@@ -144,15 +149,42 @@
             }
             if (fldsToRender.length === 0) fldsToRender = fields.slice(0, 8);
 
+            const tituloHtml = `<span class="whitespace-pre-line${edit && edit.titleClass ? ' ' + edit.titleClass : ''}"${edit && edit.titleAttrs ? ' ' + edit.titleAttrs : ''}>${(esc(bloco.titulo || 'Dados Cadastrais')).replace(/\r?\n/g, '<br>')}</span>`;
+            const cabecalho = `
+                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between${edit ? ' flex-wrap gap-1' : ''}">
+                            ${tituloHtml}${edit && edit.headerExtra ? edit.headerExtra : ''}
+                        </div>`;
+            const topoEdicao = (f, pct, modo, rotuloHtml) => `
+                                        <div class="flex items-center justify-between gap-1 mb-1">
+                                            <div class="flex items-center gap-1 min-w-0 flex-1">${edit.lead ? edit.lead(f, pct, modo) : ''}${rotuloHtml}</div>
+                                            <div class="flex items-center gap-1 shrink-0">${edit.tail ? edit.tail(f, pct, modo) : ''}</div>
+                                        </div>`;
+
             if (colCount === 1) {
                 return `
-                    <div class="mb-4 page-break-avoid">
-                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
-                            <span class="whitespace-pre-line">${(esc(bloco.titulo || 'Dados Cadastrais')).replace(/\r?\n/g, '<br>')}</span>
-                        </div>
-                        <div class="divide-y divide-slate-200 border border-slate-200 rounded-lg overflow-hidden">
+                    <div class="mb-4 page-break-avoid">${cabecalho}
+                        <div class="divide-y divide-slate-200 border border-slate-200 rounded-lg overflow-hidden${edit ? ' a4-grid-fields-container' : ''}"${edit && edit.containerAttrs ? ' ' + edit.containerAttrs : ''}>
                             ${fldsToRender.map(f => {
                                 const val = resolveFieldValue(f, featureData);
+                                if (edit) {
+                                    // linha editável: alça + nome à esquerda; valor e controles à direita
+                                    const attrs = edit.fieldAttrs ? edit.fieldAttrs(f, 100) : '';
+                                    if (isRichField(f)) {
+                                        return `
+                                    <div class="px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50 group/field select-none" ${attrs}>
+                                        <div class="flex items-center justify-between gap-2">
+                                            <div class="flex items-center gap-2 min-w-0">${edit.lead ? edit.lead(f, 100, 'linha') : ''}<span class="font-bold text-slate-600 truncate">${esc(f.label)}:</span></div>
+                                            <div class="flex items-center gap-2">${edit.tail ? edit.tail(f, 100, 'linha') : ''}</div>
+                                        </div>
+                                        <div class="font-semibold text-slate-900 text-[11px] break-words whitespace-normal">${resolveFieldHtml(f, featureData, fileModes[f.id])}</div>
+                                    </div>`;
+                                    }
+                                    return `
+                                    <div class="flex items-center justify-between px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50 group/field select-none" ${attrs}>
+                                        <div class="flex items-center gap-2 min-w-0">${edit.lead ? edit.lead(f, 100, 'linha') : ''}<span class="font-bold text-slate-600 truncate">${esc(f.label)}:</span></div>
+                                        <div class="flex items-center gap-2 min-w-0"><span class="font-semibold text-slate-900 truncate font-mono text-[11px]">${esc(val)}</span>${edit.tail ? edit.tail(f, 100, 'linha') : ''}</div>
+                                    </div>`;
+                                }
                                 if (isRichField(f)) {
                                     return `
                                     <div class="px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50">
@@ -173,11 +205,8 @@
             }
 
             return `
-                <div class="mb-4 page-break-avoid">
-                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
-                        <span class="whitespace-pre-line">${(esc(bloco.titulo || 'Dados Cadastrais')).replace(/\r?\n/g, '<br>')}</span>
-                    </div>
-                    <div class="flex flex-wrap gap-2.5">
+                <div class="mb-4 page-break-avoid">${cabecalho}
+                    <div class="flex flex-wrap gap-2.5${edit ? ' a4-grid-fields-container' : ''}"${edit && edit.containerAttrs ? ' ' + edit.containerAttrs : ''}>
                         ${fldsToRender.map(f => {
                             const val = resolveFieldValue(f, featureData);
                             let pct = larguras[f.id];
@@ -190,11 +219,21 @@
                             pct = Math.round(pct);
                             const widthStyle = getFieldWidthStyle(pct);
                             const isLongText = pct >= 45 || String(val).length > 25 || (f.id && (f.id.includes('endereco') || f.id.includes('obs'))) || (f.label && (f.label.toLowerCase().includes('endereço') || f.label.toLowerCase().includes('observa')));
+                            const valorHtml = isRichField(f) ? resolveFieldHtml(f, featureData, fileModes[f.id]) : esc(val);
+                            const valorCls = (isLongText || isRichField(f)) ? 'break-words whitespace-normal leading-snug' : 'truncate';
+                            if (edit) {
+                                return `
+                                <div class="relative group/field p-2 border ${pct > 55 ? 'border-sky-300 bg-sky-50/40' : 'border-slate-200 bg-slate-50/50'} rounded-lg select-none" ${edit.fieldAttrs ? edit.fieldAttrs(f, pct) : ''}
+                                     style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">${topoEdicao(f, pct, 'card', `<span class="text-[9.5px] uppercase font-bold text-slate-500 truncate" title="${esc(f.label)}">${esc(f.label)}</span>`)}
+                                    <div class="text-xs font-bold text-slate-800 mt-0.5 ${valorCls}">${valorHtml}</div>
+                                </div>
+                            `;
+                            }
                             return `
-                                <div class="p-2 border border-slate-200 rounded-lg bg-slate-50/50" 
+                                <div class="p-2 border border-slate-200 rounded-lg bg-slate-50/50"
                                      style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">
                                     <div class="text-[9.5px] uppercase font-bold text-slate-500 truncate">${esc(f.label)}</div>
-                                    <div class="text-xs font-bold text-slate-800 mt-0.5 ${(isLongText || isRichField(f)) ? 'break-words whitespace-normal leading-snug' : 'truncate'}">${isRichField(f) ? resolveFieldHtml(f, featureData, fileModes[f.id]) : esc(val)}</div>
+                                    <div class="text-xs font-bold text-slate-800 mt-0.5 ${valorCls}">${valorHtml}</div>
                                 </div>
                             `;
                         }).join('')}

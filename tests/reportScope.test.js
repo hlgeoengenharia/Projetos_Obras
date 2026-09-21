@@ -41,7 +41,7 @@ window.window = window;
 const ctx = { window, document, localStorage, forms, console, setTimeout: () => 0, clearTimeout() {}, alert() {}, confirm: () => true, navigator: {} };
 ctx.self = window;
 vm.createContext(ctx);
-['src/pageSize.js', 'src/mapTools.js', 'src/reportAdapter.js', 'src/reportBuilder.js'].forEach(f => vm.runInContext(read(f), ctx, { filename: f }));
+['src/pageSize.js', 'src/mapTools.js', 'src/fieldFormatter.js', 'src/reportBlocks.js', 'src/reportPreview.js', 'src/reportAdapter.js', 'src/reportBuilder.js'].forEach(f => vm.runInContext(read(f), ctx, { filename: f }));
 const RB = window.ReportBuilder;
 const RA = window.ReportAdapter;
 ok('construtor e adaptador carregaram', !!RB && !!RA && !!window.PageSize);
@@ -181,6 +181,33 @@ ok('voltando ao individual, o modelo geral não aparece na lista', !has(containe
     window.getFeaturePropertyValue = undefined;
     window.openFeatureReportPage(tplMapa.id, { id_banco: 10 }, quadG);
     ok('sem a função de leitura de atributos da página do mapa: sem rótulos, sem erro', Object.keys(JSON.parse(store['s:constructive_active_report_payload']).camadasMapa[0].features[0].properties).length === 0);
+}
+
+// ---------------------------------------------------------------- Grade de Atributos no construtor: desenho REAL do relatório + controles de edição
+{
+    const tpl = RA.getReportTemplates('f1')[0];
+    const salvarGrade = (colunas, extra) => {
+        tpl.blocos = tpl.blocos.filter(b => b.tipo !== 'grade_campos');
+        tpl.blocos.push(Object.assign({ id: 'g1', tipo: 'grade_campos', titulo: 'Dados <Cadastrais>', colunasLayout: colunas, campos_selecionados: ['a'], campos_larguras: { a: 50 } }, extra || {}));
+        RA.saveReportTemplate(tpl);
+        RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+        return sheet['a4-blocks-list'].innerHTML;
+    };
+    const idx = () => tpl.blocos.findIndex(b => b.tipo === 'grade_campos');
+    let h = salvarGrade(2);
+    ok('grade (2 colunas): mostra o valor de exemplo do campo, como no relatório (e não "[Valor de ...]")', has(h, 'Exemplo: Nome') && !has(h, '[Valor de Nome]'));
+    ok('grade: título editável com duplo clique (escapado) e dica de arrastar/largura', has(h, "ReportBuilder.enableInlineEdit(this, " + idx() + ", 'titulo')") && has(h, 'Dados &lt;Cadastrais&gt;') && has(h, '2 Colunas') && has(h, 'Arraste ⠿ para reordenar'));
+    ok('grade: mesmos ganchos do construtor (contêiner, alça, campo com id e índice) para o arrastar e soltar continuar funcionando', has(h, 'a4-grid-fields-container" data-block-index="' + idx() + '"') && has(h, 'data-field-id="a" data-block-index="' + idx() + '"') && has(h, 'field-drag-handle'));
+    ok('grade: largura [-] [50%] [+] e remover campo', has(h, "ReportBuilder.changeFieldWidthStep(" + idx() + ", 'a', -1, event)") && has(h, "ReportBuilder.changeFieldWidthStep(" + idx() + ", 'a', 1, event)") && has(h, "ReportBuilder.toggleFieldWidthPopover(" + idx() + ", 'a', event)") && has(h, '>50%<') && has(h, "ReportBuilder.removeFieldFromGrid(" + idx() + ", 'a', event)"));
+    ok('grade: a largura do campo aparece na folha (50%)', has(h, 'flex: 0 0 calc(50% - 5px)'));
+    h = salvarGrade(1);
+    ok('grade (lista corrida): linha com alça, valor de exemplo e remover; sem os botões de largura', has(h, 'Lista Corrida') && has(h, 'Exemplo: Nome') && has(h, 'field-drag-handle') && has(h, "ReportBuilder.removeFieldFromGrid(" + idx() + ", 'a', event)") && !has(h, 'changeFieldWidthStep'));
+    // tipos com formatação própria aparecem formatados como no relatório
+    const forms0 = window.forms[0];
+    forms0.tabs[0].fields = [{ id: 'a', label: 'Nome', type: 'text' }, { id: 'ar', label: 'Área (m²)', type: 'area_m2' }, { id: 'dt', label: 'Data', type: 'date' }, { id: 'cp', label: 'CPF/CNPJ', type: 'cpfcnpj' }];
+    h = salvarGrade(2, { campos_selecionados: ['a', 'ar', 'dt', 'cp'], campos_larguras: {} });
+    ok('grade: valores de exemplo formatados pelo tipo do campo (área com m², data dd/mm/aaaa, CPF com máscara)', has(h, '550,26 m²') && has(h, '15/03/2026') && has(h, '123.456.789-09'));
+    ok('grade: sem o desenho antigo (esquemático) quando os módulos compartilhados estão carregados', !has(h, 'Valor de'));
 }
 
 console.log(`reportScope: ${total - failed}/${total} verificações passaram`);

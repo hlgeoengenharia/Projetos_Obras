@@ -54,6 +54,21 @@ ok('emblema de órgão: cor por órgão (MPF roxo, PF azul, SPU verde, municípi
 ok('emblema de situação e de recuo (regular, irregular, sem valor e texto escapado)', /emerald/.test(B.getStatusBadgeHtml('Regular')) && /red/.test(B.getStatusBadgeHtml('Irregular')) && /—/.test(B.getStatusBadgeHtml('')) && /&lt;x&gt;/.test(B.getStatusBadgeHtml('<x>')) && /emerald/.test(B.getRecuoBadgeHtml('Recuo total; sim')) && /amber/.test(B.getRecuoBadgeHtml('Não recuou')));
 eq('largura do campo na grade: 100% (a partir de 98%), 50% e limites de 15 a 100', [B.getFieldWidthStyle(100), B.getFieldWidthStyle(99), B.getFieldWidthStyle(50), B.getFieldWidthStyle(5), B.getFieldWidthStyle(undefined)], ['100%', '100%', 'calc(50% - 5px)', 'calc(15% - 8.5px)', 'calc(50% - 5px)']);
 
+// ---------------------------------------------------------------- grade: modo de edição (construtor) x leitura (relatório)
+{
+    const bloco = { titulo: 'Dados', colunasLayout: 2, campos_selecionados: ['f_nome', 'f_area'], campos_larguras: { f_nome: 66 } };
+    const leitura = B.renderAttributeGrid(bloco, dados, campos);
+    ok('leitura: sem nenhum controle de edição', !/field-drag-handle|a4-grid-fields-container|data-field-id|group\/field|select-none/.test(leitura) && /Maria &lt;da&gt; Silva/.test(leitura) && /550,26 m²/.test(leitura));
+    const edicao = { titleClass: 'tt', titleAttrs: 'data-t="1"', headerExtra: '<i>dica</i>', containerAttrs: 'data-block-index="7"', fieldAttrs: (f, pct) => 'data-field-id="' + f.id + '" data-pct="' + pct + '"', lead: (f, pct, modo) => '<b>alça-' + modo + '</b>', tail: (f, pct, modo) => '<u>fim-' + f.id + '-' + pct + '-' + modo + '</u>' };
+    const ed = B.renderAttributeGrid(bloco, dados, campos, { edit: edicao });
+    ok('edição: mesmo conteúdo do relatório, com título editável, dica, contêiner e campos identificados', ed.includes('class="whitespace-pre-line tt" data-t="1"') && ed.includes('<i>dica</i>') && ed.includes('a4-grid-fields-container" data-block-index="7"') && ed.includes('data-field-id="f_nome" data-pct="66"') && ed.includes('data-field-id="f_area" data-pct="50"') && ed.includes('Maria &lt;da&gt; Silva') && ed.includes('550,26 m²'));
+    ok('edição: alça antes do nome e controles depois (modo card com a largura de cada campo)', ed.indexOf('<b>alça-card</b>') >= 0 && ed.indexOf('<b>alça-card</b>') < ed.indexOf('Proprietário') && ed.includes('<u>fim-f_nome-66-card</u>') && ed.includes('<u>fim-f_area-50-card</u>'));
+    const lista = B.renderAttributeGrid(Object.assign({}, bloco, { colunasLayout: 1 }), dados, campos, { edit: edicao });
+    ok('edição em lista corrida: alça, nome, valor e controles na mesma linha (modo linha)', lista.includes('<b>alça-linha</b>') && lista.includes('<u>fim-f_nome-100-linha</u>') && lista.includes('Maria &lt;da&gt; Silva') && lista.includes('a4-grid-fields-container" data-block-index="7"'));
+    const foto = B.renderAttributeGrid({ colunasLayout: 1, campos_selecionados: ['f_foto'], campos_exibicao: { f_foto: 'imagem' } }, { f_foto: [{ url: 'https://x/a.jpg', name: 'a.jpg', title: 'Fachada' }] }, [{ id: 'f_foto', label: 'Fotos', type: 'photo' }], { edit: edicao });
+    ok('edição: foto/anexo aparece de verdade (imagem na íntegra) com os controles', /<img[^>]+src="https:\/\/x\/a\.jpg"/.test(foto) && foto.includes('<u>fim-f_foto-100-linha</u>'));
+}
+
 console.log(`reportBlocks: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {
     console.error(`${failed} falha(s)`);

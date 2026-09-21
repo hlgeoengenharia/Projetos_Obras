@@ -1884,6 +1884,11 @@
                     flds = fields.filter(f => selSet.has(f.id));
                 }
 
+                // Desenho REAL (o mesmo do relatório) com os dados da feição de teste; os controles de edição ficam por cima
+                if (window.ReportBlocks && window.ReportPreview) {
+                    return renderGradeReal(bloco, index, fields, colCount);
+                }
+
                 if (colCount === 1) {
                     // Lista Corrida (Chave-Valor)
                     return `
@@ -3314,6 +3319,42 @@
         const formId = currentTemplate?.form_id;
         const panel = document.getElementById('accordion-blocks-panel');
         if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    // ---- desenhistas compartilhados com o relatório (src/reportBlocks.js) e feição de teste (src/reportPreview.js)
+    function blocosReais(fields) {
+        return window.ReportBlocks.create({
+            esc: escapeHtml,
+            FieldFormatter: window.FieldFormatter,
+            geometryCenter: () => window.ReportPreview.CENTRO,
+            formFields: () => fields || []
+        });
+    }
+    function dadosDeExemplo() {
+        const tabs = (window.ReportAdapter && window.ReportAdapter.getFormTabs && currentTemplate) ? (window.ReportAdapter.getFormTabs(currentTemplate.form_id) || []) : [];
+        return window.ReportPreview.sampleFeatureData(tabs);
+    }
+
+    /** Grade de Atributos: desenho do relatório + alça de arrastar, largura [-] [%] [+], formato do arquivo e remover. */
+    function renderGradeReal(bloco, index, fields, colCount) {
+        const dica = colCount === 1
+            ? '<span class="text-[9px] text-sky-600 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded font-medium print:hidden">Arraste ⠿ para reordenar</span>'
+            : '<span class="text-[9px] text-sky-600 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded font-medium print:hidden">Arraste ⠿ para reordenar • Use [-] [+] ou clique no % para a largura</span>';
+        const edit = {
+            titleClass: 'cursor-text hover:bg-sky-50 px-1 rounded',
+            titleAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')"`,
+            headerExtra: `<div class="flex items-center gap-2"><span class="text-[10px] font-mono text-slate-400 font-normal">${colCount === 1 ? 'Lista Corrida' : colCount + ' Colunas'}</span>${dica}</div>`,
+            containerAttrs: `data-block-index="${index}"`,
+            fieldAttrs: (f) => `data-field-id="${f.id}" data-block-index="${index}"`,
+            lead: (f, pct, modo) => `<span class="field-drag-handle cursor-grab active:cursor-grabbing text-slate-300 group-hover/field:text-sky-600 hover:bg-slate-200/60 p-0.5 rounded transition-colors" title="Arraste para mover de posição ${modo === 'linha' ? 'na lista' : 'na grade'}"><span class="material-symbols-outlined text-[15px] leading-none">drag_indicator</span></span>`,
+            tail: (f, pct, modo) => {
+                const arquivo = fileModeToggleHtml(index, f, fileFieldMode(currentTemplate.blocos[index] || bloco, f));
+                const remover = `<button type="button" class="field-remove-btn p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors cursor-pointer print:hidden" onclick="ReportBuilder.removeFieldFromGrid(${index}, '${f.id}', event)" title="${modo === 'linha' ? 'Remover campo da grade' : 'Remover este campo da grade'}"><span class="material-symbols-outlined text-[14px] leading-none">close</span></button>`;
+                if (modo === 'linha') return arquivo + remover;
+                return arquivo + `<div class="inline-flex items-center bg-white border border-slate-200 rounded-md p-0.5 shadow-2xs"><button type="button" class="field-width-dec-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 hover:bg-slate-100 rounded cursor-pointer transition-colors" onclick="ReportBuilder.changeFieldWidthStep(${index}, '${f.id}', -1, event)" title="Diminuir largura do campo (-)"><span class="material-symbols-outlined text-[13px] leading-none">remove</span></button><button type="button" class="field-width-badge-btn px-1.5 py-0.5 text-[9.5px] font-extrabold text-slate-700 hover:text-sky-600 cursor-pointer transition-colors" onclick="ReportBuilder.toggleFieldWidthPopover(${index}, '${f.id}', event)" title="Clique para escolher proporção exata ou regular slider">${pct}%</button><button type="button" class="field-width-inc-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 hover:bg-slate-100 rounded cursor-pointer transition-colors" onclick="ReportBuilder.changeFieldWidthStep(${index}, '${f.id}', 1, event)" title="Aumentar largura do campo (+)"><span class="material-symbols-outlined text-[13px] leading-none">add</span></button></div>` + remover;
+            }
+        };
+        return blocosReais(fields).renderAttributeGrid(bloco, dadosDeExemplo(), fields, { edit: edit });
     }
 
     // --- MANIPULADORES DO CARD 3: MINI-MAPA ---
