@@ -139,7 +139,7 @@ async function runScenario(cfg) {
     sandbox.self = sandbox.window;
     vm.createContext(sandbox);
     localScripts.forEach(src => { try { vm.runInContext(read(src), sandbox, { filename: src }); } catch (e) { errors.push('script ' + src + ': ' + e.message); } });
-    ['PageSize', 'MapTools', 'ReportMap', 'ReportTemporal', 'ReportExport', 'ReportBlocks', 'ReportEditor', 'ReportWord', 'ReportDocx', 'MapSnapshot', 'VerificarEmissao', 'FieldFormatter', 'ReportData'].forEach(n => { if (windowStub[n]) sandbox[n] = windowStub[n]; });
+    ['PageSize', 'MapTools', 'ReportMap', 'ReportTemporal', 'ReportExport', 'ReportBlocks', 'ReportEditor', 'ReportFreeText', 'ReportWord', 'ReportDocx', 'MapSnapshot', 'VerificarEmissao', 'FieldFormatter', 'ReportData'].forEach(n => { if (windowStub[n]) sandbox[n] = windowStub[n]; });
     sandbox.unhandled = [];
     try { vm.runInContext(pageScript, sandbox, { filename: 'relatorio_view.html(inline)' }); } catch (e) { errors.push('script da página: ' + e.stack); }
     (listeners.DOMContentLoaded || []).forEach(fn => { try { fn(); } catch (e) { errors.push('DOMContentLoaded: ' + e.stack); } });
@@ -687,6 +687,20 @@ async function runScenario(cfg) {
             ok('largura exata: abre o menu de proporções na própria página', !!pop && pop.innerHTML.includes("definirLarguraExata(2, 'a', 50") && pop.innerHTML.includes("definirLarguraExata(2, 'a', 100"));
             r.sandbox.definirLarguraExata(2, 'a', 50, { stopPropagation() {}, preventDefault() {} });
             ok('largura exata: escolher uma proporção avisa o construtor e fecha o menu', r.captured.mensagens.some(m => m.nome === 'setFieldWidthExact' && JSON.stringify(m.args) === '[2,"a",50]') && !r.registry['popover-largura']);
+        }
+        // texto livre: o editor do construtor (texto bruto com as menções, barra de formatação), com a gravação por mensagem
+        {
+            const pt = JSON.parse(JSON.stringify(payload));
+            pt.formFields = [{ id: 'a', label: 'Nome', type: 'text', tabTitle: 'Dados' }];
+            pt.template.blocos.splice(3, 0, { id: 'tx', tipo: 'caixa_texto_livre', titulo: 'Parecer <Y>', conteudo: 'Texto com <b>negrito</b> e @Nome', espacamento: '1.4', alinhamento: 'justify' });
+            enviar(pt);
+            await r.settle(6);
+            const d = r.registry['a4-document-container']._html;
+            ok('texto livre (edição): editor com barra de formatação, texto bruto com as menções e lista do @ (moldura do bloco 3)', [d.includes('rich-text-toolbar'), d.includes('id="free-text-editor-3"'), d.includes('Texto com <b>negrito</b> e @Nome'), d.includes('id="mention-dropdown-3"'), d.includes('Parecer &lt;Y&gt;'), d.includes('data-bloco-index="3"')].every(Boolean));
+            const RB = r.sandbox.window.ReportBuilder;
+            RB.saveFreeTextContent(3, '<b>novo</b>');
+            RB.changeLineHeight(3, '2.0');
+            ok('texto livre (edição): salvar o texto e mudar o espaçamento avisam o construtor', r.captured.mensagens.some(m => m.nome === 'saveFreeTextContent' && JSON.stringify(m.args) === '[3,"<b>novo</b>"]') && r.captured.mensagens.some(m => m.nome === 'changeLineHeight' && JSON.stringify(m.args) === '[3,"2.0"]'));
         }
         // alteração que não mexe no mapa: redesenha sem recarregar
         const p2 = JSON.parse(JSON.stringify(payload)); p2.template.blocos[2].titulo = 'Outro título';

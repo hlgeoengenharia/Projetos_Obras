@@ -245,7 +245,7 @@
     const CHAVE_FOLHA_REAL = 'constructive_folha_real';
     // ações que a página real pode pedir (as mesmas funções dos botões da folha clássica)
     const ACOES_FOLHA_REAL = ['moveBlock', 'removeBlock', 'atualizarPropriedade', 'reordenarCampos', 'moveSynthetic1nColumn', 'editSynthetic1nColTitle', 'removeColumnFromSynthetic1n',
-        'changeFieldWidthStep', 'setFieldWidthExact', 'removeFieldFromGrid', 'removeFieldFromAnalytical1n', 'setFieldFileMode'];
+        'changeFieldWidthStep', 'setFieldWidthExact', 'removeFieldFromGrid', 'removeFieldFromAnalytical1n', 'setFieldFileMode', 'saveFreeTextContent', 'changeLineHeight'];
     let folhaRealPronta = false;
     let folhaRealTimer = null;
 

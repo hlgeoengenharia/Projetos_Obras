@@ -280,7 +280,7 @@
          * PINTADOS POR CIMA da lista aberta, e ela parecia transparente. Enquanto a lista está aberta, o bloco dela sobe.
          */
         function elevarBlocoDaLista(dropdown, aberta) {
-            const bloco = dropdown && dropdown.closest ? dropdown.closest('.report-block-item') : null;
+            const bloco = dropdown && dropdown.closest ? dropdown.closest('.report-block-item, .edit-bloco') : null;
             if (bloco && bloco.style) bloco.style.zIndex = aberta ? '60' : '';
         }
 
