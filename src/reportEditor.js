@@ -93,8 +93,13 @@
 
     function sintetica(bloco, index, featureData, opts) {
         const b = bloco;
+        // seta para expandir/recolher (só na página de edição, que passa opts.recolhivel)
+        const seta = (chave, recolhido) => `<button type="button" class="quadro-seta" onclick="ReportBuilder.alternarQuadro('${chave}')" title="Expandir ou recolher"><span class="material-symbols-outlined">${recolhido ? 'chevron_right' : 'expand_more'}</span></button>`;
+        const recolhivel = !!(opts && opts.recolhivel);
         const btn = (dir, cIdx, icone, dica) => `<button type="button" onclick="ReportBuilder.moveSynthetic1nColumn(${index}, ${cIdx}, ${dir}, event)" class="opacity-0 group-hover/th:opacity-100 p-0.5 text-slate-400 hover:text-slate-800 hover:bg-slate-200 rounded cursor-pointer print:hidden shrink-0" title="${dica}"><span class="material-symbols-outlined text-[13px] leading-none">${icone}</span></button>`;
         const edit = {
+            recolhido: recolhivel && !!opts.recolhido,
+            chevron: recolhivel ? seta('sint:' + index, !!opts.recolhido) : '',
             titleClass: 'cursor-text hover:bg-sky-50 px-1 rounded',
             titleAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')"`,
             metaExtra: ` • ${b.colunas && b.colunas.length ? b.colunas.length : 3} coluna(s) • ${b.densidade}`,
@@ -106,7 +111,12 @@
 
     function laudo(bloco, index, featureData, opts) {
         const b = bloco;
+        // seta para expandir/recolher (só na página de edição, que passa opts.recolhivel)
+        const seta = (chave, recolhido) => `<button type="button" class="quadro-seta" onclick="ReportBuilder.alternarQuadro('${chave}')" title="Expandir ou recolher"><span class="material-symbols-outlined">${recolhido ? 'chevron_right' : 'expand_more'}</span></button>`;
+        const recolhivel = !!(opts && opts.recolhivel);
         const edit = {
+            recolhidos: recolhivel ? (opts.recolhidos || []).map(String) : [],
+            groupChevron: recolhivel ? (tabId, recolhido) => seta('laudo:' + index + ':' + tabId, recolhido) : null,
             titleClass: 'cursor-text hover:bg-sky-50 px-1 rounded',
             titleAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')"`,
             metaExtra: ' • <span class="text-[9px] text-sky-600 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded font-medium print:hidden font-sans">Arraste ⠿ para reordenar campos (vale para todos os registros da aba)</span>',

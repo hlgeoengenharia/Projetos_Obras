@@ -697,11 +697,15 @@
 
                             <!-- Lista de Abas com seus respectivos campos e botão rápido + -->
                             <div class="max-h-64 overflow-y-auto space-y-2 p-1 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 custom-scrollbar" id="cfg-grid-tabs-container">
-                                ${tabGroups.map((tg, tgIdx) => `
-                                    <div class="cfg-grid-tab-section border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800/80 overflow-hidden shadow-2xs" data-tab-title="${escapeHtml(tg.title.toLowerCase())}">
+                                ${tabGroups.map((tg, tgIdx) => {
+                                    const corpoId = 'cfg-grid-tab-body-' + tg.id;
+                                    const aberta = secaoAberta(corpoId, tgIdx === 0);
+                                    return `
+                                    <div class="cfg-grid-tab-section border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800/80 overflow-hidden shadow-2xs" data-body-id="${escapeHtml(corpoId)}" data-aberta-padrao="${tgIdx === 0}" data-tab-title="${escapeHtml(tg.title.toLowerCase())}">
                                         <!-- Cabeçalho da Aba -->
                                         <div class="bg-slate-100/90 dark:bg-slate-700/60 px-2.5 py-1.5 flex items-center justify-between border-b border-slate-200 dark:border-slate-700">
-                                            <div class="flex items-center gap-1.5 min-w-0">
+                                            <div class="flex items-center gap-1.5 min-w-0 flex-1 cursor-pointer select-none" onclick="ReportBuilder.toggleAccordionTab('${escapeHtml(corpoId)}')" title="Expandir ou recolher a aba">
+                                                <span id="${escapeHtml(corpoId)}-icon" class="material-symbols-outlined text-[18px] text-slate-500 shrink-0">${iconeSecao(aberta)}</span>
                                                 <span class="material-symbols-outlined text-[15px] text-primary dark:text-sky-400">tab</span>
                                                 <span class="text-xs font-bold text-slate-800 dark:text-white uppercase truncate" title="${escapeHtml(tg.title)}">${escapeHtml(tg.title)}</span>
                                                 <span class="text-[9px] font-mono text-slate-500 bg-slate-200/80 dark:bg-slate-800 px-1.5 py-0.2 rounded-full">${tg.fields.length}</span>
@@ -712,8 +716,8 @@
                                                 <button type="button" onclick="ReportBuilder.toggleTabFieldsInDrawer('${escapeHtml(tg.id)}', false)" class="text-[9.5px] font-bold text-slate-400 hover:underline cursor-pointer">Nenhum</button>
                                             </div>
                                         </div>
-                                        <!-- Campos da Aba -->
-                                        <div class="p-1 space-y-0.5">
+                                        <!-- Campos da Aba (expansível) -->
+                                        <div id="${escapeHtml(corpoId)}" class="p-1 space-y-0.5 ${aberta ? '' : 'hidden'}">
                                             ${tg.fields.map((f, i) => `
                                                 <div class="cfg-grid-field-item flex items-center justify-between gap-1.5 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 text-xs text-slate-700 dark:text-slate-300 transition-colors" data-field-label="${escapeHtml(f.label.toLowerCase())}" data-tab-id="${escapeHtml(tg.id)}">
                                                     <label class="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
@@ -741,7 +745,7 @@
                                             `).join('')}
                                         </div>
                                     </div>
-                                `).join('')}
+                                `; }).join('')}
                             </div>
 
                             <!-- Layout Colunas -->
@@ -842,13 +846,14 @@
 
                         <!-- 1. TABELA SINTÉTICA (CRONOLÓGICA 1:N) - POSICIONADA LOGO ABAIXO DE ORDENAÇÃO DOS REGISTROS -->
                         <div class="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
-                            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-1.5">
+                            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-1.5 cursor-pointer select-none" onclick="ReportBuilder.toggleAccordionTab('sec-tabela-sintetica')" title="Expandir ou recolher esta seção">
                                 <span class="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                                     <span class="material-symbols-outlined text-[16px] text-sky-600">table_rows</span>
                                     1. Tabela Sintética (Cronológica)
                                 </span>
-                                <span class="text-[9px] font-mono bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 px-1.5 py-0.5 rounded font-bold">1:N Resumo</span>
+                                <span class="flex items-center gap-1.5"><span class="text-[9px] font-mono bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 px-1.5 py-0.5 rounded font-bold">1:N Resumo</span><span id="sec-tabela-sintetica-icon" class="material-symbols-outlined text-[18px] text-slate-500">${iconeSecao(secaoAberta('sec-tabela-sintetica', true))}</span></span>
                             </div>
+                            <div id="sec-tabela-sintetica" class="space-y-3 ${secaoAberta('sec-tabela-sintetica', true) ? '' : 'hidden'}">
 
                             <!-- DENSIDADE DA TABELA -->
                             <div class="space-y-1">
@@ -992,17 +997,19 @@
                                     <span class="material-symbols-outlined text-[16px]">add_circle</span> Inserir Tabela Sintética na Folha
                                 </button>
                             `}
+                            </div>
                         </div>
 
                         <!-- SEÇÃO B: LAUDO ANALÍTICO & CADERNO FOTOGRÁFICO 1:N -->
                         <div class="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2.5">
-                            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-1.5">
+                            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-1.5 cursor-pointer select-none" onclick="ReportBuilder.toggleAccordionTab('sec-laudo-analitico')" title="Expandir ou recolher esta seção">
                                 <span class="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                                     <span class="material-symbols-outlined text-[16px] text-amber-500">photo_library</span>
                                     2. Laudo Analítico & Fotos (1:N)
                                 </span>
-                                <span class="text-[9px] font-mono bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 px-1.5 py-0.5 rounded font-bold">1:N Detalhado</span>
+                                <span class="flex items-center gap-1.5"><span class="text-[9px] font-mono bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 px-1.5 py-0.5 rounded font-bold">1:N Detalhado</span><span id="sec-laudo-analitico-icon" class="material-symbols-outlined text-[18px] text-slate-500">${iconeSecao(secaoAberta('sec-laudo-analitico', true))}</span></span>
                             </div>
+                            <div id="sec-laudo-analitico" class="space-y-3 ${secaoAberta('sec-laudo-analitico', true) ? '' : 'hidden'}">
 
                             <!-- Filtro de Vistorias (Todas vs Última) -->
                             <div>
@@ -1230,6 +1237,7 @@
                                     <span class="material-symbols-outlined text-[16px]">photo_library</span> Inserir Laudo Analítico & Fotos na Folha
                                 </button>
                             `}
+                            </div>
                         </div>
                     </div>
                 `
@@ -2528,6 +2536,15 @@
             });
 
             section.style.display = anyVisible ? 'block' : 'none';
+
+            // com busca, a aba que tem resultado abre para mostrá-lo; sem busca, volta ao que o usuário deixou
+            const corpo = document.getElementById(section.getAttribute('data-body-id') || '');
+            if (corpo) {
+                const abrir = cleanQuery ? anyVisible : secaoAberta(corpo.id, section.getAttribute('data-aberta-padrao') === 'true');
+                corpo.classList.toggle('hidden', !abrir);
+                const icone = document.getElementById(corpo.id + '-icon');
+                if (icone) icone.textContent = iconeSecao(abrir);
+            }
         });
     }
 
@@ -2797,11 +2814,17 @@
     let current1nLaudoSelectedFieldKeys = new Set(); // Conjunto de chaves "tabId:fieldId" selecionadas para laudo analítico
     let current1nLaudoSelectedTabs = new Set(); // Conjunto de IDs das abas selecionadas para o laudo analítico
 
+    // seções recolhíveis do painel lateral (abas da grade, "1. Tabela Sintética", "2. Laudo Analítico"): true = aberta, false = fechada; sem registro = padrão
+    const secoesGaveta = {};
+    const secaoAberta = (id, padrao) => (id in secoesGaveta ? secoesGaveta[id] : padrao);
+    const iconeSecao = (aberta) => (aberta ? 'expand_more' : 'chevron_right');
+
     function toggleAccordionTab(containerId) {
         const el = document.getElementById(containerId);
         if (!el) return;
         const isHidden = el.classList.contains('hidden');
         el.classList.toggle('hidden');
+        secoesGaveta[containerId] = isHidden;
         const icon = document.getElementById(containerId + '-icon');
         if (icon) {
             icon.textContent = isHidden ? 'expand_more' : 'chevron_right';

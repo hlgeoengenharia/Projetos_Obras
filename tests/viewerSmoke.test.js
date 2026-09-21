@@ -702,6 +702,28 @@ async function runScenario(cfg) {
             RB.changeLineHeight(3, '2.0');
             ok('texto livre (edição): salvar o texto e mudar o espaçamento avisam o construtor', r.captured.mensagens.some(m => m.nome === 'saveFreeTextContent' && JSON.stringify(m.args) === '[3,"<b>novo</b>"]') && r.captured.mensagens.some(m => m.nome === 'changeLineHeight' && JSON.stringify(m.args) === '[3,"2.0"]'));
         }
+        // quadros expansíveis na página de edição: sintético (todo) e laudo (por aba); o relatório emitido não muda
+        {
+            const pq = JSON.parse(JSON.stringify(payload));
+            pq.formTabs = [{ id: 't_pf', title: 'PF', isMultiple: true, fields: [{ id: 'pf_data', label: 'Data', type: 'date' }, { id: 'pf_obs', label: 'Observações', type: 'text' }] }];
+            pq.formFields = pq.formTabs[0].fields;
+            pq.featureData = { id_banco: 10, t_pf: [{ pf_data: '2026-03-15', pf_obs: 'Obs-unica-X', _created_at: '2026-03-15' }, { pf_data: '2026-02-10', pf_obs: 'Obs-unica-Y', _created_at: '2026-02-10' }] };
+            pq.template.blocos.splice(3, 0, { id: 's1', tipo: 'tabela_sintetica_1n', colunas: ['aba', 'pf_data'] }, { id: 'l1', tipo: 'laudo_vistoria_fotos', abas_selecionadas: ['t_pf'], campos_selecionados: ['pf_obs'] });
+            enviar(pq);
+            await r.settle(6);
+            let d = r.registry['a4-document-container']._html;
+            ok('quadros: setas de expandir/recolher no quadro sintético (bloco 3) e na aba do laudo (bloco 4), tudo expandido de início', d.includes("alternarQuadro('sint:3')") && d.includes("alternarQuadro('laudo:4:t_pf')") && d.includes('15/03/2026') && d.includes('Obs-unica-X') && d.includes('expand_more'));
+            const RB = r.sandbox.window.ReportBuilder;
+            RB.alternarQuadro('sint:3');
+            d = r.registry['a4-document-container']._html;
+            ok('quadro sintético recolhido: ficam o título e o resumo (seta para a direita); as linhas somem; o laudo não é afetado', !d.includes('15/03/2026') && d.includes('chevron_right') && d.includes('2 registro(s)') && d.includes('Obs-unica-X'));
+            RB.alternarQuadro('laudo:4:t_pf');
+            d = r.registry['a4-document-container']._html;
+            ok('aba do laudo recolhida: fica só o cabeçalho da aba (com a contagem de registros); os cartões somem', !d.includes('Obs-unica-X') && !d.includes('Obs-unica-Y') && d.includes('Aba / Ente: PF') && d.includes('2 registro(s)'));
+            RB.alternarQuadro('sint:3'); RB.alternarQuadro('laudo:4:t_pf');
+            d = r.registry['a4-document-container']._html;
+            ok('expandir de novo traz tudo de volta', d.includes('15/03/2026') && d.includes('Obs-unica-X') && d.includes('Obs-unica-Y'));
+        }
         // cada bloco tem a cor do card correspondente no painel do construtor
         {
             const d0 = r.registry['a4-document-container']._html;

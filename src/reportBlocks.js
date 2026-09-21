@@ -627,17 +627,21 @@
             </tr></thead>`;
 
             const meta = `${records.length} registro(s) • ${sortOrder === 'asc' ? 'Antigo → Recente' : 'Recente → Antigo'}${groupByTab ? ' • Por Aba' : ''}`;
-            const chunkHtml = (rows, isFirst) => `
+            const chunkHtml = (rows, isFirst, semTabela) => {
+                const titulo = `<span class="whitespace-pre-line${edit && edit.titleClass ? ' ' + edit.titleClass : ''}"${edit && edit.titleAttrs ? ' ' + edit.titleAttrs : ''}>${esc(bloco.titulo || TITLE)}${isFirst ? '' : ' (continuação)'}</span>`;
+                return `
                 <div class="mb-4">
                     <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
-                        <span class="whitespace-pre-line${edit && edit.titleClass ? ' ' + edit.titleClass : ''}"${edit && edit.titleAttrs ? ' ' + edit.titleAttrs : ''}>${esc(bloco.titulo || TITLE)}${isFirst ? '' : ' (continuação)'}</span>
+                        ${edit && edit.chevron ? `<span class="flex items-center gap-1 min-w-0">${edit.chevron}${titulo}</span>` : titulo}
                         <span class="text-[10px] font-mono text-slate-500 normal-case">${esc(meta)}${edit && edit.metaExtra ? edit.metaExtra : ''}</span>
                     </div>
-                    <div class="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+                    ${semTabela ? '' : `<div class="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
                         <table class="w-full text-left border-collapse">${theadHtml}<tbody>${rows.join('')}</tbody></table>
-                    </div>
+                    </div>`}
                 </div>`;
+            };
 
+            if (edit && edit.recolhido) return chunkHtml([], true, true); // recolhido (só na página de edição): fica o título e o resumo
             if (opts && opts.full) return chunkHtml(rowsHtml, true);
             return { split: { rowsHtml, chunkHtml } };
         }
@@ -751,18 +755,20 @@
             const perTabCount = {};
             records.forEach(r => { perTabCount[r.tabId] = (perTabCount[r.tabId] || 0) + 1; });
             const seenTab = {};
+            const recolhida = (tabId) => !!(edit && Array.isArray(edit.recolhidos) && edit.recolhidos.includes(String(tabId)));
             const rowsHtml = records.map((r, i) => {
                 let groupHeader = '';
                 const primeiro = !seenTab[r.tabId];
+                if (recolhida(r.tabId) && !primeiro) return null; // aba recolhida: só o cabeçalho dela (o primeiro registro carrega o cabeçalho)
                 if (primeiro) {
                     seenTab[r.tabId] = true;
                     groupHeader = `<div class="flex items-center justify-between px-2.5 py-1.5 bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold text-slate-800 uppercase tracking-wide mb-2">
-                        <div class="flex items-center gap-1.5"><span${edit && edit.groupAttrs ? ' ' + edit.groupAttrs(r.tabId) : ''}>${esc(bloco['custom_tab_title_' + r.tabId] || ('Aba / Ente: ' + r.tabTitle))}</span></div>
+                        <div class="flex items-center gap-1.5">${edit && edit.groupChevron ? edit.groupChevron(r.tabId, recolhida(r.tabId)) : ''}<span${edit && edit.groupAttrs ? ' ' + edit.groupAttrs(r.tabId) : ''}>${esc(bloco['custom_tab_title_' + r.tabId] || ('Aba / Ente: ' + r.tabTitle))}</span></div>
                         <span class="text-[9.5px] font-mono font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">${perTabCount[r.tabId]} registro(s)</span>
                     </div>`;
                 }
-                return `<div data-split-row>${groupHeader}${cardHtml(r, i, primeiro)}</div>`;
-            });
+                return `<div data-split-row>${groupHeader}${recolhida(r.tabId) ? '' : cardHtml(r, i, primeiro)}</div>`;
+            }).filter(Boolean);
 
             const meta = `${records.length} registro(s) • ${sortOrder === 'asc' ? 'Antigo → Recente' : 'Recente → Antigo'}`;
             const chunkHtml = (rows, isFirst) => `

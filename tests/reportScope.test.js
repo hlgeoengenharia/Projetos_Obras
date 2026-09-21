@@ -372,6 +372,30 @@ ok('voltando ao individual, o modelo geral não aparece na lista', !has(containe
     ok('cards: cada tipo de informação tem cor diferente', new Set(cores).size === cores.length);
 }
 
+// ---------------------------------------------------------------- Painel lateral: abas da grade e seções do Quadro Analítico e Sintético expansíveis
+{
+    const forms0 = window.forms[0];
+    forms0.tabs = forms0.tabs.filter(t => t.id !== 't_h');
+    forms0.tabs.push({ id: 't_h', title: 'PF', isMultiple: true, fields: [{ id: 'h_d', label: 'Data', type: 'date' }] });
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+    let h = container.innerHTML;
+    const balanco = (s) => (s.split('<div').length - 1) - (s.split('</div>').length - 1);
+    eq('painel: as marcas <div> e </div> continuam equilibradas (nenhuma seção ficou aberta ou fechada a mais)', balanco(h), 0);
+    ok('grade: cada aba é expansível (seta, corpo próprio); a 1ª aba abre por padrão e as outras ficam recolhidas', h.includes("ReportBuilder.toggleAccordionTab('cfg-grid-tab-body-t1')") && h.includes('id="cfg-grid-tab-body-t1"') && h.includes('id="cfg-grid-tab-body-t_h"') && /id="cfg-grid-tab-body-t1" class="[^"]*"/.exec(h)[0].indexOf('hidden') < 0 && /id="cfg-grid-tab-body-t_h" class="[^"]*hidden/.test(h));
+    ok('quadro: "1. Tabela Sintética" e "2. Laudo Analítico" têm cabeçalho clicável com seta e corpo próprio, abertos por padrão', h.includes("ReportBuilder.toggleAccordionTab('sec-tabela-sintetica')") && h.includes('id="sec-tabela-sintetica"') && h.includes("ReportBuilder.toggleAccordionTab('sec-laudo-analitico')") && h.includes('id="sec-laudo-analitico"') && !/id="sec-tabela-sintetica" class="[^"]*hidden/.test(h) && !/id="sec-laudo-analitico" class="[^"]*hidden/.test(h));
+    // a escolha do usuário sobrevive ao redesenho do painel
+    const alvo = { classList: { _s: new Set(), toggle(c) { if (this._s.has(c)) this._s.delete(c); else this._s.add(c); }, contains(c) { return this._s.has(c); } } };
+    inputs['sec-tabela-sintetica'] = alvo;
+    RB.toggleAccordionTab('sec-tabela-sintetica');
+    delete inputs['sec-tabela-sintetica'];
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+    h = container.innerHTML;
+    ok('seção recolhida continua recolhida depois que o painel é redesenhado', /id="sec-tabela-sintetica" class="[^"]*hidden/.test(h) && !/id="sec-laudo-analitico" class="[^"]*hidden/.test(h));
+    RB.toggleAccordionTab && (inputs['sec-tabela-sintetica'] = { classList: { toggle() {}, contains: () => true } });
+    RB.toggleAccordionTab('sec-tabela-sintetica'); // reabre
+    delete inputs['sec-tabela-sintetica'];
+}
+
 console.log(`reportScope: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {
     console.error(`${failed} falha(s)`);

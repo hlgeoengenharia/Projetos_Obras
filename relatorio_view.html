@@ -16,22 +16,22 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260921o"></script>
-    <script src="src/mapTools.js?v=20260921o"></script>
-    <script src="src/reportMap.js?v=20260921o"></script>
-    <script src="src/reportTemporal.js?v=20260921o"></script>
-    <script src="src/reportExport.js?v=20260921o"></script>
-    <script src="src/reportBlocks.js?v=20260921o"></script>
-    <script src="src/reportEditor.js?v=20260921o"></script>
-    <script src="src/reportFreeText.js?v=20260921o"></script>
-    <script src="src/reportWord.js?v=20260921o"></script>
-    <script src="src/reportDocx.js?v=20260921o"></script>
-    <script src="src/mapSnapshot.js?v=20260921o"></script>
-    <script src="src/verificarEmissao.js?v=20260921o"></script>
+    <script src="src/pageSize.js?v=20260921p"></script>
+    <script src="src/mapTools.js?v=20260921p"></script>
+    <script src="src/reportMap.js?v=20260921p"></script>
+    <script src="src/reportTemporal.js?v=20260921p"></script>
+    <script src="src/reportExport.js?v=20260921p"></script>
+    <script src="src/reportBlocks.js?v=20260921p"></script>
+    <script src="src/reportEditor.js?v=20260921p"></script>
+    <script src="src/reportFreeText.js?v=20260921p"></script>
+    <script src="src/reportWord.js?v=20260921p"></script>
+    <script src="src/reportDocx.js?v=20260921p"></script>
+    <script src="src/mapSnapshot.js?v=20260921p"></script>
+    <script src="src/verificarEmissao.js?v=20260921p"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260921o"></script>
-    <script src="src/reportData.js?v=20260921o"></script>
+    <script src="src/fieldFormatter.js?v=20260921p"></script>
+    <script src="src/reportData.js?v=20260921p"></script>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -218,6 +218,9 @@
         .edit-bloco-barra { display: none; position: absolute; top: -15px; right: 6px; z-index: 60; align-items: center; gap: 2px; background: var(--cor-bloco); color: #fff; border-radius: 8px; padding: 3px 7px; font: 600 9px/1 ui-monospace, monospace; text-transform: uppercase; box-shadow: 0 2px 8px rgba(0,0,0,.25); user-select: none; }
         .edit-bloco:hover > .edit-bloco-barra, .edit-bloco.selecionado > .edit-bloco-barra { display: flex; }
         /* alça para regular a largura do cartão de campo arrastando com o mouse (como a altura do mapa) */
+        .quadro-seta { display: inline-flex; align-items: center; border: 0; background: none; cursor: pointer; padding: 0; color: #475569; border-radius: 4px; }
+        .quadro-seta:hover { background: rgba(15,23,42,.08); color: #0f172a; }
+        .quadro-seta .material-symbols-outlined { font-size: 18px; }
         .campo-resize { display: none; position: absolute; top: 4px; bottom: 4px; right: -5px; width: 9px; cursor: ew-resize; z-index: 20; border-radius: 5px; background: rgba(14,165,233,.35); touch-action: none; }
         .campo-resize::after { content: ''; position: absolute; top: 50%; left: 3px; width: 3px; height: 16px; margin-top: -8px; border-radius: 2px; background: #0284c7; }
         [data-field-id]:hover > .campo-resize, .campo-resize.arrastando { display: block; }
@@ -299,6 +302,17 @@
         const EDICAO = !!(window.location && /[?&]modo=edicao(&|$)/.test(window.location.search || ''));
         if (EDICAO) document.documentElement.classList.add('modo-edicao');
         let chaveMapaEdicao = null;
+        // quadros recolhidos na página de edição (só para a rolagem ficar menor; o relatório emitido sempre sai completo): 'sint:<bloco>' e 'laudo:<bloco>:<aba>'
+        const CHAVE_RECOLHIDOS = 'constructive_quadros_recolhidos';
+        const quadrosRecolhidos = new Set();
+        try { JSON.parse(sessionStorage.getItem(CHAVE_RECOLHIDOS) || '[]').forEach(k => quadrosRecolhidos.add(k)); } catch (e) { /* sem armazenamento: começa tudo expandido */ }
+        /** Seta do quadro (ou da aba do laudo): recolhe/expande e redesenha a página, mantendo o mapa vivo. */
+        function alternarQuadro(chave) {
+            if (quadrosRecolhidos.has(chave)) quadrosRecolhidos.delete(chave); else quadrosRecolhidos.add(chave);
+            try { sessionStorage.setItem(CHAVE_RECOLHIDOS, JSON.stringify(Array.from(quadrosRecolhidos))); } catch (e) { /* ok */ }
+            if (mapController) keptMapWrap = document.getElementById('map-wrap');
+            desenharRelatorio();
+        }
         const NOMES_BLOCO = { cabecalho: 'Cabeçalho oficial', grade_campos: 'Grade de atributos', mapa_estatico: 'Mini-mapa cartográfico', grafico_existente: 'Gráficos do dashboard', kpis: 'Painel de indicadores', galeria_fotos: 'Laudo analítico', laudo_vistoria_fotos: 'Laudo analítico', tabela_sintetica: 'Tabela sintética', tabela_sintetica_1n: 'Quadro sintético 1:N', tabela_analitica: 'Tabela analítica', caixa_texto_livre: 'Texto livre', texto_livre: 'Texto livre', rodape: 'Rodapé oficial' };
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -356,7 +370,7 @@
          */
         function criarPonteConstrutor() {
             const local = {
-                enableInlineEdit: editarTextoInline, toggleFieldWidthPopover: alternarPopoverLargura, closeFieldWidthPopover: fecharPopoverLargura,
+                alternarQuadro: alternarQuadro, enableInlineEdit: editarTextoInline, toggleFieldWidthPopover: alternarPopoverLargura, closeFieldWidthPopover: fecharPopoverLargura,
                 // editor do texto livre: roda aqui (é DOM da página); só o resultado vai para o construtor
                 execFormat: FreeText.execFormat, changeLineHeight: FreeText.changeLineHeight, saveFreeTextContent: FreeText.saveFreeTextContent,
                 handleFreeTextInput: FreeText.handleFreeTextInput, handleFreeTextKeyDown: FreeText.handleFreeTextKeyDown,
@@ -935,13 +949,13 @@
                     return Blocks.renderFreeTextBlock(bloco, idx, featureData);
 
                 case 'tabela_sintetica_1n': {
-                    if (EDICAO) return Editor.sintetica(bloco, idx, featureData);
+                    if (EDICAO) return Editor.sintetica(bloco, idx, featureData, { recolhivel: true, recolhido: quadrosRecolhidos.has('sint:' + idx) });
                     return renderSyntheticTable(bloco, featureData);
                 }
 
                 case 'laudo_vistoria_fotos':
                 case 'galeria_fotos': {
-                    if (EDICAO) return Editor.laudo(bloco, idx, featureData);
+                    if (EDICAO) return Editor.laudo(bloco, idx, featureData, { recolhivel: true, recolhidos: Array.from(quadrosRecolhidos).filter(k => k.startsWith('laudo:' + idx + ':')).map(k => k.split(':').slice(2).join(':')) });
                     return renderAnalyticalLaudo(bloco, featureData);
                 }
 
