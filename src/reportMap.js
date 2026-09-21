@@ -769,6 +769,13 @@
                 frame();
                 apply();
             },
+            /** Altura do mapa na folha (mm): 40 a 400. Quem chama repagina a folha. */
+            setAltura(mm) {
+                const n = Number(mm);
+                if (!isFinite(n)) return;
+                cfg.alturaMm = Math.round(Math.min(400, Math.max(40, n)));
+                notify();
+            },
             /** Apaga as edições e as posições dos rótulos (volta ao calculado). */
             resetMeasures() {
                 // só as medidas da feição: nomes dos pontos (v:N) e distâncias tiradas pelo usuário (dist:N) ficam

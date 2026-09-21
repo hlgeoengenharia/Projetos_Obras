@@ -746,6 +746,20 @@ t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefin
     eq('desligar a coluna (pelo setConfig) também funciona', b.ctl.pointRows().colConfrontantes, false);
 }
 
+// ---------------------------------------------------------------- altura do mapa
+{
+    const b = build({});
+    eq('altura padrão do modelo: 90 mm', b.ctl.getConfig().alturaMm, 90);
+    const n0 = b.changes.length;
+    b.ctl.setAltura(150.4);
+    eq('setAltura arredonda, guarda e avisa a mudança', [b.ctl.getConfig().alturaMm, b.changes.length, b.changes[b.changes.length - 1].alturaMm], [150, n0 + 1, 150]);
+    b.ctl.setAltura(5); eq('mínimo 40 mm', b.ctl.getConfig().alturaMm, 40);
+    b.ctl.setAltura(9999); eq('máximo 400 mm (a folha limita antes)', b.ctl.getConfig().alturaMm, 400);
+    b.ctl.setAltura('x'); eq('valor inválido é ignorado', b.ctl.getConfig().alturaMm, 400);
+    b.ctl.setAltura(120);
+    eq('o que se salva leva a altura', b.ctl.snapshot().alturaMm, 120);
+}
+
 // ---------------------------------------------------------------- quadriculado
 t = build({});
 eq('quadriculado desligado: nada desenhado', t.layersOf('polyline').length, 0);

@@ -292,12 +292,41 @@ async function runScenario(cfg) {
         eq('sem erro de execução', r.errors, []);
     }
 
+    // ---- altura do mapa ajustável na folha
+    {
+        const r = await runScenario({ width: 1900, opener: true, payload: cenarios[3].payload });
+        const painel = () => r.registry['map-tools-panel']._html;
+        const cfg = () => require('vm').runInContext('mapController.getConfig()', r.sandbox);
+        const vm = require('vm');
+        ok('a folha traz a alça de altura na borda de baixo do mapa (não sai na impressão)', /id="map-resize"[^>]*class="no-print"|class="no-print"[^>]*id="map-resize"/.test(r.doc));
+        ok('painel: altura em mm, "Preencher a folha" e dica de arrastar', /id="mp-altura"/.test(painel()) && /mapPanelAltura\(this.value\)/.test(painel()) && /Preencher a folha/.test(painel()) && /Ou arraste a borda de baixo do mapa/.test(painel()));
+        const max = vm.runInContext('mapaAlturaMaxMm()', r.sandbox);
+        ok('altura máxima do mapa pela folha A4 retrato (cabeçalho, rodapé, margens e dimensões descontados)', max > 150 && max < 230);
+        eq('limite: 40 mm no mínimo e o máximo da folha', [vm.runInContext('mapaAlturaLimitada(5)', r.sandbox), vm.runInContext('mapaAlturaLimitada(9999)', r.sandbox), vm.runInContext('mapaAlturaLimitada(120)', r.sandbox)], [40, max, 120]);
+        eq('preencher: soma o espaço livre (px) à altura, sem passar do máximo nem ficar abaixo de 40', [vm.runInContext('mapaAlturaPreenchida(90, 378, 200)', r.sandbox), vm.runInContext('mapaAlturaPreenchida(90, 5000, 200)', r.sandbox), vm.runInContext('mapaAlturaPreenchida(90, -3000, 200)', r.sandbox)], [187, 200, 40]);
+        r.sandbox.mapPanelAltura('150');
+        await r.settle(6);
+        eq('digitar a altura muda a configuração e o mapa na folha', [cfg().alturaMm, /id="map-wrap"[^>]*height: 567px/.test(r.registry['a4-document-container']._html) || /height: 567px/.test(r.registry['a4-document-container']._html)], [150, true]);
+        ok('a altura aparece no painel', /id="mp-altura"[^>]*value="150"/.test(painel()));
+        r.sandbox.mapPanelAltura('9999');
+        eq('valor acima da folha é limitado', cfg().alturaMm, max);
+        r.sandbox.mapPanelReset();
+        await r.settle(6);
+        eq('restaurar volta à altura do modelo (90 mm)', cfg().alturaMm, 90);
+        eq('sem erro de execução', r.errors, []);
+        // altura salva pelo usuário vale ao abrir
+        const salvo = await runScenario({ width: 1900, opener: true, ajustes: { alturaMm: 140 }, payload: cenarios[3].payload });
+        await salvo.settle(6);
+        eq('ajuste salvo: o mapa abre com a altura do usuário', [vm.runInContext('mapController.getConfig().alturaMm', salvo.sandbox), /height: 529px/.test(salvo.registry['a4-document-container']._html)], [140, true]);
+    }
+
     // ---- ícone de girar e cards (CSS): área de clique que encosta no texto, visível ao passar o mouse e durante o giro
     {
         const css = html.slice(html.indexOf('<style'), html.indexOf('</style>'));
         const rot = /\.report-rot \{[^}]*\}/.exec(css);
         ok('ícone de girar: sem folga entre o texto e o ícone (a área de clique é maior que o desenho e vai até o texto)', !!rot && /left: 100%/.test(rot[0]) && !/margin-left/.test(rot[0]) && /padding: 6px 6px 6px 10px/.test(rot[0]) && /cursor: grab/.test(rot[0]));
         ok('ícone de girar aparece ao passar o mouse em todo tipo de texto e durante o giro', ['report-measure-label', 'report-point-label', 'report-nlabel-l', 'report-note-label'].every(c => css.includes('.' + c + ':hover .report-rot')) && /\.rotating \.report-rot/.test(css));
+        ok('alça de altura do mapa: cursor de redimensionar, aparece ao passar o mouse e durante o arrasto', /#map-resize \{[^}]*cursor: ns-resize/.test(css) && /#map-wrap:hover #map-resize, #map-resize\.ativo \{ opacity: 1/.test(css));
         ok('anotação no mapa: fundo branco e borda preta', /\.report-note-label \{[^}]*background: #ffffff[^}]*border: 1px solid #000000/.test(css));
         ok('cards do painel: título com fundo próprio (um tom só) e corpo com moldura', /#map-tools-panel h4 \{[^}]*background: #e2e8f0[^}]*border: 1px solid #cbd5e1/.test(css) && /#map-tools-panel \.sec-body \{[^}]*border: 1px solid #cbd5e1[^}]*background: #f8fafc/.test(css) && /#map-tools-panel h4\.open \{[^}]*background: #cbd5e1/.test(css));
     }
@@ -422,7 +451,8 @@ async function runScenario(cfg) {
             ok('"Rótulos nas feições vizinhas" está em "Camadas ativas no mapa"', /Rótulos nas feições vizinhas/.test(secs.camadas) && !/Rótulos nas feições vizinhas/.test(secs.extras));
             ok('"Mapa de situação" e "Quadriculado UTM" estão em "Mapa base"', /Mapa de situação/.test(secs.base) && /Quadriculado UTM/.test(secs.base) && !/Mapa de situação|Quadriculado UTM/.test(secs.extras));
             ok('"+ Anotação de texto" e as anotações (com N/I/S) estão em "Elementos do mapa"', /\+ Anotação de texto no centro do mapa/.test(secs.elementos) && /mapPanelNotaEstilo\('a1', 'n'\)/.test(secs.elementos) && !/Anotação de texto/.test(secs.extras));
-            ok('"Tabela de confrontantes" está em "Pontos nos vértices", logo depois do memorial', /Memorial \(azimute e distância\)[\s\S]{0,400}Tabela de confrontantes/.test(secs.pontos) && !/Tabela de confrontantes/.test(secs.extras));
+            const iMem = secs.pontos.indexOf('Memorial (azimute e distância)'), iCol = secs.pontos.search(/Coluna (&quot;|")Confrontantes/), iTab = secs.pontos.indexOf('Tabela de confrontantes');
+            ok('em "Pontos nos vértices": Memorial, depois a coluna "Confrontantes" (logo abaixo) e depois a tabela de confrontantes', iMem > 0 && iCol > iMem && iTab > iCol && !/Tabela de confrontantes/.test(secs.extras));
             ok('"Medições no mapa" fica com distância e área cadastral × calculada', /Distância e sobreposição/.test(secs.extras) && /Área cadastral × área calculada/.test(secs.extras));
         }
         ok('extras: caixa do mapa de situação existe no bloco do mapa', /id="map-locator"/.test(r.doc));

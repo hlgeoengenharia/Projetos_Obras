@@ -77,7 +77,7 @@
             norte: src.norte !== undefined ? !!src.norte : (legadoNorte !== undefined ? !!legadoNorte : d.norte),
             escala: src.escala !== undefined ? !!src.escala : (legadoEscala !== undefined ? !!legadoEscala : d.escala),
             projecao: src.projecao === undefined ? d.projecao : !!src.projecao,
-            alturaMm: clamp(src.alturaMm, 40, 220, d.alturaMm),
+            alturaMm: clamp(src.alturaMm, 40, 400, d.alturaMm), // o limite real de cada folha é aplicado pelo visualizador
             vista: normalizeVista(src.vista),
             medidas: normalizeMedidas(src.medidas),
             edicoes: normalizeEdicoes(src.edicoes),

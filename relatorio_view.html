@@ -124,6 +124,10 @@
         #map-north { top: 8px; right: 8px; background: rgba(0,0,0,.72); color: #fff; padding: 4px 6px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; font: 700 10px monospace; line-height: 1; }
         #map-info-wrap { bottom: 34px; left: 8px; display: flex; gap: 4px; align-items: center; max-width: 70%; flex-wrap: wrap; }
         .map-chip { background: rgba(0,0,0,.72); color: #fff; padding: 3px 7px; border-radius: 5px; font: 9px monospace; pointer-events: auto; cursor: move; touch-action: none; }
+        /* alça na borda inferior do mapa: arrastar muda a altura dele na folha */
+        #map-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 12px; cursor: ns-resize; z-index: 700; touch-action: none; display: flex; justify-content: center; align-items: flex-end; background: linear-gradient(to top, rgba(15,23,42,.30), transparent); opacity: 0; transition: opacity .15s; }
+        #map-wrap:hover #map-resize, #map-resize.ativo { opacity: 1; }
+        #map-resize::after { content: ''; width: 46px; height: 4px; margin-bottom: 3px; border-radius: 2px; background: #fff; box-shadow: 0 0 0 1px rgba(15,23,42,.55); }
         #map-north, #map-legend, .leaflet-control-scale { pointer-events: auto; cursor: move; touch-action: none; }
         #map-legend [data-leg] span { cursor: text; }
         #map-legend { bottom: 22px; right: 8px; background: rgba(255,255,255,.92); border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 7px; font: 9px sans-serif; color: #0f172a; max-width: 45%; }
@@ -254,6 +258,7 @@
         let emissaoTimer = null;
         let mapPanelOpen = null;       // painel "Mapa" aberto? (null = ainda não decidido; decide pela largura da tela)
         let lastPontosKey = '';
+        let mapAlturaMm = null;       // altura do mapa na folha (mm): a do modelo até o usuário ajustar
         let repaginateTimer = null;
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -893,7 +898,8 @@
                 case 'mapa_estatico': {
                     mapBloco = bloco;
                     const mcfg = MapTools.normalizeMapConfig(bloco);
-                    const mapPx = Math.round(mcfg.alturaMm * 3.78);
+                    if (mapAlturaMm === null) mapAlturaMm = mcfg.alturaMm;
+                    const mapPx = Math.round(mapAlturaMm * 3.78);
                     return `
                         <div class="mb-4 page-break-avoid">
                             <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
@@ -902,6 +908,7 @@
                             <!-- Mini-mapa Leaflet (configurado no painel "Mapa" à direita) -->
                             <div id="map-wrap" class="relative rounded-lg overflow-hidden border border-slate-300 shadow-xs" style="height: ${mapPx}px;">
                                 <div id="interactive-report-map" class="w-full bg-slate-200 z-0" style="height: ${mapPx}px;"></div>
+                                <div id="map-resize" class="no-print" title="Arraste para ajustar a altura do mapa (a largura acompanha a folha)"></div>
                                 <div id="map-north" class="report-map-overlay"><span class="material-symbols-outlined" style="font-size:18px;color:#fbbf24">navigation</span><span>N</span></div>
                                 <div id="map-info-wrap" class="report-map-overlay"><div id="map-escala-txt" class="map-chip" title="Arraste para mover"></div><div id="map-proj-txt" class="map-chip" title="Arraste para mover"></div></div>
                                 <div id="map-legend" class="report-map-overlay"></div>
@@ -1415,6 +1422,7 @@
                 console.error('[Mapa] Erro ao criar o mini-mapa:', e);
                 return;
             }
+            aplicarAlturaMapa(config.alturaMm); // altura escolhida pelo usuário na última vez
             renderMapToolsPanel();
             // análise temporal: ortofotos que a página do mapa entregou (só as que o usuário pode ver)
             const ortofotos = (reportPayload && Array.isArray(reportPayload.ortofotos)) ? reportPayload.ortofotos : [];
@@ -1462,6 +1470,7 @@
         // ---------------- pontos nos vértices: tabela (com memorial) e repaginação
         function onMapChange(cfg) {
             scheduleEmissao();
+            if (mapController && cfg.alturaMm !== mapAlturaMm) { aplicarAlturaMapa(cfg.alturaMm); renderMapToolsPanel(); }
             const key = blocosKey(cfg);
             if (key === lastPontosKey) return;
             lastPontosKey = key;
@@ -1469,6 +1478,58 @@
             renderMapToolsPanel();
             scheduleRepaginate();
         }
+
+        // ---- altura do mapa na folha: arrastar a borda inferior, digitar em mm ou preencher o espaço livre da folha
+        function mapaAlturaMaxMm() {
+            const tpl = renderArgs && renderArgs.tpl;
+            const d = PageSize.dims(tpl && tpl.config_pagina);
+            const m = (tpl && tpl.config_pagina && tpl.config_pagina.margens_mm) || { top: 15, bottom: 15 };
+            // sobra da folha depois do cabeçalho, do rodapé, das margens e da caixa de dimensões que vem embaixo do mapa
+            const px = d.heightPx - Math.round(((m.top || 0) + (m.bottom || 0)) * 3.78) - 135 - 42 - 110;
+            return Math.max(60, Math.floor(px / 3.78));
+        }
+        function mapaAlturaLimitada(mm) { return Math.round(Math.min(mapaAlturaMaxMm(), Math.max(40, Number(mm) || 0))); }
+        /** Nova altura (mm) que aproveita o espaço livre (px) no fim da folha; nunca fora de [40, max]. */
+        function mapaAlturaPreenchida(atualMm, livrePx, maxMm) {
+            return Math.round(Math.min(maxMm, Math.max(40, atualMm + livrePx / 3.78 - 3)));
+        }
+        function aplicarAlturaMapa(mm) {
+            const nova = mapaAlturaLimitada(mm);
+            if (nova === mapAlturaMm) return;
+            mapAlturaMm = nova;
+            const px = Math.round(nova * 3.78) + 'px';
+            const wrap = document.getElementById('map-wrap');
+            const inner = document.getElementById('interactive-report-map');
+            if (wrap) wrap.style.height = px;
+            if (inner) inner.style.height = px;
+            if (mapController) mapController.invalidate();
+            scheduleRepaginate();
+        }
+        document.addEventListener('pointerdown', (ev) => {
+            const h = ev.target && ev.target.closest ? ev.target.closest('#map-resize') : null;
+            if (!h || !mapController) return;
+            ev.preventDefault();
+            const wrap = document.getElementById('map-wrap');
+            const inner = document.getElementById('interactive-report-map');
+            if (!wrap || !inner) return;
+            const y0 = ev.clientY, h0 = wrap.getBoundingClientRect().height;
+            const minPx = 40 * 3.78, maxPx = mapaAlturaMaxMm() * 3.78;
+            let px = h0;
+            h.classList.add('ativo');
+            const move = (e) => {
+                px = Math.min(maxPx, Math.max(minPx, h0 + (e.clientY - y0)));
+                wrap.style.height = inner.style.height = Math.round(px) + 'px';
+                mapController.invalidate();
+            };
+            const up = () => {
+                document.removeEventListener('pointermove', move);
+                document.removeEventListener('pointerup', up);
+                h.classList.remove('ativo');
+                mapController.setAltura(Math.round(px / 3.78));
+            };
+            document.addEventListener('pointermove', move);
+            document.addEventListener('pointerup', up);
+        });
 
         function scheduleRepaginate() {
             clearTimeout(repaginateTimer);
@@ -1584,7 +1645,7 @@
             const pr = mapController.pointRows();
             if (!pr.rows.length) return '';
             const esc = escapeHtml;
-            const heads = ['Ponto'].concat(pr.colOrientacao ? ['Orientação'] : [], pr.headers, pr.memorial ? ['Azimute até o\nponto seguinte', 'Distância (m)'] : [], pr.colConfrontantes ? ['Confrontantes'] : []);
+            const heads = ['Ponto'].concat(pr.colOrientacao ? ['Orientação'] : [], pr.headers, pr.memorial ? ['Azimute', 'Distância (m)'] : [], pr.colConfrontantes ? ['Confrontantes'] : []);
             // tudo centralizado; dois cliques em qualquer texto da tabela (título, nome, coordenadas, azimute, distância) para editar
             const ed = (key, txt, cls) => `<td class="px-2 py-1 border-r border-slate-200 text-center ${cls} pt-editavel" data-pt-edit="${esc(key)}" title="Duplo clique para editar (vazio restaura o calculado)">${esc(txt)}</td>`;
             const rowsHtml = pr.rows.map((r, i) => {
@@ -1774,6 +1835,14 @@
                     ${rotulosHtml}
                     </div>
 <h4 data-sec-h="elementos" class="${secH('elementos')}" onclick="mapPanelSecao('elementos')">Elementos do mapa<span class="chev">&#9662;</span></h4><div data-sec="elementos" class="sec-body" style="display:${secD('elementos')}">
+                    <div style="margin-bottom:6px">
+                        <div style="font-weight:700;margin-bottom:2px">Altura do mapa na folha</div>
+                        <div style="display:flex;align-items:center;gap:6px">
+                            <input type="number" id="mp-altura" min="40" max="${mapaAlturaMaxMm()}" step="5" value="${mapAlturaMm !== null ? mapAlturaMm : cfg.alturaMm}" onchange="mapPanelAltura(this.value)" style="width:70px;padding:3px;border:1px solid #cbd5e1;border-radius:6px"> mm
+                            <button type="button" class="act" style="flex:1" onclick="mapPanelPreencher()" title="Soma à altura o espaço que sobra no fim da folha">Preencher a folha</button>
+                        </div>
+                        <div style="color:#64748b;line-height:1.35;margin-top:3px">Ou arraste a borda de baixo do mapa, na folha. A largura acompanha a folha (máx. ${mapaAlturaMaxMm()} mm).</div>
+                    </div>
                     ${chk('mp-norte', 'Norte', cfg.norte, "mapPanelSet('norte', this.checked)")}
                     ${chk('mp-escala', 'Escala', cfg.escala, "mapPanelSet('escala', this.checked)")}
                     ${chk('mp-proj', 'Sistema de projeção', cfg.projecao, "mapPanelSet('projecao', this.checked)")}
@@ -1816,8 +1885,8 @@
                     </select>
                     ${chk('mp-pts-tab', 'Tabela de pontos', cfg.pontos.tabela, "mapPanelPontos('tabela', this.checked)")}
                     ${chk('mp-pts-mem', 'Memorial (azimute e distância)', cfg.pontos.memorial, "mapPanelPontos('memorial', this.checked)")}
-                    ${confTabelaHtml}
                     ${colConfHtml}
+                    ${confTabelaHtml}
                     <div style="display:flex;gap:6px;margin:5px 0">
                         <button type="button" class="act" onclick="mapPanelMarcarTodos()" ${(mapController.verticesOmitidos || !cfg.pontos.ativo) ? 'disabled style="opacity:.5"' : ''}>Marcar todos</button>
                         <button type="button" class="act" onclick="mapPanelLimparPontos()">Limpar pontos</button>
@@ -1937,6 +2006,24 @@
             renderMapToolsPanel();
         }
         function mapPanelDistRemover(id) { if (mapController) { mapController.removeDistance(id); renderMapToolsPanel(); } }
+
+        function mapPanelAltura(v) {
+            if (!mapController) return;
+            mapController.setAltura(mapaAlturaLimitada(v));
+            renderMapToolsPanel();
+        }
+        // soma à altura do mapa o espaço que sobra no fim da folha em que ele está
+        function mapPanelPreencher() {
+            const wrap = document.getElementById('map-wrap');
+            const page = wrap && wrap.closest ? wrap.closest('.a4-page') : null;
+            const slot = page ? page.querySelector('.a4-page-body-slot') : null;
+            const ultimo = slot ? slot.lastElementChild : null;
+            if (!mapController || !slot || !ultimo) return;
+            const limite = slot.getBoundingClientRect().bottom - (parseFloat(window.getComputedStyle(slot).paddingBottom) || 0);
+            const livre = limite - ultimo.getBoundingClientRect().bottom;
+            mapController.setAltura(mapaAlturaPreenchida(mapAlturaMm, livre, mapaAlturaMaxMm()));
+            renderMapToolsPanel();
+        }
 
         function mapPanelHide() {
             mapPanelOpen = false;

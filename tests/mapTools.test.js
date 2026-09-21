@@ -21,7 +21,7 @@ eq('padrão: base OSM e 90 mm', [c0.baseMap, c0.alturaMm], ['osm', 90]);
 eq('modelo legado (exibirNorte/exibirEscala) é respeitado', (() => { const c = MT.normalizeMapConfig({ exibirNorte: false, exibirEscala: false }); return [c.norte, c.escala]; })(), [false, false]);
 eq('bloco.mapa vence o legado', MT.normalizeMapConfig({ exibirNorte: false, mapa: { norte: true } }).norte, true);
 const sujo = MT.normalizeMapConfig({ mapa: { baseMap: 'xyz', alturaMm: 9999, destaque: { cor: 'vermelho', espessura: -3, preenchimento: 5 } } });
-eq('valores inválidos voltam ao padrão / limites', [sujo.baseMap, sujo.alturaMm, sujo.destaque.cor, sujo.destaque.espessura, sujo.destaque.preenchimento], ['osm', 220, '#10b981', 1, 0.9]);
+eq('valores inválidos voltam ao padrão / limites', [sujo.baseMap, sujo.alturaMm, sujo.destaque.cor, sujo.destaque.espessura, sujo.destaque.preenchimento], ['osm', 400, '#10b981', 1, 0.9]);
 eq('esmaecimento do entorno: padrão 0,6 e limites 0,1 a 0,95', [c0.destaque.opacidadeEntorno, MT.normalizeMapConfig({ mapa: { destaque: { opacidadeEntorno: 5 } } }).destaque.opacidadeEntorno, MT.normalizeMapConfig({ mapa: { destaque: { opacidadeEntorno: 0 } } }).destaque.opacidadeEntorno, MT.normalizeMapConfig({ mapa: { destaque: { opacidadeEntorno: 0.3 } } }).destaque.opacidadeEntorno], [0.6, 0.95, 0.1, 0.3]);
 eq('mapa base pode ser uma ortofoto ("ortofoto:id"); id estranho volta ao padrão', [MT.normalizeMapConfig({ mapa: { baseMap: 'ortofoto:abc-12' } }).baseMap, MT.normalizeMapConfig({ mapa: { baseMap: 'ortofoto:<x>' } }).baseMap, MT.normalizeMapConfig({ mapa: { baseMap: 'ortofoto:' } }).baseMap], ['ortofoto:abc-12', 'osm', 'osm']);
 // giro e afastamento dos textos dos lados

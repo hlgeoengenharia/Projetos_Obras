@@ -81,7 +81,7 @@ api.setController(controllerFor({ ativo: true, sistema: 'geo_gms', memorial: tru
 out = api.renderPointsTable();
 const memo = out.split.chunkHtml(out.split.rowsHtml, true);
 ok('memorial: título próprio', /Memorial Descritivo — Tabela de Pontos/.test(memo));
-ok('memorial: colunas Latitude, Longitude, Azimute e Distância', /Latitude/.test(memo) && /Longitude/.test(memo) && /Azimute até o<br>ponto seguinte/.test(memo) && /Distância \(m\)/.test(memo));
+ok('memorial: colunas Latitude, Longitude, Azimute e Distância', /Latitude/.test(memo) && /Longitude/.test(memo) && />Azimute<\/th>/.test(memo) && !/ponto seguinte/.test(memo.replace(/<span class="text-\[9\.5px\][\s\S]*?<\/span>/, '')) && /Distância \(m\)/.test(memo));
 const texto = (s) => s.replace(/<[^>]+>/g, '|').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
 ok('memorial: coordenadas em graus, minutos e segundos (exatas)', texto(out.split.rowsHtml[0]).includes(MT.fmtGms(-7.02, 'N', 'S')) && texto(out.split.rowsHtml[0]).includes(MT.fmtGms(-34.84, 'L', 'O')));
 ok('memorial: polígono fecha no primeiro ponto (nota e último azimute ao Sul)', /fecha no primeiro ponto/.test(memo) && /180° 00' 00/.test(out.split.rowsHtml[3]));
@@ -93,7 +93,7 @@ ok('memorial: azimute do primeiro lado é para Leste (~90°) e a distância é a
     api.setController(controllerFor({ ativo: true, sistema: 'utm', memorial: true, ordem: ['v:0', 'v:2', 'v:3', 'v:4'], titulos: { 'v:3': 'Marco 3' }, textos: { 'v:3:cf': 'Rua <X>' }, colConf: { ativo: true } }, anel));
     const o3 = api.renderPointsTable();
     const c3 = o3.split.chunkHtml(o3.split.rowsHtml, true);
-    ok('cabeçalho: Ponto, Orientação (logo depois), coordenadas, Azimute em duas linhas, Distância e Confrontantes', /Ponto[\s\S]*Orientação[\s\S]*E \(m\)[\s\S]*N \(m\)[\s\S]*Azimute até o<br>ponto seguinte[\s\S]*Distância \(m\)[\s\S]*Confrontantes/.test(c3) && (c3.match(/<th /g) || []).length === 7);
+    ok('cabeçalho: Ponto, Orientação (logo depois), coordenadas, Azimute em duas linhas, Distância e Confrontantes', /Ponto[\s\S]*Orientação[\s\S]*E \(m\)[\s\S]*N \(m\)[\s\S]*Azimute[\s\S]*Distância \(m\)[\s\S]*Confrontantes/.test(c3) && (c3.match(/<th /g) || []).length === 7);
     const linhas = o3.split.rowsHtml.join('');
     ok('orientação: "P1 até P2" com os nomes da coluna Ponto (nome renomeado vale; volta ao primeiro no fim)', /data-pt-edit="v:0:or"[^>]*>P1 até P2</.test(linhas) && /data-pt-edit="v:2:or"[^>]*>P2 até Marco 3</.test(linhas) && /data-pt-edit="v:3:or"[^>]*>Marco 3 até P4</.test(linhas) && /data-pt-edit="v:4:or"[^>]*>P4 até P1</.test(linhas));
     ok('distância com vértice não escolhido no meio: lados somados e total', /data-pt-edit="v:0:dist"[^>]*>[\d.,]+ m \+ [\d.,]+ m, totalizando [\d.,]+ m</.test(linhas) && /data-pt-edit="v:2:dist"[^>]*>[\d.,]+</.test(linhas) && !/data-pt-edit="v:2:dist"[^>]*>[^<]*totalizando/.test(linhas));
