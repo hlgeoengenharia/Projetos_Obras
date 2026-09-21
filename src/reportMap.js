@@ -52,7 +52,7 @@
         const map = L.map(opts.container, { zoomControl: true, attributionControl: true, zoomSnap: 0.25, preferCanvas: true });
         if (map.attributionControl && map.attributionControl.setPrefix) map.attributionControl.setPrefix(false);
 
-        const state = { measure: null, dlines: [], base: null, orto: null, feature: null, mask: null, neighbors: {}, scaleControl: null, markers: {}, pts: {}, nlabels: {}, grid: [], notes: {}, locator: null, exporting: false };
+        const state = { draw: null, mlayers: [], measure: null, dlines: [], base: null, orto: null, feature: null, mask: null, neighbors: {}, scaleControl: null, markers: {}, pts: {}, nlabels: {}, grid: [], notes: {}, locator: null, exporting: false };
         const vertData = MT.vertices(opts.geometry || null); // vértices onde o usuário pode marcar pontos
         const measureData = MT.computeMeasures(opts.geometry || null); // { itens, ladosOmitidos }
         const tileLayers = {};
@@ -203,6 +203,23 @@
                 (it.grupo === 'lados' && m.lados) || (it.grupo === 'total' && m.total) || (it.grupo === 'perimetro' && m.perimetro));
         }
 
+        /** Medições livres (ponto, distância e área) no formato dos itens de medida: texto editável, arrastável e girável. */
+        function medItems() {
+            return MT.applyEdits(cfg.medicoes.itens.map(m => {
+                const info = MT.medicaoInfo(m);
+                const texto = MT.medicaoTexto(m, cfg.medicoes.sistema);
+                let ang = 0, off = [0, m.tipo === 'area' ? 0 : -12];
+                if (m.tipo === 'linha') {
+                    // alinhado ao trecho do meio da linha
+                    const k = Math.max(0, Math.min(m.pts.length - 2, Math.floor((m.pts.length - 1) / 2)));
+                    const A = [m.pts[k][1], m.pts[k][0]], B = [m.pts[k + 1][1], m.pts[k + 1][0]];
+                    ang = MT.edgeAngleCss(A, B);
+                    off = MT.edgeOffsetAbove(A, B, 9);
+                }
+                return { id: m.id, grupo: 'total', tipo: 'medicao', valor: info.comprimento || info.area || 0, texto: texto, resumo: texto, pos: [info.centro.lat, info.centro.lng], dy: 0, ang: ang, off: off };
+            }), cfg.edicoes);
+        }
+
         /** Distâncias tiradas pelo usuário (feição → camada de referência), no formato dos itens de medida. */
         function distItems() {
             if (!cfg.referencia.ativo) return [];
@@ -319,7 +336,7 @@
 
         function applyMeasures() {
             clearMeasureMarkers();
-            visibleMeasures().concat(distItems()).forEach(it => {
+            visibleMeasures().concat(distItems(), medItems()).forEach(it => {
                 const p = cfg.posicoes[it.id];
                 const pos = p ? [p.lat, p.lng] : it.pos;
                 const off = p || !it.off ? [0, 0] : it.off; // depois de arrastado, o texto fica exatamente onde foi solto
@@ -355,6 +372,59 @@
             }
         }
 
+        // ------------------------------------------------------------ ferramentas de medição: ponto, distância e área
+        const COR_MED = '#0e7490';
+        function clearMedLayers() { state.mlayers.forEach(l => map.removeLayer(l)); state.mlayers = []; }
+        function addMedLayer(l) { l.addTo(map); state.mlayers.push(l); }
+        function applyMedicoes() {
+            clearMedLayers();
+            cfg.medicoes.itens.forEach(m => {
+                if (m.tipo === 'ponto') addMedLayer(L.circleMarker(m.pts[0], { radius: 6, color: '#ffffff', weight: 2, fillColor: COR_MED, fillOpacity: 1, interactive: false }));
+                else if (m.tipo === 'linha') {
+                    addMedLayer(L.polyline(m.pts, { color: COR_MED, weight: 2.5, interactive: false }));
+                    m.pts.forEach(p => addMedLayer(L.circleMarker(p, { radius: 3, color: COR_MED, weight: 1.5, fillColor: '#ffffff', fillOpacity: 1, interactive: false })));
+                } else addMedLayer(L.polygon(m.pts, { color: COR_MED, weight: 2.5, fillColor: COR_MED, fillOpacity: 0.2, interactive: false }));
+            });
+            // desenho em andamento: linha/polígono provisório com os cliques dados e o ponto sob o mouse
+            const d = state.draw;
+            if (d && d.pts.length) {
+                const seq = d.hover ? d.pts.concat([d.hover]) : d.pts;
+                if (d.tipo === 'area' && seq.length >= 3) addMedLayer(L.polygon(seq, { color: COR_MED, weight: 2, dashArray: '5 4', fillColor: COR_MED, fillOpacity: 0.12, interactive: false }));
+                else if (seq.length >= 2) addMedLayer(L.polyline(seq, { color: COR_MED, weight: 2, dashArray: '5 4', interactive: false }));
+                d.pts.forEach(p => addMedLayer(L.circleMarker(p, { radius: 3.5, color: COR_MED, weight: 1.5, fillColor: '#a5f3fc', fillOpacity: 1, interactive: false })));
+            }
+        }
+        function drawChanged() { applyMedicoes(); if (opts.onMeasureState) opts.onMeasureState(state.draw ? state.draw.pts.length : 0); }
+        /** Cola o clique nos contornos da feição e das camadas ligadas (aderência), até ~14 px de distância. */
+        function snapLatLng(ll) {
+            if (!cfg.medicoes.aderencia) return [ll.lat, ll.lng];
+            const mpp = 156543.03392 * Math.cos(ll.lat * Math.PI / 180) / Math.pow(2, map.getZoom ? map.getZoom() : 18);
+            const lim = 14 * mpp;
+            let best = MT.nearestOnGeometry(geometry, ll.lat, ll.lng);
+            if (cfg.camadasVizinhas) {
+                const on = new Set(cfg.camadasLigadas.map(String));
+                camadas.forEach(c => { if (!on.has(String(c.id))) return; const p = MT.nearestOnCamada(c, ll.lat, ll.lng); if (p && (!best || p.d < best.d)) best = p; });
+            }
+            return best && best.d <= lim ? [best.lat, best.lng] : [ll.lat, ll.lng];
+        }
+        function onDrawClick(e) {
+            const d = state.draw;
+            if (!d || !e || !e.latlng) return;
+            const p = snapLatLng(e.latlng);
+            if (d.tipo === 'ponto') { api.addMedicao('ponto', [p]); state.draw = null; setMeasureCursor(false); drawChanged(); return; }
+            d.pts.push(p);
+            d.hover = null;
+            drawChanged();
+        }
+        function onDrawMove(e) {
+            const d = state.draw;
+            if (!d || !d.pts.length || !e || !e.latlng) return;
+            d.hover = [e.latlng.lat, e.latlng.lng];
+            applyMedicoes();
+        }
+        map.on('mousemove', onDrawMove);
+        map.on('dblclick', (e) => { if (state.draw && state.draw.tipo !== 'ponto') api.finishDraw(); });
+
         // ------------------------------------------------------------ distância até a camada de referência (dois cliques no mapa)
         function clearDistLines() { state.dlines.forEach(l => map.removeLayer(l)); state.dlines = []; }
         function applyDistLines() {
@@ -380,6 +450,7 @@
         function setMeasureCursor(on) { if (map.getContainer && map.getContainer() && map.getContainer().style) map.getContainer().style.cursor = on ? 'crosshair' : ''; }
         function measureChanged() { applyDistLines(); if (opts.onMeasureState) opts.onMeasureState(state.measure ? state.measure.fase : 0); }
         function onMapClick(e) {
+            if (state.draw) { onDrawClick(e); return; }
             if (!state.measure || !e || !e.latlng) return;
             const ll = e.latlng;
             if (state.measure.fase === 1) {
@@ -398,7 +469,11 @@
             measureChanged();
         }
         map.on('click', onMapClick);
-        if (doc && doc.addEventListener) doc.addEventListener('keydown', (ev) => { if (ev && ev.key === 'Escape' && state.measure) api.cancelDistMeasure(); });
+        if (doc && doc.addEventListener) doc.addEventListener('keydown', (ev) => {
+            if (!ev) return;
+            if (ev.key === 'Escape') { if (state.measure) api.cancelDistMeasure(); if (state.draw) api.cancelDraw(); }
+            else if (ev.key === 'Enter' && state.draw && state.draw.tipo !== 'ponto') api.finishDraw();
+        });
 
         // ------------------------------------------------------------ quadriculado UTM (acompanha o enquadramento)
         function clearGrid() { state.grid.forEach(l => map.removeLayer(l)); state.grid = []; }
@@ -522,7 +597,7 @@
                 if (chosen.has(v.id) || state.exporting) return;
                 const h = L.circleMarker([v.lat, v.lng], { radius: 5, color: '#334155', weight: 1.5, fillColor: '#ffffff', fillOpacity: 1, interactive: true, bubblingMouseEvents: false, className: 'report-vertex-handle' });
                 h.addTo(map);
-                h.on('click', (e) => { if (state.measure) onMapClick(e); else api.addPoint(v.id); });
+                h.on('click', (e) => { if (state.measure || state.draw) onMapClick(e); else api.addPoint(v.id); });
                 state.pts['h:' + v.id] = h;
             });
             // pontos marcados: a bolinha fica no vértice; o nome é um texto à parte (arrastar move, ↻ gira, dois cliques renomeiam)
@@ -689,6 +764,7 @@
             applyFeature();
             applyMeasures();
             applyDistLines();
+            applyMedicoes();
             applyPoints();
             applyGrid();
             applyNotes();
@@ -728,7 +804,7 @@
                 next.destaque = Object.assign({}, cfg.destaque, (patch && patch.destaque) || {});
                 next.medidas = Object.assign({}, cfg.medidas, (patch && patch.medidas) || {});
                 next.pontos = Object.assign({}, cfg.pontos, (patch && patch.pontos) || {});
-                ['rotulos', 'confrontantes', 'referencia', 'comparacaoArea', 'situacao', 'quadriculado'].forEach(k => { next[k] = Object.assign({}, cfg[k], (patch && patch[k]) || {}); });
+                ['rotulos', 'confrontantes', 'referencia', 'comparacaoArea', 'situacao', 'quadriculado', 'medicoes'].forEach(k => { next[k] = Object.assign({}, cfg[k], (patch && patch[k]) || {}); });
                 const pontosNovos = next.pontos;
                 const camadaAnt = cfg.confrontantes.camada;
                 const refAnt = cfg.referencia.camada;
@@ -757,7 +833,7 @@
                     camadasLigadas: cfg.camadasLigadas.slice(), destaque: Object.assign({}, cfg.destaque), medidas: JSON.parse(JSON.stringify(cfg.medidas)),
                     edicoes: Object.assign({}, cfg.edicoes), posicoes: Object.assign({}, cfg.posicoes), rotacoes: Object.assign({}, cfg.rotacoes),
                     pontos: Object.assign({}, cfg.pontos, { ordem: cfg.pontos.ordem.slice(), titulos: Object.assign({}, cfg.pontos.titulos) }),
-                    rotulos: JSON.parse(JSON.stringify(cfg.rotulos)), confrontantes: JSON.parse(JSON.stringify(cfg.confrontantes)), referencia: JSON.parse(JSON.stringify(cfg.referencia)), elementos: JSON.parse(JSON.stringify(cfg.elementos)), legenda: JSON.parse(JSON.stringify(cfg.legenda)),
+                    rotulos: JSON.parse(JSON.stringify(cfg.rotulos)), confrontantes: JSON.parse(JSON.stringify(cfg.confrontantes)), referencia: JSON.parse(JSON.stringify(cfg.referencia)), medicoes: JSON.parse(JSON.stringify(cfg.medicoes)), elementos: JSON.parse(JSON.stringify(cfg.elementos)), legenda: JSON.parse(JSON.stringify(cfg.legenda)),
                     comparacaoArea: Object.assign({}, cfg.comparacaoArea), situacao: Object.assign({}, cfg.situacao), quadriculado: Object.assign({}, cfg.quadriculado),
                     anotacoes: cfg.anotacoes.map(a => Object.assign({}, a)), vista: currentView()
                 });
@@ -778,8 +854,8 @@
             },
             /** Apaga as edições e as posições dos rótulos (volta ao calculado). */
             resetMeasures() {
-                // só as medidas da feição: nomes dos pontos (v:N) e distâncias tiradas pelo usuário (dist:N) ficam
-                const soPontos = (m) => { const out = {}; Object.keys(m).forEach(k => { if (/^(v|dist):/.test(k)) out[k] = m[k]; }); return out; };
+                // só as medidas da feição: nomes dos pontos (v:N), distâncias tiradas (dist:N) e medições livres (med:N) ficam
+                const soPontos = (m) => { const out = {}; Object.keys(m).forEach(k => { if (/^(v|dist|med):/.test(k)) out[k] = m[k]; }); return out; };
                 cfg.edicoes = soPontos(cfg.edicoes); cfg.posicoes = soPontos(cfg.posicoes); cfg.rotacoes = soPontos(cfg.rotacoes); apply();
             },
             /** Itens de medida atuais (com as edições), para painel/teste. */
@@ -855,11 +931,85 @@
                 notify();
             },
             resetLegenda() { cfg.legenda = MT.normalizeLegenda({}); applyOverlays(); notify(); },
+            // ---- ferramentas de medição (cópia da "Ferramenta de Medição" do mapa principal)
+            /** Começa a desenhar: 'ponto' (um clique), 'linha' (comprimento) ou 'area' (área e perímetro). Concluir: duplo clique, Enter ou finishDraw(). */
+            startDraw(tipo) {
+                if (!['ponto', 'linha', 'area'].includes(tipo) || cfg.medicoes.itens.length >= 30) return false;
+                state.measure = null;
+                state.draw = { tipo: tipo, pts: [], hover: null };
+                setMeasureCursor(true);
+                if (map.doubleClickZoom && map.doubleClickZoom.disable) map.doubleClickZoom.disable();
+                drawChanged();
+                return true;
+            },
+            /** Conclui a linha/polígono em desenho (com pontos suficientes); pontos repetidos no fim (do duplo clique) são tirados. */
+            finishDraw() {
+                const d = state.draw;
+                if (!d) return null;
+                const pts = d.pts.filter((p, i) => i === 0 || MT.distanceM([p[1], p[0]], [d.pts[i - 1][1], d.pts[i - 1][0]]) > 0.05);
+                state.draw = null;
+                setMeasureCursor(false);
+                if (map.doubleClickZoom && map.doubleClickZoom.enable) map.doubleClickZoom.enable();
+                const id = pts.length >= (d.tipo === 'linha' ? 2 : 3) ? api.addMedicao(d.tipo, pts) : null;
+                drawChanged();
+                return id;
+            },
+            cancelDraw() {
+                if (!state.draw) return;
+                state.draw = null;
+                setMeasureCursor(false);
+                if (map.doubleClickZoom && map.doubleClickZoom.enable) map.doubleClickZoom.enable();
+                drawChanged();
+            },
+            /** { tipo, pontos } do desenho em andamento, ou null. */
+            drawState() { return state.draw ? { tipo: state.draw.tipo, pontos: state.draw.pts.length } : null; },
+            /** Guarda uma medição pronta. Devolve o id ('med:N') ou null (limite/valores inválidos). */
+            addMedicao(tipo, pts) {
+                const usados = cfg.medicoes.itens.map(m => Number(m.id.slice(4)));
+                let n = 1; while (usados.indexOf(n) >= 0) n++;
+                const med = MT.normalizeMedicoes(Object.assign({}, cfg.medicoes, { itens: cfg.medicoes.itens.concat([{ id: 'med:' + n, tipo: tipo, pts: pts }]) }));
+                if (med.itens.length === cfg.medicoes.itens.length) return null;
+                cfg.medicoes = med;
+                apply();
+                return 'med:' + n;
+            },
+            /** Marca um ponto pelas coordenadas digitadas; se ficar fora do enquadramento, o mapa passa a mostrar a feição e o ponto. */
+            addMedicaoPonto(lat, lng) {
+                const id = api.addMedicao('ponto', [[lat, lng]]);
+                if (id && bbox && map.getBounds && map.fitBounds) {
+                    const b = map.getBounds();
+                    if (b && b.contains && !b.contains([lat, lng])) {
+                        map.fitBounds([[Math.min(bbox[1], lat), Math.min(bbox[0], lng)], [Math.max(bbox[3], lat), Math.max(bbox[2], lng)]], { padding: [30, 30], maxZoom: 19 });
+                    }
+                }
+                return id;
+            },
+            removeMedicao(id) {
+                cfg.medicoes = MT.normalizeMedicoes(Object.assign({}, cfg.medicoes, { itens: cfg.medicoes.itens.filter(m => m.id !== id) }));
+                const sem = (m) => { const out = Object.assign({}, m); delete out[id]; return out; };
+                cfg.edicoes = sem(cfg.edicoes); cfg.posicoes = sem(cfg.posicoes); cfg.rotacoes = sem(cfg.rotacoes);
+                apply();
+            },
+            clearMedicoes() {
+                const ids = cfg.medicoes.itens.map(m => m.id);
+                cfg.medicoes = MT.normalizeMedicoes(Object.assign({}, cfg.medicoes, { itens: [] }));
+                const sem = (m) => { const out = {}; Object.keys(m).forEach(k => { if (ids.indexOf(k) < 0) out[k] = m[k]; }); return out; };
+                cfg.edicoes = sem(cfg.edicoes); cfg.posicoes = sem(cfg.posicoes); cfg.rotacoes = sem(cfg.rotacoes);
+                apply();
+            },
+            /** Medições com os números e as coordenadas nos três formatos, para o painel e para o texto da folha. */
+            medicaoRows() {
+                return cfg.medicoes.itens.map(m => {
+                    const info = MT.medicaoInfo(m);
+                    return { id: m.id, tipo: m.tipo, numero: Number(m.id.slice(4)), info: info, coords: MT.coordTriple(info.centro.lat, info.centro.lng), texto: (medItems().find(x => x.id === m.id) || {}).texto, npts: m.pts.length };
+                });
+            },
             // ---- distância feição → camada de referência, medida pelo usuário com dois cliques
             /** 0 = parado; 1 = falta o ponto na feição; 2 = falta o ponto na camada. */
             measureState() { return state.measure ? state.measure.fase : 0; },
             startDistMeasure() {
                 if (!cfg.referencia.ativo || !cfg.referencia.camada || cfg.referencia.medidas.length >= 20) return false;
+                if (state.draw) api.cancelDraw();
                 state.measure = { fase: 1, a: null };
                 setMeasureCursor(true);
                 measureChanged();

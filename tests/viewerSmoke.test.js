@@ -104,7 +104,7 @@ async function runScenario(cfg) {
     const layer = (kind) => { const l = { kind, addTo(m) { (m.layers = m.layers || []).push(l); return l; }, on() { return l; }, bringToFront() {}, getBounds: () => ({}), setStyle() {} }; return l; };
     const Lstub = {
         map: (c, o) => { const m = { container: c, options: o, layers: [], attributionControl: { setPrefix() {} }, removeLayer() {}, removeControl() {}, on() {}, fitBounds() {}, setView() {}, getCenter: () => ({ lat: -7.015, lng: -34.835 }), getZoom: () => 18, getContainer: () => ({ style: {} }), invalidateSize() {}, remove() {} }; mapsCreated.push(m); return m; },
-        tileLayer: () => layer('tile'), imageOverlay: () => layer('image'), geoJSON: () => layer('geojson'), polygon: () => layer('polygon'),
+        tileLayer: () => layer('tile'), imageOverlay: () => layer('image'), geoJSON: () => layer('geojson'), polygon: () => layer('polygon'), polyline: () => layer('polyline'),
         circleMarker: () => layer('circle'), divIcon: (o) => o, marker: () => { const l = layer('marker'); l.dragging = { disable() {} }; l.getElement = () => null; l.getLatLng = () => ({ lat: 0, lng: 0 }); return l; },
         control: { scale: () => ({ addTo() {} }) }, DomEvent: { stopPropagation() {} }
     };
@@ -318,6 +318,48 @@ async function runScenario(cfg) {
         const salvo = await runScenario({ width: 1900, opener: true, ajustes: { alturaMm: 140 }, payload: cenarios[3].payload });
         await salvo.settle(6);
         eq('ajuste salvo: o mapa abre com a altura do usuário', [vm.runInContext('mapController.getConfig().alturaMm', salvo.sandbox), /height: 529px/.test(salvo.registry['a4-document-container']._html)], [140, true]);
+    }
+
+    // ---- ferramentas de medição no card "Medições no mapa"
+    {
+        const r = await runScenario({ width: 1900, opener: true, payload: cenarios[3].payload });
+        const painel = () => r.registry['map-tools-panel']._html;
+        const vm = require('vm');
+        const cfg = () => vm.runInContext('mapController.getConfig()', r.sandbox);
+        const secExtras = () => { const m = /data-sec-h="extras"[\s\S]*?(?=data-sec-h="temporal")/.exec(painel()); return m ? m[0] : ''; };
+        ok('card "Medições no mapa": as 4 ferramentas do mapa principal (sem o Analisador de Gabarito 3D)', ['Coordenadas do Ponto', 'Distância (m)', 'Área (m²)', 'Consultar Coordenadas'].every(t => secExtras().includes(t)) && !/Gabarito/.test(painel()));
+        ok('card: aderência, sistema dos pontos e as análises antigas continuam', /Aderência \(gruda nos contornos\)/.test(secExtras()) && /Pontos em/.test(secExtras()) && /Distância e sobreposição/.test(secExtras()) && /Área cadastral × área calculada/.test(secExtras()));
+        r.sandbox.mapPanelFerramenta('linha');
+        ok('ferramenta ligada: o painel diz como desenhar e mostra Concluir e Cancelar', /Clique para adicionar pontos/.test(secExtras()) && /mapPanelConcluirMedicao\(\)/.test(secExtras()));
+        r.sandbox.mapPanelFerramenta('linha');
+        ok('clicar na mesma ferramenta cancela', !/Clique para adicionar pontos/.test(secExtras()));
+        // medir de verdade pelo controlador e ver o painel e a folha
+        vm.runInContext("mapController.addMedicao('linha', [[-7.0195, -34.8395], [-7.0195, -34.8385]]); mapController.addMedicao('area', [[-7.0195, -34.8395], [-7.0195, -34.8385], [-7.0185, -34.8385]]); mapController.addMedicao('ponto', [[-7.019, -34.839]]);", r.sandbox);
+        r.sandbox.renderMapToolsPanel();
+        await r.settle(8);
+        ok('painel: cada medição com seus números e as coordenadas DEC, GMS e UTM (com copiar e remover)', /Distância 1/.test(secExtras()) && /Comprimento: <b>/.test(secExtras()) && /Área 2/.test(secExtras()) && /Perímetro: <b>/.test(secExtras()) && /Coordenadas do ponto 3/.test(secExtras()) && /DEC -7\./.test(secExtras()) && /GMS 7° /.test(secExtras()) && /UTM E /.test(secExtras()) && /mapPanelMedCopiar\('med:1'\)/.test(secExtras()) && /mapPanelMedRemover\('med:3'\)/.test(secExtras()) && /mapPanelMedLimpar\(\)/.test(secExtras()));
+        const folha = r.registry['a4-document-container']._html;
+        ok('folha: as medições entram nas "Análises da Feição" (comprimento, área, perímetro e coordenadas)', /Distância medida \(1\)/.test(folha) && /Área medida \(2\)/.test(folha) && /Coordenadas do ponto \(3\)/.test(folha) && /DEC -7\./.test(folha));
+        // consultar coordenadas
+        r.sandbox.mapPanelConsulta();
+        ok('Consultar Coordenadas: formulário com abas DEC, GMS e UTM (DEC aberta)', /mapPanelConsultaAba\('gms'\)/.test(secExtras()) && /Pode colar &quot;lat, lng&quot;|Pode colar "lat, lng"/.test(secExtras()) && /mapPanelConsultaMarcar\(\)/.test(secExtras()));
+        r.sandbox.mapPanelConsultaMarcar();
+        ok('campos vazios: mensagem de erro no painel', /Preencha a latitude e a longitude\./.test(secExtras()));
+        r.sandbox.mapPanelConsultaCampo('lat', '-7,0192');
+        r.sandbox.mapPanelConsultaCampo('lng', '-34.8388');
+        r.sandbox.mapPanelConsultaMarcar();
+        eq('coordenadas digitadas viram um ponto no mapa', [cfg().medicoes.itens.length, cfg().medicoes.itens[3].pts[0]], [4, [-7.0192, -34.8388]]);
+        r.sandbox.mapPanelConsultaAba('utm');
+        ok('aba UTM: X, Y e zona', /placeholder="X \(Este\)"/.test(secExtras()) && /placeholder="Zona"/.test(secExtras()));
+        r.sandbox.mapPanelConsultaAba('gms');
+        ok('aba GMS: campo para colar e graus, minutos, segundos e direção', /placeholder="Colar GMS/.test(secExtras()) && /S \(Sul\)/.test(secExtras()) && /W \(Oeste\)/.test(secExtras()));
+        r.sandbox.mapPanelMedicoes('sistema', 'geo_dec');
+        eq('pontos em graus decimais', cfg().medicoes.sistema, 'geo_dec');
+        r.sandbox.mapPanelMedRemover('med:1');
+        eq('remover uma medição pelo painel', cfg().medicoes.itens.map(m => m.id), ['med:2', 'med:3', 'med:4']);
+        r.sandbox.mapPanelMedLimpar();
+        eq('limpar tudo', cfg().medicoes.itens, []);
+        eq('sem erro de execução', r.errors, []);
     }
 
     // ---- edição com quebra de linha e ajuste de largura das colunas da tabela de pontos

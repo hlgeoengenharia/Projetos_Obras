@@ -261,7 +261,11 @@
         let emissaoTimer = null;
         let mapPanelOpen = null;       // painel "Mapa" aberto? (null = ainda não decidido; decide pela largura da tela)
         let lastPontosKey = '';
-        let mapAlturaMm = null;       // altura do mapa na folha (mm): a do modelo até o usuário ajustar
+        let mapAlturaMm = null;
+        let consultaAberta = false;   // formulário "Consultar Coordenadas" aberto no painel
+        let consultaAba = 'dec';
+        let consultaCampos = {};
+        let consultaErro = '';       // altura do mapa na folha (mm): a do modelo até o usuário ajustar
         let repaginateTimer = null;
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -1549,7 +1553,7 @@
 
         /** O que muda a paginação: pontos, confrontantes, referência e comparação de área. */
         function blocosKey(cfg) {
-            return JSON.stringify([cfg.pontos, cfg.confrontantes, cfg.referencia, cfg.comparacaoArea]);
+            return JSON.stringify([cfg.pontos, cfg.confrontantes, cfg.referencia, cfg.comparacaoArea, cfg.medicoes.itens]);
         }
 
         function camadasDoPayload() {
@@ -1633,6 +1637,15 @@
             if (cfg.referencia.ativo && cfg.referencia.camada && mapController.distanceRows) {
                 const cam = camadasDoPayload().find(x => String(x.id) === cfg.referencia.camada);
                 mapController.distanceRows().forEach(r => linhas.push({ aviso: false, html: `<b>Distância medida no mapa${r.id ? ' (' + escapeHtml(r.id.slice(5)) + ')' : ''}</b> — da feição até a camada <b>${escapeHtml(cam ? cam.name : 'de referência')}</b>: <b>${escapeHtml(r.texto)}</b>.` }));
+            }
+            if (mapController.medicaoRows) {
+                mapController.medicaoRows().forEach(r => {
+                    const c = r.coords;
+                    const coord = '<br><span class="font-mono text-[10px]">DEC ' + escapeHtml(c.dec) + ' • GMS ' + escapeHtml(c.gms) + ' • UTM ' + escapeHtml(c.utm) + '</span>';
+                    if (r.tipo === 'ponto') linhas.push({ aviso: false, html: '<b>Coordenadas do ponto (' + r.numero + ')</b>' + coord });
+                    else if (r.tipo === 'linha') linhas.push({ aviso: false, html: '<b>Distância medida (' + r.numero + ')</b>: comprimento <b>' + fmt(r.info.comprimento, 2) + ' m</b>' + coord.replace('<br>', '<br>Centro: ') });
+                    else linhas.push({ aviso: false, html: '<b>Área medida (' + r.numero + ')</b>: <b>' + fmt(r.info.area, 2) + ' m²</b> (' + fmt(r.info.area / 10000, 4) + ' ha) • perímetro <b>' + fmt(r.info.perimetro, 2) + ' m</b>' + coord.replace('<br>', '<br>Centroide: ') });
+                });
             }
             if (!linhas.length) return '';
             return `<div class="mb-4 page-break-avoid">
@@ -1753,6 +1766,37 @@
                     </div>`).join('')}</div>
                 ${(cfg.confrontantes.ordem.length || Object.keys(cfg.confrontantes.textos).length) ? '<button type="button" class="act" style="margin-top:4px" onclick="mapPanelConfReset()">Restaurar nomes e ordem</button>' : ''}` : '';
             const legItens = mapController.legendItems();
+            const ds = mapController.drawState();
+            const medRows = mapController.medicaoRows();
+            const tituloMed = { ponto: 'Coordenadas do ponto', linha: 'Distância', area: 'Área' };
+            const btnFerr = (tipo, rotulo) => '<button type="button" class="act" style="' + (ds && ds.tipo === tipo ? 'background:#d1fae5;border-color:#10b981;' : '') + '" onclick="mapPanelFerramenta(\'' + tipo + '\')">' + rotulo + '</button>';
+            const campoC = (k, ph, w) => '<input type="text" value="' + esc(consultaCampos[k] || '') + '" placeholder="' + ph + '" oninput="mapPanelConsultaCampo(\'' + k + '\', this.value)" style="width:' + (w || '100%') + ';min-width:0;padding:3px 5px;border:1px solid #cbd5e1;border-radius:6px;font:11px monospace">';
+            const dirC = (k, opcoes) => '<select onchange="mapPanelConsultaCampo(\'' + k + '\', this.value)" style="padding:3px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px">' + opcoes.map(x => '<option value="' + x[0] + '"' + ((consultaCampos[k] || opcoes[0][0]) === x[0] ? ' selected' : '') + '>' + x[1] + '</option>').join('') + '</select>';
+            const abaC = (a, r) => '<button type="button" class="act" style="padding:4px;' + (consultaAba === a ? 'background:#0f172a;color:#fff;border-color:#0f172a;' : '') + '" onclick="mapPanelConsultaAba(\'' + a + '\')">' + r + '</button>';
+            let consultaForm = '';
+            if (consultaAba === 'dec') consultaForm = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">' + campoC('lat', 'Latitude: -7.019674') + campoC('lng', 'Longitude: -34.832625') + '</div><div style="color:#64748b;margin-top:2px">Pode colar "lat, lng" num dos campos.</div>';
+            else if (consultaAba === 'gms') consultaForm = campoC('colar', 'Colar GMS: 7° 1\' 10" S, 34° 49\' 57" W') +
+                '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1.2fr;gap:4px;margin-top:4px">' + campoC('latDeg', 'Lat °') + campoC('latMin', "Min '") + campoC('latSec', 'Seg "') + dirC('latDir', [['S', 'S (Sul)'], ['N', 'N (Norte)']]) + '</div>' +
+                '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1.2fr;gap:4px;margin-top:4px">' + campoC('lngDeg', 'Lng °') + campoC('lngMin', "Min '") + campoC('lngSec', 'Seg "') + dirC('lngDir', [['W', 'W (Oeste)'], ['E', 'E (Leste)']]) + '</div>';
+            else consultaForm = '<div style="display:grid;grid-template-columns:1fr 1fr 60px;gap:5px">' + campoC('x', 'X (Este)') + campoC('y', 'Y (Norte)') + campoC('zone', 'Zona') + '</div><div style="color:#64748b;margin-top:2px">SIRGAS 2000; a zona e o hemisfério vêm da feição se você não informar.</div>';
+            const consultaHtml = consultaAberta ? '<div style="border:1px solid #cbd5e1;border-radius:8px;padding:6px;margin:6px 0;background:#fff"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:5px">' + abaC('dec', 'DEC') + abaC('gms', 'GMS') + abaC('utm', 'UTM') + '</div>' + consultaForm + (consultaErro ? '<div style="color:#b91c1c;margin-top:4px">' + esc(consultaErro) + '</div>' : '') + '<div style="display:flex;gap:5px;margin-top:6px"><button type="button" class="act primary" onclick="mapPanelConsultaMarcar()">Marcar no mapa</button><button type="button" class="act" onclick="mapPanelConsulta()">Fechar</button></div></div>' : '';
+            const dicaDesenho = !ds ? '' : '<div style="color:#b45309;margin:4px 0">' + (ds.tipo === 'ponto' ? 'Clique no mapa para marcar o ponto.' : (ds.tipo === 'linha' ? 'Clique para adicionar pontos (' + ds.pontos + ' até agora); duplo clique ou Enter conclui, Esc cancela.' : 'Clique para desenhar o polígono (' + ds.pontos + ' pontos até agora); duplo clique ou Enter conclui, Esc cancela.')) + '</div>' + (ds.tipo !== 'ponto' ? '<div style="display:flex;gap:5px"><button type="button" class="act primary" onclick="mapPanelConcluirMedicao()">Concluir</button><button type="button" class="act" onclick="mapPanelFerramenta(\'' + ds.tipo + '\')">Cancelar</button></div>' : '');
+            const linhaMed = (r) => {
+                const partes = [];
+                if (r.tipo === 'linha') partes.push('Comprimento: <b>' + esc(MapTools.fmtNumber(r.info.comprimento, 2)) + ' m</b>');
+                if (r.tipo === 'area') partes.push('Área: <b>' + esc(MapTools.fmtNumber(r.info.area, 2)) + ' m²</b> (' + esc(MapTools.fmtNumber(r.info.area / 10000, 4)) + ' ha) • Perímetro: <b>' + esc(MapTools.fmtNumber(r.info.perimetro, 2)) + ' m</b>');
+                const rot = r.tipo === 'ponto' ? 'Coordenadas exatas' : (r.tipo === 'linha' ? 'Coordenadas do centro' : 'Coordenadas do centroide');
+                partes.push('<span style="color:#64748b">' + rot + '</span><br>DEC ' + esc(r.coords.dec) + '<br>GMS ' + esc(r.coords.gms) + '<br>UTM ' + esc(r.coords.utm));
+                return '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:5px;margin-top:4px;background:#fff;font-size:10.5px;line-height:1.4"><div style="display:flex;align-items:center;gap:4px"><b style="flex:1">' + tituloMed[r.tipo] + ' ' + r.numero + '</b><button type="button" title="Copiar coordenadas" onclick="mapPanelMedCopiar(\'' + esc(r.id) + '\')" style="border:0;background:none;cursor:pointer">copiar</button><button type="button" title="Remover" onclick="mapPanelMedRemover(\'' + esc(r.id) + '\')" style="border:0;background:none;cursor:pointer;color:#b91c1c">×</button></div>' + partes.join('<br>') + '</div>';
+            };
+            const ferramentasHtml = '<div style="font-weight:700;margin-bottom:3px">Ferramentas de medição</div>' +
+                '<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">' + btnFerr('ponto', 'Coordenadas do Ponto') + btnFerr('linha', 'Distância (m)') + btnFerr('area', 'Área (m²)') + '<button type="button" class="act" style="' + (consultaAberta ? 'background:#d1fae5;border-color:#10b981;' : '') + '" onclick="mapPanelConsulta()">Consultar Coordenadas</button></div>' +
+                chk('mp-med-adr', 'Aderência (gruda nos contornos)', cfg.medicoes.aderencia, "mapPanelMedicoes('aderencia', this.checked)") +
+                '<label class="row">Pontos em <select onchange="mapPanelMedicoes(\'sistema\', this.value)" style="flex:1;padding:3px;border:1px solid #cbd5e1;border-radius:6px"><option value="utm"' + (cfg.medicoes.sistema === 'utm' ? ' selected' : '') + '>UTM (E, N)</option><option value="geo_dec"' + (cfg.medicoes.sistema === 'geo_dec' ? ' selected' : '') + '>Graus decimais</option><option value="geo_gms"' + (cfg.medicoes.sistema === 'geo_gms' ? ' selected' : '') + '>Graus, minutos e segundos</option></select></label>' +
+                dicaDesenho + consultaHtml + medRows.map(linhaMed).join('') +
+                (medRows.length ? '<button type="button" class="act" style="margin-top:5px" onclick="mapPanelMedLimpar()">Limpar medições</button>' : '') +
+                '<div style="color:#64748b;line-height:1.35;margin:4px 0">Dois cliques no valor, no mapa, editam o texto; arraste para mover; ↻ para girar.</div>' +
+                '<div style="border-top:1px solid #e2e8f0;margin:6px 0 4px"></div><div style="font-weight:700;margin-bottom:2px">Análises com a camada e o cadastro</div>';
             const msDist = mapController.measureState();
             const distRows = mapController.distanceRows();
             const distListHtml = distRows.length ? `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:4px;margin-top:4px">${distRows.map(r => `
@@ -1909,6 +1953,7 @@
                         </div>`).join('')}</div>` : ''}
                     </div>
                     <h4 data-sec-h="extras" class="${secH('extras')}" onclick="mapPanelSecao('extras')">Medições no mapa<span class="chev">&#9662;</span></h4><div data-sec="extras" class="sec-body" style="display:${secD('extras')}">
+                    ${ferramentasHtml}
                     ${refAreaHtml}
                     </div>
                     <h4 data-sec-h="temporal" class="${secH('temporal')}" onclick="mapPanelSecao('temporal')">Análise temporal (ortofotos)<span class="chev">&#9662;</span></h4><div data-sec="temporal" class="sec-body" style="display:${secD('temporal')}">
@@ -2050,6 +2095,36 @@
             renderMapToolsPanel();
         }
         function mapPanelDistRemover(id) { if (mapController) { mapController.removeDistance(id); renderMapToolsPanel(); } }
+
+        // ferramentas de medição (cópia da "Ferramenta de Medição" do mapa principal)
+        function mapPanelFerramenta(tipo) {
+            if (!mapController) return;
+            const ds = mapController.drawState();
+            if (ds && ds.tipo === tipo) mapController.cancelDraw(); else mapController.startDraw(tipo);
+            renderMapToolsPanel();
+        }
+        function mapPanelConcluirMedicao() { if (mapController) { mapController.finishDraw(); renderMapToolsPanel(); } }
+        function mapPanelMedicoes(k, v) { if (mapController) { mapController.setConfig({ medicoes: { [k]: v } }); renderMapToolsPanel(); } }
+        function mapPanelMedRemover(id) { if (mapController) { mapController.removeMedicao(id); renderMapToolsPanel(); } }
+        function mapPanelMedLimpar() { if (mapController) { mapController.clearMedicoes(); renderMapToolsPanel(); } }
+        function mapPanelMedCopiar(id) {
+            const r = mapController ? mapController.medicaoRows().find(x => x.id === id) : null;
+            if (!r || !navigator.clipboard) return;
+            navigator.clipboard.writeText('DEC: ' + r.coords.dec + '\nGMS: ' + r.coords.gms + '\nUTM: ' + r.coords.utm).catch(() => {});
+        }
+        function mapPanelConsulta() { consultaAberta = !consultaAberta; consultaErro = ''; renderMapToolsPanel(); }
+        function mapPanelConsultaAba(a) { consultaAba = a; consultaErro = ''; renderMapToolsPanel(); }
+        function mapPanelConsultaCampo(k, v) { consultaCampos[k] = v; }
+        function mapPanelConsultaMarcar() {
+            if (!mapController || !renderArgs) return;
+            const bb = MapTools.geometryBBox(renderArgs.featureGeometry);
+            const c = bb ? MapTools.bboxCenter(bb) : [-34.8, -7];
+            const r = MapTools.parseCoordenadas(consultaAba, consultaCampos, { lat: c[1], lng: c[0] });
+            if (r.erro) { consultaErro = r.erro; renderMapToolsPanel(); return; }
+            consultaErro = '';
+            if (!mapController.addMedicaoPonto(r.lat, r.lng)) consultaErro = 'Limite de medições atingido (30). Remova alguma.';
+            renderMapToolsPanel();
+        }
 
         function mapPanelAltura(v) {
             if (!mapController) return;

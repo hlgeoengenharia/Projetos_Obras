@@ -41,6 +41,7 @@
         situacao: { ativo: false },                                           // mapa de situação (localização) no canto
         quadriculado: { ativo: false, espacamento: 0 },                       // grade de coordenadas UTM (0 = automático)
         anotacoes: [],                                                        // textos livres no mapa: { id, lat, lng, texto }
+        medicoes: { itens: [], sistema: 'utm', aderencia: true },             // ferramentas de medição do mapa principal: ponto, distância e área desenhados no relatório { id:'med:N', tipo, pts:[[lat,lng]...] }
         elementos: {},                                                        // posição dos elementos sobre o mapa (norte, escala, escalaTexto, projecao, legenda): deslocamento { dx, dy } em fração do tamanho do mapa
         legenda: { nomes: {}, ocultos: [] }                                   // legenda editável: nomes trocados e itens ocultos, por chave ('feicao' | 'c:<camada>')
     };
@@ -91,6 +92,7 @@
             comparacaoArea: normalizeComparacaoArea(src.comparacaoArea),
             situacao: { ativo: !!(src.situacao && src.situacao.ativo) },
             quadriculado: normalizeQuadriculado(src.quadriculado),
+            medicoes: normalizeMedicoes(src.medicoes),
             elementos: normalizeElementos(src.elementos),
             legenda: normalizeLegenda(src.legenda),
             anotacoes: normalizeAnotacoes(src.anotacoes)
@@ -143,6 +145,109 @@
             .sort((a, b) => ((a.pos < 0 ? 1e6 : a.pos) - (b.pos < 0 ? 1e6 : b.pos)) || (a.i - b.i))
             .map(x => Object.assign({}, x.r, { lado: tx[x.r.id + ':lado'] || x.r.rotuloLado, confTexto: tx[x.r.id + ':conf'] || '', editados: ['lado', 'conf'].filter(k => tx[x.r.id + ':' + k]) }));
     }
+    // ---------------------------------------------------------------- ferramentas de medição (ponto, distância e área)
+    const MAX_MEDICOES = 30, MAX_PTS_MEDICAO = 200;
+    const MIN_PTS = { ponto: 1, linha: 2, area: 3 };
+    function normalizeMedicoes(x) {
+        x = x || {};
+        const vistos = new Set();
+        const itens = [];
+        (Array.isArray(x.itens) ? x.itens : []).forEach(m => {
+            if (!m || itens.length >= MAX_MEDICOES || typeof m.id !== 'string' || !/^med:[0-9]{1,3}$/.test(m.id) || vistos.has(m.id) || !MIN_PTS[m.tipo]) return;
+            const pts = (Array.isArray(m.pts) ? m.pts : []).filter(okLatLng).slice(0, m.tipo === 'ponto' ? 1 : MAX_PTS_MEDICAO).map(p => [Number(p[0]), Number(p[1])]);
+            if (pts.length < MIN_PTS[m.tipo]) return;
+            vistos.add(m.id);
+            itens.push({ id: m.id, tipo: m.tipo, pts: pts });
+        });
+        return { itens, sistema: ['utm', 'geo_dec', 'geo_gms'].indexOf(x.sistema) >= 0 ? x.sistema : 'utm', aderencia: x.aderencia === undefined ? true : !!x.aderencia };
+    }
+
+    /** Coordenadas nos três formatos do mapa principal (DEC, GMS e UTM). */
+    function coordTriple(lat, lng) {
+        const u = latLngToUtm(lat, lng), p = projectionInfo(lat, lng);
+        return {
+            dec: lat.toFixed(6) + ', ' + lng.toFixed(6),
+            gms: fmtGms(lat, 'N', 'S') + ', ' + fmtGms(lng, 'L', 'O'),
+            utm: 'E ' + fmtNumber(u.e, 2) + ' m, N ' + fmtNumber(u.n, 2) + ' m (zona ' + p.zone + p.hemisphere + ')'
+        };
+    }
+
+    /**
+     * Resultado de uma medição: ponto { lat, lng }; linha { comprimento, centro }; área { area, perimetro, centro }.
+     * centro = { lat, lng } (meio da linha; centroide do polígono).
+     */
+    function medicaoInfo(item) {
+        const pts = item.pts;
+        if (item.tipo === 'ponto') return { lat: pts[0][0], lng: pts[0][1], centro: { lat: pts[0][0], lng: pts[0][1] } };
+        const coords = pts.map(p => [p[1], p[0]]);
+        if (item.tipo === 'linha') {
+            const m = halfwayLatLng(coords);
+            return { comprimento: lineLengthM(coords), centro: { lat: m[0], lng: m[1] } };
+        }
+        const ring = coords.concat([coords[0]]);
+        const c = centroidLngLat(ring);
+        return { area: polygonAreaM2([ring]), perimetro: lineLengthM(ring), centro: { lat: c[1], lng: c[0] } };
+    }
+
+    /** Texto que vai sobre o mapa. sistema: 'utm' | 'geo_dec' | 'geo_gms' (só vale para pontos). */
+    function medicaoTexto(item, sistema) {
+        const i = medicaoInfo(item);
+        if (item.tipo === 'ponto') {
+            const cel = coordCells(i.lat, i.lng, sistema || 'utm');
+            return sistema === 'utm' || !sistema ? 'E ' + cel[0] + '  N ' + cel[1] : cel.join(', ');
+        }
+        if (item.tipo === 'linha') return 'Comp. ' + fmtNumber(i.comprimento, 2) + ' m';
+        return 'Área ' + fmtNumber(i.area, 2) + ' m² • Perím. ' + fmtNumber(i.perimetro, 2) + ' m';
+    }
+
+    /**
+     * Lê o que o usuário digitou em "Consultar Coordenadas". aba: 'dec' | 'gms' | 'utm'.
+     * c: dec { lat, lng }; gms { colar, latDeg, latMin, latSec, latDir, lngDeg, lngMin, lngSec, lngDir }; utm { x, y, zone }.
+     * ref = { lat, lng } (perto da feição: dá a zona e o hemisfério do UTM). Devolve { lat, lng } ou { erro }.
+     */
+    function parseCoordenadas(aba, c, ref) {
+        c = c || {};
+        ref = ref || { lat: -7, lng: -34.8 };
+        const num = (s) => { const t = String(s === undefined || s === null ? '' : s).trim().replace(/\s+/g, '').replace(',', '.'); const n = Number(t); return t !== '' && isFinite(n) ? n : NaN; };
+        let lat, lng;
+        if (aba === 'dec') {
+            let a = String(c.lat || '').trim(), b = String(c.lng || '').trim();
+            const par = /^(-?\d+(?:[.,]\d+)?)\s*(?:;|,\s+|\s+)\s*(-?\d+(?:[.,]\d+)?)$/;
+            const m = par.exec(a) || par.exec(b);
+            if (m) { a = m[1]; b = m[2]; } // "lat, lng" colado num dos campos
+            if (!a || !b) return { erro: 'Preencha a latitude e a longitude.' };
+            lat = num(a); lng = num(b);
+            if (isNaN(lat) || isNaN(lng)) return { erro: 'Valores numéricos inválidos em latitude ou longitude.' };
+        } else if (aba === 'gms') {
+            let r = null;
+            const colar = String(c.colar || '').trim();
+            if (colar) {
+                const m = /(-?\d+)\s*°\s*(\d+)\s*['′]\s*([\d.,]+)\s*(?:["″]|'')?\s*([NSns])?\s*[,;\s]+\s*(-?\d+)\s*°\s*(\d+)\s*['′]\s*([\d.,]+)\s*(?:["″]|'')?\s*([EWOLewol])?/.exec(colar);
+                if (!m) return { erro: 'Não entendi o GMS colado. Exemplo: 7° 1\' 10" S, 34° 49\' 57" W' };
+                r = { latDeg: m[1], latMin: m[2], latSec: m[3], latDir: (m[4] || 'S'), lngDeg: m[5], lngMin: m[6], lngSec: m[7], lngDir: (m[8] || 'W') };
+            } else r = c;
+            const ld = num(r.latDeg), lm = num(r.latMin === '' || r.latMin === undefined ? 0 : r.latMin), ls = num(r.latSec === '' || r.latSec === undefined ? 0 : r.latSec);
+            const gd = num(r.lngDeg), gm = num(r.lngMin === '' || r.lngMin === undefined ? 0 : r.lngMin), gs = num(r.lngSec === '' || r.lngSec === undefined ? 0 : r.lngSec);
+            if (isNaN(ld) || isNaN(gd)) return { erro: 'Preencha ao menos os graus da latitude e da longitude.' };
+            if ([lm, ls, gm, gs].some(v => isNaN(v) || v < 0 || v >= 60)) return { erro: 'Minutos e segundos devem estar entre 0 e 60.' };
+            lat = Math.abs(ld) + lm / 60 + ls / 3600;
+            lng = Math.abs(gd) + gm / 60 + gs / 3600;
+            const ldir = String(r.latDir || 'S').toUpperCase(), gdir = String(r.lngDir || 'W').toUpperCase();
+            if (ldir === 'S' || ld < 0) lat = -lat;
+            if (gdir === 'W' || gdir === 'O' || gd < 0) lng = -lng;
+        } else if (aba === 'utm') {
+            const e = num(c.x), n = num(c.y);
+            if (String(c.x || '').trim() === '' || String(c.y || '').trim() === '') return { erro: 'Preencha as coordenadas X (Este) e Y (Norte).' };
+            if (isNaN(e) || isNaN(n)) return { erro: 'Valores numéricos inválidos em X ou Y.' };
+            const zone = Math.round(num(c.zone)) || projectionInfo(ref.lat, ref.lng).zone;
+            if (zone < 1 || zone > 60) return { erro: 'Zona UTM inválida (1 a 60).' };
+            const r = utmToLatLng(e, n, zone, ref.lat < 0);
+            lat = r.lat; lng = r.lng;
+        } else return { erro: 'Formato de coordenada desconhecido.' };
+        if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return { erro: 'Coordenadas fora dos limites geográficos.' };
+        return { lat: lat, lng: lng };
+    }
+
     const ELEMENTOS_MOVEIS = ['norte', 'escala', 'escalaTexto', 'projecao', 'legenda'];
     function normalizeElementos(e) {
         const out = {};
@@ -389,7 +494,8 @@
             referencia: Object.assign({}, config.referencia, ajustes.referencia || {}),
             comparacaoArea: Object.assign({}, config.comparacaoArea, ajustes.comparacaoArea || {}),
             situacao: Object.assign({}, config.situacao, ajustes.situacao || {}),
-            quadriculado: Object.assign({}, config.quadriculado, ajustes.quadriculado || {})
+            quadriculado: Object.assign({}, config.quadriculado, ajustes.quadriculado || {}),
+            medicoes: Object.assign({}, config.medicoes, ajustes.medicoes || {})
         }) });
     }
 
@@ -1425,7 +1531,7 @@
 
     return {
         MAP_DEFAULTS, BASE_MAPS,
-        normalizeMapConfig, mergeAjustes, normalizeColConf, confrontantesDoTrecho, normalizeElementos, normalizeLegenda, applyConfrontantes, nearestOnGeometry, nearestOnCamada, edgeOffsetAbove, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
+        normalizeMapConfig, mergeAjustes, normalizeMedicoes, coordTriple, medicaoInfo, medicaoTexto, parseCoordenadas, normalizeColConf, confrontantesDoTrecho, normalizeElementos, normalizeLegenda, applyConfrontantes, nearestOnGeometry, nearestOnCamada, edgeOffsetAbove, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
         geometryBBox, bboxCenter, expandBBoxMeters, bboxIntersects, roundCoords, geomKind,
         normalizeTemporal, rasterDateInfo, fmtRasterDate, tileXY, tileUrl, probeZoom, rasterBBox, buildOrtofotoList, sortOrtofotos,
         COORD_SYSTEMS, normalizePontos, latLngToUtm, utmToLatLng, fmtGms, coordHeaders, coordCells, coordSystemLabel, azimuthDeg, fmtAzimuth, vertices, defaultPointTitle, pointRows,

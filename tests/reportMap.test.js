@@ -775,6 +775,95 @@ t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefin
     eq('quebra de linha na célula é guardada e volta na linha da tabela', [b.ctl.pointRows().rows[1].distancia, b.ctl.getConfig().pontos.colunas], ['10 m\n+ 20 m', { cf: 30 }]);
 }
 
+// ---------------------------------------------------------------- ferramentas de medição (ponto, distância, área)
+{
+    const eventos = {};
+    const docE = makeDoc(ids);
+    docE.addEventListener = (n, fn) => { eventos[n] = fn; };
+    docE.removeEventListener = (n) => { delete eventos[n]; };
+    const estados = [];
+    const mk = (extra) => build({ mapa: extra || {} }, undefined, { doc: docE, onMeasureState: (n) => estados.push(n) });
+    const b = mk();
+    const click = (lat, lng) => b.map.handlers.click({ latlng: { lat: lat, lng: lng } });
+    const rotMed = () => b.layersOf('marker').filter(x => /report-measure-label/.test(x.args.o.icon.html) && /(Comp\.|Área [\d.,]+ m² •|E [\d.,]+  N)/.test(x.args.o.icon.html));
+    b.map.doubleClickZoom = { off: false, disable() { this.off = true; }, enable() { this.off = false; } };
+    // ponto: um clique
+    eq('começar o ponto: cursor de mira; clicar marca o ponto e termina', [b.ctl.startDraw('ponto'), b.map.cont.style.cursor, (click(-7.0301, -34.8501), b.ctl.getConfig().medicoes.itens.map(m => [m.id, m.tipo])), b.ctl.drawState(), b.map.cont.style.cursor], [true, 'crosshair', [['med:1', 'ponto']], null, '']);
+    ok('ponto: bolinha desenhada e texto com as coordenadas UTM (editável, arrastável, girável)', b.layersOf('circle').some(c => c.args.o.fillColor === '#0e7490') && rotMed().some(m => /E [\d.]+,\d\d  N/.test(m.args.o.icon.html) && /report-rot no-print/.test(m.args.o.icon.html)));
+    // linha: cliques, prévia, duplo clique conclui e tira o clique repetido
+    b.ctl.startDraw('linha');
+    ok('desenhando: o zoom por duplo clique fica desligado', b.map.doubleClickZoom.off === true);
+    click(-7.0301, -34.8501); click(-7.0301, -34.8511);
+    b.map.handlers.mousemove({ latlng: { lat: -7.0311, lng: -34.8511 } });
+    eq('durante o desenho: linha tracejada com os cliques e o ponto sob o mouse', [b.ctl.drawState(), b.layersOf('polyline').filter(l => l.args.o.dashArray === '5 4').length, b.layersOf('polyline').filter(l => l.args.o.dashArray === '5 4')[0].args.p.length], [{ tipo: 'linha', pontos: 2 }, 1, 3]);
+    click(-7.0311, -34.8511); click(-7.0311, -34.8511); // duplo clique: dois cliques no mesmo lugar
+    b.map.handlers.dblclick({});
+    const linha = b.ctl.getConfig().medicoes.itens[1];
+    eq('duplo clique conclui: linha com 3 pontos (o clique repetido sai); zoom volta', [linha.id, linha.tipo, linha.pts.length, b.map.doubleClickZoom.off, b.ctl.drawState()], ['med:2', 'linha', 3, false, null]);
+    const comp = MT.lineLengthM(linha.pts.map(p => [p[1], p[0]]));
+    ok('linha: comprimento total no mapa e linha contínua com bolinhas nos vértices', rotMed().some(m => m.args.o.icon.html.indexOf('Comp. ' + MT.fmtNumber(comp, 2) + ' m') >= 0) && b.layersOf('polyline').some(l => l.args.o.color === '#0e7490' && !l.args.o.dashArray && l.args.p.length === 3));
+    eq('linha: dados para o painel (comprimento, centro nos três formatos)', [b.ctl.medicaoRows()[1].numero, Math.abs(b.ctl.medicaoRows()[1].info.comprimento - comp) < 1e-6, /^-7\.0/.test(b.ctl.medicaoRows()[1].coords.dec)], [2, true, true]);
+    // área: Enter conclui; menos de 3 pontos não vale
+    b.ctl.startDraw('area');
+    click(-7.031, -34.851); click(-7.031, -34.852);
+    eventos.keydown({ key: 'Enter' });
+    eq('área com menos de 3 pontos não vale', [b.ctl.getConfig().medicoes.itens.length, b.ctl.drawState()], [2, null]);
+    b.ctl.startDraw('area');
+    click(-7.031, -34.851); click(-7.031, -34.852); click(-7.032, -34.852);
+    b.map.handlers.mousemove({ latlng: { lat: -7.032, lng: -34.851 } });
+    ok('área em desenho: polígono provisório tracejado', b.layersOf('polygon').some(l => l.args.o.dashArray === '5 4'));
+    eventos.keydown({ key: 'Enter' });
+    const areaItem = b.ctl.getConfig().medicoes.itens[2];
+    ok('Enter conclui a área: polígono cheio e texto com área e perímetro', areaItem.tipo === 'area' && areaItem.pts.length === 3 && b.layersOf('polygon').some(l => l.args.o.fillOpacity === 0.2 && !l.args.o.dashArray) && rotMed().some(m => /Área [\d.,]+ m² • Perím\. [\d.,]+ m/.test(m.args.o.icon.html)));
+    eq('painel: área com perímetro e centroide', [b.ctl.medicaoRows()[2].tipo, b.ctl.medicaoRows()[2].info.area > 0, b.ctl.medicaoRows()[2].info.perimetro > 0, b.ctl.medicaoRows()[2].npts], ['area', true, true, 3]);
+    ok('o painel é avisado a cada clique (estado do desenho)', estados.length > 5 && estados.includes(2) && estados[estados.length - 1] === 0);
+    // editar o texto, restaurar e remover
+    const r1 = rotMed().find(m => m.args.o.icon.html.indexOf('Comp.') >= 0);
+    r1.handlers.dblclick({});
+    const campo = r1.span.children[0];
+    campo.value = '125 m de extensão';
+    campo.listeners.keydown({ key: 'Enter' });
+    eq('duplo clique edita o texto da medição', [b.ctl.getConfig().edicoes['med:2'], b.ctl.medicaoRows()[1].texto], ['125 m de extensão', '125 m de extensão']);
+    b.ctl.resetMeasures();
+    eq('restaurar medidas da feição não apaga as medições livres nem os textos delas', [b.ctl.getConfig().medicoes.itens.length, b.ctl.getConfig().edicoes['med:2']], [3, '125 m de extensão']);
+    b.ctl.removeMedicao('med:2');
+    eq('remover apaga a medição e o texto editado', [b.ctl.getConfig().medicoes.itens.map(m => m.id), b.ctl.getConfig().edicoes['med:2']], [['med:1', 'med:3'], undefined]);
+    b.ctl.clearMedicoes();
+    eq('limpar medições', [b.ctl.getConfig().medicoes.itens, b.layersOf('circle').filter(c => c.args.o.fillColor === '#0e7490').length], [[], 0]);
+    // cancelar
+    b.ctl.startDraw('linha'); click(-7.03, -34.85);
+    eventos.keydown({ key: 'Escape' });
+    eq('Esc cancela o desenho e não guarda nada', [b.ctl.drawState(), b.ctl.getConfig().medicoes.itens.length, b.map.doubleClickZoom.off], [null, 0, false]);
+    eq('ferramenta inválida não começa', b.ctl.startDraw('circulo'), false);
+    // aderência: o clique gruda no contorno da feição (lado leste em lng -34.83)
+    const g = mk();
+    g.ctl.startDraw('ponto');
+    g.map.handlers.click({ latlng: { lat: -7.015, lng: -34.83002 } });
+    ok('aderência ligada: o ponto gruda no lado leste da feição', Math.abs(g.ctl.getConfig().medicoes.itens[0].pts[0][1] + 34.83) < 1e-9);
+    const s = mk({ medicoes: { aderencia: false } });
+    s.ctl.startDraw('ponto');
+    s.map.handlers.click({ latlng: { lat: -7.015, lng: -34.83002 } });
+    eq('aderência desligada: fica onde clicou', s.ctl.getConfig().medicoes.itens[0].pts[0], [-7.015, -34.83002]);
+    // consultar coordenadas: ponto direto, e o mapa passa a mostrar feição e ponto se ficar fora
+    const c = mk();
+    c.map.getBounds = () => ({ getWest: () => -34.84, getSouth: () => -7.02, getEast: () => -34.83, getNorth: () => -7.01, contains: (p) => p[0] >= -7.02 && p[0] <= -7.01 && p[1] >= -34.84 && p[1] <= -34.83 });
+    c.ctl.addMedicaoPonto(-7.015, -34.835);
+    eq('ponto dentro do enquadramento: o mapa não se mexe', c.map.fitted.b[0][0], -7.02);
+    const antes = JSON.stringify(c.map.fitted);
+    c.ctl.addMedicaoPonto(-7.05, -34.9);
+    ok('ponto fora do enquadramento: o mapa passa a mostrar a feição e o ponto', JSON.stringify(c.map.fitted) !== antes && c.map.fitted.b[0][0] === -7.05 && c.map.fitted.b[0][1] === -34.9 && c.map.fitted.b[1][0] === -7.01);
+    // limite de 30
+    const l = mk();
+    for (let i = 0; i < 31; i++) l.ctl.addMedicao('ponto', [[-7.0 - i / 1000, -34.8]]);
+    eq('no máximo 30 medições', [l.ctl.getConfig().medicoes.itens.length, l.ctl.startDraw('ponto'), l.ctl.addMedicao('ponto', [[-7, -34]])], [30, false, null]);
+    eq('o que se salva leva as medições', b.ctl.snapshot().medicoes.aderencia, true);
+    // medir distância até a camada cancela o desenho em andamento
+    const d = mk({ referencia: { ativo: true, camada: '1' } });
+    d.ctl.startDraw('linha');
+    d.ctl.startDistMeasure();
+    eq('iniciar a medição até a camada de referência cancela o desenho', [d.ctl.drawState(), d.ctl.measureState()], [null, 1]);
+}
+
 // ---------------------------------------------------------------- quadriculado
 t = build({});
 eq('quadriculado desligado: nada desenhado', t.layersOf('polyline').length, 0);

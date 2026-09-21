@@ -143,6 +143,47 @@ eq('anotações: estilo (padrão negrito) e giro guardados; giro zero não é gu
 eq('orientação, distância e confrontantes guardam a quebra de linha (até 160 caracteres); as outras células, uma linha só', MT.normalizePontos({ textos: { 'v:0:cf': ' Lote 03\r\n  Quadra E \n\n\n\nRua A ', 'v:0:dist': 'a\nb', 'v:0:or': 'x\ny', 'v:0:az': 'a\nb', 'v:1:dist': 'a'.repeat(300) } }).textos, { 'v:0:cf': 'Lote 03\nQuadra E\n\nRua A', 'v:0:dist': 'a\nb', 'v:0:or': 'x\ny', 'v:0:az': 'a b', 'v:1:dist': 'a'.repeat(160) });
 eq('larguras das colunas Distância e Confrontantes: em % da tabela, entre 8 e 60; só essas duas', MT.normalizePontos({ colunas: { dist: 22.26, cf: 99, az: 30, x: 5 } }).colunas, { dist: 22.3, cf: 60 });
 eq('sem larguras: automático', [MT.normalizePontos({}).colunas, MT.normalizePontos({ colunas: { dist: 'x', cf: 0 } }).colunas], [{}, {}]);
+// ferramentas de medição: ponto, distância e área
+{
+    const med = MT.normalizeMedicoes({ itens: [
+        { id: 'med:1', tipo: 'ponto', pts: [[-7.0195, -34.8326], [1, 1]] },
+        { id: 'med:2', tipo: 'linha', pts: [[-7, -34], [-7.001, -34.001]] },
+        { id: 'med:3', tipo: 'linha', pts: [[-7, -34]] },
+        { id: 'med:4', tipo: 'area', pts: [[-7, -34], [-7.001, -34], [-7.001, -34.001]] },
+        { id: 'med:4', tipo: 'area', pts: [[-7, -34], [-7.001, -34], [-7.001, -34.001]] },
+        { id: 'x', tipo: 'ponto', pts: [[1, 1]] }, { id: 'med:5', tipo: 'circulo', pts: [[1, 1]] }, { id: 'med:6', tipo: 'ponto', pts: [[999, 1]] }], sistema: 'lixo' });
+    eq('medições: só ids/tipos válidos, pontos mínimos, sem repetição; ponto guarda um só; sistema padrão UTM e aderência ligada', [med.itens.map(m => [m.id, m.tipo, m.pts.length]), med.sistema, med.aderencia], [[['med:1', 'ponto', 1], ['med:2', 'linha', 2], ['med:4', 'area', 3]], 'utm', true]);
+    eq('padrão do mapa: sem medições', MT.normalizeMapConfig({}).medicoes, { itens: [], sistema: 'utm', aderencia: true });
+    eq('medições vêm dos ajustes do usuário', MT.mergeAjustes(MT.normalizeMapConfig({}), { medicoes: { itens: [{ id: 'med:1', tipo: 'ponto', pts: [[-7, -34]] }], aderencia: false } }).medicoes.aderencia, false);
+    const lado100 = 100 / 111195; // ~100 m em graus de latitude
+    const quad = { id: 'med:1', tipo: 'area', pts: [[-7, -34], [-7 - lado100, -34], [-7 - lado100, -34 - lado100 / Math.cos(7 * Math.PI / 180)], [-7, -34 - lado100 / Math.cos(7 * Math.PI / 180)]] };
+    const ia = MT.medicaoInfo(quad);
+    ok('área: polígono de ~100 m x 100 m dá ~10.000 m² e ~400 m de perímetro, com o centroide no meio', Math.abs(ia.area - 10000) < 60 && Math.abs(ia.perimetro - 400) < 3 && Math.abs(ia.centro.lat + 7 + lado100 / 2) < 1e-5);
+    const il = MT.medicaoInfo({ id: 'med:2', tipo: 'linha', pts: [[-7, -34], [-7, -34.001], [-7, -34.002]] });
+    ok('linha: comprimento somado e ponto do meio', Math.abs(il.comprimento - MT.distanceM([-34, -7], [-34.002, -7])) < 0.01 && Math.abs(il.centro.lng + 34.001) < 1e-6);
+    eq('texto do ponto no sistema escolhido', [MT.medicaoTexto({ tipo: 'ponto', pts: [[-7.0195, -34.8326]] }, 'utm').replace(/[\d.,]+/g, '#'), MT.medicaoTexto({ tipo: 'ponto', pts: [[-7.0195, -34.8326]] }, 'geo_dec'), MT.medicaoTexto({ tipo: 'ponto', pts: [[-7.0195, -34.8326]] }, 'geo_gms')], ['E #  N #', '-7,019500, -34,832600', "7° 01' 10,20\" S, 34° 49' 57,36\" O"]);
+    eq('texto da linha e da área', [MT.medicaoTexto({ tipo: 'linha', pts: [[-7, -34], [-7, -34.001]] }, 'utm'), /^Área [\d.,]+ m² • Perím\. [\d.,]+ m$/.test(MT.medicaoTexto(quad, 'utm'))], ['Comp. ' + MT.fmtNumber(MT.distanceM([-34, -7], [-34.001, -7]), 2) + ' m', true]);
+    const tr = MT.coordTriple(-7.0195, -34.8326);
+    eq('coordenadas nos três formatos do mapa principal (DEC, GMS e UTM)', [tr.dec, tr.gms, /^E [\d.,]+ m, N [\d.,]+ m \(zona 25S\)$/.test(tr.utm)], ['-7.019500, -34.832600', "7° 01' 10,20\" S, 34° 49' 57,36\" O", true]);
+
+    // Consultar Coordenadas
+    const ref = { lat: -7.0195, lng: -34.8326 };
+    const dec = MT.parseCoordenadas('dec', { lat: '-7,019674', lng: '-34.832625' }, ref);
+    eq('DEC: vírgula ou ponto como separador decimal', [dec.lat, dec.lng], [-7.019674, -34.832625]);
+    eq('DEC: "lat, lng" colado num dos campos', MT.parseCoordenadas('dec', { lat: '-7.019674, -34.832625', lng: '' }, ref), { lat: -7.019674, lng: -34.832625 });
+    eq('DEC: erros claros', [MT.parseCoordenadas('dec', { lat: '', lng: '1' }, ref).erro, MT.parseCoordenadas('dec', { lat: 'a', lng: '1' }, ref).erro, MT.parseCoordenadas('dec', { lat: '95', lng: '1' }, ref).erro], ['Preencha a latitude e a longitude.', 'Valores numéricos inválidos em latitude ou longitude.', 'Coordenadas fora dos limites geográficos.']);
+    const gms = MT.parseCoordenadas('gms', { latDeg: '7', latMin: '1', latSec: '10,2', latDir: 'S', lngDeg: '34', lngMin: '49', lngSec: '57.36', lngDir: 'W' }, ref);
+    ok('GMS por campos: Sul e Oeste negativos', Math.abs(gms.lat + 7.0195) < 1e-6 && Math.abs(gms.lng + 34.8326) < 1e-6);
+    const colado = MT.parseCoordenadas('gms', { colar: "7° 1' 10,2\" S, 34° 49' 57,36\" W" }, ref);
+    ok('GMS colado inteiro', Math.abs(colado.lat + 7.0195) < 1e-6 && Math.abs(colado.lng + 34.8326) < 1e-6);
+    eq('GMS: norte e leste positivos; erros', [MT.parseCoordenadas('gms', { latDeg: '7', latDir: 'N', lngDeg: '34', lngDir: 'E' }, ref).lat, MT.parseCoordenadas('gms', { latDeg: '7', latMin: '70', lngDeg: '34' }, ref).erro, MT.parseCoordenadas('gms', { latDeg: '', lngDeg: '34' }, ref).erro, MT.parseCoordenadas('gms', { colar: 'xx' }, ref).erro.slice(0, 20)], [7, 'Minutos e segundos devem estar entre 0 e 60.', 'Preencha ao menos os graus da latitude e da longitude.', 'Não entendi o GMS co']);
+    const u = MT.latLngToUtm(-7.0195, -34.8326, 25);
+    const uv = MT.parseCoordenadas('utm', { x: String(u.e).replace('.', ','), y: String(u.n), zone: '25' }, ref);
+    ok('UTM: volta exatamente à coordenada de origem (zona informada, hemisfério pela feição)', Math.abs(uv.lat + 7.0195) < 1e-7 && Math.abs(uv.lng + 34.8326) < 1e-7);
+    const uz = MT.parseCoordenadas('utm', { x: String(u.e), y: String(u.n) }, ref);
+    ok('UTM sem zona: usa a da feição', Math.abs(uz.lat + 7.0195) < 1e-7);
+    eq('UTM: erros', [MT.parseCoordenadas('utm', { x: '', y: '1' }, ref).erro, MT.parseCoordenadas('utm', { x: 'a', y: '1' }, ref).erro, MT.parseCoordenadas('utm', { x: '1', y: '1', zone: '99' }, ref).erro, MT.parseCoordenadas('xx', {}, ref).erro], ['Preencha as coordenadas X (Este) e Y (Norte).', 'Valores numéricos inválidos em X ou Y.', 'Zona UTM inválida (1 a 60).', 'Formato de coordenada desconhecido.']);
+}
 eq('base satélite e nenhum são aceitas', [MT.normalizeMapConfig({ mapa: { baseMap: 'satelite' } }).baseMap, MT.normalizeMapConfig({ mapa: { baseMap: 'nenhum' } }).baseMap], ['satelite', 'nenhum']);
 
 const aj = MT.mergeAjustes(c0, { norte: false, baseMap: 'satelite', camadasLigadas: [7, 'b'], destaque: { esmaecerEntorno: true }, lixo: 1 });
