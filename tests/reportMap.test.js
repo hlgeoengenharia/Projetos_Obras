@@ -698,6 +698,36 @@ t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefin
     ok('Enter grava o nome direto na legenda', b.ctl.getConfig().legenda.nomes.feicao === 'Imóvel objeto' && /Imóvel objeto/.test(legend.innerHTML));
 }
 
+// ---------------------------------------------------------------- anotações: card branco (CSS), estilo, giro
+{
+    const eventos = {};
+    const docE = makeDoc(ids);
+    docE.addEventListener = (n, fn) => { eventos[n] = fn; };
+    docE.removeEventListener = (n) => { delete eventos[n]; };
+    const b = build({ mapa: { anotacoes: [{ id: 'a1', lat: -7.015, lng: -34.835, texto: 'Muro <alto>' }] } }, undefined, { doc: docE });
+    const notas = () => b.layersOf('marker').filter(m => m.args.o.icon.className === 'report-note');
+    const h = () => notas()[0].args.o.icon.html;
+    ok('anotação: texto escapado, giro, estilo (negrito por padrão) e ícone de girar', /Muro &lt;alto&gt;/.test(h()) && /rotate\(0deg\)/.test(h()) && /font-weight:700;font-style:normal;text-decoration:none/.test(h()) && /report-rot no-print/.test(h()));
+    b.ctl.styleNote('a1', 'n'); b.ctl.styleNote('a1', 'i'); b.ctl.styleNote('a1', 's');
+    ok('N / I / S da anotação: sem negrito, itálico e sublinhado', /font-weight:400;font-style:italic;text-decoration:underline/.test(h()));
+    eq('estilo guardado na anotação', b.ctl.getConfig().anotacoes[0].estilo, { n: false, i: true, s: true });
+    b.ctl.styleNote('a1', 'x');
+    eq('opção de estilo inválida é ignorada', b.ctl.getConfig().anotacoes[0].estilo, { n: false, i: true, s: true });
+    const mk = notas()[0];
+    mk.span.getBoundingClientRect = () => ({ left: 100, top: 100, width: 20, height: 10 });
+    mk.span.style = {};
+    mk.span.classList = { added: [], add(c) { this.added.push(c); } };
+    mk.span.listeners.pointerdown({ stopPropagation() {}, preventDefault() {} });
+    eq('durante o giro o ícone fica visível (classe "rotating")', mk.span.classList.added, ['rotating']);
+    eventos.pointermove({ clientX: 110, clientY: 155 });
+    eventos.pointerup({});
+    eq('girar a anotação guarda o giro e mantém texto e estilo', [b.ctl.getConfig().anotacoes[0].rot, /rotate\(90deg\)/.test(h()), /italic/.test(h()), b.ctl.getConfig().anotacoes[0].texto], [90, true, true, 'Muro <alto>']);
+    b.ctl.renameNote('a1', 'Muro novo');
+    eq('renomear preserva estilo e giro', [b.ctl.getConfig().anotacoes[0].estilo.i, b.ctl.getConfig().anotacoes[0].rot, /Muro novo/.test(h())], [true, 90, true]);
+    notas()[0].span.listeners.dblclick({ stopPropagation() {} });
+    eq('dois cliques no ícone tiram o giro da anotação', [b.ctl.getConfig().anotacoes[0].rot, /rotate\(0deg\)/.test(h())], [undefined, true]);
+}
+
 // ---------------------------------------------------------------- quadriculado
 t = build({});
 eq('quadriculado desligado: nada desenhado', t.layersOf('polyline').length, 0);

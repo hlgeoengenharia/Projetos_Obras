@@ -278,6 +278,7 @@
                 stop(ev);
                 if (ev.preventDefault) ev.preventDefault();
                 if (mk.dragging && mk.dragging.disable) mk.dragging.disable();
+                if (lab.classList && lab.classList.add) lab.classList.add('rotating');
                 let deg = current();
                 const move = (e) => {
                     const r = lab.getBoundingClientRect();
@@ -447,7 +448,8 @@
         function applyNotes() {
             clearNotes();
             cfg.anotacoes.forEach(n => {
-                const html = '<span class="report-note-label" title="Duplo clique para editar • arraste para mover">' + escapeHtml(n.texto) + '</span>';
+                const rot = n.rot !== undefined ? n.rot : 0;
+                const html = '<span class="report-note-label" style="transform:' + labelTransform(rot) + ';' + estiloCss(n.estilo) + '" title="Duplo clique para editar • arraste para mover">' + escapeHtml(n.texto) + ROT_HANDLE + '</span>';
                 const icon = L.divIcon({ className: 'report-note', html: html, iconSize: [0, 0] });
                 const mk = L.marker([n.lat, n.lng], { icon: icon, draggable: true, keyboard: false, zIndexOffset: 1600 });
                 mk.addTo(map);
@@ -461,7 +463,19 @@
                     notify();
                 });
                 state.notes[n.id] = mk;
+                wireRotate(mk, '.report-note-label', () => rot, (deg) => setNoteRot(n.id, deg), () => setNoteRot(n.id, undefined));
             });
+        }
+
+        function setNoteRot(id, deg) {
+            cfg.anotacoes = MT.normalizeAnotacoes(cfg.anotacoes.map(a => {
+                if (a.id !== id) return a;
+                const b = Object.assign({}, a);
+                if (deg === undefined) delete b.rot; else b.rot = deg;
+                return b;
+            }));
+            applyNotes();
+            notify();
         }
 
         // ------------------------------------------------------------ pontos nos vértices
@@ -912,6 +926,13 @@
                 const limpo = MT.normalizeAnotacoes([{ id: id, lat: 0, lng: 0, texto: texto }]);
                 cfg.anotacoes = limpo.length ? cfg.anotacoes.map(a => a.id === id ? Object.assign({}, a, { texto: limpo[0].texto }) : a) : cfg.anotacoes.filter(a => a.id !== id);
                 apply();
+            },
+            /** Liga/desliga negrito ('n'), itálico ('i') ou sublinhado ('s') de uma anotação. */
+            styleNote(id, k) {
+                if (['n', 'i', 's'].indexOf(k) < 0) return;
+                cfg.anotacoes = MT.normalizeAnotacoes(cfg.anotacoes.map(a => a.id === id ? Object.assign({}, a, { estilo: Object.assign({}, a.estilo, { [k]: !(a.estilo && a.estilo[k]) }) }) : a));
+                applyNotes();
+                notify();
             },
             removeNote(id) { cfg.anotacoes = cfg.anotacoes.filter(a => a.id !== id); apply(); },
             /** Liga/desliga o modo de saída (impressão, PNG, Word): sem marcadores de vértice livres. */

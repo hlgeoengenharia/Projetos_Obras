@@ -204,7 +204,10 @@
             if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || !texto) return;
             const id = /^a[0-9]{1,4}$/.test(String(x.id)) ? String(x.id) : 'a' + (out.length + 1);
             if (out.some(o => o.id === id)) return;
-            out.push({ id: id, lat: lat, lng: lng, texto: texto });
+            const item = { id: id, lat: lat, lng: lng, texto: texto, estilo: normalizeEstilo(x.estilo, MAP_DEFAULTS.rotulos.estilo) };
+            const rot = normalizeRotacoes({ a: x.rot }).a;
+            if (x.rot !== undefined && rot !== undefined && rot !== 0) item.rot = rot;
+            out.push(item);
         });
         return out;
     }

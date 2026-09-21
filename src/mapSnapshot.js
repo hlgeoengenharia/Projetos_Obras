@@ -113,6 +113,17 @@
         const x = r.left - origin.left, y = r.top - origin.top;
         const a = (ang || 0) + rotationOf(st);
         if (!a && r.width > 0 && r.height > 0) paintBox(ctx, st, x, y, r.width, r.height);
+        else if (a && env.size) {
+            // caixa girada: desenhada em torno do centro, com o tamanho de layout (sem giro) do elemento
+            const sz = env.size(el);
+            if (sz && sz.w > 0 && sz.h > 0) {
+                ctx.save();
+                ctx.translate(x + r.width / 2, y + r.height / 2);
+                ctx.rotate(a);
+                paintBox(ctx, st, -sz.w / 2, -sz.h / 2, sz.w, sz.h);
+                ctx.restore();
+            }
+        }
         Array.prototype.forEach.call(el.childNodes || [], n => {
             if (n.nodeType === 3) paintText(ctx, n, st, env, origin, a);
             else if (n.nodeType === 1) {
@@ -216,7 +227,7 @@
             ignoreElements: (n) => shouldIgnore(n)
         });
         const ctx = canvas.getContext('2d');
-        paintOverlays(ctx, mapEl, { cs: deps.cs, rect: deps.rect, textRect: deps.textRect }, scale);
+        paintOverlays(ctx, mapEl, { cs: deps.cs, rect: deps.rect, textRect: deps.textRect, size: deps.size }, scale);
         const r = deps.rect(mapEl);
         return { dataUrl: canvas.toDataURL('image/png'), w: r.width, h: r.height };
     }

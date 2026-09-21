@@ -133,8 +133,9 @@
         .report-measure { background: transparent; border: 0; }
         .report-measure-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: #065f46; font: 10px/14px monospace; text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; cursor: move; }
         .report-measure-label.edited { color: #92400e; }
-        .report-rot { position: absolute; left: 100%; top: 50%; margin-left: 5px; transform: translateY(-50%); width: 15px; height: 15px; border-radius: 50%; background: #0f172a; color: #fff; font: 11px/15px sans-serif; text-align: center; text-shadow: none; cursor: grab; display: none; }
-        .report-measure-label:hover .report-rot, .report-point-label:hover .report-rot, .report-nlabel-l:hover .report-rot { display: block; }
+        /* ícone de girar: a área de clique é maior que o desenho e encosta no texto, para o mouse chegar até ele sem perdê-lo */
+        .report-rot { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); box-sizing: content-box; width: 18px; height: 18px; padding: 6px 6px 6px 10px; background: radial-gradient(circle closest-side, #0f172a 96%, transparent 100%); background-origin: content-box; background-clip: content-box; background-repeat: no-repeat; color: #fff; font: 13px/18px sans-serif; text-align: center; text-shadow: none; cursor: grab; display: none; }
+        .report-rot:active { cursor: grabbing; }        .report-measure-label:hover .report-rot, .report-point-label:hover .report-rot, .report-nlabel-l:hover .report-rot, .report-note-label:hover .report-rot, .rotating .report-rot { display: block; }
         .report-tframe-title { display: flex; justify-content: space-between; gap: 6px; background: #0f172a; color: #fff; padding: 2px 7px; border-radius: 6px 6px 0 0; font: 700 9.5px/16px monospace; }
         .report-tframe-title span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .report-tframe-wrap { border: 1px solid #cbd5e1; border-top: 0; background: #e2e8f0; position: relative; overflow: hidden; border-radius: 0 0 6px 6px; }
@@ -146,7 +147,7 @@
         .report-glabel span.e { transform: translate(-50%, -110%); }
         .report-glabel span.n { transform: translate(2px, -50%); }
         .report-note { background: transparent; border: 0; }
-        .report-note-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; background: #fef9c3; color: #713f12; border: 1px solid #eab308; border-radius: 4px; padding: 0 5px; font: 700 9px/14px sans-serif; cursor: text; }
+        .report-note-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; background: #ffffff; color: #0f172a; border: 1px solid #000000; border-radius: 4px; padding: 0 5px; font: 10px/14px sans-serif; cursor: move; }
         .report-vertex-handle { cursor: pointer; }
         @media print { .report-vertex-handle { display: none !important; } }
         .report-point { background: transparent; border: 0; }
@@ -158,11 +159,12 @@
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
         #map-tools-panel { position: fixed; top: 84px; right: 12px; width: 268px; max-height: calc(100vh - 100px); overflow-y: auto; z-index: 1200; background: #fff; border: 1px solid #cbd5e1; border-radius: 14px; box-shadow: 0 10px 30px rgba(15,23,42,.18); font-size: 12px; color: #0f172a; }
-        #map-tools-panel h4 { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #475569; font-weight: 800; margin: 0; padding: 9px 2px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; user-select: none; }
-        #map-tools-panel h4:hover { color: #0f172a; }
+                #map-tools-panel h4 { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #334155; font-weight: 800; margin: 8px 0 0; padding: 8px 10px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; background: #e2e8f0; border: 1px solid #cbd5e1; border-radius: 8px; user-select: none; }
+        #map-tools-panel h4:hover { color: #0f172a; background: #dbe3ee; }
+        #map-tools-panel h4.open { border-radius: 8px 8px 0 0; background: #cbd5e1; color: #0f172a; }
         #map-tools-panel h4 .chev { font-size: 12px; transition: transform .15s; }
         #map-tools-panel h4.open .chev { transform: rotate(180deg); }
-        #map-tools-panel .sec-body { padding: 6px 2px 8px; border-bottom: 1px solid #e2e8f0; }
+        #map-tools-panel .sec-body { padding: 8px 10px 10px; border: 1px solid #cbd5e1; border-top: 0; border-radius: 0 0 8px 8px; background: #f8fafc; }
         #map-tools-panel label.row { display: flex; align-items: center; gap: 7px; padding: 2px 0; cursor: pointer; }
         #map-tools-panel label.row.off { opacity: .45; cursor: not-allowed; }
         #map-tools-panel .rowx { display: flex; align-items: center; gap: 4px; }
@@ -1636,6 +1638,7 @@
             const secH = (id) => (mapPanelSecaoAberta === id ? 'open' : '');
             const secD = (id) => (mapPanelSecaoAberta === id ? 'block' : 'none');
             const chk = (id, label, checked, handler, disabled) => `<label class="row ${disabled ? 'off' : ''}"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="${handler}"> ${label}</label>`;
+            const nisNota = (n) => '<span class="nis">' + [['n', '<b>N</b>', 'Negrito'], ['i', '<i>I</i>', 'Itálico'], ['s', '<u>S</u>', 'Sublinhado']].map(([k, l, tt]) => `<button type="button" title="${tt}" class="${n.estilo && n.estilo[k] ? 'on' : ''}" onclick="mapPanelNotaEstilo('${esc(n.id)}', '${k}')">${l}</button>`).join('') + '</span>';
             const nis = (alvo, grupo, e) => '<span class="nis">' + [['n', '<b>N</b>', 'Negrito'], ['i', '<i>I</i>', 'Itálico'], ['s', '<u>S</u>', 'Sublinhado']].map(([k, l, t]) => `<button type="button" title="${t}" class="${e[k] ? 'on' : ''}" onclick="mapPanelEstilo('${alvo}', '${grupo}', '${k}')">${l}</button>`).join('') + '</span>';
             const chkN = (id, label, checked, handler, disabled, nisHtml) => `<div class="rowx"><label class="row ${disabled ? 'off' : ''}" style="flex:1;min-width:0"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="${handler}"> ${label}</label>${nisHtml}</div>`;
             const estM = cfg.medidas.estilo;
@@ -1670,26 +1673,36 @@
                 <button type="button" class="act" onclick="mapPanelMedirDist()">${msDist ? 'Cancelar a medição' : 'Medir distância no mapa'}</button>
                 ${msDist === 1 ? '<div style="color:#b45309;margin:3px 0">Clique num ponto da feição.</div>' : (msDist === 2 ? '<div style="color:#b45309;margin:3px 0">Agora clique num ponto da camada de referência.</div>' : '')}
                 ${distListHtml}` : '';
-            const extrasHtml = `
+            const rotulosHtml = `
                 ${chkN('mp-x-rot', 'Rótulos nas feições vizinhas', cfg.rotulos.ativo, "mapPanelExtra('rotulos', 'ativo', this.checked)", !temRotulo, nis('rotulos', '', cfg.rotulos.estilo))}
                 ${(cfg.rotulos.ativo && temNome) ? sel("mapPanelExtra('rotulos', 'campo', this.value)", `<option value="rotulo" ${cfg.rotulos.campo === 'rotulo' ? 'selected' : ''}>Mostrar Quadra/Lote</option><option value="titulo" ${cfg.rotulos.campo === 'titulo' ? 'selected' : ''}>Mostrar o nome principal</option>`) : ''}
                 ${!temRotulo ? '<div style="color:#64748b;margin-bottom:3px">Sem rótulos nas camadas ativas (ou sem permissão de ver os dados delas).</div>' : ''}
                 ${cfg.rotulos.ativo && temRotulo ? `<div style="color:#64748b;line-height:1.35;margin:2px 0 3px">Arraste um rótulo para mover e use o ícone ↻ (ao passar o mouse) para girar.</div>${Object.keys(cfg.rotulos.itens).length ? '<button type="button" class="act" onclick="mapPanelRotulosReset()">Restaurar posição dos rótulos</button>' : ''}` : ''}
+            `;
+            const confTabelaHtml = `
                 ${chk('mp-x-conf', 'Tabela de confrontantes', cfg.confrontantes.ativo, "mapPanelExtra('confrontantes', 'ativo', this.checked)", kind !== 'polygon' || !cams.length)}
                 ${cfg.confrontantes.ativo ? sel("mapPanelExtra('confrontantes', 'camada', this.value)", camOpts(cfg.confrontantes.camada)) + (temNome ? chk('mp-x-conf-n', 'Incluir o nome do vizinho', cfg.confrontantes.nomes, "mapPanelExtra('confrontantes', 'nomes', this.checked)") : '') + confHtml : ''}
+            `;
+            const refAreaHtml = `
                 ${chk('mp-x-ref', 'Distância e sobreposição (camada de referência)', cfg.referencia.ativo, "mapPanelExtra('referencia', 'ativo', this.checked)", !cams.length)}
                 ${cfg.referencia.ativo ? sel("mapPanelExtra('referencia', 'camada', this.value)", camOpts(cfg.referencia.camada)) + refMedirHtml : ''}
                 ${chk('mp-x-area', 'Área cadastral × área calculada', cfg.comparacaoArea.ativo, "mapPanelExtra('comparacaoArea', 'ativo', this.checked)", kind !== 'polygon' || !camposArea.length)}
                 ${cfg.comparacaoArea.ativo ? sel("mapPanelExtra('comparacaoArea', 'campo', this.value)", '<option value="">Campo da área cadastral…</option>' + camposArea.map(f => `<option value="${esc(f.id || f.name)}" ${cfg.comparacaoArea.campo === (f.id || f.name) ? 'selected' : ''}>${esc(f.label || f.name || f.id)}${abaDoCampo(f) ? ' — Aba: ' + esc(abaDoCampo(f)) : ''}</option>`).join('')) : ''}
+            `;
+            const situacaoGradeHtml = `
                 ${chk('mp-x-sit', 'Mapa de situação (localização)', cfg.situacao.ativo, "mapPanelExtra('situacao', 'ativo', this.checked)")}
                 ${chk('mp-x-grade', 'Quadriculado UTM', cfg.quadriculado.ativo, "mapPanelExtra('quadriculado', 'ativo', this.checked)")}
                 ${cfg.quadriculado.ativo ? sel("mapPanelExtra('quadriculado', 'espacamento', Number(this.value))", [0, 10, 20, 50, 100, 200, 500, 1000].map(v => `<option value="${v}" ${cfg.quadriculado.espacamento === v ? 'selected' : ''}>${v ? 'Grade de ' + v + ' m' : 'Espaçamento automático'}</option>`).join('')) : ''}
+            `;
+            const notasHtml = `
                 <button type="button" class="act" style="margin-top:5px" onclick="mapPanelNotaAdd()">+ Anotação de texto no centro do mapa</button>
                 ${notas.length ? `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:4px;margin-top:4px">${notas.map(n => `
                     <div style="display:flex;align-items:center;gap:3px;padding:2px 0">
                         <input type="text" value="${esc(n.texto)}" maxlength="80" onchange="mapPanelNotaRenomear('${esc(n.id)}', this.value)" style="flex:1;min-width:0;padding:2px 5px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px">
+                        ${nisNota(n)}
                         <button type="button" title="Remover" onclick="mapPanelNotaRemover('${esc(n.id)}')" style="border:0;background:none;cursor:pointer;color:#b91c1c">×</button>
-                    </div>`).join('')}</div>` : ''}`;
+                    </div>`).join('')}</div>` : ''}
+            `;
             const tc = temporalController;
             const tcfg = tc ? tc.getConfig() : null;
             const statusTxt = { 'verificando': 'verificando…', 'sem-cobertura': 'sem imagem no local' };
@@ -1734,7 +1747,38 @@
                     <label class="row">Cor <input type="color" value="${esc(cfg.destaque.cor)}" oninput="mapPanelDestaque('cor', this.value)" style="width:34px;height:22px;padding:0;border:1px solid #cbd5e1"></label>
                     <label class="row">Preenchimento <input type="range" min="0" max="90" value="${Math.round(cfg.destaque.preenchimento * 100)}" oninput="mapPanelDestaque('preenchimento', this.value / 100)" style="flex:1"></label>
                     </div>
-                    <h4 data-sec-h="medidas" class="${secH('medidas')}" onclick="mapPanelSecao('medidas')">Medidas da feição<span class="chev">&#9662;</span></h4><div data-sec="medidas" class="sec-body" style="display:${secD('medidas')}">
+                    <h4 data-sec-h="camadas" class="${secH('camadas')}" onclick="mapPanelSecao('camadas')">Camadas ativas no mapa<span class="chev">&#9662;</span></h4><div data-sec="camadas" class="sec-body" style="display:${secD('camadas')}">
+                    ${camadasHtml}
+                    ${rotulosHtml}
+                    </div>
+<h4 data-sec-h="elementos" class="${secH('elementos')}" onclick="mapPanelSecao('elementos')">Elementos do mapa<span class="chev">&#9662;</span></h4><div data-sec="elementos" class="sec-body" style="display:${secD('elementos')}">
+                    ${chk('mp-norte', 'Norte', cfg.norte, "mapPanelSet('norte', this.checked)")}
+                    ${chk('mp-escala', 'Escala', cfg.escala, "mapPanelSet('escala', this.checked)")}
+                    ${chk('mp-proj', 'Sistema de projeção', cfg.projecao, "mapPanelSet('projecao', this.checked)")}
+                    <div style="color:#64748b;line-height:1.35;margin:3px 0">Arraste, no mapa, o norte, a escala (barra e texto), a projeção e a legenda para mudar de lugar.</div>
+                    ${Object.keys(cfg.elementos).length ? '<button type="button" class="act" style="margin-bottom:6px" onclick="mapPanelElementosReset()">Restaurar posições</button>' : ''}
+                    <div style="font-weight:700;margin:6px 0 2px">Legenda</div>
+                    ${legItens.length ? legItens.map(i => `
+                        <div style="display:flex;align-items:center;gap:5px;padding:2px 0">
+                            <input type="checkbox" ${i.oculto ? '' : 'checked'} title="Mostrar na legenda" onchange="mapPanelLegendaVer('${esc(i.key)}', this.checked)">
+                            <i style="display:inline-block;width:12px;height:8px;border-radius:2px;background:${esc(i.cor)};flex:none"></i>
+                            <input type="text" value="${esc(i.nome)}" maxlength="60" onchange="mapPanelLegendaNome('${esc(i.key)}', this.value)" style="flex:1;min-width:0;padding:2px 5px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px">
+                        </div>`).join('') : '<div style="color:#64748b">Sem itens: ligue o destaque da feição ou uma camada ativa.</div>'}
+                    <div style="color:#64748b;line-height:1.35;margin:3px 0">Dois cliques num item da legenda, no mapa, também renomeiam (vazio restaura o nome original).</div>
+                    ${(Object.keys(cfg.legenda.nomes).length || cfg.legenda.ocultos.length) ? '<button type="button" class="act" onclick="mapPanelLegendaReset()">Restaurar legenda</button>' : ''}
+                    ${notasHtml}
+                    </div>
+<h4 data-sec-h="base" class="${secH('base')}" onclick="mapPanelSecao('base')">Mapa base<span class="chev">&#9662;</span></h4><div data-sec="base" class="sec-body" style="display:${secD('base')}">
+                    <select onchange="mapPanelSet('baseMap', this.value)" style="width:100%;padding:5px;border:1px solid #cbd5e1;border-radius:8px">
+                        <option value="osm" ${cfg.baseMap === 'osm' ? 'selected' : ''}>Ruas (OpenStreetMap)</option>
+                        <option value="satelite" ${cfg.baseMap === 'satelite' ? 'selected' : ''}>Satélite</option>
+                        <option value="nenhum" ${cfg.baseMap === 'nenhum' ? 'selected' : ''}>Sem mapa base</option>
+                        ${ortofotosBase.length ? `<optgroup label="Ortofotos ativas no projeto">${ortofotosBase.map(x => `<option value="ortofoto:${esc(x.id)}" ${cfg.baseMap === 'ortofoto:' + x.id ? 'selected' : ''}>${esc(x.nome)}${x.dataTxt ? ' — ' + esc(x.dataTxt) : ''}</option>`).join('')}</optgroup>` : ''}
+                    </select>
+                    ${/^ortofoto:/.test(cfg.baseMap) ? '<div style="color:#64748b;line-height:1.35;margin-top:3px">A ortofoto fica sobre o satélite, que preenche o que ela não cobre.</div>' : ''}
+                    ${situacaoGradeHtml}
+                    </div>
+<h4 data-sec-h="medidas" class="${secH('medidas')}" onclick="mapPanelSecao('medidas')">Medição da feição<span class="chev">&#9662;</span></h4><div data-sec="medidas" class="sec-body" style="display:${secD('medidas')}">
                     ${chkN('mp-med', 'Mostrar medidas no mapa', cfg.medidas.ativo, "mapPanelMedidas('ativo', this.checked)", false, nis('medidas', 'todos', estTodos))}
                     ${chkN('mp-med-lados', kind === 'line' ? 'Trechos' : 'Lados', cfg.medidas.lados, "mapPanelMedidas('lados', this.checked)", kind === 'point' || mapController.ladosOmitidos, nis('medidas', 'lados', estM.lados))}
                     ${chkN('mp-med-total', kind === 'polygon' ? 'Área' : (kind === 'line' ? 'Comprimento total' : 'Coordenada'), cfg.medidas.total, "mapPanelMedidas('total', this.checked)", false, nis('medidas', 'total', estM.total))}
@@ -1750,6 +1794,7 @@
                     </select>
                     ${chk('mp-pts-tab', 'Tabela de pontos', cfg.pontos.tabela, "mapPanelPontos('tabela', this.checked)")}
                     ${chk('mp-pts-mem', 'Memorial (azimute e distância)', cfg.pontos.memorial, "mapPanelPontos('memorial', this.checked)")}
+                    ${confTabelaHtml}
                     <div style="display:flex;gap:6px;margin:5px 0">
                         <button type="button" class="act" onclick="mapPanelMarcarTodos()" ${(mapController.verticesOmitidos || !cfg.pontos.ativo) ? 'disabled style="opacity:.5"' : ''}>Marcar todos</button>
                         <button type="button" class="act" onclick="mapPanelLimparPontos()">Limpar pontos</button>
@@ -1762,39 +1807,11 @@
                             <button type="button" title="Remover" onclick="mapPanelRemover('${esc(r.vid)}')" style="border:0;background:none;cursor:pointer;color:#b91c1c">×</button>
                         </div>`).join('')}</div>` : ''}
                     </div>
+                    <h4 data-sec-h="extras" class="${secH('extras')}" onclick="mapPanelSecao('extras')">Medições no mapa<span class="chev">&#9662;</span></h4><div data-sec="extras" class="sec-body" style="display:${secD('extras')}">
+                    ${refAreaHtml}
+                    </div>
                     <h4 data-sec-h="temporal" class="${secH('temporal')}" onclick="mapPanelSecao('temporal')">Análise temporal (ortofotos)<span class="chev">&#9662;</span></h4><div data-sec="temporal" class="sec-body" style="display:${secD('temporal')}">
                     ${temporalHtml}
-                    </div>
-                    <h4 data-sec-h="extras" class="${secH('extras')}" onclick="mapPanelSecao('extras')">Extras do mapa<span class="chev">&#9662;</span></h4><div data-sec="extras" class="sec-body" style="display:${secD('extras')}">
-                    ${extrasHtml}
-                    </div>
-                    <h4 data-sec-h="base" class="${secH('base')}" onclick="mapPanelSecao('base')">Mapa base<span class="chev">&#9662;</span></h4><div data-sec="base" class="sec-body" style="display:${secD('base')}">
-                    <select onchange="mapPanelSet('baseMap', this.value)" style="width:100%;padding:5px;border:1px solid #cbd5e1;border-radius:8px">
-                        <option value="osm" ${cfg.baseMap === 'osm' ? 'selected' : ''}>Ruas (OpenStreetMap)</option>
-                        <option value="satelite" ${cfg.baseMap === 'satelite' ? 'selected' : ''}>Satélite</option>
-                        <option value="nenhum" ${cfg.baseMap === 'nenhum' ? 'selected' : ''}>Sem mapa base</option>
-                        ${ortofotosBase.length ? `<optgroup label="Ortofotos ativas no projeto">${ortofotosBase.map(x => `<option value="ortofoto:${esc(x.id)}" ${cfg.baseMap === 'ortofoto:' + x.id ? 'selected' : ''}>${esc(x.nome)}${x.dataTxt ? ' — ' + esc(x.dataTxt) : ''}</option>`).join('')}</optgroup>` : ''}
-                    </select>
-                    ${/^ortofoto:/.test(cfg.baseMap) ? '<div style="color:#64748b;line-height:1.35;margin-top:3px">A ortofoto fica sobre o satélite, que preenche o que ela não cobre.</div>' : ''}
-                    </div>
-                    <h4 data-sec-h="camadas" class="${secH('camadas')}" onclick="mapPanelSecao('camadas')">Camadas ativas no mapa<span class="chev">&#9662;</span></h4><div data-sec="camadas" class="sec-body" style="display:${secD('camadas')}">
-                    ${camadasHtml}
-                    </div>
-                    <h4 data-sec-h="elementos" class="${secH('elementos')}" onclick="mapPanelSecao('elementos')">Elementos do mapa<span class="chev">&#9662;</span></h4><div data-sec="elementos" class="sec-body" style="display:${secD('elementos')}">
-                    ${chk('mp-norte', 'Norte', cfg.norte, "mapPanelSet('norte', this.checked)")}
-                    ${chk('mp-escala', 'Escala', cfg.escala, "mapPanelSet('escala', this.checked)")}
-                    ${chk('mp-proj', 'Sistema de projeção', cfg.projecao, "mapPanelSet('projecao', this.checked)")}
-                    <div style="color:#64748b;line-height:1.35;margin:3px 0">Arraste, no mapa, o norte, a escala (barra e texto), a projeção e a legenda para mudar de lugar.</div>
-                    ${Object.keys(cfg.elementos).length ? '<button type="button" class="act" style="margin-bottom:6px" onclick="mapPanelElementosReset()">Restaurar posições</button>' : ''}
-                    <div style="font-weight:700;margin:6px 0 2px">Legenda</div>
-                    ${legItens.length ? legItens.map(i => `
-                        <div style="display:flex;align-items:center;gap:5px;padding:2px 0">
-                            <input type="checkbox" ${i.oculto ? '' : 'checked'} title="Mostrar na legenda" onchange="mapPanelLegendaVer('${esc(i.key)}', this.checked)">
-                            <i style="display:inline-block;width:12px;height:8px;border-radius:2px;background:${esc(i.cor)};flex:none"></i>
-                            <input type="text" value="${esc(i.nome)}" maxlength="60" onchange="mapPanelLegendaNome('${esc(i.key)}', this.value)" style="flex:1;min-width:0;padding:2px 5px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px">
-                        </div>`).join('') : '<div style="color:#64748b">Sem itens: ligue o destaque da feição ou uma camada ativa.</div>'}
-                    <div style="color:#64748b;line-height:1.35;margin:3px 0">Dois cliques num item da legenda, no mapa, também renomeiam (vazio restaura o nome original).</div>
-                    ${(Object.keys(cfg.legenda.nomes).length || cfg.legenda.ocultos.length) ? '<button type="button" class="act" onclick="mapPanelLegendaReset()">Restaurar legenda</button>' : ''}
                     </div>
                     <h4 data-sec-h="exportar" class="${secH('exportar')}" onclick="mapPanelSecao('exportar')">Exportar<span class="chev">&#9662;</span></h4><div data-sec="exportar" class="sec-body" style="display:${secD('exportar')}">
                     <button type="button" class="act" onclick="exportarMapaPng()">Salvar o mapa como imagem (PNG)</button>
@@ -1910,6 +1927,7 @@
         function mapPanelMover(vid, dir) { if (mapController) mapController.movePoint(vid, dir); }
         function mapPanelRemover(vid) { if (mapController) mapController.removePoint(vid); }
         function mapPanelExtra(grupo, prop, value) { if (mapController) mapController.setConfig({ [grupo]: { [prop]: value } }); }
+        function mapPanelNotaEstilo(id, k) { if (mapController) { mapController.styleNote(id, k); renderMapToolsPanel(); } }
         function mapPanelNotaAdd() { if (mapController) { mapController.addNote(''); renderMapToolsPanel(); } }
         function mapPanelNotaRenomear(id, txt) { if (mapController) { mapController.renameNote(id, txt); renderMapToolsPanel(); } }
         function mapPanelNotaRemover(id) { if (mapController) { mapController.removeNote(id); renderMapToolsPanel(); } }
@@ -2046,6 +2064,7 @@
                 cs: (e) => window.getComputedStyle(e),
                 rect: (e) => e.getBoundingClientRect(),
                 textRect: nodeTextRect,
+                size: (e) => ({ w: e.offsetWidth, h: e.offsetHeight }),
                 scale: escala || 2
             });
         }

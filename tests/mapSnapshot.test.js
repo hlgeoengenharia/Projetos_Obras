@@ -96,6 +96,16 @@ eq('texto sem retângulo calculado não é desenhado (nunca em posição inventa
     ok('sem caixa (card) para o texto girado', of(c, 'fill').length === 0 && of(c, 'rect').length === 0);
     eq('salva/restaura em par (o giro não vaza para os outros textos)', [of(c, 'save').length, of(c, 'restore').length], [2, 2]);
     eq('rotationOf lê a matriz; sem matriz, zero', [Math.round(MS.rotationOf({ transform: matriz }) * 1000) / 1000, MS.rotationOf({ transform: 'none' }), MS.rotationOf({ transform: 'matrix(1, 0, 0, 1, 40, 12)' }) + 0], [Math.round(th * 1000) / 1000, 0, 0]);
+    // anotação girada mantém o card (fundo branco e borda preta) desenhado em torno do centro
+    const nota = E('div', { cls: 'leaflet-marker-icon report-note', r: R(300, 200, 0, 0) },
+        E('span', { cls: 'report-note-label', st: { transform: matriz, backgroundColor: 'rgb(255, 255, 255)', borderTopWidth: '1px', borderRightWidth: '1px', borderBottomWidth: '1px', borderLeftWidth: '1px', borderTopStyle: 'solid', borderRightStyle: 'solid', borderBottomStyle: 'solid', borderLeftStyle: 'solid', borderTopColor: 'rgb(0, 0, 0)', borderRightColor: 'rgb(0, 0, 0)', borderBottomColor: 'rgb(0, 0, 0)', borderLeftColor: 'rgb(0, 0, 0)' }, r: R(260, 180, 80, 60) }, T('Muro', R(270, 195, 60, 30))));
+    const cn = fakeCtx();
+    MS.paintOverlays(cn, E('div', { r: R(100, 50, 600, 340) }, nota), { cs: env.cs, rect: env.rect, textRect: env.textRect, size: () => ({ w: 40, h: 14 }) }, 1);
+    ok('anotação girada: caixa desenhada girada em torno do centro (200, 160) com o tamanho de layout (40 x 14)', of(cn, 'translate')[0][1] === 200 && of(cn, 'translate')[0][2] === 160 && of(cn, 'rotate').length >= 1 && of(cn, 'rect').some(x => x[1] === -20 && x[2] === -7 && x[3] === 40 && x[4] === 14));
+    ok('anotação girada: fundo branco e borda preta preservados', of(cn, 'fill').some(c => c[1] === 'rgb(255,255,255)') && of(cn, 'stroke').some(c => c[1] === 'rgb(0,0,0)'));
+    const semTam = fakeCtx();
+    MS.paintOverlays(semTam, E('div', { r: R(100, 50, 600, 340) }, nota), env, 1);
+    ok('sem o tamanho de layout, a caixa girada não é inventada (só o texto)', of(semTam, 'fill').length === 0 && of(semTam, 'fillText').length === 1);
     const sub = fakeCtx();
     MS.paintOverlays(sub, E('div', { r: R(0, 0, 100, 100) }, E('div', { cls: 'report-point', r: R(10, 10, 0, 0) }, E('span', { st: { textDecoration: 'underline' }, r: R(10, 10, 40, 12) }, T('P1', R(10, 10, 40, 12))))), env, 1);
     ok('sublinhado também no texto sem giro (a partir do início do texto)', of(sub, 'moveTo').some(x => x[1] === 10) && of(sub, 'lineTo').some(x => x[1] === 20));

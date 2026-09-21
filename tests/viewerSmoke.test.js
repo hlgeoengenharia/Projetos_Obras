@@ -176,7 +176,7 @@ async function runScenario(cfg) {
         ok(`[${n}] folhas montadas`, /a4-page/.test(r.doc));
         ok(`[${n}] bloco do mini-mapa na folha`, /id="map-wrap"/.test(r.doc) && /id="interactive-report-map"/.test(r.doc));
         ok(`[${n}] Leaflet criado no contêiner do mapa`, r.mapsCreated.some(m => m.container === 'interactive-report-map'));
-        ok(`[${n}] painel "Mapa" existe e traz as seções`, /Configurações do Mapa/.test(r.panel) && !/Mapa do relatório/.test(r.panel) && ['Feição em destaque', 'Medidas da feição', 'Pontos nos vértices', 'Análise temporal', 'Extras do mapa', 'Mapa base', 'Camadas ativas no mapa', 'Elementos do mapa', 'Exportar'].every(s => r.panel.includes(s)));
+        ok(`[${n}] painel "Mapa" existe e traz as seções`, /Configurações do Mapa/.test(r.panel) && !/Mapa do relatório/.test(r.panel) && ['Feição em destaque', 'Camadas ativas no mapa', 'Elementos do mapa', 'Mapa base', 'Medição da feição', 'Pontos nos vértices', 'Medições no mapa', 'Análise temporal', 'Exportar'].every(s => r.panel.includes(s)));
         if (c.payload.ortofotos && c.payload.ortofotos.length) ok(`[${n}] painel lista a ortofoto`, /Ortofoto_10-02-2026/.test(r.panel));
         const temporalLigada = JSON.stringify(c.payload.template.blocos[1].mapa).includes('"temporal"') || (c.ajustes && c.ajustes.temporal && c.ajustes.temporal.ativo);
         if (temporalLigada) ok(`[${n}] quadro da análise temporal na folha e mapa criado`, /Análise Multitemporal de Ortofotos/.test(r.doc) && r.mapsCreated.some(m => m.container && m.container.id === 'tmap-r1'));
@@ -206,7 +206,8 @@ async function runScenario(cfg) {
         const abertas = () => (r.panel_() .match(/data-sec="([a-z]+)" class="sec-body" style="display:block"/g) || []).map(s => /data-sec="([a-z]+)"/.exec(s)[1]);
         r.panel_ = () => r.registry['map-tools-panel']._html;
         const cabecalhos = (r.panel_().match(/data-sec-h="[a-z]+"/g) || []).length;
-        eq('sanfona: nove títulos (feição, medidas, pontos, temporal, extras, base, camadas, elementos, exportar)', cabecalhos, 9);
+        eq('sanfona: nove títulos', cabecalhos, 9);
+        eq('ordem fixa dos cards no painel (e, portanto, dos blocos na folha)', (r.panel_().match(/data-sec-h="([a-z]+)"/g) || []).map(s => /"([a-z]+)"/.exec(s)[1]), ['destaque', 'camadas', 'elementos', 'base', 'medidas', 'pontos', 'extras', 'temporal', 'exportar']);
         eq('sanfona: ao abrir só "Feição em destaque" está aberta', abertas(), ['destaque']);
         r.sandbox.mapPanelSecao('medidas');
         r.sandbox.renderMapToolsPanel();
@@ -260,6 +261,16 @@ async function runScenario(cfg) {
         eq('restaurar legenda', [cfg().legenda.nomes, cfg().legenda.ocultos], [{}, []]);
         r.sandbox.mapPanelElementosReset();
         eq('sem erro de execução', r.errors, []);
+    }
+
+    // ---- ícone de girar e cards (CSS): área de clique que encosta no texto, visível ao passar o mouse e durante o giro
+    {
+        const css = html.slice(html.indexOf('<style'), html.indexOf('</style>'));
+        const rot = /\.report-rot \{[^}]*\}/.exec(css);
+        ok('ícone de girar: sem folga entre o texto e o ícone (a área de clique é maior que o desenho e vai até o texto)', !!rot && /left: 100%/.test(rot[0]) && !/margin-left/.test(rot[0]) && /padding: 6px 6px 6px 10px/.test(rot[0]) && /cursor: grab/.test(rot[0]));
+        ok('ícone de girar aparece ao passar o mouse em todo tipo de texto e durante o giro', ['report-measure-label', 'report-point-label', 'report-nlabel-l', 'report-note-label'].every(c => css.includes('.' + c + ':hover .report-rot')) && /\.rotating \.report-rot/.test(css));
+        ok('anotação no mapa: fundo branco e borda preta', /\.report-note-label \{[^}]*background: #ffffff[^}]*border: 1px solid #000000/.test(css));
+        ok('cards do painel: título com fundo próprio (um tom só) e corpo com moldura', /#map-tools-panel h4 \{[^}]*background: #e2e8f0[^}]*border: 1px solid #cbd5e1/.test(css) && /#map-tools-panel \.sec-body \{[^}]*border: 1px solid #cbd5e1[^}]*background: #f8fafc/.test(css) && /#map-tools-panel h4\.open \{[^}]*background: #cbd5e1/.test(css));
     }
 
     // ---- medidas: negrito / itálico / sublinhado pelo painel
@@ -371,7 +382,20 @@ async function runScenario(cfg) {
         eq('extras ligados: nenhum erro de execução', r.errors, []);
         ok('extras: tabela de confrontantes e análises entram na folha', /Confrontantes/.test(r.doc) && /Quadra E • Lote 02/.test(r.doc) && /Análises da Feição/.test(r.doc));
         ok('extras: o mapa de situação foi criado na caixa própria', r.mapsCreated.some(m => m.container && m.container.id === 'map-locator'));
-        ok('extras: painel traz a seção "Extras do mapa" com as camadas e o campo de área', /Extras do mapa/.test(r.panel) && /Rótulos nas feições vizinhas/.test(r.panel) && /Tabela de confrontantes/.test(r.panel) && /Área do terreno/.test(r.panel) && /Muro/.test(r.panel));
+        ok('extras: painel traz as opções nos cards certos', /Medições no mapa/.test(r.panel) && !/Extras do mapa/.test(r.panel) && /Rótulos nas feições vizinhas/.test(r.panel) && /Tabela de confrontantes/.test(r.panel) && /Área do terreno/.test(r.panel) && /Muro/.test(r.panel));
+        {
+            // conteúdo de cada card, na ordem em que aparecem
+            const secs = {};
+            const re = /data-sec-h="([a-z]+)"[\s\S]*?(?=data-sec-h=|map-panel-status)/g;
+            let mm;
+            while ((mm = re.exec(r.panel))) secs[mm[1]] = mm[0];
+            eq('cards do painel na ordem definida (fixa)', Object.keys(secs), ['destaque', 'camadas', 'elementos', 'base', 'medidas', 'pontos', 'extras', 'temporal', 'exportar']);
+            ok('"Rótulos nas feições vizinhas" está em "Camadas ativas no mapa"', /Rótulos nas feições vizinhas/.test(secs.camadas) && !/Rótulos nas feições vizinhas/.test(secs.extras));
+            ok('"Mapa de situação" e "Quadriculado UTM" estão em "Mapa base"', /Mapa de situação/.test(secs.base) && /Quadriculado UTM/.test(secs.base) && !/Mapa de situação|Quadriculado UTM/.test(secs.extras));
+            ok('"+ Anotação de texto" e as anotações (com N/I/S) estão em "Elementos do mapa"', /\+ Anotação de texto no centro do mapa/.test(secs.elementos) && /mapPanelNotaEstilo\('a1', 'n'\)/.test(secs.elementos) && !/Anotação de texto/.test(secs.extras));
+            ok('"Tabela de confrontantes" está em "Pontos nos vértices", logo depois do memorial', /Memorial \(azimute e distância\)[\s\S]{0,400}Tabela de confrontantes/.test(secs.pontos) && !/Tabela de confrontantes/.test(secs.extras));
+            ok('"Medições no mapa" fica com distância e área cadastral × calculada', /Distância e sobreposição/.test(secs.extras) && /Área cadastral × área calculada/.test(secs.extras));
+        }
         ok('extras: caixa do mapa de situação existe no bloco do mapa', /id="map-locator"/.test(r.doc));
         // mudar a camada de confrontantes repagina e mantém tudo funcionando
         r.sandbox.mapPanelExtra('confrontantes', 'nomes', true);
