@@ -16,6 +16,7 @@ const read = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
 
 // ---------------------------------------------------------------- ambiente
 const store = {};
+const docHandlers = {};
 const container = { innerHTML: '' };
 const inputs = {}; // campos do card do mapa simulados por id
 const sheetEl = () => ({ innerHTML: '', style: {}, classList: { add() {}, remove() {}, toggle() {} }, querySelectorAll: () => [], querySelector: () => null, appendChild() {}, addEventListener() {} });
@@ -27,7 +28,7 @@ const document = {
     querySelector: () => null,
     activeElement: null,
     createElement: stub,
-    addEventListener() {}
+    addEventListener(tipo, fn) { (docHandlers[tipo] = docHandlers[tipo] || []).push(fn); }
 };
 const localStorage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
 const forms = [{
@@ -269,6 +270,26 @@ ok('voltando ao individual, o modelo geral não aparece na lista', !has(containe
     ok('laudo: largura do campo (100%) na folha e no botão', has(h, '>100%<') && has(h, 'flex: 0 0 100%'));
     ok('laudo: campo de foto com o seletor de formato (lista/imagem) e as fotos de exemplo', has(h, 'Fotos:') && has(h, '<img '));
     ok('laudo: sem o desenho antigo (por aba, com resumo/detalhes)', !has(h, '<details') && !has(h, 'Marque as abas do laudo'));
+}
+
+// ---------------------------------------------------------------- Lista de campos do "@" (texto livre): fecha ao clicar fora
+{
+    const mkDrop = (id) => { const cls = new Set(); return { id, classList: { add: (c) => cls.add(c), remove: (c) => cls.delete(c), contains: (c) => cls.has(c) }, _cls: cls }; };
+    const dd = mkDrop('mention-dropdown-3');
+    const antes = document.querySelectorAll;
+    document.querySelectorAll = (sel) => (String(sel).includes('mention-dropdown') ? [dd] : []);
+    const alvo = (dentro, botao) => ({ closest: (sel) => ((dentro && sel.includes('mention-dropdown-')) || (botao && sel.includes('showMentionDropdown')) ? {} : null) });
+    const clicar = (a) => (docHandlers.mousedown || []).forEach(fn => fn({ target: a }));
+    ok('há um ouvinte de clique no documento para fechar a lista do @', (docHandlers.mousedown || []).length >= 1);
+    dd._cls.clear();
+    clicar(alvo(false, false));
+    ok('clique fora da lista: ela fecha', dd._cls.has('hidden'));
+    dd._cls.clear();
+    clicar(alvo(true, false));
+    ok('clique dentro da lista: continua aberta (o item escolhido insere o campo)', !dd._cls.has('hidden'));
+    clicar(alvo(false, true));
+    ok('clique no botão "@ Inserir Campo": não fecha (ele é quem abre)', !dd._cls.has('hidden'));
+    document.querySelectorAll = antes;
 }
 
 console.log(`reportScope: ${total - failed}/${total} verificações passaram`);

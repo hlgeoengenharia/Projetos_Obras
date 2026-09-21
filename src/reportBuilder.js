@@ -5642,6 +5642,17 @@
         return escapeHtml(String(val)).replace(/\r?\n/g, '<br>');
     }
 
+    // Lista de campos do "@": fecha ao clicar em qualquer lugar fora dela (o botão "@ Inserir Campo" só a abre)
+    if (typeof document !== 'undefined') {
+        document.addEventListener('mousedown', function (e) {
+            const alvo = e.target;
+            if (alvo && alvo.closest && (alvo.closest('[id^="mention-dropdown-"]') || alvo.closest('[onmousedown*="showMentionDropdown"]'))) return;
+            document.querySelectorAll('[id^="mention-dropdown-"]').forEach(function (d) {
+                if (!d.classList.contains('hidden')) d.classList.add('hidden');
+            });
+        });
+    }
+
     // Seleção com clique simples em tags de menção (@campo) para facilitar aplicação imediata de Negrito, Itálico e Sublinhado
     if (typeof document !== 'undefined') {
         document.addEventListener('click', function (e) {
