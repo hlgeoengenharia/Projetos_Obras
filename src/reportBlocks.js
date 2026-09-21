@@ -686,8 +686,8 @@
             const WIDE = ['textarea', 'hiperlink', 'hiperlink_1n', 'attachment', 'cep'];
 
             const widthOf = (pct) => {
-                const p = Math.round(pct);
-                return p >= 98 ? '100%' : (p >= 65 ? '66.666%' : (p <= 28 ? '25%' : (p <= 38 ? '33.333%' : '50%')));
+                const p = Math.max(15, Math.min(100, Math.round(pct)));
+                return p >= 98 ? '100%' : 'calc(' + p + '% - ' + (Math.round(8 * (1 - p / 100) * 10) / 10) + 'px)'; // folga de 8px entre os cartões (gap-2)
             };
 
             const photosHtml = (r, editando) => {

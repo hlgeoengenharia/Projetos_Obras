@@ -114,6 +114,11 @@ out = renderAnalyticalLaudo({ abas_selecionadas: ['t_pf'], campos_selecionados: 
 full = out.split.chunkHtml(out.split.rowsHtml, true);
 ok('só o campo escolhido', full.includes('Observações:') && !full.includes('Situação da ocupação:'));
 
+// largura do campo: vale exatamente o percentual escolhido (inclusive o arrastado com o mouse), com a folga entre os cartões
+out = renderAnalyticalLaudo({ abas_selecionadas: ['t_pf'], campos_selecionados: [{ id: 'pf_obs', tabId: 't_pf' }, { id: 'pf_ocup', tabId: 't_pf' }], campos_larguras: { pf_obs: 100, pf_ocup: 40 } }, data);
+full = out.split.chunkHtml(out.split.rowsHtml, true);
+ok('largura exata do campo no laudo (100% e 40%, sem encaixar em 33/50/66)', full.includes('flex: 0 0 100%') && full.includes('flex: 0 0 calc(40% - 4.8px)'));
+
 // escopo "última"
 out = renderAnalyticalLaudo({ abas_selecionadas: ['t_pf'], escopo: 'ultima' }, data);
 eq('escopo "última vistoria" → 1 cartão', out.split.rowsHtml.length, 1);

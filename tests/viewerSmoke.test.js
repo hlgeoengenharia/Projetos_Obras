@@ -702,6 +702,11 @@ async function runScenario(cfg) {
             RB.changeLineHeight(3, '2.0');
             ok('texto livre (edição): salvar o texto e mudar o espaçamento avisam o construtor', r.captured.mensagens.some(m => m.nome === 'saveFreeTextContent' && JSON.stringify(m.args) === '[3,"<b>novo</b>"]') && r.captured.mensagens.some(m => m.nome === 'changeLineHeight' && JSON.stringify(m.args) === '[3,"2.0"]'));
         }
+        // regular a largura do cartão arrastando (percentual do contêiner, entre 15 e 100)
+        {
+            const L = r.sandbox.larguraPorArrasto;
+            eq('arrastar a alça: 300px de 600 (+0) = 50%; +150px = 75%; muito além = 100%; muito aquém = 15%', [L(300, 0, 600), L(300, 150, 600), L(300, 900, 600), L(300, -290, 600), L(300, 0, 0)], [50, 75, 100, 15, 100]);
+        }
         // alteração que não mexe no mapa: redesenha sem recarregar
         const p2 = JSON.parse(JSON.stringify(payload)); p2.template.blocos[2].titulo = 'Outro título';
         enviar(p2);

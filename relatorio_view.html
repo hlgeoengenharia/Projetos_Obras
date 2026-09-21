@@ -16,22 +16,22 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260921i"></script>
-    <script src="src/mapTools.js?v=20260921i"></script>
-    <script src="src/reportMap.js?v=20260921i"></script>
-    <script src="src/reportTemporal.js?v=20260921i"></script>
-    <script src="src/reportExport.js?v=20260921i"></script>
-    <script src="src/reportBlocks.js?v=20260921i"></script>
-    <script src="src/reportEditor.js?v=20260921i"></script>
-    <script src="src/reportFreeText.js?v=20260921i"></script>
-    <script src="src/reportWord.js?v=20260921i"></script>
-    <script src="src/reportDocx.js?v=20260921i"></script>
-    <script src="src/mapSnapshot.js?v=20260921i"></script>
-    <script src="src/verificarEmissao.js?v=20260921i"></script>
+    <script src="src/pageSize.js?v=20260921j"></script>
+    <script src="src/mapTools.js?v=20260921j"></script>
+    <script src="src/reportMap.js?v=20260921j"></script>
+    <script src="src/reportTemporal.js?v=20260921j"></script>
+    <script src="src/reportExport.js?v=20260921j"></script>
+    <script src="src/reportBlocks.js?v=20260921j"></script>
+    <script src="src/reportEditor.js?v=20260921j"></script>
+    <script src="src/reportFreeText.js?v=20260921j"></script>
+    <script src="src/reportWord.js?v=20260921j"></script>
+    <script src="src/reportDocx.js?v=20260921j"></script>
+    <script src="src/mapSnapshot.js?v=20260921j"></script>
+    <script src="src/verificarEmissao.js?v=20260921j"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260921i"></script>
-    <script src="src/reportData.js?v=20260921i"></script>
+    <script src="src/fieldFormatter.js?v=20260921j"></script>
+    <script src="src/reportData.js?v=20260921j"></script>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -217,6 +217,12 @@
         .edit-bloco.selecionado { outline: 2px solid #0ea5e9; }
         .edit-bloco-barra { display: none; position: absolute; top: -15px; right: 6px; z-index: 60; align-items: center; gap: 2px; background: rgba(15, 23, 42, .92); color: #fff; border-radius: 8px; padding: 2px 6px; font: 600 9px/1 ui-monospace, monospace; text-transform: uppercase; box-shadow: 0 2px 8px rgba(0,0,0,.25); user-select: none; }
         .edit-bloco:hover > .edit-bloco-barra, .edit-bloco.selecionado > .edit-bloco-barra { display: flex; }
+        /* alça para regular a largura do cartão de campo arrastando com o mouse (como a altura do mapa) */
+        .campo-resize { display: none; position: absolute; top: 4px; bottom: 4px; right: -5px; width: 9px; cursor: ew-resize; z-index: 20; border-radius: 5px; background: rgba(14,165,233,.35); touch-action: none; }
+        .campo-resize::after { content: ''; position: absolute; top: 50%; left: 3px; width: 3px; height: 16px; margin-top: -8px; border-radius: 2px; background: #0284c7; }
+        [data-field-id]:hover > .campo-resize, .campo-resize.arrastando { display: block; }
+        .campo-resize .campo-resize-rotulo { display: none; position: absolute; bottom: 100%; right: 0; margin-bottom: 2px; background: #0f172a; color: #fff; font: 700 10px/1 ui-monospace, monospace; padding: 3px 5px; border-radius: 5px; white-space: nowrap; }
+        .campo-resize.arrastando .campo-resize-rotulo { display: block; }
         .edit-bloco-barra button { background: none; border: 0; color: inherit; cursor: pointer; padding: 2px; border-radius: 4px; display: inline-flex; }
         .edit-bloco-barra button:hover { background: rgba(255,255,255,.18); }
         .edit-bloco-barra .material-symbols-outlined { font-size: 14px; }
@@ -340,7 +346,6 @@
             reportPayload = payload;
             if (mapController) keptMapWrap = document.getElementById('map-wrap');
             desenharRelatorio();
-            ligarArrastoCampos();
         }
 
         /**
@@ -433,6 +438,53 @@
                         if (ids.length) avisarConstrutor({ tipo: 'construtor:acao', nome: 'reordenarCampos', args: [idx, ids] });
                     }
                 }));
+            });
+        }
+
+        /** Largura (em %) de um cartão depois de arrastar a alça: a largura de partida mais o deslocamento, em % do contêiner (mín. 15, máx. 100). */
+        function larguraPorArrasto(larguraInicialPx, deslocamentoPx, larguraContainerPx) {
+            if (!(larguraContainerPx > 0)) return 100;
+            return Math.max(15, Math.min(100, Math.round((larguraInicialPx + deslocamentoPx) / larguraContainerPx * 100)));
+        }
+
+        /** Alça na borda direita de cada cartão de campo (grade e laudo): arrastar muda a largura; ao soltar, o construtor grava o percentual. */
+        function ligarRedimensionarCampos() {
+            document.querySelectorAll('.a4-grid-fields-container').forEach(cont => {
+                const idx = parseInt(cont.getAttribute('data-block-index'), 10);
+                if (isNaN(idx) || !(cont.className || '').includes('flex-wrap')) return; // "lista corrida" não tem largura por campo
+                Array.from(cont.children).forEach(card => {
+                    const fid = card.getAttribute && card.getAttribute('data-field-id');
+                    if (!fid) return;
+                    const alca = document.createElement('div');
+                    alca.className = 'campo-resize';
+                    alca.title = 'Arraste para regular a largura do campo';
+                    alca.innerHTML = '<span class="campo-resize-rotulo"></span>';
+                    alca.addEventListener('mousedown', (ev) => {
+                        ev.preventDefault(); ev.stopPropagation();
+                        const larguraCont = cont.getBoundingClientRect().width;
+                        const inicial = card.getBoundingClientRect().width;
+                        const x0 = ev.clientX;
+                        const rotulo = alca.firstChild;
+                        let pct = null;
+                        alca.classList.add('arrastando');
+                        const mover = (e) => {
+                            pct = larguraPorArrasto(inicial, e.clientX - x0, larguraCont);
+                            const folga = Math.round(10 * (1 - pct / 100) * 10) / 10;
+                            const w = pct >= 98 ? '100%' : 'calc(' + pct + '% - ' + folga + 'px)';
+                            card.style.flex = '0 0 ' + w; card.style.width = w; card.style.maxWidth = w;
+                            if (rotulo) rotulo.textContent = pct + '%';
+                        };
+                        const soltar = () => {
+                            document.removeEventListener('mousemove', mover);
+                            document.removeEventListener('mouseup', soltar);
+                            alca.classList.remove('arrastando');
+                            if (pct !== null) avisarConstrutor({ tipo: 'construtor:acao', nome: 'setFieldWidthExact', args: [idx, fid, pct] });
+                        };
+                        document.addEventListener('mousemove', mover);
+                        document.addEventListener('mouseup', soltar);
+                    });
+                    card.appendChild(alca);
+                });
             });
         }
 
@@ -817,6 +869,7 @@
                 }, 100);
             }
             if (temporalController) temporalController.attach();
+            if (EDICAO) { ligarArrastoCampos(); ligarRedimensionarCampos(); } // as alças voltam a cada repaginação
             scheduleEmissao();
         }
 
