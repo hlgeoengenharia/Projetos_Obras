@@ -32,7 +32,7 @@
         rotacoes: {},            // { idDoTexto: graus } (texto girado pelo usuário; sem ele vale o alinhamento automático)
         edicoes: {},             // { idDaMedida: 'texto que o usuário digitou' }
         posicoes: {},            // { idDaMedida: { lat, lng } } (rótulo arrastado)
-        pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false, ordem: [], titulos: {}, estilo: { n: true, i: false, s: false }, textos: {} }, // pontos nos vértices; textos = células e título da tabela editados pelo usuário
+        pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false, ordem: [], titulos: {}, estilo: { n: true, i: false, s: false }, textos: {}, colConf: { ativo: false, camadas: [], tolM: 3, distLogM: 30 } }, // pontos nos vértices; textos = células e título da tabela editados pelo usuário; colConf = coluna "Confrontantes" da tabela de pontos (camadas e campos escolhidos)
         temporal: { ativo: false, ordem: 'asc', colunas: 2, alturaMm: 70, sincronizar: true, contorno: true, excluidas: [] }, // série de ortofotos por data
         rotulos: { ativo: false, campo: 'rotulo', estilo: { n: true, i: false, s: false }, itens: {} }, // texto sobre as feições vizinhas ('rotulo' = Quadra/Lote; 'titulo' = nome principal); itens = posição/giro ajustados pelo usuário, por 'camada:índice'
         confrontantes: { ativo: false, camada: '', tolM: 3, nomes: false, ordem: [], textos: {} },  // quem faz divisa com cada lado; ordem das linhas e textos (LADO / CONFRONTANTE) editados
@@ -261,7 +261,7 @@
         const textos = {};
         if (p.textos && typeof p.textos === 'object') {
             Object.keys(p.textos).forEach(k => {
-                if (!/^(titulo|v:[0-9]+:(c[0-9]|az|dist))$/.test(k) || typeof p.textos[k] !== 'string') return;
+                if (!/^(titulo|v:[0-9]+:(c[0-9]|az|dist|or|cf))$/.test(k) || typeof p.textos[k] !== 'string') return;
                 const txt = p.textos[k].replace(/[\r\n]+/g, ' ').trim().slice(0, 80);
                 if (txt) textos[k] = txt;
             });
@@ -273,7 +273,8 @@
             memorial: p.memorial === undefined ? d.memorial : !!p.memorial,
             ordem, titulos,
             estilo: normalizeEstilo(p.estilo, d.estilo),
-            textos
+            textos,
+            colConf: normalizeColConf(p.colConf)
         };
     }
 
@@ -282,6 +283,21 @@
         x = x || {};
         def = def || { n: true, i: false, s: false };
         return { n: x.n === undefined ? !!def.n : !!x.n, i: x.i === undefined ? !!def.i : !!x.i, s: x.s === undefined ? !!def.s : !!x.s };
+    }
+
+    /** Coluna "Confrontantes" da tabela de pontos: camadas escolhidas, campos de cada uma e se a camada é de logradouros (ruas à frente). */
+    function normalizeColConf(x) {
+        x = x || {};
+        const vistos = new Set();
+        const camadas = [];
+        (Array.isArray(x.camadas) ? x.camadas : []).forEach(c => {
+            if (!c || typeof c.id !== 'string' || !ID_REF.test(c.id) || vistos.has(c.id) || camadas.length >= 6) return;
+            vistos.add(c.id);
+            const campos = [];
+            (Array.isArray(c.campos) ? c.campos : []).forEach(k => { if (typeof k === 'string' && k.trim() && k.length <= 60 && campos.indexOf(k) < 0 && campos.length < 6) campos.push(k); });
+            camadas.push({ id: c.id, campos: campos, logradouro: !!c.logradouro });
+        });
+        return { ativo: !!x.ativo, camadas, tolM: clamp(x.tolM, 0.5, 20, 3), distLogM: clamp(x.distLogM, 5, 100, 30) };
     }
 
     function normalizeMedidas(m) {
@@ -728,32 +744,192 @@
      * Com memorial: azimute e distância até o ponto seguinte (polígono fecha voltando ao primeiro).
      */
     function pointRows(geometry, pontos, opts) {
+        opts = opts || {};
+        const lista = allVertexList(geometry);
         const byId = {};
+        const byPos = {};
+        const tamanho = {};
         // com muitos vértices os marcadores ficam de fora, mas os pontos já escolhidos continuam valendo
-        allVertexList(geometry).forEach(v => { byId[v.id] = v; });
+        lista.forEach(v => { byId[v.id] = v; byPos[v.ring + ':' + v.pos] = v; tamanho[v.ring] = (tamanho[v.ring] || 0) + 1; });
         const bbox = geometryBBox(geometry);
         const c = bbox ? bboxCenter(bbox) : [-34.8, -7];
         const proj = projectionInfo(c[1], c[0]);
         const ordem = (pontos.ordem || []).filter(id => byId[id]);
         const g = geometry && geometry.type === 'Feature' ? geometry.geometry : geometry;
         const fecha = !!g && /Polygon/.test(g.type) && ordem.length >= 3;
+        const tx = pontos.textos || {};
+        const cc = pontos.colConf || { ativo: false, camadas: [] };
+        const colConf = !!(pontos.memorial && cc.ativo);
+
+        // sentido em que a sequência percorre o anel (+1 ou -1); 0 = decidir par a par pelo caminho mais curto
+        let sentido = 0;
+        if (ordem.length >= 2 && ordem.every(id => byId[id].ring === byId[ordem[0]].ring) && byId[ordem[0]].closed) {
+            const n = tamanho[byId[ordem[0]].ring];
+            const pares = ordem.map((id, i) => [byId[id], byId[ordem[i + 1] || (fecha ? ordem[0] : id)]]).filter(p => p[0] !== p[1]);
+            const frente = pares.reduce((s, p) => s + ((p[1].pos - p[0].pos + n) % n), 0);
+            const tras = pares.reduce((s, p) => s + ((p[0].pos - p[1].pos + n) % n), 0);
+            if (fecha && frente === n) sentido = 1; else if (fecha && tras === n) sentido = -1;
+        }
+        // vértices do caminho entre dois pontos escolhidos (inclui os que ficaram de fora)
+        const caminho = (a, b) => {
+            if (a.ring !== b.ring) return [a, b];
+            const n = tamanho[a.ring];
+            let dir;
+            if (!a.closed) dir = b.pos >= a.pos ? 1 : -1;
+            else if (sentido) dir = sentido;
+            else dir = ((b.pos - a.pos + n) % n) <= ((a.pos - b.pos + n) % n) ? 1 : -1;
+            const out = [a];
+            let p = a.pos, guarda = 0;
+            while (p !== b.pos && guarda++ <= n) {
+                p = a.closed ? (p + dir + n) % n : p + dir;
+                const v = byPos[a.ring + ':' + p];
+                if (!v) break;
+                out.push(v);
+            }
+            return out;
+        };
+        const sinalDoAnel = (ringId) => {
+            const vs = lista.filter(v => v.ring === ringId);
+            let s = 0;
+            for (let i = 0; i < vs.length; i++) { const a = vs[i], b = vs[(i + 1) % vs.length]; s += a.lng * b.lat - b.lng * a.lat; }
+            return s >= 0 ? 1 : -1;
+        };
+
         const rows = ordem.map((id, i) => {
             const v = byId[id];
-            const tx = pontos.textos || {};
-            const row = { vid: id, titulo: (pontos.titulos && pontos.titulos[id]) || defaultPointTitle(i), lat: v.lat, lng: v.lng, cells: coordCells(v.lat, v.lng, pontos.sistema).map((c, k) => tx[id + ':c' + k] || c), editados: [] };
+            const titulo = (pontos.titulos && pontos.titulos[id]) || defaultPointTitle(i);
+            const row = { vid: id, titulo: titulo, lat: v.lat, lng: v.lng, cells: coordCells(v.lat, v.lng, pontos.sistema).map((cel, k) => tx[id + ':c' + k] || cel), editados: [] };
             Object.keys(tx).forEach(k => { if (k.indexOf(id + ':') === 0) row.editados.push(k.slice(id.length + 1)); });
             if (pontos.memorial) {
-                const next = i < ordem.length - 1 ? byId[ordem[i + 1]] : (fecha ? byId[ordem[0]] : null);
+                const nextId = i < ordem.length - 1 ? ordem[i + 1] : (fecha ? ordem[0] : null);
+                const next = nextId ? byId[nextId] : null;
                 if (next) {
+                    const nextTitulo = (pontos.titulos && pontos.titulos[nextId]) || defaultPointTitle(ordem.indexOf(nextId));
+                    const trecho = caminho(v, next);
+                    const partes = [];
+                    for (let k = 0; k < trecho.length - 1; k++) partes.push(distanceM([trecho[k].lng, trecho[k].lat], [trecho[k + 1].lng, trecho[k + 1].lat]));
+                    const total = partes.reduce((s, x) => s + x, 0);
+                    row.orientacao = titulo + ' até ' + nextTitulo;
                     row.azimute = fmtAzimuth(azimuthDeg([v.lng, v.lat], [next.lng, next.lat]));
-                    row.distancia = fmtNumber(distanceM([v.lng, v.lat], [next.lng, next.lat]), 2);
-                } else { row.azimute = '—'; row.distancia = '—'; }
+                    row.distPartes = partes;
+                    row.distTotal = total;
+                    row.intermediarios = trecho.length - 2;
+                    // com vértices não escolhidos no meio: cada lado somado, e o total
+                    row.distancia = partes.length > 1 && partes.length <= 12
+                        ? partes.map(x => fmtNumber(x, 2) + ' m').join(' + ') + ', totalizando ' + fmtNumber(total, 2) + ' m'
+                        : fmtNumber(total, 2);
+                    row.trecho = trecho.map(t => [t.lng, t.lat]);
+                    if (colConf) row.confrontantes = opts.camadas ? confrontantesDoTrecho(row.trecho, opts.camadas, cc, v.closed ? sinalDoAnel(v.ring) : 0) : '';
+                } else { row.orientacao = '—'; row.azimute = '—'; row.distancia = '—'; row.confrontantes = ''; }
+                if (tx[id + ':or']) row.orientacao = tx[id + ':or'];
                 if (tx[id + ':az']) row.azimute = tx[id + ':az'];
                 if (tx[id + ':dist']) row.distancia = tx[id + ':dist'];
+                if (tx[id + ':cf']) row.confrontantes = tx[id + ':cf'];
             }
             return row;
         });
-        return { tituloTabela: (pontos.textos && pontos.textos.titulo) || '', sistema: pontos.sistema, sistemaLabel: coordSystemLabel(pontos.sistema, proj), headers: coordHeaders(pontos.sistema, proj), memorial: !!pontos.memorial, fecha: fecha, rows: rows, proj: proj };
+        return { tituloTabela: (pontos.textos && pontos.textos.titulo) || '', sistema: pontos.sistema, sistemaLabel: coordSystemLabel(pontos.sistema, proj), headers: coordHeaders(pontos.sistema, proj), memorial: !!pontos.memorial, colOrientacao: !!pontos.memorial, colConfrontantes: colConf, fecha: fecha, rows: rows, proj: proj };
+    }
+
+    /** n pontos igualmente espaçados ao longo de uma poligonal (coordenadas planas). */
+    function sampleAlong(P, n) {
+        const lens = [];
+        let total = 0;
+        for (let i = 0; i < P.length - 1; i++) { const l = Math.hypot(P[i + 1][0] - P[i][0], P[i + 1][1] - P[i][1]); lens.push(l); total += l; }
+        if (!(total > 0)) return [P[0]];
+        const out = [];
+        for (let s = 0; s <= n; s++) {
+            let alvo = total * s / n, i = 0;
+            while (i < lens.length - 1 && alvo > lens[i]) { alvo -= lens[i]; i++; }
+            const k = lens[i] > 0 ? Math.min(1, alvo / lens[i]) : 0;
+            out.push([P[i][0] + (P[i + 1][0] - P[i][0]) * k, P[i][1] + (P[i + 1][1] - P[i][1]) * k]);
+        }
+        return out;
+    }
+
+    function nearestPlanar(parts, p) {
+        let best = { d: Infinity, q: null };
+        const seg = (a, b) => {
+            const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+            let k = l2 ? ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2 : 0;
+            k = Math.max(0, Math.min(1, k));
+            const q = [a[0] + k * dx, a[1] + k * dy];
+            const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+            if (d < best.d) best = { d: d, q: q };
+        };
+        parts.segs.forEach(s => seg(s[0], s[1]));
+        parts.pts.forEach(q => { const d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (d < best.d) best = { d: d, q: q }; });
+        return best;
+    }
+
+    /** Texto de um confrontante: os campos escolhidos (juntos por " — "); sem campos escolhidos, Quadra/Lote e nome principal. */
+    function textoConfrontante(f, campos) {
+        const props = (f && f.properties) || {};
+        if (campos && campos.length) return campos.map(k => (props.f && props.f[k]) || '').filter(Boolean).join(' — ');
+        return [props.r, props.t].filter(Boolean).join(' — ');
+    }
+
+    /**
+     * Quem confronta um trecho (poligonal entre dois pontos escolhidos, com os vértices do meio).
+     * Camadas comuns: feição que fica a até tolM do trecho em, no mínimo, 20% dele. Camadas de logradouros:
+     * a feição mais próxima, até distLogM, do lado de fora do trecho (mesmo sem tocar). Sem ninguém: ''.
+     * cc = { camadas: [{ id, campos, logradouro }], tolM, distLogM }; sinal = sentido do anel (+1 anti-horário), 0 = sem teste de lado.
+     */
+    function confrontantesDoTrecho(path, camadas, cc, sinal) {
+        if (!path || path.length < 2) return '';
+        const proj = localProjector(path[0][1], path[0][0]);
+        const P = path.map(proj);
+        let comp = 0;
+        for (let i = 0; i < P.length - 1; i++) comp += Math.hypot(P[i + 1][0] - P[i][0], P[i + 1][1] - P[i][1]);
+        const amostras = sampleAlong(P, Math.max(3, Math.min(60, Math.ceil(comp))));
+        const corda = [P[P.length - 1][0] - P[0][0], P[P.length - 1][1] - P[0][1]];
+        const tol = cc.tolM === undefined ? 3 : cc.tolM;
+        const distLog = cc.distLogM === undefined ? 30 : cc.distLogM;
+        const caixa = geometryBBox({ type: 'LineString', coordinates: path });
+        const textos = [];
+        (cc.camadas || []).forEach(sel => {
+            const cam = (camadas || []).find(x => String(x.id) === String(sel.id));
+            if (!cam || !Array.isArray(cam.features)) return;
+            const raio = sel.logradouro ? distLog : tol;
+            const area = expandBBoxMeters(caixa, raio + 1);
+            const achados = [];
+            cam.features.forEach(f => {
+                if (!f || !f.geometry) return;
+                const bb = geometryBBox(f.geometry);
+                if (!bb || !bboxIntersects(bb, area)) return;
+                const parts = planarParts(f.geometry, proj);
+                if (!sel.logradouro) {
+                    const perto = amostras.filter(p => pointToPartsDist(p, parts) <= tol).length;
+                    const fr = perto / amostras.length;
+                    if (fr >= 0.2) achados.push({ f: f, chave: fr });
+                } else {
+                    let melhor = null;
+                    amostras.forEach(p => { const n = nearestPlanar(parts, p); if (!melhor || n.d < melhor.d) melhor = { d: n.d, q: n.q }; });
+                    if (!melhor || !(melhor.d <= distLog)) return;
+                    // rua que só encosta na divisa conta; a que está afastada precisa estar EM FRENTE ao trecho (não além das pontas)
+                    // e do lado de fora dele (à direita num anel anti-horário)
+                    if (melhor.d > tol) {
+                        const c2 = corda[0] * corda[0] + corda[1] * corda[1];
+                        const t = c2 > 0 ? ((melhor.q[0] - P[0][0]) * corda[0] + (melhor.q[1] - P[0][1]) * corda[1]) / c2 : 0;
+                        if (t < -0.05 || t > 1.05) return;
+                        if (sinal) {
+                            const lateral = (corda[0] * (melhor.q[1] - P[0][1]) - corda[1] * (melhor.q[0] - P[0][0])) / (Math.sqrt(c2) || 1); // metros; negativo = à direita
+                            if (sinal > 0 ? lateral > -0.3 : lateral < 0.3) return;
+                        }
+                    }
+                    achados.push({ f: f, chave: -melhor.d });
+                }
+            });
+            achados.sort((a, b) => b.chave - a.chave);
+            let usados = 0;
+            achados.forEach(a => {
+                const t = textoConfrontante(a.f, sel.campos);
+                if (!t || textos.indexOf(t) >= 0 || usados >= (sel.logradouro ? 2 : 4)) return;
+                textos.push(t);
+                usados++;
+            });
+        });
+        return textos.join('; ');
     }
 
     function allVertexList(geometry) {
@@ -761,14 +937,17 @@
         const g = geometry && geometry.type === 'Feature' ? geometry.geometry : geometry;
         const out = [];
         if (!g) return out;
-        const push = (c) => out.push({ id: 'v:' + out.length, lat: c[1], lng: c[0] });
-        const ring = (r) => { const n = r.length > 1 && r[0][0] === r[r.length - 1][0] && r[0][1] === r[r.length - 1][1] ? r.length - 1 : r.length; for (let i = 0; i < n; i++) push(r[i]); };
+        // ring/pos/closed: em que anel (ou linha) o vértice está, a posição nele e se ele fecha (polígono)
+        let rid = -1;
+        const push = (c, closed, pos) => out.push({ id: 'v:' + out.length, lat: c[1], lng: c[0], ring: rid, pos: pos, closed: !!closed });
+        const ring = (r) => { rid++; const n = r.length > 1 && r[0][0] === r[r.length - 1][0] && r[0][1] === r[r.length - 1][1] ? r.length - 1 : r.length; for (let i = 0; i < n; i++) push(r[i], true, i); };
+        const line = (l) => { rid++; l.forEach((c, i) => push(c, false, i)); };
         if (g.type === 'Polygon') ring(g.coordinates[0] || []);
         else if (g.type === 'MultiPolygon') g.coordinates.forEach(p => ring(p[0] || []));
-        else if (g.type === 'LineString') g.coordinates.forEach(push);
-        else if (g.type === 'MultiLineString') g.coordinates.forEach(l => l.forEach(push));
-        else if (g.type === 'Point') push(g.coordinates);
-        else if (g.type === 'MultiPoint') g.coordinates.forEach(push);
+        else if (g.type === 'LineString') line(g.coordinates);
+        else if (g.type === 'MultiLineString') g.coordinates.forEach(line);
+        else if (g.type === 'Point') { rid++; push(g.coordinates, false, 0); }
+        else if (g.type === 'MultiPoint') g.coordinates.forEach(c => { rid++; push(c, false, 0); });
         return out;
     }
 
@@ -1192,6 +1371,9 @@
             if (typeof opts.canSee === 'function' && !opts.canSee(theme.id)) return;
             const feats = [];
             let total = 0;
+            // campos disponíveis para a coluna Confrontantes e seus valores (só perto da feição e só se a página do mapa liberou)
+            const campos = typeof opts.fieldsFn === 'function' ? (opts.fieldsFn(theme) || []).slice(0, 40) : [];
+            const areaDados = expandBBoxMeters(bbox, opts.dataBufferM === undefined ? 80 : opts.dataBufferM);
             (theme.features || []).forEach(f => {
                 if (!f || !f.geometry) return;
                 if (opts.excludeKey && featureKey(f.properties) === opts.excludeKey) return;
@@ -1206,13 +1388,20 @@
                         if (l.r) props.r = String(l.r).slice(0, 40);
                         if (l.t) props.t = String(l.t).slice(0, 60);
                     }
+                    if (campos.length && typeof opts.valuesFn === 'function' && bboxIntersects(fb, areaDados)) {
+                        const vals = opts.valuesFn(theme, f, campos) || {};
+                        const enxuto = {};
+                        Object.keys(vals).forEach(k => { const s = String(vals[k] === undefined || vals[k] === null ? '' : vals[k]).replace(/\s+/g, ' ').trim(); if (s) enxuto[k] = s.slice(0, 80); });
+                        if (Object.keys(enxuto).length) props.f = enxuto;
+                    }
                     feats.push({ type: 'Feature', properties: props, geometry: { type: f.geometry.type, coordinates: roundCoords(f.geometry.coordinates, 6) } });
                 }
             });
             if (feats.length) {
                 out.push({
                     id: String(theme.id), name: theme.name || 'Camada', color: isHexColor(theme.color) ? theme.color : '#0284c7',
-                    kind: geomKind(feats[0].geometry), features: feats, truncated: total > feats.length
+                    kind: geomKind(feats[0].geometry), features: feats, truncated: total > feats.length,
+                    campos: campos
                 });
             }
         });
@@ -1221,7 +1410,7 @@
 
     return {
         MAP_DEFAULTS, BASE_MAPS,
-        normalizeMapConfig, mergeAjustes, normalizeElementos, normalizeLegenda, applyConfrontantes, nearestOnGeometry, nearestOnCamada, edgeOffsetAbove, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
+        normalizeMapConfig, mergeAjustes, normalizeColConf, confrontantesDoTrecho, normalizeElementos, normalizeLegenda, applyConfrontantes, nearestOnGeometry, nearestOnCamada, edgeOffsetAbove, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
         geometryBBox, bboxCenter, expandBBoxMeters, bboxIntersects, roundCoords, geomKind,
         normalizeTemporal, rasterDateInfo, fmtRasterDate, tileXY, tileUrl, probeZoom, rasterBBox, buildOrtofotoList, sortOrtofotos,
         COORD_SYSTEMS, normalizePontos, latLngToUtm, utmToLatLng, fmtGms, coordHeaders, coordCells, coordSystemLabel, azimuthDeg, fmtAzimuth, vertices, defaultPointTitle, pointRows,

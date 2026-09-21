@@ -728,6 +728,24 @@ t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefin
     eq('dois cliques no ícone tiram o giro da anotação', [b.ctl.getConfig().anotacoes[0].rot, /rotate\(0deg\)/.test(h())], [undefined, true]);
 }
 
+// ---------------------------------------------------------------- coluna Confrontantes (controlador)
+{
+    const viz = { id: 'V', name: 'Vizinhos', color: '#f00', kind: 'polygon', truncated: false, campos: [{ k: 'nome', l: 'Nome' }], features: [{ type: 'Feature', properties: { r: 'Lote 02', f: { nome: 'Fulano' } }, geometry: { type: 'Polygon', coordinates: [[[-34.83, -7.02], [-34.82, -7.02], [-34.82, -7.01], [-34.83, -7.01], [-34.83, -7.02]]] } }] };
+    const b = build({ mapa: { pontos: { ativo: true, memorial: true, ordem: ['v:0', 'v:1', 'v:2', 'v:3'] } } }, undefined, { camadas: [viz] });
+    eq('sem a coluna ligada: sem texto de confrontante', b.ctl.pointRows().rows.map(r => r.confrontantes), [undefined, undefined, undefined, undefined]);
+    b.ctl.setColConf({ ativo: true, camadas: [{ id: 'V', campos: ['nome'], logradouro: false }], tolM: 3, distLogM: 30 });
+    eq('coluna ligada: o lado leste (P2 até P3) tem o vizinho pelo campo escolhido', [b.ctl.pointRows().colConfrontantes, b.ctl.pointRows().rows.map(r => r.confrontantes)], [true, ['', 'Fulano', '', '']]);
+    b.ctl.setTabelaTexto('v:0:cf', 'Rua A');
+    b.ctl.setTabelaTexto('v:1:or', 'Trecho leste');
+    eq('texto do usuário na célula (confrontantes e orientação)', [b.ctl.pointRows().rows[0].confrontantes, b.ctl.pointRows().rows[1].orientacao], ['Rua A', 'Trecho leste']);
+    b.ctl.setColConf({ ativo: true, camadas: [{ id: 'V', campos: [], logradouro: false }], tolM: 3, distLogM: 30 });
+    eq('mudar as camadas/campos descarta o texto escrito nas células de confrontantes; a orientação fica', [b.ctl.getConfig().pontos.textos['v:0:cf'], b.ctl.getConfig().pontos.textos['v:1:or']], [undefined, 'Trecho leste']);
+    b.ctl.movePoint('v:3', -1);
+    eq('mudar a sequência dos pontos descarta também a orientação escrita (recalculada)', b.ctl.getConfig().pontos.textos['v:1:or'], undefined);
+    b.ctl.setConfig({ pontos: { colConf: { ativo: false } } });
+    eq('desligar a coluna (pelo setConfig) também funciona', b.ctl.pointRows().colConfrontantes, false);
+}
+
 // ---------------------------------------------------------------- quadriculado
 t = build({});
 eq('quadriculado desligado: nada desenhado', t.layersOf('polyline').length, 0);

@@ -263,6 +263,35 @@ async function runScenario(cfg) {
         eq('sem erro de execução', r.errors, []);
     }
 
+    // ---- coluna Confrontantes: painel, camadas, campos e distâncias
+    {
+        const camV = { id: 'V', name: 'Vizinhos', color: '#f00', kind: 'polygon', truncated: false, campos: [{ k: 'nome', l: 'Nome do proprietário' }, { k: 'obs', l: 'Observação' }], features: [{ type: 'Feature', properties: { r: 'Lote 02', f: { nome: 'Fulano' } }, geometry: { type: 'Polygon', coordinates: [[[-34.839, -7.02], [-34.8385, -7.02], [-34.8385, -7.019], [-34.839, -7.019], [-34.839, -7.02]]] } }] };
+        const r = await runScenario({ width: 1900, opener: true, payload: { templateId: 'rpt_smoke', template: tplWith({ pontos: { ativo: true, memorial: true, ordem: ['v:0', 'v:1', 'v:2', 'v:3'] } }), formId: 'f1', formFields: [], formTabs: [], featureData: { id_banco: 10 }, featureGeometry: quad, featureKey: '10', camadasMapa: [camV] } });
+        const painel = () => r.registry['map-tools-panel']._html;
+        const cfg = () => require('vm').runInContext('mapController.getConfig().pontos.colConf', r.sandbox);
+        ok('painel: opção da coluna Confrontantes dentro de "Pontos nos vértices"', /Coluna &quot;Confrontantes&quot; na tabela de pontos|Coluna "Confrontantes" na tabela de pontos/.test(painel()));
+        r.sandbox.mapPanelColConf('ativo', true);
+        ok('ligada: lista as camadas para escolher', /mapPanelColConfCamada\('V', this.checked\)/.test(painel()) && /Divisa até \(m\)/.test(painel()) && /Rua até \(m\)/.test(painel()));
+        r.sandbox.mapPanelColConfCamada('V', true);
+        ok('camada escolhida: mostra logradouro e os campos dela para marcar mais de um', /mapPanelColConfLog\('V'/.test(painel()) && /Nome do proprietário/.test(painel()) && /mapPanelColConfCampo\('V', 1, this.checked\)/.test(painel()));
+        r.sandbox.mapPanelColConfCampo('V', 0, true);
+        r.sandbox.mapPanelColConfCampo('V', 1, true);
+        r.sandbox.mapPanelColConfLog('V', true);
+        eq('camada, campos e logradouro guardados', cfg().camadas, [{ id: 'V', campos: ['nome', 'obs'], logradouro: true }]);
+        r.sandbox.mapPanelColConfCampo('V', 1, false);
+        r.sandbox.mapPanelColConfLog('V', false);
+        r.sandbox.mapPanelColConf('tolM', 5);
+        r.sandbox.mapPanelColConf('distLogM', 50);
+        eq('campo desmarcado, logradouro desligado e distâncias', [cfg().camadas[0].campos, cfg().camadas[0].logradouro, cfg().tolM, cfg().distLogM], [['nome'], false, 5, 50]);
+        await r.settle(6);
+        const folha = () => r.registry['a4-document-container']._html;
+        ok('a folha traz a tabela de pontos com as colunas Orientação e Confrontantes', /Orientação/.test(folha()) && /Confrontantes/.test(folha()) && /P1 até P2/.test(folha()));
+        ok('o confrontante do lado leste aparece na tabela (campo escolhido)', /Fulano/.test(folha()));
+        r.sandbox.mapPanelColConfCamada('V', false);
+        eq('camada tirada', cfg().camadas, []);
+        eq('sem erro de execução', r.errors, []);
+    }
+
     // ---- ícone de girar e cards (CSS): área de clique que encosta no texto, visível ao passar o mouse e durante o giro
     {
         const css = html.slice(html.indexOf('<style'), html.indexOf('</style>'));

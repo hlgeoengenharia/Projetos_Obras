@@ -483,7 +483,12 @@
             Object.keys(state.pts).forEach(k => { map.removeLayer(state.pts[k]); delete state.pts[k]; });
         }
 
-        function pointRowsNow() { return MT.pointRows(geometry, cfg.pontos); }
+        // as linhas da tabela dependem só dos pontos e das camadas: guardadas até a configuração dos pontos mudar
+        function pointRowsNow() {
+            const chave = JSON.stringify(cfg.pontos);
+            if (!state.prCache || state.prCache.chave !== chave) state.prCache = { chave: chave, valor: MT.pointRows(geometry, cfg.pontos, { camadas: camadas }) };
+            return state.prCache.valor;
+        }
 
         /**
          * Normaliza o novo estado dos pontos em relação ao anterior: trocar a sequência recalcula azimutes/distâncias e
@@ -494,7 +499,8 @@
             const textos = Object.assign({}, next.textos || {});
             const mudouOrdem = JSON.stringify(next.ordem) !== JSON.stringify(ant.ordem);
             const mudouSistema = next.sistema !== ant.sistema;
-            Object.keys(textos).forEach(k => { if ((mudouOrdem && /:(az|dist)$/.test(k)) || (mudouSistema && /:c[0-9]$/.test(k))) delete textos[k]; });
+            const mudouConf = JSON.stringify(next.colConf) !== JSON.stringify(ant.colConf);
+            Object.keys(textos).forEach(k => { if ((mudouOrdem && /:(az|dist|or|cf)$/.test(k)) || (mudouSistema && /:c[0-9]$/.test(k)) || (mudouConf && /:cf$/.test(k))) delete textos[k]; });
             cfg.pontos = MT.normalizePontos(Object.assign({}, next, { textos: textos }));
             const vivos = new Set(cfg.pontos.ordem);
             const solta = (m) => { const out = {}; Object.keys(m).forEach(k => { if (!/^v:/.test(k) || vivos.has(k)) out[k] = m[k]; }); return out; };
@@ -902,7 +908,9 @@
             /** Volta os rótulos das feições vizinhas para o centro de cada feição, sem giro. */
             resetRotulos() { cfg.rotulos = MT.normalizeRotulos(Object.assign({}, cfg.rotulos, { itens: {} })); redrawNeighborLabels(); notify(); },
             clearPoints() { setPontos({ ordem: [], titulos: {}, textos: {} }); },
-            /** Texto da tabela de pontos escrito pelo usuário: 'titulo' ou 'v:N:c0|az|dist'. Vazio volta ao calculado. */
+            /** Coluna "Confrontantes" da tabela de pontos: { ativo, camadas: [{ id, campos, logradouro }], tolM, distLogM }. */
+            setColConf(cc) { setPontos({ colConf: cc }); },
+            /** Texto da tabela de pontos escrito pelo usuário: 'titulo' ou 'v:N:c0|az|dist|or|cf'. Vazio volta ao calculado. */
             setTabelaTexto(chave, texto) {
                 const textos = Object.assign({}, cfg.pontos.textos);
                 const limpo = MT.normalizePontos({ textos: { [chave]: texto } }).textos[chave];

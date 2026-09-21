@@ -1584,18 +1584,22 @@
             const pr = mapController.pointRows();
             if (!pr.rows.length) return '';
             const esc = escapeHtml;
-            const heads = ['Ponto'].concat(pr.headers, pr.memorial ? ['Azimute até o ponto seguinte', 'Distância (m)'] : []);
+            const heads = ['Ponto'].concat(pr.colOrientacao ? ['Orientação'] : [], pr.headers, pr.memorial ? ['Azimute até o\nponto seguinte', 'Distância (m)'] : [], pr.colConfrontantes ? ['Confrontantes'] : []);
             // tudo centralizado; dois cliques em qualquer texto da tabela (título, nome, coordenadas, azimute, distância) para editar
             const ed = (key, txt, cls) => `<td class="px-2 py-1 border-r border-slate-200 text-center ${cls} pt-editavel" data-pt-edit="${esc(key)}" title="Duplo clique para editar (vazio restaura o calculado)">${esc(txt)}</td>`;
             const rowsHtml = pr.rows.map((r, i) => {
-                const cells = r.cells.map((c, k) => ed(r.vid + ':c' + k, c, 'font-mono text-[10px]')).join('');
-                const mem = pr.memorial ? ed(r.vid + ':az', r.azimute, 'font-mono text-[10px]') + ed(r.vid + ':dist', r.distancia, 'font-mono text-[10px]').replace('border-r ', '') : '';
-                return `<tr data-split-row class="${i % 2 ? 'bg-slate-50/70' : 'bg-white'}" style="page-break-inside: avoid;">${ed(r.vid + ':t', r.titulo, 'font-bold text-[10px] text-slate-800')}${cells}${mem}</tr>`;
+                const tds = [ed(r.vid + ':t', r.titulo, 'font-bold text-[10px] text-slate-800')];
+                if (pr.colOrientacao) tds.push(ed(r.vid + ':or', r.orientacao, 'font-mono text-[10px]'));
+                r.cells.forEach((c, k) => tds.push(ed(r.vid + ':c' + k, c, 'font-mono text-[10px]')));
+                if (pr.memorial) { tds.push(ed(r.vid + ':az', r.azimute, 'font-mono text-[10px]')); tds.push(ed(r.vid + ':dist', r.distancia, 'font-mono text-[10px]')); }
+                if (pr.colConfrontantes) tds.push(ed(r.vid + ':cf', r.confrontantes || '', 'text-[10px]'));
+                tds[tds.length - 1] = tds[tds.length - 1].replace('border-r ', ''); // a última coluna não leva divisória
+                return `<tr data-split-row class="${i % 2 ? 'bg-slate-50/70' : 'bg-white'}" style="page-break-inside: avoid;">${tds.join('')}</tr>`;
             });
-            const thead = `<thead><tr class="bg-slate-100 border-b border-slate-200 text-slate-700">${heads.map(h => `<th class="px-2 py-1 border-r last:border-r-0 border-slate-200 text-center text-[9.5px] font-bold uppercase tracking-wide leading-tight">${esc(h)}</th>`).join('')}</tr></thead>`;
+            const thead = `<thead><tr class="bg-slate-100 border-b border-slate-200 text-slate-700">${heads.map(h => `<th class="px-2 py-1 border-r last:border-r-0 border-slate-200 text-center text-[9.5px] font-bold uppercase tracking-wide leading-tight">${esc(h).replace(/\n/g, '<br>')}</th>`).join('')}</tr></thead>`;
             const tituloPadrao = pr.memorial ? 'Memorial Descritivo — Tabela de Pontos' : 'Tabela de Pontos';
             const titulo = pr.tituloTabela || tituloPadrao;
-            const nota = pr.memorial ? ` • azimutes a partir do Norte, distâncias em linha reta${pr.fecha ? ', fechando no primeiro ponto' : ''}` : '';
+            const nota = pr.memorial ? ` • azimutes a partir do Norte; distância somada pelos vértices não escolhidos quando houver${pr.fecha ? '; fecha no primeiro ponto' : ''}` : '';
             const meta = `${pr.rows.length} ponto(s) • ${pr.sistemaLabel}${nota}`;
             const chunkHtml = (rows, isFirst) => `
                 <div class="mb-4">
@@ -1651,6 +1655,24 @@
             const abaDoCampo = (f) => f.tabTitle || ((((reportPayload && reportPayload.formTabs) || []).find(t => t.id === f.tabId) || {}).title) || '';
             const notas = mapController.getConfig().anotacoes;
             const sel = (onchange, html) => `<select onchange="${onchange}" style="width:100%;padding:4px;border:1px solid #cbd5e1;border-radius:8px;margin:2px 0">${html}</select>`;
+            const cc = cfg.pontos.colConf;
+            const colConfCams = cams.map(c => {
+                const s = cc.camadas.find(x => x.id === String(c.id));
+                const campos = c.campos || [];
+                const detalhe = s ? `
+                    <label class="row" title="Ruas: vale a feição mais próxima, do lado de fora do trecho, mesmo sem tocar nele"><input type="checkbox" ${s.logradouro ? 'checked' : ''} onchange="mapPanelColConfLog('${esc(c.id)}', this.checked)"> Camada de logradouros (rua à frente)</label>
+                    ${campos.length ? `<div style="max-height:96px;overflow:auto;border-top:1px solid #e2e8f0;margin-top:2px;padding-top:2px">${campos.map((fl, j) => `<label class="row"><input type="checkbox" ${s.campos.indexOf(fl.k) >= 0 ? 'checked' : ''} onchange="mapPanelColConfCampo('${esc(c.id)}', ${j}, this.checked)"> ${esc(fl.l)}</label>`).join('')}</div>` : '<div style="color:#64748b;margin-top:2px">Sem campos disponíveis (sem permissão de ver os dados desta camada): vale o rótulo.</div>'}` : '';
+                return `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:4px;margin:3px 0;background:#fff"><label class="row"><input type="checkbox" ${s ? 'checked' : ''} onchange="mapPanelColConfCamada('${esc(c.id)}', this.checked)"><i style="display:inline-block;width:12px;height:8px;border-radius:2px;background:${esc(c.color)}"></i><span style="flex:1">${esc(c.name)}</span></label>${detalhe}</div>`;
+            }).join('');
+            const colConfHtml = `
+                ${chk('mp-pts-cc', 'Coluna "Confrontantes" na tabela de pontos', cc.ativo, "mapPanelColConf('ativo', this.checked)", !cfg.pontos.memorial || !cams.length || kind !== 'polygon')}
+                ${!cfg.pontos.memorial ? '<div style="color:#64748b;line-height:1.35;margin-bottom:3px">Ligue o memorial para usar esta coluna.</div>' : ''}
+                ${cc.ativo && cfg.pontos.memorial ? `<div style="color:#64748b;line-height:1.35;margin:2px 0 3px">Escolha as camadas e, em cada uma, os campos. Cada confrontante é ligado ao trecho entre os dois pontos (com os vértices do meio); um trecho pode ter vários. Sem ninguém, a célula fica em branco para você preencher (dois cliques).</div>
+                    ${colConfCams}
+                    <div style="display:flex;gap:6px;margin-top:3px">
+                        <label style="flex:1;font-size:10px;color:#475569">Divisa até (m)<input type="number" min="0.5" max="20" step="0.5" value="${cc.tolM}" onchange="mapPanelColConf('tolM', Number(this.value))" style="width:100%;padding:3px;border:1px solid #cbd5e1;border-radius:6px"></label>
+                        <label style="flex:1;font-size:10px;color:#475569">Rua até (m)<input type="number" min="5" max="100" step="5" value="${cc.distLogM}" onchange="mapPanelColConf('distLogM', Number(this.value))" style="width:100%;padding:3px;border:1px solid #cbd5e1;border-radius:6px"></label>
+                    </div>` : ''}`;
             const confRows = cfg.confrontantes.ativo ? mapController.confrontanteRows() : [];
             const confHtml = confRows.length ? `<div style="color:#64748b;line-height:1.35;margin:2px 0 3px">Dois cliques em LADO ou CONFRONTANTE(S), na tabela, para escrever o texto que preferir (vazio restaura). Ordem das linhas:</div>
                 <div style="border:1px solid #e2e8f0;border-radius:8px;padding:4px">${confRows.map((r, i) => `
@@ -1795,6 +1817,7 @@
                     ${chk('mp-pts-tab', 'Tabela de pontos', cfg.pontos.tabela, "mapPanelPontos('tabela', this.checked)")}
                     ${chk('mp-pts-mem', 'Memorial (azimute e distância)', cfg.pontos.memorial, "mapPanelPontos('memorial', this.checked)")}
                     ${confTabelaHtml}
+                    ${colConfHtml}
                     <div style="display:flex;gap:6px;margin:5px 0">
                         <button type="button" class="act" onclick="mapPanelMarcarTodos()" ${(mapController.verticesOmitidos || !cfg.pontos.ativo) ? 'disabled style="opacity:.5"' : ''}>Marcar todos</button>
                         <button type="button" class="act" onclick="mapPanelLimparPontos()">Limpar pontos</button>
@@ -1880,6 +1903,24 @@
             const td = ev.target && ev.target.closest ? ev.target.closest('[data-pt-edit], [data-conf-edit]') : null;
             if (td) editarTextoTabelaPontos(td);
         });
+
+        // coluna "Confrontantes" da tabela de pontos: camadas, campos e distâncias
+        function colConfEditar(fn) {
+            if (!mapController) return;
+            const c = JSON.parse(JSON.stringify(mapController.getConfig().pontos.colConf));
+            fn(c);
+            mapController.setColConf(c);
+            renderMapToolsPanel();
+        }
+        function mapPanelColConf(k, v) { colConfEditar(c => { c[k] = v; }); }
+        function mapPanelColConfCamada(id, on) { colConfEditar(c => { c.camadas = c.camadas.filter(x => x.id !== String(id)); if (on) c.camadas.push({ id: String(id), campos: [], logradouro: false }); }); }
+        function mapPanelColConfLog(id, on) { colConfEditar(c => { const s = c.camadas.find(x => x.id === String(id)); if (s) s.logradouro = !!on; }); }
+        function mapPanelColConfCampo(id, j, on) {
+            const cam = camadasDoPayload().find(x => String(x.id) === String(id));
+            const k = cam && cam.campos && cam.campos[j] ? cam.campos[j].k : null;
+            if (k === null) return;
+            colConfEditar(c => { const s = c.camadas.find(x => x.id === String(id)); if (s) s.campos = s.campos.filter(x => x !== k).concat(on ? [k] : []); });
+        }
 
         function mapPanelConfMover(id, dir) { if (mapController) { mapController.moveConfrontante(id, dir); renderMapToolsPanel(); } }
         function mapPanelConfReset() { if (mapController) { mapController.resetConfrontantes(); renderMapToolsPanel(); } }

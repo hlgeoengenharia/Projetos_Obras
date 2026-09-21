@@ -5510,7 +5510,29 @@
                     camadasMapa = window.MapTools.collectNearbyLayers(window.themes, featureGeometry, {
                         excludeKey: featureKeyMapa,
                         canSee: (id) => (typeof window.userCanOnTheme !== 'function') || window.userCanOnTheme(id, 'ver'),
-                        labelFn: rotulos
+                        labelFn: rotulos,
+                        // campos da camada (para a coluna Confrontantes) e valores das feições próximas: só com permissão de ver os dados
+                        fieldsFn: (theme) => {
+                            try {
+                                if (typeof window.canUserSeeThemeData === 'function' && !window.canUserSeeThemeData(theme)) return [];
+                                const vistos = new Set();
+                                const lista = [];
+                                const add = (k, l) => { const s = String(k || ''); if (!s || vistos.has(s.toLowerCase())) return; vistos.add(s.toLowerCase()); lista.push({ k: s, l: String(l || s).slice(0, 60) }); };
+                                const forms = (typeof allForms !== 'undefined' && Array.isArray(allForms)) ? allForms : (Array.isArray(window.allForms) ? window.allForms : []);
+                                const form = theme.formId ? forms.find(f => f.id === theme.formId) : null;
+                                ((form && (form.schema || form.tabs)) || []).forEach(tab => (tab.fields || []).forEach(fl => add(fl.id || fl.name || fl.label, fl.label || fl.name || fl.id)));
+                                (theme.features || []).slice(0, 30).forEach(ft => Object.keys((ft && ft.properties) || {}).forEach(k => { if (k.charAt(0) !== '_' && k !== 'themeId' && k !== 'id_banco') add(k, typeof window.getThemeFieldLabel === 'function' ? window.getThemeFieldLabel(theme, k) : k); }));
+                                return lista;
+                            } catch (e) { return []; }
+                        },
+                        valuesFn: (theme, f, campos) => {
+                            const out = {};
+                            try {
+                                if (typeof window.getFeaturePropertyValue !== 'function') return out;
+                                campos.forEach(c => { const v = window.getFeaturePropertyValue(theme, f, c.k); if (v !== undefined && v !== null && v !== '') out[c.k] = v; });
+                            } catch (e) { /* sem valores */ }
+                            return out;
+                        }
                     });
                 }
             }

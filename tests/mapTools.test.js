@@ -88,6 +88,57 @@ eq('legenda: nomes e itens ocultos só com chaves válidas', MT.normalizeLegenda
 ok('padrão: nada movido, legenda sem ajustes', Object.keys(MT.normalizeMapConfig({}).elementos).length === 0 && MT.normalizeMapConfig({}).legenda.ocultos.length === 0);
 eq('ajustes do usuário levam elementos e legenda', [MT.mergeAjustes(MT.normalizeMapConfig({}), { elementos: { norte: { dx: 0.1, dy: 0.1 } }, legenda: { nomes: { feicao: 'X' } } }).elementos.norte, MT.mergeAjustes(MT.normalizeMapConfig({}), { legenda: { nomes: { feicao: 'X' } } }).legenda.nomes.feicao], [{ dx: 0.1, dy: 0.1 }, 'X']);
 eq('anotações: estilo (padrão negrito) e giro guardados; giro zero não é guardado', MT.normalizeAnotacoes([{ id: 'a1', lat: -7, lng: -34, texto: 'Muro', estilo: { n: false, s: true }, rot: 370 }, { id: 'a2', lat: -7, lng: -34, texto: 'Rua', rot: 0 }]).map(a => [a.estilo, a.rot]), [[{ n: false, i: false, s: true }, 10], [{ n: true, i: false, s: false }, undefined]]);
+// tabela de pontos: orientação, distância somada e confrontantes por trecho
+{
+    const anel = { type: 'Polygon', coordinates: [[[-34.84, -7.02], [-34.8395, -7.02], [-34.839, -7.02], [-34.839, -7.019], [-34.84, -7.019], [-34.84, -7.02]]] };
+    const P = (ordem, extra) => MT.normalizePontos(Object.assign({ ativo: true, memorial: true, ordem }, extra || {}));
+    const d = (a, b) => MT.distanceM(a, b);
+    const f2 = (n) => MT.fmtNumber(n, 2);
+    const r = MT.pointRows(anel, P(['v:0', 'v:2', 'v:3', 'v:4']));
+    const l1 = d([-34.84, -7.02], [-34.8395, -7.02]), l2 = d([-34.8395, -7.02], [-34.839, -7.02]);
+    eq('vértice não escolhido entre P1 e P2: lados somados e total', [r.rows[0].distancia, r.rows[0].intermediarios, r.rows[0].distPartes.length], [f2(l1) + ' m + ' + f2(l2) + ' m, totalizando ' + f2(l1 + l2) + ' m', 1, 2]);
+    eq('sem vértice no meio: só o valor', [r.rows[1].distancia, r.rows[1].intermediarios], [f2(d([-34.839, -7.02], [-34.839, -7.019])), 0]);
+    eq('orientação: nome do ponto até o próximo; o último volta ao primeiro', r.rows.map(x => x.orientacao), ['P1 até P2', 'P2 até P3', 'P3 até P4', 'P4 até P1']);
+    eq('azimute continua sendo o da linha reta entre os dois pontos', r.rows[0].azimute, MT.fmtAzimuth(MT.azimuthDeg([-34.84, -7.02], [-34.839, -7.02])));
+    const rev = MT.pointRows(anel, P(['v:4', 'v:3', 'v:2', 'v:0']));
+    eq('sequência no sentido contrário: o vértice do meio também entra', rev.rows[2].distancia, f2(l2) + ' m + ' + f2(l1) + ' m, totalizando ' + f2(l1 + l2) + ' m');
+    eq('trecho traz o caminho (com os vértices do meio)', r.rows[0].trecho, [[-34.84, -7.02], [-34.8395, -7.02], [-34.839, -7.02]]);
+    const dois = MT.pointRows(anel, P(['v:0', 'v:2']));
+    eq('só dois pontos de um polígono: o caminho mais curto; sem fechar', [dois.rows[0].intermediarios, dois.rows[1].orientacao, dois.fecha], [1, '—', false]);
+    const linha = { type: 'LineString', coordinates: [[-34.84, -7.02], [-34.8395, -7.02], [-34.839, -7.02], [-34.8385, -7.02]] };
+    const rl = MT.pointRows(linha, P(['v:0', 'v:2', 'v:3']));
+    eq('linha aberta: vértices do meio somados; o último ponto não tem seguinte', [rl.rows[0].intermediarios, rl.rows[1].intermediarios, rl.rows[2].orientacao], [1, 0, '—']);
+    const edit = MT.pointRows(anel, P(['v:0', 'v:2'], { textos: { 'v:0:or': 'Da Marco A à Marco B', 'v:0:dist': '110 m', 'v:0:cf': 'Vizinho' }, colConf: { ativo: true } }));
+    eq('textos editados valem para orientação, distância e confrontantes', [edit.rows[0].orientacao, edit.rows[0].distancia, edit.rows[0].confrontantes], ['Da Marco A à Marco B', '110 m', 'Vizinho']);
+    eq('colunas conforme a configuração', [r.colOrientacao, r.colConfrontantes, edit.colConfrontantes, MT.pointRows(anel, P(['v:0', 'v:2'], { memorial: false, colConf: { ativo: true } })).colConfrontantes], [true, false, true, false]);
+
+    // confrontantes por trecho
+    const rect = (x0, y0, x1, y1) => ({ type: 'Polygon', coordinates: [[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]] });
+    const linhaRua = (y, nome, x0, x1) => ({ type: 'Feature', properties: { f: { nome: nome } }, geometry: { type: 'LineString', coordinates: [[x0 === undefined ? -34.8405 : x0, y], [x1 === undefined ? -34.8385 : x1, y]] } });
+    const camadas = [
+        { id: 'L1', name: 'Lotes', features: [{ type: 'Feature', properties: { r: 'Lote 02', f: { nome: 'Fulano', obs: 'Muro' } }, geometry: rect(-34.839, -7.02, -34.8385, -7.019) }, { type: 'Feature', properties: { r: 'Lote 09' }, geometry: rect(-34.8385, -7.0195, -34.838, -7.0185) }] },
+        { id: 'RUA', name: 'Logradouros', features: [linhaRua(-7.02015, 'Rua das Flores'), linhaRua(-7.01985, 'Rua Interna', -34.8399, -34.8391), linhaRua(-7.0188, 'Rua Norte'), linhaRua(-7.0215, 'Rua Longe')] }
+    ];
+    const cf = (camadasSel, extra) => MT.pointRows(anel, P(['v:0', 'v:2', 'v:3', 'v:4'], { colConf: Object.assign({ ativo: true, camadas: camadasSel }, extra || {}) }), { camadas: camadas }).rows.map(x => x.confrontantes);
+    eq('feição da camada que toca o trecho, com o campo escolhido; só o trecho leste', cf([{ id: 'L1', campos: ['nome'] }]), ['', 'Fulano', '', '']);
+    eq('vários campos da camada juntos (—)', cf([{ id: 'L1', campos: ['nome', 'obs'] }])[1], 'Fulano — Muro');
+    eq('sem campos escolhidos vale o rótulo (Quadra/Lote)', cf([{ id: 'L1', campos: [] }])[1], 'Lote 02');
+    eq('rua à frente (fora do trecho) mesmo sem tocar; a de dentro do lote, a que passa além das pontas e a distante ficam de fora', cf([{ id: 'RUA', campos: ['nome'], logradouro: true }]), ['Rua das Flores', '', 'Rua Norte', '']);
+    eq('várias camadas juntas: cada trecho leva todos os seus confrontantes', cf([{ id: 'L1', campos: ['nome'] }, { id: 'RUA', campos: ['nome'], logradouro: true }]), ['Rua das Flores', 'Fulano', 'Rua Norte', '']);
+    eq('distância máxima até a rua', cf([{ id: 'RUA', campos: ['nome'], logradouro: true }], { distLogM: 5 }), ['', '', '', '']);
+    eq('camada que não existe no envio é ignorada', cf([{ id: 'ZZ', campos: [] }]), ['', '', '', '']);
+    eq('sem camadas no envio: colunas em branco', MT.pointRows(anel, P(['v:0', 'v:2'], { colConf: { ativo: true, camadas: [{ id: 'L1', campos: [] }] } })).rows.map(x => x.confrontantes), ['', '']);
+    // o trecho da base tem um vértice no meio: a rua e o vizinho de canto valem para o trecho todo
+    eq('vizinho que só encosta no canto do trecho não conta', cf([{ id: 'L1', campos: ['nome'] }])[0], '');
+    eq('normalização da coluna: até 6 camadas, ids e campos válidos, limites', MT.normalizeColConf({ ativo: 1, camadas: [{ id: 'A', campos: ['x', 'x', '', 'y'], logradouro: 1 }, { id: 'A' }, { id: 'a b' }, { id: 'B' }], tolM: 99, distLogM: 1 }), { ativo: true, camadas: [{ id: 'A', campos: ['x', 'y'], logradouro: true }, { id: 'B', campos: [], logradouro: false }], tolM: 20, distLogM: 5 });
+    // payload: campos e valores só perto da feição
+    const themes = [{ id: 'T1', name: 'Lotes', features: [
+        { geometry: rect(-34.8399, -7.0199, -34.8397, -7.0197), properties: { a: 1 } },
+        { geometry: rect(-34.836, -7.0199, -34.8358, -7.0197), properties: { a: 2 } }] }];
+    const col = MT.collectNearbyLayers(themes, anel, { fieldsFn: () => [{ k: 'a', l: 'A' }], valuesFn: (th, ft, campos) => ({ a: ft.properties.a }), dataBufferM: 80 });
+    eq('payload: campos da camada; valores só das feições a até 80 m da feição', [col[0].campos, col[0].features[0].properties.f, col[0].features[1].properties.f], [[{ k: 'a', l: 'A' }], { a: '1' }, undefined]);
+    eq('payload sem permissão (sem fieldsFn): nada de campos nem valores', [MT.collectNearbyLayers(themes, anel, {})[0].campos, MT.collectNearbyLayers(themes, anel, {})[0].features[0].properties.f], [[], undefined]);
+}
 eq('base satélite e nenhum são aceitas', [MT.normalizeMapConfig({ mapa: { baseMap: 'satelite' } }).baseMap, MT.normalizeMapConfig({ mapa: { baseMap: 'nenhum' } }).baseMap], ['satelite', 'nenhum']);
 
 const aj = MT.mergeAjustes(c0, { norte: false, baseMap: 'satelite', camadasLigadas: [7, 'b'], destaque: { esmaecerEntorno: true }, lixo: 1 });

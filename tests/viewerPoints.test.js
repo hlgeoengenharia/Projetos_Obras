@@ -69,7 +69,7 @@ ok('a tabela repete o cabeçalho a cada parte', /<thead>/.test(out.split.chunkHt
     const o2 = api.renderPointsTable();
     const c2 = o2.split.chunkHtml(o2.split.rowsHtml, true);
     const celulas = o2.split.rowsHtml.join('');
-    ok('todas as células e cabeçalhos centralizados (nenhum alinhado à direita ou à esquerda)', !/text-right|text-left/.test(celulas + (c2.match(/<thead>[\s\S]*<\/thead>/) || [''])[0]) && (c2.match(/<th [^>]*text-center/g) || []).length === 5 && (celulas.match(/<td [^>]*text-center/g) || []).length === 15);
+    ok('todas as células e cabeçalhos centralizados (nenhum alinhado à direita ou à esquerda)', !/text-right|text-left/.test(celulas + (c2.match(/<thead>[\s\S]*<\/thead>/) || [''])[0]) && (c2.match(/<th [^>]*text-center/g) || []).length === 6 && (celulas.match(/<td [^>]*text-center/g) || []).length === 18);
     ok('cada texto da tabela é editável por duplo clique (nome, coordenadas, azimute, distância)', ['v:0:t', 'v:0:c0', 'v:0:c1', 'v:0:az', 'v:0:dist', 'v:2:dist'].every(k => celulas.includes('data-pt-edit="' + k + '"')));
     ok('título editável e texto do usuário escapado', c2.includes('data-pt-edit="titulo"') && c2.includes('Descrição &lt;dos&gt; limites') && !/Memorial Descritivo/.test(c2));
     ok('textos editados aparecem na tabela', celulas.includes('7.999.999,00') && celulas.includes('10° 00\' 00&quot;'));
@@ -81,11 +81,30 @@ api.setController(controllerFor({ ativo: true, sistema: 'geo_gms', memorial: tru
 out = api.renderPointsTable();
 const memo = out.split.chunkHtml(out.split.rowsHtml, true);
 ok('memorial: título próprio', /Memorial Descritivo — Tabela de Pontos/.test(memo));
-ok('memorial: colunas Latitude, Longitude, Azimute e Distância', /Latitude/.test(memo) && /Longitude/.test(memo) && /Azimute até o ponto seguinte/.test(memo) && /Distância \(m\)/.test(memo));
+ok('memorial: colunas Latitude, Longitude, Azimute e Distância', /Latitude/.test(memo) && /Longitude/.test(memo) && /Azimute até o<br>ponto seguinte/.test(memo) && /Distância \(m\)/.test(memo));
 const texto = (s) => s.replace(/<[^>]+>/g, '|').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
 ok('memorial: coordenadas em graus, minutos e segundos (exatas)', texto(out.split.rowsHtml[0]).includes(MT.fmtGms(-7.02, 'N', 'S')) && texto(out.split.rowsHtml[0]).includes(MT.fmtGms(-34.84, 'L', 'O')));
-ok('memorial: polígono fecha no primeiro ponto (nota e último azimute ao Sul)', /fechando no primeiro ponto/.test(memo) && /180° 00' 00/.test(out.split.rowsHtml[3]));
+ok('memorial: polígono fecha no primeiro ponto (nota e último azimute ao Sul)', /fecha no primeiro ponto/.test(memo) && /180° 00' 00/.test(out.split.rowsHtml[3]));
 ok('memorial: azimute do primeiro lado é para Leste (~90°) e a distância é a do lado', /\|(89|90)° \d\d' \d\d"?\|/.test(texto(out.split.rowsHtml[0])) && texto(out.split.rowsHtml[0]).includes(MT.fmtNumber(MT.distanceM([-34.84, -7.02], [-34.839, -7.02]), 2)));
+
+// ---------------------------------------------------------------- colunas Orientação e Confrontantes, distância somada
+{
+    const anel = { type: 'Polygon', coordinates: [[[-34.84, -7.02], [-34.8395, -7.02], [-34.839, -7.02], [-34.839, -7.019], [-34.84, -7.019], [-34.84, -7.02]]] };
+    api.setController(controllerFor({ ativo: true, sistema: 'utm', memorial: true, ordem: ['v:0', 'v:2', 'v:3', 'v:4'], titulos: { 'v:3': 'Marco 3' }, textos: { 'v:3:cf': 'Rua <X>' }, colConf: { ativo: true } }, anel));
+    const o3 = api.renderPointsTable();
+    const c3 = o3.split.chunkHtml(o3.split.rowsHtml, true);
+    ok('cabeçalho: Ponto, Orientação (logo depois), coordenadas, Azimute em duas linhas, Distância e Confrontantes', /Ponto[\s\S]*Orientação[\s\S]*E \(m\)[\s\S]*N \(m\)[\s\S]*Azimute até o<br>ponto seguinte[\s\S]*Distância \(m\)[\s\S]*Confrontantes/.test(c3) && (c3.match(/<th /g) || []).length === 7);
+    const linhas = o3.split.rowsHtml.join('');
+    ok('orientação: "P1 até P2" com os nomes da coluna Ponto (nome renomeado vale; volta ao primeiro no fim)', /data-pt-edit="v:0:or"[^>]*>P1 até P2</.test(linhas) && /data-pt-edit="v:2:or"[^>]*>P2 até Marco 3</.test(linhas) && /data-pt-edit="v:3:or"[^>]*>Marco 3 até P4</.test(linhas) && /data-pt-edit="v:4:or"[^>]*>P4 até P1</.test(linhas));
+    ok('distância com vértice não escolhido no meio: lados somados e total', /data-pt-edit="v:0:dist"[^>]*>[\d.,]+ m \+ [\d.,]+ m, totalizando [\d.,]+ m</.test(linhas) && /data-pt-edit="v:2:dist"[^>]*>[\d.,]+</.test(linhas) && !/data-pt-edit="v:2:dist"[^>]*>[^<]*totalizando/.test(linhas));
+    ok('confrontantes: célula editável, texto do usuário escapado; sem camadas fica em branco', /data-pt-edit="v:3:cf"[^>]*>Rua &lt;X&gt;</.test(linhas) && /data-pt-edit="v:0:cf"[^>]*><\/td>/.test(linhas));
+    api.setController(controllerFor({ ativo: true, sistema: 'utm', memorial: true, ordem: ['v:0', 'v:2', 'v:3', 'v:4'] }, anel));
+    const o4 = api.renderPointsTable();
+    ok('coluna Confrontantes só aparece quando ligada', !/Confrontantes/.test(o4.split.chunkHtml(o4.split.rowsHtml, true)) && !/data-pt-edit="v:0:cf"/.test(o4.split.rowsHtml.join('')));
+    api.setController(controllerFor({ ativo: true, sistema: 'utm', memorial: false, ordem: ['v:0', 'v:2'], colConf: { ativo: true } }, anel));
+    const o5 = api.renderPointsTable();
+    ok('sem memorial: sem Orientação nem Confrontantes', !/Orientação|Confrontantes|Azimute/.test(o5.split.chunkHtml(o5.split.rowsHtml, true)));
+}
 
 // ---------------------------------------------------------------- linha: sem fechamento
 const linha = { type: 'LineString', coordinates: [[-34.84, -7.02], [-34.84, -7.019], [-34.839, -7.019]] };
