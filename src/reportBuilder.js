@@ -1381,23 +1381,38 @@
     /**
      * Helper para gerar a estrutura de um card de acordeão.
      */
+    // Uma cor fixa para cada tipo de informação (a mesma cor marca o bloco correspondente na folha da página real):
+    // folha = cinza • cabeçalho = índigo • texto livre = violeta • campos (grade) = azul • quadros 1:N e laudo = âmbar • mapa = verde • gráficos = rosa • rodapé = ciano
+    const CORES_CARD = {
+        'acc-layout': { barra: 'border-l-slate-500', icone: 'bg-slate-600 text-white', cabecalho: 'bg-slate-100/80 dark:bg-slate-950/40', corpo: 'bg-slate-50/70 dark:bg-slate-950/20', borda: 'border-slate-300 dark:border-slate-800', texto: 'text-slate-800 dark:text-slate-300' },
+        'acc-header': { barra: 'border-l-indigo-500', icone: 'bg-indigo-600 text-white', cabecalho: 'bg-indigo-100/80 dark:bg-indigo-950/40', corpo: 'bg-indigo-50/70 dark:bg-indigo-950/20', borda: 'border-indigo-300 dark:border-indigo-800', texto: 'text-indigo-800 dark:text-indigo-300' },
+        'acc-free-text': { barra: 'border-l-violet-500', icone: 'bg-violet-600 text-white', cabecalho: 'bg-violet-100/80 dark:bg-violet-950/40', corpo: 'bg-violet-50/70 dark:bg-violet-950/20', borda: 'border-violet-300 dark:border-violet-800', texto: 'text-violet-800 dark:text-violet-300' },
+        'acc-grid': { barra: 'border-l-sky-500', icone: 'bg-sky-600 text-white', cabecalho: 'bg-sky-100/80 dark:bg-sky-950/40', corpo: 'bg-sky-50/70 dark:bg-sky-950/20', borda: 'border-sky-300 dark:border-sky-800', texto: 'text-sky-800 dark:text-sky-300' },
+        'acc-photos': { barra: 'border-l-amber-500', icone: 'bg-amber-600 text-white', cabecalho: 'bg-amber-100/80 dark:bg-amber-950/40', corpo: 'bg-amber-50/70 dark:bg-amber-950/20', borda: 'border-amber-300 dark:border-amber-800', texto: 'text-amber-800 dark:text-amber-300' },
+        'acc-map': { barra: 'border-l-emerald-500', icone: 'bg-emerald-600 text-white', cabecalho: 'bg-emerald-100/80 dark:bg-emerald-950/40', corpo: 'bg-emerald-50/70 dark:bg-emerald-950/20', borda: 'border-emerald-300 dark:border-emerald-800', texto: 'text-emerald-800 dark:text-emerald-300' },
+        'acc-charts': { barra: 'border-l-rose-500', icone: 'bg-rose-600 text-white', cabecalho: 'bg-rose-100/80 dark:bg-rose-950/40', corpo: 'bg-rose-50/70 dark:bg-rose-950/20', borda: 'border-rose-300 dark:border-rose-800', texto: 'text-rose-800 dark:text-rose-300' },
+        'acc-text-footer': { barra: 'border-l-cyan-500', icone: 'bg-cyan-600 text-white', cabecalho: 'bg-cyan-100/80 dark:bg-cyan-950/40', corpo: 'bg-cyan-50/70 dark:bg-cyan-950/20', borda: 'border-cyan-300 dark:border-cyan-800', texto: 'text-cyan-800 dark:text-cyan-300' },
+    };
+    const COR_CARD_PADRAO = { barra: 'border-l-slate-400', icone: 'bg-slate-600 text-white', cabecalho: 'bg-slate-100 dark:bg-slate-700/40', corpo: 'bg-slate-50 dark:bg-slate-800/40', borda: 'border-slate-300 dark:border-slate-700', texto: 'text-slate-700 dark:text-slate-300' };
+
     function renderAccordionCard({ id, title, icon, badge, content }) {
         const isOpen = (activeAccordionId === id);
+        const cor = CORES_CARD[id] || COR_CARD_PADRAO;
         return `
-            <div class="bg-white dark:bg-slate-800 rounded-2xl border ${isOpen ? 'border-primary/50 shadow-sm' : 'border-slate-200 dark:border-slate-700'} overflow-hidden transition-all duration-200">
-                <button type="button" onclick="ReportBuilder.toggleAccordion('${id}')" class="w-full p-3.5 sm:p-4 flex items-center justify-between gap-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors select-none cursor-pointer">
+            <div class="${cor.corpo} rounded-2xl border border-l-4 ${cor.barra} ${isOpen ? 'shadow-md ' + cor.borda : cor.borda} overflow-hidden transition-all duration-200" data-cor-card="${id}">
+                <button type="button" onclick="ReportBuilder.toggleAccordion('${id}')" class="w-full p-3.5 sm:p-4 flex items-center justify-between gap-3 text-left ${cor.cabecalho} hover:brightness-95 transition-colors select-none cursor-pointer">
                     <div class="flex items-center gap-2.5 min-w-0">
-                        <div class="w-8 h-8 rounded-xl ${isOpen ? 'bg-primary text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'} flex items-center justify-center shrink-0 transition-colors">
+                        <div class="w-8 h-8 rounded-xl ${cor.icone} ${isOpen ? 'ring-2 ring-offset-1 ring-white/70' : ''} flex items-center justify-center shrink-0 transition-colors">
                             <span class="material-symbols-outlined text-[18px]">${icon}</span>
                         </div>
                         <div class="min-w-0">
-                            <span class="font-bold text-xs sm:text-sm text-slate-800 dark:text-white block truncate">${title}</span>
-                            ${badge ? `<span class="text-[9px] font-bold uppercase tracking-wider text-primary dark:text-sky-400">${badge}</span>` : ''}
+                            <span class="font-bold text-xs sm:text-sm ${cor.texto} block truncate">${title}</span>
+                            ${badge ? `<span class="text-[9px] font-bold uppercase tracking-wider ${cor.texto} opacity-80">${badge}</span>` : ''}
                         </div>
                     </div>
                     <span class="material-symbols-outlined text-[20px] text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180 text-primary' : ''}">expand_more</span>
                 </button>
-                <div class="p-4 pt-1 border-t border-slate-100 dark:border-slate-700/60 ${isOpen ? 'block' : 'hidden'}">
+                <div class="p-4 pt-3 border-t ${cor.borda} ${isOpen ? 'block' : 'hidden'}">
                     ${content}
                 </div>
             </div>

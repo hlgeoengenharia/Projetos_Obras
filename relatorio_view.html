@@ -16,22 +16,22 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260921l"></script>
-    <script src="src/mapTools.js?v=20260921l"></script>
-    <script src="src/reportMap.js?v=20260921l"></script>
-    <script src="src/reportTemporal.js?v=20260921l"></script>
-    <script src="src/reportExport.js?v=20260921l"></script>
-    <script src="src/reportBlocks.js?v=20260921l"></script>
-    <script src="src/reportEditor.js?v=20260921l"></script>
-    <script src="src/reportFreeText.js?v=20260921l"></script>
-    <script src="src/reportWord.js?v=20260921l"></script>
-    <script src="src/reportDocx.js?v=20260921l"></script>
-    <script src="src/mapSnapshot.js?v=20260921l"></script>
-    <script src="src/verificarEmissao.js?v=20260921l"></script>
+    <script src="src/pageSize.js?v=20260921m"></script>
+    <script src="src/mapTools.js?v=20260921m"></script>
+    <script src="src/reportMap.js?v=20260921m"></script>
+    <script src="src/reportTemporal.js?v=20260921m"></script>
+    <script src="src/reportExport.js?v=20260921m"></script>
+    <script src="src/reportBlocks.js?v=20260921m"></script>
+    <script src="src/reportEditor.js?v=20260921m"></script>
+    <script src="src/reportFreeText.js?v=20260921m"></script>
+    <script src="src/reportWord.js?v=20260921m"></script>
+    <script src="src/reportDocx.js?v=20260921m"></script>
+    <script src="src/mapSnapshot.js?v=20260921m"></script>
+    <script src="src/verificarEmissao.js?v=20260921m"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260921l"></script>
-    <script src="src/reportData.js?v=20260921l"></script>
+    <script src="src/fieldFormatter.js?v=20260921m"></script>
+    <script src="src/reportData.js?v=20260921m"></script>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -212,10 +212,10 @@
         html.modo-edicao header.no-print, html.modo-edicao #dica-viewer, html.modo-edicao #aviso-previa,
         html.modo-edicao #map-tools-panel, html.modo-edicao #map-tools-toggle { display: none !important; }
         html.modo-edicao main { padding: 0; }
-        .edit-bloco { position: relative; outline: 1px dashed transparent; outline-offset: 3px; border-radius: 6px; transition: outline-color .12s; }
-        .edit-bloco:hover { outline-color: rgba(56, 189, 248, .65); }
-        .edit-bloco.selecionado { outline: 2px solid #0ea5e9; }
-        .edit-bloco-barra { display: none; position: absolute; top: -15px; right: 6px; z-index: 60; align-items: center; gap: 2px; background: rgba(15, 23, 42, .92); color: #fff; border-radius: 8px; padding: 2px 6px; font: 600 9px/1 ui-monospace, monospace; text-transform: uppercase; box-shadow: 0 2px 8px rgba(0,0,0,.25); user-select: none; }
+        .edit-bloco { --cor-bloco: #0ea5e9; position: relative; outline: 1px dashed transparent; outline-offset: 3px; border-radius: 6px; transition: outline-color .12s; }
+        .edit-bloco:hover { outline-color: var(--cor-bloco); }
+        .edit-bloco.selecionado { outline: 2px solid var(--cor-bloco); }
+        .edit-bloco-barra { display: none; position: absolute; top: -15px; right: 6px; z-index: 60; align-items: center; gap: 2px; background: var(--cor-bloco); color: #fff; border-radius: 8px; padding: 3px 7px; font: 600 9px/1 ui-monospace, monospace; text-transform: uppercase; box-shadow: 0 2px 8px rgba(0,0,0,.25); user-select: none; }
         .edit-bloco:hover > .edit-bloco-barra, .edit-bloco.selecionado > .edit-bloco-barra { display: flex; }
         /* alça para regular a largura do cartão de campo arrastando com o mouse (como a altura do mapa) */
         .campo-resize { display: none; position: absolute; top: 4px; bottom: 4px; right: -5px; width: 9px; cursor: ew-resize; z-index: 20; border-radius: 5px; background: rgba(14,165,233,.35); touch-action: none; }
@@ -324,12 +324,14 @@
         }
 
         /** Moldura de edição de um bloco: barra (nome, subir, descer, remover) e contorno ao passar o mouse / selecionar. */
+        // mesma cor do card do painel lateral do construtor (uma cor por tipo de informação)
+        const COR_BLOCO = { cabecalho: '#6366f1', rodape: '#06b6d4', caixa_texto_livre: '#8b5cf6', texto_livre: '#8b5cf6', grade_campos: '#0ea5e9', tabela_sintetica_1n: '#f59e0b', tabela_sintetica: '#f59e0b', tabela_analitica: '#f59e0b', laudo_vistoria_fotos: '#f59e0b', galeria_fotos: '#f59e0b', mapa_estatico: '#10b981', grafico_existente: '#f43f5e', kpis: '#f43f5e' };
         function envolverEdicao(html, idx, bloco, opts) {
             if (!EDICAO || idx < 0 || !bloco) return html;
             const nome = NOMES_BLOCO[bloco.tipo] || bloco.tipo;
             const fixo = !!(opts && opts.fixo);
             const mover = fixo ? '' : `<button type="button" onclick="acaoEdicao('moveBlock', [${idx}, -1], event)" title="Mover para cima"><span class="material-symbols-outlined">arrow_upward</span></button><button type="button" onclick="acaoEdicao('moveBlock', [${idx}, 1], event)" title="Mover para baixo"><span class="material-symbols-outlined">arrow_downward</span></button>`;
-            return `<div class="edit-bloco${opts && opts.classe ? ' ' + opts.classe : ''}" data-bloco-index="${idx}" onclick="selecionarBlocoEdicao(this, event)"><div class="edit-bloco-barra"><span>${escapeHtml(nome)}</span>${mover}<button type="button" onclick="acaoEdicao('removeBlock', [${idx}], event)" title="Remover da folha"><span class="material-symbols-outlined">close</span></button></div>${html}</div>`;
+            return `<div class="edit-bloco${opts && opts.classe ? ' ' + opts.classe : ''}" style="--cor-bloco:${COR_BLOCO[bloco.tipo] || '#0ea5e9'}" data-bloco-index="${idx}" onclick="selecionarBlocoEdicao(this, event)"><div class="edit-bloco-barra"><span>${escapeHtml(nome)}</span>${mover}<button type="button" onclick="acaoEdicao('removeBlock', [${idx}], event)" title="Remover da folha"><span class="material-symbols-outlined">close</span></button></div>${html}</div>`;
         }
 
         /** Chave do que exige recriar o mapa (o Leaflet não é refeito a cada edição): bloco do mapa, camadas e ortofotos. */

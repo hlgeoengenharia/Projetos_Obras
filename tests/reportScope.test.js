@@ -361,6 +361,17 @@ ok('voltando ao individual, o modelo geral não aparece na lista', !has(containe
     if (antes.real) sheet['a4-real'] = antes.real; else delete sheet['a4-real'];
 }
 
+// ---------------------------------------------------------------- Cards do painel lateral: uma cor fixa por tipo de informação
+{
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+    const h = container.innerHTML;
+    const cor = (id, c) => h.includes('data-cor-card="' + id + '"') && h.includes('border-l-' + c + '-500');
+    ok('cards: folha=cinza, cabeçalho=índigo, texto livre=violeta, campos=azul, quadros 1:N=âmbar, mapa=verde, rodapé=ciano', cor('acc-layout', 'slate') && cor('acc-header', 'indigo') && cor('acc-free-text', 'violet') && cor('acc-grid', 'sky') && cor('acc-photos', 'amber') && cor('acc-map', 'emerald') && cor('acc-text-footer', 'cyan'));
+    ok('cards: o corpo de cada card tem o tom da sua cor (fundo) e o ícone tem a cor cheia', h.includes('bg-indigo-50/70') && h.includes('bg-indigo-600 text-white') && h.includes('bg-emerald-50/70') && h.includes('bg-amber-50/70'));
+    const cores = ['slate', 'indigo', 'violet', 'sky', 'amber', 'emerald', 'cyan'];
+    ok('cards: cada tipo de informação tem cor diferente', new Set(cores).size === cores.length);
+}
+
 console.log(`reportScope: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {
     console.error(`${failed} falha(s)`);

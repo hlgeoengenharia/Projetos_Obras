@@ -650,7 +650,7 @@ async function runScenario(cfg) {
         const doc = r.registry['a4-document-container']._html;
         eq('edição: sem erros depois de receber o modelo', r.errors, []);
         ok('edição: a folha é desenhada com o modelo recebido, sem aviso de prévia', /a4-page/.test(doc) && /FICHA CADASTRAL/.test(doc) && !r.registry['aviso-previa']);
-        ok('edição: cada bloco do corpo tem moldura (índice do modelo, nome, subir, descer, remover)', /class="edit-bloco" data-bloco-index="1"/.test(doc) && /class="edit-bloco" data-bloco-index="2"/.test(doc) && /Mini-mapa cartográfico/.test(doc) && /acaoEdicao\('moveBlock', \[2, -1\], event\)/.test(doc) && /acaoEdicao\('removeBlock', \[2\], event\)/.test(doc));
+        ok('edição: cada bloco do corpo tem moldura (índice do modelo, nome, subir, descer, remover)', /class="edit-bloco"[^>]*data-bloco-index="1"/.test(doc) && /class="edit-bloco"[^>]*data-bloco-index="2"/.test(doc) && /Mini-mapa cartográfico/.test(doc) && /acaoEdicao\('moveBlock', \[2, -1\], event\)/.test(doc) && /acaoEdicao\('removeBlock', \[2\], event\)/.test(doc));
         ok('edição: cabeçalho e rodapé têm moldura só com remover (sem mover)', /data-bloco-index="0"/.test(doc) && /data-bloco-index="3"/.test(doc) && !/acaoEdicao\('moveBlock', \[0,/.test(doc) && /acaoEdicao\('removeBlock', \[3\], event\)/.test(doc));
         ok('edição: as tabelas do mapa (sem índice no modelo) não ganham moldura', (doc.match(/class="edit-bloco/g) || []).length >= 4 && !/data-bloco-index="-1"/.test(doc));
         ok('edição: o mapa é criado uma vez', r.mapsCreated.filter(m => m.container === 'interactive-report-map').length === 1);
@@ -701,6 +701,12 @@ async function runScenario(cfg) {
             RB.saveFreeTextContent(3, '<b>novo</b>');
             RB.changeLineHeight(3, '2.0');
             ok('texto livre (edição): salvar o texto e mudar o espaçamento avisam o construtor', r.captured.mensagens.some(m => m.nome === 'saveFreeTextContent' && JSON.stringify(m.args) === '[3,"<b>novo</b>"]') && r.captured.mensagens.some(m => m.nome === 'changeLineHeight' && JSON.stringify(m.args) === '[3,"2.0"]'));
+        }
+        // cada bloco tem a cor do card correspondente no painel do construtor
+        {
+            const d0 = r.registry['a4-document-container']._html;
+            const corDe = (i) => (new RegExp('--cor-bloco:(#[0-9a-f]+)"[^>]*data-bloco-index="' + i + '"')).exec(d0);
+            eq('cores dos blocos: cabeçalho índigo, mapa verde, grade azul', [corDe(0) && corDe(0)[1], corDe(1) && corDe(1)[1], corDe(2) && corDe(2)[1]], ['#6366f1', '#10b981', '#0ea5e9']);
         }
         // regular a largura do cartão arrastando (percentual do contêiner, entre 15 e 100)
         {
