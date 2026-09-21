@@ -128,6 +128,9 @@
         #map-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 12px; cursor: ns-resize; z-index: 700; touch-action: none; display: flex; justify-content: center; align-items: flex-end; background: linear-gradient(to top, rgba(15,23,42,.30), transparent); opacity: 0; transition: opacity .15s; }
         #map-wrap:hover #map-resize, #map-resize.ativo { opacity: 1; }
         #map-resize::after { content: ''; width: 46px; height: 4px; margin-bottom: 3px; border-radius: 2px; background: #fff; box-shadow: 0 0 0 1px rgba(15,23,42,.55); }
+        /* divisória ajustável das colunas Distância e Confrontantes (só na tela) */
+        .col-resize { position: absolute; top: 0; right: -4px; width: 9px; height: 100%; cursor: col-resize; z-index: 5; touch-action: none; }
+        .col-resize:hover, .col-resize.ativo { background: rgba(5,150,105,.35); }
         #map-north, #map-legend, .leaflet-control-scale { pointer-events: auto; cursor: move; touch-action: none; }
         #map-legend [data-leg] span { cursor: text; }
         #map-legend { bottom: 22px; right: 8px; background: rgba(255,255,255,.92); border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 7px; font: 9px sans-serif; color: #0f172a; max-width: 45%; }
@@ -1645,19 +1648,25 @@
             const pr = mapController.pointRows();
             if (!pr.rows.length) return '';
             const esc = escapeHtml;
-            const heads = ['Ponto'].concat(pr.colOrientacao ? ['Orientação'] : [], pr.headers, pr.memorial ? ['Azimute', 'Distância (m)'] : [], pr.colConfrontantes ? ['Confrontantes'] : []);
+            // colunas: Distância e Confrontantes têm largura ajustável (arrastar a divisória do cabeçalho); Azimute nunca quebra
+            const larg = cfg.pontos.colunas || {};
+            const cols = [{ h: 'Ponto' }];
+            if (pr.colOrientacao) cols.push({ h: 'Orientação' });
+            pr.headers.forEach(h => cols.push({ h: h }));
+            if (pr.memorial) { cols.push({ h: 'Azimute', nowrap: true }); cols.push({ h: 'Distância (m)', key: 'dist' }); }
+            if (pr.colConfrontantes) cols.push({ h: 'Confrontantes', key: 'cf' });
             // tudo centralizado; dois cliques em qualquer texto da tabela (título, nome, coordenadas, azimute, distância) para editar
-            const ed = (key, txt, cls) => `<td class="px-2 py-1 border-r border-slate-200 text-center ${cls} pt-editavel" data-pt-edit="${esc(key)}" title="Duplo clique para editar (vazio restaura o calculado)">${esc(txt)}</td>`;
+            const ed = (key, txt, cls) => `<td class="px-2 py-1 border-r border-slate-200 text-center ${cls} pt-editavel" data-pt-edit="${esc(key)}" title="${/whitespace-pre-line/.test(cls) ? 'Duplo clique para editar; Shift+Enter quebra a linha (vazio restaura o calculado)' : 'Duplo clique para editar (vazio restaura o calculado)'}">${esc(txt)}</td>`;
             const rowsHtml = pr.rows.map((r, i) => {
                 const tds = [ed(r.vid + ':t', r.titulo, 'font-bold text-[10px] text-slate-800')];
-                if (pr.colOrientacao) tds.push(ed(r.vid + ':or', r.orientacao, 'font-mono text-[10px]'));
+                if (pr.colOrientacao) tds.push(ed(r.vid + ':or', r.orientacao, 'font-mono text-[10px] whitespace-pre-line'));
                 r.cells.forEach((c, k) => tds.push(ed(r.vid + ':c' + k, c, 'font-mono text-[10px]')));
-                if (pr.memorial) { tds.push(ed(r.vid + ':az', r.azimute, 'font-mono text-[10px]')); tds.push(ed(r.vid + ':dist', r.distancia, 'font-mono text-[10px]')); }
-                if (pr.colConfrontantes) tds.push(ed(r.vid + ':cf', r.confrontantes || '', 'text-[10px]'));
+                if (pr.memorial) { tds.push(ed(r.vid + ':az', r.azimute, 'font-mono text-[10px] whitespace-nowrap')); tds.push(ed(r.vid + ':dist', r.distancia, 'font-mono text-[10px] whitespace-pre-line')); }
+                if (pr.colConfrontantes) tds.push(ed(r.vid + ':cf', r.confrontantes || '', 'text-[10px] whitespace-pre-line'));
                 tds[tds.length - 1] = tds[tds.length - 1].replace('border-r ', ''); // a última coluna não leva divisória
                 return `<tr data-split-row class="${i % 2 ? 'bg-slate-50/70' : 'bg-white'}" style="page-break-inside: avoid;">${tds.join('')}</tr>`;
             });
-            const thead = `<thead><tr class="bg-slate-100 border-b border-slate-200 text-slate-700">${heads.map(h => `<th class="px-2 py-1 border-r last:border-r-0 border-slate-200 text-center text-[9.5px] font-bold uppercase tracking-wide leading-tight">${esc(h).replace(/\n/g, '<br>')}</th>`).join('')}</tr></thead>`;
+            const thead = `<thead><tr class="bg-slate-100 border-b border-slate-200 text-slate-700">${cols.map(c => `<th class="px-2 py-1 border-r last:border-r-0 border-slate-200 text-center text-[9.5px] font-bold uppercase tracking-wide leading-tight ${c.nowrap ? 'whitespace-nowrap' : ''}" style="position:relative;${c.key && larg[c.key] ? 'width:' + larg[c.key] + '%;' : ''}" ${c.key ? `data-col-key="${c.key}"` : ''}>${esc(c.h).replace(/\n/g, '<br>')}${c.key ? `<span class="col-resize no-print" data-col-resize="${c.key}" title="Arraste para ajustar a largura da coluna (dois cliques: automática)"></span>` : ''}</th>`).join('')}</tr></thead>`;
             const tituloPadrao = pr.memorial ? 'Memorial Descritivo — Tabela de Pontos' : 'Tabela de Pontos';
             const titulo = pr.tituloTabela || tituloPadrao;
             const nota = pr.memorial ? ` • azimutes a partir do Norte; distância somada pelos vértices não escolhidos quando houver${pr.fecha ? '; fecha no primeiro ponto' : ''}` : '';
@@ -1946,12 +1955,15 @@
             const chave = td.getAttribute('data-pt-edit') || td.getAttribute('data-conf-edit');
             const daConf = !td.getAttribute('data-pt-edit');
             const atual = td.textContent.trim();
-            const input = document.createElement('input');
-            input.type = 'text';
+            // orientação, distância e confrontantes aceitam quebra de linha (Shift+Enter); as demais células, uma linha só
+            const multi = !daConf && /:(dist|cf|or)$/.test(chave);
+            const input = document.createElement(multi ? 'textarea' : 'input');
+            if (!multi) input.type = 'text';
             input.value = atual;
-            input.maxLength = 80;
+            input.maxLength = multi ? 160 : 80;
+            if (multi) input.rows = Math.max(2, atual.split('\n').length);
             input.className = 'pt-edit-input';
-            input.style.cssText = 'width:100%;min-width:60px;font:inherit;text-align:center;border:1px solid #059669;border-radius:3px;padding:0 2px;outline:none';
+            input.style.cssText = 'width:100%;min-width:60px;font:inherit;text-align:center;border:1px solid #059669;border-radius:3px;padding:0 2px;outline:none;' + (multi ? 'resize:none;display:block;white-space:pre-wrap' : '');
             td.textContent = '';
             td.appendChild(input);
             input.focus();
@@ -1965,9 +1977,41 @@
                 else if (/:t$/.test(chave)) mapController.renamePoint(chave.slice(0, -2), input.value);
                 else mapController.setTabelaTexto(chave, input.value);
             };
-            input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') fim(true); else if (ev.key === 'Escape') fim(false); });
+            input.addEventListener('keydown', (ev) => {
+                if (ev.key === 'Enter' && !(multi && ev.shiftKey)) { if (ev.preventDefault) ev.preventDefault(); fim(true); } // Shift+Enter: nova linha
+                else if (ev.key === 'Escape') fim(false);
+            });
             input.addEventListener('blur', () => fim(true));
         }
+
+        // largura das colunas Distância e Confrontantes: arrastar a divisória do cabeçalho (dois cliques voltam ao automático)
+        document.addEventListener('pointerdown', (ev) => {
+            const h = ev.target && ev.target.closest ? ev.target.closest('[data-col-resize]') : null;
+            if (!h || !mapController) return;
+            ev.preventDefault();
+            const chave = h.getAttribute('data-col-resize');
+            const th = h.closest('th'), tabela = h.closest('table');
+            if (!th || !tabela) return;
+            const x0 = ev.clientX, w0 = th.getBoundingClientRect().width, tw = tabela.getBoundingClientRect().width || 1;
+            let pct = w0 / tw * 100;
+            h.classList.add('ativo');
+            const move = (e) => {
+                pct = Math.min(60, Math.max(8, (w0 + (e.clientX - x0)) / tw * 100));
+                document.querySelectorAll('th[data-col-key="' + chave + '"]').forEach(x => { x.style.width = pct + '%'; });
+            };
+            const up = () => {
+                document.removeEventListener('pointermove', move);
+                document.removeEventListener('pointerup', up);
+                h.classList.remove('ativo');
+                mapController.setColunaPontos(chave, Math.round(pct * 10) / 10);
+            };
+            document.addEventListener('pointermove', move);
+            document.addEventListener('pointerup', up);
+        });
+        document.addEventListener('dblclick', (ev) => {
+            const h = ev.target && ev.target.closest ? ev.target.closest('[data-col-resize]') : null;
+            if (h && mapController) { ev.preventDefault(); mapController.setColunaPontos(h.getAttribute('data-col-resize'), undefined); }
+        });
         document.addEventListener('dblclick', (ev) => {
             const td = ev.target && ev.target.closest ? ev.target.closest('[data-pt-edit], [data-conf-edit]') : null;
             if (td) editarTextoTabelaPontos(td);

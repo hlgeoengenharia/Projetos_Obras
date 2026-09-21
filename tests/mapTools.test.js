@@ -44,7 +44,7 @@ eq('giros: ids válidos, graus no intervalo (-180, 180] e uma casa decimal', MT.
 eq('giros voltam pelos ajustes do usuário', MT.mergeAjustes(MT.normalizeMapConfig({}), { rotacoes: { area: 30 } }).rotacoes, { area: 30 });
 // pontos: estilo do nome e textos editados da tabela
 eq('pontos: estilo padrão em negrito e sem textos editados', [MT.normalizeMapConfig({}).pontos.estilo, MT.normalizeMapConfig({}).pontos.textos], [{ n: true, i: false, s: false }, {}]);
-eq('pontos: textos editados só com chaves válidas (título e células dos pontos), limpos e limitados', MT.normalizePontos({ textos: { titulo: '  Memorial  ', 'v:1:az': 'N 10° E', 'v:2:c0': '123', 'v:2:c99': 'x', 'v:2:xx': 'y', lixo: 'z', 'v:3:dist': '', 'v:4:dist': 'a'.repeat(200) } }).textos, { titulo: 'Memorial', 'v:1:az': 'N 10° E', 'v:2:c0': '123', 'v:4:dist': 'a'.repeat(80) });
+eq('pontos: textos editados só com chaves válidas (título e células dos pontos), limpos e limitados', MT.normalizePontos({ textos: { titulo: '  Memorial  ', 'v:1:az': 'N 10° E', 'v:2:c0': '123', 'v:2:c99': 'x', 'v:2:xx': 'y', lixo: 'z', 'v:3:dist': '', 'v:4:az': 'a'.repeat(200) } }).textos, { titulo: 'Memorial', 'v:1:az': 'N 10° E', 'v:2:c0': '123', 'v:4:az': 'a'.repeat(80) });
 {
     const quad = { type: 'Polygon', coordinates: [[[-34.84, -7.02], [-34.839, -7.02], [-34.839, -7.019], [-34.84, -7.019], [-34.84, -7.02]]] };
     const base = MT.pointRows(quad, MT.normalizePontos({ ordem: ['v:0', 'v:1', 'v:2'], memorial: true }));
@@ -139,6 +139,10 @@ eq('anotações: estilo (padrão negrito) e giro guardados; giro zero não é gu
     eq('payload: campos da camada; valores só das feições a até 80 m da feição', [col[0].campos, col[0].features[0].properties.f, col[0].features[1].properties.f], [[{ k: 'a', l: 'A' }], { a: '1' }, undefined]);
     eq('payload sem permissão (sem fieldsFn): nada de campos nem valores', [MT.collectNearbyLayers(themes, anel, {})[0].campos, MT.collectNearbyLayers(themes, anel, {})[0].features[0].properties.f], [[], undefined]);
 }
+// células com quebra de linha e colunas ajustáveis
+eq('orientação, distância e confrontantes guardam a quebra de linha (até 160 caracteres); as outras células, uma linha só', MT.normalizePontos({ textos: { 'v:0:cf': ' Lote 03\r\n  Quadra E \n\n\n\nRua A ', 'v:0:dist': 'a\nb', 'v:0:or': 'x\ny', 'v:0:az': 'a\nb', 'v:1:dist': 'a'.repeat(300) } }).textos, { 'v:0:cf': 'Lote 03\nQuadra E\n\nRua A', 'v:0:dist': 'a\nb', 'v:0:or': 'x\ny', 'v:0:az': 'a b', 'v:1:dist': 'a'.repeat(160) });
+eq('larguras das colunas Distância e Confrontantes: em % da tabela, entre 8 e 60; só essas duas', MT.normalizePontos({ colunas: { dist: 22.26, cf: 99, az: 30, x: 5 } }).colunas, { dist: 22.3, cf: 60 });
+eq('sem larguras: automático', [MT.normalizePontos({}).colunas, MT.normalizePontos({ colunas: { dist: 'x', cf: 0 } }).colunas], [{}, {}]);
 eq('base satélite e nenhum são aceitas', [MT.normalizeMapConfig({ mapa: { baseMap: 'satelite' } }).baseMap, MT.normalizeMapConfig({ mapa: { baseMap: 'nenhum' } }).baseMap], ['satelite', 'nenhum']);
 
 const aj = MT.mergeAjustes(c0, { norte: false, baseMap: 'satelite', camadasLigadas: [7, 'b'], destaque: { esmaecerEntorno: true }, lixo: 1 });

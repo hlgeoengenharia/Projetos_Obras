@@ -32,7 +32,7 @@
         rotacoes: {},            // { idDoTexto: graus } (texto girado pelo usuário; sem ele vale o alinhamento automático)
         edicoes: {},             // { idDaMedida: 'texto que o usuário digitou' }
         posicoes: {},            // { idDaMedida: { lat, lng } } (rótulo arrastado)
-        pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false, ordem: [], titulos: {}, estilo: { n: true, i: false, s: false }, textos: {}, colConf: { ativo: false, camadas: [], tolM: 3, distLogM: 30 } }, // pontos nos vértices; textos = células e título da tabela editados pelo usuário; colConf = coluna "Confrontantes" da tabela de pontos (camadas e campos escolhidos)
+        pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false, ordem: [], titulos: {}, estilo: { n: true, i: false, s: false }, textos: {}, colConf: { ativo: false, camadas: [], tolM: 3, distLogM: 30 }, colunas: {} }, // pontos nos vértices; textos = células e título da tabela editados pelo usuário; colConf = coluna "Confrontantes" da tabela de pontos (camadas e campos escolhidos); colunas = largura (% da tabela) das colunas Distância (dist) e Confrontantes (cf) ajustada pelo usuário
         temporal: { ativo: false, ordem: 'asc', colunas: 2, alturaMm: 70, sincronizar: true, contorno: true, excluidas: [] }, // série de ortofotos por data
         rotulos: { ativo: false, campo: 'rotulo', estilo: { n: true, i: false, s: false }, itens: {} }, // texto sobre as feições vizinhas ('rotulo' = Quadra/Lote; 'titulo' = nome principal); itens = posição/giro ajustados pelo usuário, por 'camada:índice'
         confrontantes: { ativo: false, camada: '', tolM: 3, nomes: false, ordem: [], textos: {} },  // quem faz divisa com cada lado; ordem das linhas e textos (LADO / CONFRONTANTE) editados
@@ -262,7 +262,10 @@
         if (p.textos && typeof p.textos === 'object') {
             Object.keys(p.textos).forEach(k => {
                 if (!/^(titulo|v:[0-9]+:(c[0-9]|az|dist|or|cf))$/.test(k) || typeof p.textos[k] !== 'string') return;
-                const txt = p.textos[k].replace(/[\r\n]+/g, ' ').trim().slice(0, 80);
+                // orientação, distância e confrontantes aceitam quebra de linha dentro da célula
+                const txt = /:(dist|cf|or)$/.test(k)
+                    ? p.textos[k].replace(/\r/g, '').split('\n').map(s => s.trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 160)
+                    : p.textos[k].replace(/[\r\n]+/g, ' ').trim().slice(0, 80);
                 if (txt) textos[k] = txt;
             });
         }
@@ -274,7 +277,8 @@
             ordem, titulos,
             estilo: normalizeEstilo(p.estilo, d.estilo),
             textos,
-            colConf: normalizeColConf(p.colConf)
+            colConf: normalizeColConf(p.colConf),
+            colunas: normalizeColunas(p.colunas)
         };
     }
 
@@ -283,6 +287,17 @@
         x = x || {};
         def = def || { n: true, i: false, s: false };
         return { n: x.n === undefined ? !!def.n : !!x.n, i: x.i === undefined ? !!def.i : !!x.i, s: x.s === undefined ? !!def.s : !!x.s };
+    }
+
+    /** Largura das colunas ajustáveis da tabela de pontos, em % da tabela (8 a 60). */
+    function normalizeColunas(x) {
+        const out = {};
+        if (!x || typeof x !== 'object') return out;
+        ['dist', 'cf'].forEach(k => {
+            const v = Number(x[k]);
+            if (x[k] !== undefined && x[k] !== null && isFinite(v) && v > 0) out[k] = Math.round(Math.min(60, Math.max(8, v)) * 10) / 10;
+        });
+        return out;
     }
 
     /** Coluna "Confrontantes" da tabela de pontos: camadas escolhidas, campos de cada uma e se a camada é de logradouros (ruas à frente). */

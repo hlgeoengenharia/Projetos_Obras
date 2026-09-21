@@ -915,6 +915,13 @@
             /** Volta os rótulos das feições vizinhas para o centro de cada feição, sem giro. */
             resetRotulos() { cfg.rotulos = MT.normalizeRotulos(Object.assign({}, cfg.rotulos, { itens: {} })); redrawNeighborLabels(); notify(); },
             clearPoints() { setPontos({ ordem: [], titulos: {}, textos: {} }); },
+            /** Largura (% da tabela) de uma coluna ajustável da tabela de pontos: 'dist' ou 'cf'. Sem valor volta ao automático. */
+            setColunaPontos(chave, pct) {
+                if (chave !== 'dist' && chave !== 'cf') return;
+                const colunas = Object.assign({}, cfg.pontos.colunas);
+                if (pct === undefined || pct === null || pct === '') delete colunas[chave]; else colunas[chave] = pct;
+                setPontos({ colunas: colunas });
+            },
             /** Coluna "Confrontantes" da tabela de pontos: { ativo, camadas: [{ id, campos, logradouro }], tolM, distLogM }. */
             setColConf(cc) { setPontos({ colConf: cc }); },
             /** Texto da tabela de pontos escrito pelo usuário: 'titulo' ou 'v:N:c0|az|dist|or|cf'. Vazio volta ao calculado. */

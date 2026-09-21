@@ -320,6 +320,37 @@ async function runScenario(cfg) {
         eq('ajuste salvo: o mapa abre com a altura do usuário', [vm.runInContext('mapController.getConfig().alturaMm', salvo.sandbox), /height: 529px/.test(salvo.registry['a4-document-container']._html)], [140, true]);
     }
 
+    // ---- edição com quebra de linha e ajuste de largura das colunas da tabela de pontos
+    {
+        const r = await runScenario({ width: 1900, opener: true, payload: Object.assign({}, cenarios[3].payload, { template: tplWith({ pontos: { ativo: true, memorial: true, ordem: ['v:0', 'v:1', 'v:2', 'v:3'], colConf: { ativo: true } } }) }) });
+        const vm = require('vm');
+        const cfg = () => vm.runInContext('mapController.getConfig().pontos', r.sandbox);
+        const criados = [];
+        r.sandbox.document.createElement = (tag) => { const e = { tag: tag, style: {}, listeners: {}, value: '', addEventListener(n, fn) { this.listeners[n] = fn; }, focus() {}, select() {} }; criados.push(e); return e; };
+        const celula = (chave, texto) => ({ textContent: texto, filhos: [], querySelector: () => null, getAttribute: (n) => (n === 'data-pt-edit' ? chave : null), appendChild(c) { this.filhos.push(c); } });
+        // colunas com quebra de linha: campo de várias linhas; Enter grava; Shift+Enter não grava
+        const td = celula('v:0:cf', 'Lote 03\nQuadra E');
+        r.sandbox.editarTextoTabelaPontos(td);
+        const ta = td.filhos[0];
+        ok('confrontantes: a edição abre um campo de várias linhas (textarea) com o texto atual', ta.tag === 'textarea' && ta.value === 'Lote 03\nQuadra E' && ta.rows === 2 && ta.maxLength === 160);
+        ta.value = 'Lote 03\nQuadra E\nRua A';
+        let prevenido = 0;
+        ta.listeners.keydown({ key: 'Enter', shiftKey: true, preventDefault() { prevenido++; } });
+        eq('Shift+Enter quebra a linha e não grava', [cfg().textos['v:0:cf'], prevenido], [undefined, 0]);
+        ta.listeners.keydown({ key: 'Enter', shiftKey: false, preventDefault() { prevenido++; } });
+        eq('Enter grava o texto com as quebras de linha', [cfg().textos['v:0:cf'], prevenido], ['Lote 03\nQuadra E\nRua A', 1]);
+        // coluna de uma linha só continua com campo de uma linha
+        const td2 = celula('v:0:az', '2° 59\' 25"');
+        r.sandbox.editarTextoTabelaPontos(td2);
+        ok('azimute: campo de uma linha só', td2.filhos[0].tag === 'input' && td2.filhos[0].maxLength === 80);
+        // largura das colunas
+        vm.runInContext("mapController.setColunaPontos('dist', 24)", r.sandbox);
+        eq('largura da coluna Distância guardada pelo controlador (e a tabela é refeita)', cfg().colunas, { dist: 24 });
+        const css = html.slice(html.indexOf('<style'), html.indexOf('</style>'));
+        ok('divisória das colunas: cursor de redimensionar e realce ao passar/arrastar', /\.col-resize \{[^}]*cursor: col-resize/.test(css) && /\.col-resize:hover, \.col-resize\.ativo/.test(css));
+        eq('sem erro de execução', r.errors, []);
+    }
+
     // ---- ícone de girar e cards (CSS): área de clique que encosta no texto, visível ao passar o mouse e durante o giro
     {
         const css = html.slice(html.indexOf('<style'), html.indexOf('</style>'));

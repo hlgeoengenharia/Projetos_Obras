@@ -760,6 +760,21 @@ t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefin
     eq('o que se salva leva a altura', b.ctl.snapshot().alturaMm, 120);
 }
 
+// ---------------------------------------------------------------- colunas ajustáveis e quebra de linha (controlador)
+{
+    const b = build({ mapa: { pontos: { ativo: true, memorial: true, ordem: ['v:0', 'v:1', 'v:2'] } } });
+    b.ctl.setColunaPontos('dist', 25.44);
+    b.ctl.setColunaPontos('cf', 30);
+    b.ctl.setColunaPontos('az', 30);
+    eq('largura das colunas guardada (só dist e cf)', b.ctl.getConfig().pontos.colunas, { dist: 25.4, cf: 30 });
+    b.ctl.setColunaPontos('dist', undefined);
+    eq('sem valor volta ao automático', b.ctl.getConfig().pontos.colunas, { cf: 30 });
+    b.ctl.setTabelaTexto('v:0:cf', 'Lote 03\nQuadra E');
+    b.ctl.setColConf({ ativo: true, camadas: [], tolM: 3, distLogM: 30 });
+    b.ctl.setTabelaTexto('v:1:dist', '10 m\n+ 20 m');
+    eq('quebra de linha na célula é guardada e volta na linha da tabela', [b.ctl.pointRows().rows[1].distancia, b.ctl.getConfig().pontos.colunas], ['10 m\n+ 20 m', { cf: 30 }]);
+}
+
 // ---------------------------------------------------------------- quadriculado
 t = build({});
 eq('quadriculado desligado: nada desenhado', t.layersOf('polyline').length, 0);

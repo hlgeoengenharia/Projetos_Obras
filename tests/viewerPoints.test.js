@@ -98,6 +98,18 @@ ok('memorial: azimute do primeiro lado é para Leste (~90°) e a distância é a
     ok('orientação: "P1 até P2" com os nomes da coluna Ponto (nome renomeado vale; volta ao primeiro no fim)', /data-pt-edit="v:0:or"[^>]*>P1 até P2</.test(linhas) && /data-pt-edit="v:2:or"[^>]*>P2 até Marco 3</.test(linhas) && /data-pt-edit="v:3:or"[^>]*>Marco 3 até P4</.test(linhas) && /data-pt-edit="v:4:or"[^>]*>P4 até P1</.test(linhas));
     ok('distância com vértice não escolhido no meio: lados somados e total', /data-pt-edit="v:0:dist"[^>]*>[\d.,]+ m \+ [\d.,]+ m, totalizando [\d.,]+ m</.test(linhas) && /data-pt-edit="v:2:dist"[^>]*>[\d.,]+</.test(linhas) && !/data-pt-edit="v:2:dist"[^>]*>[^<]*totalizando/.test(linhas));
     ok('confrontantes: célula editável, texto do usuário escapado; sem camadas fica em branco', /data-pt-edit="v:3:cf"[^>]*>Rua &lt;X&gt;</.test(linhas) && /data-pt-edit="v:0:cf"[^>]*><\/td>/.test(linhas));
+    // azimute sem quebra; distância e confrontantes ajustáveis (largura) e com quebra de linha dentro da célula
+    ok('azimute: célula e cabeçalho sem quebra de linha', /data-pt-edit="v:0:az"[^>]*class="[^"]*whitespace-nowrap|class="[^"]*whitespace-nowrap[^"]*"[^>]*data-pt-edit="v:0:az"/.test(linhas) && /whitespace-nowrap[^>]*>Azimute</.test(c3));
+    ok('distância, confrontantes e orientação: célula com quebra de linha (pre-line)', ['v:0:dist', 'v:0:cf', 'v:0:or'].every(k => new RegExp('class="[^"]*whitespace-pre-line[^"]*"[^>]*data-pt-edit="' + k + '"').test(linhas)));
+    ok('cabeçalhos de Distância e Confrontantes com divisória para arrastar (não sai no Word)', /data-col-key="dist"[^>]*>Distância \(m\)<span class="col-resize no-print" data-col-resize="dist"/.test(c3) && /data-col-key="cf"[^>]*>Confrontantes<span class="col-resize no-print" data-col-resize="cf"/.test(c3) && !/data-col-resize="(?!dist|cf)/.test(c3));
+    ok('sem largura escolhida: colunas automáticas', !/width:[0-9.]+%/.test(c3));
+    api.setController(controllerFor({ ativo: true, sistema: 'utm', memorial: true, ordem: ['v:0', 'v:2', 'v:3', 'v:4'], colConf: { ativo: true }, colunas: { dist: 22.5, cf: 31 } }, anel));
+    const ol = api.renderPointsTable();
+    const cl = ol.split.chunkHtml(ol.split.rowsHtml, true);
+    ok('larguras escolhidas aparecem no cabeçalho (em %), também nas partes seguintes da tabela', /data-col-key="dist"/.test(cl) && /width:22\.5%;[^"]*"[^>]*data-col-key="dist"/.test(cl) && /width:31%;[^"]*"[^>]*data-col-key="cf"/.test(cl) && /width:22\.5%/.test(ol.split.chunkHtml([ol.split.rowsHtml[1]], false)));
+    const quebra = api.renderPointsTable;
+    api.setController(controllerFor({ ativo: true, sistema: 'utm', memorial: true, ordem: ['v:0', 'v:2'], colConf: { ativo: true }, textos: { 'v:0:cf': 'Lote 03\nQuadra E' } }, anel));
+    ok('quebra de linha digitada segue para a célula', /data-pt-edit="v:0:cf"[^>]*>Lote 03\nQuadra E</.test(api.renderPointsTable().split.rowsHtml.join('')));
     api.setController(controllerFor({ ativo: true, sistema: 'utm', memorial: true, ordem: ['v:0', 'v:2', 'v:3', 'v:4'] }, anel));
     const o4 = api.renderPointsTable();
     ok('coluna Confrontantes só aparece quando ligada', !/Confrontantes/.test(o4.split.chunkHtml(o4.split.rowsHtml, true)) && !/data-pt-edit="v:0:cf"/.test(o4.split.rowsHtml.join('')));
