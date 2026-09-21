@@ -345,7 +345,7 @@ ok('sem geometria: nenhuma medida e aviso no resumo', marcadores(t).length === 0
     eventos.pointermove({ clientX: 125, clientY: 95, shiftKey: true }); // ~ -34° → passo de 15° = -30°
     eq('Shift trava o giro em passos de 15°', mk.span.style.transform, 'translate(-50%,-50%) rotate(-30deg)');
     eventos.pointerup({});
-    eq('ao soltar, o giro é guardado e a configuração notificada', [w.ctl.getConfig().rotacoes['lado:0'], w.changes.length > 1, Object.keys(eventos)], [-30, true, []]);
+    eq('ao soltar, o giro é guardado e a configuração notificada', [w.ctl.getConfig().rotacoes['lado:0'], w.changes.length > 1, Object.keys(eventos).filter(n => n !== 'keydown')], [-30, true, []]);
     ok('o texto é redesenhado com o giro guardado', /rotate\(-30deg\)/.test(marcadores(w)[0].args.o.icon.html));
     const mk2 = marcadores(w)[0];
     mk2.span.listeners.dblclick(sem);
@@ -575,6 +575,61 @@ t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefin
     eq('desligada: sem linhas', desl.ctl.confrontanteRows(), []);
 }
 
+// ---------------------------------------------------------------- distância até a camada de referência (dois cliques)
+{
+    const ref = { id: 'R', name: 'LPM', color: '#00f', kind: 'line', truncated: false, features: [{ type: 'Feature', properties: { r: 'Linha' }, geometry: { type: 'LineString', coordinates: [[-34.82, -7.03], [-34.82, -7.0]] } }] };
+    const eventos = {};
+    const docE = makeDoc(ids);
+    docE.addEventListener = (n, fn) => { eventos[n] = fn; };
+    const mk = (extraCfg) => build({ mapa: Object.assign({ referencia: { ativo: true, camada: 'R' } }, extraCfg || {}) }, undefined, { camadas: [ref], doc: docE });
+    const b = mk();
+    const click = (lat, lng) => b.map.handlers.click({ latlng: { lat: lat, lng: lng } });
+    eq('parado: measureState 0; clique no mapa não faz nada', [b.ctl.measureState(), (click(-7.015, -34.8302), b.ctl.getConfig().referencia.medidas.length)], [0, 0]);
+    ok('começar a medir: estado 1 e cursor de mira', b.ctl.startDistMeasure() === true && b.ctl.measureState() === 1 && b.map.cont.style.cursor === 'crosshair');
+    click(-7.015, -34.8302);
+    eq('primeiro clique (feição): estado 2 e ponto provisório desenhado', [b.ctl.measureState(), b.layersOf('circle').filter(c => c.args.o.fillColor === '#fca5a5').length], [2, 1]);
+    click(-7.012, -34.8195);
+    const m = b.ctl.getConfig().referencia.medidas;
+    eq('segundo clique (camada): distância guardada entre os dois pontos colados nos traçados', [m.length, m[0].id, Math.abs(m[0].a[0] + 7.015) < 1e-6, m[0].a[1], Math.abs(m[0].b[0] + 7.012) < 1e-6, m[0].b[1]], [1, 'dist:1', true, -34.83, true, -34.82]);
+    eq('depois de medir: parado e cursor normal', [b.ctl.measureState(), b.map.cont.style.cursor], [0, '']);
+    const esperado = MT.fmtNumber(MT.distanceM([m[0].a[1], m[0].a[0]], [m[0].b[1], m[0].b[0]]), 2) + ' m';
+    const linha = b.layersOf('polyline').filter(l => l.args.o.dashArray === '6 4');
+    ok('linha tracejada entre os dois pontos e uma bolinha em cada ponta', linha.length === 1 && linha[0].args.p[0][0] === m[0].a[0] && b.layersOf('circle').filter(c => c.args.o.fillColor === '#ffffff' && c.args.o.radius === 3.5).length === 2);
+    const rot = () => b.layersOf('marker').find(x => /report-measure-label/.test(x.args.o.icon.html) && !/Á/.test(x.args.o.icon.html) && x.args.o.icon.html.indexOf(esperado) >= 0);
+    ok('texto da distância no meio da linha, alinhado à linha, com o estilo do grupo', !!rot() && /rotate\(-?[\d.]+deg\)/.test(rot().args.o.icon.html) && /font-weight:700/.test(rot().args.o.icon.html));
+    eq('linhas da distância (painel e relatório)', b.ctl.distanceRows().map(r => [r.id, r.texto, r.editado]), [['dist:1', esperado, false]]);
+    // editar o texto
+    rot().handlers.dblclick({});
+    const campo = rot().span.children[0];
+    campo.value = '1,15 km';
+    campo.listeners.keydown({ key: 'Enter' });
+    eq('duplo clique edita o texto da distância (vazio restaura)', [b.ctl.distanceRows()[0].texto, b.ctl.distanceRows()[0].editado, b.ctl.getConfig().edicoes['dist:1']], ['1,15 km', true, '1,15 km']);
+    b.ctl.resetMeasures();
+    eq('restaurar medidas da feição não apaga a distância tirada pelo usuário', [b.ctl.getConfig().referencia.medidas.length, b.ctl.distanceRows()[0].texto], [1, '1,15 km']);
+    // segunda distância e remoção
+    b.ctl.startDistMeasure(); click(-7.0125, -34.835); click(-7.02, -34.8195);
+    eq('segunda distância recebe outro número', b.ctl.getConfig().referencia.medidas.map(x => x.id), ['dist:1', 'dist:2']);
+    b.ctl.removeDistance('dist:1');
+    eq('remover apaga a medida e o texto editado dela', [b.ctl.getConfig().referencia.medidas.map(x => x.id), b.ctl.getConfig().edicoes['dist:1']], [['dist:2'], undefined]);
+    // desligar / trocar camada / cancelar
+    b.ctl.startDistMeasure();
+    eventos.keydown({ key: 'Escape' });
+    eq('Esc cancela a medição em andamento', [b.ctl.measureState(), b.map.cont.style.cursor], [0, '']);
+    b.ctl.setConfig({ referencia: { ativo: false } });
+    eq('referência desligada: distâncias somem do mapa e não são medidas', [b.layersOf('polyline').filter(l => l.args.o.dashArray === '6 4').length, b.ctl.distanceRows().length, b.ctl.startDistMeasure()], [0, 0, false]);
+    b.ctl.setConfig({ referencia: { ativo: true } });
+    eq('religar traz as medidas de volta', b.ctl.distanceRows().length, 1);
+    b.ctl.setConfig({ referencia: { camada: '1' } });
+    eq('trocar a camada de referência descarta as distâncias (eram até a camada anterior)', b.ctl.getConfig().referencia.medidas, []);
+    const sem = mk({ referencia: { ativo: true, camada: '' } });
+    eq('sem camada escolhida não dá para medir', sem.ctl.startDistMeasure(), false);
+    // durante a medição, clicar num vértice livre conta como clique no mapa
+    const v = mk({ pontos: { ativo: true } });
+    v.ctl.startDistMeasure();
+    v.layersOf('circle').filter(c => c.args.o.className === 'report-vertex-handle')[0].handlers.click({ latlng: { lat: -7.02, lng: -34.84 } });
+    eq('clique num vértice durante a medição vale como o primeiro ponto (e não marca o ponto)', [v.ctl.measureState(), v.ctl.getConfig().pontos.ordem], [2, []]);
+}
+
 // ---------------------------------------------------------------- quadriculado
 t = build({});
 eq('quadriculado desligado: nada desenhado', t.layersOf('polyline').length, 0);
@@ -595,7 +650,7 @@ t = build({});
 ok('situação desligada: caixa escondida e nenhum mapa extra', t.doc.els['map-locator'].style.display === 'none' && t.L.__maps.length === 1);
 t.ctl.setConfig({ situacao: { ativo: true } });
 const loc = t.L.__maps[1];
-ok('situação ligada: mapa pequeno criado na caixa, sem interação e sem controles', t.doc.els['map-locator'].style.display === '' && !!loc && loc.options.zoomControl === false && loc.options.dragging === false && loc.options.attributionControl === false);
+ok('situação ligada: mapa pequeno criado na caixa, sem interação e sem controles', t.doc.els['map-locator'].style.display === 'block' && !!loc && loc.options.zoomControl === false && loc.options.dragging === false && loc.options.attributionControl === false);
 ok('situação: fundo de ruas, ponto da feição e retângulo do que o mapa principal mostra', Array.from(loc.layers).some(l => l.kind === 'tile') && Array.from(loc.layers).some(l => l.kind === 'circle') && Array.from(loc.layers).some(l => l.kind === 'rectangle'));
 eq('situação: 6 níveis de zoom abaixo do mapa principal, centrada na feição', [loc.zoom, loc.center.lat, loc.center.lng], [12, -7.015, -34.835]);
 t.map.zoom = 19; t.map.handlers.zoomend();

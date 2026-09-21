@@ -62,6 +62,26 @@ eq('confrontantes: ordem só com ids de lado válidos e sem repetição; textos 
     const ap = MT.applyConfrontantes(rows, { textos: { 'lado:0:lado': 'Frente', 'lado:1:conf': 'Rua X' } });
     eq('textos editados aparecem; o resto usa o calculado', [ap[0].lado, ap[1].lado, ap[0].confTexto, ap[1].confTexto, ap[0].editados, ap[2].editados], ['Frente', 'L2', '', 'Rua X', ['lado'], []]);
 }
+// distância medida pelo usuário: ponto mais próximo sobre o traçado e medidas guardadas
+{
+    const quad = { type: 'Polygon', coordinates: [[[-34.84, -7.02], [-34.83, -7.02], [-34.83, -7.01], [-34.84, -7.01], [-34.84, -7.02]]] };
+    const perto = MT.nearestOnGeometry(quad, -7.015, -34.8302);
+    ok('clique perto do lado leste: gruda nele (mesma latitude, na longitude do lado)', Math.abs(perto.lat + 7.015) < 1e-6 && Math.abs(perto.lng + 34.83) < 1e-9 && perto.d < 25);
+    const dentro = MT.nearestOnGeometry(quad, -7.0125, -34.835);
+    ok('clique dentro do polígono: gruda no contorno mais próximo (lado norte)', Math.abs(dentro.lat + 7.01) < 1e-9 && Math.abs(dentro.lng + 34.835) < 1e-6);
+    const canto = MT.nearestOnGeometry(quad, -7.03, -34.85);
+    ok('clique longe, além do canto: gruda no vértice mais próximo', canto.lat === -7.02 && canto.lng === -34.84);
+    const lin = MT.nearestOnGeometry({ type: 'LineString', coordinates: [[-34.82, -7.03], [-34.82, -7.0]] }, -7.012, -34.8195);
+    ok('linha: ponto mais próximo sobre o trecho', Math.abs(lin.lng + 34.82) < 1e-9 && Math.abs(lin.lat + 7.012) < 1e-6);
+    const pt = MT.nearestOnGeometry({ type: 'Point', coordinates: [-34.8, -7.0] }, -7.001, -34.801);
+    ok('ponto: o próprio ponto', pt.lat === -7 && pt.lng === -34.8);
+    eq('sem geometria: nada', [MT.nearestOnGeometry(null, 0, 0), MT.nearestOnCamada(null, 0, 0), MT.nearestOnCamada({ features: [] }, 0, 0)], [null, null, null]);
+    const cam = { features: [{ geometry: { type: 'Point', coordinates: [-34.5, -7.5] } }, { geometry: { type: 'LineString', coordinates: [[-34.82, -7.03], [-34.82, -7.0]] } }] };
+    const c = MT.nearestOnCamada(cam, -7.012, -34.8195);
+    ok('camada: o ponto mais próximo entre todas as feições', Math.abs(c.lng + 34.82) < 1e-9);
+    eq('medidas guardadas: só ids dist:N, pontos válidos, sem repetição, até 20', MT.normalizeReferencia({ ativo: true, camada: 'R', medidas: [{ id: 'dist:1', a: [-7, -34], b: [-7.1, -34.1] }, { id: 'dist:1', a: [1, 1], b: [2, 2] }, { id: 'x', a: [1, 1], b: [2, 2] }, { id: 'dist:2', a: [999, 1], b: [2, 2] }, { id: 'dist:3', a: [1], b: [2, 2] }] }).medidas, [{ id: 'dist:1', a: [-7, -34], b: [-7.1, -34.1] }]);
+    ok('padrão: sem medidas', MT.normalizeMapConfig({}).referencia.medidas.length === 0);
+}
 eq('base satélite e nenhum são aceitas', [MT.normalizeMapConfig({ mapa: { baseMap: 'satelite' } }).baseMap, MT.normalizeMapConfig({ mapa: { baseMap: 'nenhum' } }).baseMap], ['satelite', 'nenhum']);
 
 const aj = MT.mergeAjustes(c0, { norte: false, baseMap: 'satelite', camadasLigadas: [7, 'b'], destaque: { esmaecerEntorno: true }, lixo: 1 });

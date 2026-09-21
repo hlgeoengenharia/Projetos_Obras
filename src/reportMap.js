@@ -51,7 +51,7 @@
         const map = L.map(opts.container, { zoomControl: true, attributionControl: true, zoomSnap: 0.25, preferCanvas: true });
         if (map.attributionControl && map.attributionControl.setPrefix) map.attributionControl.setPrefix(false);
 
-        const state = { base: null, orto: null, feature: null, mask: null, neighbors: {}, scaleControl: null, markers: {}, pts: {}, nlabels: {}, grid: [], notes: {}, locator: null, exporting: false };
+        const state = { measure: null, dlines: [], base: null, orto: null, feature: null, mask: null, neighbors: {}, scaleControl: null, markers: {}, pts: {}, nlabels: {}, grid: [], notes: {}, locator: null, exporting: false };
         const vertData = MT.vertices(opts.geometry || null); // vértices onde o usuário pode marcar pontos
         const measureData = MT.computeMeasures(opts.geometry || null); // { itens, ladosOmitidos }
         const tileLayers = {};
@@ -202,6 +202,17 @@
                 (it.grupo === 'lados' && m.lados) || (it.grupo === 'total' && m.total) || (it.grupo === 'perimetro' && m.perimetro));
         }
 
+        /** Distâncias tiradas pelo usuário (feição → camada de referência), no formato dos itens de medida. */
+        function distItems() {
+            if (!cfg.referencia.ativo) return [];
+            return MT.applyEdits(cfg.referencia.medidas.map(m => {
+                const A = [m.a[1], m.a[0]], B = [m.b[1], m.b[0]];
+                const d = MT.distanceM(A, B);
+                const texto = MT.fmtNumber(d, 2) + ' m';
+                return { id: m.id, grupo: 'total', tipo: 'distancia', valor: d, texto: texto, resumo: 'Distância: ' + texto, pos: [(m.a[0] + m.b[0]) / 2, (m.a[1] + m.b[1]) / 2], dy: 0, ang: MT.edgeAngleCss(A, B), off: MT.edgeOffsetAbove(A, B, 9) };
+            }), cfg.edicoes);
+        }
+
         function clearMeasureMarkers() {
             Object.keys(state.markers).forEach(id => { map.removeLayer(state.markers[id]); delete state.markers[id]; });
         }
@@ -306,7 +317,7 @@
 
         function applyMeasures() {
             clearMeasureMarkers();
-            visibleMeasures().forEach(it => {
+            visibleMeasures().concat(distItems()).forEach(it => {
                 const p = cfg.posicoes[it.id];
                 const pos = p ? [p.lat, p.lng] : it.pos;
                 const off = p || !it.off ? [0, 0] : it.off; // depois de arrastado, o texto fica exatamente onde foi solto
@@ -342,6 +353,51 @@
             }
         }
 
+        // ------------------------------------------------------------ distância até a camada de referência (dois cliques no mapa)
+        function clearDistLines() { state.dlines.forEach(l => map.removeLayer(l)); state.dlines = []; }
+        function applyDistLines() {
+            clearDistLines();
+            if (!cfg.referencia.ativo) return;
+            cfg.referencia.medidas.forEach(m => {
+                const cor = '#b91c1c';
+                const ln = L.polyline([m.a, m.b], { color: cor, weight: 2, dashArray: '6 4', interactive: false });
+                ln.addTo(map);
+                state.dlines.push(ln);
+                [m.a, m.b].forEach(p => {
+                    const c = L.circleMarker(p, { radius: 3.5, color: cor, weight: 1.5, fillColor: '#ffffff', fillOpacity: 1, interactive: false });
+                    c.addTo(map);
+                    state.dlines.push(c);
+                });
+            });
+            if (state.measure && state.measure.fase === 2) {
+                const c = L.circleMarker(state.measure.a, { radius: 4, color: '#b91c1c', weight: 2, fillColor: '#fca5a5', fillOpacity: 1, interactive: false });
+                c.addTo(map);
+                state.dlines.push(c);
+            }
+        }
+        function setMeasureCursor(on) { if (map.getContainer && map.getContainer() && map.getContainer().style) map.getContainer().style.cursor = on ? 'crosshair' : ''; }
+        function measureChanged() { applyDistLines(); if (opts.onMeasureState) opts.onMeasureState(state.measure ? state.measure.fase : 0); }
+        function onMapClick(e) {
+            if (!state.measure || !e || !e.latlng) return;
+            const ll = e.latlng;
+            if (state.measure.fase === 1) {
+                const p = MT.nearestOnGeometry(geometry, ll.lat, ll.lng);
+                if (!p) return;
+                state.measure = { fase: 2, a: [p.lat, p.lng] };
+                measureChanged();
+                return;
+            }
+            const cam = camadas.find(x => String(x.id) === cfg.referencia.camada);
+            const p = cam ? MT.nearestOnCamada(cam, ll.lat, ll.lng) : null;
+            if (!p) return;
+            api.addDistance(state.measure.a, [p.lat, p.lng]);
+            state.measure = null;
+            setMeasureCursor(false);
+            measureChanged();
+        }
+        map.on('click', onMapClick);
+        if (doc && doc.addEventListener) doc.addEventListener('keydown', (ev) => { if (ev && ev.key === 'Escape' && state.measure) api.cancelDistMeasure(); });
+
         // ------------------------------------------------------------ quadriculado UTM (acompanha o enquadramento)
         function clearGrid() { state.grid.forEach(l => map.removeLayer(l)); state.grid = []; }
         function applyGrid() {
@@ -367,7 +423,8 @@
         // ------------------------------------------------------------ mapa de situação (mapa pequeno com a visão geral)
         function applySituacao() {
             const box = el('map-locator');
-            show(box, !!cfg.situacao.ativo && !!box);
+            // display explícito: o CSS da caixa é "display:none", então '' (voltar ao CSS) a deixaria invisível
+            if (box && box.style) box.style.display = cfg.situacao.ativo ? 'block' : 'none';
             if (!cfg.situacao.ativo || !box) return;
             if (!state.locator) {
                 const lm = L.map(box, { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false, preferCanvas: true });
@@ -444,7 +501,7 @@
                 if (chosen.has(v.id) || state.exporting) return;
                 const h = L.circleMarker([v.lat, v.lng], { radius: 5, color: '#334155', weight: 1.5, fillColor: '#ffffff', fillOpacity: 1, interactive: true, bubblingMouseEvents: false, className: 'report-vertex-handle' });
                 h.addTo(map);
-                h.on('click', () => api.addPoint(v.id));
+                h.on('click', (e) => { if (state.measure) onMapClick(e); else api.addPoint(v.id); });
                 state.pts['h:' + v.id] = h;
             });
             // pontos marcados: a bolinha fica no vértice; o nome é um texto à parte (arrastar move, ↻ gira, dois cliques renomeiam)
@@ -516,6 +573,7 @@
             applyMask();
             applyFeature();
             applyMeasures();
+            applyDistLines();
             applyPoints();
             applyGrid();
             applyNotes();
@@ -558,6 +616,7 @@
                 ['rotulos', 'confrontantes', 'referencia', 'comparacaoArea', 'situacao', 'quadriculado'].forEach(k => { next[k] = Object.assign({}, cfg[k], (patch && patch[k]) || {}); });
                 const pontosNovos = next.pontos;
                 const camadaAnt = cfg.confrontantes.camada;
+                const refAnt = cfg.referencia.camada;
                 cfg = MT.normalizeMapConfig({ mapa: Object.assign({}, next, { pontos: cfg.pontos }) }); // o resto normalizado; os pontos passam por aplicarPontos
                 aplicarPontos(pontosNovos);
                 // outra camada de confrontantes: os nomes escritos para os vizinhos da anterior não valem mais
@@ -566,6 +625,8 @@
                     Object.keys(tx).forEach(k => { if (/:conf$/.test(k)) delete tx[k]; });
                     cfg.confrontantes = MT.normalizeConfrontantes(Object.assign({}, cfg.confrontantes, { textos: tx }));
                 }
+                if (cfg.referencia.camada !== refAnt) cfg.referencia = MT.normalizeReferencia(Object.assign({}, cfg.referencia, { medidas: [] }));
+                if (state.measure && (!cfg.referencia.ativo || cfg.referencia.camada !== refAnt)) { state.measure = null; setMeasureCursor(false); }
                 apply();
             },
             /** Liga/desliga uma camada vizinha pelo id. */
@@ -581,7 +642,7 @@
                     camadasLigadas: cfg.camadasLigadas.slice(), destaque: Object.assign({}, cfg.destaque), medidas: JSON.parse(JSON.stringify(cfg.medidas)),
                     edicoes: Object.assign({}, cfg.edicoes), posicoes: Object.assign({}, cfg.posicoes), rotacoes: Object.assign({}, cfg.rotacoes),
                     pontos: Object.assign({}, cfg.pontos, { ordem: cfg.pontos.ordem.slice(), titulos: Object.assign({}, cfg.pontos.titulos) }),
-                    rotulos: JSON.parse(JSON.stringify(cfg.rotulos)), confrontantes: JSON.parse(JSON.stringify(cfg.confrontantes)), referencia: Object.assign({}, cfg.referencia),
+                    rotulos: JSON.parse(JSON.stringify(cfg.rotulos)), confrontantes: JSON.parse(JSON.stringify(cfg.confrontantes)), referencia: JSON.parse(JSON.stringify(cfg.referencia)),
                     comparacaoArea: Object.assign({}, cfg.comparacaoArea), situacao: Object.assign({}, cfg.situacao), quadriculado: Object.assign({}, cfg.quadriculado),
                     anotacoes: cfg.anotacoes.map(a => Object.assign({}, a)), vista: currentView()
                 });
@@ -595,9 +656,9 @@
             },
             /** Apaga as edições e as posições dos rótulos (volta ao calculado). */
             resetMeasures() {
-                // só as medidas: a posição e o giro dos nomes dos pontos (v:N) ficam
-                const soPontos = (m) => { const out = {}; Object.keys(m).forEach(k => { if (/^v:/.test(k)) out[k] = m[k]; }); return out; };
-                cfg.edicoes = {}; cfg.posicoes = soPontos(cfg.posicoes); cfg.rotacoes = soPontos(cfg.rotacoes); apply();
+                // só as medidas da feição: nomes dos pontos (v:N) e distâncias tiradas pelo usuário (dist:N) ficam
+                const soPontos = (m) => { const out = {}; Object.keys(m).forEach(k => { if (/^(v|dist):/.test(k)) out[k] = m[k]; }); return out; };
+                cfg.edicoes = soPontos(cfg.edicoes); cfg.posicoes = soPontos(cfg.posicoes); cfg.rotacoes = soPontos(cfg.rotacoes); apply();
             },
             /** Itens de medida atuais (com as edições), para painel/teste. */
             measures() { return MT.applyEdits(measureData.itens, cfg.edicoes); },
@@ -641,6 +702,35 @@
                 if (vertData.omitidos) return;
                 setPontos({ ativo: true, ordem: vertData.itens.map(v => v.id) });
             },
+            // ---- distância feição → camada de referência, medida pelo usuário com dois cliques
+            /** 0 = parado; 1 = falta o ponto na feição; 2 = falta o ponto na camada. */
+            measureState() { return state.measure ? state.measure.fase : 0; },
+            startDistMeasure() {
+                if (!cfg.referencia.ativo || !cfg.referencia.camada || cfg.referencia.medidas.length >= 20) return false;
+                state.measure = { fase: 1, a: null };
+                setMeasureCursor(true);
+                measureChanged();
+                return true;
+            },
+            cancelDistMeasure() { state.measure = null; setMeasureCursor(false); measureChanged(); },
+            /** Guarda uma distância entre dois pontos [lat, lng] (o ponto na feição e o ponto na camada). Devolve o id. */
+            addDistance(a, b) {
+                const usados = cfg.referencia.medidas.map(m => Number(m.id.slice(5)));
+                let n = 1; while (usados.indexOf(n) >= 0) n++;
+                const ref = MT.normalizeReferencia(Object.assign({}, cfg.referencia, { medidas: cfg.referencia.medidas.concat([{ id: 'dist:' + n, a: a, b: b }]) }));
+                if (ref.medidas.length === cfg.referencia.medidas.length) return null;
+                cfg.referencia = ref;
+                apply();
+                return 'dist:' + n;
+            },
+            removeDistance(id) {
+                cfg.referencia = MT.normalizeReferencia(Object.assign({}, cfg.referencia, { medidas: cfg.referencia.medidas.filter(m => m.id !== id) }));
+                const sem = (m) => { const out = Object.assign({}, m); delete out[id]; return out; };
+                cfg.edicoes = sem(cfg.edicoes); cfg.posicoes = sem(cfg.posicoes); cfg.rotacoes = sem(cfg.rotacoes);
+                apply();
+            },
+            /** Distâncias tiradas, com o texto final (editado ou calculado): { id, texto, metros, editado }. */
+            distanceRows() { return distItems().map(it => ({ id: it.id, texto: it.texto, metros: it.valor, editado: it.editado })); },
             // ---- tabela de confrontantes: linhas na ordem escolhida, com os textos editados
             confrontanteRows() {
                 const c = cfg.confrontantes;

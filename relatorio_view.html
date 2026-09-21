@@ -1405,7 +1405,7 @@
 
             try {
                 lastPontosKey = blocosKey(config);
-                mapController = ReportMap.create({ L, MapTools, container: 'interactive-report-map', geometry, camadas, ortofotos: (reportPayload && Array.isArray(reportPayload.ortofotos)) ? reportPayload.ortofotos : [], config, onChange: onMapChange });
+                mapController = ReportMap.create({ L, MapTools, container: 'interactive-report-map', geometry, camadas, onMeasureState: () => renderMapToolsPanel(), ortofotos: (reportPayload && Array.isArray(reportPayload.ortofotos)) ? reportPayload.ortofotos : [], config, onChange: onMapChange });
             } catch (e) {
                 console.error('[Mapa] Erro ao criar o mini-mapa:', e);
                 return;
@@ -1538,7 +1538,7 @@
                 const cmp = campo && areaItem ? MapTools.compararAreas(readFieldRaw(campo, renderArgs.featureData), areaItem.valor) : null;
                 if (cmp) {
                     const sinal = cmp.diferenca >= 0 ? '+' : '−';
-                    linhas.push({ aviso: cmp.alerta, html: `<b>Área:</b> cadastral (${areaEmLinha(campo.label || campo.name || 'campo')}) ${fmt(cmp.cadastro, 2)} m² • calculada pela geometria ${fmt(cmp.calculada, 2)} m² • diferença ${sinal}${fmt(Math.abs(cmp.diferenca), 2)} m²${cmp.pct === null ? '' : ` (${sinal}${fmt(Math.abs(cmp.pct), 2)}%)`}${cmp.alerta ? ' — <b>divergência acima de 1%</b>' : ''}` });
+                    linhas.push({ aviso: cmp.alerta, html: `<b>Área:</b> cadastral (${areaEmLinha(campo.label || campo.name || 'campo')}${campo.tabTitle ? ' — Aba: ' + areaEmLinha(campo.tabTitle) : ''}) ${fmt(cmp.cadastro, 2)} m² • calculada pela geometria ${fmt(cmp.calculada, 2)} m² • diferença ${sinal}${fmt(Math.abs(cmp.diferenca), 2)} m²${cmp.pct === null ? '' : ` (${sinal}${fmt(Math.abs(cmp.pct), 2)}%)`}${cmp.alerta ? ' — <b>divergência acima de 1%</b>' : ''}` });
                 }
             }
 
@@ -1560,6 +1560,10 @@
                         linhas.push({ aviso: false, html: `Camada <b>${escapeHtml(cam.name)}</b>: nenhuma feição num raio de 400 m da feição.` });
                     }
                 }
+            }
+            if (cfg.referencia.ativo && cfg.referencia.camada && mapController.distanceRows) {
+                const cam = camadasDoPayload().find(x => String(x.id) === cfg.referencia.camada);
+                mapController.distanceRows().forEach(r => linhas.push({ aviso: false, html: `<b>Distância medida no mapa${r.id ? ' (' + escapeHtml(r.id.slice(5)) + ')' : ''}</b> — da feição até a camada <b>${escapeHtml(cam ? cam.name : 'de referência')}</b>: <b>${escapeHtml(r.texto)}</b>.` }));
             }
             if (!linhas.length) return '';
             return `<div class="mb-4 page-break-avoid">
@@ -1638,6 +1642,7 @@
             const temRotulo = cams.some(c => c.features.some(f => f.properties && f.properties.r));
             const temNome = cams.some(c => c.features.some(f => f.properties && f.properties.t));
             const camposArea = ((reportPayload && reportPayload.formFields) || []).filter(f => ['area_m2', 'number'].includes(String(f.type || '').toLowerCase()));
+            const abaDoCampo = (f) => f.tabTitle || ((((reportPayload && reportPayload.formTabs) || []).find(t => t.id === f.tabId) || {}).title) || '';
             const notas = mapController.getConfig().anotacoes;
             const sel = (onchange, html) => `<select onchange="${onchange}" style="width:100%;padding:4px;border:1px solid #cbd5e1;border-radius:8px;margin:2px 0">${html}</select>`;
             const confRows = cfg.confrontantes.ativo ? mapController.confrontanteRows() : [];
@@ -1649,6 +1654,18 @@
                         <button type="button" title="Descer" onclick="mapPanelConfMover('${esc(r.id)}', 1)" ${i === confRows.length - 1 ? 'disabled' : ''} style="border:0;background:none;cursor:pointer">▼</button>
                     </div>`).join('')}</div>
                 ${(cfg.confrontantes.ordem.length || Object.keys(cfg.confrontantes.textos).length) ? '<button type="button" class="act" style="margin-top:4px" onclick="mapPanelConfReset()">Restaurar nomes e ordem</button>' : ''}` : '';
+            const msDist = mapController.measureState();
+            const distRows = mapController.distanceRows();
+            const distListHtml = distRows.length ? `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:4px;margin-top:4px">${distRows.map(r => `
+                    <div style="display:flex;align-items:center;gap:3px;padding:2px 0">
+                        <span style="flex:1;min-width:0">Distância ${esc(r.id.slice(5))}: <b>${esc(r.texto)}</b></span>
+                        <button type="button" title="Remover" onclick="mapPanelDistRemover('${esc(r.id)}')" style="border:0;background:none;cursor:pointer;color:#b91c1c">×</button>
+                    </div>`).join('')}</div><div style="color:#64748b;line-height:1.35;margin-top:3px">Dois cliques no valor, no mapa, para editar; arraste para mover; ↻ para girar.</div>` : '';
+            const refMedirHtml = (cfg.referencia.ativo && cfg.referencia.camada) ? `
+                <div style="color:#64748b;line-height:1.35;margin:2px 0 3px">Meça a distância entre um ponto qualquer da feição e um ponto qualquer da camada: clique no mapa primeiro na feição e depois na camada (o clique gruda no contorno mais próximo).</div>
+                <button type="button" class="act" onclick="mapPanelMedirDist()">${msDist ? 'Cancelar a medição' : 'Medir distância no mapa'}</button>
+                ${msDist === 1 ? '<div style="color:#b45309;margin:3px 0">Clique num ponto da feição.</div>' : (msDist === 2 ? '<div style="color:#b45309;margin:3px 0">Agora clique num ponto da camada de referência.</div>' : '')}
+                ${distListHtml}` : '';
             const extrasHtml = `
                 ${chkN('mp-x-rot', 'Rótulos nas feições vizinhas', cfg.rotulos.ativo, "mapPanelExtra('rotulos', 'ativo', this.checked)", !temRotulo, nis('rotulos', '', cfg.rotulos.estilo))}
                 ${(cfg.rotulos.ativo && temNome) ? sel("mapPanelExtra('rotulos', 'campo', this.value)", `<option value="rotulo" ${cfg.rotulos.campo === 'rotulo' ? 'selected' : ''}>Mostrar Quadra/Lote</option><option value="titulo" ${cfg.rotulos.campo === 'titulo' ? 'selected' : ''}>Mostrar o nome principal</option>`) : ''}
@@ -1657,9 +1674,9 @@
                 ${chk('mp-x-conf', 'Tabela de confrontantes', cfg.confrontantes.ativo, "mapPanelExtra('confrontantes', 'ativo', this.checked)", kind !== 'polygon' || !cams.length)}
                 ${cfg.confrontantes.ativo ? sel("mapPanelExtra('confrontantes', 'camada', this.value)", camOpts(cfg.confrontantes.camada)) + (temNome ? chk('mp-x-conf-n', 'Incluir o nome do vizinho', cfg.confrontantes.nomes, "mapPanelExtra('confrontantes', 'nomes', this.checked)") : '') + confHtml : ''}
                 ${chk('mp-x-ref', 'Distância e sobreposição (camada de referência)', cfg.referencia.ativo, "mapPanelExtra('referencia', 'ativo', this.checked)", !cams.length)}
-                ${cfg.referencia.ativo ? sel("mapPanelExtra('referencia', 'camada', this.value)", camOpts(cfg.referencia.camada)) : ''}
+                ${cfg.referencia.ativo ? sel("mapPanelExtra('referencia', 'camada', this.value)", camOpts(cfg.referencia.camada)) + refMedirHtml : ''}
                 ${chk('mp-x-area', 'Área cadastral × área calculada', cfg.comparacaoArea.ativo, "mapPanelExtra('comparacaoArea', 'ativo', this.checked)", kind !== 'polygon' || !camposArea.length)}
-                ${cfg.comparacaoArea.ativo ? sel("mapPanelExtra('comparacaoArea', 'campo', this.value)", '<option value="">Campo da área cadastral…</option>' + camposArea.map(f => `<option value="${esc(f.id || f.name)}" ${cfg.comparacaoArea.campo === (f.id || f.name) ? 'selected' : ''}>${esc(f.label || f.name || f.id)}</option>`).join('')) : ''}
+                ${cfg.comparacaoArea.ativo ? sel("mapPanelExtra('comparacaoArea', 'campo', this.value)", '<option value="">Campo da área cadastral…</option>' + camposArea.map(f => `<option value="${esc(f.id || f.name)}" ${cfg.comparacaoArea.campo === (f.id || f.name) ? 'selected' : ''}>${esc(f.label || f.name || f.id)}${abaDoCampo(f) ? ' — Aba: ' + esc(abaDoCampo(f)) : ''}</option>`).join('')) : ''}
                 ${chk('mp-x-sit', 'Mapa de situação (localização)', cfg.situacao.ativo, "mapPanelExtra('situacao', 'ativo', this.checked)")}
                 ${chk('mp-x-grade', 'Quadriculado UTM', cfg.quadriculado.ativo, "mapPanelExtra('quadriculado', 'ativo', this.checked)")}
                 ${cfg.quadriculado.ativo ? sel("mapPanelExtra('quadriculado', 'espacamento', Number(this.value))", [0, 10, 20, 50, 100, 200, 500, 1000].map(v => `<option value="${v}" ${cfg.quadriculado.espacamento === v ? 'selected' : ''}>${v ? 'Grade de ' + v + ' m' : 'Espaçamento automático'}</option>`).join('')) : ''}
@@ -1835,6 +1852,13 @@
         function mapPanelConfMover(id, dir) { if (mapController) { mapController.moveConfrontante(id, dir); renderMapToolsPanel(); } }
         function mapPanelConfReset() { if (mapController) { mapController.resetConfrontantes(); renderMapToolsPanel(); } }
         function mapPanelRotulosReset() { if (mapController) { mapController.resetRotulos(); renderMapToolsPanel(); } }
+
+        function mapPanelMedirDist() {
+            if (!mapController) return;
+            if (mapController.measureState()) mapController.cancelDistMeasure(); else mapController.startDistMeasure();
+            renderMapToolsPanel();
+        }
+        function mapPanelDistRemover(id) { if (mapController) { mapController.removeDistance(id); renderMapToolsPanel(); } }
 
         function mapPanelHide() {
             mapPanelOpen = false;

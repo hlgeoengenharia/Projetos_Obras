@@ -227,6 +227,23 @@ async function runScenario(cfg) {
         eq('sem erro de execução na sanfona', r.errors, []);
     }
 
+    // ---- mapa de situação visível; medição de distância e aba do campo de área no painel
+    {
+        const campos = [{ id: 'f_area1', label: 'Área', type: 'area_m2', tabId: 't1', tabTitle: 'Dados Gerais' }, { id: 'f_area2', label: 'Área', type: 'area_m2', tabId: 't2', tabTitle: 'Regularização' }];
+        const r = await runScenario({ width: 1900, opener: true, payload: { templateId: 'rpt_smoke', template: tplWith({ situacao: { ativo: true }, referencia: { ativo: true, camada: 'A' }, comparacaoArea: { ativo: true } }), formId: 'f1', formFields: campos, formTabs: [], featureData: { id_banco: 10 }, featureGeometry: quad, featureKey: '10', camadasMapa: [camadaA] } });
+        const painel = r.registry['map-tools-panel']._html;
+        eq('mapa de situação ligado: a caixa fica visível (display explícito; o CSS dela é "none")', r.registry['map-locator'].style.display, 'block');
+        ok('painel: botão para medir a distância até a camada de referência', /Medir distância no mapa/.test(painel) && /mapPanelMedirDist\(\)/.test(painel));
+        ok('painel: campos de área com o nome da aba ao lado (mesmo título em abas diferentes)', /Área — Aba: Dados Gerais/.test(painel) && /Área — Aba: Regularização/.test(painel));
+        r.sandbox.mapPanelMedirDist();
+        ok('medir: o painel avisa o que clicar', /Clique num ponto da feição/.test(r.registry['map-tools-panel']._html) && /Cancelar a medição/.test(r.registry['map-tools-panel']._html));
+        r.sandbox.mapPanelMedirDist();
+        ok('cancelar volta ao botão de medir', /Medir distância no mapa/.test(r.registry['map-tools-panel']._html));
+        eq('sem erro de execução', r.errors, []);
+        const desl = await runScenario({ width: 1900, opener: true, payload: { templateId: 'rpt_smoke', template: tplWith({}), formId: 'f1', formFields: [], formTabs: [], featureData: { id_banco: 10 }, featureGeometry: quad, featureKey: '10' } });
+        eq('situação desligada: caixa escondida', desl.registry['map-locator'].style.display, 'none');
+    }
+
     // ---- medidas: negrito / itálico / sublinhado pelo painel
     {
         const r = await runScenario({ width: 1900, opener: true, payload: cenarios[3].payload });

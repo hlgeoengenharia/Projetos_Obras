@@ -78,6 +78,17 @@ const t0 = texto(out.split.rowsHtml[0]), t1 = texto(out.split.rowsHtml[1]), t2 =
     ok('a ordem escolhida vale na tabela', linhas[0].includes('data-conf-edit="lado:1:lado"') && linhas[1].includes('data-conf-edit="lado:0:lado"'));
     ok('texto do usuário aparece escapado no lugar do calculado', linhas[0].includes('Frente &lt;Leste&gt;') && linhas[0].includes('Rua &lt;X&gt;') && !/Quadra E/.test(linhas[0]));
 }
+{
+    // aba do campo de área cadastral e distâncias medidas no mapa
+    const st = state({ comparacaoArea: { ativo: true, campo: 'f_area' } });
+    st.payload.formFields = [{ id: 'f_area', label: 'Área do terreno (m²)', type: 'area_m2', tabTitle: 'Dados Gerais' }];
+    const a1 = load(st, MT, {}).renderAnaliseMapa();
+    ok('análise da área cita a aba do campo', /Área do terreno \(m²\) — Aba: Dados Gerais/.test(a1));
+    const st2 = state({ referencia: { ativo: true, camada: 'LPM' } });
+    st2.controller.distanceRows = () => [{ id: 'dist:1', texto: '52,30 m', metros: 52.3, editado: false }, { id: 'dist:2', texto: 'cerca de <60> m', metros: 60, editado: true }];
+    const a2 = load(st2, MT, {}).renderAnaliseMapa();
+    ok('distâncias medidas no mapa aparecem nas análises (texto do usuário escapado)', /Distância medida no mapa \(1\)/.test(a2) && /52,30 m/.test(a2) && /Distância medida no mapa \(2\)/.test(a2) && /cerca de &lt;60&gt; m/.test(a2) && !/<60>/.test(a2));
+}
 ok('lado sul: sem confrontante identificado', /Sem confrontante identificado/.test(t0) && /L1/.test(t0) && /30,0\d|29,9\d/.test(t0));
 ok('lado leste: Quadra E • Lote 02, sem o nome (padrão)', /Quadra E • Lote 02/.test(t1) && !/Beltrano/.test(t1));
 ok('lado norte: Quadra D • Lote 09', /Quadra D • Lote 09/.test(t2));

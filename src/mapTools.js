@@ -36,7 +36,7 @@
         temporal: { ativo: false, ordem: 'asc', colunas: 2, alturaMm: 70, sincronizar: true, contorno: true, excluidas: [] }, // série de ortofotos por data
         rotulos: { ativo: false, campo: 'rotulo', estilo: { n: true, i: false, s: false }, itens: {} }, // texto sobre as feições vizinhas ('rotulo' = Quadra/Lote; 'titulo' = nome principal); itens = posição/giro ajustados pelo usuário, por 'camada:índice'
         confrontantes: { ativo: false, camada: '', tolM: 3, nomes: false, ordem: [], textos: {} },  // quem faz divisa com cada lado; ordem das linhas e textos (LADO / CONFRONTANTE) editados
-        referencia: { ativo: false, camada: '' },                             // distância e sobreposição com uma camada de referência (ex.: LPM)
+        referencia: { ativo: false, camada: '', medidas: [] },                // distância e sobreposição com uma camada de referência (ex.: LPM); medidas = distâncias tiradas pelo usuário { id:'dist:N', a:[lat,lng], b:[lat,lng] }
         comparacaoArea: { ativo: false, campo: '' },                          // área cadastral x área calculada
         situacao: { ativo: false },                                           // mapa de situação (localização) no canto
         quadriculado: { ativo: false, espacamento: 0 },                       // grade de coordenadas UTM (0 = automático)
@@ -139,9 +139,17 @@
             .sort((a, b) => ((a.pos < 0 ? 1e6 : a.pos) - (b.pos < 0 ? 1e6 : b.pos)) || (a.i - b.i))
             .map(x => Object.assign({}, x.r, { lado: tx[x.r.id + ':lado'] || x.r.rotuloLado, confTexto: tx[x.r.id + ':conf'] || '', editados: ['lado', 'conf'].filter(k => tx[x.r.id + ':' + k]) }));
     }
+    const okLatLng = (p) => Array.isArray(p) && p.length === 2 && isFinite(Number(p[0])) && isFinite(Number(p[1])) && Math.abs(Number(p[0])) <= 90 && Math.abs(Number(p[1])) <= 180;
     function normalizeReferencia(x) {
         x = x || {};
-        return { ativo: bool(x.ativo, false), camada: ID_REF.test(String(x.camada || '')) ? String(x.camada) : '' };
+        const vistos = new Set();
+        const medidas = [];
+        (Array.isArray(x.medidas) ? x.medidas : []).forEach(m => {
+            if (!m || typeof m.id !== 'string' || !/^dist:[0-9]{1,3}$/.test(m.id) || vistos.has(m.id) || medidas.length >= 20 || !okLatLng(m.a) || !okLatLng(m.b)) return;
+            vistos.add(m.id);
+            medidas.push({ id: m.id, a: [Number(m.a[0]), Number(m.a[1])], b: [Number(m.b[0]), Number(m.b[1])] });
+        });
+        return { ativo: bool(x.ativo, false), camada: ID_REF.test(String(x.camada || '')) ? String(x.camada) : '', medidas };
     }
     function normalizeComparacaoArea(x) {
         x = x || {};
@@ -477,6 +485,11 @@
         return [Math.round(nx * px * 10) / 10, Math.round(ny * px * 10) / 10];
     }
 
+    /** Afastamento (px) para o lado de cima da aresta a→b (texto sobre linhas e sobre medidas soltas). */
+    function edgeOffsetAbove(a, b, px) {
+        return edgeOffsetPx(a, b, edgeOffsetPx(a, b, 1, 1)[1] > 0 ? -1 : 1, px);
+    }
+
     /** Sentido do anel: +1 anti-horário, -1 horário (em lng/lat). */
     function ringSign(ring) {
         let s = 0;
@@ -526,7 +539,7 @@
                 total += lineLengthM(coords);
                 for (let i = 0; i < coords.length - 1; i++) {
                     const d = distanceM(coords[i], coords[i + 1]);
-                    trechos.push({ id: 'trecho:' + nTrechos, grupo: 'lados', tipo: 'trecho', valor: d, texto: fmtNumber(d, 2) + ' m', resumo: 'T' + (nTrechos + 1) + ': ' + fmtNumber(d, 2) + ' m', pos: midLatLng(coords[i], coords[i + 1]), dy: 0, ang: edgeAngleCss(coords[i], coords[i + 1]), off: edgeOffsetPx(coords[i], coords[i + 1], edgeOffsetPx(coords[i], coords[i + 1], 1, 1)[1] > 0 ? -1 : 1, 9) });
+                    trechos.push({ id: 'trecho:' + nTrechos, grupo: 'lados', tipo: 'trecho', valor: d, texto: fmtNumber(d, 2) + ' m', resumo: 'T' + (nTrechos + 1) + ': ' + fmtNumber(d, 2) + ' m', pos: midLatLng(coords[i], coords[i + 1]), dy: 0, ang: edgeAngleCss(coords[i], coords[i + 1]), off: edgeOffsetAbove(coords[i], coords[i + 1], 9) });
                     nTrechos++;
                 }
             });
@@ -937,6 +950,50 @@
         return rows;
     }
 
+    /**
+     * Ponto mais próximo de (lat, lng) sobre o traçado da geometria (contorno do polígono, linha ou o próprio ponto).
+     * Devolve { lat, lng, d } (d em metros, plano local) ou null.
+     */
+    function nearestOnGeometry(geometry, lat, lng) {
+        const g = geometry && geometry.type === 'Feature' ? geometry.geometry : geometry;
+        if (!g) return null;
+        const proj = localProjector(lat, lng);
+        let best = null;
+        const cand = (a, b) => {
+            const pa = proj(a), pb = proj(b);
+            const dx = pb[0] - pa[0], dy = pb[1] - pa[1];
+            const l2 = dx * dx + dy * dy;
+            let k = l2 === 0 ? 0 : -(pa[0] * dx + pa[1] * dy) / l2;
+            k = Math.max(0, Math.min(1, k));
+            const d = Math.hypot(pa[0] + k * dx, pa[1] + k * dy);
+            if (best === null || d < best.d) best = { d: d, lng: a[0] + k * (b[0] - a[0]), lat: a[1] + k * (b[1] - a[1]) };
+        };
+        const path = (c) => { for (let i = 0; i < c.length - 1; i++) cand(c[i], c[i + 1]); if (c.length === 1) cand(c[0], c[0]); };
+        const walk = (geo) => {
+            if (!geo) return;
+            if (geo.type === 'Polygon') geo.coordinates.forEach(path);
+            else if (geo.type === 'MultiPolygon') geo.coordinates.forEach(p => p.forEach(path));
+            else if (geo.type === 'LineString') path(geo.coordinates);
+            else if (geo.type === 'MultiLineString') geo.coordinates.forEach(path);
+            else if (geo.type === 'Point') cand(geo.coordinates, geo.coordinates);
+            else if (geo.type === 'MultiPoint') geo.coordinates.forEach(c => cand(c, c));
+            else if (geo.type === 'GeometryCollection') (geo.geometries || []).forEach(walk);
+        };
+        walk(g);
+        return best;
+    }
+
+    /** Ponto mais próximo de (lat, lng) sobre qualquer feição da camada. */
+    function nearestOnCamada(camada, lat, lng) {
+        if (!camada || !Array.isArray(camada.features)) return null;
+        let best = null;
+        camada.features.forEach(f => {
+            const p = nearestOnGeometry(f.geometry, lat, lng);
+            if (p && (best === null || p.d < best.d)) best = p;
+        });
+        return best;
+    }
+
     /** Menor distância da feição a qualquer feição da camada de referência (alcance = limite do recorte enviado). */
     function distanciaCamada(geometry, camada) {
         if (!camada || !Array.isArray(camada.features) || !camada.features.length) return null;
@@ -1126,7 +1183,7 @@
 
     return {
         MAP_DEFAULTS, BASE_MAPS,
-        normalizeMapConfig, mergeAjustes, applyConfrontantes, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
+        normalizeMapConfig, mergeAjustes, applyConfrontantes, nearestOnGeometry, nearestOnCamada, edgeOffsetAbove, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
         geometryBBox, bboxCenter, expandBBoxMeters, bboxIntersects, roundCoords, geomKind,
         normalizeTemporal, rasterDateInfo, fmtRasterDate, tileXY, tileUrl, probeZoom, rasterBBox, buildOrtofotoList, sortOrtofotos,
         COORD_SYSTEMS, normalizePontos, latLngToUtm, utmToLatLng, fmtGms, coordHeaders, coordCells, coordSystemLabel, azimuthDeg, fmtAzimuth, vertices, defaultPointTitle, pointRows,
