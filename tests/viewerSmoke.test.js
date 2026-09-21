@@ -139,7 +139,7 @@ async function runScenario(cfg) {
     sandbox.self = sandbox.window;
     vm.createContext(sandbox);
     localScripts.forEach(src => { try { vm.runInContext(read(src), sandbox, { filename: src }); } catch (e) { errors.push('script ' + src + ': ' + e.message); } });
-    ['PageSize', 'MapTools', 'ReportMap', 'ReportTemporal', 'ReportExport', 'ReportBlocks', 'ReportWord', 'ReportDocx', 'MapSnapshot', 'VerificarEmissao', 'FieldFormatter', 'ReportData'].forEach(n => { if (windowStub[n]) sandbox[n] = windowStub[n]; });
+    ['PageSize', 'MapTools', 'ReportMap', 'ReportTemporal', 'ReportExport', 'ReportBlocks', 'ReportEditor', 'ReportWord', 'ReportDocx', 'MapSnapshot', 'VerificarEmissao', 'FieldFormatter', 'ReportData'].forEach(n => { if (windowStub[n]) sandbox[n] = windowStub[n]; });
     sandbox.unhandled = [];
     try { vm.runInContext(pageScript, sandbox, { filename: 'relatorio_view.html(inline)' }); } catch (e) { errors.push('script da página: ' + e.stack); }
     (listeners.DOMContentLoaded || []).forEach(fn => { try { fn(); } catch (e) { errors.push('DOMContentLoaded: ' + e.stack); } });
@@ -657,6 +657,37 @@ async function runScenario(cfg) {
         // botões da moldura → mensagem para o construtor
         r.sandbox.acaoEdicao('moveBlock', [2, -1], { stopPropagation() {}, preventDefault() {} });
         ok('edição: botão da moldura avisa o construtor da ação e dos argumentos', r.captured.mensagens.some(m => m.tipo === 'construtor:acao' && m.nome === 'moveBlock' && JSON.stringify(m.args) === '[2,-1]'));
+        // controles de edição (mesmo módulo do construtor) desenhados na página, e a ponte "ReportBuilder" → mensagens
+        {
+            const pc = JSON.parse(JSON.stringify(payload));
+            pc.formFields = [{ id: 'a', label: 'Nome', type: 'text' }];
+            pc.formTabs = [{ id: 't1', title: 'Dados', fields: pc.formFields }];
+            pc.featureData = { id_banco: 10, a: 'Maria' };
+            pc.template.blocos[0].titulo = 'FICHA <X>';
+            pc.template.blocos[2].campos_selecionados = ['a'];
+            enviar(pc);
+            await r.settle(6);
+            const d = r.registry['a4-document-container']._html;
+            ok('edição: grade com título editável, alça de arrastar, largura e remover (o valor vem da feição de teste)', [d.includes("ReportBuilder.enableInlineEdit(this, 2, 'titulo')"), d.includes('field-drag-handle'), d.includes("ReportBuilder.changeFieldWidthStep(2, 'a', 1, event)"), d.includes("ReportBuilder.removeFieldFromGrid(2, 'a', event)"), d.includes('Maria'), d.includes('a4-grid-fields-container" data-block-index="2"')].every(Boolean));
+            ok('edição: cabeçalho com título e subtítulo editáveis (título escapado) e selo de repetição', [d.includes("enableInlineEdit(this, 0, 'titulo')"), d.includes("enableInlineEdit(this, 0, 'subtitulo')"), d.includes('FICHA &lt;X&gt;'), d.includes('Apenas 1ª Folha')].every(Boolean));
+            const RB = r.sandbox.window.ReportBuilder;
+            const ev = { stopPropagation() { this.parou = true; }, preventDefault() {} };
+            RB.changeFieldWidthStep(2, 'a', 1, ev);
+            ok('ponte: ReportBuilder.<ação>(...) vira mensagem, com o evento cortado (e parado na página)', ev.parou === true && r.captured.mensagens.some(m => m.tipo === 'construtor:acao' && m.nome === 'changeFieldWidthStep' && JSON.stringify(m.args) === '[2,"a",1,null]'));
+            // duplo clique: edição local e gravação ao sair
+            const ouvintes = {};
+            const el = { style: {}, innerText: '  Novo título' + String.fromCharCode(10), focus() {}, addEventListener: (t, fn) => { ouvintes[t] = fn; }, removeEventListener() {} };
+            RB.enableInlineEdit(el, 2, 'titulo');
+            ok('edição inline: o elemento vira editável na própria página', el.contentEditable === 'true');
+            ouvintes.blur();
+            ok('edição inline: ao sair grava a propriedade (texto aparado) por mensagem', el.contentEditable === 'false' && r.captured.mensagens.some(m => m.nome === 'atualizarPropriedade' && JSON.stringify(m.args) === '[2,"titulo","Novo título"]'));
+            // largura exata: menu local
+            RB.toggleFieldWidthPopover(2, 'a', { stopPropagation() {}, preventDefault() {}, currentTarget: { getBoundingClientRect: () => ({ bottom: 100, left: 200 }) } });
+            const pop = r.registry['popover-largura'];
+            ok('largura exata: abre o menu de proporções na própria página', !!pop && pop.innerHTML.includes("definirLarguraExata(2, 'a', 50") && pop.innerHTML.includes("definirLarguraExata(2, 'a', 100"));
+            r.sandbox.definirLarguraExata(2, 'a', 50, { stopPropagation() {}, preventDefault() {} });
+            ok('largura exata: escolher uma proporção avisa o construtor e fecha o menu', r.captured.mensagens.some(m => m.nome === 'setFieldWidthExact' && JSON.stringify(m.args) === '[2,"a",50]') && !r.registry['popover-largura']);
+        }
         // alteração que não mexe no mapa: redesenha sem recarregar
         const p2 = JSON.parse(JSON.stringify(payload)); p2.template.blocos[2].titulo = 'Outro título';
         enviar(p2);

@@ -243,7 +243,9 @@
     // O construtor envia o modelo por mensagem a cada alteração; a página devolve as ações (mover, remover...).
     // ================================================================================================
     const CHAVE_FOLHA_REAL = 'constructive_folha_real';
-    const ACOES_FOLHA_REAL = ['moveBlock', 'removeBlock'];
+    // ações que a página real pode pedir (as mesmas funções dos botões da folha clássica)
+    const ACOES_FOLHA_REAL = ['moveBlock', 'removeBlock', 'atualizarPropriedade', 'reordenarCampos', 'moveSynthetic1nColumn', 'editSynthetic1nColTitle', 'removeColumnFromSynthetic1n',
+        'changeFieldWidthStep', 'setFieldWidthExact', 'removeFieldFromGrid', 'removeFieldFromAnalytical1n', 'setFieldFileMode'];
     let folhaRealPronta = false;
     let folhaRealTimer = null;
 
@@ -278,7 +280,11 @@
 
     function montarPayloadPrevia() {
         const formTabs = (window.ReportAdapter && window.ReportAdapter.getFormTabs) ? window.ReportAdapter.getFormTabs(currentTemplate.form_id) : [];
-        return window.ReportPreview.buildPreviewPayload({ template: JSON.parse(JSON.stringify(currentTemplate)), formId: currentTemplate.form_id, formTabs: JSON.parse(JSON.stringify(formTabs || [])) });
+        // os padrões do painel lateral (densidade, zebrado, campos do laudo...) entram nos blocos: a página desenha só o que está no modelo
+        const fields = (window.ReportAdapter && window.ReportAdapter.getFormFields) ? window.ReportAdapter.getFormFields(currentTemplate.form_id) : [];
+        const template = JSON.parse(JSON.stringify(currentTemplate));
+        template.blocos = (template.blocos || []).map(b => blocoParaFolha(b, fields));
+        return window.ReportPreview.buildPreviewPayload({ template: template, formId: currentTemplate.form_id, formTabs: JSON.parse(JSON.stringify(formTabs || [])) });
     }
 
     /** Envia o modelo atual para a página (com um pequeno atraso: várias alterações seguidas viram um envio só). */
@@ -2067,6 +2073,12 @@
         element.addEventListener('blur', onBlur);
     }
 
+    /** Propriedade de um bloco alterada na página real (título editado com duplo clique): grava e redesenha. */
+    function atualizarPropriedade(blockIndex, propPath, value) {
+        updateBlockProperty(blockIndex, propPath, value);
+        renderA4Blocks();
+    }
+
     function updateBlockProperty(blockIndex, propPath, value) {
         if (!currentTemplate || !currentTemplate.blocos || !currentTemplate.blocos[blockIndex]) return;
         currentTemplate.blocos[blockIndex][propPath] = value;
@@ -2139,50 +2151,42 @@
                 ghostClass: 'opacity-40',
                 chosenClass: 'ring-2',
                 onEnd: function(evt) {
-                    const bloco = currentTemplate.blocos[blockIndex];
-                    if (!bloco || !Array.isArray(bloco.campos_selecionados)) return;
-
-                    // Reordena campos_selecionados com base na ordem real dos elementos no DOM do container
-                    const newContainerOrder = Array.from(container.children)
-                        .map(el => el.getAttribute('data-field-id'))
-                        .filter(Boolean);
-
-                    if (newContainerOrder.length > 0) {
-                        // Mapeia posições atuais dos itens desse container dentro de bloco.campos_selecionados
-                        const indicesInBloco = [];
-                        bloco.campos_selecionados.forEach((cf, idx) => {
-                            const cId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
-                            if (newContainerOrder.includes(cId)) {
-                                indicesInBloco.push(idx);
-                            }
-                        });
-
-                        // Se encontrou os itens correspondentes, reorganiza as posições relativas
-                        if (indicesInBloco.length === newContainerOrder.length) {
-                            const itemMap = new Map();
-                            indicesInBloco.forEach(idx => {
-                                const cf = bloco.campos_selecionados[idx];
-                                const cId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
-                                itemMap.set(cId, cf);
-                            });
-
-                            indicesInBloco.forEach((slotIdx, i) => {
-                                const targetFieldId = newContainerOrder[i];
-                                if (itemMap.has(targetFieldId)) {
-                                    bloco.campos_selecionados[slotIdx] = itemMap.get(targetFieldId);
-                                }
-                            });
-
-                            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
-                                window.ReportAdapter.saveReportTemplate(currentTemplate);
-                            }
-                            renderA4Blocks();
-                        }
-                    }
+                    // ordem real dos elementos no DOM do container
+                    reordenarCampos(blockIndex, Array.from(container.children).map(el => el.getAttribute('data-field-id')).filter(Boolean));
                 }
             });
             gridSortableInstances.push(inst);
         });
+    }
+
+    /** Reordena campos_selecionados do bloco conforme a nova ordem dos campos na tela (folha clássica e página real). */
+    function reordenarCampos(blockIndex, newContainerOrder) {
+        const bloco = currentTemplate && currentTemplate.blocos && currentTemplate.blocos[blockIndex];
+        if (!bloco || !Array.isArray(bloco.campos_selecionados) || !Array.isArray(newContainerOrder) || newContainerOrder.length === 0) return;
+
+        // posições atuais dos itens desse container dentro de bloco.campos_selecionados
+        const indicesInBloco = [];
+        bloco.campos_selecionados.forEach((cf, idx) => {
+            const cId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
+            if (newContainerOrder.includes(cId)) indicesInBloco.push(idx);
+        });
+        if (indicesInBloco.length !== newContainerOrder.length) return;
+
+        const itemMap = new Map();
+        indicesInBloco.forEach(idx => {
+            const cf = bloco.campos_selecionados[idx];
+            const cId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
+            itemMap.set(cId, cf);
+        });
+        indicesInBloco.forEach((slotIdx, i) => {
+            const targetFieldId = newContainerOrder[i];
+            if (itemMap.has(targetFieldId)) bloco.campos_selecionados[slotIdx] = itemMap.get(targetFieldId);
+        });
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderA4Blocks();
     }
 
     const FIELD_WIDTH_STEPS = [25, 33, 50, 66, 75, 100];
@@ -5079,7 +5083,9 @@
         generateIndividualReport,
         openFeatureReportPage,
         previewReal,
-        alternarFolhaReal
+        alternarFolhaReal,
+        reordenarCampos,
+        atualizarPropriedade
     };
 
 })();

@@ -335,6 +335,15 @@ ok('voltando ao individual, o modelo geral não aparece na lista', !has(containe
     pendentes.splice(0).forEach(fn => fn());
     const ultimo = posts[posts.length - 1].m.payload;
     ok('ação removeBlock vinda da página remove o bloco e o novo modelo é enviado para a página', posts.length >= 2 && ultimo.template.blocos.length === 1 && ultimo.template.blocos[0].tipo === 'cabecalho');
+    // edição vinda da página: título por duplo clique e nova ordem dos campos
+    tpl.blocos = [{ id: 'h1', tipo: 'cabecalho', titulo: 'Ficha' }, { id: 'g1', tipo: 'grade_campos', titulo: 'Dados', colunasLayout: 2, campos_selecionados: ['a', 'b', 'c'] }];
+    RA.saveReportTemplate(tpl);
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+    msg({ tipo: 'construtor:acao', nome: 'atualizarPropriedade', args: [1, 'titulo', 'Título novo'] });
+    msg({ tipo: 'construtor:acao', nome: 'reordenarCampos', args: [1, ['c', 'a', 'b']] });
+    pendentes.splice(0).forEach(fn => fn());
+    const ult = posts[posts.length - 1].m.payload.template.blocos[1];
+    eq('atualizarPropriedade e reordenarCampos vindos da página mudam o modelo enviado de volta', [ult.titulo, ult.campos_selecionados], ['Título novo', ['c', 'a', 'b']]);
     msg({ tipo: 'construtor:acao', nome: 'deleteCurrentTemplate', args: [] });
     ok('ação fora da lista permitida é ignorada (não apaga o modelo)', RA.getReportTemplates('f1').length >= 1);
 

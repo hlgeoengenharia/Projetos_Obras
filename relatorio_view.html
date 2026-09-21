@@ -16,20 +16,21 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260921g"></script>
-    <script src="src/mapTools.js?v=20260921g"></script>
-    <script src="src/reportMap.js?v=20260921g"></script>
-    <script src="src/reportTemporal.js?v=20260921g"></script>
-    <script src="src/reportExport.js?v=20260921g"></script>
-    <script src="src/reportBlocks.js?v=20260921g"></script>
-    <script src="src/reportWord.js?v=20260921g"></script>
-    <script src="src/reportDocx.js?v=20260921g"></script>
-    <script src="src/mapSnapshot.js?v=20260921g"></script>
-    <script src="src/verificarEmissao.js?v=20260921g"></script>
+    <script src="src/pageSize.js?v=20260921h"></script>
+    <script src="src/mapTools.js?v=20260921h"></script>
+    <script src="src/reportMap.js?v=20260921h"></script>
+    <script src="src/reportTemporal.js?v=20260921h"></script>
+    <script src="src/reportExport.js?v=20260921h"></script>
+    <script src="src/reportBlocks.js?v=20260921h"></script>
+    <script src="src/reportEditor.js?v=20260921h"></script>
+    <script src="src/reportWord.js?v=20260921h"></script>
+    <script src="src/reportDocx.js?v=20260921h"></script>
+    <script src="src/mapSnapshot.js?v=20260921h"></script>
+    <script src="src/verificarEmissao.js?v=20260921h"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260921g"></script>
-    <script src="src/reportData.js?v=20260921g"></script>
+    <script src="src/fieldFormatter.js?v=20260921h"></script>
+    <script src="src/reportData.js?v=20260921h"></script>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -338,9 +339,106 @@
             reportPayload = payload;
             if (mapController) keptMapWrap = document.getElementById('map-wrap');
             desenharRelatorio();
+            ligarArrastoCampos();
+        }
+
+        /**
+         * "ReportBuilder" dentro da página: os botões da moldura (gerados por src/reportEditor.js) chamam ReportBuilder.<ação>(...);
+         * aqui cada chamada vira uma mensagem para o construtor (que altera o modelo e reenvia). O que precisa de tela fica local.
+         */
+        function criarPonteConstrutor() {
+            const local = { enableInlineEdit: editarTextoInline, toggleFieldWidthPopover: alternarPopoverLargura, closeFieldWidthPopover: fecharPopoverLargura };
+            return new Proxy({}, { get: (_, nome) => {
+                if (local[nome]) return local[nome];
+                return (...args) => {
+                    const limpos = args.map(a => {
+                        if (a && typeof a === 'object' && typeof a.stopPropagation === 'function') { a.stopPropagation(); if (a.preventDefault) a.preventDefault(); return null; }
+                        return (a && a.nodeType) ? null : a;
+                    });
+                    avisarConstrutor({ tipo: 'construtor:acao', nome: String(nome), args: limpos });
+                };
+            } });
+        }
+
+        /** Duplo clique em um título/texto: edita ali mesmo; ao sair (ou Enter) grava a propriedade do bloco no modelo. */
+        function editarTextoInline(el, idx, prop) {
+            if (!el) return;
+            el.contentEditable = 'true';
+            el.focus();
+            el.style.outline = '2px solid #0ea5e9';
+            const teclas = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); el.blur(); } };
+            el.addEventListener('keydown', teclas);
+            const sair = () => {
+                el.removeEventListener('keydown', teclas);
+                el.removeEventListener('blur', sair);
+                el.contentEditable = 'false';
+                el.style.outline = '';
+                let valor = el.innerText || '';
+                if (valor.endsWith('\n')) valor = valor.slice(0, -1);
+                avisarConstrutor({ tipo: 'construtor:acao', nome: 'atualizarPropriedade', args: [idx, prop, valor.trim()] });
+            };
+            el.addEventListener('blur', sair);
+        }
+
+        /** Largura exata do campo: pequeno menu ao lado do botão de % (proporções rápidas). */
+        function fecharPopoverLargura() {
+            const p = document.getElementById('popover-largura');
+            if (p && p.remove) p.remove();
+        }
+        function alternarPopoverLargura(idx, fid, ev) {
+            if (ev && ev.stopPropagation) { ev.stopPropagation(); if (ev.preventDefault) ev.preventDefault(); }
+            const anterior = document.getElementById('popover-largura');
+            const mesmo = anterior && anterior.getAttribute && anterior.getAttribute('data-campo') === String(fid);
+            fecharPopoverLargura();
+            if (mesmo) return;
+            const alvo = ev && (ev.currentTarget || ev.target);
+            const r = alvo && alvo.getBoundingClientRect ? alvo.getBoundingClientRect() : { bottom: 200, left: 100 };
+            const p = document.createElement('div');
+            p.id = 'popover-largura';
+            p.setAttribute('data-campo', String(fid));
+            p.style.cssText = 'position:absolute;z-index:9999;width:220px;background:#fff;border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 10px 30px rgba(15,23,42,.25);padding:10px;font:12px system-ui,sans-serif;color:#0f172a;';
+            p.style.top = (window.scrollY + r.bottom + 6) + 'px';
+            p.style.left = Math.max(6, Math.min((window.innerWidth || 800) - 226, r.left - 70)) + 'px';
+            const itens = [[25, '1/4'], [33, '1/3'], [50, '1/2'], [66, '2/3'], [75, '3/4'], [100, 'Total']];
+            p.innerHTML = '<div style="font-weight:800;text-transform:uppercase;font-size:10px;color:#475569;margin-bottom:6px">Largura do campo</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px">'
+                + itens.map(i => '<button type="button" style="padding:4px 2px;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc;cursor:pointer;font-weight:700;font-size:10px" onclick="definirLarguraExata(' + Number(idx) + ', \'' + escapeHtml(String(fid)) + '\', ' + i[0] + ', event)">' + i[1] + ' (' + i[0] + '%)</button>').join('') + '</div>';
+            document.body.appendChild(p);
+        }
+        function definirLarguraExata(idx, fid, pct, ev) {
+            if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+            fecharPopoverLargura();
+            avisarConstrutor({ tipo: 'construtor:acao', nome: 'setFieldWidthExact', args: [idx, fid, pct] });
+        }
+
+        /** Arrastar campos (alça ⠿) dentro da grade e do laudo: a nova ordem vai para o construtor. */
+        let arrastosCampos = [];
+        function ligarArrastoCampos() {
+            arrastosCampos.forEach(s => { try { s.destroy(); } catch (e) { /* já removido */ } });
+            arrastosCampos = [];
+            if (typeof Sortable === 'undefined') return;
+            document.querySelectorAll('.a4-grid-fields-container').forEach(cont => {
+                const idx = parseInt(cont.getAttribute('data-block-index'), 10);
+                if (isNaN(idx)) return;
+                arrastosCampos.push(new Sortable(cont, {
+                    handle: '.field-drag-handle', animation: 200, direction: 'horizontal', swapThreshold: 0.65, invertSwap: true, emptyInsertThreshold: 5, ghostClass: 'opacity-40', chosenClass: 'ring-2',
+                    onEnd: () => {
+                        const ids = Array.from(cont.children).map(el => el.getAttribute('data-field-id')).filter(Boolean);
+                        if (ids.length) avisarConstrutor({ tipo: 'construtor:acao', nome: 'reordenarCampos', args: [idx, ids] });
+                    }
+                }));
+            });
         }
 
         function iniciarModoEdicao() {
+            window.ReportBuilder = criarPonteConstrutor();
+            document.addEventListener('mousedown', (e) => { if (!e.target.closest || !e.target.closest('#popover-largura')) fecharPopoverLargura(); });
+            // Sortable (arrastar campos): carregado só aqui
+            if (typeof Sortable === 'undefined') {
+                const s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js';
+                s.onload = () => ligarArrastoCampos();
+                document.head.appendChild(s);
+            }
             window.addEventListener('message', (e) => {
                 if (e.origin !== window.location.origin || e.source !== window.parent) return;
                 const m = e.data;
@@ -377,6 +475,7 @@
             formTabs: () => window.reportViewerFormTabs || [],
             formFields: () => window.reportViewerFormFields
         });
+        const Editor = ReportEditor.create({ blocks: Blocks, esc: escapeHtml }); // moldura de edição (modo edição)
         const { getOrgBadgeHtml, getStatusBadgeHtml, getRecuoBadgeHtml, getGeometryCenter, formatFieldValueForDisplay, readFieldRaw, isRichField,
                 resolveFieldHtml, resolveFieldValue, getFieldWidthStyle, renderAttributeGrid, replaceMentionsWithData,
                 getFooterPageNumberText, renderHeaderSlotHtml, renderFooterSlotHtml } = Blocks;
@@ -675,7 +774,7 @@
                          style="max-width: ${pageWidthPx}px; min-height: ${pageHeightPx}px; ">
                         
                         <!-- Cabeçalho Institucional: Fora do corpo, acima da margem superior -->
-                        ${showHeader ? envolverEdicao(renderHeaderSlotHtml(hdrBloco, tpl, mm.left, mm.right), blocos.indexOf(hdrBloco), hdrBloco, { fixo: true }) : ''}
+                        ${showHeader ? envolverEdicao(EDICAO ? Editor.cabecalho(hdrBloco, blocos.indexOf(hdrBloco), tpl, { padLeftMm: mm.left, padRightMm: mm.right }) : renderHeaderSlotHtml(hdrBloco, tpl, mm.left, mm.right), blocos.indexOf(hdrBloco), hdrBloco, { fixo: true }) : ''}
 
                         <!-- Corpo da Folha: Delimitado entre as margens superior e inferior -->
                         <div ${pageIdAttr} class="a4-page-body-slot flex flex-col gap-5 w-full flex-1" style="padding: ${padTopMm}mm ${mm.right}mm ${padBotMm}mm ${mm.left}mm; box-sizing: border-box;">
@@ -713,6 +812,7 @@
                     return Blocks.renderHeaderBlock(bloco, tpl);
 
                 case 'grade_campos': {
+                    if (EDICAO) return Editor.grade(bloco, idx, fields, featureData, bloco.colunasLayout || 2);
                     return renderAttributeGrid(bloco, featureData, fields);
                 }
 
@@ -765,11 +865,13 @@
                     return Blocks.renderFreeTextBlock(bloco, idx, featureData);
 
                 case 'tabela_sintetica_1n': {
+                    if (EDICAO) return Editor.sintetica(bloco, idx, featureData);
                     return renderSyntheticTable(bloco, featureData);
                 }
 
                 case 'laudo_vistoria_fotos':
                 case 'galeria_fotos': {
+                    if (EDICAO) return Editor.laudo(bloco, idx, featureData);
                     return renderAnalyticalLaudo(bloco, featureData);
                 }
 
