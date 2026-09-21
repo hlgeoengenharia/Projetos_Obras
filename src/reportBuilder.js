@@ -142,6 +142,11 @@
                                 <button type="button" onclick="ReportBuilder.setPageSize('A3')" class="px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${pd.name === 'A3' ? 'bg-primary text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-primary'}">A3</button>
                             </div>
                         </div>
+                        ${isGeral ? '' : `
+                        <button type="button" onclick="ReportBuilder.previewReal()" class="flex items-center gap-1.5 px-4 py-2.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="Abre o relatório de verdade (o mesmo da impressão, do PDF e do Word) com uma feição de teste e o modelo como está agora, sem precisar salvar">
+                            <span class="material-symbols-outlined text-[18px]">visibility</span>
+                            <span>Ver como sairá</span>
+                        </button>`}
                         <button type="button" onclick="ReportBuilder.saveCurrentTemplate()" class="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="Salvar Modelo">
                             <span class="material-symbols-outlined text-[18px]">save</span>
                             <span>Salvar Modelo</span>
@@ -5480,6 +5485,27 @@
     }
     window.openFeatureReportPage = openFeatureReportPage;
 
+    /**
+     * "Ver como sairá": abre o relatório real (relatorio_view.html) com o modelo em edição (mesmo sem salvar) e uma
+     * feição FIXA DE TESTE (dados de exemplo para cada tipo de campo, geometria de 20 x 30 m, vizinhos e uma rua).
+     * A janela avisa que é prévia e não salva ajustes nem registra emissões.
+     */
+    function previewReal() {
+        if (!currentTemplate || !currentTemplate.form_id) return;
+        if (!window.ReportPreview) { alert('Módulo de prévia não carregado. Recarregue a página.'); return; }
+        const formTabs = (window.ReportAdapter && window.ReportAdapter.getFormTabs) ? window.ReportAdapter.getFormTabs(currentTemplate.form_id) : [];
+        const payload = window.ReportPreview.buildPreviewPayload({ template: JSON.parse(JSON.stringify(currentTemplate)), formId: currentTemplate.form_id, formTabs: JSON.parse(JSON.stringify(formTabs || [])) });
+        try {
+            const json = JSON.stringify(payload);
+            sessionStorage.setItem('constructive_active_report_payload', json);
+            localStorage.setItem('constructive_active_report_payload', json);
+        } catch (e) {
+            alert('Não foi possível preparar a prévia (armazenamento do navegador cheio).');
+            return;
+        }
+        window.open('relatorio_view.html?templateId=' + encodeURIComponent(currentTemplate.id || '') + '&previa=1', '_blank');
+    }
+
     function escapeHtml(str) {
         return String(str || '')
             .replace(/&/g, '&amp;')
@@ -5602,7 +5628,8 @@
         deleteCurrentTemplate,
         printReport,
         generateIndividualReport,
-        openFeatureReportPage
+        openFeatureReportPage,
+        previewReal
     };
 
 })();

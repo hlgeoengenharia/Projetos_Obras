@@ -465,6 +465,32 @@ async function runScenario(cfg) {
         ok('a borda do card usa a mesma alça das colunas (aparece ao passar o mouse e não sai na impressão)', /\.col-resize \{[^}]*cursor: col-resize/.test(css));
     }
 
+    // ---- prévia com a feição de teste (aberta pelo construtor): avisa e não salva nem registra
+    {
+        const RP = require('../src/reportPreview.js');
+        const vm = require('vm');
+        const tabs = [{ id: 'aba1', title: 'Dados do Imóvel', fields: [{ id: 'f_nome', label: 'Proprietário', type: 'text' }] }];
+        const tpl = tplWith({});
+        const payload = RP.buildPreviewPayload({ template: tpl, formId: 'f1', formTabs: tabs });
+        const r = await runScenario({ width: 1900, opener: true, ajustes: { alturaMm: 150 }, payload: payload });
+        const corpo = () => r.registry['a4-document-container']._html;
+        eq('prévia: sem erro de execução', r.errors, []);
+        ok('prévia: a folha traz o mapa com a feição de teste e o modelo em edição', /id="interactive-report-map"/.test(corpo()) && /FICHA CADASTRAL/.test(corpo()) && vm.runInContext('reportPayload.featureKey', r.sandbox) === 'exemplo-previa');
+        eq('prévia: ignora os ajustes salvos (abre no padrão do modelo: 90 mm)', vm.runInContext('mapController.getConfig().alturaMm', r.sandbox), 90);
+        r.sandbox.mapPanelAltura('120');
+        await r.sandbox.mapPanelSave();
+        const status = r.registry['map-panel-status'] ? r.registry['map-panel-status'].textContent : '';
+        ok('prévia: "Salvar ajustes" só avisa que não salva', /Prévia com dados de exemplo: os ajustes não são salvos/.test(status));
+        await r.sandbox.emitirEregistrar('impressao');
+        eq('prévia: impressão/Word não registram emissão (o protocolo não existiria no servidor)', r.captured.registros, []);
+        ok('prévia: camadas de exemplo listadas no painel do mapa', /Lotes \(exemplo\)/.test(r.registry['map-tools-panel']._html) && /Logradouros \(exemplo\)/.test(r.registry['map-tools-panel']._html));
+        ok('prévia: o aviso fixo (só na tela) existe no código', /id = 'aviso-previa'/.test(html) && /PRÉVIA<\/b> — feição e dados de exemplo/.test(html));
+        // relatório normal (sem a marca): continua registrando
+        const normal = await runScenario({ width: 1900, opener: true, payload: cenarios[3].payload });
+        await normal.sandbox.emitirEregistrar('impressao');
+        ok('relatório normal continua registrando a emissão', normal.captured.registros.length === 1);
+    }
+
     // ---- ícone de girar e cards (CSS): área de clique que encosta no texto, visível ao passar o mouse e durante o giro
     {
         const css = html.slice(html.indexOf('<style'), html.indexOf('</style>'));

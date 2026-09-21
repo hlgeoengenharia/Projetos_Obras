@@ -64,6 +64,7 @@ ok('folha A4 no título', has(html, 'Folha A4 Interativa') && has(html, '210 × 
 
 // ---------------------------------------------------------------- Mini-Mapa (card do Relatório Individual)
 ok('card do mapa: só o texto e o botão (nenhuma opção; tudo já vem ligado)', has(html, 'Mini-Mapa Cartográfico') && has(html, 'todas as opções ligadas') && ['cfg-map-x-rotulos', 'cfg-map-x-confr', 'cfg-map-x-area', 'cfg-map-x-sit', 'cfg-map-x-grade', 'cfg-map-temp-ativo', 'cfg-map-pts-ativo', 'cfg-map-pts-tab', 'cfg-map-pts-mem', 'cfg-map-med-ativo', 'cfg-map-destaque', 'cfg-map-base', 'cfg-map-altura', 'cfg-map-camadas', 'cfg-map-norte', 'cfg-map-escala', 'cfg-map-proj', 'cfg-map-note'].every(id => !has(html, 'id="' + id + '"')) && has(html, 'ReportBuilder.insertMapBlock()'));
+ok('individual: botão "Ver como sairá" abre o relatório real com a feição de teste; o geral não tem', has(html, 'ReportBuilder.previewReal()') && has(html, 'Ver como sairá') && typeof RB.previewReal === 'function');
 ok('rodapé oficial: opção do QR code de verificação', has(html, 'id="cfg-ftr-qr"') && has(html, 'QR code para verificar a autenticidade online'));
 ok('card explica que o usuário ajusta no relatório (Configurações do Mapa)', has(html, 'painel <em>Configurações do Mapa</em>'));
 ok('o modelo padrão já traz o mapa na folha: o botão é "Restaurar o padrão completo"', has(html, 'Restaurar o padrão completo do Mini-Mapa') && !has(html, 'Atualizar o Mini-Mapa da Folha'));

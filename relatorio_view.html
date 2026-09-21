@@ -381,6 +381,17 @@
             return formatFieldValueForDisplay(readFieldRaw(f, featureData), f);
         }
 
+        // aviso fixo (só na tela) quando o relatório é aberto pelo construtor com a feição de teste
+        function mostrarAvisoPrevia() {
+            if (document.getElementById('aviso-previa')) return;
+            const d = document.createElement('div');
+            d.id = 'aviso-previa';
+            d.className = 'no-print';
+            d.style.cssText = 'position:fixed;left:16px;bottom:16px;z-index:1300;max-width:340px;background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:9px 12px;border-radius:10px;font:12px/1.35 sans-serif;box-shadow:0 6px 18px rgba(15,23,42,.18)';
+            d.innerHTML = '<b>PRÉVIA</b> — feição e dados de exemplo, com o modelo como está no construtor. Nada é salvo nem registrado, e o que for gerado aqui não tem validade como documento.';
+            document.body.appendChild(d);
+        }
+
         function initReportViewer() {
             const docBox = document.getElementById('a4-document-container');
             if (docBox) docBox.addEventListener('input', () => scheduleEmissao());
@@ -425,6 +436,7 @@
             }
 
             const { templateId, formId, featureData, featureGeometry, template } = reportPayload;
+            if (reportPayload.preview) mostrarAvisoPrevia();
             
             // Busca o modelo
             let templates = [];
@@ -1390,7 +1402,10 @@
             return { tplId: String(tplId), key: String(key), formId: (reportPayload && reportPayload.formId) || '' };
         }
 
+        const emPrevia = () => !!(reportPayload && reportPayload.preview);
+
         async function loadMapAjustes() {
+            if (emPrevia()) return null; // prévia: sempre o padrão do modelo
             const { tplId, key } = mapAjusteIds();
             if (!tplId || !key) return null;
             const adapter = getOpenerAdapter();
@@ -1401,6 +1416,7 @@
         }
 
         async function persistMapAjustes(ajustes) {
+            if (emPrevia()) return { ok: false, motivo: 'previa' };
             const { tplId, key, formId } = mapAjusteIds();
             if (!tplId || !key) return { ok: false, motivo: 'sem-feicao' };
             const adapter = getOpenerAdapter();
@@ -2277,6 +2293,7 @@
         async function mapPanelSave() {
             const status = document.getElementById('map-panel-status');
             if (!mapController) return;
+            if (emPrevia()) { if (status) status.textContent = 'Prévia com dados de exemplo: os ajustes não são salvos.'; return; }
             if (status) status.textContent = 'Salvando…';
             const r = await persistMapAjustes(snapshotCompleto());
             if (!status) return;
@@ -2373,7 +2390,7 @@
         async function emitirEregistrar(formato) {
             clearTimeout(emissaoTimer);
             const em = await calcularEmissao();
-            if (em.hash) {
+            if (em.hash && !emPrevia()) { // prévia: nada é registrado (o protocolo não existe no servidor)
                 const adapter = getOpenerAdapter();
                 const ids = mapAjusteIds();
                 if (adapter && typeof adapter.registrarEmissao === 'function') {
