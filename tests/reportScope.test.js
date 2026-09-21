@@ -274,7 +274,8 @@ ok('voltando ao individual, o modelo geral não aparece na lista', !has(containe
 
 // ---------------------------------------------------------------- Lista de campos do "@" (texto livre): fecha ao clicar fora
 {
-    const mkDrop = (id) => { const cls = new Set(); return { id, classList: { add: (c) => cls.add(c), remove: (c) => cls.delete(c), contains: (c) => cls.has(c) }, _cls: cls }; };
+    const blocoEl = { style: { zIndex: '' } };
+    const mkDrop = (id) => { const cls = new Set(); return { id, closest: () => blocoEl, classList: { add: (c) => cls.add(c), remove: (c) => cls.delete(c), contains: (c) => cls.has(c) }, _cls: cls }; };
     const dd = mkDrop('mention-dropdown-3');
     const antes = document.querySelectorAll;
     document.querySelectorAll = (sel) => (String(sel).includes('mention-dropdown') ? [dd] : []);
@@ -284,11 +285,18 @@ ok('voltando ao individual, o modelo geral não aparece na lista', !has(containe
     dd._cls.clear();
     clicar(alvo(false, false));
     ok('clique fora da lista: ela fecha', dd._cls.has('hidden'));
+    ok('ao fechar, o bloco volta à camada normal', blocoEl.style.zIndex === '');
     dd._cls.clear();
     clicar(alvo(true, false));
     ok('clique dentro da lista: continua aberta (o item escolhido insere o campo)', !dd._cls.has('hidden'));
     clicar(alvo(false, true));
     ok('clique no botão "@ Inserir Campo": não fecha (ele é quem abre)', !dd._cls.has('hidden'));
+    // aberta: o bloco da lista sobe acima dos blocos de baixo (senão eles são pintados por cima e a lista parece transparente)
+    inputs['mention-dropdown-0'] = dd;
+    RB.showMentionDropdown(0);
+    ok('lista aberta: o bloco dela fica acima dos seguintes', !dd._cls.has('hidden') && blocoEl.style.zIndex === '60');
+    RB.hideMentionDropdown && RB.hideMentionDropdown(0);
+    delete inputs['mention-dropdown-0'];
     document.querySelectorAll = antes;
 }
 

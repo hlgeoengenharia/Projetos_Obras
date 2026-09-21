@@ -4915,6 +4915,7 @@
         if (filtered.length === 0) {
             dropdown.innerHTML = '<div class="p-2.5 text-[11px] text-slate-400 italic text-center">Nenhum campo encontrado com "@' + escapeHtml(query) + '"</div>';
             dropdown.classList.remove('hidden');
+            elevarBlocoDaLista(dropdown, true);
             return;
         }
 
@@ -4951,6 +4952,16 @@
             </div>
         `;
         dropdown.classList.remove('hidden');
+        elevarBlocoDaLista(dropdown, true);
+    }
+
+    /**
+     * Cada bloco da folha cria a própria camada (z-10): sem isto, os blocos de baixo (campos, botões de largura) ficavam
+     * PINTADOS POR CIMA da lista aberta, e ela parecia transparente. Enquanto a lista está aberta, o bloco dela sobe.
+     */
+    function elevarBlocoDaLista(dropdown, aberta) {
+        const bloco = dropdown && dropdown.closest ? dropdown.closest('.report-block-item') : null;
+        if (bloco && bloco.style) bloco.style.zIndex = aberta ? '60' : '';
     }
 
     function updateMentionDropdownHighlight(items) {
@@ -4966,7 +4977,7 @@
 
     function hideMentionDropdown(blockIndex) {
         const dropdown = document.getElementById(`mention-dropdown-${blockIndex}`);
-        if (dropdown) dropdown.classList.add('hidden');
+        if (dropdown) { dropdown.classList.add('hidden'); elevarBlocoDaLista(dropdown, false); }
     }
 
     function insertMentionField(blockIndex, fieldId, fieldName, fieldLabel, tabTitle = '') {
@@ -5648,7 +5659,7 @@
             const alvo = e.target;
             if (alvo && alvo.closest && (alvo.closest('[id^="mention-dropdown-"]') || alvo.closest('[onmousedown*="showMentionDropdown"]'))) return;
             document.querySelectorAll('[id^="mention-dropdown-"]').forEach(function (d) {
-                if (!d.classList.contains('hidden')) d.classList.add('hidden');
+                if (!d.classList.contains('hidden')) { d.classList.add('hidden'); elevarBlocoDaLista(d, false); }
             });
         });
     }
