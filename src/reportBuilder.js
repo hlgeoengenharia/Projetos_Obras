@@ -1354,46 +1354,7 @@
     }
 
     /** Como cada TIPO de campo será exibido no relatório (marcadores, não dados reais). */
-    function laudoSampleHtml(f, fileMode) {
-        const t = String(f.type || 'text').toLowerCase();
-        const ph = (s) => `<span class="text-slate-400 italic font-normal">${escapeHtml(s)}</span>`;
-        const link = (title, num, url) => `<div class="leading-snug mb-1"><strong>${title}</strong>${num ? ' - ' + num : ''}<br><span class="text-sky-700 break-all font-normal">${url}</span></div>`;
-        switch (t) {
-            case 'hiperlink': return link('Título', 'Número', 'https://endereço-do-link');
-            case 'hiperlink_1n': return link('Título 1', 'Número 1', 'https://endereço-do-link-1') + link('Título 2', 'Número 2', 'https://endereço-do-link-2');
-            case 'attachment':
-            case 'photo': {
-                const mode = fileMode || (t === 'photo' ? 'imagem' : 'lista');
-                if (mode === 'imagem') {
-                    return '<div class="grid grid-cols-2 gap-1"><div class="border border-slate-200 rounded overflow-hidden bg-white">'
-                        + '<div class="h-14 bg-slate-100 flex items-center justify-center"><span class="material-symbols-outlined text-[24px] text-slate-300">image</span></div>'
-                        + '<div class="p-1 text-[9px] leading-tight text-slate-600 font-normal"><div class="font-bold text-slate-800">Título</div><div class="font-mono">arquivo.jpg</div><div>Enviado por: Nome</div><div>00/00/0000 00:00</div></div>'
-                        + '</div></div>';
-                }
-                return '<div class="leading-snug mb-1"><strong>Título do arquivo 1</strong><br><span class="font-mono text-[9px] font-normal">arquivo-1.jpg</span></div>'
-                    + '<div class="leading-snug"><strong>Título do arquivo 2</strong><br><span class="font-mono text-[9px] font-normal">arquivo-2.pdf</span></div>';
-            }
-            case 'epol_1n': return '2023.0000001<br>2024.0000002';
-            case 'rip_1n': return '00000000001-01<br>00000000002-02';
-            case 'date': return '14/08/2026';
-            case 'currency': return 'R$ 0,00';
-            case 'area_m2': return '0,00 m²';
-            case 'length_m': return '0,00 m';
-            case 'volume_m3': return '0,00 m³';
-            case 'cpfcnpj': return '000.000.000-00';
-            case 'ipl': case 'ipf': return '0000000-00.0000.0.00.0000';
-            case 'epol': return '0000.0000000';
-            case 'rip': return '00000000000-00';
-            case 'insc_imob_cabedelo': return '0.0000.000.00.0000.0000.0';
-            case 'pa_anpp_ap': return '0.00.000.000000/0000-00';
-            case 'cep': return 'Rua, nº - Bairro - Cidade - UF - CEP: 00000-000';
-            case 'geolocation': return '-7.000000, -34.000000';
-            case 'textarea': return ph('«texto longo, exibido na íntegra»');
-            default: return ph('«' + (f.label || f.name || f.id) + '»');
-        }
-    }
 
-    const LAUDO_WIDE_TYPES = ['textarea', 'hiperlink', 'hiperlink_1n', 'attachment', 'cep'];
 
     // ---- Fotos e anexos: o usuário escolhe, por campo, "Lista" (título + nome do arquivo) ou "Imagem"
     // na íntegra (com título e metadados). Guardado em bloco.campos_exibicao = { idDoCampo: 'lista'|'imagem' }.
@@ -1478,133 +1439,6 @@
         const order = ((Array.isArray(bloco.ordem_abas) && bloco.ordem_abas.length) ? bloco.ordem_abas : current1nTabOrder).map(String);
         const rank = (t) => { const i = order.indexOf(String(t.id)); return i < 0 ? 999 : i; };
         return allTabs.filter(t => selectedIds.includes(String(t.id))).sort((a, b) => rank(a) - rank(b));
-    }
-
-    function renderLaudoPreview(bloco, index, fields) {
-        const layout = bloco.layoutFotos || '2_cols';
-        const gridClass = layout === '1_col' ? 'grid-cols-1' : (layout === 'grid_4' ? 'grid-cols-4' : 'grid-cols-2');
-        const isSingle = bloco.escopo === 'ultima';
-        const isAsc = bloco.ordem_cronologica === 'asc';
-        const density = bloco.densidade || current1nLaudoDensity || 'compact';
-        const striping = bloco.zebrado || current1nLaudoRowStriping || 'slate';
-        let cardPad = 'p-3';
-        let gap = 'gap-2';
-        if (density === 'comfortable') { cardPad = 'p-3.5 sm:p-4'; gap = 'gap-2.5'; }
-        else if (density === 'ultracompact') { cardPad = 'p-2'; gap = 'gap-1.5'; }
-        const cardBg = striping === 'sky' ? 'bg-sky-50/60 border-sky-200' : (striping === 'white' ? 'bg-white border-slate-200' : 'bg-slate-50/70 border-slate-200');
-        const larguras = bloco.campos_larguras || {};
-
-        const tabs = laudoTabsSelecionadas(bloco, fields);
-
-        ensureLaudoFieldSelection(bloco, tabs);
-        const selIds = (Array.isArray(bloco.campos_selecionados) ? bloco.campos_selecionados : [])
-            .map(cf => typeof cf === 'string' ? cf : (cf.rawId || cf.id));
-
-        const titleHtml = `
-            <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between flex-wrap gap-1">
-                <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(escapeHtml(bloco.titulo || 'Laudo Analítico e Caderno Fotográfico')).replace(/\r?\n/g, '<br>')}</span>
-                <div class="flex items-center gap-1.5 text-[10px] font-mono text-slate-400">
-                    <span>${tabs.length} aba(s)</span><span>•</span>
-                    <span>${isSingle ? 'Última vistoria de cada aba' : 'Todas as vistorias'}</span><span>•</span>
-                    <span>${isAsc ? 'Antigo → Recente' : 'Recente → Antigo'}</span>
-                    <span class="text-[9px] text-sky-600 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded font-medium print:hidden ml-1">Arraste ⠿ para reordenar campos</span>
-                </div>
-            </div>`;
-
-        if (!tabs.length) {
-            return `<div class="mb-4">${titleHtml}<div class="p-4 text-center text-xs italic text-slate-400 border border-dashed border-slate-300 rounded-lg">Marque as abas do laudo na barra lateral (card "Laudo Analítico") para elas aparecerem aqui.</div></div>`;
-        }
-
-        const sections = tabs.map(tab => {
-            const photoFields = tab.fields.filter(f => String(f.type || '').toLowerCase() === 'photo');
-            let tabFields = tab.fields.filter(f => String(f.type || '').toLowerCase() !== 'photo' && (!selIds.length || selIds.includes(f.id)));
-            if (selIds.length) tabFields = tabFields.slice().sort((a, b) => selIds.indexOf(a.id) - selIds.indexOf(b.id));
-            const tabTitle = bloco['custom_tab_title_' + tab.id] || ('Aba / Ente: ' + tab.title);
-
-            const fieldCards = tabFields.map(f => {
-                const fid = f.id;
-                const type = String(f.type || '').toLowerCase();
-                let pct = larguras[fid];
-                if (!pct) pct = LAUDO_WIDE_TYPES.includes(type) ? 100 : 50;
-                pct = Math.round(pct);
-                const widthStyle = getFieldWidthStyle(pct);
-                const isExpanded = pct > 55;
-                const label = f.label || f.name || fid;
-                return `
-                    <div class="relative group/field p-2 border ${isExpanded ? 'border-sky-300 bg-sky-50/30 shadow-2xs' : 'border-slate-200 bg-white'} rounded-lg select-none transition-all"
-                         data-field-id="${escapeHtml(fid)}" data-block-index="${index}"
-                         style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">
-                        <div class="flex items-center justify-between gap-1 mb-1">
-                            <div class="flex items-center gap-1 min-w-0 flex-1">
-                                <span class="field-drag-handle cursor-grab active:cursor-grabbing text-slate-300 group-hover/field:text-sky-600 hover:bg-slate-200/60 p-0.5 rounded transition-colors" title="Arraste para mover de posição no laudo">
-                                    <span class="material-symbols-outlined text-[14px] leading-none">drag_indicator</span>
-                                </span>
-                                <span class="text-[9.5px] uppercase font-extrabold text-slate-600 truncate" title="${escapeHtml(label)}">${escapeHtml(label)}:</span>
-                            </div>
-                            <div class="flex items-center gap-1 shrink-0">
-                                ${fileModeToggleHtml(index, f, fileFieldMode(bloco, f))}
-                                <div class="inline-flex items-center bg-white border border-slate-200 rounded p-0.5 shadow-2xs">
-                                    <button type="button" class="field-width-dec-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 hover:bg-slate-100 rounded cursor-pointer transition-colors"
-                                            onclick="ReportBuilder.changeFieldWidthStep(${index}, '${escapeHtml(fid)}', -1, event)" title="Diminuir largura do campo (-)">
-                                        <span class="material-symbols-outlined text-[12px] leading-none">remove</span>
-                                    </button>
-                                    <button type="button" class="field-width-badge-btn px-1 py-0.5 text-[9px] font-extrabold text-slate-700 hover:text-sky-600 cursor-pointer transition-colors"
-                                            onclick="ReportBuilder.toggleFieldWidthPopover(${index}, '${escapeHtml(fid)}', event)" title="Clique para escolher proporção exata">${pct}%</button>
-                                    <button type="button" class="field-width-inc-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 hover:bg-slate-100 rounded cursor-pointer transition-colors"
-                                            onclick="ReportBuilder.changeFieldWidthStep(${index}, '${escapeHtml(fid)}', 1, event)" title="Aumentar largura do campo (+)">
-                                        <span class="material-symbols-outlined text-[12px] leading-none">add</span>
-                                    </button>
-                                </div>
-                                <button type="button" class="field-remove-btn p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors cursor-pointer print:hidden"
-                                        onclick="ReportBuilder.removeFieldFromAnalytical1n(${index}, '${escapeHtml(fid)}', event)" title="Remover este campo do laudo">
-                                    <span class="material-symbols-outlined text-[13px] leading-none">close</span>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="text-[10.5px] text-slate-800 font-semibold break-words whitespace-normal">${laudoSampleHtml(f, fileFieldMode(bloco, f))}</div>
-                    </div>`;
-            }).join('');
-
-            const photosHtml = photoFields.length ? photoFields.map(pf => {
-                const pfMode = fileFieldMode(bloco, pf);
-                const header = `<div class="flex items-center justify-between gap-1 pt-1"><span class="text-[9.5px] uppercase font-extrabold text-slate-600 truncate">${escapeHtml(pf.label || 'Fotos')}:</span>${fileModeToggleHtml(index, pf, pfMode)}</div>`;
-                if (pfMode === 'lista') {
-                    return header + `<div class="p-2 bg-white rounded-lg border border-slate-200 text-[10.5px] text-slate-800 font-semibold">${laudoSampleHtml(pf, 'lista')}</div>`;
-                }
-                return header + `
-                    <div class="grid ${gridClass} gap-2.5">
-                        <div class="border border-slate-200 rounded-lg overflow-hidden bg-white flex flex-col shadow-2xs">
-                            <div class="h-24 bg-slate-100 flex items-center justify-center text-slate-400 text-xs font-bold relative">
-                                <span class="material-symbols-outlined text-[28px] text-slate-300">photo_camera</span>
-                                <span class="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1 rounded">${escapeHtml(pf.label || 'Fotos')}</span>
-                            </div>
-                            <div class="p-2 text-[10px] space-y-0.5 text-slate-600">
-                                ${bloco.exibirLegenda !== false ? '<div class="font-bold text-slate-800 truncate">Legenda da foto</div>' : ''}
-                                ${bloco.exibirData !== false ? '<div>Data: 00/00/0000</div>' : ''}
-                            </div>
-                        </div>
-                    </div>`;
-            }).join('') : '';
-
-            return `
-                <details open class="group/tab" data-tab-id="${escapeHtml(String(tab.id))}">
-                    <summary class="flex items-center justify-between px-2 py-1 bg-slate-100 rounded-lg border border-slate-200 text-xs cursor-pointer list-none">
-                        <div class="flex items-center gap-1.5 font-bold text-slate-800 uppercase tracking-wide">
-                            <span class="cursor-text hover:bg-sky-50 px-1 rounded transition-colors" title="Duplo clique para editar o texto da aba"
-                                  ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'custom_tab_title_${escapeHtml(String(tab.id))}')">${escapeHtml(tabTitle)}</span>
-                        </div>
-                        <span class="text-[9.5px] font-mono font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">${tabFields.length} campo(s) • ${tab.isMultiple ? '1:N' : '1:1'}</span>
-                    </summary>
-                    <div class="mt-2 border rounded-xl ${cardPad} ${cardBg} space-y-2.5 shadow-2xs">
-                        ${tabFields.length
-                            ? `<div class="flex flex-wrap ${gap} a4-grid-fields-container" data-block-index="${index}">${fieldCards}</div>`
-                            : '<div class="text-[10px] italic text-slate-400">Nenhum campo desta aba foi escolhido para o laudo. Marque os campos na barra lateral.</div>'}
-                        ${photosHtml}
-                    </div>
-                </details>`;
-        }).join('');
-
-        return `<div class="mb-4">${titleHtml}<div class="space-y-4">${sections}</div></div>`;
     }
 
     /** Lista (↑ ↓) das abas do laudo, na ordem em que aparecerão no relatório. */
@@ -1697,7 +1531,7 @@
             if (hdrIndex !== -1) {
                 const hdrBloco = currentTemplate.blocos[hdrIndex];
                 headerSlot.innerHTML = `
-                    <div class="report-block-item group relative transition-all print:border-none print:p-0 print:bg-transparent page-break-avoid w-full${(window.ReportBlocks && window.ReportPreview) ? '' : ' border-b border-slate-300 pb-2 mb-1'}" data-block-id="${hdrBloco.id || hdrIndex}">
+                    <div class="report-block-item group relative transition-all print:border-none print:p-0 print:bg-transparent page-break-avoid w-full" data-block-id="${hdrBloco.id || hdrIndex}">
                         <!-- Barra de Controle Flutuante no Hover (Posicionada à esquerda para não sobrepor metadados à direita) -->
                         <div class="absolute -top-3.5 left-2 hidden group-hover:flex items-center gap-1 bg-slate-900/90 text-white rounded-lg shadow-md px-1.5 py-0.5 z-30 select-none print:hidden backdrop-blur-xs">
                             <div class="flex items-center gap-1 text-slate-300 px-1" title="Cabeçalho Oficial Institucional (Acima da Margem Superior)">
@@ -1726,7 +1560,7 @@
             if (ftrIndex !== -1) {
                 const ftrBloco = currentTemplate.blocos[ftrIndex];
                 footerSlot.innerHTML = `
-                    <div class="report-block-item group relative transition-all print:border-none print:p-0 print:bg-transparent page-break-avoid w-full mt-auto${(window.ReportBlocks && window.ReportPreview) ? '' : ' border-t border-slate-300 pt-2'}" data-block-id="${ftrBloco.id || ftrIndex}">
+                    <div class="report-block-item group relative transition-all print:border-none print:p-0 print:bg-transparent page-break-avoid w-full mt-auto" data-block-id="${ftrBloco.id || ftrIndex}">
                         <!-- Barra de Controle Flutuante no Hover (Posicionada à esquerda para não sobrepor metadados à direita) -->
                         <div class="absolute -top-3.5 left-2 hidden group-hover:flex items-center gap-1 bg-slate-900/90 text-white rounded-lg shadow-md px-1.5 py-0.5 z-30 select-none print:hidden backdrop-blur-xs">
                             <div class="flex items-center gap-1 text-slate-300 px-1" title="Rodapé Oficial Fixo na Base da Folha (Abaixo da Margem Inferior)">
@@ -1813,206 +1647,19 @@
     }
 
     /**
-     * Sanitiza o título de abas/órgãos para exibição em tabelas sintéticas e laudos fotográficos.
-     */
-    function sanitizeTabTitle(t) {
-        const title = (t && typeof t === 'object') ? (t.title || t.label || t.name) : String(t || '');
-        if (!title || title.toLowerCase().startsWith('f_') || title.toLowerCase().startsWith('tab_')) {
-            return 'MPF';
-        }
-        return title;
-    }
-
-    /**
      * Renderiza o conteúdo do bloco com suporte a Duplo-Clique Inline em todos os textos.
      */
     function renderBlockContent(bloco, index, fields, charts) {
         switch (bloco.tipo) {
             case 'cabecalho':
-                if (window.ReportBlocks && window.ReportPreview) return renderCabecalhoReal(bloco, index, fields);
-                const repeatLabel = bloco.repetir_todas_folhas ? 'Todas as Folhas' : 'Apenas 1ª Folha';
-                return `
-                    <div class="w-full">
-                        <!-- Data, Hora e Protocolo na parte superior direita, FORA do card principal -->
-                        ${(bloco.exibirDataHora || bloco.exibirProtocolo) ? `
-                            <div class="flex items-center justify-end gap-3 font-mono text-[10px] text-slate-500 mb-1 select-none print:mb-0.5">
-                                ${bloco.exibirDataHora ? `<span>Data: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</span>` : ''}
-                                ${(bloco.exibirDataHora && bloco.exibirProtocolo) ? `<span class="text-slate-300">•</span>` : ''}
-                                ${bloco.exibirProtocolo ? `<span class="font-bold text-slate-700">Protocolo: #${(bloco.id || '2026').slice(-6).toUpperCase()}</span>` : ''}
-                                <span class="text-[9px] font-sans font-bold ${bloco.repetir_todas_folhas ? 'text-sky-600 bg-sky-50 dark:bg-sky-950/40 border-sky-200' : 'text-slate-500 bg-slate-100 dark:bg-slate-800 border-slate-200'} border px-1.5 py-0.2 rounded ml-1 print:hidden" title="Modo de repetição nas folhas">${repeatLabel}</span>
-                            </div>
-                        ` : ''}
-                        <div class="flex items-start justify-between border-b-2 border-slate-900 pb-3 mb-2 gap-4">
-                            <div class="flex items-center gap-3">
-                                ${bloco.logo ? `
-                                    <div class="w-14 h-14 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden shrink-0 border border-slate-200">
-                                        ${bloco.logo_url ? `
-                                            <img src="${bloco.logo_url}" class="w-full h-full object-contain" />
-                                        ` : `
-                                            <span class="material-symbols-outlined text-slate-800 text-[42px]">account_balance</span>
-                                        `}
-                                    </div>
-                                ` : ''}
-                                <div>
-                                    <div class="text-[11px] uppercase font-bold text-slate-600 tracking-wider cursor-text hover:bg-sky-50 px-1 py-0.5 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'subtitulo')" title="Duplo clique para editar">${(escapeHtml(bloco.subtitulo || 'Prefeitura Municipal')).replace(/\r?\n/g, '<br>')}</div>
-                                    <div class="text-lg font-black uppercase text-slate-900 tracking-tight cursor-text hover:bg-sky-50 px-1 py-0.5 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')" title="Duplo clique para editar">${(escapeHtml(bloco.titulo || 'FICHA CADASTRAL DO IMÓVEL')).replace(/\r?\n/g, '<br>')}</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
+                return renderCabecalhoReal(bloco, index, fields);
 
             case 'grade_campos': {
                 const colCount = bloco.colunasLayout || 2;
                 if (!bloco.campos_spans) bloco.campos_spans = {};
                 if (!bloco.campos_larguras) bloco.campos_larguras = {};
-
-                // Mapeia os campos preservando a ordem exata de bloco.campos_selecionados
-                const fieldsMap = new Map();
-                fields.forEach(f => {
-                    fieldsMap.set(f.id, f);
-                    if (f.name) fieldsMap.set(f.name, f);
-                });
-
-                const rawSel = Array.isArray(bloco.campos_selecionados) ? bloco.campos_selecionados : [];
-                let flds = rawSel
-                    .map(item => typeof item === 'string' ? { id: item } : item)
-                    .map(item => {
-                        const baseField = fieldsMap.get(item.id) || fieldsMap.get(item.name) || {};
-                        return { ...baseField, ...item };
-                    })
-                    .filter(f => f && (f.label || f.name));
-
-                if (flds.length === 0 && rawSel.length > 0) {
-                    const selSet = new Set(rawSel.map(s => typeof s === 'string' ? s : s.id));
-                    flds = fields.filter(f => selSet.has(f.id));
-                }
-
                 // Desenho REAL (o mesmo do relatório) com os dados da feição de teste; os controles de edição ficam por cima
-                if (window.ReportBlocks && window.ReportPreview) {
-                    return renderGradeReal(bloco, index, fields, colCount);
-                }
-
-                if (colCount === 1) {
-                    // Lista Corrida (Chave-Valor)
-                    return `
-                        <div class="mb-4">
-                            <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">
-                                <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(escapeHtml(bloco.titulo || 'Atributos Cadastrais')).replace(/\r?\n/g, '<br>')}</span>
-                                <div class="flex items-center gap-2">
-                                    <span class="text-[10px] font-mono text-slate-400 font-normal">Lista Corrida</span>
-                                    <span class="text-[9px] text-sky-600 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 px-1.5 py-0.5 rounded font-medium print:hidden">Arraste ⠿ para reordenar</span>
-                                </div>
-                            </div>
-                            <div class="divide-y divide-slate-200 border border-slate-200 rounded-lg overflow-hidden a4-grid-fields-container" data-block-index="${index}">
-                                ${flds.map(f => `
-                                    <div class="flex items-center justify-between px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50 group/field select-none" data-field-id="${f.id}">
-                                        <div class="flex items-center gap-2 min-w-0">
-                                            <span class="field-drag-handle cursor-grab active:cursor-grabbing text-slate-300 group-hover/field:text-sky-600 p-0.5 rounded hover:bg-slate-200 transition-colors" title="Arraste para mover de posição na lista">
-                                                <span class="material-symbols-outlined text-[15px] leading-none">drag_indicator</span>
-                                            </span>
-                                            <span class="font-bold text-slate-600 truncate">${escapeHtml(f.label)}:</span>
-                                        </div>
-                                        <div class="flex items-center gap-2">
-                                            ${fileModeToggleHtml(index, f, fileFieldMode(bloco, f))}
-                                            <span class="font-semibold text-slate-900 truncate font-mono text-[11px]">[${escapeHtml(f.label)}]${isFileField(f) ? ' · ' + (fileFieldMode(bloco, f) === 'imagem' ? 'imagem' : 'lista') : ''}</span>
-                                            <button type="button" 
-                                                    class="field-remove-btn p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition-colors cursor-pointer print:hidden" 
-                                                    onclick="ReportBuilder.removeFieldFromGrid(${index}, '${f.id}', event)" 
-                                                    title="Remover campo da grade">
-                                                <span class="material-symbols-outlined text-[14px] leading-none">close</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    `;
-                }
-
-                return `
-                    <div class="mb-4">
-                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between flex-wrap gap-1">
-                            <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(escapeHtml(bloco.titulo || 'Atributos Cadastrais')).replace(/\r?\n/g, '<br>')}</span>
-                            <div class="flex items-center gap-2">
-                                <span class="text-[10px] font-mono text-slate-400 font-normal">${colCount} Colunas</span>
-                                <span class="text-[9px] text-sky-600 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 px-1.5 py-0.5 rounded font-medium print:hidden">Arraste ⠿ para reordenar • Use [-] [+] para ajustar largura</span>
-                            </div>
-                        </div>
-                        <div class="flex flex-wrap gap-2.5 a4-grid-fields-container" data-block-index="${index}">
-                            ${flds.map(f => {
-                                const larguras = bloco.campos_larguras || {};
-                                const spans = bloco.campos_spans || {};
-                                let pct = larguras[f.id];
-                                if (!pct) {
-                                    const span = Math.min(spans[f.id] || f.colSpan || 1, colCount);
-                                    if (span >= colCount) pct = 100;
-                                    else if (colCount === 3 && span === 2) pct = 66;
-                                    else pct = colCount === 3 ? 33 : 50;
-                                }
-                                pct = Math.round(pct);
-                                const widthStyle = getFieldWidthStyle(pct);
-                                const isExpanded = pct > 55;
-                                return `
-                                    <div class="relative group/field p-2.5 border ${isExpanded ? 'border-sky-300 dark:border-sky-700 bg-sky-50/40 dark:bg-sky-950/20 shadow-2xs' : 'border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40'} rounded-lg hover:shadow-xs select-none transition-all"
-                                         data-field-id="${f.id}"
-                                         data-block-index="${index}"
-                                         style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">
-                                        
-                                        <!-- Topo do card com alça de drag, stepper de largura e botão X -->
-                                        <div class="flex items-center justify-between gap-1 mb-1">
-                                            <div class="flex items-center gap-1 min-w-0 flex-1">
-                                                <span class="field-drag-handle cursor-grab active:cursor-grabbing text-slate-300 group-hover/field:text-sky-600 hover:bg-slate-200/60 dark:hover:bg-slate-700 p-0.5 rounded transition-colors" title="Arraste para mover de posição na grade">
-                                                    <span class="material-symbols-outlined text-[15px] leading-none">drag_indicator</span>
-                                                </span>
-                                                <span class="text-[10px] uppercase font-extrabold text-slate-600 dark:text-slate-300 truncate" title="${escapeHtml(f.label)}">${escapeHtml(f.label)}</span>
-                                            </div>
-
-                                            <div class="flex items-center gap-1 shrink-0">
-                                                ${fileModeToggleHtml(index, f, fileFieldMode(bloco, f))}
-                                                <!-- Stepper de Largura Direto: [-] [X%] [+] -->
-                                                <div class="inline-flex items-center bg-white dark:bg-slate-700/90 border border-slate-200 dark:border-slate-600 rounded-md p-0.5 shadow-2xs">
-                                                    <button type="button" 
-                                                            class="field-width-dec-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 rounded cursor-pointer transition-colors" 
-                                                            onclick="ReportBuilder.changeFieldWidthStep(${index}, '${f.id}', -1, event)" 
-                                                            title="Diminuir largura do campo (-)">
-                                                        <span class="material-symbols-outlined text-[13px] leading-none">remove</span>
-                                                    </button>
-                                                    <button type="button" 
-                                                            class="field-width-badge-btn px-1.5 py-0.5 text-[9.5px] font-extrabold text-slate-700 dark:text-slate-200 hover:text-sky-600 dark:hover:text-sky-300 cursor-pointer transition-colors" 
-                                                            onclick="ReportBuilder.toggleFieldWidthPopover(${index}, '${f.id}', event)" 
-                                                            title="Clique para escolher proporção exata ou regular slider">
-                                                        ${pct}%
-                                                    </button>
-                                                    <button type="button" 
-                                                            class="field-width-inc-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 rounded cursor-pointer transition-colors" 
-                                                            onclick="ReportBuilder.changeFieldWidthStep(${index}, '${f.id}', 1, event)" 
-                                                            title="Aumentar largura do campo (+)">
-                                                        <span class="material-symbols-outlined text-[13px] leading-none">add</span>
-                                                    </button>
-                                                </div>
-
-                                                <!-- Botão X para retirar campo diretamente da folha -->
-                                                <button type="button" 
-                                                        class="field-remove-btn p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50 rounded transition-colors cursor-pointer print:hidden" 
-                                                        onclick="ReportBuilder.removeFieldFromGrid(${index}, '${f.id}', event)" 
-                                                        title="Remover este campo da grade">
-                                                    <span class="material-symbols-outlined text-[14px] leading-none">close</span>
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        ${isFileField(f)
-                                            ? `<div class="text-[10.5px] text-slate-800 font-semibold mt-1 break-words whitespace-normal">${laudoSampleHtml(f, fileFieldMode(bloco, f))}</div>`
-                                            : `<div class="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 font-mono text-[11px] ${isExpanded ? 'break-words' : 'truncate'}">
-                                            [Valor de ${escapeHtml(f.label)}]
-                                        </div>`}
-                                    </div>
-                                `;
-                            }).join('')}
-                        </div>
-                    </div>
-                `;
+                return renderGradeReal(bloco, index, fields, colCount);
             }
 
             case 'mapa_estatico':
@@ -2169,340 +1816,12 @@
                     </div>
                 `;
 
-            case 'tabela_sintetica_1n': {
-                if (temDesenhoReal1n()) return renderSinteticaReal(bloco, index, fields);
-                const rawCols = (Array.isArray(bloco.colunas) && bloco.colunas.length > 0)
-                    ? bloco.colunas
-                    : ['aba', 'data', 'situacao_ocupacao', 'situacao_recuo', 'area_invadida', 'qtd_fotos'];
-
-                const fieldsMap = new Map();
-                fields.forEach(f => {
-                    fieldsMap.set(f.id, f);
-                    if (f.name) fieldsMap.set(f.name, f);
-                });
-
-                const colLabelMap = {
-                    'aba': 'Aba / Ente',
-                    'data': 'Data Vistoria',
-                    'org': 'Órgão / Entidade',
-                    'situacao_ocupacao': 'Situação Ocupação',
-                    'situacao_recuo': 'Situação Recuo',
-                    'area_invadida': 'Área Invadida',
-                    'qtd_fotos': 'Fotos / Anexos'
-                };
-
-                const cols = rawCols.map(c => {
-                    const cId = typeof c === 'string' ? c : c.id;
-                    const cLabel = (typeof c === 'object' && c.label) ? c.label : (colLabelMap[cId] || fieldsMap.get(cId)?.label || cId);
-                    return { id: cId, label: cLabel };
-                });
-
-                const isAsc = bloco.ordem_cronologica === 'asc';
-                const isGroupedByTab = !!bloco.ordenar_por_aba;
-                const density = bloco.densidade || current1nTableDensity || 'compact';
-                const striping = bloco.zebrado || current1nRowStriping || 'slate';
-
-                let thDensityClass = 'py-1.5 px-2 text-[9.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300';
-                let tdDensityClass = 'py-1.5 px-2 text-[10px] border-b border-slate-200';
-                if (density === 'comfortable') {
-                    thDensityClass = 'p-2 text-[10.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300';
-                    tdDensityClass = 'p-2 text-[11px] border-b border-slate-200';
-                } else if (density === 'ultracompact') {
-                    thDensityClass = 'py-0.5 px-1 text-[8.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300';
-                    tdDensityClass = 'py-0.5 px-1 text-[9px] font-medium border-b border-slate-200';
-                }
-
-                // Resolução dinâmica de abas e registros baseados na seleção do usuário
-                const formTabs = (window.ReportAdapter && window.ReportAdapter.getFormTabs) ? window.ReportAdapter.getFormTabs(currentTemplate?.form_id) : [];
-                const multiTabs = (window.ReportAdapter && window.ReportAdapter.getMultipleTabs)
-                    ? window.ReportAdapter.getMultipleTabs(currentTemplate?.form_id)
-                    : [];
-
-                const tabsPool = formTabs.length > 0 ? formTabs : multiTabs;
-                const synSelectedTabIds = new Set();
-                const hasExplicitSynTabs = Array.isArray(bloco.abas_selecionadas);
-                if (hasExplicitSynTabs) {
-                    bloco.abas_selecionadas.forEach(id => synSelectedTabIds.add(id));
-                } else {
-                    tabsPool.forEach(t => synSelectedTabIds.add(t.id));
-                }
-
-                let activeSynTabs = tabsPool.filter(t => synSelectedTabIds.has(t.id) || synSelectedTabIds.has(t.title));
-                if (!hasExplicitSynTabs && activeSynTabs.length === 0 && tabsPool.length > 0) {
-                    activeSynTabs = tabsPool;
-                }
-
-                // Função auxiliar para avaliar regras de condição de campos
-                const checkFieldCondition = (fld, data) => {
-                    if (!fld || !fld.condition) return true;
-                    const cField = fld.condition;
-                    const expected = (fld.condValue !== undefined && fld.condValue !== null) ? String(fld.condValue).toLowerCase().trim() : '';
-                    const op = fld.conditionOperator || 'equals';
-                    let cVal = data ? (data[cField] !== undefined ? data[cField] : data[cField.toLowerCase()]) : undefined;
-                    if (cVal === undefined && data) {
-                        for (const [k, v] of Object.entries(data)) {
-                            if (k.toLowerCase() === cField.toLowerCase() || k.toLowerCase().replace(/_/g, '') === cField.toLowerCase().replace(/_/g, '')) {
-                                cVal = v;
-                                break;
-                            }
-                        }
-                    }
-                    const cStr = (cVal !== undefined && cVal !== null) ? String(cVal).toLowerCase().trim() : '';
-                    if (op === 'equals') return cStr === expected;
-                    if (op === 'not_equals') return cStr !== expected && cStr !== '';
-                    if (op === 'contains') return cStr.includes(expected);
-                    if (op === 'filled' || op === 'not_empty') return cStr !== '' && cStr !== '—';
-                    return true;
-                };
-
-                let mockRecords = [];
-                activeSynTabs.forEach(tabItem => {
-                    const rawTitle = (typeof tabItem === 'object') ? (tabItem.title || tabItem.name || tabItem.id) : String(tabItem);
-                    const sTitle = sanitizeTabTitle(rawTitle);
-                    const titleLow = sTitle.toLowerCase();
-                    let orgBadge = sTitle.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) || 'ABA';
-
-                    // Detecção com precedência estrita para MPF (1 único registro consolidado)
-                    if (titleLow.includes('mpf') || titleLow.includes('minist') || titleLow.includes('procurad')) {
-                        orgBadge = 'MPF';
-                        mockRecords.push(
-                            { 
-                                org: 'MPF', 
-                                orgBadge: 'MPF', 
-                                date: '14/08/2026', 
-                                situacao: 'Em Investigação', 
-                                recuo: 'Não Recuou', 
-                                area: '120,50 m²', 
-                                fotos: '📷 3 Fotos', 
-                                links: 'IC 1.24.000.000123/2026', 
-                                conclusao: 'Procedimento preparatório de tutela coletiva.',
-                                ipl: 'IPL 0800653/2026',
-                                distribuicao: '2ª Vara Federal',
-                                designado: 'Dr. Procurador da República',
-                                correlatos: 'ACP 0801234/2026',
-                                fase_investigacao: 'Instrução'
-                            }
-                        );
-                    } else if (titleLow.includes('polic') || /\bpf\b/.test(titleLow) || titleLow === 'pf' || (titleLow.includes('pf') && !titleLow.includes('mpf'))) {
-                        orgBadge = 'PF';
-                        mockRecords.push(
-                            { org: 'PF', orgBadge: 'PF', date: '15/08/2026', situacao: 'Irregular', recuo: 'Não Recuou', area: '120,50 m²', fotos: '📷 4 Fotos', links: 'Proc. IPL 0800653', conclusao: 'Constatada ocupação irregular sem recuo.' },
-                            { org: 'PF', orgBadge: 'PF', date: '12/01/2026', situacao: 'Em Notificação', recuo: 'Recuo Parcial', area: '120,50 m²', fotos: '📷 2 Fotos', links: 'Proc. IPL 0800653', conclusao: 'Vistoria inicial de constatação.' }
-                        );
-                    } else if (titleLow.includes('spu') || titleLow.includes('patrim')) {
-                        orgBadge = 'SPU';
-                        mockRecords.push(
-                            { org: 'SPU', orgBadge: 'SPU', date: '10/04/2026', situacao: 'Pendente', recuo: 'Recuo Parcial', area: '85,20 m²', fotos: '📷 3 Fotos', links: 'RIP 2145.00192', conclusao: 'Área da União sob regime de regularização.' }
-                        );
-                    } else if (titleLow.includes('pm') || titleLow.includes('pref') || titleLow.includes('munic') || titleLow.includes('meio')) {
-                        orgBadge = 'MUNICÍPIO';
-                        mockRecords.push(
-                            { org: 'MUNICÍPIO', orgBadge: 'MUNICÍPIO', date: '05/02/2026', situacao: 'Regular', recuo: 'Recuo Total', area: '45,00 m²', fotos: '📷 1 Foto', links: 'Auto 102/2026', conclusao: 'Parâmetros urbanísticos respeitados.' }
-                        );
-                    } else {
-                        const genericBadge = sTitle.toUpperCase();
-                        mockRecords.push(
-                            { org: sTitle, orgBadge: genericBadge, date: '15/08/2026', situacao: 'Conforme', recuo: 'Regular', area: '100,00 m²', fotos: '📷 2 Fotos', links: 'Registro Geral', conclusao: `Vistoria técnica cadastrada para a aba ${sTitle}.` }
-                        );
-                    }
-                });
-
-                if (mockRecords.length === 0) {
-                    mockRecords.push(
-                        { org: 'MPF', orgBadge: 'MPF', date: '14/08/2026', situacao: 'Em Investigação', recuo: 'Não Recuou', area: '120,50 m²', fotos: '📷 3 Fotos', links: 'IC 1.24.000.000123/2026', conclusao: 'Procedimento preparatório de tutela coletiva.' },
-                        { org: 'PF', orgBadge: 'PF', date: '12/01/2026', situacao: 'Em Notificação', recuo: 'Recuo Parcial', area: '120,50 m²', fotos: '📷 2 Fotos', links: 'Proc. IPL 0800653', conclusao: 'Vistoria inicial de constatação.' }
-                    );
-                }
-
-                // Deduplicação estrita para MPF: garante no máximo 1 único registro consolidado
-                const uniqueMockRecords = [];
-                let hasMpfEntry = false;
-                mockRecords.forEach(r => {
-                    const isMpf = (r.org && r.org.toLowerCase().includes('mpf')) || (r.orgBadge && r.orgBadge.toLowerCase().includes('mpf'));
-                    if (isMpf) {
-                        if (!hasMpfEntry) {
-                            uniqueMockRecords.push(r);
-                            hasMpfEntry = true;
-                        }
-                    } else {
-                        uniqueMockRecords.push(r);
-                    }
-                });
-                mockRecords = uniqueMockRecords;
-
-                if (isAsc) {
-                    mockRecords.reverse();
-                }
-
-                const tbodyRowsHtml = mockRecords.map((rec, recIdx) => {
-                    const isOdd = recIdx % 2 === 1;
-                    let rowBg = isOdd ? 'bg-slate-50/70' : 'bg-white';
-                    if (striping === 'sky') {
-                        rowBg = isOdd ? 'bg-sky-50/60' : 'bg-white';
-                    } else if (striping === 'ente') {
-                        const orgLow = rec.org.toLowerCase();
-                        if (orgLow.includes('mpf') || orgLow.includes('minist')) {
-                            rowBg = 'bg-purple-50/30';
-                        } else if (orgLow.includes('pf') || orgLow.includes('policia') || orgLow.includes('polícia')) {
-                            rowBg = 'bg-blue-50/30';
-                        } else if (orgLow.includes('spu') || orgLow.includes('patrimonio') || orgLow.includes('patrimônio')) {
-                            rowBg = 'bg-emerald-50/30';
-                        } else if (orgLow.includes('munic') || orgLow.includes('pref') || orgLow.includes('pm')) {
-                            rowBg = 'bg-amber-50/30';
-                        } else {
-                            rowBg = isOdd ? 'bg-slate-100/50' : 'bg-white';
-                        }
-                    } else if (striping === 'white') {
-                        rowBg = 'bg-white';
-                    }
-
-                    return `
-                        <tr class="${rowBg} border-b border-slate-200 hover:bg-amber-50/40 transition-colors">
-                            <td class="${tdDensityClass} text-center text-slate-400 font-mono border-r border-slate-200">${recIdx + 1}</td>
-                            ${cols.map(c => {
-                                const canonId = getCanonicalColId(c.id, c.label);
-                                if (canonId === 'aba') {
-                                    let badgeColor = 'bg-slate-100 text-slate-800';
-                                    const oLow = (rec.orgBadge || rec.org || '').toLowerCase();
-                                    if (rec.org.toLowerCase().includes('mpf') || oLow.includes('minist')) badgeColor = 'bg-purple-100 text-purple-800';
-                                    else if (oLow.includes('spu') || oLow.includes('patrim')) badgeColor = 'bg-emerald-100 text-emerald-800';
-                                    else if (oLow.includes('pm') || oLow.includes('pref') || oLow.includes('munic')) badgeColor = 'bg-amber-100 text-amber-800';
-                                    else if (oLow.includes('pf') || oLow.includes('polic')) badgeColor = 'bg-blue-100 text-blue-800';
-                                    else {
-                                        const dynPalette = ['bg-sky-100 text-sky-800', 'bg-teal-100 text-teal-800', 'bg-indigo-100 text-indigo-800', 'bg-rose-100 text-rose-800', 'bg-orange-100 text-orange-800'];
-                                        const hash = Math.abs(String(rec.orgBadge || rec.org).split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0));
-                                        badgeColor = dynPalette[hash % dynPalette.length];
-                                    }
-                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 whitespace-normal break-words"><span class="px-1.5 py-0.5 rounded ${badgeColor} font-bold text-[9px] uppercase">${escapeHtml(rec.orgBadge || rec.org)}</span></td>`;
-                                }
-                                if (canonId === 'data') {
-                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 font-medium text-slate-900 font-mono">${rec.date}</td>`;
-                                }
-                                if (canonId === 'org') {
-                                    let orgColor = 'bg-slate-100 text-slate-800';
-                                    const bLow = (rec.orgBadge || rec.org || '').toLowerCase();
-                                    if (bLow.includes('mpf') || bLow.includes('minist')) orgColor = 'bg-purple-100 text-purple-800';
-                                    else if (bLow.includes('pf') || bLow.includes('polic')) orgColor = 'bg-blue-100 text-blue-800';
-                                    else if (bLow.includes('spu') || bLow.includes('patrim')) orgColor = 'bg-emerald-100 text-emerald-800';
-                                    else if (bLow.includes('pm') || bLow.includes('pref') || bLow.includes('munic')) orgColor = 'bg-amber-100 text-amber-800';
-                                    else {
-                                        const dynPalette = ['bg-sky-100 text-sky-800', 'bg-teal-100 text-teal-800', 'bg-indigo-100 text-indigo-800', 'bg-rose-100 text-rose-800', 'bg-orange-100 text-orange-800'];
-                                        const hash = Math.abs(String(rec.orgBadge || rec.org).split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0));
-                                        orgColor = dynPalette[hash % dynPalette.length];
-                                    }
-                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200"><span class="px-1.5 py-0.5 rounded ${orgColor} font-bold text-[9px]">${escapeHtml(rec.orgBadge || rec.org)}</span></td>`;
-                                }
-                                if (canonId === 'situacao_ocupacao') {
-                                    const isIrreg = rec.situacao.toLowerCase().includes('irreg');
-                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200"><span class="px-1.5 py-0.5 rounded ${isIrreg ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'} font-bold text-[9px]">${rec.situacao}</span></td>`;
-                                }
-                                if (canonId === 'situacao_recuo') {
-                                    const hasRecuo = rec.recuo.toLowerCase().includes('parcial') || rec.recuo.toLowerCase().includes('total');
-                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200"><span class="px-1.5 py-0.5 rounded ${hasRecuo ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-bold text-[9px]">${rec.recuo}</span></td>`;
-                                }
-                                if (canonId === 'area_invadida') {
-                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 font-mono font-bold text-right text-slate-800">${rec.area}</td>`;
-                                }
-                                if (canonId === 'qtd_fotos') {
-                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 text-sky-600 font-semibold">${rec.fotos}</td>`;
-                                }
-                                if (canonId === 'links' || canonId === 'epol' || canonId === 'rip') {
-                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 whitespace-normal break-words"><span class="inline-flex items-center gap-1 text-[9.5px] font-bold text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200"><span class="material-symbols-outlined text-[11px]">attachment</span>${rec.links}</span></td>`;
-                                }
-                                if (canonId === 'conclusao') {
-                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 text-slate-700 text-[9.5px] whitespace-normal break-words leading-tight">${rec.conclusao}</td>`;
-                                }
-
-                                // Resolução de campo específico (ex: campos MPF como IPL, Distribuição, etc.) com checagem de condição
-                                const targetFieldDef = fieldsMap.get(c.id) || fieldsMap.get(c.name);
-                                const isCondMet = checkFieldCondition(targetFieldDef, rec);
-                                if (!isCondMet) {
-                                    return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 text-slate-400 font-mono text-[10px]">—</td>`;
-                                }
-
-                                const cKey = (c.id || c.name || '').toLowerCase();
-                                const cLabelKey = (c.label || '').toLowerCase();
-                                let cellVal = rec[c.id] || rec[c.name] || rec[cKey];
-                                if (!cellVal) {
-                                    if (cLabelKey.includes('ipl')) cellVal = rec.ipl || 'IPL 0800653/2026';
-                                    else if (cLabelKey.includes('distrib')) cellVal = rec.distribuicao || '2ª Vara Federal';
-                                    else if (cLabelKey.includes('design')) cellVal = rec.designado || 'Dr. Procurador da República';
-                                    else if (cLabelKey.includes('correlat')) cellVal = rec.correlatos || 'ACP 0801234/2026';
-                                    else if (cLabelKey.includes('fase')) cellVal = rec.fase_investigacao || 'Instrução';
-                                    else cellVal = `[${escapeHtml(c.label)} - #${recIdx + 1}]`;
-                                }
-                                return `<td class="${tdDensityClass} border-r last:border-r-0 border-slate-200 text-slate-700 whitespace-normal break-words">${escapeHtml(cellVal)}</td>`;
-                            }).join('')}
-                        </tr>
-                    `;
-                }).join('');
-
-                return `
-                    <div class="mb-4">
-                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
-                            <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(escapeHtml(bloco.titulo || 'Quadro Sintético de Vistorias (Histórico 1:N)')).replace(/\r?\n/g, '<br>')}</span>
-                            <div class="flex items-center gap-1.5 text-[10px] font-mono text-slate-400">
-                                <span>${cols.length} Colunas</span>
-                                <span>•</span>
-                                <span>${isAsc ? 'Antigo → Recente' : 'Recente → Antigo'}</span>
-                                ${isGroupedByTab ? '<span>• Por Aba</span>' : ''}
-                                <span>•</span>
-                                <span class="capitalize">${density}</span>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
-                            <table class="w-full text-left border-collapse">
-                                <thead>
-                                    <tr class="bg-slate-100 border-b-2 border-slate-300">
-                                        <th class="${thDensityClass} border-r border-slate-200 w-7 text-center">#</th>
-                                        ${cols.map((c, cIdx) => `
-                                            <th class="${thDensityClass} border-r last:border-r-0 border-slate-200 group/th relative select-none whitespace-normal break-words leading-tight" style="min-width: 60px;">
-                                                <div class="flex items-center justify-between gap-1">
-                                                    <div class="flex items-center gap-0.5 min-w-0">
-                                                        ${cIdx > 0 ? `
-                                                            <button type="button" onclick="ReportBuilder.moveSynthetic1nColumn(${index}, ${cIdx}, -1, event)" 
-                                                                    class="opacity-0 group-hover/th:opacity-100 p-0.5 text-slate-400 hover:text-slate-800 hover:bg-slate-200 rounded cursor-pointer print:hidden shrink-0" 
-                                                                    title="Mover coluna para a esquerda">
-                                                                <span class="material-symbols-outlined text-[13px] leading-none">chevron_left</span>
-                                                            </button>
-                                                        ` : ''}
-                                                        <span class="cursor-pointer hover:bg-sky-100 px-1 py-0.5 rounded transition-colors whitespace-normal break-words leading-tight" 
-                                                              title="Duplo clique para renomear ou abreviar título" 
-                                                              ondblclick="ReportBuilder.editSynthetic1nColTitle(${index}, ${cIdx}, event)">
-                                                            ${escapeHtml(c.label)}
-                                                        </span>
-                                                        ${cIdx < cols.length - 1 ? `
-                                                            <button type="button" onclick="ReportBuilder.moveSynthetic1nColumn(${index}, ${cIdx}, 1, event)" 
-                                                                    class="opacity-0 group-hover/th:opacity-100 p-0.5 text-slate-400 hover:text-slate-800 hover:bg-slate-200 rounded cursor-pointer print:hidden shrink-0" 
-                                                                    title="Mover coluna para a direita">
-                                                                <span class="material-symbols-outlined text-[13px] leading-none">chevron_right</span>
-                                                            </button>
-                                                        ` : ''}
-                                                    </div>
-                                                    <button type="button" 
-                                                            onclick="ReportBuilder.removeColumnFromSynthetic1n(${index}, '${escapeHtml(c.id)}', event)" 
-                                                            class="field-remove-btn opacity-0 group-hover/th:opacity-100 p-0.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-all cursor-pointer print:hidden shrink-0" 
-                                                            title="Remover esta coluna da tabela">
-                                                        <span class="material-symbols-outlined text-[13px] leading-none">close</span>
-                                                    </button>
-                                                </div>
-                                            </th>
-                                        `).join('')}
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-slate-200">
-                                    ${tbodyRowsHtml}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                `;
-            }
+            case 'tabela_sintetica_1n':
+                return renderSinteticaReal(bloco, index, fields);
 
             case 'laudo_vistoria_fotos':
             case 'galeria_fotos': {
-                if (temDesenhoReal1n()) return renderLaudoReal(bloco, index, fields);
-                return renderLaudoPreview(bloco, index, fields);
+                return renderLaudoReal(bloco, index, fields);
             }
 
             case 'tabela_sintetica': {
@@ -2646,24 +1965,8 @@
                 `;
             }
 
-            case 'rodape': {
-                if (window.ReportBlocks && window.ReportPreview) return renderRodapeReal(bloco, fields);
-                const isSecondPageStart = (bloco.inicio_numeracao === 'segunda');
-                const pageLabel = isSecondPageStart 
-                    ? '<span class="text-sky-600 font-semibold">Página 02 de 10 (a partir da 2ª folha)</span>' 
-                    : 'Página 01 de 01';
-                return `
-                    <div class="text-[10px] text-slate-500 flex items-center justify-between font-mono w-full">
-                        <div>
-                            ${bloco.exibirDataHora !== false ? `Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}` : ''}
-                            ${bloco.exibirHash !== false ? `<span class="ml-2 font-bold text-slate-600">SHA-256: 7f83b1657ff1...</span>` : ''}${bloco.exibirQr !== false ? `<span class="ml-2 text-slate-500">[QR code de verificação]</span>` : ''}
-                        </div>
-                        <div class="font-bold text-slate-700">
-                            ${bloco.numeracao !== false ? pageLabel : ''}
-                        </div>
-                    </div>
-                `;
-            }
+            case 'rodape':
+                return renderRodapeReal(bloco, fields);
 
             default:
                 return `<div class="text-xs text-slate-400 italic p-2">Bloco de tipo [${bloco.tipo}]</div>`;
@@ -3367,11 +2670,6 @@
         };
         const r = blocosReais(fields).renderAnalyticalLaudo(b, dadosDeExemplo(), { full: true, edit: edit });
         return typeof r === 'string' ? r : '';
-    }
-
-    /** As tabelas 1:N e o laudo só usam o desenho do relatório quando todos os módulos de dados estão carregados. */
-    function temDesenhoReal1n() {
-        return !!(window.ReportBlocks && window.ReportPreview && window.ReportData);
     }
 
     /** Quadro Sintético 1:N: desenho do relatório com os registros de exemplo; colunas com mover, renomear (duplo clique) e remover. */

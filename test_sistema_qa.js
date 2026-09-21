@@ -743,8 +743,7 @@ const hasTabSequenceReordering = freshReportBuilderCodeUpdated.includes('move1nT
     lerVisualizador().includes('bloco.ordem_abas');
 assertTest('Relatórios A4: Agrupamento 1:N suporta reordenar a sequência das abas com botões [↑] e [↓] na barra lateral e no relatório', hasTabSequenceReordering);
 
-const hasConclusionAndCompoundFields = freshReportBuilderCodeUpdated.includes('laudoSampleHtml') &&
-    freshReportBuilderCodeUpdated.includes('exibido na íntegra') &&
+const hasConclusionAndCompoundFields = freshReportBuilderCodeUpdated.includes('renderLaudoReal') &&
     lerVisualizador().includes('FieldFormatter.toHtml(r.values[f.id]') &&
     lerVisualizador().includes('attachment');
 assertTest('Relatórios A4: Laudo 1:N exibe campos longos na íntegra e formata campos compostos (links/anexos) pelo formatador único', hasConclusionAndCompoundFields);
@@ -761,11 +760,9 @@ const hasCanonicalColumnDeduplication = freshReportBuilderCodeUpdated.includes('
     fs.readFileSync('src/reportData.js', 'utf8').includes('col.fieldIds');
 assertTest('Relatórios A4: Tabela Sintética 1:N unifica colunas sinônimas/canônicas (getCanonicalColId) evitando duplicidade entre abas', hasCanonicalColumnDeduplication);
 
-const has1nMultiRecordInspectionPreview = freshReportBuilderCodeUpdated.includes('mockRecords') &&
-    freshReportBuilderCodeUpdated.includes('15/08/2026') &&
-    freshReportBuilderCodeUpdated.includes('12/01/2026') &&
-    freshReportBuilderCodeUpdated.includes('10/04/2026') &&
-    freshReportBuilderCodeUpdated.includes('Vistoria inicial de constatação.');
+const has1nMultiRecordInspectionPreview = freshReportBuilderCodeUpdated.includes('renderSinteticaReal') &&
+    freshReportBuilderCodeUpdated.includes('sampleFeatureData') &&
+    fs.readFileSync('src/reportPreview.js', 'utf8').includes('[0, 1].map(seq');
 assertTest('Relatórios A4: Visualização interativa 1:N renderiza múltiplas linhas por ente para múltiplos registros/vistorias com datas e dados distintos', has1nMultiRecordInspectionPreview);
 
 // Novos testes: Laudo Analítico & Fotos (1:N) com paridade da Grade de Atributos e Abas Analíticas
@@ -782,14 +779,12 @@ const hasLaudoInteractiveGridControls = freshReportBuilderCodeUpdated.includes('
     freshReportBuilderCodeUpdated.includes('toggleFieldWidthPopover');
 assertTest('Relatórios A4: Laudo Analítico 1:N na Folha A4 conta com controles da Grade de Atributos (drag & drop, botões de largura [-] [+] e popover, remoção [x])', hasLaudoInteractiveGridControls);
 
-const hasLaudoMultiTabStructureAndStandardConclusion = freshReportBuilderCodeUpdated.includes('Aba / Ente:') &&
-    freshReportBuilderCodeUpdated.includes('renderLaudoPreview') &&
-    freshReportBuilderCodeUpdated.includes('<details open') &&
-    lerVisualizador().includes('Aba / Ente:');
-assertTest('Relatórios A4: Laudo Analítico 1:N mostra na Folha A4 uma seção por aba, já ABERTA, com os campos reais do formulário prontos para posicionar', hasLaudoMultiTabStructureAndStandardConclusion);
+const hasLaudoMultiTabStructureAndStandardConclusion = freshReportBuilderCodeUpdated.includes('renderLaudoReal') &&
+    lerVisualizador().includes('Aba / Ente:') &&
+    lerVisualizador().includes('data-split-row');
+assertTest('Relatórios A4: Laudo Analítico 1:N mostra na Folha A4 o desenho real do relatório (um cartão por registro, com o título de cada aba) e os campos reais do formulário prontos para posicionar', hasLaudoMultiTabStructureAndStandardConclusion);
 
-const hasFullCompound1nFields = freshReportBuilderCodeUpdated.includes('Título 2') &&
-    freshReportBuilderCodeUpdated.includes('endereço-do-link-2') &&
+const hasFullCompound1nFields = fs.readFileSync('src/reportPreview.js', 'utf8').includes('hiperlink_1n') &&
     fs.readFileSync('src/fieldFormatter.js', 'utf8').includes('linkBlockHtml') &&
     lerVisualizador().includes('hiperlink_1n');
 assertTest('Relatórios A4: Campos com tipo de dados 1:N (hiperlinks, processos e anexos) são exibidos integralmente sem truncamento', hasFullCompound1nFields);
@@ -890,7 +885,7 @@ assertTest('Relatórios A4: "1. Tabela Sintética (Cronológica)" posicionada im
 const hasLaudoTabFilteringAndInlineEdit = freshReportBuilderJs.includes('custom_tab_title_') &&
     freshReportBuilderJs.includes('getLaudoPreviewTabs') &&
     freshReportBuilderJs.includes('selectedIds') &&
-    freshReportBuilderJs.includes('tabFields');
+    freshReportBuilderJs.includes('laudoTabsSelecionadas');
 assertTest('Relatórios A4: Laudo Analítico relaciona apenas abas/campos selecionados e permite edição inline por duplo clique no título da Aba', hasLaudoTabFilteringAndInlineEdit);
 
 const hasFeaturePayloadIntegrity = fs.readFileSync('src/formRenderer.js', 'utf8').includes('window.activeFeatureData = featureData') &&
@@ -940,21 +935,19 @@ const hasBrowserHeadersFootersSuppression = updatedRelatorioViewHtml.includes('m
 assertTest('Impressão A4: Supressão de cabeçalho e rodapé nativos do navegador (about:blank, data/hora e título) sem vazamento', hasBrowserHeadersFootersSuppression);
 
 const hasTwoDigitFooterPagination = updatedRelatorioViewHtml.includes('String(pageIdx).padStart(2, \'0\')') &&
-    freshReportBuilderJs.includes('Página 01 de 01') &&
-    freshReportBuilderJs.includes('Página 02 de 10');
+    freshReportBuilderJs.includes('renderRodapeReal') &&
+    freshReportBuilderJs.includes('segunda ? 10 : 1');
 assertTest('Rodapé Oficial: Data/hora integrada e numeração de páginas com 2 dígitos (Ex: Página 01 de 10)', hasTwoDigitFooterPagination);
 
 // Verificações dos ajustes do Quadro Analítico e Sintético (Tabela Sintética, Laudo 1:N, Accordion e Drag & Drop)
 const hasSyntheticHorizontalLines = updatedRelatorioViewHtml.includes('divide-y divide-slate-200') &&
     updatedRelatorioViewHtml.includes('border-b border-slate-200') &&
-    freshReportBuilderJs.includes('divide-y divide-slate-200') &&
-    freshReportBuilderCodeUpdated.includes('border-b border-slate-200');
+    freshReportBuilderJs.includes('renderSinteticaReal');
 assertTest('Tabela Sintética: Linhas horizontais visíveis separando registros/entes na Folha A4 e no Relatório Final', hasSyntheticHorizontalLines);
 
 const hasMpfBadgeResolution = updatedRelatorioViewHtml.includes("o.includes('MPF')") &&
     updatedRelatorioViewHtml.includes('bg-purple-100 text-purple-800') &&
-    freshReportBuilderJs.includes('bg-purple-100 text-purple-800') &&
-    freshReportBuilderJs.includes("rec.org.toLowerCase().includes('mpf')");
+    freshReportBuilderJs.includes('renderSinteticaReal');
 assertTest('Tabela Sintética: Ente no ícone roxo exibe nome correto (MPF) resolvido a partir dos títulos das abas', hasMpfBadgeResolution);
 
 const hasExpandableTabAccordions = freshReportBuilderJs.includes('toggleAccordionTab') &&
@@ -1024,7 +1017,7 @@ assertTest('Mini-Mapa: o relatório gerado tem o painel "Mapa" (destaque, camada
     ['tests/fieldFormatter.test.js', 'Formatador único: cada tipo de campo é formatado pelo TIPO (CPF/CNPJ, IPL, EPOL, RIP, CEP, moeda, m², data, links, anexos), sem adivinhar por nome/rótulo/id'],
     ['tests/viewerResolve.test.js', 'Visualizador: campo é lido pelo ID do schema; campo vazio nunca herda valor de outro campo nem de outra aba'],
     ['tests/reportData.test.js', 'Camada de dados: abas visíveis (permissão e condição), registros 1:N e 1:1, colunas lidas pelo campo da própria aba, dados de aba oculta removidos'],
-    ['tests/builderLaudoPreview.test.js', 'Construtor: prévia do Laudo com uma seção ABERTA por aba (campos reais, arraste, largura, 1:N na íntegra) e sequência de abas (↑ ↓)'],
+    ['tests/builderLaudoPreview.test.js', 'Construtor: abas e campos do Laudo (seleção, ids legados, sequência ↑ ↓) e formato de fotos e anexos'],
     ['tests/mapTools.test.js', 'Mini-mapa: configuração normalizada, ajustes do usuário, bbox, projeção SIRGAS 2000 UTM, escala e recorte das camadas ativas ao redor da feição'],
     ['tests/reportMap.test.js', 'Mini-mapa (Leaflet simulado): destaque, esmaecer entorno, mapa base, camadas ligáveis com legenda, norte, escala, projeção, crédito do mapa e vista salva'],
     ['tests/mapSnapshot.test.js', 'Imagem do mapa: html2canvas só para tiles/vetores e textos (rótulos, norte, escala, legenda, crédito) desenhados nas posições reais do navegador'],

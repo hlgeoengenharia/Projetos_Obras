@@ -1,5 +1,6 @@
 // tests/builderLaudoPreview.test.js
-// Executa a pré-visualização do Laudo Analítico e a sequência de abas do CONSTRUTOR (src/reportBuilder.js).
+// Executa, no CONSTRUTOR (src/reportBuilder.js), a escolha das abas e dos campos do Laudo Analítico, a sequência das abas e o formato de fotos/anexos.
+// (O desenho do laudo na folha é o do relatório, em src/reportBlocks.js; o construtor com os controles está em tests/reportScope.test.js.)
 // Rodar com: node tests/builderLaudoPreview.test.js
 
 const fs = require('fs');
@@ -74,8 +75,8 @@ const load = new Function('state', 'window', 'document', 'ReportAdapter', 'onRer
     ${extractFunction('escapeHtml')}
     ${extractFunction('getFieldWidthStyle')}
     ${region}
-    return { getLaudoPreviewTabs, renderLaudoPreview, renderLaudoTabSequenceList, ensureLaudoFieldSelection,
-             move1nLaudoTabSequence, isFileField, fileFieldMode, fileModeToggleHtml, setFieldFileMode, laudoSampleHtml, getOrder: () => current1nTabOrder, setTemplate: (t) => { currentTemplate = t; } };
+    return { getLaudoPreviewTabs, laudoTabsSelecionadas, renderLaudoTabSequenceList, ensureLaudoFieldSelection,
+             move1nLaudoTabSequence, isFileField, fileFieldMode, fileModeToggleHtml, setFieldFileMode, getOrder: () => current1nTabOrder, setTemplate: (t) => { currentTemplate = t; } };
 `);
 const api = load(state, window, document, ReportAdapter, () => { rerenders++; });
 
@@ -91,26 +92,15 @@ const tabs = api.getLaudoPreviewTabs(formFields);
 eq('abas do laudo: consolidada fica de fora', tabs.map(t => t.id), ['t_dados', 't_mpf', 't_pf', 't_spu']);
 eq('campos agrupados na aba certa (PF tem 5, incluindo a foto)', tabs.find(t => t.id === 't_pf').fields.length, 5);
 
-// ---------------------------------------------------------------- pré-visualização: abas ABERTAS, na sequência escolhida
+// ---------------------------------------------------------------- abas escolhidas, na sequência definida pelo usuário
 let bloco = { abas_selecionadas: ['t_pf', 't_spu'], ordem_abas: ['t_spu', 't_pf'], campos_selecionados: [] };
 api.setTemplate(mkTemplate(bloco));
-let html = api.renderLaudoPreview(bloco, 0, formFields);
-ok('cada aba é uma seção ABERTA (<details open>)', (html.match(/<details open/g) || []).length === 2);
-ok('sequência escolhida: SPU antes de PF', html.indexOf('Aba / Ente: SPU') < html.indexOf('Aba / Ente: PF'));
-ok('campos da aba aparecem para editar (arraste, largura, remover)',
-    html.includes('data-field-id="pf_ocup"') && html.includes('field-drag-handle') && html.includes('changeFieldWidthStep') && html.includes('removeFieldFromAnalytical1n'));
-ok('container do arraste por aba', html.includes('a4-grid-fields-container'));
-ok('campo repetido em outra aba aparece nas duas (ids diferentes)', html.includes('data-field-id="pf_ocup"') && html.includes('data-field-id="spu_ocup"'));
-ok('foto fica fora da grade e vira área de fotos', !html.includes('data-field-id="pf_fotos"') && html.includes('Legenda da foto'));
-ok('aba ainda não escolhida (MPF) não aparece', !html.includes('Aba / Ente: MPF'));
-
-// campo 1:N: exibido na íntegra (título, número e link)
-ok('campo 1:N de link mostra título, número e endereço', html.includes('Título 1') && html.includes('Número 1') && html.includes('https://endereço-do-link-1'));
-ok('campo 1:N mostra vários itens', html.includes('Título 2'));
-ok('data mostra o formato de data', html.includes('14/08/2026'));
-ok('textarea indica exibição na íntegra', html.includes('exibido na íntegra'));
+let escolhidas = api.laudoTabsSelecionadas(bloco, formFields);
+eq('sequência escolhida: SPU antes de PF', escolhidas.map(t => t.id), ['t_spu', 't_pf']);
+ok('aba ainda não escolhida (MPF) não entra', !escolhidas.some(t => t.id === 't_mpf'));
 
 // seleção padrão materializada (sem escolha válida → todos os campos, exceto fotos)
+api.ensureLaudoFieldSelection(bloco, escolhidas);
 eq('seleção padrão criada com campos reais das abas', bloco.campos_selecionados.map(c => c.id),
     ['spu_data', 'spu_ocup', 'pf_data', 'pf_ocup', 'pf_obs', 'pf_links']);
 ok('seleção padrão foi salva no modelo', saved.length >= 1);
@@ -118,33 +108,20 @@ ok('seleção padrão foi salva no modelo', saved.length >= 1);
 // seleção com ids legados é substituída
 bloco = { abas_selecionadas: ['t_pf'], campos_selecionados: [{ id: 'data', label: 'Data' }, { id: 'conclusao', label: 'Conclusão' }] };
 api.setTemplate(mkTemplate(bloco));
-api.renderLaudoPreview(bloco, 0, formFields);
+api.ensureLaudoFieldSelection(bloco, api.laudoTabsSelecionadas(bloco, formFields));
 ok('ids legados (data/conclusao) trocados por campos reais', bloco.campos_selecionados.every(c => formFields.some(f => f.id === c.id)));
 
-// só os campos escolhidos, na ordem escolhida
+// seleção válida é preservada (só os campos escolhidos, na ordem escolhida)
 bloco = { abas_selecionadas: ['t_pf'], campos_selecionados: [{ id: 'pf_obs', tabId: 't_pf' }, { id: 'pf_data', tabId: 't_pf' }] };
 api.setTemplate(mkTemplate(bloco));
-html = api.renderLaudoPreview(bloco, 0, formFields);
-ok('só os campos escolhidos aparecem', html.includes('data-field-id="pf_obs"') && html.includes('data-field-id="pf_data"') && !html.includes('data-field-id="pf_ocup"'));
-ok('na ordem escolhida (Observações antes de Data)', html.indexOf('data-field-id="pf_obs"') < html.indexOf('data-field-id="pf_data"'));
+api.ensureLaudoFieldSelection(bloco, api.laudoTabsSelecionadas(bloco, formFields));
+eq('seleção válida e sua ordem não mudam', bloco.campos_selecionados.map(c => c.id), ['pf_obs', 'pf_data']);
 
-// largura salva e padrão largo para tipos longos
-bloco = { abas_selecionadas: ['t_pf'], campos_selecionados: [{ id: 'pf_obs', tabId: 't_pf' }, { id: 'pf_data', tabId: 't_pf' }], campos_larguras: { pf_data: 33 } };
-api.setTemplate(mkTemplate(bloco));
-html = api.renderLaudoPreview(bloco, 0, formFields);
-ok('largura salva (33%) é respeitada', html.includes('>33%</button>'));
-ok('textarea nasce com 100%', html.includes('>100%</button>'));
-
-// título da aba editável
-bloco = { abas_selecionadas: ['t_pf'], custom_tab_title_t_pf: 'Polícia Federal — Vistorias' };
-api.setTemplate(mkTemplate(bloco));
-ok('título de aba editado aparece na prévia', api.renderLaudoPreview(bloco, 0, formFields).includes('Polícia Federal — Vistorias'));
-
-// sem abas escolhidas e sem 1:N → aviso
+// abas deduzidas dos campos escolhidos; sem nada válido cai nas abas 1:N
+bloco = { campos_selecionados: [{ id: 'spu_data', tabId: 't_spu' }] };
+eq('sem abas escolhidas: deduz as abas dos campos escolhidos', api.laudoTabsSelecionadas(bloco, formFields).map(t => t.id), ['t_spu']);
 bloco = { abas_selecionadas: ['inexistente'] };
-api.setTemplate(mkTemplate(bloco));
-html = api.renderLaudoPreview(bloco, 0, formFields);
-ok('sem aba escolhida cai nas abas 1:N (PF e SPU)', html.includes('Aba / Ente: PF') && html.includes('Aba / Ente: SPU'));
+eq('aba inexistente: cai nas abas 1:N (PF e SPU)', api.laudoTabsSelecionadas(bloco, formFields).map(t => t.id).sort(), ['t_pf', 't_spu']);
 
 // ---------------------------------------------------------------- sequência das abas no card
 state.current1nLaudoSelectedTabs.add('t_pf');
@@ -169,9 +146,8 @@ ok('lista reflete a nova ordem (SPU primeiro)', list.indexOf('>SPU<') < list.ind
 api.move1nLaudoTabSequence('t_spu', -1); // já é o primeiro: nada muda
 eq('mover o primeiro para cima não faz nada', api.getOrder().filter(id => id === 't_pf' || id === 't_spu'), ['t_spu', 't_pf']);
 
-// ---------------------------------------------------------------- a mesma sequência vale na prévia
-html = api.renderLaudoPreview(tpl.blocos[0], 0, formFields);
-ok('prévia usa a nova sequência', html.indexOf('Aba / Ente: SPU') < html.indexOf('Aba / Ente: PF'));
+// ---------------------------------------------------------------- a mesma sequência vale nas abas do laudo
+eq('abas do laudo seguem a nova sequência', api.laudoTabsSelecionadas(tpl.blocos[0], formFields).map(t => t.id), ['t_spu', 't_pf']);
 
 
 // ---------------------------------------------------------------- fotos/anexos: "Lista" x "Imagem na íntegra"
@@ -186,26 +162,19 @@ eq('valor inválido cai no padrão', api.fileFieldMode({ campos_exibicao: { pf_f
 ok('seletor não aparece em campo comum', api.fileModeToggleHtml(0, texto, 'lista') === '');
 const tog = api.fileModeToggleHtml(3, fotos, 'lista');
 ok('seletor tem os dois botões e chama a ação', tog.includes('view_list') && tog.includes('>image<') && tog.includes("ReportBuilder.setFieldFileMode(3, 'pf_fotos', 'imagem', event)"));
-ok('amostra em lista mostra título + arquivo', api.laudoSampleHtml(anexo, 'lista').includes('arquivo-1'));
-ok('amostra em imagem mostra título, arquivo, autor e data', /Título/.test(api.laudoSampleHtml(anexo, 'imagem')) && api.laudoSampleHtml(anexo, 'imagem').includes('Enviado por'));
 
 bloco = { abas_selecionadas: ['t_pf'], campos_selecionados: [{ id: 'pf_obs', tabId: 't_pf' }] };
 const tplF = mkTemplate(bloco);
 api.setTemplate(tplF);
-html = api.renderLaudoPreview(bloco, 0, formFields);
-ok('laudo: foto em imagem por padrão (miniatura com legenda)', html.includes('Legenda da foto') && html.includes("'imagem', event"));
 const before = saved.length, rr = rerenders;
 api.setFieldFileMode(0, 'pf_fotos', 'lista', null);
 eq('escolha gravada em campos_exibicao', tplF.blocos[0].campos_exibicao, { pf_fotos: 'lista' });
 ok('modelo salvo e folha redesenhada', saved.length > before && rerenders > rr);
-html = api.renderLaudoPreview(tplF.blocos[0], 0, formFields);
-ok('laudo: modo lista troca a miniatura pela lista', !html.includes('Legenda da foto') && html.includes('arquivo-1'));
 api.setFieldFileMode(0, 'pf_fotos', 'invalido', null);
 eq('modo inválido é ignorado', tplF.blocos[0].campos_exibicao.pf_fotos, 'lista');
 
-// grade de atributos (renderA4Blocks): seletor e amostra por modo
-ok('grade de atributos usa o seletor e a amostra por modo',
-    src.includes('${fileModeToggleHtml(index, f, fileFieldMode(bloco, f))}') && src.includes('${isFileField(f)') && src.includes('setFieldFileMode,'));
+// grade de atributos e laudo (renderA4Blocks): usam o seletor de formato do arquivo
+ok('grade de atributos e laudo usam o seletor de formato', src.includes('fileModeToggleHtml(index, f, fileFieldMode(') && src.includes('setFieldFileMode,'));
 
 console.log(`builderLaudoPreview: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {
