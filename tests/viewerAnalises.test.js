@@ -52,7 +52,7 @@ function state(cfg, opts) {
     return {
         payload: { camadasMapa: opts.camadas || camadas, formFields: [campoArea] },
         args: { featureGeometry: opts.geometry || lote, featureData: opts.dados || { f_area: '560,00' } },
-        controller: { getConfig: () => config }
+        controller: { getConfig: () => config, confrontanteRows: () => { const cf = config.confrontantes; const cam = (opts.camadas || camadas).find(x => String(x.id) === cf.camada); return cam ? MT.applyConfrontantes(MT.confrontantes(opts.geometry || lote, cam, { tolM: cf.tolM }), cf) : []; } }
     };
 }
 const run = (cfg, opts, turf) => load(state(cfg, opts), MT, { turf: turf });
@@ -71,6 +71,13 @@ let chunk = out.split.chunkHtml(out.split.rowsHtml, true);
 ok('título, camada e critério de divisa', /Confrontantes/.test(chunk) && /camada: Lotes/.test(chunk) && /3,0 m/.test(chunk) && /20% do lado/.test(chunk));
 ok('colunas: Lado, Comprimento, Azimute, Confrontante(s)', ['Lado', 'Comprimento (m)', 'Azimute', 'Confrontante(s)'].every(h => chunk.includes(h)));
 const t0 = texto(out.split.rowsHtml[0]), t1 = texto(out.split.rowsHtml[1]), t2 = texto(out.split.rowsHtml[2]);
+{
+    const ed = run({ confrontantes: { ativo: true, camada: 'L1', ordem: ['lado:1', 'lado:0'], textos: { 'lado:1:lado': 'Frente <Leste>', 'lado:1:conf': 'Rua <X>' } } }).renderConfrontantesTable();
+    const linhas = ed.split.rowsHtml;
+    ok('LADO e CONFRONTANTE(S) são editáveis por duplo clique (chave da linha na tabela)', linhas.every((r, i) => r.includes('data-conf-edit="lado:') && r.includes(':lado"') && r.includes(':conf"')));
+    ok('a ordem escolhida vale na tabela', linhas[0].includes('data-conf-edit="lado:1:lado"') && linhas[1].includes('data-conf-edit="lado:0:lado"'));
+    ok('texto do usuário aparece escapado no lugar do calculado', linhas[0].includes('Frente &lt;Leste&gt;') && linhas[0].includes('Rua &lt;X&gt;') && !/Quadra E/.test(linhas[0]));
+}
 ok('lado sul: sem confrontante identificado', /Sem confrontante identificado/.test(t0) && /L1/.test(t0) && /30,0\d|29,9\d/.test(t0));
 ok('lado leste: Quadra E • Lote 02, sem o nome (padrão)', /Quadra E • Lote 02/.test(t1) && !/Beltrano/.test(t1));
 ok('lado norte: Quadra D • Lote 09', /Quadra D • Lote 09/.test(t2));

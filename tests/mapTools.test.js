@@ -52,6 +52,16 @@ eq('pontos: textos editados só com chaves válidas (título e células dos pont
     eq('linha da tabela usa o texto editado; o resto continua calculado', [ed.rows[0].cells[0], ed.rows[0].cells[1] === base.rows[0].cells[1], ed.rows[0].azimute, ed.rows[0].distancia === base.rows[0].distancia, ed.rows[1].distancia, ed.rows[1].azimute === base.rows[1].azimute], ['999.999,99', true, '90°', true, '111,11', true]);
     eq('linha informa quais textos foram editados; título da tabela vem do usuário', [ed.rows[0].editados.sort(), ed.rows[2].editados, ed.tituloTabela, base.tituloTabela], [['az', 'c0'], [], 'Meu memorial', '']);
 }
+// rótulos das vizinhas e confrontantes: ajustes do usuário
+eq('rótulos: estilo padrão em negrito e sem ajustes', [MT.normalizeMapConfig({}).rotulos.estilo, MT.normalizeMapConfig({}).rotulos.itens], [{ n: true, i: false, s: false }, {}]);
+eq('rótulos: ajustes por "camada:índice"; só posição válida, giro válido; o resto cai', MT.normalizeRotulos({ ativo: true, itens: { 'L1:0': { lat: -7.1, lng: -34.8, rot: 370 }, 'L1:1': { rot: 30 }, 'L1:2': { lat: 999, lng: 1 }, 'lixo': { lat: 1, lng: 1 }, 'L1:3': { lat: 'x', lng: 1, rot: 'y' }, 'a b:1': { rot: 1 } } }).itens, { 'L1:0': { lat: -7.1, lng: -34.8, rot: 10 }, 'L1:1': { rot: 30 } });
+eq('confrontantes: ordem só com ids de lado válidos e sem repetição; textos só de LADO e CONFRONTANTE', MT.normalizeConfrontantes({ ordem: ['lado:2', 'lado:0', 'lado:2', 'x', 'lado:9999999'], textos: { 'lado:1:lado': ' Frente ', 'lado:1:conf': 'Rua <A>', 'lado:1:outro': 'x', 'lado:2:lado': '', lixo: 'z' } }), { ativo: false, camada: '', tolM: 3, nomes: false, ordem: ['lado:2', 'lado:0'], textos: { 'lado:1:lado': 'Frente', 'lado:1:conf': 'Rua <A>' } });
+{
+    const rows = [{ id: 'lado:0', rotuloLado: 'L1' }, { id: 'lado:1', rotuloLado: 'L2' }, { id: 'lado:2', rotuloLado: 'L3' }];
+    eq('linhas na ordem escolhida (as que não estão na ordem vão para o fim, na ordem natural)', MT.applyConfrontantes(rows, { ordem: ['lado:2', 'lado:0'] }).map(r => r.id), ['lado:2', 'lado:0', 'lado:1']);
+    const ap = MT.applyConfrontantes(rows, { textos: { 'lado:0:lado': 'Frente', 'lado:1:conf': 'Rua X' } });
+    eq('textos editados aparecem; o resto usa o calculado', [ap[0].lado, ap[1].lado, ap[0].confTexto, ap[1].confTexto, ap[0].editados, ap[2].editados], ['Frente', 'L2', '', 'Rua X', ['lado'], []]);
+}
 eq('base satélite e nenhum são aceitas', [MT.normalizeMapConfig({ mapa: { baseMap: 'satelite' } }).baseMap, MT.normalizeMapConfig({ mapa: { baseMap: 'nenhum' } }).baseMap], ['satelite', 'nenhum']);
 
 const aj = MT.mergeAjustes(c0, { norte: false, baseMap: 'satelite', camadasLigadas: [7, 'b'], destaque: { esmaecerEntorno: true }, lixo: 1 });

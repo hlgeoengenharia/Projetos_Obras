@@ -136,8 +136,9 @@
         .report-tframe-title span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .report-tframe-wrap { border: 1px solid #cbd5e1; border-top: 0; background: #e2e8f0; position: relative; overflow: hidden; border-radius: 0 0 6px 6px; }
         #map-locator { top: 8px; left: 46px; width: 128px; height: 128px; border: 2px solid #0f172a; border-radius: 6px; background: #e2e8f0; overflow: hidden; display: none; }
-        .report-nlabel, .report-glabel { background: transparent; border: 0; pointer-events: none; }
-        .report-nlabel span { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; font: 700 8px/10px monospace; color: #0f172a; text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; }
+        .report-nlabel, .report-glabel { background: transparent; border: 0; }
+        .report-glabel { pointer-events: none; }
+        .report-nlabel-l { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; font: 8px/10px monospace; color: #0f172a; text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; cursor: move; }
         .report-glabel span { position: absolute; white-space: nowrap; font: 8px/10px monospace; color: #1e293b; background: rgba(255,255,255,.85); padding: 0 2px; }
         .report-glabel span.e { transform: translate(-50%, -110%); }
         .report-glabel span.n { transform: translate(2px, -50%); }
@@ -1495,7 +1496,7 @@
             if (!c.ativo || !c.camada) return '';
             const cam = camadasDoPayload().find(x => String(x.id) === c.camada);
             if (!cam) return '';
-            const rows = MapTools.confrontantes(renderArgs.featureGeometry, cam, { tolM: c.tolM });
+            const rows = mapController.confrontanteRows();
             if (!rows.length) return '';
             const esc = escapeHtml;
             const nomeDe = (x) => {
@@ -1504,10 +1505,10 @@
                 return esc(r && t ? r + ' — ' + t : (r || t || 'sem identificação'));
             };
             const rowsHtml = rows.map((r, i) => `<tr data-split-row class="${i % 2 ? 'bg-slate-50/70' : 'bg-white'}" style="page-break-inside: avoid;">
-                <td class="px-2 py-1 border-r border-slate-200 font-bold text-[10px] text-slate-800">${esc(r.rotuloLado)}</td>
+                <td class="px-2 py-1 border-r border-slate-200 font-bold text-[10px] text-slate-800 pt-editavel" data-conf-edit="${esc(r.id)}:lado" title="Duplo clique para editar (vazio restaura o calculado)">${esc(r.lado)}</td>
                 <td class="px-2 py-1 border-r border-slate-200 font-mono text-[10px] text-right">${MapTools.fmtNumber(r.comprimento, 2)}</td>
                 <td class="px-2 py-1 border-r border-slate-200 font-mono text-[10px] text-right">${esc(MapTools.fmtAzimuth(r.azimute))}</td>
-                <td class="px-2 py-1 text-[10px]">${r.confrontantes.length ? r.confrontantes.map(nomeDe).join('; ') : '<span class="text-slate-400 italic">Sem confrontante identificado (via pública ou área livre)</span>'}</td></tr>`);
+                <td class="px-2 py-1 text-[10px] pt-editavel" data-conf-edit="${esc(r.id)}:conf" title="Duplo clique para editar (vazio restaura o calculado)">${r.confTexto ? esc(r.confTexto) : (r.confrontantes.length ? r.confrontantes.map(nomeDe).join('; ') : '<span class="text-slate-400 italic">Sem confrontante identificado (via pública ou área livre)</span>')}</td></tr>`);
             const thead = `<thead><tr class="bg-slate-100 border-b border-slate-200 text-slate-700">${['Lado', 'Comprimento (m)', 'Azimute', 'Confrontante(s)'].map(h => `<th class="px-2 py-1 border-r last:border-r-0 border-slate-200 text-[9.5px] font-bold uppercase tracking-wide leading-tight">${h}</th>`).join('')}</tr></thead>`;
             const meta = `camada: ${cam.name} • divisa = feição a até ${MapTools.fmtNumber(c.tolM, 1)} m de, no mínimo, 20% do lado${cam.truncated ? ' • camada recortada pelo limite de envio' : ''}`;
             const chunkHtml = (rs, isFirst) => `
@@ -1639,12 +1640,22 @@
             const camposArea = ((reportPayload && reportPayload.formFields) || []).filter(f => ['area_m2', 'number'].includes(String(f.type || '').toLowerCase()));
             const notas = mapController.getConfig().anotacoes;
             const sel = (onchange, html) => `<select onchange="${onchange}" style="width:100%;padding:4px;border:1px solid #cbd5e1;border-radius:8px;margin:2px 0">${html}</select>`;
+            const confRows = cfg.confrontantes.ativo ? mapController.confrontanteRows() : [];
+            const confHtml = confRows.length ? `<div style="color:#64748b;line-height:1.35;margin:2px 0 3px">Dois cliques em LADO ou CONFRONTANTE(S), na tabela, para escrever o texto que preferir (vazio restaura). Ordem das linhas:</div>
+                <div style="border:1px solid #e2e8f0;border-radius:8px;padding:4px">${confRows.map((r, i) => `
+                    <div style="display:flex;align-items:center;gap:3px;padding:2px 0">
+                        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.lado)}</span>
+                        <button type="button" title="Subir" onclick="mapPanelConfMover('${esc(r.id)}', -1)" ${i === 0 ? 'disabled' : ''} style="border:0;background:none;cursor:pointer">▲</button>
+                        <button type="button" title="Descer" onclick="mapPanelConfMover('${esc(r.id)}', 1)" ${i === confRows.length - 1 ? 'disabled' : ''} style="border:0;background:none;cursor:pointer">▼</button>
+                    </div>`).join('')}</div>
+                ${(cfg.confrontantes.ordem.length || Object.keys(cfg.confrontantes.textos).length) ? '<button type="button" class="act" style="margin-top:4px" onclick="mapPanelConfReset()">Restaurar nomes e ordem</button>' : ''}` : '';
             const extrasHtml = `
-                ${chk('mp-x-rot', 'Rótulos nas feições vizinhas', cfg.rotulos.ativo, "mapPanelExtra('rotulos', 'ativo', this.checked)", !temRotulo)}
+                ${chkN('mp-x-rot', 'Rótulos nas feições vizinhas', cfg.rotulos.ativo, "mapPanelExtra('rotulos', 'ativo', this.checked)", !temRotulo, nis('rotulos', '', cfg.rotulos.estilo))}
                 ${(cfg.rotulos.ativo && temNome) ? sel("mapPanelExtra('rotulos', 'campo', this.value)", `<option value="rotulo" ${cfg.rotulos.campo === 'rotulo' ? 'selected' : ''}>Mostrar Quadra/Lote</option><option value="titulo" ${cfg.rotulos.campo === 'titulo' ? 'selected' : ''}>Mostrar o nome principal</option>`) : ''}
                 ${!temRotulo ? '<div style="color:#64748b;margin-bottom:3px">Sem rótulos nas camadas ativas (ou sem permissão de ver os dados delas).</div>' : ''}
+                ${cfg.rotulos.ativo && temRotulo ? `<div style="color:#64748b;line-height:1.35;margin:2px 0 3px">Arraste um rótulo para mover e use o ícone ↻ (ao passar o mouse) para girar.</div>${Object.keys(cfg.rotulos.itens).length ? '<button type="button" class="act" onclick="mapPanelRotulosReset()">Restaurar posição dos rótulos</button>' : ''}` : ''}
                 ${chk('mp-x-conf', 'Tabela de confrontantes', cfg.confrontantes.ativo, "mapPanelExtra('confrontantes', 'ativo', this.checked)", kind !== 'polygon' || !cams.length)}
-                ${cfg.confrontantes.ativo ? sel("mapPanelExtra('confrontantes', 'camada', this.value)", camOpts(cfg.confrontantes.camada)) + (temNome ? chk('mp-x-conf-n', 'Incluir o nome do vizinho', cfg.confrontantes.nomes, "mapPanelExtra('confrontantes', 'nomes', this.checked)") : '') : ''}
+                ${cfg.confrontantes.ativo ? sel("mapPanelExtra('confrontantes', 'camada', this.value)", camOpts(cfg.confrontantes.camada)) + (temNome ? chk('mp-x-conf-n', 'Incluir o nome do vizinho', cfg.confrontantes.nomes, "mapPanelExtra('confrontantes', 'nomes', this.checked)") : '') + confHtml : ''}
                 ${chk('mp-x-ref', 'Distância e sobreposição (camada de referência)', cfg.referencia.ativo, "mapPanelExtra('referencia', 'ativo', this.checked)", !cams.length)}
                 ${cfg.referencia.ativo ? sel("mapPanelExtra('referencia', 'camada', this.value)", camOpts(cfg.referencia.camada)) : ''}
                 ${chk('mp-x-area', 'Área cadastral × área calculada', cfg.comparacaoArea.ativo, "mapPanelExtra('comparacaoArea', 'ativo', this.checked)", kind !== 'polygon' || !camposArea.length)}
@@ -1791,8 +1802,9 @@
         // edição por duplo clique dos textos da tabela de pontos (título, nome, coordenadas, azimute, distância)
         function editarTextoTabelaPontos(td) {
             if (!mapController || !td || td.querySelector('input')) return;
-            const chave = td.getAttribute('data-pt-edit');
-            const atual = td.textContent;
+            const chave = td.getAttribute('data-pt-edit') || td.getAttribute('data-conf-edit');
+            const daConf = !td.getAttribute('data-pt-edit');
+            const atual = td.textContent.trim();
             const input = document.createElement('input');
             input.type = 'text';
             input.value = atual;
@@ -1808,16 +1820,21 @@
                 if (feito) return;
                 feito = true;
                 if (!grava || input.value === atual) { td.textContent = atual; return; }
-                if (/:t$/.test(chave)) mapController.renamePoint(chave.slice(0, -2), input.value);
+                if (daConf) mapController.setConfrontanteTexto(chave, input.value);
+                else if (/:t$/.test(chave)) mapController.renamePoint(chave.slice(0, -2), input.value);
                 else mapController.setTabelaTexto(chave, input.value);
             };
             input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') fim(true); else if (ev.key === 'Escape') fim(false); });
             input.addEventListener('blur', () => fim(true));
         }
         document.addEventListener('dblclick', (ev) => {
-            const td = ev.target && ev.target.closest ? ev.target.closest('[data-pt-edit]') : null;
+            const td = ev.target && ev.target.closest ? ev.target.closest('[data-pt-edit], [data-conf-edit]') : null;
             if (td) editarTextoTabelaPontos(td);
         });
+
+        function mapPanelConfMover(id, dir) { if (mapController) { mapController.moveConfrontante(id, dir); renderMapToolsPanel(); } }
+        function mapPanelConfReset() { if (mapController) { mapController.resetConfrontantes(); renderMapToolsPanel(); } }
+        function mapPanelRotulosReset() { if (mapController) { mapController.resetRotulos(); renderMapToolsPanel(); } }
 
         function mapPanelHide() {
             mapPanelOpen = false;

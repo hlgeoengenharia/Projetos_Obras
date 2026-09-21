@@ -102,25 +102,52 @@
 
         // texto sobre cada feição da camada (Quadra/Lote ou nome principal), no centro dela; camadas enormes ficam sem rótulo
         const MAX_ROTULOS = 250;
+        // chave do ajuste de um rótulo: id da camada (só caracteres seguros) + posição da feição na camada
+        function nlKey(c, i) { return String(c.id).replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 64) + ':' + i; }
+
+        function setRotuloItem(id, patch) {
+            const itens = Object.assign({}, cfg.rotulos.itens);
+            const novo = Object.assign({}, itens[id] || {}, patch);
+            Object.keys(novo).forEach(k => { if (novo[k] === undefined) delete novo[k]; });
+            if (novo.lat === undefined && novo.rot === undefined) delete itens[id]; else itens[id] = novo;
+            cfg.rotulos = MT.normalizeRotulos(Object.assign({}, cfg.rotulos, { itens: itens }));
+            redrawNeighborLabels();
+            notify();
+        }
+
         function addNeighborLabels(c) {
             if (!cfg.rotulos.ativo) return;
             const key = cfg.rotulos.campo === 'titulo' ? 't' : 'r';
-            const itens = c.features.filter(x => x.properties && x.properties[key]);
+            const itens = [];
+            c.features.forEach((x, i) => { if (x.properties && x.properties[key]) itens.push({ x: x, i: i }); });
             if (!itens.length || itens.length > MAX_ROTULOS) return;
             const list = [];
-            itens.forEach(x => {
+            itens.forEach(({ x, i }) => {
                 const bb = MT.geometryBBox(x.geometry);
                 if (!bb) return;
-                const ct = MT.bboxCenter(bb);
-                const icon = L.divIcon({ className: 'report-nlabel', html: '<span>' + escapeHtml(x.properties[key]) + '</span>', iconSize: [0, 0] });
-                const mk = L.marker([ct[1], ct[0]], { icon: icon, interactive: false, keyboard: false });
+                const id = nlKey(c, i);
+                const aj = cfg.rotulos.itens[id] || {};
+                const ct = aj.lat !== undefined ? [aj.lng, aj.lat] : MT.bboxCenter(bb);
+                const rot = aj.rot !== undefined ? aj.rot : 0;
+                const html = '<span class="report-nlabel-l" style="transform:' + labelTransform(rot) + ';' + estiloCss(cfg.rotulos.estilo) + '" title="Arraste para mover">' + escapeHtml(x.properties[key]) + ROT_HANDLE + '</span>';
+                const icon = L.divIcon({ className: 'report-nlabel', html: html, iconSize: [0, 0] });
+                const mk = L.marker([ct[1], ct[0]], { icon: icon, draggable: true, keyboard: false, zIndexOffset: 900 });
                 mk.addTo(map);
+                mk.on('dragend', () => { const ll = mk.getLatLng(); setRotuloItem(id, { lat: ll.lat, lng: ll.lng }); });
                 list.push(mk);
+                wireRotate(mk, '.report-nlabel-l', () => rot, (deg) => setRotuloItem(id, { rot: deg }), () => setRotuloItem(id, { rot: undefined }));
             });
-            state.nlabels[String(c.id)] = list;
+            state.nlabels[String(c.id)] = (state.nlabels[String(c.id)] || []).concat(list);
         }
         function clearNeighborLabels() {
             Object.keys(state.nlabels).forEach(id => { state.nlabels[id].forEach(m => map.removeLayer(m)); delete state.nlabels[id]; });
+        }
+
+        function redrawNeighborLabels() {
+            clearNeighborLabels();
+            if (!cfg.camadasVizinhas) return;
+            const on = new Set(cfg.camadasLigadas.map(String));
+            camadas.forEach(c => { if (on.has(String(c.id))) addNeighborLabels(c); });
         }
 
         function applyNeighbors() {
@@ -530,8 +557,15 @@
                 next.pontos = Object.assign({}, cfg.pontos, (patch && patch.pontos) || {});
                 ['rotulos', 'confrontantes', 'referencia', 'comparacaoArea', 'situacao', 'quadriculado'].forEach(k => { next[k] = Object.assign({}, cfg[k], (patch && patch[k]) || {}); });
                 const pontosNovos = next.pontos;
+                const camadaAnt = cfg.confrontantes.camada;
                 cfg = MT.normalizeMapConfig({ mapa: Object.assign({}, next, { pontos: cfg.pontos }) }); // o resto normalizado; os pontos passam por aplicarPontos
                 aplicarPontos(pontosNovos);
+                // outra camada de confrontantes: os nomes escritos para os vizinhos da anterior não valem mais
+                if (cfg.confrontantes.camada !== camadaAnt) {
+                    const tx = Object.assign({}, cfg.confrontantes.textos);
+                    Object.keys(tx).forEach(k => { if (/:conf$/.test(k)) delete tx[k]; });
+                    cfg.confrontantes = MT.normalizeConfrontantes(Object.assign({}, cfg.confrontantes, { textos: tx }));
+                }
                 apply();
             },
             /** Liga/desliga uma camada vizinha pelo id. */
@@ -547,7 +581,7 @@
                     camadasLigadas: cfg.camadasLigadas.slice(), destaque: Object.assign({}, cfg.destaque), medidas: JSON.parse(JSON.stringify(cfg.medidas)),
                     edicoes: Object.assign({}, cfg.edicoes), posicoes: Object.assign({}, cfg.posicoes), rotacoes: Object.assign({}, cfg.rotacoes),
                     pontos: Object.assign({}, cfg.pontos, { ordem: cfg.pontos.ordem.slice(), titulos: Object.assign({}, cfg.pontos.titulos) }),
-                    rotulos: Object.assign({}, cfg.rotulos), confrontantes: Object.assign({}, cfg.confrontantes), referencia: Object.assign({}, cfg.referencia),
+                    rotulos: JSON.parse(JSON.stringify(cfg.rotulos)), confrontantes: JSON.parse(JSON.stringify(cfg.confrontantes)), referencia: Object.assign({}, cfg.referencia),
                     comparacaoArea: Object.assign({}, cfg.comparacaoArea), situacao: Object.assign({}, cfg.situacao), quadriculado: Object.assign({}, cfg.quadriculado),
                     anotacoes: cfg.anotacoes.map(a => Object.assign({}, a)), vista: currentView()
                 });
@@ -607,6 +641,36 @@
                 if (vertData.omitidos) return;
                 setPontos({ ativo: true, ordem: vertData.itens.map(v => v.id) });
             },
+            // ---- tabela de confrontantes: linhas na ordem escolhida, com os textos editados
+            confrontanteRows() {
+                const c = cfg.confrontantes;
+                if (!c.ativo || !c.camada) return [];
+                const cam = camadas.find(x => String(x.id) === c.camada);
+                if (!cam) return [];
+                const chave = c.camada + '|' + c.tolM;
+                if (!state.confCache || state.confCache.chave !== chave) state.confCache = { chave: chave, rows: MT.confrontantes(geometry, cam, { tolM: c.tolM }) };
+                return MT.applyConfrontantes(state.confCache.rows, c);
+            },
+            /** Texto da tabela de confrontantes escrito pelo usuário: 'lado:K:lado' ou 'lado:K:conf'. Vazio volta ao calculado. */
+            setConfrontanteTexto(chave, texto) {
+                const textos = Object.assign({}, cfg.confrontantes.textos);
+                const limpo = MT.normalizeConfrontantes({ textos: { [chave]: texto } }).textos[chave];
+                if (limpo) textos[chave] = limpo; else delete textos[chave];
+                cfg.confrontantes = MT.normalizeConfrontantes(Object.assign({}, cfg.confrontantes, { textos: textos }));
+                notify();
+            },
+            /** Sobe (-1) ou desce (+1) uma linha da tabela de confrontantes. */
+            moveConfrontante(id, dir) {
+                const ids = api.confrontanteRows().map(r => r.id);
+                const i = ids.indexOf(id), j = i + (dir < 0 ? -1 : 1);
+                if (i < 0 || j < 0 || j >= ids.length) return;
+                ids.splice(j, 0, ids.splice(i, 1)[0]);
+                cfg.confrontantes = MT.normalizeConfrontantes(Object.assign({}, cfg.confrontantes, { ordem: ids }));
+                notify();
+            },
+            resetConfrontantes() { cfg.confrontantes = MT.normalizeConfrontantes(Object.assign({}, cfg.confrontantes, { ordem: [], textos: {} })); notify(); },
+            /** Volta os rótulos das feições vizinhas para o centro de cada feição, sem giro. */
+            resetRotulos() { cfg.rotulos = MT.normalizeRotulos(Object.assign({}, cfg.rotulos, { itens: {} })); redrawNeighborLabels(); notify(); },
             clearPoints() { setPontos({ ordem: [], titulos: {}, textos: {} }); },
             /** Texto da tabela de pontos escrito pelo usuário: 'titulo' ou 'v:N:c0|az|dist'. Vazio volta ao calculado. */
             setTabelaTexto(chave, texto) {

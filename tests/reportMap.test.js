@@ -497,9 +497,10 @@ const camadasRot = [
     { id: '1', name: 'Lotes', color: '#ff0000', kind: 'polygon', features: [{ type: 'Feature', properties: { r: 'Quadra E • Lote 02', t: 'Beltrano <b>' }, geometry: poly }, { type: 'Feature', properties: {}, geometry: poly }], truncated: false }
 ];
 const nlabels = (tt) => tt.layersOf('marker').filter(m => m.args.o.icon.className === 'report-nlabel');
+const semIcone = (h) => h.replace(/<span class="report-rot[^>]*>[^<]*<\/span>/, '');
 t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefined, { camadas: camadasRot });
-eq('rótulo (Quadra/Lote) no centro de cada feição que tem rótulo', [nlabels(t).length, nlabels(t)[0].args.o.icon.html.replace(/<[^>]+>/g, '')], [1, 'Quadra E • Lote 02']);
-ok('rótulo fica no centro da feição e não é clicável', nlabels(t)[0].args.pos[0] === -7.015 && nlabels(t)[0].args.pos[1] === -34.835 && nlabels(t)[0].args.o.interactive === false);
+eq('rótulo (Quadra/Lote) no centro de cada feição que tem rótulo', [nlabels(t).length, semIcone(nlabels(t)[0].args.o.icon.html).replace(/<[^>]+>/g, '')], [1, 'Quadra E • Lote 02']);
+ok('rótulo fica no centro da feição e pode ser arrastado', nlabels(t)[0].args.pos[0] === -7.015 && nlabels(t)[0].args.pos[1] === -34.835 && nlabels(t)[0].args.o.draggable === true);
 t.ctl.setConfig({ rotulos: { campo: 'titulo' } });
 ok('campo "nome principal" com o texto escapado', nlabels(t).length === 1 && /Beltrano &lt;b&gt;/.test(nlabels(t)[0].args.o.icon.html) && !/<b>/.test(nlabels(t)[0].args.o.icon.html));
 t.ctl.setConfig({ rotulos: { ativo: false } });
@@ -511,6 +512,68 @@ const enorme = [{ id: '9', name: 'Enorme', color: '#00f', kind: 'polygon', featu
 t = build({ mapa: { camadasLigadas: ['9'], rotulos: { ativo: true } } }, undefined, { camadas: enorme });
 eq('camada com mais de 250 rótulos: ficam de fora (poluição)', nlabels(t).length, 0);
 t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefined, { camadas: camadasRot });
+
+// rótulos das vizinhas: mover, girar, estilo
+{
+    const b = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefined, { camadas: camadasRot });
+    const h = nlabels(b)[0].args.o.icon.html;
+    ok('rótulo sem card, com estilo, giro e ícone de girar', !/border|background/.test(h) && /font-weight:700;font-style:normal;text-decoration:none/.test(h) && /rotate\(0deg\)/.test(h) && /report-rot no-print/.test(h) && /report-nlabel-l/.test(h));
+    nlabels(b)[0].latlng = { lat: -7.0111, lng: -34.8333 };
+    nlabels(b)[0].handlers.dragend();
+    eq('arrastar guarda a posição por "camada:índice" e redesenha o rótulo no novo lugar', [b.ctl.getConfig().rotulos.itens['1:0'], nlabels(b).length, nlabels(b)[0].args.pos], [{ lat: -7.0111, lng: -34.8333 }, 1, [-7.0111, -34.8333]]);
+    b.ctl.setConfig({ rotulos: { estilo: { n: false, i: true, s: true } } });
+    ok('estilo dos rótulos (itálico e sublinhado, sem negrito)', /font-weight:400;font-style:italic;text-decoration:underline/.test(nlabels(b)[0].args.o.icon.html));
+    // giro pelo ícone
+    const eventos = {};
+    const docE = makeDoc(ids);
+    docE.addEventListener = (n, fn) => { eventos[n] = fn; };
+    docE.removeEventListener = (n) => { delete eventos[n]; };
+    const g = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefined, { camadas: camadasRot, doc: docE });
+    const mk = nlabels(g)[0];
+    mk.span.getBoundingClientRect = () => ({ left: 100, top: 100, width: 20, height: 10 });
+    mk.span.style = {};
+    mk.span.listeners.pointerdown({ stopPropagation() {}, preventDefault() {} });
+    eventos.pointermove({ clientX: 110, clientY: 155 });
+    eventos.pointerup({});
+    eq('girar o rótulo guarda o giro sem perder a posição', [g.ctl.getConfig().rotulos.itens['1:0'], /rotate\(90deg\)/.test(nlabels(g)[0].args.o.icon.html)], [{ rot: 90 }, true]);
+    nlabels(g)[0].span.listeners.dblclick({ stopPropagation() {} });
+    eq('dois cliques no ícone tiram o giro (e o ajuste some se não sobra nada)', g.ctl.getConfig().rotulos.itens, {});
+    g.ctl.setConfig({ rotulos: { itens: { '1:0': { lat: -7.0, lng: -34.9, rot: 15 } } } });
+    g.ctl.resetRotulos();
+    eq('restaurar posição dos rótulos', [g.ctl.getConfig().rotulos.itens, nlabels(g)[0].args.pos], [{}, [-7.015, -34.835]]);
+    const s = g.ctl.snapshot();
+    ok('o que se salva leva o estilo e os ajustes dos rótulos', s.rotulos.estilo && typeof s.rotulos.itens === 'object');
+}
+
+// ---------------------------------------------------------------- tabela de confrontantes: ordem e textos
+{
+    const viz = { id: 'V', name: 'Vizinhos', color: '#f00', kind: 'polygon', truncated: false, features: [{ type: 'Feature', properties: { r: 'Lote 02', t: 'Fulano' }, geometry: { type: 'Polygon', coordinates: [[[-34.83, -7.02], [-34.82, -7.02], [-34.82, -7.01], [-34.83, -7.01], [-34.83, -7.02]]] } }] };
+    const b = build({ mapa: { confrontantes: { ativo: true, camada: 'V' } } }, undefined, { camadas: [viz] });
+    const rows = () => b.ctl.confrontanteRows();
+    eq('quatro lados, na ordem natural, com o nome calculado', [rows().map(r => r.id), rows().map(r => r.lado)], [['lado:0', 'lado:1', 'lado:2', 'lado:3'], ['L1', 'L2', 'L3', 'L4']]);
+    ok('o lado leste (L2) tem o vizinho identificado', rows()[1].confrontantes.length === 1 && rows()[1].confrontantes[0].r === 'Lote 02');
+    b.ctl.moveConfrontante('lado:1', -1);
+    eq('subir uma linha muda a ordem e a guarda', [rows().map(r => r.id), b.ctl.getConfig().confrontantes.ordem], [['lado:1', 'lado:0', 'lado:2', 'lado:3'], ['lado:1', 'lado:0', 'lado:2', 'lado:3']]);
+    b.ctl.moveConfrontante('lado:1', -1);
+    b.ctl.moveConfrontante('lado:3', 1);
+    eq('subir a primeira ou descer a última não faz nada', rows().map(r => r.id), ['lado:1', 'lado:0', 'lado:2', 'lado:3']);
+    b.ctl.setConfrontanteTexto('lado:1:lado', '  Frente  ');
+    b.ctl.setConfrontanteTexto('lado:1:conf', 'Rua das Flores');
+    eq('textos de LADO e CONFRONTANTE(S) do usuário', [rows()[0].lado, rows()[0].confTexto, rows()[1].lado, rows()[1].confTexto], ['Frente', 'Rua das Flores', 'L1', '']);
+    b.ctl.setConfrontanteTexto('lado:1:conf', '');
+    eq('vazio restaura o calculado', [rows()[0].confTexto, b.ctl.getConfig().confrontantes.textos], ['', { 'lado:1:lado': 'Frente' }]);
+    b.ctl.setConfrontanteTexto('lado:1:conf', 'Rua das Flores');
+    b.ctl.setConfig({ confrontantes: { nomes: true } });
+    eq('mudar outra opção da tabela mantém a ordem e os textos', [rows()[0].lado, rows()[0].confTexto], ['Frente', 'Rua das Flores']);
+    b.ctl.setConfig({ confrontantes: { camada: '' } });
+    eq('trocar a camada descarta só os nomes dos vizinhos (CONFRONTANTE); LADO e ordem ficam', [b.ctl.getConfig().confrontantes.textos, b.ctl.getConfig().confrontantes.ordem.length], [{ 'lado:1:lado': 'Frente' }, 4]);
+    eq('sem camada: sem linhas', rows(), []);
+    b.ctl.setConfig({ confrontantes: { camada: 'V' } });
+    b.ctl.resetConfrontantes();
+    eq('restaurar nomes e ordem', [rows().map(r => r.lado), b.ctl.getConfig().confrontantes.ordem, b.ctl.getConfig().confrontantes.textos], [['L1', 'L2', 'L3', 'L4'], [], {}]);
+    const desl = build({ mapa: {} }, undefined, { camadas: [viz] });
+    eq('desligada: sem linhas', desl.ctl.confrontanteRows(), []);
+}
 
 // ---------------------------------------------------------------- quadriculado
 t = build({});

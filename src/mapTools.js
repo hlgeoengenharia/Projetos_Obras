@@ -34,8 +34,8 @@
         posicoes: {},            // { idDaMedida: { lat, lng } } (rótulo arrastado)
         pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false, ordem: [], titulos: {}, estilo: { n: true, i: false, s: false }, textos: {} }, // pontos nos vértices; textos = células e título da tabela editados pelo usuário
         temporal: { ativo: false, ordem: 'asc', colunas: 2, alturaMm: 70, sincronizar: true, contorno: true, excluidas: [] }, // série de ortofotos por data
-        rotulos: { ativo: false, campo: 'rotulo' },                          // texto sobre as feições vizinhas ('rotulo' = Quadra/Lote; 'titulo' = nome principal)
-        confrontantes: { ativo: false, camada: '', tolM: 3, nomes: false },  // quem faz divisa com cada lado
+        rotulos: { ativo: false, campo: 'rotulo', estilo: { n: true, i: false, s: false }, itens: {} }, // texto sobre as feições vizinhas ('rotulo' = Quadra/Lote; 'titulo' = nome principal); itens = posição/giro ajustados pelo usuário, por 'camada:índice'
+        confrontantes: { ativo: false, camada: '', tolM: 3, nomes: false, ordem: [], textos: {} },  // quem faz divisa com cada lado; ordem das linhas e textos (LADO / CONFRONTANTE) editados
         referencia: { ativo: false, camada: '' },                             // distância e sobreposição com uma camada de referência (ex.: LPM)
         comparacaoArea: { ativo: false, campo: '' },                          // área cadastral x área calculada
         situacao: { ativo: false },                                           // mapa de situação (localização) no canto
@@ -96,13 +96,48 @@
     const ID_REF = /^[A-Za-z0-9_.:-]{1,64}$/;
     function bool(v, d) { return v === undefined ? d : !!v; }
 
+    const MAX_ITENS_ROTULO = 300;
     function normalizeRotulos(x) {
         x = x || {};
-        return { ativo: bool(x.ativo, false), campo: x.campo === 'titulo' ? 'titulo' : 'rotulo' };
+        const itens = {};
+        if (x.itens && typeof x.itens === 'object') {
+            Object.keys(x.itens).slice(0, MAX_ITENS_ROTULO).forEach(k => {
+                const v = x.itens[k];
+                if (!/^[A-Za-z0-9_.-]{1,64}:[0-9]{1,5}$/.test(k) || !v || typeof v !== 'object') return;
+                const item = {};
+                const lat = Number(v.lat), lng = Number(v.lng);
+                if (v.lat !== undefined && isFinite(lat) && isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) { item.lat = lat; item.lng = lng; }
+                const rot = normalizeRotacoes({ a: v.rot }).a;
+                if (v.rot !== undefined && rot !== undefined) item.rot = rot;
+                if (item.lat !== undefined || item.rot !== undefined) itens[k] = item;
+            });
+        }
+        return { ativo: bool(x.ativo, false), campo: x.campo === 'titulo' ? 'titulo' : 'rotulo', estilo: normalizeEstilo(x.estilo, MAP_DEFAULTS.rotulos.estilo), itens };
     }
     function normalizeConfrontantes(x) {
         x = x || {};
-        return { ativo: bool(x.ativo, false), camada: ID_REF.test(String(x.camada || '')) ? String(x.camada) : '', tolM: clamp(x.tolM, 0.5, 20, 3), nomes: bool(x.nomes, false) };
+        const vistos = new Set();
+        const ordem = [];
+        (Array.isArray(x.ordem) ? x.ordem : []).forEach(id => { if (typeof id === 'string' && /^lado:[0-9]{1,4}$/.test(id) && !vistos.has(id) && ordem.length < 200) { vistos.add(id); ordem.push(id); } });
+        const textos = {};
+        if (x.textos && typeof x.textos === 'object') {
+            Object.keys(x.textos).forEach(k => {
+                if (!/^lado:[0-9]{1,4}:(lado|conf)$/.test(k) || typeof x.textos[k] !== 'string') return;
+                const txt = x.textos[k].replace(/[\r\n]+/g, ' ').trim().slice(0, 160);
+                if (txt) textos[k] = txt;
+            });
+        }
+        return { ativo: bool(x.ativo, false), camada: ID_REF.test(String(x.camada || '')) ? String(x.camada) : '', tolM: clamp(x.tolM, 0.5, 20, 3), nomes: bool(x.nomes, false), ordem, textos };
+    }
+
+    /** Aplica a ordem das linhas e os textos editados (LADO / CONFRONTANTE) às linhas calculadas de confrontantes(). */
+    function applyConfrontantes(rows, conf) {
+        conf = conf || {};
+        const ordem = conf.ordem || [];
+        const tx = conf.textos || {};
+        return rows.map((r, i) => ({ r, i, pos: ordem.indexOf(r.id) }))
+            .sort((a, b) => ((a.pos < 0 ? 1e6 : a.pos) - (b.pos < 0 ? 1e6 : b.pos)) || (a.i - b.i))
+            .map(x => Object.assign({}, x.r, { lado: tx[x.r.id + ':lado'] || x.r.rotuloLado, confTexto: tx[x.r.id + ':conf'] || '', editados: ['lado', 'conf'].filter(k => tx[x.r.id + ':' + k]) }));
     }
     function normalizeReferencia(x) {
         x = x || {};
@@ -1091,7 +1126,7 @@
 
     return {
         MAP_DEFAULTS, BASE_MAPS,
-        normalizeMapConfig, mergeAjustes, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
+        normalizeMapConfig, mergeAjustes, applyConfrontantes, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
         geometryBBox, bboxCenter, expandBBoxMeters, bboxIntersects, roundCoords, geomKind,
         normalizeTemporal, rasterDateInfo, fmtRasterDate, tileXY, tileUrl, probeZoom, rasterBBox, buildOrtofotoList, sortOrtofotos,
         COORD_SYSTEMS, normalizePontos, latLngToUtm, utmToLatLng, fmtGms, coordHeaders, coordCells, coordSystemLabel, azimuthDeg, fmtAzimuth, vertices, defaultPointTitle, pointRows,
