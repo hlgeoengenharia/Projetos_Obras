@@ -22,14 +22,20 @@ function extractFunction(name) {
 const reportPayload = { featureGeometry: null };
 const turf = undefined;
 // eslint-disable-next-line no-new-func
-const load = new Function('FieldFormatter', 'reportPayload', 'turf', `
-    ${extractFunction('getGeometryCenter')}
-    ${extractFunction('formatFieldValueForDisplay')}
-    ${extractFunction('readFieldRaw')}
-    ${extractFunction('resolveFieldValue')}
-    return { resolveFieldValue, formatFieldValueForDisplay, readFieldRaw };
+const ReportBlocks = require('../src/reportBlocks.js');
+const load = new Function('FieldFormatter', 'reportPayload', 'turf', 'ReportBlocks', `
+    // mesma regra do visualizador para achar o centro da feição (campos de geolocalização não gravados)
+    const B = ReportBlocks.create({ FieldFormatter: FieldFormatter, geometryCenter: () => {
+        try {
+            const g = reportPayload && reportPayload.featureGeometry;
+            if (!g || typeof turf === 'undefined') return null;
+            const c = turf.centroid({ type: 'Feature', properties: {}, geometry: g }).geometry.coordinates;
+            return { lat: c[1], lng: c[0] };
+        } catch (e) { return null; }
+    } });
+    return { resolveFieldValue: B.resolveFieldValue, formatFieldValueForDisplay: B.formatFieldValueForDisplay, readFieldRaw: B.readFieldRaw };
 `);
-const { resolveFieldValue } = load(FieldFormatter, reportPayload, turf);
+const { resolveFieldValue } = load(FieldFormatter, reportPayload, turf, ReportBlocks);
 
 let total = 0;
 let failed = 0;

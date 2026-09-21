@@ -18,6 +18,11 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
+// O visualizador do relatório = relatorio_view.html + os desenhistas dos blocos (src/reportBlocks.js, movidos dele sem mudar o desenho)
+function lerVisualizador() {
+    return fs.readFileSync('relatorio_view.html', 'utf8') + '\n' + fs.readFileSync('src/reportBlocks.js', 'utf8');
+}
+
 // Cores ANSI para o terminal
 const GREEN = '\x1b[32m';
 const RED = '\x1b[31m';
@@ -582,7 +587,8 @@ const relatorioViewExists = fs.existsSync('relatorio_view.html');
 assertTest('Relatórios A4: Arquivo dedicado relatorio_view.html existe', relatorioViewExists);
 
 if (relatorioViewExists) {
-    const relatorioViewCode = fs.readFileSync('relatorio_view.html', 'utf8');
+    // o visualizador + os desenhistas dos blocos (src/reportBlocks.js, movidos do visualizador sem mudar o desenho)
+    const relatorioViewCode = lerVisualizador();
     const hasRelatorioViewFeatures = !relatorioViewCode.includes('Gerar PDF') && relatorioViewCode.includes('window.print()') &&
         relatorioViewCode.includes('Gerar Word') &&
         relatorioViewCode.includes('gerarWord') &&
@@ -619,7 +625,7 @@ assertTest('Relatórios A4: Card "Grade de Atributos/Campos" organiza campos por
 
 // Verificações do Card 6: Vistoria Fotográfica & Anexos (1:N) Reformulado
 const freshReportAdapterCode = fs.readFileSync('src/reportAdapter.js', 'utf8');
-const freshRelatorioViewCode = fs.readFileSync('relatorio_view.html', 'utf8');
+const freshRelatorioViewCode = lerVisualizador();
 const hasMultipleTabsAdapter = freshReportAdapterCode.includes('getMultipleTabs') &&
     freshReportAdapterCode.includes('isMultiple || t.isConsolidated');
 assertTest('Relatórios A4: ReportAdapter implementa e expõe getMultipleTabs para detecção de abas 1:N e consolidadas', hasMultipleTabsAdapter);
@@ -647,14 +653,14 @@ const hasGridReorderAndResize = freshReportBuilderCodeUpdated.includes('initGrid
     freshReportBuilderCodeUpdated.includes('field-width-dec-btn') &&
     freshReportBuilderCodeUpdated.includes('field-width-inc-btn') &&
     freshReportBuilderCodeUpdated.includes('field-drag-handle') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('spans[f.id]');
+    lerVisualizador().includes('spans[f.id]');
 assertTest('Relatórios A4: Grade de Atributos suporta reordenação (drag & drop), botões steppers [-] [+] e menu popover de proporções', hasGridReorderAndResize);
 
 const hasFluidGridResizing = freshReportBuilderCodeUpdated.includes('campos_larguras') &&
     freshReportBuilderCodeUpdated.includes('getFieldWidthStyle') &&
     freshReportBuilderCodeUpdated.includes('field-width-popover') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('campos_larguras') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('getFieldWidthStyle');
+    lerVisualizador().includes('campos_larguras') &&
+    lerVisualizador().includes('getFieldWidthStyle');
 assertTest('Relatórios A4: Grade de Atributos suporta ajuste de largura (% rápido por frações e slider livre de 15% a 100%) na folha interativa e no relatório final', hasFluidGridResizing);
 
 const hasGridFieldDeletion = freshReportBuilderCodeUpdated.includes('removeFieldFromGrid') &&
@@ -716,9 +722,9 @@ const hasCard6ExistingInsertsAndRemoves = freshReportBuilderCodeUpdated.includes
     freshReportBuilderCodeUpdated.includes('removeFieldFromAnalytical1n');
 assertTest('Relatórios A4: Card 1:N permite adicionar campos a tabelas/laudos existentes e botões "x" na folha A4 para remover colunas e campos', hasCard6ExistingInsertsAndRemoves);
 
-const has1nViewCustomFieldsAndSorting = fs.readFileSync('relatorio_view.html', 'utf8').includes('renderSyntheticTable(bloco, featureData)') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('bloco.campos_selecionados') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('bloco.ordenar_por_aba');
+const has1nViewCustomFieldsAndSorting = lerVisualizador().includes('renderSyntheticTable(bloco, featureData)') &&
+    lerVisualizador().includes('bloco.campos_selecionados') &&
+    lerVisualizador().includes('bloco.ordenar_por_aba');
 assertTest('Relatórios A4: relatorio_view.html renderiza campos customizados, ordenação cronológica e agrupamento por aba para blocos 1:N', has1nViewCustomFieldsAndSorting);
 
 const hasSynthetic1nColumnControls = freshReportBuilderCodeUpdated.includes('moveSynthetic1nColumn') &&
@@ -728,19 +734,19 @@ assertTest('Relatórios A4: Tabela Sintética 1:N permite mover colunas (◀ / �
 
 const hasTableDensityAndStriping = freshReportBuilderCodeUpdated.includes('set1nTableDensity') &&
     freshReportBuilderCodeUpdated.includes('set1nRowStriping') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('density === \'ultracompact\'') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('bloco.zebrado');
+    lerVisualizador().includes('density === \'ultracompact\'') &&
+    lerVisualizador().includes('bloco.zebrado');
 assertTest('Relatórios A4: Tabela Sintética 1:N suporta densidade horizontal (Confortável/Compacto/Ultra) e cores alternadas por linha (Zebrado/Ente)', hasTableDensityAndStriping);
 
 const hasTabSequenceReordering = freshReportBuilderCodeUpdated.includes('move1nTabSequence') &&
     freshReportBuilderCodeUpdated.includes('cfg-1n-tab-sequence-container') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('bloco.ordem_abas');
+    lerVisualizador().includes('bloco.ordem_abas');
 assertTest('Relatórios A4: Agrupamento 1:N suporta reordenar a sequência das abas com botões [↑] e [↓] na barra lateral e no relatório', hasTabSequenceReordering);
 
 const hasConclusionAndCompoundFields = freshReportBuilderCodeUpdated.includes('laudoSampleHtml') &&
     freshReportBuilderCodeUpdated.includes('exibido na íntegra') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('FieldFormatter.toHtml(r.values[f.id]') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('attachment');
+    lerVisualizador().includes('FieldFormatter.toHtml(r.values[f.id]') &&
+    lerVisualizador().includes('attachment');
 assertTest('Relatórios A4: Laudo 1:N exibe campos longos na íntegra e formata campos compostos (links/anexos) pelo formatador único', hasConclusionAndCompoundFields);
 
 const has1nCheckboxPersistence = freshReportBuilderCodeUpdated.includes('current1nSelectedFieldKeys') &&
@@ -779,13 +785,13 @@ assertTest('Relatórios A4: Laudo Analítico 1:N na Folha A4 conta com controles
 const hasLaudoMultiTabStructureAndStandardConclusion = freshReportBuilderCodeUpdated.includes('Aba / Ente:') &&
     freshReportBuilderCodeUpdated.includes('renderLaudoPreview') &&
     freshReportBuilderCodeUpdated.includes('<details open') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('Aba / Ente:');
+    lerVisualizador().includes('Aba / Ente:');
 assertTest('Relatórios A4: Laudo Analítico 1:N mostra na Folha A4 uma seção por aba, já ABERTA, com os campos reais do formulário prontos para posicionar', hasLaudoMultiTabStructureAndStandardConclusion);
 
 const hasFullCompound1nFields = freshReportBuilderCodeUpdated.includes('Título 2') &&
     freshReportBuilderCodeUpdated.includes('endereço-do-link-2') &&
     fs.readFileSync('src/fieldFormatter.js', 'utf8').includes('linkBlockHtml') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('hiperlink_1n');
+    lerVisualizador().includes('hiperlink_1n');
 assertTest('Relatórios A4: Campos com tipo de dados 1:N (hiperlinks, processos e anexos) são exibidos integralmente sem truncamento', hasFullCompound1nFields);
 
 const freshReportBuilderCodeFinal = fs.readFileSync('src/reportBuilder.js', 'utf8');
@@ -841,7 +847,7 @@ console.log(`\n${BOLD}[5/5] Verificando Relatórios Gerenciais A4 (Cabeçalho, Q
 
 const freshReportAdapterJs = fs.readFileSync('src/reportAdapter.js', 'utf8');
 const freshReportBuilderJs = fs.readFileSync('src/reportBuilder.js', 'utf8');
-const freshRelatorioViewHtml = fs.readFileSync('relatorio_view.html', 'utf8');
+const freshRelatorioViewHtml = lerVisualizador();
 
 const hasCircuitBreakerAndCloudSync = freshReportAdapterJs.includes('STORAGE_KEY_REMOTE_AVAILABLE') &&
     freshReportAdapterJs.includes('isRemoteTemplatesTableAvailable') &&
@@ -893,10 +899,10 @@ const hasFeaturePayloadIntegrity = fs.readFileSync('src/formRenderer.js', 'utf8'
     fs.readFileSync('index.html', 'utf8').includes('window.activeFeatureData && Object.keys(window.activeFeatureData).length > 0');
 assertTest('Relatórios A4: Sincronização e integridade do payload de feição individual (activeFeatureData e openFeatureReportPage)', hasFeaturePayloadIntegrity);
 
-const hasFeatureDataResolutionInViewer = fs.readFileSync('relatorio_view.html', 'utf8').includes('function resolveFieldValue') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('resolveFieldValue(f, featureData)') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('window.opener.activeFeatureData') &&
-    fs.readFileSync('relatorio_view.html', 'utf8').includes('window.reportViewerFormTabs');
+const hasFeatureDataResolutionInViewer = lerVisualizador().includes('function resolveFieldValue') &&
+    lerVisualizador().includes('resolveFieldValue(f, featureData)') &&
+    lerVisualizador().includes('window.opener.activeFeatureData') &&
+    lerVisualizador().includes('window.reportViewerFormTabs');
 assertTest('Relatórios A4: relatorio_view.html implementa resolveFieldValue resiliente e suporte a dados de window.opener e formTabs', hasFeatureDataResolutionInViewer);
 
 // Verificações: Cabeçalho Acima da Margem, Rodapé Abaixo da Margem e Numeração a partir da 2ª Folha
@@ -913,7 +919,7 @@ const hasFooterPageStartOptions = freshReportBuilderJs.includes('cfg-ftr-page-st
     freshReportBuilderJs.includes('updateFooterProperty');
 assertTest('ReportBuilder: Card Rodapé Oficial inclui seleção de início de numeração (1ª folha vs 2ª folha) e métodos sincronizados', hasFooterPageStartOptions);
 
-const updatedRelatorioViewHtml = fs.readFileSync('relatorio_view.html', 'utf8');
+const updatedRelatorioViewHtml = lerVisualizador();
 const hasZeroMarginPrint = updatedRelatorioViewHtml.includes('@page') &&
     updatedRelatorioViewHtml.includes('size: A4') &&
     updatedRelatorioViewHtml.includes('margin: 0') &&
@@ -984,7 +990,7 @@ const hasReportsTabType = settingsHtmlForReportsTab.includes('btn-type-reports')
     settingsHtmlForReportsTab.includes('tab-reports-settings');
 assertTest('Cadastros: "Tipo de Aba" inclui Relatórios (A4), aba sem campos que recebe apenas os botões dos relatórios', hasReportsTabType);
 
-const viewerMapCode = fs.readFileSync('relatorio_view.html', 'utf8');
+const viewerMapCode = lerVisualizador();
 const hasMiniMapViewer = viewerMapCode.includes('src/mapTools.js') && viewerMapCode.includes('src/reportMap.js') &&
     viewerMapCode.includes('map-tools-panel') && viewerMapCode.includes('mapPanelSave') && viewerMapCode.includes('mapPanelReset') && viewerMapCode.includes('mapPanelMedidas') && viewerMapCode.includes('report-measure-input') &&
     viewerMapCode.includes('mapPanelPontos') && viewerMapCode.includes('tabela_pontos_mapa') && viewerMapCode.includes('repaginateKeepingMap') &&
@@ -1007,7 +1013,7 @@ const verificarHtml = fs.existsSync('verificar.html') ? fs.readFileSync('verific
 const funcaoVerifSql = emissoesSql.slice(emissoesSql.indexOf('CREATE OR REPLACE FUNCTION public.verificar_emissao'));
 assertTest('Verificação pública: função SECURITY DEFINER só devolve existência, data, formato e conferência do hash (sem usuário/feição/modelo), liberada ao anônimo; página pública sem login', funcaoVerifSql.includes('SECURITY DEFINER') && funcaoVerifSql.includes('SET search_path = public') && funcaoVerifSql.includes('GRANT EXECUTE ON FUNCTION public.verificar_emissao(text, text) TO anon') && !/RETURNS TABLE[^)]*(user_id|template_id|feature_key|form_id)/.test(funcaoVerifSql) && verificarHtml.includes('rpc(\'verificar_emissao\'') && fs.readFileSync('supabase-config.js', 'utf8').includes("endsWith('verificar.html')"));
 assertTest('Emissões: tabela relatorios_emissoes com RLS por usuário, sem acesso anônimo e sem alterar/apagar (trilha de auditoria)', emissoesSql.includes('ENABLE ROW LEVEL SECURITY') && emissoesSql.includes('user_id = auth.uid()') && emissoesSql.includes('REVOKE ALL ON public.relatorios_emissoes FROM anon') && emissoesSql.includes('REVOKE UPDATE, DELETE'));
-const viewerExportCode = fs.readFileSync('relatorio_view.html', 'utf8');
+const viewerExportCode = lerVisualizador();
 assertTest('Relatório: protocolo e SHA-256 reais (sem valores fixos), impressão e Word passam pela emissão, mapas exportados como imagem', viewerExportCode.includes('src/reportExport.js') && viewerExportCode.includes('html2canvas') && viewerExportCode.includes('imprimirRelatorio') && viewerExportCode.includes('capturarMapasDoRelatorio') && viewerExportCode.includes('ReportWord.buildDocument') && viewerExportCode.includes('MapSnapshot.capture') && viewerExportCode.includes('data-emissao="hash"') && !viewerExportCode.includes('8a4f91e') && !viewerExportCode.includes("slice(-6).toUpperCase()"));
 assertTest('Mini-Mapa: o relatório gerado tem o painel "Mapa" (destaque, camadas, base, norte/escala/projeção, salvar e restaurar) e a tabela de ajustes com RLS por usuário', hasMiniMapViewer && hasAjustesSql);
 
@@ -1030,6 +1036,7 @@ assertTest('Mini-Mapa: o relatório gerado tem o painel "Mapa" (destaque, camada
     ['tests/verificarEmissao.test.js', 'Verificação pública: protocolo do QR code, SHA-256 digitado, respostas (registrado, autêntico, não confere, não encontrado) sem expor dados do relatório'],
     ['tests/viewerAnalises.test.js', 'Análises do relatório: confrontantes por lado, área cadastral x calculada, distância e sobreposição com camada de referência (escape, avisos, recorte)'],
     ['tests/viewerPoints.test.js', 'Tabela de pontos e memorial descritivo no relatório: coordenadas por sistema, azimute/distância, fechamento do polígono, quebra entre folhas e escape de HTML'],
+    ['tests/reportBlocks.test.js', 'Desenhistas dos blocos (módulo compartilhado com o construtor): cabeçalho, rodapé, texto livre com menções, emblemas e largura dos campos'],
     ['tests/reportPreview.test.js', 'Prévia real do relatório no construtor: feição de teste fixa (600 m², vizinhos, rua), dados de exemplo válidos para cada tipo de campo, registros 1:N e pacote enviado ao relatório'],
     ['tests/reportTemplatesSync.test.js', 'Modelos de relatório entre navegadores: baixa do servidor o que falta, envia o que só existe no navegador (com o atalho_aba nos extras), o mais novo vence e reabre o circuito quando a tabela passa a existir'],
     ['tests/reportAjustes.test.js', 'Ajustes do usuário no relatório: salva por modelo + feição no servidor com reserva no navegador e circuito fechado quando a tabela não existe'],

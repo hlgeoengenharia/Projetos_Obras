@@ -19,12 +19,13 @@ function extractFunction(name) {
 }
 
 // eslint-disable-next-line no-new-func
-const load = new Function('S', 'MapTools', 'window', `
+const ReportBlocks = require('../src/reportBlocks.js');
+const load = new Function('S', 'MapTools', 'window', 'ReportBlocks', `
     const reportPayload = S.payload;
     const renderArgs = S.args;
     const mapController = S.controller;
     ${extractFunction('escapeHtml')}
-    ${extractFunction('readFieldRaw')}
+    const { readFieldRaw } = ReportBlocks.create({ esc: escapeHtml });
     ${extractFunction('camadasDoPayload')}
     ${extractFunction('areaEmLinha')}
     ${extractFunction('renderConfrontantesTable')}
@@ -55,7 +56,7 @@ function state(cfg, opts) {
         controller: { getConfig: () => config, confrontanteRows: () => { const cf = config.confrontantes; const cam = (opts.camadas || camadas).find(x => String(x.id) === cf.camada); return cam ? MT.applyConfrontantes(MT.confrontantes(opts.geometry || lote, cam, { tolM: cf.tolM }), cf) : []; } }
     };
 }
-const run = (cfg, opts, turf) => load(state(cfg, opts), MT, { turf: turf });
+const run = (cfg, opts, turf) => load(state(cfg, opts), MT, { turf: turf }, ReportBlocks);
 
 let total = 0;
 let failed = 0;
@@ -82,11 +83,11 @@ const t0 = texto(out.split.rowsHtml[0]), t1 = texto(out.split.rowsHtml[1]), t2 =
     // aba do campo de área cadastral e distâncias medidas no mapa
     const st = state({ comparacaoArea: { ativo: true, campo: 'f_area' } });
     st.payload.formFields = [{ id: 'f_area', label: 'Área do terreno (m²)', type: 'area_m2', tabTitle: 'Dados Gerais' }];
-    const a1 = load(st, MT, {}).renderAnaliseMapa();
+    const a1 = load(st, MT, {}, ReportBlocks).renderAnaliseMapa();
     ok('análise da área cita a aba do campo', /Área do terreno \(m²\) — Aba: Dados Gerais/.test(a1));
     const st2 = state({ referencia: { ativo: true, camada: 'LPM' } });
     st2.controller.distanceRows = () => [{ id: 'dist:1', texto: '52,30 m', metros: 52.3, editado: false }, { id: 'dist:2', texto: 'cerca de <60> m', metros: 60, editado: true }];
-    const a2 = load(st2, MT, {}).renderAnaliseMapa();
+    const a2 = load(st2, MT, {}, ReportBlocks).renderAnaliseMapa();
     ok('distâncias medidas no mapa aparecem nas análises (texto do usuário escapado)', /Distância medida no mapa \(1\)/.test(a2) && /52,30 m/.test(a2) && /Distância medida no mapa \(2\)/.test(a2) && /cerca de &lt;60&gt; m/.test(a2) && !/<60>/.test(a2));
 }
 ok('lado sul: sem confrontante identificado', /Sem confrontante identificado/.test(t0) && /L1/.test(t0) && /30,0\d|29,9\d/.test(t0));

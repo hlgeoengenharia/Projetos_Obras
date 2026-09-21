@@ -139,7 +139,7 @@ async function runScenario(cfg) {
     sandbox.self = sandbox.window;
     vm.createContext(sandbox);
     localScripts.forEach(src => { try { vm.runInContext(read(src), sandbox, { filename: src }); } catch (e) { errors.push('script ' + src + ': ' + e.message); } });
-    ['PageSize', 'MapTools', 'ReportMap', 'ReportTemporal', 'ReportExport', 'ReportWord', 'ReportDocx', 'MapSnapshot', 'VerificarEmissao', 'FieldFormatter', 'ReportData'].forEach(n => { if (windowStub[n]) sandbox[n] = windowStub[n]; });
+    ['PageSize', 'MapTools', 'ReportMap', 'ReportTemporal', 'ReportExport', 'ReportBlocks', 'ReportWord', 'ReportDocx', 'MapSnapshot', 'VerificarEmissao', 'FieldFormatter', 'ReportData'].forEach(n => { if (windowStub[n]) sandbox[n] = windowStub[n]; });
     sandbox.unhandled = [];
     try { vm.runInContext(pageScript, sandbox, { filename: 'relatorio_view.html(inline)' }); } catch (e) { errors.push('script da página: ' + e.stack); }
     (listeners.DOMContentLoaded || []).forEach(fn => { try { fn(); } catch (e) { errors.push('DOMContentLoaded: ' + e.stack); } });

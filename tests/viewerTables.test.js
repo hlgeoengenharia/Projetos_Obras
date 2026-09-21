@@ -28,16 +28,15 @@ const region = lines.slice(regionStart, regionEnd + 1).join('\n');
 const window = { reportViewerFormTabs: [] };
 const reportPayload = { featureGeometry: null };
 // eslint-disable-next-line no-new-func
-const load = new Function('FieldFormatter', 'ReportData', 'window', 'reportPayload', 'turf', `
+const ReportBlocks = require('../src/reportBlocks.js');
+const load = new Function('FieldFormatter', 'ReportData', 'window', 'reportPayload', 'turf', 'ReportBlocks', `
     ${extractFunction('escapeHtml')}
-    ${extractFunction('getGeometryCenter')}
-    ${extractFunction('getOrgBadgeHtml')}
-    ${extractFunction('getStatusBadgeHtml')}
-    ${extractFunction('getRecuoBadgeHtml')}
+    const B = ReportBlocks.create({ esc: escapeHtml, FieldFormatter: FieldFormatter, geometryCenter: () => null });
+    const { getGeometryCenter, getOrgBadgeHtml, getStatusBadgeHtml, getRecuoBadgeHtml } = B;
     ${region}
     return { renderSyntheticTable, renderAnalyticalLaudo };
 `);
-const { renderSyntheticTable, renderAnalyticalLaudo } = load(FieldFormatter, ReportData, window, reportPayload, undefined);
+const { renderSyntheticTable, renderAnalyticalLaudo } = load(FieldFormatter, ReportData, window, reportPayload, undefined, ReportBlocks);
 
 let total = 0;
 let failed = 0;

@@ -20,19 +20,14 @@ function extractFunction(name) {
 
 const reportPayload = { featureGeometry: null };
 // eslint-disable-next-line no-new-func
-const load = new Function('FieldFormatter', 'reportPayload', 'turf', `
+// os desenhistas moram em src/reportBlocks.js (o visualizador só os liga à página)
+const ReportBlocks = require('../src/reportBlocks.js');
+const load = new Function('FieldFormatter', 'reportPayload', 'turf', 'ReportBlocks', `
     ${extractFunction('escapeHtml')}
-    ${extractFunction('getGeometryCenter')}
-    ${extractFunction('getFieldWidthStyle')}
-    ${extractFunction('formatFieldValueForDisplay')}
-    ${extractFunction('readFieldRaw')}
-    ${extractFunction('isRichField')}
-    ${extractFunction('resolveFieldHtml')}
-    ${extractFunction('resolveFieldValue')}
-    ${extractFunction('renderAttributeGrid')}
-    return { renderAttributeGrid };
+    const B = ReportBlocks.create({ esc: escapeHtml, FieldFormatter: FieldFormatter, geometryCenter: () => null });
+    return { renderAttributeGrid: B.renderAttributeGrid };
 `);
-const { renderAttributeGrid } = load(FieldFormatter, reportPayload, undefined);
+const { renderAttributeGrid } = load(FieldFormatter, reportPayload, undefined, ReportBlocks);
 
 let total = 0;
 let failed = 0;
