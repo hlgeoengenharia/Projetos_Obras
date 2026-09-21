@@ -17,6 +17,7 @@ const read = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
 // ---------------------------------------------------------------- ambiente
 const store = {};
 const docHandlers = {};
+const pendentes = []; // temporizadores pedidos pelo construtor (só rodam quando o teste manda)
 const container = { innerHTML: '' };
 const inputs = {}; // campos do card do mapa simulados por id
 const sheetEl = () => ({ innerHTML: '', style: {}, classList: { add() {}, remove() {}, toggle() {} }, querySelectorAll: () => [], querySelector: () => null, appendChild() {}, addEventListener() {} });
@@ -37,9 +38,10 @@ const forms = [{
            { id: 't_rel', title: 'Relatórios', tabType: 'reports', isReportsTab: true, fields: [] }],
     statsConfig: [{ id: 'g1', title: 'Situação do recuo', type: 'pie', fieldId: 'a', fieldLabel: 'Nome' }]
 }];
-const window = { localStorage, forms, currentFormId: 'f1' };
+const winHandlers = {};
+const window = { localStorage, forms, currentFormId: 'f1', location: { origin: 'http://localhost:8080' }, addEventListener(t, fn) { (winHandlers[t] = winHandlers[t] || []).push(fn); } };
 window.window = window;
-const ctx = { window, document, localStorage, forms, console, setTimeout: () => 0, clearTimeout() {}, alert() {}, confirm: () => true, navigator: {} };
+const ctx = { window, document, localStorage, forms, console, setTimeout: (fn) => { pendentes.push(fn); return 0; }, clearTimeout() {}, alert() {}, confirm: () => true, navigator: {} };
 ctx.self = window;
 vm.createContext(ctx);
 ['src/pageSize.js', 'src/mapTools.js', 'src/fieldFormatter.js', 'src/reportData.js', 'src/reportBlocks.js', 'src/reportPreview.js', 'src/reportAdapter.js', 'src/reportBuilder.js'].forEach(f => vm.runInContext(read(f), ctx, { filename: f }));
@@ -298,6 +300,49 @@ ok('voltando ao individual, o modelo geral não aparece na lista', !has(containe
     RB.hideMentionDropdown && RB.hideMentionDropdown(0);
     delete inputs['mention-dropdown-0'];
     document.querySelectorAll = antes;
+}
+
+// ---------------------------------------------------------------- Página real (beta): a Folha A4 Interativa é o próprio relatorio_view.html em um iframe
+{
+    const attrs = {};
+    const posts = [];
+    const frame = { style: {}, contentWindow: { postMessage: (m, origem) => posts.push({ m, origem }) }, getAttribute: (k) => (k in attrs ? attrs[k] : null), setAttribute: (k, v) => { attrs[k] = v; } };
+    const mkToggle = () => { const cls = new Set(); return { cls, classList: { add: (c) => cls.add(c), remove: (c) => cls.delete(c), toggle: (c, on) => { if (on) cls.add(c); else cls.delete(c); }, contains: (c) => cls.has(c) } }; };
+    const classica = mkToggle(), real = mkToggle(), botao = mkToggle();
+    const antes = { classica: sheet['a4-classica'], real: sheet['a4-real'] };
+    Object.assign(sheet, { 'a4-real-frame': frame, 'a4-classica': classica, 'a4-real': real, 'btn-folha-real': botao });
+    const tpl = RA.getReportTemplates('f1')[0];
+    tpl.blocos = [{ id: 'h1', tipo: 'cabecalho', titulo: 'Ficha' }, { id: 'g1', tipo: 'grade_campos', titulo: 'Dados', colunasLayout: 2, campos_selecionados: ['a'] }];
+    RA.saveReportTemplate(tpl);
+    delete store.constructive_folha_real;
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+    ok('página real desligada por padrão: folha clássica visível, iframe sem endereço', !classica.cls.has('hidden') && real.cls.has('hidden') && !('src' in attrs));
+
+    RB.alternarFolhaReal();
+    eq('ligar a página real: guarda a escolha, esconde a folha clássica e aponta o iframe para o relatório em modo edição', [store.constructive_folha_real, classica.cls.has('hidden'), real.cls.has('hidden'), attrs.src], ['1', true, false, 'relatorio_view.html?modo=edicao']);
+    const timers = [];
+    ok('modelo só é enviado depois que a página avisa que está pronta', posts.length === 0);
+    const msg = (data, fonte, origem) => (winHandlers.message || []).forEach(fn => fn({ data, source: fonte === undefined ? frame.contentWindow : fonte, origin: origem || 'http://localhost:8080' }));
+    msg({ tipo: 'construtor:pronto' });
+    ok('ao ficar pronta, recebe o modelo (payload da prévia com a feição de teste) na mesma origem', posts.length === 1 && posts[0].origem === 'http://localhost:8080' && posts[0].m.tipo === 'construtor:dados' && posts[0].m.payload.preview === true && posts[0].m.payload.template.blocos.length === 2 && posts[0].m.payload.featureKey === 'exemplo-previa');
+    msg({ tipo: 'construtor:altura', altura: 2345.2 });
+    eq('o iframe ganha a altura do conteúdo (sem rolagem própria)', frame.style.height, '2346px');
+    msg({ tipo: 'construtor:altura', altura: 999 }, {});
+    msg({ tipo: 'construtor:altura', altura: 999 }, frame.contentWindow, 'http://outro.site');
+    eq('mensagem de outra janela ou de outra origem é ignorada', frame.style.height, '2346px');
+    // ações da moldura de edição: só as permitidas
+    msg({ tipo: 'construtor:acao', nome: 'removeBlock', args: [1] });
+    pendentes.splice(0).forEach(fn => fn());
+    const ultimo = posts[posts.length - 1].m.payload;
+    ok('ação removeBlock vinda da página remove o bloco e o novo modelo é enviado para a página', posts.length >= 2 && ultimo.template.blocos.length === 1 && ultimo.template.blocos[0].tipo === 'cabecalho');
+    msg({ tipo: 'construtor:acao', nome: 'deleteCurrentTemplate', args: [] });
+    ok('ação fora da lista permitida é ignorada (não apaga o modelo)', RA.getReportTemplates('f1').length >= 1);
+
+    RB.alternarFolhaReal();
+    eq('desligar volta à folha clássica', [store.constructive_folha_real, classica.cls.has('hidden'), real.cls.has('hidden')], ['0', false, true]);
+    ['a4-real-frame', 'btn-folha-real'].forEach(k => delete sheet[k]);
+    if (antes.classica) sheet['a4-classica'] = antes.classica; else delete sheet['a4-classica'];
+    if (antes.real) sheet['a4-real'] = antes.real; else delete sheet['a4-real'];
 }
 
 console.log(`reportScope: ${total - failed}/${total} verificações passaram`);

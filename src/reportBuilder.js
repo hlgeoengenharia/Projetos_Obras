@@ -175,6 +175,9 @@
                                 <span class="text-slate-400 text-[11px]">Dê duplo-clique em qualquer texto da folha para editar</span>
                             </div>
                             <div class="flex items-center gap-2">
+                                <button type="button" id="btn-folha-real" onclick="ReportBuilder.alternarFolhaReal()" class="flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-semibold cursor-pointer transition-colors" title="Mostra a própria página do relatório (mapa, paginação e tudo) como folha de edição">
+                                    <span class="material-symbols-outlined text-[14px]">web</span><span id="btn-folha-real-texto">Página real (beta)</span>
+                                </button>
                                 <span class="text-[11px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md" id="a4-dimension-indicator">${pd.label}</span>
                             </div>
                         </div>
@@ -182,6 +185,12 @@
                         <!-- ESTÚDIO DE DOCUMENTO (DESKTOP CINZA COM RÉGUA E PAPEL BRANCO PURO) -->
                         <div class="w-full bg-slate-200/80 dark:bg-slate-900/90 p-3 sm:p-6 lg:p-8 rounded-2xl border border-slate-300/80 dark:border-slate-800 flex flex-col items-center overflow-x-auto shadow-inner">
                             
+                            <!-- PÁGINA REAL: o próprio relatório_view.html em modo edição (iframe do tamanho do conteúdo) -->
+                            <div id="a4-real" class="hidden w-full flex flex-col items-center">
+                                <iframe id="a4-real-frame" title="Folha A4 Interativa (a própria página do relatório)" class="w-full border-0 bg-transparent" style="height: 1200px;" scrolling="no"></iframe>
+                            </div>
+
+                            <div id="a4-classica" class="w-full flex flex-col items-center">
                             <!-- RÉGUA HORIZONTAL DE MILÍMETROS (ESTILO WORD) -->
                             <div class="w-full flex justify-center mb-1 select-none pointer-events-none no-print">
                                 <div id="a4-horizontal-ruler" class="h-6 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-t-lg relative flex items-end text-[9px] font-mono text-slate-400 overflow-hidden shadow-2xs">
@@ -215,6 +224,7 @@
                                 </span>
                                 <div class="h-px bg-slate-300 dark:bg-slate-700 flex-1"></div>
                             </div>
+                            </div>
 
                         </div>
                     </div>
@@ -223,9 +233,83 @@
         `;
 
         applyA4StageDimensions();
+        aplicarModoFolha();
         renderA4Blocks();
         initSortable();
     }
+
+    // ================================================================================================
+    // PÁGINA REAL: a Folha A4 Interativa passa a ser o próprio relatorio_view.html (modo edição) em um iframe.
+    // O construtor envia o modelo por mensagem a cada alteração; a página devolve as ações (mover, remover...).
+    // ================================================================================================
+    const CHAVE_FOLHA_REAL = 'constructive_folha_real';
+    const ACOES_FOLHA_REAL = ['moveBlock', 'removeBlock'];
+    let folhaRealPronta = false;
+    let folhaRealTimer = null;
+
+    function folhaRealAtiva() {
+        try { return localStorage.getItem(CHAVE_FOLHA_REAL) === '1' && !!(window.ReportPreview); } catch (e) { return false; }
+    }
+
+    function alternarFolhaReal() {
+        try { localStorage.setItem(CHAVE_FOLHA_REAL, localStorage.getItem(CHAVE_FOLHA_REAL) === '1' ? '0' : '1'); } catch (e) { /* sem armazenamento: fica como está */ }
+        aplicarModoFolha();
+        renderA4Blocks();
+    }
+
+    /** Mostra a folha clássica ou a página real, e marca o botão. */
+    function aplicarModoFolha() {
+        const real = folhaRealAtiva();
+        const classica = document.getElementById('a4-classica');
+        const wrapReal = document.getElementById('a4-real');
+        const frame = document.getElementById('a4-real-frame');
+        const botao = document.getElementById('btn-folha-real');
+        if (classica) classica.classList.toggle('hidden', real);
+        if (wrapReal) wrapReal.classList.toggle('hidden', !real);
+        if (botao) {
+            ['bg-sky-600', 'text-white', 'border-sky-600', 'bg-white', 'text-slate-600', 'border-slate-300'].forEach(c => botao.classList.remove(c));
+            (real ? ['bg-sky-600', 'text-white', 'border-sky-600'] : ['bg-white', 'text-slate-600', 'border-slate-300']).forEach(c => botao.classList.add(c));
+        }
+        if (real && frame && !frame.getAttribute('src')) {
+            folhaRealPronta = false;
+            frame.setAttribute('src', 'relatorio_view.html?modo=edicao');
+        }
+    }
+
+    function montarPayloadPrevia() {
+        const formTabs = (window.ReportAdapter && window.ReportAdapter.getFormTabs) ? window.ReportAdapter.getFormTabs(currentTemplate.form_id) : [];
+        return window.ReportPreview.buildPreviewPayload({ template: JSON.parse(JSON.stringify(currentTemplate)), formId: currentTemplate.form_id, formTabs: JSON.parse(JSON.stringify(formTabs || [])) });
+    }
+
+    /** Envia o modelo atual para a página (com um pequeno atraso: várias alterações seguidas viram um envio só). */
+    function agendarEnvioFolhaReal() {
+        clearTimeout(folhaRealTimer);
+        folhaRealTimer = setTimeout(enviarFolhaReal, 80);
+    }
+
+    function enviarFolhaReal() {
+        const frame = document.getElementById('a4-real-frame');
+        if (!frame || !frame.contentWindow || !folhaRealPronta || !currentTemplate || !currentTemplate.form_id || !window.ReportPreview) return;
+        try {
+            frame.contentWindow.postMessage({ tipo: 'construtor:dados', payload: montarPayloadPrevia() }, window.location.origin);
+        } catch (e) {
+            console.error('[ReportBuilder] Falha ao enviar o modelo para a página do relatório:', e);
+        }
+    }
+
+    /** Mensagens vindas da página do relatório embutida (só do nosso iframe e da nossa origem). */
+    function tratarMensagemFolhaReal(e) {
+        const frame = document.getElementById('a4-real-frame');
+        if (!frame || e.source !== frame.contentWindow || e.origin !== window.location.origin) return;
+        const m = e.data || {};
+        if (m.tipo === 'construtor:pronto') { folhaRealPronta = true; enviarFolhaReal(); }
+        else if (m.tipo === 'construtor:altura' && m.altura > 0) frame.style.height = Math.ceil(m.altura) + 'px';
+        else if (m.tipo === 'construtor:acao' && ACOES_FOLHA_REAL.includes(m.nome) && Array.isArray(m.args)) {
+            const fn = window.ReportBuilder && window.ReportBuilder[m.nome];
+            if (typeof fn === 'function') fn.apply(null, m.args);
+        }
+    }
+    if (typeof window !== 'undefined' && window.addEventListener) window.addEventListener('message', tratarMensagemFolhaReal);
 
     /**
      * Aplica proporção, régua e margens no Canvas A4 central conforme o Card 0.
@@ -1505,6 +1589,7 @@
     }
 
     function renderA4Blocks() {
+        if (folhaRealAtiva() && document.getElementById('a4-real-frame')) { agendarEnvioFolhaReal(); return; }
         const container = document.getElementById('a4-blocks-list');
         if (!container || !currentTemplate) return;
 
@@ -4925,8 +5010,7 @@
     function previewReal() {
         if (!currentTemplate || !currentTemplate.form_id) return;
         if (!window.ReportPreview) { alert('Módulo de prévia não carregado. Recarregue a página.'); return; }
-        const formTabs = (window.ReportAdapter && window.ReportAdapter.getFormTabs) ? window.ReportAdapter.getFormTabs(currentTemplate.form_id) : [];
-        const payload = window.ReportPreview.buildPreviewPayload({ template: JSON.parse(JSON.stringify(currentTemplate)), formId: currentTemplate.form_id, formTabs: JSON.parse(JSON.stringify(formTabs || [])) });
+        const payload = montarPayloadPrevia();
         try {
             const json = JSON.stringify(payload);
             sessionStorage.setItem('constructive_active_report_payload', json);
@@ -5072,7 +5156,8 @@
         printReport,
         generateIndividualReport,
         openFeatureReportPage,
-        previewReal
+        previewReal,
+        alternarFolhaReal
     };
 
 })();

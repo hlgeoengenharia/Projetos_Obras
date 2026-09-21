@@ -16,20 +16,20 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260921f"></script>
-    <script src="src/mapTools.js?v=20260921f"></script>
-    <script src="src/reportMap.js?v=20260921f"></script>
-    <script src="src/reportTemporal.js?v=20260921f"></script>
-    <script src="src/reportExport.js?v=20260921f"></script>
-    <script src="src/reportBlocks.js?v=20260921f"></script>
-    <script src="src/reportWord.js?v=20260921f"></script>
-    <script src="src/reportDocx.js?v=20260921f"></script>
-    <script src="src/mapSnapshot.js?v=20260921f"></script>
-    <script src="src/verificarEmissao.js?v=20260921f"></script>
+    <script src="src/pageSize.js?v=20260921g"></script>
+    <script src="src/mapTools.js?v=20260921g"></script>
+    <script src="src/reportMap.js?v=20260921g"></script>
+    <script src="src/reportTemporal.js?v=20260921g"></script>
+    <script src="src/reportExport.js?v=20260921g"></script>
+    <script src="src/reportBlocks.js?v=20260921g"></script>
+    <script src="src/reportWord.js?v=20260921g"></script>
+    <script src="src/reportDocx.js?v=20260921g"></script>
+    <script src="src/mapSnapshot.js?v=20260921g"></script>
+    <script src="src/verificarEmissao.js?v=20260921g"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260921f"></script>
-    <script src="src/reportData.js?v=20260921f"></script>
+    <script src="src/fieldFormatter.js?v=20260921g"></script>
+    <script src="src/reportData.js?v=20260921g"></script>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -204,6 +204,21 @@
             text-decoration: underline !important;
             text-underline-offset: 2px !important;
         }
+
+        /* MODO EDIÇÃO (?modo=edicao): a própria página do relatório dentro da Folha A4 Interativa do construtor */
+        html.modo-edicao body { min-height: 0; background: transparent; }
+        html.modo-edicao header.no-print, html.modo-edicao #dica-viewer, html.modo-edicao #aviso-previa,
+        html.modo-edicao #map-tools-panel, html.modo-edicao #map-tools-toggle { display: none !important; }
+        html.modo-edicao main { padding: 0; }
+        .edit-bloco { position: relative; outline: 1px dashed transparent; outline-offset: 3px; border-radius: 6px; transition: outline-color .12s; }
+        .edit-bloco:hover { outline-color: rgba(56, 189, 248, .65); }
+        .edit-bloco.selecionado { outline: 2px solid #0ea5e9; }
+        .edit-bloco-barra { display: none; position: absolute; top: -15px; right: 6px; z-index: 60; align-items: center; gap: 2px; background: rgba(15, 23, 42, .92); color: #fff; border-radius: 8px; padding: 2px 6px; font: 600 9px/1 ui-monospace, monospace; text-transform: uppercase; box-shadow: 0 2px 8px rgba(0,0,0,.25); user-select: none; }
+        .edit-bloco:hover > .edit-bloco-barra, .edit-bloco.selecionado > .edit-bloco-barra { display: flex; }
+        .edit-bloco-barra button { background: none; border: 0; color: inherit; cursor: pointer; padding: 2px; border-radius: 4px; display: inline-flex; }
+        .edit-bloco-barra button:hover { background: rgba(255,255,255,.18); }
+        .edit-bloco-barra .material-symbols-outlined { font-size: 14px; }
+        @media print { .edit-bloco-barra { display: none !important; } .edit-bloco { outline: none !important; } }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
@@ -239,7 +254,7 @@
     </header>
 
     <!-- ÁREA DE NOTIFICAÇÃO / DICA VISUAL -->
-    <div class="no-print bg-sky-50 dark:bg-sky-950/40 border-b border-sky-200 dark:border-sky-800/60 px-4 py-2 text-center text-xs text-sky-800 dark:text-sky-300 flex items-center justify-center gap-2">
+    <div id="dica-viewer" class="no-print bg-sky-50 dark:bg-sky-950/40 border-b border-sky-200 dark:border-sky-800/60 px-4 py-2 text-center text-xs text-sky-800 dark:text-sky-300 flex items-center justify-center gap-2">
         <span class="material-symbols-outlined text-[16px]">info</span>
         <span>Você pode navegar pelo Mini-Mapa Cartográfico (pan/zoom/camadas) e editar a Caixa de Texto Livre diretamente na folha antes de imprimir (ou salvar em PDF) ou gerar o Word.</span>
     </div>
@@ -272,9 +287,75 @@
         let consultaErro = '';       // altura do mapa na folha (mm): a do modelo até o usuário ajustar
         let repaginateTimer = null;
 
+        // MODO EDIÇÃO: a Folha A4 Interativa do construtor é esta mesma página (em um iframe), com a moldura de edição por cima
+        const EDICAO = !!(window.location && /[?&]modo=edicao(&|$)/.test(window.location.search || ''));
+        if (EDICAO) document.documentElement.classList.add('modo-edicao');
+        let chaveMapaEdicao = null;
+        const NOMES_BLOCO = { cabecalho: 'Cabeçalho oficial', grade_campos: 'Grade de atributos', mapa_estatico: 'Mini-mapa cartográfico', grafico_existente: 'Gráficos do dashboard', kpis: 'Painel de indicadores', galeria_fotos: 'Laudo analítico', laudo_vistoria_fotos: 'Laudo analítico', tabela_sintetica: 'Tabela sintética', tabela_sintetica_1n: 'Quadro sintético 1:N', tabela_analitica: 'Tabela analítica', caixa_texto_livre: 'Texto livre', texto_livre: 'Texto livre', rodape: 'Rodapé oficial' };
+
         window.addEventListener('DOMContentLoaded', () => {
             initReportViewer();
         });
+
+        /** Mensagens entre a folha (esta página) e o construtor (página de fora). */
+        function avisarConstrutor(msg) {
+            try { if (window.parent && window.parent !== window) window.parent.postMessage(msg, window.location.origin); } catch (e) { /* sem pai: ignora */ }
+        }
+
+        /** Botões da moldura de edição: o construtor é quem altera o modelo (esta página só desenha). */
+        function acaoEdicao(nome, args, ev) {
+            if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+            avisarConstrutor({ tipo: 'construtor:acao', nome: nome, args: args || [] });
+        }
+
+        function selecionarBlocoEdicao(el, ev) {
+            if (ev && ev.target && ev.target.closest && ev.target.closest('.edit-bloco-barra')) return;
+            document.querySelectorAll('.edit-bloco.selecionado').forEach(x => x.classList.remove('selecionado'));
+            el.classList.add('selecionado');
+            avisarConstrutor({ tipo: 'construtor:selecionar', indice: Number(el.getAttribute('data-bloco-index')) });
+        }
+
+        /** Moldura de edição de um bloco: barra (nome, subir, descer, remover) e contorno ao passar o mouse / selecionar. */
+        function envolverEdicao(html, idx, bloco, opts) {
+            if (!EDICAO || idx < 0 || !bloco) return html;
+            const nome = NOMES_BLOCO[bloco.tipo] || bloco.tipo;
+            const fixo = !!(opts && opts.fixo);
+            const mover = fixo ? '' : `<button type="button" onclick="acaoEdicao('moveBlock', [${idx}, -1], event)" title="Mover para cima"><span class="material-symbols-outlined">arrow_upward</span></button><button type="button" onclick="acaoEdicao('moveBlock', [${idx}, 1], event)" title="Mover para baixo"><span class="material-symbols-outlined">arrow_downward</span></button>`;
+            return `<div class="edit-bloco${opts && opts.classe ? ' ' + opts.classe : ''}" data-bloco-index="${idx}" onclick="selecionarBlocoEdicao(this, event)"><div class="edit-bloco-barra"><span>${escapeHtml(nome)}</span>${mover}<button type="button" onclick="acaoEdicao('removeBlock', [${idx}], event)" title="Remover da folha"><span class="material-symbols-outlined">close</span></button></div>${html}</div>`;
+        }
+
+        /** Chave do que exige recriar o mapa (o Leaflet não é refeito a cada edição): bloco do mapa, camadas e ortofotos. */
+        function chaveMapaDe(payload) {
+            const blocos = (payload && payload.template && payload.template.blocos) || [];
+            return JSON.stringify([blocos.filter(b => b.tipo === 'mapa_estatico'), (payload && payload.camadasMapa) || null, (payload && payload.ortofotos) || null]);
+        }
+
+        /** Construtor enviou o modelo (ou uma alteração dele): redesenha a folha; o mapa só é refeito se ele mesmo mudou. */
+        function receberDadosEdicao(payload) {
+            const chave = chaveMapaDe(payload);
+            if (mapController && chaveMapaEdicao !== null && chave !== chaveMapaEdicao) { window.location.reload(); return; } // recarrega e pede os dados de novo
+            chaveMapaEdicao = chave;
+            reportPayload = payload;
+            if (mapController) keptMapWrap = document.getElementById('map-wrap');
+            desenharRelatorio();
+        }
+
+        function iniciarModoEdicao() {
+            window.addEventListener('message', (e) => {
+                if (e.origin !== window.location.origin || e.source !== window.parent) return;
+                const m = e.data;
+                if (m && m.tipo === 'construtor:dados' && m.payload) receberDadosEdicao(m.payload);
+            });
+            // o iframe é do tamanho do conteúdo: o construtor rola a página, não a folha
+            let agendada = false;
+            const enviarAltura = () => {
+                if (agendada) return;
+                agendada = true;
+                requestAnimationFrame(() => { agendada = false; avisarConstrutor({ tipo: 'construtor:altura', altura: Math.ceil(document.body.getBoundingClientRect().height) }); });
+            };
+            if (typeof ResizeObserver !== 'undefined') new ResizeObserver(enviarAltura).observe(document.body);
+            avisarConstrutor({ tipo: 'construtor:pronto' });
+        }
 
         // desenhistas dos blocos (src/reportBlocks.js): os mesmos que o construtor passa a usar
         const Blocks = ReportBlocks.create({
@@ -316,6 +397,7 @@
         function initReportViewer() {
             const docBox = document.getElementById('a4-document-container');
             if (docBox) docBox.addEventListener('input', () => scheduleEmissao());
+            if (EDICAO) { iniciarModoEdicao(); return; }
             // Recupera o payload de dados salvo pela aplicação principal
             try {
                 const raw = sessionStorage.getItem('constructive_active_report_payload') || 
@@ -356,8 +438,13 @@
                 return;
             }
 
+            desenharRelatorio();
+        }
+
+        /** Monta o relatório a partir do payload (feição, modelo, camadas): folhas, blocos, mapa. */
+        function desenharRelatorio() {
             const { templateId, formId, featureData, featureGeometry, template } = reportPayload;
-            if (reportPayload.preview) mostrarAvisoPrevia();
+            if (reportPayload.preview && !EDICAO) mostrarAvisoPrevia();
             
             // Busca o modelo
             let templates = [];
@@ -579,7 +666,7 @@
                 const padTopMm = showHeader ? Math.max(2, mm.top - 8) : mm.top;
                 const padBotMm = showFooter ? Math.max(2, mm.bottom - 8) : mm.bottom;
 
-                const bodyHtml = pageBlocks.map(b => b.html).join('');
+                const bodyHtml = pageBlocks.map(b => envolverEdicao(b.html, blocos.indexOf(b.bloco), b.bloco)).join('');
                 const pageIdAttr = isFirst ? 'id="report-blocks-render"' : '';
 
                 pagesHtml += `
@@ -588,7 +675,7 @@
                          style="max-width: ${pageWidthPx}px; min-height: ${pageHeightPx}px; ">
                         
                         <!-- Cabeçalho Institucional: Fora do corpo, acima da margem superior -->
-                        ${showHeader ? renderHeaderSlotHtml(hdrBloco, tpl, mm.left, mm.right) : ''}
+                        ${showHeader ? envolverEdicao(renderHeaderSlotHtml(hdrBloco, tpl, mm.left, mm.right), blocos.indexOf(hdrBloco), hdrBloco, { fixo: true }) : ''}
 
                         <!-- Corpo da Folha: Delimitado entre as margens superior e inferior -->
                         <div ${pageIdAttr} class="a4-page-body-slot flex flex-col gap-5 w-full flex-1" style="padding: ${padTopMm}mm ${mm.right}mm ${padBotMm}mm ${mm.left}mm; box-sizing: border-box;">
@@ -596,7 +683,7 @@
                         </div>
 
                         <!-- Rodapé Oficial: Fora do corpo, abaixo da margem inferior, fixo na base -->
-                        ${showFooter ? renderFooterSlotHtml(ftrBloco, pageNum, totalPages, mm.left, mm.right) : ''}
+                        ${showFooter ? envolverEdicao(renderFooterSlotHtml(ftrBloco, pageNum, totalPages, mm.left, mm.right), blocos.indexOf(ftrBloco), ftrBloco, { fixo: true, classe: 'mt-auto' }) : ''}
                     </div>
                 `;
             });

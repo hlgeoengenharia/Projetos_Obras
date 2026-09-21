@@ -94,7 +94,7 @@ async function runScenario(cfg) {
     }
     ['a4-document-container', 'report-header-title'].forEach(id => { registry[id] = makeEl('div', id); registry[id]._real = true; });
     const documentStub = {
-        body: makeEl('body'), documentElement: { style: { setProperty() {} } }, head: makeEl('head'), title: '',
+        body: makeEl('body'), documentElement: { style: { setProperty() {} }, classList: { add(c) { (documentStub.classes = documentStub.classes || []).push(c); }, remove() {} } }, head: makeEl('head'), title: '',
         getElementById: (id) => registry[id] || null, createElement: (tag) => makeEl(tag),
         querySelector: () => null, addEventListener() {},
         querySelectorAll: (sel) => (String(sel).includes('report-tframe-wrap') ? Object.values(registry).filter(e => e.id && e.id.startsWith('tmap-wrap-')) : [])
@@ -111,15 +111,15 @@ async function runScenario(cfg) {
 
     const store = {};
     const storage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
-    storage.setItem('constructive_active_report_payload', JSON.stringify(cfg.payload));
+    if (!cfg.edicao) storage.setItem('constructive_active_report_payload', JSON.stringify(cfg.payload));
     const timers = [];
     const listeners = {};
     // janela de origem (a página do mapa) com o adaptador de ajustes, como no uso real
-    const captured = { blobs: [], alerts: [], registros: [], prints: 0, downloads: [], qrData: '' };
+    const captured = { blobs: [], alerts: [], registros: [], prints: 0, downloads: [], qrData: '', mensagens: [], reloads: 0 };
     const opener = cfg.opener ? { closed: false, ReportAdapter: { getAjustes: async () => cfg.ajustes || null, saveAjustes: async () => ({ ok: true, remoto: false }), registrarEmissao: async (e) => { captured.registros.push(e); return { ok: true, remoto: false }; } } } : null;
     const windowStub = {
         addEventListener: (ev, fn) => { (listeners[ev] = listeners[ev] || []).push(fn); },
-        location: { search: '?templateId=rpt_smoke', href: 'http://localhost:8080/relatorio_view.html?templateId=rpt_smoke' }, localStorage: storage, sessionStorage: storage, opener,
+        location: { search: cfg.search || '?templateId=rpt_smoke', origin: 'http://localhost:8080', reload() { captured.reloads++; }, href: 'http://localhost:8080/relatorio_view.html?templateId=rpt_smoke' }, parent: cfg.edicao ? { postMessage: (m) => captured.mensagens.push(m) } : undefined, localStorage: storage, sessionStorage: storage, opener,
         getComputedStyle: (el) => Object.assign({}, BASE_CS, el._style || {}),
         innerWidth: cfg.width || 1900, scrollY: 0, scrollTo() {}, print() { captured.prints++; }, getSelection: () => ({ removeAllRanges() {}, addRange() {} })
     };
@@ -156,7 +156,7 @@ async function runScenario(cfg) {
         process.removeListener('unhandledRejection', onRej);
     }
     await settle(14);
-    return { sandbox, registry, errors, mapsCreated, captured, listeners, settle, doc: registry['a4-document-container']._html, panel: registry['map-tools-panel'] ? registry['map-tools-panel']._html : '' };
+    return { sandbox, registry, errors, mapsCreated, captured, listeners, documentStub, settle, doc: registry['a4-document-container']._html, panel: registry['map-tools-panel'] ? registry['map-tools-panel']._html : '' };
 }
 
 (async () => {
@@ -635,6 +635,37 @@ async function runScenario(cfg) {
         await r.settle(4);
         ok('extras: anotação nova aparece no painel', (r.registry['map-tools-panel']._html.match(/Anotação/g) || []).length >= 1);
         eq('extras: nenhum erro depois das mudanças', r.errors, []);
+    }
+
+    // ---- MODO EDIÇÃO (?modo=edicao): a Folha A4 Interativa do construtor é esta página, alimentada por mensagens
+    {
+        const payload = { templateId: 'rpt_smoke', template: tplWith({}), formId: 'f1', formFields: [], formTabs: [], featureData: { id_banco: 10 }, featureGeometry: quad, featureKey: '10', preview: true };
+        const r = await runScenario({ edicao: true, search: '?modo=edicao', payload });
+        const enviar = (p) => (r.listeners.message || []).forEach(fn => fn({ origin: 'http://localhost:8080', source: r.sandbox.window.parent, data: { tipo: 'construtor:dados', payload: p } }));
+        eq('edição: sem erros ao iniciar e sem desenhar nada antes de receber os dados', [r.errors, /a4-page/.test(r.registry['a4-document-container']._html)], [[], false]);
+        ok('edição: a página marca o modo e avisa o construtor que está pronta', (r.documentStub.classes || []).includes('modo-edicao') && r.captured.mensagens.some(m => m.tipo === 'construtor:pronto'));
+        ok('edição: ignora mensagem de outra origem ou de outra janela', (() => { (r.listeners.message || []).forEach(fn => fn({ origin: 'http://outro.site', source: r.sandbox.window.parent, data: { tipo: 'construtor:dados', payload } })); (r.listeners.message || []).forEach(fn => fn({ origin: 'http://localhost:8080', source: {}, data: { tipo: 'construtor:dados', payload } })); return !/a4-page/.test(r.registry['a4-document-container']._html); })());
+        enviar(payload);
+        await r.settle(14);
+        const doc = r.registry['a4-document-container']._html;
+        eq('edição: sem erros depois de receber o modelo', r.errors, []);
+        ok('edição: a folha é desenhada com o modelo recebido, sem aviso de prévia', /a4-page/.test(doc) && /FICHA CADASTRAL/.test(doc) && !r.registry['aviso-previa']);
+        ok('edição: cada bloco do corpo tem moldura (índice do modelo, nome, subir, descer, remover)', /class="edit-bloco" data-bloco-index="1"/.test(doc) && /class="edit-bloco" data-bloco-index="2"/.test(doc) && /Mini-mapa cartográfico/.test(doc) && /acaoEdicao\('moveBlock', \[2, -1\], event\)/.test(doc) && /acaoEdicao\('removeBlock', \[2\], event\)/.test(doc));
+        ok('edição: cabeçalho e rodapé têm moldura só com remover (sem mover)', /data-bloco-index="0"/.test(doc) && /data-bloco-index="3"/.test(doc) && !/acaoEdicao\('moveBlock', \[0,/.test(doc) && /acaoEdicao\('removeBlock', \[3\], event\)/.test(doc));
+        ok('edição: as tabelas do mapa (sem índice no modelo) não ganham moldura', (doc.match(/class="edit-bloco/g) || []).length >= 4 && !/data-bloco-index="-1"/.test(doc));
+        ok('edição: o mapa é criado uma vez', r.mapsCreated.filter(m => m.container === 'interactive-report-map').length === 1);
+        // botões da moldura → mensagem para o construtor
+        r.sandbox.acaoEdicao('moveBlock', [2, -1], { stopPropagation() {}, preventDefault() {} });
+        ok('edição: botão da moldura avisa o construtor da ação e dos argumentos', r.captured.mensagens.some(m => m.tipo === 'construtor:acao' && m.nome === 'moveBlock' && JSON.stringify(m.args) === '[2,-1]'));
+        // alteração que não mexe no mapa: redesenha sem recarregar
+        const p2 = JSON.parse(JSON.stringify(payload)); p2.template.blocos[2].titulo = 'Outro título';
+        enviar(p2);
+        await r.settle(6);
+        ok('edição: alteração fora do mapa redesenha sem recarregar a página', /Outro título/.test(r.registry['a4-document-container']._html) && r.captured.reloads === 0);
+        // alteração no bloco do mapa: recarrega (o Leaflet não é refeito no lugar)
+        const p3 = JSON.parse(JSON.stringify(payload)); p3.template.blocos[1].notaTecnica = 'Nota nova';
+        enviar(p3);
+        ok('edição: alteração no bloco do mapa recarrega a página (que pede os dados de novo)', r.captured.reloads === 1);
     }
 
     console.log(`viewerSmoke: ${total - failed}/${total} verificações passaram`);
