@@ -1442,30 +1442,9 @@
 
     // ---- Fotos e anexos: o usuário escolhe, por campo, "Lista" (título + nome do arquivo) ou "Imagem"
     // na íntegra (com título e metadados). Guardado em bloco.campos_exibicao = { idDoCampo: 'lista'|'imagem' }.
-    function isFileField(f) {
-        const t = String((f && f.type) || '').toLowerCase();
-        return t === 'photo' || t === 'attachment';
-    }
 
     /** Modo efetivo do campo: o escolhido; senão foto → imagem e anexo → lista. */
-    function fileFieldMode(bloco, f) {
-        const m = bloco && bloco.campos_exibicao ? bloco.campos_exibicao[f.id] : null;
-        if (m === 'lista' || m === 'imagem') return m;
-        return String(f.type || '').toLowerCase() === 'photo' ? 'imagem' : 'lista';
-    }
 
-    function fileModeToggleHtml(index, f, mode) {
-        if (!isFileField(f)) return '';
-        const fid = escapeHtml(f.id);
-        const btn = (m, icon, title) => '<button type="button" class="file-mode-btn px-1 py-0.5 rounded cursor-pointer transition-colors '
-            + (mode === m ? 'bg-sky-100 text-sky-700' : 'text-slate-400 hover:text-sky-600') + '"'
-            + ' onclick="ReportBuilder.setFieldFileMode(' + index + ", '" + fid + "', '" + m + "', event)\" title=\"" + title + '">'
-            + '<span class="material-symbols-outlined text-[13px] leading-none">' + icon + '</span></button>';
-        return '<div class="inline-flex items-center bg-white border border-slate-200 rounded p-0.5 shadow-2xs" title="Como exibir os arquivos deste campo">'
-            + btn('lista', 'view_list', 'Lista: título e nome do arquivo')
-            + btn('imagem', 'image', 'Imagem na íntegra, com título e metadados')
-            + '</div>';
-    }
 
     function setFieldFileMode(blockIndex, fieldId, mode, evt) {
         if (evt) { evt.stopPropagation(); evt.preventDefault(); }
@@ -2732,95 +2711,38 @@
         });
     }
 
-    /** Laudo Analítico: desenho do relatório com registros de exemplo; controles de campo (arrastar, largura, formato do arquivo, remover) no 1º registro de cada aba. */
-    function renderLaudoReal(bloco, index, fields) {
-        // a seleção padrão de campos do laudo é gravada como antes (abas escolhidas / deduzidas dos campos / todas as 1:N)
-        const tabsLaudo = laudoTabsSelecionadas(bloco, fields);
-        ensureLaudoFieldSelection(bloco, tabsLaudo);
-        const b = Object.assign({}, bloco, {
-            densidade: bloco.densidade || current1nLaudoDensity || 'compact',
-            zebrado: bloco.zebrado || current1nLaudoRowStriping || 'slate',
-            ordem_abas: (Array.isArray(bloco.ordem_abas) && bloco.ordem_abas.length) ? bloco.ordem_abas : current1nTabOrder
-        });
-        const edit = {
-            titleClass: 'cursor-text hover:bg-sky-50 px-1 rounded',
-            titleAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')"`,
-            metaExtra: ' • <span class="text-[9px] text-sky-600 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded font-medium print:hidden font-sans">Arraste ⠿ para reordenar campos (vale para todos os registros da aba)</span>',
-            groupAttrs: (tabId) => `class="cursor-text hover:bg-sky-50 px-1 rounded transition-colors" title="Duplo clique para editar o texto da aba" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'custom_tab_title_${escapeHtml(String(tabId))}')"`,
-            containerAttrs: `data-block-index="${index}"`,
-            fieldAttrs: (f) => `data-field-id="${escapeHtml(f.id)}" data-block-index="${index}"`,
-            lead: () => '<span class="field-drag-handle cursor-grab active:cursor-grabbing text-slate-300 group-hover/field:text-sky-600 hover:bg-slate-200/60 p-0.5 rounded transition-colors" title="Arraste para mover de posição no laudo"><span class="material-symbols-outlined text-[14px] leading-none">drag_indicator</span></span>',
-            tail: (f, pct) => fileModeToggleHtml(index, f, fileFieldMode(bloco, f)) + `<div class="inline-flex items-center bg-white border border-slate-200 rounded p-0.5 shadow-2xs"><button type="button" class="field-width-dec-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 hover:bg-slate-100 rounded cursor-pointer transition-colors" onclick="ReportBuilder.changeFieldWidthStep(${index}, '${escapeHtml(f.id)}', -1, event)" title="Diminuir largura do campo (-)"><span class="material-symbols-outlined text-[12px] leading-none">remove</span></button><button type="button" class="field-width-badge-btn px-1 py-0.5 text-[9px] font-extrabold text-slate-700 hover:text-sky-600 cursor-pointer transition-colors" onclick="ReportBuilder.toggleFieldWidthPopover(${index}, '${escapeHtml(f.id)}', event)" title="Clique para escolher proporção exata">${Math.round(pct)}%</button><button type="button" class="field-width-inc-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 hover:bg-slate-100 rounded cursor-pointer transition-colors" onclick="ReportBuilder.changeFieldWidthStep(${index}, '${escapeHtml(f.id)}', 1, event)" title="Aumentar largura do campo (+)"><span class="material-symbols-outlined text-[12px] leading-none">add</span></button></div><button type="button" class="field-remove-btn p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors cursor-pointer print:hidden" onclick="ReportBuilder.removeFieldFromAnalytical1n(${index}, '${escapeHtml(f.id)}', event)" title="Remover este campo do laudo"><span class="material-symbols-outlined text-[13px] leading-none">close</span></button>`,
-            photoHeader: (f) => fileModeToggleHtml(index, f, fileFieldMode(bloco, f))
-        };
-        const r = blocosReais(fields).renderAnalyticalLaudo(b, dadosDeExemplo(), { full: true, edit: edit });
-        return typeof r === 'string' ? r : '';
+    // Os desenhos com controles de edição ficam em src/reportEditor.js (a página real usa os mesmos); aqui só os dados de exemplo e os padrões do bloco.
+    function editorReal(fields) {
+        return window.ReportEditor.create({ blocks: blocosReais(fields), esc: escapeHtml });
     }
 
-    /** Quadro Sintético 1:N: desenho do relatório com os registros de exemplo; colunas com mover, renomear (duplo clique) e remover. */
-    function renderSinteticaReal(bloco, index, fields) {
-        const b = Object.assign({}, bloco, {
-            densidade: bloco.densidade || current1nTableDensity || 'compact',
-            zebrado: bloco.zebrado || current1nRowStriping || 'slate'
-        });
-        const btn = (dir, cIdx, icone, dica) => `<button type="button" onclick="ReportBuilder.moveSynthetic1nColumn(${index}, ${cIdx}, ${dir}, event)" class="opacity-0 group-hover/th:opacity-100 p-0.5 text-slate-400 hover:text-slate-800 hover:bg-slate-200 rounded cursor-pointer print:hidden shrink-0" title="${dica}"><span class="material-symbols-outlined text-[13px] leading-none">${icone}</span></button>`;
-        const edit = {
-            titleClass: 'cursor-text hover:bg-sky-50 px-1 rounded',
-            titleAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')"`,
-            metaExtra: ` • ${b.colunas && b.colunas.length ? b.colunas.length : 3} coluna(s) • ${b.densidade}`,
-            th: (c, cIdx, cols, rotuloHtml) => `<div class="flex items-center justify-between gap-1"><div class="flex items-center gap-0.5 min-w-0">${cIdx > 0 ? btn(-1, cIdx, 'chevron_left', 'Mover coluna para a esquerda') : ''}<span class="cursor-pointer hover:bg-sky-100 px-1 py-0.5 rounded transition-colors whitespace-normal break-words leading-tight" title="Duplo clique para renomear ou abreviar título" ondblclick="ReportBuilder.editSynthetic1nColTitle(${index}, ${cIdx}, event)">${rotuloHtml}</span>${cIdx < cols.length - 1 ? btn(1, cIdx, 'chevron_right', 'Mover coluna para a direita') : ''}</div><button type="button" onclick="ReportBuilder.removeColumnFromSynthetic1n(${index}, '${escapeHtml(c.id)}', event)" class="field-remove-btn opacity-0 group-hover/th:opacity-100 p-0.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-all cursor-pointer print:hidden shrink-0" title="Remover esta coluna da tabela"><span class="material-symbols-outlined text-[13px] leading-none">close</span></button></div>`
-        };
-        const r = blocosReais(fields).renderSyntheticTable(b, dadosDeExemplo(), { full: true, edit: edit });
-        return typeof r === 'string' ? r : '';
-    }
-
-    /** Cabeçalho: desenho do relatório + títulos editáveis com duplo clique + selo de repetição. */
-    function renderCabecalhoReal(bloco, index, fields) {
-        const todas = !!bloco.repetir_todas_folhas;
-        const badgeHtml = `<span class="self-start text-[9px] font-sans font-bold ${todas ? 'text-sky-600 bg-sky-50 border-sky-200' : 'text-slate-500 bg-slate-100 border-slate-200'} border px-1.5 py-0.5 rounded select-none print:hidden">${todas ? 'Todas as Folhas' : 'Apenas 1ª Folha'}</span>`;
-        return blocosReais(fields).renderHeaderSlotHtml(bloco, currentTemplate || {}, 0, 0, {
-            bare: true,
-            edit: {
-                textClass: 'cursor-text hover:bg-sky-50 px-1 py-0.5 rounded',
-                subtituloAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'subtitulo')" title="Duplo clique para editar"`,
-                tituloAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')" title="Duplo clique para editar"`,
-                badgeHtml: badgeHtml
-            }
-        });
-    }
-
-    /** Rodapé: desenho do relatório; a numeração mostra como ficaria a partir da folha em que começa. */
-    function renderRodapeReal(bloco, fields) {
-        const segunda = bloco.inicio_numeracao === 'segunda';
-        const qrHtml = '<span class="text-slate-500 font-normal" title="O QR code é gerado na emissão do relatório">[QR code de verificação]</span>';
-        return blocosReais(fields).renderFooterSlotHtml(bloco, segunda ? 2 : 1, segunda ? 10 : 1, 0, 0, { bare: true, qrHtml: qrHtml });
-    }
     function dadosDeExemplo() {
         const tabs = (window.ReportAdapter && window.ReportAdapter.getFormTabs && currentTemplate) ? (window.ReportAdapter.getFormTabs(currentTemplate.form_id) || []) : [];
         return window.ReportPreview.sampleFeatureData(tabs);
     }
 
-    /** Grade de Atributos: desenho do relatório + alça de arrastar, largura [-] [%] [+], formato do arquivo e remover. */
-    function renderGradeReal(bloco, index, fields, colCount) {
-        const dica = colCount === 1
-            ? '<span class="text-[9px] text-sky-600 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded font-medium print:hidden">Arraste ⠿ para reordenar</span>'
-            : '<span class="text-[9px] text-sky-600 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded font-medium print:hidden">Arraste ⠿ para reordenar • Use [-] [+] ou clique no % para a largura</span>';
-        const edit = {
-            titleClass: 'cursor-text hover:bg-sky-50 px-1 rounded',
-            titleAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')"`,
-            headerExtra: `<div class="flex items-center gap-2"><span class="text-[10px] font-mono text-slate-400 font-normal">${colCount === 1 ? 'Lista Corrida' : colCount + ' Colunas'}</span>${dica}</div>`,
-            containerAttrs: `data-block-index="${index}"`,
-            fieldAttrs: (f) => `data-field-id="${f.id}" data-block-index="${index}"`,
-            lead: (f, pct, modo) => `<span class="field-drag-handle cursor-grab active:cursor-grabbing text-slate-300 group-hover/field:text-sky-600 hover:bg-slate-200/60 p-0.5 rounded transition-colors" title="Arraste para mover de posição ${modo === 'linha' ? 'na lista' : 'na grade'}"><span class="material-symbols-outlined text-[15px] leading-none">drag_indicator</span></span>`,
-            tail: (f, pct, modo) => {
-                const arquivo = fileModeToggleHtml(index, f, fileFieldMode(currentTemplate.blocos[index] || bloco, f));
-                const remover = `<button type="button" class="field-remove-btn p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors cursor-pointer print:hidden" onclick="ReportBuilder.removeFieldFromGrid(${index}, '${f.id}', event)" title="${modo === 'linha' ? 'Remover campo da grade' : 'Remover este campo da grade'}"><span class="material-symbols-outlined text-[14px] leading-none">close</span></button>`;
-                if (modo === 'linha') return arquivo + remover;
-                return arquivo + `<div class="inline-flex items-center bg-white border border-slate-200 rounded-md p-0.5 shadow-2xs"><button type="button" class="field-width-dec-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 hover:bg-slate-100 rounded cursor-pointer transition-colors" onclick="ReportBuilder.changeFieldWidthStep(${index}, '${f.id}', -1, event)" title="Diminuir largura do campo (-)"><span class="material-symbols-outlined text-[13px] leading-none">remove</span></button><button type="button" class="field-width-badge-btn px-1.5 py-0.5 text-[9.5px] font-extrabold text-slate-700 hover:text-sky-600 cursor-pointer transition-colors" onclick="ReportBuilder.toggleFieldWidthPopover(${index}, '${f.id}', event)" title="Clique para escolher proporção exata ou regular slider">${pct}%</button><button type="button" class="field-width-inc-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 hover:bg-slate-100 rounded cursor-pointer transition-colors" onclick="ReportBuilder.changeFieldWidthStep(${index}, '${f.id}', 1, event)" title="Aumentar largura do campo (+)"><span class="material-symbols-outlined text-[13px] leading-none">add</span></button></div>` + remover;
-            }
-        };
-        return blocosReais(fields).renderAttributeGrid(bloco, dadosDeExemplo(), fields, { edit: edit });
+    /** Padrões que vivem no painel lateral (densidade, zebrado, sequência das abas, campos do laudo) entram no bloco que vai para a folha. */
+    function blocoParaFolha(bloco, fields) {
+        if (bloco.tipo === 'tabela_sintetica_1n') {
+            return Object.assign({}, bloco, { densidade: bloco.densidade || current1nTableDensity || 'compact', zebrado: bloco.zebrado || current1nRowStriping || 'slate' });
+        }
+        if (bloco.tipo === 'laudo_vistoria_fotos' || bloco.tipo === 'galeria_fotos') {
+            ensureLaudoFieldSelection(bloco, laudoTabsSelecionadas(bloco, fields)); // a seleção padrão de campos do laudo é gravada no modelo
+            return Object.assign({}, bloco, {
+                densidade: bloco.densidade || current1nLaudoDensity || 'compact',
+                zebrado: bloco.zebrado || current1nLaudoRowStriping || 'slate',
+                ordem_abas: (Array.isArray(bloco.ordem_abas) && bloco.ordem_abas.length) ? bloco.ordem_abas : current1nTabOrder
+            });
+        }
+        return bloco;
     }
+
+    const htmlDe = (r) => (typeof r === 'string' ? r : '');
+    function renderLaudoReal(bloco, index, fields) { return htmlDe(editorReal(fields).laudo(blocoParaFolha(bloco, fields), index, dadosDeExemplo(), { full: true })); }
+    function renderSinteticaReal(bloco, index, fields) { return htmlDe(editorReal(fields).sintetica(blocoParaFolha(bloco, fields), index, dadosDeExemplo(), { full: true })); }
+    function renderCabecalhoReal(bloco, index, fields) { return editorReal(fields).cabecalho(bloco, index, currentTemplate || {}, { bare: true }); }
+    function renderRodapeReal(bloco, fields) { return editorReal(fields).rodape(bloco); }
+    function renderGradeReal(bloco, index, fields, colCount) { return editorReal(fields).grade(bloco, index, fields, dadosDeExemplo(), colCount); }
 
     // --- MANIPULADORES DO CARD 3: MINI-MAPA ---
     let currentMapMode = 'atual';

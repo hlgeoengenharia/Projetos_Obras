@@ -645,7 +645,7 @@ const has1nViewRendering = freshRelatorioViewCode.includes('renderSyntheticTable
     freshRelatorioViewCode.includes('cfg-1n-syn-cols-container' === 'cfg-1n-syn-cols-container');
 assertTest('Relatórios A4: relatorio_view.html lê os registros 1:N do schema do formulário e renderiza tanto Tabela Sintética quanto Laudo Analítico com fotos', has1nViewRendering);
 
-const freshReportBuilderCodeUpdated = fs.readFileSync('src/reportBuilder.js', 'utf8');
+const freshReportBuilderCodeUpdated = fs.readFileSync('src/reportBuilder.js', 'utf8') + fs.readFileSync('src/reportEditor.js', 'utf8');
 const hasGridReorderAndResize = freshReportBuilderCodeUpdated.includes('initGridFieldsSortable') &&
     freshReportBuilderCodeUpdated.includes('changeFieldWidthStep') &&
     freshReportBuilderCodeUpdated.includes('setFieldWidthExact') &&
@@ -841,7 +841,7 @@ assertTest('Camadas Vetoriais: Selects de formulário sincronizam dinamicamente 
 console.log(`\n${BOLD}[5/5] Verificando Relatórios Gerenciais A4 (Cabeçalho, Quebras de Linha e Supressão 404)...${RESET}`);
 
 const freshReportAdapterJs = fs.readFileSync('src/reportAdapter.js', 'utf8');
-const freshReportBuilderJs = fs.readFileSync('src/reportBuilder.js', 'utf8');
+const freshReportBuilderJs = fs.readFileSync('src/reportBuilder.js', 'utf8') + fs.readFileSync('src/reportEditor.js', 'utf8');
 const freshRelatorioViewHtml = lerVisualizador();
 
 const hasCircuitBreakerAndCloudSync = freshReportAdapterJs.includes('STORAGE_KEY_REMOTE_AVAILABLE') &&

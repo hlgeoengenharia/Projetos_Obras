@@ -64,7 +64,11 @@ const document = { getElementById: () => null };
 const window = { ReportAdapter };
 
 // eslint-disable-next-line no-new-func
-const load = new Function('state', 'window', 'document', 'ReportAdapter', 'onRerender', `
+const ReportEditor = require('../src/reportEditor.js');
+const load = new Function('state', 'window', 'document', 'ReportAdapter', 'onRerender', 'ReportEditor', `
+    // formato de fotos/anexos: agora em src/reportEditor.js (o construtor e a página real usam o mesmo)
+    const { isFileField, fileFieldMode } = ReportEditor;
+    const fileModeToggleHtml = (i, f, m) => ReportEditor.create({}).fileModeToggleHtml(i, f, m);
     let currentTemplate = state.currentTemplate;
     let current1nLaudoDensity = state.current1nLaudoDensity;
     let current1nLaudoRowStriping = state.current1nLaudoRowStriping;
@@ -78,7 +82,7 @@ const load = new Function('state', 'window', 'document', 'ReportAdapter', 'onRer
     return { getLaudoPreviewTabs, laudoTabsSelecionadas, renderLaudoTabSequenceList, ensureLaudoFieldSelection,
              move1nLaudoTabSequence, isFileField, fileFieldMode, fileModeToggleHtml, setFieldFileMode, getOrder: () => current1nTabOrder, setTemplate: (t) => { currentTemplate = t; } };
 `);
-const api = load(state, window, document, ReportAdapter, () => { rerenders++; });
+const api = load(state, window, document, ReportAdapter, () => { rerenders++; }, ReportEditor);
 
 let total = 0;
 let failed = 0;
@@ -174,7 +178,7 @@ api.setFieldFileMode(0, 'pf_fotos', 'invalido', null);
 eq('modo inválido é ignorado', tplF.blocos[0].campos_exibicao.pf_fotos, 'lista');
 
 // grade de atributos e laudo (renderA4Blocks): usam o seletor de formato do arquivo
-ok('grade de atributos e laudo usam o seletor de formato', src.includes('fileModeToggleHtml(index, f, fileFieldMode(') && src.includes('setFieldFileMode,'));
+ok('grade de atributos e laudo usam o seletor de formato', fs.readFileSync(path.join(__dirname, '..', 'src', 'reportEditor.js'), 'utf8').includes('fileModeToggleHtml(index, f, fileFieldMode(') && src.includes('setFieldFileMode,'));
 
 console.log(`builderLaudoPreview: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {

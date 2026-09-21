@@ -44,7 +44,7 @@ window.window = window;
 const ctx = { window, document, localStorage, forms, console, setTimeout: (fn) => { pendentes.push(fn); return 0; }, clearTimeout() {}, alert() {}, confirm: () => true, navigator: {} };
 ctx.self = window;
 vm.createContext(ctx);
-['src/pageSize.js', 'src/mapTools.js', 'src/fieldFormatter.js', 'src/reportData.js', 'src/reportBlocks.js', 'src/reportPreview.js', 'src/reportAdapter.js', 'src/reportBuilder.js'].forEach(f => vm.runInContext(read(f), ctx, { filename: f }));
+['src/pageSize.js', 'src/mapTools.js', 'src/fieldFormatter.js', 'src/reportData.js', 'src/reportBlocks.js', 'src/reportEditor.js', 'src/reportPreview.js', 'src/reportAdapter.js', 'src/reportBuilder.js'].forEach(f => vm.runInContext(read(f), ctx, { filename: f }));
 const RB = window.ReportBuilder;
 const RA = window.ReportAdapter;
 ok('construtor e adaptador carregaram', !!RB && !!RA && !!window.PageSize);
