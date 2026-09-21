@@ -558,6 +558,7 @@ const hasFormRendererReportShortcut = formRendererCode.includes('reportShortcutH
 assertTest('Mapa / Formulário: Abas de atributos renderizam atalho de relatório quando configuradas', hasFormRendererReportShortcut);
 
 const reportBuilderCode = fs.existsSync('src/reportBuilder.js') ? fs.readFileSync('src/reportBuilder.js', 'utf8') : '';
+const reportFreeTextCode = fs.readFileSync('src/reportFreeText.js', 'utf8');
 const hasReportBuilderAdvancedFeatures = reportBuilderCode.includes('updateAtalhoAba') &&
     reportBuilderCode.includes('handleLogoUpload');
 assertTest('Relatórios A4: Recursos avançados (seletor de aba do popup e upload de brasão)', hasReportBuilderAdvancedFeatures);
@@ -573,7 +574,7 @@ const hasFreeTextBox = reportBuilderCode.includes("id: 'acc-free-text'") &&
     reportBuilderCode.includes("insertFreeTextBlock") &&
     reportBuilderCode.includes("caixa_texto_livre") &&
     reportBuilderCode.includes("handleFreeTextInput") &&
-    reportBuilderCode.includes("renderMentionDropdown");
+    reportFreeTextCode.includes("renderMentionDropdown");
 assertTest('Relatórios A4: Card "Caixa de texto livre" implementado com formatação rica e autocomplete @', hasFreeTextBox);
 
 const hasGeralScope = !reportBuilderCode.includes("switchType('geral')") &&
@@ -610,7 +611,7 @@ const hasHeaderReportConditional = freshIndexHtml.includes('id="btn-print-featur
     freshMainJs.includes("atalho_aba === 'header'");
 assertTest('Relatórios A4: Botão "Relatório A4" no cabeçalho do popup condicionado exclusivamente a atalho_aba === "header"', hasHeaderReportConditional);
 
-const freshReportBuilderCode = fs.readFileSync('src/reportBuilder.js', 'utf8');
+const freshReportBuilderCode = fs.readFileSync('src/reportBuilder.js', 'utf8') + fs.readFileSync('src/reportFreeText.js', 'utf8');
 const hasTabDisambiguationInMentions = freshReportBuilderCode.includes('data-tab-title') &&
     freshReportBuilderCode.includes('Aba:') &&
     freshReportBuilderCode.includes('insertMentionField') &&
