@@ -1424,7 +1424,7 @@
 
             try {
                 lastPontosKey = blocosKey(config);
-                mapController = ReportMap.create({ L, MapTools, container: 'interactive-report-map', geometry, camadas, onMeasureState: () => renderMapToolsPanel(), ortofotos: (reportPayload && Array.isArray(reportPayload.ortofotos)) ? reportPayload.ortofotos : [], config, onChange: onMapChange });
+                mapController = ReportMap.create({ L, MapTools, container: 'interactive-report-map', geometry, camadas, onMeasureState: () => renderMapToolsPanel(), onMedicaoCriada: (id) => abrirModalTipoArea(id), ortofotos: (reportPayload && Array.isArray(reportPayload.ortofotos)) ? reportPayload.ortofotos : [], config, onChange: onMapChange });
             } catch (e) {
                 console.error('[Mapa] Erro ao criar o mini-mapa:', e);
                 return;
@@ -1641,10 +1641,13 @@
             if (mapController.medicaoRows) {
                 mapController.medicaoRows().forEach(r => {
                     const c = r.coords;
-                    const coord = '<br><span class="font-mono text-[10px]">DEC ' + escapeHtml(c.dec) + ' • GMS ' + escapeHtml(c.gms) + ' • UTM ' + escapeHtml(c.utm) + '</span>';
-                    if (r.tipo === 'ponto') linhas.push({ aviso: false, html: '<b>Coordenadas do ponto (' + r.numero + ')</b>' + coord });
-                    else if (r.tipo === 'linha') linhas.push({ aviso: false, html: '<b>Distância medida (' + r.numero + ')</b>: comprimento <b>' + fmt(r.info.comprimento, 2) + ' m</b>' + coord.replace('<br>', '<br>Centro: ') });
-                    else linhas.push({ aviso: false, html: '<b>Área medida (' + r.numero + ')</b>: <b>' + fmt(r.info.area, 2) + ' m²</b> (' + fmt(r.info.area / 10000, 4) + ' ha) • perímetro <b>' + fmt(r.info.perimetro, 2) + ' m</b>' + coord.replace('<br>', '<br>Centroide: ') });
+                    // DEC, GMS e UTM, um abaixo do outro
+                    const coord = (rotulo) => '<div class="font-mono text-[10px] mt-1">' + (rotulo ? '<div class="font-sans text-slate-500">' + rotulo + '</div>' : '') + '<div>DEC ' + escapeHtml(c.dec) + '</div><div>GMS ' + escapeHtml(c.gms) + '</div><div>UTM ' + escapeHtml(c.utm) + '</div></div>';
+                    if (r.tipo === 'ponto') linhas.push({ aviso: false, html: '<b>Coordenadas do ponto (' + escapeHtml(r.texto || '') + ')</b>' + coord('') });
+                    else if (r.tipo === 'linha') {
+                        const trechos = r.info.trechos.length > 1 ? '<div class="font-mono text-[10px] mt-1">' + r.info.trechos.map((d, k) => '<div>Vértice ' + (k + 1) + ' → ' + (k + 2) + ': <b>' + fmt(d, 2) + ' m</b></div>').join('') + '</div>' : '';
+                        linhas.push({ aviso: false, html: '<b>Distância medida (' + r.numero + ')</b>: comprimento total <b>' + fmt(r.info.comprimento, 2) + ' m</b>' + trechos + coord('Centro da linha') });
+                    } else linhas.push({ aviso: false, html: '<b>Área medida (' + r.numero + ')' + (r.nome ? ' — ' + escapeHtml(r.nome) : '') + '</b>: <b>' + fmt(r.info.area, 2) + ' m²</b> (' + fmt(r.info.area / 10000, 4) + ' ha) • perímetro <b>' + fmt(r.info.perimetro, 2) + ' m</b>' + coord('Centroide') });
                 });
             }
             if (!linhas.length) return '';
@@ -1783,7 +1786,12 @@
             const dicaDesenho = !ds ? '' : '<div style="color:#b45309;margin:4px 0">' + (ds.tipo === 'ponto' ? 'Clique no mapa para marcar o ponto.' : (ds.tipo === 'linha' ? 'Clique para adicionar pontos (' + ds.pontos + ' até agora); duplo clique ou Enter conclui, Esc cancela.' : 'Clique para desenhar o polígono (' + ds.pontos + ' pontos até agora); duplo clique ou Enter conclui, Esc cancela.')) + '</div>' + (ds.tipo !== 'ponto' ? '<div style="display:flex;gap:5px"><button type="button" class="act primary" onclick="mapPanelConcluirMedicao()">Concluir</button><button type="button" class="act" onclick="mapPanelFerramenta(\'' + ds.tipo + '\')">Cancelar</button></div>' : '');
             const linhaMed = (r) => {
                 const partes = [];
-                if (r.tipo === 'linha') partes.push('Comprimento: <b>' + esc(MapTools.fmtNumber(r.info.comprimento, 2)) + ' m</b>');
+                if (r.tipo === 'ponto') partes.push('Nome no mapa: <b>' + esc(r.texto || '') + '</b> (dois cliques nele, no mapa, para trocar)');
+                if (r.tipo === 'linha') {
+                    partes.push('Comprimento total: <b>' + esc(MapTools.fmtNumber(r.info.comprimento, 2)) + ' m</b>');
+                    if (r.info.trechos.length > 1) partes.push(r.info.trechos.map((d, k) => 'Vértice ' + (k + 1) + ' → ' + (k + 2) + ': ' + esc(MapTools.fmtNumber(d, 2)) + ' m').join('<br>'));
+                }
+                if (r.tipo === 'area') partes.push('<input type="text" value="' + esc(r.nome) + '" maxlength="60" placeholder="Tipo da área (construção, galpão...)" onchange="mapPanelMedNome(\'' + esc(r.id) + '\', this.value)" style="width:100%;margin:2px 0;padding:2px 5px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px">');
                 if (r.tipo === 'area') partes.push('Área: <b>' + esc(MapTools.fmtNumber(r.info.area, 2)) + ' m²</b> (' + esc(MapTools.fmtNumber(r.info.area / 10000, 4)) + ' ha) • Perímetro: <b>' + esc(MapTools.fmtNumber(r.info.perimetro, 2)) + ' m</b>');
                 const rot = r.tipo === 'ponto' ? 'Coordenadas exatas' : (r.tipo === 'linha' ? 'Coordenadas do centro' : 'Coordenadas do centroide');
                 partes.push('<span style="color:#64748b">' + rot + '</span><br>DEC ' + esc(r.coords.dec) + '<br>GMS ' + esc(r.coords.gms) + '<br>UTM ' + esc(r.coords.utm));
@@ -1792,7 +1800,6 @@
             const ferramentasHtml = '<div style="font-weight:700;margin-bottom:3px">Ferramentas de medição</div>' +
                 '<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">' + btnFerr('ponto', 'Coordenadas do Ponto') + btnFerr('linha', 'Distância (m)') + btnFerr('area', 'Área (m²)') + '<button type="button" class="act" style="' + (consultaAberta ? 'background:#d1fae5;border-color:#10b981;' : '') + '" onclick="mapPanelConsulta()">Consultar Coordenadas</button></div>' +
                 chk('mp-med-adr', 'Aderência (gruda nos contornos)', cfg.medicoes.aderencia, "mapPanelMedicoes('aderencia', this.checked)") +
-                '<label class="row">Pontos em <select onchange="mapPanelMedicoes(\'sistema\', this.value)" style="flex:1;padding:3px;border:1px solid #cbd5e1;border-radius:6px"><option value="utm"' + (cfg.medicoes.sistema === 'utm' ? ' selected' : '') + '>UTM (E, N)</option><option value="geo_dec"' + (cfg.medicoes.sistema === 'geo_dec' ? ' selected' : '') + '>Graus decimais</option><option value="geo_gms"' + (cfg.medicoes.sistema === 'geo_gms' ? ' selected' : '') + '>Graus, minutos e segundos</option></select></label>' +
                 dicaDesenho + consultaHtml + medRows.map(linhaMed).join('') +
                 (medRows.length ? '<button type="button" class="act" style="margin-top:5px" onclick="mapPanelMedLimpar()">Limpar medições</button>' : '') +
                 '<div style="color:#64748b;line-height:1.35;margin:4px 0">Dois cliques no valor, no mapa, editam o texto; arraste para mover; ↻ para girar.</div>' +
@@ -2105,12 +2112,44 @@
         }
         function mapPanelConcluirMedicao() { if (mapController) { mapController.finishDraw(); renderMapToolsPanel(); } }
         function mapPanelMedicoes(k, v) { if (mapController) { mapController.setConfig({ medicoes: { [k]: v } }); renderMapToolsPanel(); } }
+        function mapPanelMedNome(id, txt) { if (mapController) { mapController.setMedicaoNome(id, txt); renderMapToolsPanel(); } }
         function mapPanelMedRemover(id) { if (mapController) { mapController.removeMedicao(id); renderMapToolsPanel(); } }
         function mapPanelMedLimpar() { if (mapController) { mapController.clearMedicoes(); renderMapToolsPanel(); } }
         function mapPanelMedCopiar(id) {
             const r = mapController ? mapController.medicaoRows().find(x => x.id === id) : null;
             if (!r || !navigator.clipboard) return;
             navigator.clipboard.writeText('DEC: ' + r.coords.dec + '\nGMS: ' + r.coords.gms + '\nUTM: ' + r.coords.utm).catch(() => {});
+        }
+        // ao concluir o polígono da ferramenta Área, pergunta que tipo de área é (aparece no mapa e nas análises)
+        let tipoAreaPendente = null;
+        const TIPOS_AREA = ['Construção', 'Galpão', 'Pérgola', 'Pavilhão em madeira', 'Caiçara', 'Cobertura', 'Garagem', 'Muro', 'Piscina', 'Calçada'];
+        function abrirModalTipoArea(id) {
+            tipoAreaPendente = id;
+            const antigo = document.getElementById('modal-tipo-area');
+            if (antigo && antigo.remove) antigo.remove();
+            const m = document.createElement('div');
+            m.id = 'modal-tipo-area';
+            m.className = 'no-print';
+            m.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:3000;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px';
+            m.innerHTML = '<div style="background:#fff;border-radius:14px;box-shadow:0 20px 50px rgba(15,23,42,.35);padding:16px;width:100%;max-width:380px;font:13px sans-serif;color:#0f172a">' +
+                '<div style="font-weight:800;font-size:14px;margin-bottom:4px">Que tipo de área é?</div>' +
+                '<div style="color:#64748b;margin-bottom:8px;line-height:1.35">Informe o tipo da área que você acabou de medir. O nome aparece no mapa e nas análises da folha.</div>' +
+                '<input id="tipo-area-input" type="text" maxlength="60" placeholder="Ex.: construção, galpão, pérgola, caiçara..." onkeydown="if (event.key === \'Enter\') confirmarTipoArea(this.value); else if (event.key === \'Escape\') fecharModalTipoArea();" style="width:100%;padding:7px 9px;border:1px solid #94a3b8;border-radius:8px;font-size:13px;outline:none">' +
+                '<div style="display:flex;flex-wrap:wrap;gap:5px;margin:8px 0">' + TIPOS_AREA.map(x => '<button type="button" onclick="document.getElementById(\'tipo-area-input\').value = this.textContent; document.getElementById(\'tipo-area-input\').focus()" style="border:1px solid #cbd5e1;background:#f8fafc;border-radius:999px;padding:3px 9px;font-size:11px;cursor:pointer">' + x + '</button>').join('') + '</div>' +
+                '<div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" onclick="fecharModalTipoArea()" style="border:1px solid #cbd5e1;background:#fff;border-radius:9px;padding:7px 14px;font-weight:700;cursor:pointer">Pular</button><button type="button" onclick="confirmarTipoArea(document.getElementById(\'tipo-area-input\').value)" style="border:0;background:#059669;color:#fff;border-radius:9px;padding:7px 14px;font-weight:700;cursor:pointer">Confirmar</button></div></div>';
+            document.body.appendChild(m);
+            const inp = document.getElementById('tipo-area-input');
+            if (inp && inp.focus) inp.focus();
+        }
+        function fecharModalTipoArea() {
+            tipoAreaPendente = null;
+            const m = document.getElementById('modal-tipo-area');
+            if (m && m.remove) m.remove();
+        }
+        function confirmarTipoArea(txt) {
+            const id = tipoAreaPendente;
+            fecharModalTipoArea();
+            if (id && mapController) { mapController.setMedicaoNome(id, txt); renderMapToolsPanel(); }
         }
         function mapPanelConsulta() { consultaAberta = !consultaAberta; consultaErro = ''; renderMapToolsPanel(); }
         function mapPanelConsultaAba(a) { consultaAba = a; consultaErro = ''; renderMapToolsPanel(); }

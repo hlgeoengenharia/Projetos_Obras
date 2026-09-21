@@ -328,7 +328,7 @@ async function runScenario(cfg) {
         const cfg = () => vm.runInContext('mapController.getConfig()', r.sandbox);
         const secExtras = () => { const m = /data-sec-h="extras"[\s\S]*?(?=data-sec-h="temporal")/.exec(painel()); return m ? m[0] : ''; };
         ok('card "Medições no mapa": as 4 ferramentas do mapa principal (sem o Analisador de Gabarito 3D)', ['Coordenadas do Ponto', 'Distância (m)', 'Área (m²)', 'Consultar Coordenadas'].every(t => secExtras().includes(t)) && !/Gabarito/.test(painel()));
-        ok('card: aderência, sistema dos pontos e as análises antigas continuam', /Aderência \(gruda nos contornos\)/.test(secExtras()) && /Pontos em/.test(secExtras()) && /Distância e sobreposição/.test(secExtras()) && /Área cadastral × área calculada/.test(secExtras()));
+        ok('card: aderência e as análises antigas continuam; sem seletor de sistema (o mapa só mostra o nome do ponto)', /Aderência \(gruda nos contornos\)/.test(secExtras()) && !/Pontos em/.test(secExtras()) && /Distância e sobreposição/.test(secExtras()) && /Área cadastral × área calculada/.test(secExtras()));
         r.sandbox.mapPanelFerramenta('linha');
         ok('ferramenta ligada: o painel diz como desenhar e mostra Concluir e Cancelar', /Clique para adicionar pontos/.test(secExtras()) && /mapPanelConcluirMedicao\(\)/.test(secExtras()));
         r.sandbox.mapPanelFerramenta('linha');
@@ -337,9 +337,28 @@ async function runScenario(cfg) {
         vm.runInContext("mapController.addMedicao('linha', [[-7.0195, -34.8395], [-7.0195, -34.8385]]); mapController.addMedicao('area', [[-7.0195, -34.8395], [-7.0195, -34.8385], [-7.0185, -34.8385]]); mapController.addMedicao('ponto', [[-7.019, -34.839]]);", r.sandbox);
         r.sandbox.renderMapToolsPanel();
         await r.settle(8);
-        ok('painel: cada medição com seus números e as coordenadas DEC, GMS e UTM (com copiar e remover)', /Distância 1/.test(secExtras()) && /Comprimento: <b>/.test(secExtras()) && /Área 2/.test(secExtras()) && /Perímetro: <b>/.test(secExtras()) && /Coordenadas do ponto 3/.test(secExtras()) && /DEC -7\./.test(secExtras()) && /GMS 7° /.test(secExtras()) && /UTM E /.test(secExtras()) && /mapPanelMedCopiar\('med:1'\)/.test(secExtras()) && /mapPanelMedRemover\('med:3'\)/.test(secExtras()) && /mapPanelMedLimpar\(\)/.test(secExtras()));
+        ok('painel: cada medição com seus números e as coordenadas DEC, GMS e UTM (com copiar e remover)', /Distância 1/.test(secExtras()) && /Comprimento total: <b>/.test(secExtras()) && /Área 2/.test(secExtras()) && /Perímetro: <b>/.test(secExtras()) && /Coordenadas do ponto 3/.test(secExtras()) && /DEC -7\./.test(secExtras()) && /GMS 7° /.test(secExtras()) && /UTM E /.test(secExtras()) && /mapPanelMedCopiar\('med:1'\)/.test(secExtras()) && /mapPanelMedRemover\('med:3'\)/.test(secExtras()) && /mapPanelMedLimpar\(\)/.test(secExtras()));
+        ok('painel: ponto mostra o nome no mapa (P03); área tem campo para o tipo; linha de 2 vértices sem lista de trechos', /Nome no mapa: <b>P03<\/b>/.test(secExtras()) && /placeholder="Tipo da área/.test(secExtras()) && !/Vértice 1 → 2/.test(secExtras()));
         const folha = r.registry['a4-document-container']._html;
-        ok('folha: as medições entram nas "Análises da Feição" (comprimento, área, perímetro e coordenadas)', /Distância medida \(1\)/.test(folha) && /Área medida \(2\)/.test(folha) && /Coordenadas do ponto \(3\)/.test(folha) && /DEC -7\./.test(folha));
+        ok('folha: as medições entram nas "Análises da Feição" (comprimento, área, perímetro; ponto pelo nome)', /Distância medida \(1\)/.test(folha) && /Área medida \(2\)/.test(folha) && /Coordenadas do ponto \(P03\)/.test(folha));
+        ok('folha: coordenadas DEC, GMS e UTM cada uma na sua linha (uma abaixo da outra)', /<div>DEC -7\.[^<]*<\/div><div>GMS 7° [^<]*<\/div><div>UTM E [^<]*<\/div>/.test(folha) && !/DEC [^<]* • GMS/.test(folha));
+        // linha com vários vértices: medida de cada trecho na análise; tipo da área pelo pop-up
+        vm.runInContext("mapController.addMedicao('linha', [[-7.0195, -34.8395], [-7.0195, -34.8390], [-7.0190, -34.8390]]);", r.sandbox);
+        let janela = null;
+        const bodyReal = r.sandbox.document.body;
+        if (bodyReal) bodyReal.appendChild = (el) => { janela = el; };
+        r.sandbox.abrirModalTipoArea('med:2');
+        ok('pop-up do tipo de área aberto: pergunta, campo, sugestões (galpão, pérgola, caiçara...) e Confirmar/Pular', !!janela && janela.id === 'modal-tipo-area' && /Que tipo de área é\?/.test(janela.innerHTML) && /id="tipo-area-input"/.test(janela.innerHTML) && />Galpão</.test(janela.innerHTML) && />Pérgola</.test(janela.innerHTML) && />Caiçara</.test(janela.innerHTML) && />Pavilhão em madeira</.test(janela.innerHTML) && />Confirmar</.test(janela.innerHTML) && />Pular</.test(janela.innerHTML) && /position:fixed/.test(janela.style.cssText) && janela.className === 'no-print');
+        r.sandbox.confirmarTipoArea('Pavilhão em madeira');
+        await r.settle(8);
+        const folha2 = r.registry['a4-document-container']._html;
+        eq('tipo da área guardado', vm.runInContext('mapController.getConfig().medicoes.itens[1].nome', r.sandbox), 'Pavilhão em madeira');
+        ok('folha: área com o tipo no título e linha com a medida de cada trecho entre os vértices', /Área medida \(2\) — Pavilhão em madeira/.test(folha2) && /Distância medida \(4\)/.test(folha2) && /Vértice 1 → 2: <b>[\d.,]+ m<\/b>/.test(folha2) && /Vértice 2 → 3: <b>[\d.,]+ m<\/b>/.test(folha2));
+        r.sandbox.abrirModalTipoArea('med:2');
+        r.sandbox.fecharModalTipoArea();
+        r.sandbox.confirmarTipoArea('não deve valer');
+        eq('Pular/fechar não muda o tipo (nada pendente depois)', vm.runInContext('mapController.getConfig().medicoes.itens[1].nome', r.sandbox), 'Pavilhão em madeira');
+        ok('o mapa avisa a página ao concluir uma área (pop-up)', /onMedicaoCriada: \(id\) => abrirModalTipoArea\(id\)/.test(html));
         // consultar coordenadas
         r.sandbox.mapPanelConsulta();
         ok('Consultar Coordenadas: formulário com abas DEC, GMS e UTM (DEC aberta)', /mapPanelConsultaAba\('gms'\)/.test(secExtras()) && /Pode colar &quot;lat, lng&quot;|Pode colar "lat, lng"/.test(secExtras()) && /mapPanelConsultaMarcar\(\)/.test(secExtras()));
@@ -348,7 +367,7 @@ async function runScenario(cfg) {
         r.sandbox.mapPanelConsultaCampo('lat', '-7,0192');
         r.sandbox.mapPanelConsultaCampo('lng', '-34.8388');
         r.sandbox.mapPanelConsultaMarcar();
-        eq('coordenadas digitadas viram um ponto no mapa', [cfg().medicoes.itens.length, cfg().medicoes.itens[3].pts[0]], [4, [-7.0192, -34.8388]]);
+        eq('coordenadas digitadas viram um ponto no mapa', [cfg().medicoes.itens.length, cfg().medicoes.itens[4].pts[0]], [5, [-7.0192, -34.8388]]);
         r.sandbox.mapPanelConsultaAba('utm');
         ok('aba UTM: X, Y e zona', /placeholder="X \(Este\)"/.test(secExtras()) && /placeholder="Zona"/.test(secExtras()));
         r.sandbox.mapPanelConsultaAba('gms');
@@ -356,7 +375,7 @@ async function runScenario(cfg) {
         r.sandbox.mapPanelMedicoes('sistema', 'geo_dec');
         eq('pontos em graus decimais', cfg().medicoes.sistema, 'geo_dec');
         r.sandbox.mapPanelMedRemover('med:1');
-        eq('remover uma medição pelo painel', cfg().medicoes.itens.map(m => m.id), ['med:2', 'med:3', 'med:4']);
+        eq('remover uma medição pelo painel', cfg().medicoes.itens.map(m => m.id), ['med:2', 'med:3', 'med:4', 'med:5']);
         r.sandbox.mapPanelMedLimpar();
         eq('limpar tudo', cfg().medicoes.itens, []);
         eq('sem erro de execução', r.errors, []);

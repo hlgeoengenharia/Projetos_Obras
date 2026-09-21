@@ -205,19 +205,31 @@
 
         /** Medições livres (ponto, distância e área) no formato dos itens de medida: texto editável, arrastável e girável. */
         function medItems() {
-            return MT.applyEdits(cfg.medicoes.itens.map(m => {
+            const itens = [];
+            cfg.medicoes.itens.forEach(m => {
                 const info = MT.medicaoInfo(m);
-                const texto = MT.medicaoTexto(m, cfg.medicoes.sistema);
-                let ang = 0, off = [0, m.tipo === 'area' ? 0 : -12];
+                const n = Number(m.id.slice(4));
                 if (m.tipo === 'linha') {
-                    // alinhado ao trecho do meio da linha
+                    // a medida de cada trecho entre os vértices (texto próprio, editável, arrastável e girável)
+                    m.pts.slice(1).forEach((p, k) => {
+                        const A = [m.pts[k][1], m.pts[k][0]], B = [p[1], p[0]];
+                        const d = info.trechos[k];
+                        const texto = MT.fmtNumber(d, 2) + ' m';
+                        itens.push({ id: 'mseg:' + (n * 1000 + k), grupo: 'lados', tipo: 'medicao-trecho', valor: d, texto: texto, resumo: texto, pos: [(A[1] + B[1]) / 2, (A[0] + B[0]) / 2], dy: 0, ang: MT.edgeAngleCss(A, B), off: MT.edgeOffsetAbove(A, B, 9) });
+                    });
+                    if (info.trechos.length === 1) { itens.pop(); } // com um trecho só, o texto do comprimento já é a medida
                     const k = Math.max(0, Math.min(m.pts.length - 2, Math.floor((m.pts.length - 1) / 2)));
                     const A = [m.pts[k][1], m.pts[k][0]], B = [m.pts[k + 1][1], m.pts[k + 1][0]];
-                    ang = MT.edgeAngleCss(A, B);
-                    off = MT.edgeOffsetAbove(A, B, 9);
+                    const texto = MT.medicaoTexto(m, cfg.medicoes.sistema);
+                    // o total fica do outro lado da linha, para não cobrir a medida do trecho
+                    const acima = MT.edgeOffsetAbove(A, B, 9);
+                    itens.push({ id: m.id, grupo: 'total', tipo: 'medicao', valor: info.comprimento, texto: texto, resumo: texto, pos: [info.centro.lat, info.centro.lng], dy: 0, ang: MT.edgeAngleCss(A, B), off: info.trechos.length > 1 ? [-acima[0] * 1.6, -acima[1] * 1.6] : acima });
+                    return;
                 }
-                return { id: m.id, grupo: 'total', tipo: 'medicao', valor: info.comprimento || info.area || 0, texto: texto, resumo: texto, pos: [info.centro.lat, info.centro.lng], dy: 0, ang: ang, off: off };
-            }), cfg.edicoes);
+                const texto = MT.medicaoTexto(m, cfg.medicoes.sistema);
+                itens.push({ id: m.id, grupo: 'total', tipo: 'medicao', valor: info.area || 0, texto: texto, resumo: texto, pos: [info.centro.lat, info.centro.lng], dy: 0, ang: 0, off: [0, m.tipo === 'area' ? 0 : -12] });
+            });
+            return MT.applyEdits(itens, cfg.edicoes);
         }
 
         /** Distâncias tiradas pelo usuário (feição → camada de referência), no formato dos itens de medida. */
@@ -382,7 +394,11 @@
                 if (m.tipo === 'ponto') addMedLayer(L.circleMarker(m.pts[0], { radius: 6, color: '#ffffff', weight: 2, fillColor: COR_MED, fillOpacity: 1, interactive: false }));
                 else if (m.tipo === 'linha') {
                     addMedLayer(L.polyline(m.pts, { color: COR_MED, weight: 2.5, interactive: false }));
-                    m.pts.forEach(p => addMedLayer(L.circleMarker(p, { radius: 3, color: COR_MED, weight: 1.5, fillColor: '#ffffff', fillOpacity: 1, interactive: false })));
+                    // número de cada vértice da linha (1, 2, 3...), ao lado de uma bolinha
+                    m.pts.forEach((p, k) => {
+                        const html = '<span class="report-point-dot" style="background:' + COR_MED + ';box-shadow:0 0 0 1px #164e63"></span><span class="report-point-label" style="left:10px;top:-10px;transform:translate(-50%,-50%);font-weight:700;color:' + COR_MED + '">' + (k + 1) + '</span>';
+                        addMedLayer(L.marker(p, { icon: L.divIcon({ className: 'report-point', html: html, iconSize: [0, 0] }), interactive: false, keyboard: false, zIndexOffset: 1300 }));
+                    });
                 } else addMedLayer(L.polygon(m.pts, { color: COR_MED, weight: 2.5, fillColor: COR_MED, fillOpacity: 0.2, interactive: false }));
             });
             // desenho em andamento: linha/polígono provisório com os cliques dados e o ponto sob o mouse
@@ -855,7 +871,7 @@
             /** Apaga as edições e as posições dos rótulos (volta ao calculado). */
             resetMeasures() {
                 // só as medidas da feição: nomes dos pontos (v:N), distâncias tiradas (dist:N) e medições livres (med:N) ficam
-                const soPontos = (m) => { const out = {}; Object.keys(m).forEach(k => { if (/^(v|dist|med):/.test(k)) out[k] = m[k]; }); return out; };
+                const soPontos = (m) => { const out = {}; Object.keys(m).forEach(k => { if (/^(v|dist|med|mseg):/.test(k)) out[k] = m[k]; }); return out; };
                 cfg.edicoes = soPontos(cfg.edicoes); cfg.posicoes = soPontos(cfg.posicoes); cfg.rotacoes = soPontos(cfg.rotacoes); apply();
             },
             /** Itens de medida atuais (com as edições), para painel/teste. */
@@ -952,6 +968,7 @@
                 if (map.doubleClickZoom && map.doubleClickZoom.enable) map.doubleClickZoom.enable();
                 const id = pts.length >= (d.tipo === 'linha' ? 2 : 3) ? api.addMedicao(d.tipo, pts) : null;
                 drawChanged();
+                if (id && d.tipo === 'area' && opts.onMedicaoCriada) opts.onMedicaoCriada(id, 'area'); // a página pergunta que tipo de área é
                 return id;
             },
             cancelDraw() {
@@ -973,6 +990,12 @@
                 apply();
                 return 'med:' + n;
             },
+            /** Que tipo de área é (construção, galpão, pérgola...): aparece no texto do mapa e nas análises. Vazio tira o nome. */
+            setMedicaoNome(id, nome) {
+                const itens = cfg.medicoes.itens.map(m => m.id === id ? Object.assign({}, m, { nome: nome }) : m);
+                cfg.medicoes = MT.normalizeMedicoes(Object.assign({}, cfg.medicoes, { itens: itens }));
+                apply();
+            },
             /** Marca um ponto pelas coordenadas digitadas; se ficar fora do enquadramento, o mapa passa a mostrar a feição e o ponto. */
             addMedicaoPonto(lat, lng) {
                 const id = api.addMedicao('ponto', [[lat, lng]]);
@@ -985,13 +1008,15 @@
                 return id;
             },
             removeMedicao(id) {
+                const alvo = cfg.medicoes.itens.find(m => m.id === id);
+                const ids = alvo ? MT.medicaoIds(alvo) : [id];
                 cfg.medicoes = MT.normalizeMedicoes(Object.assign({}, cfg.medicoes, { itens: cfg.medicoes.itens.filter(m => m.id !== id) }));
-                const sem = (m) => { const out = Object.assign({}, m); delete out[id]; return out; };
+                const sem = (m) => { const out = {}; Object.keys(m).forEach(k => { if (ids.indexOf(k) < 0) out[k] = m[k]; }); return out; };
                 cfg.edicoes = sem(cfg.edicoes); cfg.posicoes = sem(cfg.posicoes); cfg.rotacoes = sem(cfg.rotacoes);
                 apply();
             },
             clearMedicoes() {
-                const ids = cfg.medicoes.itens.map(m => m.id);
+                const ids = [].concat.apply([], cfg.medicoes.itens.map(m => MT.medicaoIds(m)));
                 cfg.medicoes = MT.normalizeMedicoes(Object.assign({}, cfg.medicoes, { itens: [] }));
                 const sem = (m) => { const out = {}; Object.keys(m).forEach(k => { if (ids.indexOf(k) < 0) out[k] = m[k]; }); return out; };
                 cfg.edicoes = sem(cfg.edicoes); cfg.posicoes = sem(cfg.posicoes); cfg.rotacoes = sem(cfg.rotacoes);
@@ -1001,7 +1026,7 @@
             medicaoRows() {
                 return cfg.medicoes.itens.map(m => {
                     const info = MT.medicaoInfo(m);
-                    return { id: m.id, tipo: m.tipo, numero: Number(m.id.slice(4)), info: info, coords: MT.coordTriple(info.centro.lat, info.centro.lng), texto: (medItems().find(x => x.id === m.id) || {}).texto, npts: m.pts.length };
+                    return { id: m.id, tipo: m.tipo, numero: Number(m.id.slice(4)), nome: m.nome || '', info: info, coords: MT.coordTriple(info.centro.lat, info.centro.lng), texto: (medItems().find(x => x.id === m.id) || {}).texto, npts: m.pts.length };
                 });
             },
             // ---- distância feição → camada de referência, medida pelo usuário com dois cliques

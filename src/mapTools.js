@@ -157,7 +157,8 @@
             const pts = (Array.isArray(m.pts) ? m.pts : []).filter(okLatLng).slice(0, m.tipo === 'ponto' ? 1 : MAX_PTS_MEDICAO).map(p => [Number(p[0]), Number(p[1])]);
             if (pts.length < MIN_PTS[m.tipo]) return;
             vistos.add(m.id);
-            itens.push({ id: m.id, tipo: m.tipo, pts: pts });
+            const nome = typeof m.nome === 'string' ? m.nome.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
+            itens.push(nome ? { id: m.id, tipo: m.tipo, pts: pts, nome: nome } : { id: m.id, tipo: m.tipo, pts: pts });
         });
         return { itens, sistema: ['utm', 'geo_dec', 'geo_gms'].indexOf(x.sistema) >= 0 ? x.sistema : 'utm', aderencia: x.aderencia === undefined ? true : !!x.aderencia };
     }
@@ -182,7 +183,9 @@
         const coords = pts.map(p => [p[1], p[0]]);
         if (item.tipo === 'linha') {
             const m = halfwayLatLng(coords);
-            return { comprimento: lineLengthM(coords), centro: { lat: m[0], lng: m[1] } };
+            const trechos = [];
+            for (let k = 0; k < coords.length - 1; k++) trechos.push(distanceM(coords[k], coords[k + 1]));
+            return { comprimento: lineLengthM(coords), trechos: trechos, centro: { lat: m[0], lng: m[1] } };
         }
         const ring = coords.concat([coords[0]]);
         const c = centroidLngLat(ring);
@@ -192,12 +195,19 @@
     /** Texto que vai sobre o mapa. sistema: 'utm' | 'geo_dec' | 'geo_gms' (só vale para pontos). */
     function medicaoTexto(item, sistema) {
         const i = medicaoInfo(item);
-        if (item.tipo === 'ponto') {
-            const cel = coordCells(i.lat, i.lng, sistema || 'utm');
-            return sistema === 'utm' || !sistema ? 'E ' + cel[0] + '  N ' + cel[1] : cel.join(', ');
-        }
-        if (item.tipo === 'linha') return 'Comp. ' + fmtNumber(i.comprimento, 2) + ' m';
-        return 'Área ' + fmtNumber(i.area, 2) + ' m² • Perím. ' + fmtNumber(i.perimetro, 2) + ' m';
+        // ponto: só o nome (P01, P02...; o usuário edita); as coordenadas ficam no painel e nas análises da folha
+        if (item.tipo === 'ponto') return 'P' + pad2(item.id ? Number(String(item.id).slice(4)) || 1 : 1);
+        if (item.tipo === 'linha') return (i.trechos.length > 1 ? 'Total ' : 'Comp. ') + fmtNumber(i.comprimento, 2) + ' m';
+        const numeros = fmtNumber(i.area, 2) + ' m² • Perím. ' + fmtNumber(i.perimetro, 2) + ' m';
+        return item.nome ? item.nome + ' — ' + numeros : 'Área ' + numeros;
+    }
+
+    /** ids dos textos de uma medição: ela mesma e, na linha, um texto por trecho (mseg:N*1000+i). */
+    function medicaoIds(item) {
+        const n = Number(String(item.id).slice(4)) || 0;
+        const ids = [item.id];
+        if (item.tipo === 'linha') for (let k = 0; k < item.pts.length - 1; k++) ids.push('mseg:' + (n * 1000 + k));
+        return ids;
     }
 
     /**
@@ -1531,7 +1541,7 @@
 
     return {
         MAP_DEFAULTS, BASE_MAPS,
-        normalizeMapConfig, mergeAjustes, normalizeMedicoes, coordTriple, medicaoInfo, medicaoTexto, parseCoordenadas, normalizeColConf, confrontantesDoTrecho, normalizeElementos, normalizeLegenda, applyConfrontantes, nearestOnGeometry, nearestOnCamada, edgeOffsetAbove, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
+        normalizeMapConfig, mergeAjustes, normalizeMedicoes, coordTriple, medicaoInfo, medicaoTexto, medicaoIds, parseCoordenadas, normalizeColConf, confrontantesDoTrecho, normalizeElementos, normalizeLegenda, applyConfrontantes, nearestOnGeometry, nearestOnCamada, edgeOffsetAbove, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
         geometryBBox, bboxCenter, expandBBoxMeters, bboxIntersects, roundCoords, geomKind,
         normalizeTemporal, rasterDateInfo, fmtRasterDate, tileXY, tileUrl, probeZoom, rasterBBox, buildOrtofotoList, sortOrtofotos,
         COORD_SYSTEMS, normalizePontos, latLngToUtm, utmToLatLng, fmtGms, coordHeaders, coordCells, coordSystemLabel, azimuthDeg, fmtAzimuth, vertices, defaultPointTitle, pointRows,

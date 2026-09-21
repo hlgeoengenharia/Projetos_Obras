@@ -785,11 +785,11 @@ t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefin
     const mk = (extra) => build({ mapa: extra || {} }, undefined, { doc: docE, onMeasureState: (n) => estados.push(n) });
     const b = mk();
     const click = (lat, lng) => b.map.handlers.click({ latlng: { lat: lat, lng: lng } });
-    const rotMed = () => b.layersOf('marker').filter(x => /report-measure-label/.test(x.args.o.icon.html) && /(Comp\.|Área [\d.,]+ m² •|E [\d.,]+  N)/.test(x.args.o.icon.html));
+    const rotMed = () => b.layersOf('marker').filter(x => /report-measure-label/.test(x.args.o.icon.html) && /(Comp\.|Total |Área [\d.,]+ m² •|>P0\d|[\d.,]+ m<)/.test(x.args.o.icon.html));
     b.map.doubleClickZoom = { off: false, disable() { this.off = true; }, enable() { this.off = false; } };
     // ponto: um clique
     eq('começar o ponto: cursor de mira; clicar marca o ponto e termina', [b.ctl.startDraw('ponto'), b.map.cont.style.cursor, (click(-7.0301, -34.8501), b.ctl.getConfig().medicoes.itens.map(m => [m.id, m.tipo])), b.ctl.drawState(), b.map.cont.style.cursor], [true, 'crosshair', [['med:1', 'ponto']], null, '']);
-    ok('ponto: bolinha desenhada e texto com as coordenadas UTM (editável, arrastável, girável)', b.layersOf('circle').some(c => c.args.o.fillColor === '#0e7490') && rotMed().some(m => /E [\d.]+,\d\d  N/.test(m.args.o.icon.html) && /report-rot no-print/.test(m.args.o.icon.html)));
+    ok('ponto: bolinha desenhada e só o nome P01 no mapa (editável, arrastável, girável)', b.layersOf('circle').some(c => c.args.o.fillColor === '#0e7490') && rotMed().some(m => />P01</.test(m.args.o.icon.html.replace(/<span class="report-rot[^>]*>[^<]*<\/span>/, '').replace(/^.*?>(P01)<.*$/, '>$1<')) && /report-rot no-print/.test(m.args.o.icon.html)) && !rotMed().some(m => /E [\d.]+,\d\d/.test(m.args.o.icon.html)));
     // linha: cliques, prévia, duplo clique conclui e tira o clique repetido
     b.ctl.startDraw('linha');
     ok('desenhando: o zoom por duplo clique fica desligado', b.map.doubleClickZoom.off === true);
@@ -801,7 +801,10 @@ t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefin
     const linha = b.ctl.getConfig().medicoes.itens[1];
     eq('duplo clique conclui: linha com 3 pontos (o clique repetido sai); zoom volta', [linha.id, linha.tipo, linha.pts.length, b.map.doubleClickZoom.off, b.ctl.drawState()], ['med:2', 'linha', 3, false, null]);
     const comp = MT.lineLengthM(linha.pts.map(p => [p[1], p[0]]));
-    ok('linha: comprimento total no mapa e linha contínua com bolinhas nos vértices', rotMed().some(m => m.args.o.icon.html.indexOf('Comp. ' + MT.fmtNumber(comp, 2) + ' m') >= 0) && b.layersOf('polyline').some(l => l.args.o.color === '#0e7490' && !l.args.o.dashArray && l.args.p.length === 3));
+    const trechosLinha = linha.pts.slice(1).map((p, k) => MT.fmtNumber(MT.distanceM([linha.pts[k][1], linha.pts[k][0]], [p[1], p[0]]), 2) + ' m');
+    ok('linha: a medida de cada trecho e o total no mapa; linha contínua', trechosLinha.every(t => rotMed().some(m => m.args.o.icon.html.indexOf('>' + t + '<') >= 0)) && rotMed().some(m => m.args.o.icon.html.indexOf('Total ' + MT.fmtNumber(comp, 2) + ' m') >= 0) && b.layersOf('polyline').some(l => l.args.o.color === '#0e7490' && !l.args.o.dashArray && l.args.p.length === 3));
+    const numeros = b.layersOf('marker').filter(x => x.args.o.icon.className === 'report-point' && /report-point-label[^>]*>\d</.test(x.args.o.icon.html) && x.args.o.interactive === false).map(x => /report-point-label[^>]*>(\d)</.exec(x.args.o.icon.html)[1]);
+    eq('linha: número em cada vértice (1, 2, 3), sem interação', numeros, ['1', '2', '3']);
     eq('linha: dados para o painel (comprimento, centro nos três formatos)', [b.ctl.medicaoRows()[1].numero, Math.abs(b.ctl.medicaoRows()[1].info.comprimento - comp) < 1e-6, /^-7\.0/.test(b.ctl.medicaoRows()[1].coords.dec)], [2, true, true]);
     // área: Enter conclui; menos de 3 pontos não vale
     b.ctl.startDraw('area');
@@ -818,7 +821,7 @@ t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefin
     eq('painel: área com perímetro e centroide', [b.ctl.medicaoRows()[2].tipo, b.ctl.medicaoRows()[2].info.area > 0, b.ctl.medicaoRows()[2].info.perimetro > 0, b.ctl.medicaoRows()[2].npts], ['area', true, true, 3]);
     ok('o painel é avisado a cada clique (estado do desenho)', estados.length > 5 && estados.includes(2) && estados[estados.length - 1] === 0);
     // editar o texto, restaurar e remover
-    const r1 = rotMed().find(m => m.args.o.icon.html.indexOf('Comp.') >= 0);
+    const r1 = rotMed().find(m => m.args.o.icon.html.indexOf('Total ') >= 0);
     r1.handlers.dblclick({});
     const campo = r1.span.children[0];
     campo.value = '125 m de extensão';
@@ -844,6 +847,33 @@ t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefin
     s.ctl.startDraw('ponto');
     s.map.handlers.click({ latlng: { lat: -7.015, lng: -34.83002 } });
     eq('aderência desligada: fica onde clicou', s.ctl.getConfig().medicoes.itens[0].pts[0], [-7.015, -34.83002]);
+    // tipo de área: a página é avisada ao concluir e o nome vai para o mapa
+    {
+        const avisos = [];
+        const t2 = mk2();
+        function mk2() { return build({ mapa: {} }, undefined, { doc: docE, onMedicaoCriada: (id, tipo) => avisos.push([id, tipo]) }); }
+        t2.ctl.startDraw('area');
+        [[-7.031, -34.851], [-7.031, -34.852], [-7.032, -34.852]].forEach(p => t2.map.handlers.click({ latlng: { lat: p[0], lng: p[1] } }));
+        t2.map.handlers.dblclick({});
+        eq('ao concluir a área a página é avisada (para perguntar o tipo); linha e ponto não avisam', avisos, [['med:1', 'area']]);
+        t2.ctl.setMedicaoNome('med:1', '  Galpão ');
+        const rotulo = t2.layersOf('marker').find(x => /Galpão — [\d.,]+ m² • Perím\./.test(x.args.o.icon.html));
+        eq('tipo de área: aparece no texto do mapa e nos dados do painel', [!!rotulo, t2.ctl.medicaoRows()[0].nome, t2.ctl.getConfig().medicoes.itens[0].nome], [true, 'Galpão', 'Galpão']);
+        t2.ctl.setMedicaoNome('med:1', '');
+        eq('vazio tira o tipo de área', [t2.ctl.medicaoRows()[0].nome, /Área [\d.,]+ m²/.test(t2.layersOf('marker').map(x => x.args.o.icon.html).join(''))], ['', true]);
+        t2.ctl.startDraw('linha');
+        [[-7.03, -34.85], [-7.03, -34.851]].forEach(p => t2.map.handlers.click({ latlng: { lat: p[0], lng: p[1] } }));
+        t2.map.handlers.dblclick({});
+        eq('linha não pergunta o tipo', avisos.length, 1);
+        // remover a linha apaga também os textos editados dos trechos
+        t2.ctl.startDraw('linha');
+        [[-7.03, -34.85], [-7.03, -34.851], [-7.031, -34.851]].forEach(p => t2.map.handlers.click({ latlng: { lat: p[0], lng: p[1] } }));
+        t2.map.handlers.dblclick({});
+        const idLinha = t2.ctl.getConfig().medicoes.itens[2].id;
+        t2.ctl.setConfig({ edicoes: { ['mseg:' + (Number(idLinha.slice(4)) * 1000)]: '50 m', [idLinha]: 'total' } });
+        t2.ctl.removeMedicao(idLinha);
+        eq('remover a linha apaga os textos editados dela e dos trechos', Object.keys(t2.ctl.getConfig().edicoes).filter(k => /^(mseg|med):/.test(k)), []);
+    }
     // consultar coordenadas: ponto direto, e o mapa passa a mostrar feição e ponto se ficar fora
     const c = mk();
     c.map.getBounds = () => ({ getWest: () => -34.84, getSouth: () => -7.02, getEast: () => -34.83, getNorth: () => -7.01, contains: (p) => p[0] >= -7.02 && p[0] <= -7.01 && p[1] >= -34.84 && p[1] <= -34.83 });
