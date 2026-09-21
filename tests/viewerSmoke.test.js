@@ -244,6 +244,24 @@ async function runScenario(cfg) {
         eq('situação desligada: caixa escondida', desl.registry['map-locator'].style.display, 'none');
     }
 
+    // ---- elementos do mapa: escala e projeção em quadros separados, legenda editável e posições
+    {
+        const r = await runScenario({ width: 1900, opener: true, payload: Object.assign({}, cenarios[3].payload, { template: tplWith({ camadasLigadas: ['A'] }) }) });
+        const painel = () => r.registry['map-tools-panel']._html;
+        const cfg = () => require('vm').runInContext('mapController.getConfig()', r.sandbox);
+        ok('a folha traz os quadros separados de escala e projeção', /id="map-info-wrap"/.test(r.doc) && /id="map-escala-txt"/.test(r.doc) && /id="map-proj-txt"/.test(r.doc));
+        ok('escala e projeção escritas cada uma no seu quadro', /Escala aprox/.test(r.registry['map-escala-txt'].textContent) && /SIRGAS/.test(r.registry['map-proj-txt'].textContent));
+        ok('painel: legenda com os itens (mostrar/ocultar e nome editável) e a dica de arrastar', /Arraste, no mapa, o norte, a escala/.test(painel()) && /mapPanelLegendaVer\('feicao'/.test(painel()) && /mapPanelLegendaNome\('feicao'/.test(painel()) && /mapPanelLegendaVer\('c:A'/.test(painel()));
+        r.sandbox.mapPanelLegendaNome('feicao', 'Meu imóvel');
+        r.sandbox.mapPanelLegendaVer('c:A', false);
+        eq('renomear e ocultar pela legenda do painel', [cfg().legenda.nomes.feicao, cfg().legenda.ocultos, /Meu imóvel/.test(r.registry['map-legend'].innerHTML), /data-leg="c:A"/.test(r.registry['map-legend'].innerHTML)], ['Meu imóvel', ['c:A'], true, false]);
+        ok('com legenda alterada aparece o botão de restaurar', /mapPanelLegendaReset\(\)/.test(painel()));
+        r.sandbox.mapPanelLegendaReset();
+        eq('restaurar legenda', [cfg().legenda.nomes, cfg().legenda.ocultos], [{}, []]);
+        r.sandbox.mapPanelElementosReset();
+        eq('sem erro de execução', r.errors, []);
+    }
+
     // ---- medidas: negrito / itálico / sublinhado pelo painel
     {
         const r = await runScenario({ width: 1900, opener: true, payload: cenarios[3].payload });

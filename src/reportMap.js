@@ -4,7 +4,7 @@
 // Não conhece a página: os elementos de sobreposição (norte, escala/projeção, legenda) são achados pelos ids
 // abaixo, dentro de `doc`. Assim dá para testar com um Leaflet e um DOM simulados.
 //
-// Ids de sobreposição (opcionais): map-north, map-info-bar, map-legend, map-locator (mapa de situação), map-sides-text, map-area-text (resumo sob o mapa)
+// Ids de sobreposição (opcionais): map-north, map-info-wrap (com map-escala-txt e map-proj-txt), map-legend, map-locator (mapa de situação), map-sides-text, map-area-text (resumo sob o mapa)
 
 (function (root, factory) {
     if (typeof module === 'object' && module.exports) {
@@ -26,6 +26,7 @@
         return 'font-weight:' + (e.n ? 700 : 400) + ';font-style:' + (e.i ? 'italic' : 'normal') + ';text-decoration:' + (e.s ? 'underline' : 'none') + ';';
     }
     function labelTransform(deg) { return 'translate(-50%,-50%) rotate(' + (Number(deg) || 0) + 'deg)'; }
+    const MOVEIS = ['norte', 'escala', 'escalaTexto', 'projecao', 'legenda'];
     const POINT_LABEL_OFFSET = [16, -13]; // px: onde o nome do ponto nasce em relação ao vértice
     const ROT_HANDLE = '<span class="report-rot no-print" title="Girar (arraste; Shift = de 15 em 15°) • dois cliques voltam ao automático">&#8635;</span>';
 
@@ -536,6 +537,103 @@
             return 'Escala aprox. ' + MT.formatScale(MT.approxScale(MT.scaleDenominator(map.getZoom(), lat)));
         }
 
+        // ------------------------------------------------------------ legenda editável e elementos que o usuário move
+        const LEG_ID = (id) => String(id).replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 64);
+        /** Itens da legenda: { key, cor, padrao, nome (o que aparece), oculto }. */
+        function legendItems() {
+            const itens = [];
+            if (cfg.destaque.ativo) itens.push({ key: 'feicao', cor: cfg.destaque.cor, padrao: 'Feição do relatório' });
+            if (cfg.camadasVizinhas) {
+                const on = new Set(cfg.camadasLigadas.map(String));
+                camadas.filter(c => on.has(String(c.id))).forEach(c => itens.push({ key: 'c:' + LEG_ID(c.id), cor: c.color, padrao: c.name + (c.truncated ? ' *' : '') }));
+            }
+            return itens.map(i => ({ key: i.key, cor: i.cor, padrao: i.padrao, nome: cfg.legenda.nomes[i.key] || i.padrao, oculto: cfg.legenda.ocultos.indexOf(i.key) >= 0 }));
+        }
+
+        function onLegendDbl(ev) {
+            const row = ev && ev.target && ev.target.closest ? ev.target.closest('[data-leg]') : null;
+            if (!row || !doc) return;
+            const span = row.querySelector ? row.querySelector('span') : null;
+            const key = row.getAttribute('data-leg');
+            const item = legendItems().find(i => i.key === key);
+            if (!span || !item) return;
+            const input = doc.createElement('input');
+            input.type = 'text';
+            input.value = item.nome;
+            input.maxLength = 60;
+            input.className = 'report-measure-input';
+            span.textContent = '';
+            span.appendChild(input);
+            if (input.focus) input.focus();
+            if (input.select) input.select();
+            let feito = false;
+            const fim = (grava) => {
+                if (feito) return;
+                feito = true;
+                if (grava) api.renameLegend(key, input.value); else applyOverlays();
+            };
+            const stop = (e) => { if (e && e.stopPropagation) e.stopPropagation(); };
+            input.addEventListener('keydown', (e) => { stop(e); if (e.key === 'Enter') fim(true); else if (e.key === 'Escape') fim(false); });
+            input.addEventListener('blur', () => fim(true));
+            ['mousedown', 'pointerdown', 'dblclick', 'click'].forEach(n => input.addEventListener(n, stop));
+        }
+
+        // norte, escala (barra e texto), projeção e legenda: arrastar muda de lugar (deslocamento guardado em fração do mapa)
+        function mapSize() {
+            const c = map.getContainer ? map.getContainer() : null;
+            if (!c) return { w: 0, h: 0 };
+            const r = c.getBoundingClientRect ? c.getBoundingClientRect() : null;
+            return { w: c.clientWidth || (r && r.width) || 0, h: c.clientHeight || (r && r.height) || 0 };
+        }
+        function elementoMovel(key) {
+            if (key === 'norte') return el('map-north');
+            if (key === 'escalaTexto') return el('map-escala-txt');
+            if (key === 'projecao') return el('map-proj-txt');
+            if (key === 'legenda') return el('map-legend');
+            if (key === 'escala') return state.scaleControl && state.scaleControl.getContainer ? state.scaleControl.getContainer() : null;
+            return null;
+        }
+        function wireMove(e, key) {
+            if (!e || !e.addEventListener || e._reportMove || !doc || !doc.addEventListener) return;
+            e._reportMove = true;
+            e.addEventListener('mousedown', (ev) => { if (ev && ev.stopPropagation && !(ev.target && ev.target.tagName === 'INPUT')) ev.stopPropagation(); });
+            e.addEventListener('pointerdown', (ev) => {
+                if (!ev || (ev.target && ev.target.tagName === 'INPUT')) return;
+                if (ev.stopPropagation) ev.stopPropagation();
+                if (ev.preventDefault) ev.preventDefault();
+                const c = map.getContainer ? map.getContainer() : null;
+                if (!c || !c.getBoundingClientRect || !e.getBoundingClientRect) return;
+                const cr = c.getBoundingClientRect(), er = e.getBoundingClientRect();
+                const W = cr.width || 1, H = cr.height || 1;
+                const cur = cfg.elementos[key] || { dx: 0, dy: 0 };
+                let dx = cur.dx * W, dy = cur.dy * H;
+                const move = (m) => {
+                    // o elemento não sai da área do mapa
+                    const ddx = Math.max(cr.left - er.left, Math.min(cr.right - er.right, m.clientX - ev.clientX));
+                    const ddy = Math.max(cr.top - er.top, Math.min(cr.bottom - er.bottom, m.clientY - ev.clientY));
+                    dx = cur.dx * W + ddx; dy = cur.dy * H + ddy;
+                    e.style.transform = 'translate(' + Math.round(dx) + 'px,' + Math.round(dy) + 'px)';
+                };
+                const up = () => {
+                    doc.removeEventListener('pointermove', move);
+                    doc.removeEventListener('pointerup', up);
+                    api.setElemento(key, dx / W, dy / H);
+                };
+                doc.addEventListener('pointermove', move);
+                doc.addEventListener('pointerup', up);
+            });
+        }
+        function applyElementPositions() {
+            const sz = mapSize();
+            MOVEIS.forEach(key => {
+                const e = elementoMovel(key);
+                if (!e || !e.style) return;
+                const p = cfg.elementos[key];
+                e.style.transform = p && sz.w && sz.h ? 'translate(' + Math.round(p.dx * sz.w) + 'px,' + Math.round(p.dy * sz.h) + 'px)' : '';
+                wireMove(e, key);
+            });
+        }
+
         function applyOverlays() {
             show(el('map-north'), !!cfg.norte);
 
@@ -545,23 +643,20 @@
                 state.scaleControl.addTo(map);
             }
 
-            const bar = el('map-info-bar');
-            if (bar) {
-                const parts = [];
-                if (cfg.escala) parts.push(escapeHtml(scaleText()));
-                if (cfg.projecao) parts.push(escapeHtml(proj.label));
-                bar.innerHTML = parts.map(p => '<span>' + p + '</span>').join('<span>•</span>');
-                show(bar, parts.length > 0);
-            }
+            // escala aproximada e sistema de projeção: dois quadros separados, cada um com a própria posição
+            const escTxt = el('map-escala-txt'), projTxt = el('map-proj-txt');
+            if (escTxt) { escTxt.textContent = scaleText(); show(escTxt, !!cfg.escala); }
+            if (projTxt) { projTxt.textContent = proj.label; show(projTxt, !!cfg.projecao); }
+            show(el('map-info-wrap'), !!(cfg.escala || cfg.projecao));
 
             const legend = el('map-legend');
             if (legend) {
-                const on = new Set(cfg.camadasLigadas.map(String));
-                const items = cfg.camadasVizinhas ? camadas.filter(c => on.has(String(c.id))) : [];
-                const feat = cfg.destaque.ativo ? '<div><i style="background:' + escapeHtml(cfg.destaque.cor) + '"></i>Feição do relatório</div>' : '';
-                legend.innerHTML = feat + items.map(c => '<div><i style="background:' + escapeHtml(c.color) + '"></i>' + escapeHtml(c.name) + (c.truncated ? ' *' : '') + '</div>').join('');
-                show(legend, !!(feat || items.length));
+                const visiveis = legendItems().filter(i => !i.oculto);
+                legend.innerHTML = visiveis.map(i => '<div data-leg="' + escapeHtml(i.key) + '" title="Duplo clique para renomear"><i style="background:' + escapeHtml(i.cor) + '"></i><span>' + escapeHtml(i.nome) + '</span></div>').join('');
+                show(legend, visiveis.length > 0);
+                if (legend.addEventListener && !legend._reportLeg) { legend._reportLeg = true; legend.addEventListener('dblclick', onLegendDbl); }
             }
+            applyElementPositions();
             if (map.getContainer && map.getContainer() && map.getContainer().style) {
                 map.getContainer().style.background = cfg.baseMap === 'nenhum' ? '#ffffff' : '#e2e8f0';
             }
@@ -642,7 +737,7 @@
                     camadasLigadas: cfg.camadasLigadas.slice(), destaque: Object.assign({}, cfg.destaque), medidas: JSON.parse(JSON.stringify(cfg.medidas)),
                     edicoes: Object.assign({}, cfg.edicoes), posicoes: Object.assign({}, cfg.posicoes), rotacoes: Object.assign({}, cfg.rotacoes),
                     pontos: Object.assign({}, cfg.pontos, { ordem: cfg.pontos.ordem.slice(), titulos: Object.assign({}, cfg.pontos.titulos) }),
-                    rotulos: JSON.parse(JSON.stringify(cfg.rotulos)), confrontantes: JSON.parse(JSON.stringify(cfg.confrontantes)), referencia: JSON.parse(JSON.stringify(cfg.referencia)),
+                    rotulos: JSON.parse(JSON.stringify(cfg.rotulos)), confrontantes: JSON.parse(JSON.stringify(cfg.confrontantes)), referencia: JSON.parse(JSON.stringify(cfg.referencia)), elementos: JSON.parse(JSON.stringify(cfg.elementos)), legenda: JSON.parse(JSON.stringify(cfg.legenda)),
                     comparacaoArea: Object.assign({}, cfg.comparacaoArea), situacao: Object.assign({}, cfg.situacao), quadriculado: Object.assign({}, cfg.quadriculado),
                     anotacoes: cfg.anotacoes.map(a => Object.assign({}, a)), vista: currentView()
                 });
@@ -702,6 +797,37 @@
                 if (vertData.omitidos) return;
                 setPontos({ ativo: true, ordem: vertData.itens.map(v => v.id) });
             },
+            // ---- elementos que o usuário move e legenda editável
+            /** Deslocamento de um elemento (norte, escala, escalaTexto, projecao, legenda) em fração do tamanho do mapa. (0, 0) volta ao lugar padrão. */
+            setElemento(key, dx, dy) {
+                if (MOVEIS.indexOf(key) < 0) return;
+                const elementos = Object.assign({}, cfg.elementos, { [key]: { dx: dx, dy: dy } });
+                cfg.elementos = MT.normalizeElementos(elementos);
+                applyOverlays();
+                notify();
+            },
+            resetElementos() { cfg.elementos = {}; applyOverlays(); notify(); },
+            legendItems: legendItems,
+            /** Troca o nome de um item da legenda; vazio ou igual ao original volta ao original. */
+            renameLegend(key, texto) {
+                const item = legendItems().find(i => i.key === key);
+                if (!item) return;
+                const limpo = MT.normalizeLegenda({ nomes: { [key]: texto } }).nomes[key];
+                const nomes = Object.assign({}, cfg.legenda.nomes);
+                if (!limpo || limpo === item.padrao) delete nomes[key]; else nomes[key] = limpo;
+                cfg.legenda = MT.normalizeLegenda({ nomes: nomes, ocultos: cfg.legenda.ocultos });
+                applyOverlays();
+                notify();
+            },
+            /** Mostra ou oculta um item da legenda. */
+            toggleLegend(key, visivel) {
+                const ocultos = cfg.legenda.ocultos.filter(k => k !== key);
+                if (!visivel) ocultos.push(key);
+                cfg.legenda = MT.normalizeLegenda({ nomes: cfg.legenda.nomes, ocultos: ocultos });
+                applyOverlays();
+                notify();
+            },
+            resetLegenda() { cfg.legenda = MT.normalizeLegenda({}); applyOverlays(); notify(); },
             // ---- distância feição → camada de referência, medida pelo usuário com dois cliques
             /** 0 = parado; 1 = falta o ponto na feição; 2 = falta o ponto na camada. */
             measureState() { return state.measure ? state.measure.fase : 0; },

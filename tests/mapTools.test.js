@@ -82,6 +82,11 @@ eq('confrontantes: ordem só com ids de lado válidos e sem repetição; textos 
     eq('medidas guardadas: só ids dist:N, pontos válidos, sem repetição, até 20', MT.normalizeReferencia({ ativo: true, camada: 'R', medidas: [{ id: 'dist:1', a: [-7, -34], b: [-7.1, -34.1] }, { id: 'dist:1', a: [1, 1], b: [2, 2] }, { id: 'x', a: [1, 1], b: [2, 2] }, { id: 'dist:2', a: [999, 1], b: [2, 2] }, { id: 'dist:3', a: [1], b: [2, 2] }] }).medidas, [{ id: 'dist:1', a: [-7, -34], b: [-7.1, -34.1] }]);
     ok('padrão: sem medidas', MT.normalizeMapConfig({}).referencia.medidas.length === 0);
 }
+// elementos móveis e legenda
+eq('elementos: só os conhecidos, deslocamento limitado a ±1 e arredondado; (0,0) some', MT.normalizeElementos({ norte: { dx: -0.083333, dy: 0.1 }, escala: { dx: 5, dy: -5 }, projecao: { dx: 0, dy: 0 }, legenda: { dx: 'x', dy: 1 }, lixo: { dx: 1, dy: 1 }, escalaTexto: { dx: null, dy: 0.2 } }), { norte: { dx: -0.0833, dy: 0.1 }, escala: { dx: 1, dy: -1 } });
+eq('legenda: nomes e itens ocultos só com chaves válidas', MT.normalizeLegenda({ nomes: { feicao: '  Meu imóvel  ', 'c:12': 'Lotes', 'c:a b': 'x', lixo: 'y', 'c:9': '' }, ocultos: ['c:12', 'c:12', 'feicao', 'x', 3] }), { nomes: { feicao: 'Meu imóvel', 'c:12': 'Lotes' }, ocultos: ['c:12', 'feicao'] });
+ok('padrão: nada movido, legenda sem ajustes', Object.keys(MT.normalizeMapConfig({}).elementos).length === 0 && MT.normalizeMapConfig({}).legenda.ocultos.length === 0);
+eq('ajustes do usuário levam elementos e legenda', [MT.mergeAjustes(MT.normalizeMapConfig({}), { elementos: { norte: { dx: 0.1, dy: 0.1 } }, legenda: { nomes: { feicao: 'X' } } }).elementos.norte, MT.mergeAjustes(MT.normalizeMapConfig({}), { legenda: { nomes: { feicao: 'X' } } }).legenda.nomes.feicao], [{ dx: 0.1, dy: 0.1 }, 'X']);
 eq('base satélite e nenhum são aceitas', [MT.normalizeMapConfig({ mapa: { baseMap: 'satelite' } }).baseMap, MT.normalizeMapConfig({ mapa: { baseMap: 'nenhum' } }).baseMap], ['satelite', 'nenhum']);
 
 const aj = MT.mergeAjustes(c0, { norte: false, baseMap: 'satelite', camadasLigadas: [7, 'b'], destaque: { esmaecerEntorno: true }, lixo: 1 });

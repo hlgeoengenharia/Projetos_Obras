@@ -40,7 +40,9 @@
         comparacaoArea: { ativo: false, campo: '' },                          // área cadastral x área calculada
         situacao: { ativo: false },                                           // mapa de situação (localização) no canto
         quadriculado: { ativo: false, espacamento: 0 },                       // grade de coordenadas UTM (0 = automático)
-        anotacoes: []                                                         // textos livres no mapa: { id, lat, lng, texto }
+        anotacoes: [],                                                        // textos livres no mapa: { id, lat, lng, texto }
+        elementos: {},                                                        // posição dos elementos sobre o mapa (norte, escala, escalaTexto, projecao, legenda): deslocamento { dx, dy } em fração do tamanho do mapa
+        legenda: { nomes: {}, ocultos: [] }                                   // legenda editável: nomes trocados e itens ocultos, por chave ('feicao' | 'c:<camada>')
     };
     const BASE_MAPS = ['osm', 'satelite', 'nenhum'];
 
@@ -89,6 +91,8 @@
             comparacaoArea: normalizeComparacaoArea(src.comparacaoArea),
             situacao: { ativo: !!(src.situacao && src.situacao.ativo) },
             quadriculado: normalizeQuadriculado(src.quadriculado),
+            elementos: normalizeElementos(src.elementos),
+            legenda: normalizeLegenda(src.legenda),
             anotacoes: normalizeAnotacoes(src.anotacoes)
         };
     }
@@ -139,6 +143,37 @@
             .sort((a, b) => ((a.pos < 0 ? 1e6 : a.pos) - (b.pos < 0 ? 1e6 : b.pos)) || (a.i - b.i))
             .map(x => Object.assign({}, x.r, { lado: tx[x.r.id + ':lado'] || x.r.rotuloLado, confTexto: tx[x.r.id + ':conf'] || '', editados: ['lado', 'conf'].filter(k => tx[x.r.id + ':' + k]) }));
     }
+    const ELEMENTOS_MOVEIS = ['norte', 'escala', 'escalaTexto', 'projecao', 'legenda'];
+    function normalizeElementos(e) {
+        const out = {};
+        if (!e || typeof e !== 'object') return out;
+        ELEMENTOS_MOVEIS.forEach(k => {
+            const v = e[k];
+            if (!v || typeof v !== 'object') return;
+            const dx = Number(v.dx), dy = Number(v.dy);
+            if (!isFinite(dx) || !isFinite(dy) || v.dx === null || v.dy === null) return;
+            const a = Math.round(Math.max(-1, Math.min(1, dx)) * 10000) / 10000, b = Math.round(Math.max(-1, Math.min(1, dy)) * 10000) / 10000;
+            if (a !== 0 || b !== 0) out[k] = { dx: a, dy: b };
+        });
+        return out;
+    }
+
+    const LEG_KEY = /^(feicao|c:[A-Za-z0-9_.-]{1,64})$/;
+    function normalizeLegenda(x) {
+        x = x || {};
+        const nomes = {};
+        if (x.nomes && typeof x.nomes === 'object') {
+            Object.keys(x.nomes).slice(0, 60).forEach(k => {
+                if (!LEG_KEY.test(k) || typeof x.nomes[k] !== 'string') return;
+                const txt = x.nomes[k].replace(/[\r\n]+/g, ' ').trim().slice(0, 60);
+                if (txt) nomes[k] = txt;
+            });
+        }
+        const ocultos = [];
+        (Array.isArray(x.ocultos) ? x.ocultos : []).forEach(k => { if (typeof k === 'string' && LEG_KEY.test(k) && ocultos.indexOf(k) < 0 && ocultos.length < 60) ocultos.push(k); });
+        return { nomes, ocultos };
+    }
+
     const okLatLng = (p) => Array.isArray(p) && p.length === 2 && isFinite(Number(p[0])) && isFinite(Number(p[1])) && Math.abs(Number(p[0])) <= 90 && Math.abs(Number(p[1])) <= 180;
     function normalizeReferencia(x) {
         x = x || {};
@@ -1183,7 +1218,7 @@
 
     return {
         MAP_DEFAULTS, BASE_MAPS,
-        normalizeMapConfig, mergeAjustes, applyConfrontantes, nearestOnGeometry, nearestOnCamada, edgeOffsetAbove, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
+        normalizeMapConfig, mergeAjustes, normalizeElementos, normalizeLegenda, applyConfrontantes, nearestOnGeometry, nearestOnCamada, edgeOffsetAbove, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
         geometryBBox, bboxCenter, expandBBoxMeters, bboxIntersects, roundCoords, geomKind,
         normalizeTemporal, rasterDateInfo, fmtRasterDate, tileXY, tileUrl, probeZoom, rasterBBox, buildOrtofotoList, sortOrtofotos,
         COORD_SYSTEMS, normalizePontos, latLngToUtm, utmToLatLng, fmtGms, coordHeaders, coordCells, coordSystemLabel, azimuthDeg, fmtAzimuth, vertices, defaultPointTitle, pointRows,

@@ -47,6 +47,7 @@ const mapa = E('div', { id: 'map-wrap', r: R(100, 50, 600, 340) }, tile, rotulo,
 // ---------------------------------------------------------------- quais elementos o html2canvas ignora
 ok('rótulos, norte, escala, legenda, crédito e zoom são ignorados pelo html2canvas', [rotulo, norte, escala, brilho, oculto, E('div', { cls: 'leaflet-control-attribution' }), E('div', { id: 'map-info-bar' }), E('div', { cls: 'report-point' }), E('div', { cls: 'report-note' }), E('div', { cls: 'report-glabel' }), zoom, E('div', { cls: 'no-print x' })].every(MS.shouldIgnore));
 ok('tiles e vetores NÃO são ignorados', !MS.shouldIgnore(tile) && !MS.shouldIgnore(mapa) && !MS.shouldIgnore(E('div', { cls: 'leaflet-overlay-pane' })));
+ok('os quadros novos de escala aproximada e projeção também são texto sobre o mapa', ['map-escala-txt', 'map-proj-txt'].every(id => MS.isOverlay(E('div', { id })) && MS.shouldIgnore(E('div', { id }))));
 ok('só os elementos de texto contam como "sobreposição" (o zoom só é ignorado)', MS.isOverlay(rotulo) && !MS.isOverlay(zoom));
 
 // ---------------------------------------------------------------- desenho

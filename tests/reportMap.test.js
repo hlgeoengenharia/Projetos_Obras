@@ -92,7 +92,7 @@ const camadas = [
     { id: '1', name: 'Lotes <vizinhos>', color: '#ff0000', kind: 'polygon', features: [{ type: 'Feature', properties: {}, geometry: poly }], truncated: false },
     { id: '4', name: 'Linhas', color: '#00ff00', kind: 'line', features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[-34.84, -7.02], [-34.83, -7.01]] } }], truncated: true }
 ];
-const ids = ['map-north', 'map-info-bar', 'map-legend', 'map-sides-text', 'map-area-text', 'map-locator'];
+const ids = ['map-north', 'map-info-wrap', 'map-escala-txt', 'map-proj-txt', 'map-legend', 'map-sides-text', 'map-area-text', 'map-locator'];
 
 function build(config, geometry, extra) {
     const L = makeL();
@@ -118,7 +118,7 @@ ok('sem esmaecer por padrão', t.layersOf('polygon').length === 0);
 ok('nenhuma camada vizinha ligada por padrão', t.layersOf('geojson').length === 1);
 ok('escala gráfica (metros) ligada', Array.from(t.map.controls).some(c => c.kind === 'scale' && c.o.metric === true && c.o.imperial === false));
 ok('norte visível', t.doc.els['map-north'].style.display === '');
-ok('barra de info traz escala aproximada e a projeção SIRGAS 2000 UTM 25S', /Escala aprox\. 1:/.test(t.doc.els['map-info-bar'].innerHTML) && /SIRGAS 2000 \/ UTM zona 25S/.test(t.doc.els['map-info-bar'].innerHTML));
+ok('escala aproximada e projeção SIRGAS 2000 UTM 25S, cada uma no seu quadro', /Escala aprox\. 1:/.test(t.doc.els['map-escala-txt'].textContent) && /SIRGAS 2000 \/ UTM zona 25S/.test(t.doc.els['map-proj-txt'].textContent) && t.doc.els['map-info-wrap'].style.display === '');
 ok('legenda mostra a feição do relatório', /Feição do relatório/.test(t.doc.els['map-legend'].innerHTML));
 eq('projeção do controlador', t.ctl.projection.label, 'SIRGAS 2000 / UTM zona 25S');
 ok('notifica a mudança inicial', t.changes.length === 1);
@@ -182,16 +182,16 @@ ok('com "camadas vizinhas" desativadas no modelo nada é desenhado', t.layersOf(
 t.ctl.setConfig({ norte: false, escala: false, projecao: false });
 ok('norte oculto', t.doc.els['map-north'].style.display === 'none');
 ok('sem escala: sem controle de escala', !Array.from(t.map.controls).some(c => c.kind === 'scale'));
-ok('sem escala e sem projeção: barra de info oculta', t.doc.els['map-info-bar'].style.display === 'none');
+ok('sem escala e sem projeção: os dois quadros e o conjunto ficam ocultos', ['map-escala-txt', 'map-proj-txt', 'map-info-wrap'].every(i => t.doc.els[i].style.display === 'none'));
 t.ctl.setConfig({ projecao: true });
-ok('só projeção: aparece a projeção e não a escala', /SIRGAS/.test(t.doc.els['map-info-bar'].innerHTML) && !/Escala aprox/.test(t.doc.els['map-info-bar'].innerHTML));
+ok('só projeção: aparece a projeção e não a escala', t.doc.els['map-proj-txt'].style.display === '' && t.doc.els['map-escala-txt'].style.display === 'none' && /SIRGAS/.test(t.doc.els['map-proj-txt'].textContent));
 t.map.zoom = 17; t.map.handlers.zoomend();
 t.ctl.setConfig({ escala: true });
 ok('escala acompanha o zoom (zoom 17 ≈ 2 vezes a do 18)', (() => {
-    const m = /1:([\d.]+)/.exec(t.doc.els['map-info-bar'].innerHTML);
+    const m = /1:([\d.]+)/.exec(t.doc.els['map-escala-txt'].textContent);
     const n17 = parseInt(m[1].replace(/\./g, ''), 10);
     t.map.zoom = 18; t.map.handlers.zoomend();
-    const m2 = /1:([\d.]+)/.exec(t.doc.els['map-info-bar'].innerHTML);
+    const m2 = /1:([\d.]+)/.exec(t.doc.els['map-escala-txt'].textContent);
     const n18 = parseInt(m2[1].replace(/\./g, ''), 10);
     return n17 > n18 * 1.8 && n17 < n18 * 2.2;
 })());
@@ -628,6 +628,74 @@ t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefin
     v.ctl.startDistMeasure();
     v.layersOf('circle').filter(c => c.args.o.className === 'report-vertex-handle')[0].handlers.click({ latlng: { lat: -7.02, lng: -34.84 } });
     eq('clique num vértice durante a medição vale como o primeiro ponto (e não marca o ponto)', [v.ctl.measureState(), v.ctl.getConfig().pontos.ordem], [2, []]);
+}
+
+// ---------------------------------------------------------------- elementos móveis e legenda editável
+{
+    const eventos = {};
+    const docE = makeDoc(ids);
+    docE.addEventListener = (n, fn) => { eventos[n] = fn; };
+    docE.removeEventListener = (n) => { delete eventos[n]; };
+    // elementos com cara de DOM: guardam os ouvintes e têm retângulo
+    ['map-north', 'map-escala-txt', 'map-proj-txt', 'map-legend'].forEach((i, k) => { const e = docE.els[i]; e.listeners = {}; e.addEventListener = (n, fn) => { e.listeners[n] = fn; }; e.getBoundingClientRect = () => ({ left: 500, top: 20, right: 560, bottom: 60, width: 60, height: 40 }); });
+    const b = build({ mapa: { camadasLigadas: ['1'] } }, undefined, { doc: docE });
+    b.map.cont.clientWidth = 600; b.map.cont.clientHeight = 300;
+    b.map.cont.getBoundingClientRect = () => ({ left: 100, top: 0, right: 700, bottom: 300, width: 600, height: 300 });
+    b.ctl.setConfig({});
+    const norte = docE.els['map-north'];
+    ok('os elementos passam a aceitar arrasto (norte, texto da escala, projeção e legenda)', ['map-north', 'map-escala-txt', 'map-proj-txt', 'map-legend'].every(i => typeof docE.els[i].listeners.pointerdown === 'function'));
+    // arrastar o norte 50 px para a esquerda e 30 para baixo
+    norte.listeners.pointerdown({ clientX: 520, clientY: 30, stopPropagation() {}, preventDefault() {}, target: {} });
+    eventos.pointermove({ clientX: 470, clientY: 60 });
+    eq('durante o arrasto o elemento acompanha o ponteiro', norte.style.transform, 'translate(-50px,30px)');
+    eventos.pointerup({});
+    eq('ao soltar, o deslocamento é guardado em fração do mapa (600 × 300)', [b.ctl.getConfig().elementos.norte, Object.keys(eventos).filter(n => n !== 'keydown')], [{ dx: -0.0833, dy: 0.1 }, []]);
+    eq('posição aplicada em px a partir da fração', norte.style.transform, 'translate(-50px,30px)');
+    // não sai do mapa
+    norte.listeners.pointerdown({ clientX: 520, clientY: 30, stopPropagation() {}, preventDefault() {}, target: {} });
+    eventos.pointermove({ clientX: 5000, clientY: -5000 });
+    eventos.pointerup({});
+    eq('arrastar para fora do mapa trava na borda (o quadro de 500-560 x 20-60 só anda 140 px à direita e 20 px acima do que já tinha)', norte.style.transform, 'translate(90px,10px)');
+    // reaplica ao redesenhar e liga/desliga sem perder a posição
+    b.ctl.setConfig({ norte: false });
+    b.ctl.setConfig({ norte: true });
+    ok('desligar e ligar de novo mantém a posição', /translate\(/.test(norte.style.transform));
+    b.ctl.setElemento('projecao', 0.1, -0.05);
+    eq('posição do texto da projeção', docE.els['map-proj-txt'].style.transform, 'translate(60px,-15px)');
+    b.ctl.setElemento('projecao', 0, 0);
+    eq('voltar a (0, 0) tira a posição guardada', [b.ctl.getConfig().elementos.projecao, docE.els['map-proj-txt'].style.transform], [undefined, '']);
+    b.ctl.setElemento('lixo', 0.5, 0.5);
+    ok('elemento desconhecido é ignorado', b.ctl.getConfig().elementos.lixo === undefined);
+    b.ctl.resetElementos();
+    eq('restaurar posições', [b.ctl.getConfig().elementos, norte.style.transform], [{}, '']);
+    ok('as posições vão junto no que se salva', typeof b.ctl.snapshot().elementos === 'object');
+
+    // legenda
+    const legend = docE.els['map-legend'];
+    ok('legenda: itens com chave (feição e camada ligada), identificados por data-leg', /data-leg="feicao"/.test(legend.innerHTML) && /data-leg="c:1"/.test(legend.innerHTML));
+    eq('itens da legenda para o painel', b.ctl.legendItems().map(i => [i.key, i.nome, i.oculto]), [['feicao', 'Feição do relatório', false], ['c:1', 'Lotes <vizinhos>', false]]);
+    b.ctl.renameLegend('c:1', '  Lotes da quadra  ');
+    ok('renomear um item da legenda (nome limpo e escapado no HTML)', /Lotes da quadra/.test(legend.innerHTML) && !/Lotes &lt;vizinhos&gt;/.test(legend.innerHTML));
+    b.ctl.renameLegend('c:1', '<b>x</b>');
+    ok('nome digitado é escapado', /&lt;b&gt;x&lt;\/b&gt;/.test(legend.innerHTML) && !/<b>x/.test(legend.innerHTML));
+    b.ctl.renameLegend('c:1', 'Lotes <vizinhos>');
+    eq('nome igual ao original volta ao original (nada guardado)', b.ctl.getConfig().legenda.nomes, {});
+    b.ctl.toggleLegend('feicao', false);
+    ok('ocultar um item tira só ele da legenda', !/data-leg="feicao"/.test(legend.innerHTML) && /data-leg="c:1"/.test(legend.innerHTML) && b.ctl.legendItems()[0].oculto === true);
+    b.ctl.toggleLegend('c:1', false);
+    eq('todos ocultos: legenda some', legend.style.display, 'none');
+    b.ctl.resetLegenda();
+    ok('restaurar legenda', legend.style.display === '' && /data-leg="feicao"/.test(legend.innerHTML) && b.ctl.getConfig().legenda.ocultos.length === 0);
+    eq('chave desconhecida é ignorada', (b.ctl.renameLegend('c:zzz', 'x'), b.ctl.getConfig().legenda.nomes), {});
+    // dois cliques no item: campo de texto no lugar do nome
+    const span = { textContent: 'Feição do relatório', children: [], appendChild(c) { this.children.push(c); } };
+    const row = { getAttribute: () => 'feicao', querySelector: () => span };
+    legend.listeners.dblclick({ target: { closest: () => row } });
+    const campo = span.children[0];
+    ok('dois cliques abrem o campo de texto com o nome atual', !!campo && campo.tag === 'input' && campo.value === 'Feição do relatório' && campo.focused === true);
+    campo.value = 'Imóvel objeto';
+    campo.listeners.keydown({ key: 'Enter', stopPropagation() {} });
+    ok('Enter grava o nome direto na legenda', b.ctl.getConfig().legenda.nomes.feicao === 'Imóvel objeto' && /Imóvel objeto/.test(legend.innerHTML));
 }
 
 // ---------------------------------------------------------------- quadriculado

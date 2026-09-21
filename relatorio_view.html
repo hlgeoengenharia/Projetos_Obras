@@ -122,7 +122,10 @@
         /* Mini-mapa: sobreposições impressas junto com o mapa */
         .report-map-overlay { position: absolute; z-index: 500; pointer-events: none; }
         #map-north { top: 8px; right: 8px; background: rgba(0,0,0,.72); color: #fff; padding: 4px 6px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; font: 700 10px monospace; line-height: 1; }
-        #map-info-bar { bottom: 34px; left: 8px; background: rgba(0,0,0,.72); color: #fff; padding: 3px 7px; border-radius: 5px; font: 9px monospace; display: flex; gap: 6px; align-items: center; max-width: 70%; flex-wrap: wrap; }
+        #map-info-wrap { bottom: 34px; left: 8px; display: flex; gap: 4px; align-items: center; max-width: 70%; flex-wrap: wrap; }
+        .map-chip { background: rgba(0,0,0,.72); color: #fff; padding: 3px 7px; border-radius: 5px; font: 9px monospace; pointer-events: auto; cursor: move; touch-action: none; }
+        #map-north, #map-legend, .leaflet-control-scale { pointer-events: auto; cursor: move; touch-action: none; }
+        #map-legend [data-leg] span { cursor: text; }
         #map-legend { bottom: 22px; right: 8px; background: rgba(255,255,255,.92); border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 7px; font: 9px sans-serif; color: #0f172a; max-width: 45%; }
         #map-legend div { display: flex; align-items: center; gap: 5px; line-height: 1.5; }
         #map-legend i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; border: 1px solid rgba(0,0,0,.35); }
@@ -898,7 +901,7 @@
                             <div id="map-wrap" class="relative rounded-lg overflow-hidden border border-slate-300 shadow-xs" style="height: ${mapPx}px;">
                                 <div id="interactive-report-map" class="w-full bg-slate-200 z-0" style="height: ${mapPx}px;"></div>
                                 <div id="map-north" class="report-map-overlay"><span class="material-symbols-outlined" style="font-size:18px;color:#fbbf24">navigation</span><span>N</span></div>
-                                <div id="map-info-bar" class="report-map-overlay"></div>
+                                <div id="map-info-wrap" class="report-map-overlay"><div id="map-escala-txt" class="map-chip" title="Arraste para mover"></div><div id="map-proj-txt" class="map-chip" title="Arraste para mover"></div></div>
                                 <div id="map-legend" class="report-map-overlay"></div>
                                 <div id="map-locator" class="report-map-overlay"></div>
                             </div>
@@ -1654,6 +1657,7 @@
                         <button type="button" title="Descer" onclick="mapPanelConfMover('${esc(r.id)}', 1)" ${i === confRows.length - 1 ? 'disabled' : ''} style="border:0;background:none;cursor:pointer">▼</button>
                     </div>`).join('')}</div>
                 ${(cfg.confrontantes.ordem.length || Object.keys(cfg.confrontantes.textos).length) ? '<button type="button" class="act" style="margin-top:4px" onclick="mapPanelConfReset()">Restaurar nomes e ordem</button>' : ''}` : '';
+            const legItens = mapController.legendItems();
             const msDist = mapController.measureState();
             const distRows = mapController.distanceRows();
             const distListHtml = distRows.length ? `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:4px;margin-top:4px">${distRows.map(r => `
@@ -1780,6 +1784,17 @@
                     ${chk('mp-norte', 'Norte', cfg.norte, "mapPanelSet('norte', this.checked)")}
                     ${chk('mp-escala', 'Escala', cfg.escala, "mapPanelSet('escala', this.checked)")}
                     ${chk('mp-proj', 'Sistema de projeção', cfg.projecao, "mapPanelSet('projecao', this.checked)")}
+                    <div style="color:#64748b;line-height:1.35;margin:3px 0">Arraste, no mapa, o norte, a escala (barra e texto), a projeção e a legenda para mudar de lugar.</div>
+                    ${Object.keys(cfg.elementos).length ? '<button type="button" class="act" style="margin-bottom:6px" onclick="mapPanelElementosReset()">Restaurar posições</button>' : ''}
+                    <div style="font-weight:700;margin:6px 0 2px">Legenda</div>
+                    ${legItens.length ? legItens.map(i => `
+                        <div style="display:flex;align-items:center;gap:5px;padding:2px 0">
+                            <input type="checkbox" ${i.oculto ? '' : 'checked'} title="Mostrar na legenda" onchange="mapPanelLegendaVer('${esc(i.key)}', this.checked)">
+                            <i style="display:inline-block;width:12px;height:8px;border-radius:2px;background:${esc(i.cor)};flex:none"></i>
+                            <input type="text" value="${esc(i.nome)}" maxlength="60" onchange="mapPanelLegendaNome('${esc(i.key)}', this.value)" style="flex:1;min-width:0;padding:2px 5px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px">
+                        </div>`).join('') : '<div style="color:#64748b">Sem itens: ligue o destaque da feição ou uma camada ativa.</div>'}
+                    <div style="color:#64748b;line-height:1.35;margin:3px 0">Dois cliques num item da legenda, no mapa, também renomeiam (vazio restaura o nome original).</div>
+                    ${(Object.keys(cfg.legenda.nomes).length || cfg.legenda.ocultos.length) ? '<button type="button" class="act" onclick="mapPanelLegendaReset()">Restaurar legenda</button>' : ''}
                     </div>
                     <h4 data-sec-h="exportar" class="${secH('exportar')}" onclick="mapPanelSecao('exportar')">Exportar<span class="chev">&#9662;</span></h4><div data-sec="exportar" class="sec-body" style="display:${secD('exportar')}">
                     <button type="button" class="act" onclick="exportarMapaPng()">Salvar o mapa como imagem (PNG)</button>
@@ -1852,6 +1867,11 @@
         function mapPanelConfMover(id, dir) { if (mapController) { mapController.moveConfrontante(id, dir); renderMapToolsPanel(); } }
         function mapPanelConfReset() { if (mapController) { mapController.resetConfrontantes(); renderMapToolsPanel(); } }
         function mapPanelRotulosReset() { if (mapController) { mapController.resetRotulos(); renderMapToolsPanel(); } }
+
+        function mapPanelElementosReset() { if (mapController) { mapController.resetElementos(); renderMapToolsPanel(); } }
+        function mapPanelLegendaVer(key, on) { if (mapController) { mapController.toggleLegend(key, on); renderMapToolsPanel(); } }
+        function mapPanelLegendaNome(key, txt) { if (mapController) { mapController.renameLegend(key, txt); renderMapToolsPanel(); } }
+        function mapPanelLegendaReset() { if (mapController) { mapController.resetLegenda(); renderMapToolsPanel(); } }
 
         function mapPanelMedirDist() {
             if (!mapController) return;
