@@ -11,6 +11,13 @@ Sempre teste as alterações no seu servidor local antes de subir.
 *   Dica: Use o Inspetor do Navegador (F12) para testar o layout em modo celular.
 *   Rode a bateria de testes: `node test_sistema_qa.js`. Tudo deve terminar em "TODAS AS VERIFICAÇÕES PASSARAM". (O `git commit` também roda isso sozinho e **cancela o commit se algum teste falhar**.)
 
+### Os 3 arquivos de verificação (todos continuam valendo)
+| Arquivo | Para que serve |
+|---|---|
+| `test_sistema_qa.js` | A auditoria em si: sintaxe dos arquivos, permissões por perfil, regressões conhecidas e todos os testes da pasta `tests/`. É o que decide se está tudo certo. |
+| `verificar_sistema.bat` | Atalho: dois cliques roda a auditoria e mostra SUCESSO ou ERRO. Use quando quiser conferir sem commitar. |
+| `pre-commit` | Cópia do "guarda" do git: roda a auditoria em cada `git commit` e cancela o commit se algo falhar. O git só usa a cópia que está em `.git/hooks/pre-commit` (essa pasta não vai para o GitHub). Se clonar o projeto em outro computador, copie este arquivo para lá: `copy pre-commit .git\hooks\pre-commit`. |
+
 ## 2. Preparando o Envio (Git)
 Abra o terminal na pasta raiz do projeto (`Projetos_Obras`).
 

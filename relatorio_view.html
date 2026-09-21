@@ -124,6 +124,9 @@
         #map-north { top: 8px; right: 8px; background: rgba(0,0,0,.72); color: #fff; padding: 4px 6px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; font: 700 10px monospace; line-height: 1; }
         #map-info-wrap { bottom: 34px; left: 8px; display: flex; gap: 4px; align-items: center; max-width: 70%; flex-wrap: wrap; }
         .map-chip { background: rgba(0,0,0,.72); color: #fff; padding: 3px 7px; border-radius: 5px; font: 9px monospace; pointer-events: auto; cursor: move; touch-action: none; }
+        /* ferramenta de medição ativa: nada no mapa reage ao mouse (só o próprio mapa), e o cursor é a mira */
+        .report-drawing, .report-drawing * { cursor: crosshair !important; }
+        .report-drawing .leaflet-interactive, .report-drawing .leaflet-marker-icon, .report-drawing .leaflet-control-scale { pointer-events: none !important; }
         /* alça na borda inferior do mapa: arrastar muda a altura dele na folha */
         #map-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 12px; cursor: ns-resize; z-index: 700; touch-action: none; display: flex; justify-content: center; align-items: flex-end; background: linear-gradient(to top, rgba(15,23,42,.30), transparent); opacity: 0; transition: opacity .15s; }
         #map-wrap:hover #map-resize, #map-resize.ativo { opacity: 1; }
@@ -1768,6 +1771,7 @@
                         <button type="button" title="Descer" onclick="mapPanelConfMover('${esc(r.id)}', 1)" ${i === confRows.length - 1 ? 'disabled' : ''} style="border:0;background:none;cursor:pointer">▼</button>
                     </div>`).join('')}</div>
                 ${(cfg.confrontantes.ordem.length || Object.keys(cfg.confrontantes.textos).length) ? '<button type="button" class="act" style="margin-top:4px" onclick="mapPanelConfReset()">Restaurar nomes e ordem</button>' : ''}` : '';
+            const corRow = (grupo, rotulo, valor) => '<label class="row" title="A cor do texto ganha um contorno que contrasta, para ler sobre o satélite">' + rotulo + ' <input type="color" value="' + esc(valor) + '" onchange="mapPanelCor(\'' + grupo + '\', this.value)" style="width:34px;height:22px;padding:0;border:1px solid #cbd5e1;margin-left:auto"></label>';
             const legItens = mapController.legendItems();
             const ds = mapController.drawState();
             const medRows = mapController.medicaoRows();
@@ -1800,6 +1804,7 @@
             const ferramentasHtml = '<div style="font-weight:700;margin-bottom:3px">Ferramentas de medição</div>' +
                 '<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">' + btnFerr('ponto', 'Coordenadas do Ponto') + btnFerr('linha', 'Distância (m)') + btnFerr('area', 'Área (m²)') + '<button type="button" class="act" style="' + (consultaAberta ? 'background:#d1fae5;border-color:#10b981;' : '') + '" onclick="mapPanelConsulta()">Consultar Coordenadas</button></div>' +
                 chk('mp-med-adr', 'Aderência (gruda nos contornos)', cfg.medicoes.aderencia, "mapPanelMedicoes('aderencia', this.checked)") +
+                corRow('medicoes', 'Cor das medições (linhas, áreas, pontos e textos)', cfg.medicoes.cor) +
                 dicaDesenho + consultaHtml + medRows.map(linhaMed).join('') +
                 (medRows.length ? '<button type="button" class="act" style="margin-top:5px" onclick="mapPanelMedLimpar()">Limpar medições</button>' : '') +
                 '<div style="color:#64748b;line-height:1.35;margin:4px 0">Dois cliques no valor, no mapa, editam o texto; arraste para mover; ↻ para girar.</div>' +
@@ -1813,6 +1818,7 @@
                     </div>`).join('')}</div><div style="color:#64748b;line-height:1.35;margin-top:3px">Dois cliques no valor, no mapa, para editar; arraste para mover; ↻ para girar.</div>` : '';
             const refMedirHtml = (cfg.referencia.ativo && cfg.referencia.camada) ? `
                 <div style="color:#64748b;line-height:1.35;margin:2px 0 3px">Meça a distância entre um ponto qualquer da feição e um ponto qualquer da camada: clique no mapa primeiro na feição e depois na camada (o clique gruda no contorno mais próximo).</div>
+                ${corRow('referencia', 'Cor da linha e do texto da distância', cfg.referencia.cor)}
                 <button type="button" class="act" onclick="mapPanelMedirDist()">${msDist ? 'Cancelar a medição' : 'Medir distância no mapa'}</button>
                 ${msDist === 1 ? '<div style="color:#b45309;margin:3px 0">Clique num ponto da feição.</div>' : (msDist === 2 ? '<div style="color:#b45309;margin:3px 0">Agora clique num ponto da camada de referência.</div>' : '')}
                 ${distListHtml}` : '';
@@ -1820,6 +1826,7 @@
                 ${chkN('mp-x-rot', 'Rótulos nas feições vizinhas', cfg.rotulos.ativo, "mapPanelExtra('rotulos', 'ativo', this.checked)", !temRotulo, nis('rotulos', '', cfg.rotulos.estilo))}
                 ${(cfg.rotulos.ativo && temNome) ? sel("mapPanelExtra('rotulos', 'campo', this.value)", `<option value="rotulo" ${cfg.rotulos.campo === 'rotulo' ? 'selected' : ''}>Mostrar Quadra/Lote</option><option value="titulo" ${cfg.rotulos.campo === 'titulo' ? 'selected' : ''}>Mostrar o nome principal</option>`) : ''}
                 ${!temRotulo ? '<div style="color:#64748b;margin-bottom:3px">Sem rótulos nas camadas ativas (ou sem permissão de ver os dados delas).</div>' : ''}
+                ${cfg.rotulos.ativo && temRotulo ? corRow('rotulos', 'Cor dos rótulos', cfg.rotulos.cor) : ''}
                 ${cfg.rotulos.ativo && temRotulo ? `<div style="color:#64748b;line-height:1.35;margin:2px 0 3px">Arraste um rótulo para mover e use o ícone ↻ (ao passar o mouse) para girar.</div>${Object.keys(cfg.rotulos.itens).length ? '<button type="button" class="act" onclick="mapPanelRotulosReset()">Restaurar posição dos rótulos</button>' : ''}` : ''}
             `;
             const confTabelaHtml = `
@@ -1931,6 +1938,7 @@
                     </div>
 <h4 data-sec-h="medidas" class="${secH('medidas')}" onclick="mapPanelSecao('medidas')">Medição da feição<span class="chev">&#9662;</span></h4><div data-sec="medidas" class="sec-body" style="display:${secD('medidas')}">
                     ${chkN('mp-med', 'Mostrar medidas no mapa', cfg.medidas.ativo, "mapPanelMedidas('ativo', this.checked)", false, nis('medidas', 'todos', estTodos))}
+                    ${corRow('medidas', 'Cor dos textos das medidas', cfg.medidas.cor)}
                     ${chkN('mp-med-lados', kind === 'line' ? 'Trechos' : 'Lados', cfg.medidas.lados, "mapPanelMedidas('lados', this.checked)", kind === 'point' || mapController.ladosOmitidos, nis('medidas', 'lados', estM.lados))}
                     ${chkN('mp-med-total', kind === 'polygon' ? 'Área' : (kind === 'line' ? 'Comprimento total' : 'Coordenada'), cfg.medidas.total, "mapPanelMedidas('total', this.checked)", false, nis('medidas', 'total', estM.total))}
                     ${chkN('mp-med-perim', 'Perímetro', cfg.medidas.perimetro, "mapPanelMedidas('perimetro', this.checked)", kind !== 'polygon', nis('medidas', 'perimetro', estM.perimetro))}
@@ -1938,6 +1946,7 @@
                     <button type="button" class="act" onclick="mapPanelResetMedidas()">Restaurar medidas calculadas</button>
                     </div>
                     <h4 data-sec-h="pontos" class="${secH('pontos')}" onclick="mapPanelSecao('pontos')">Pontos nos vértices<span class="chev">&#9662;</span></h4><div data-sec="pontos" class="sec-body" style="display:${secD('pontos')}">
+                    ${corRow('pontos', 'Cor dos pontos e dos nomes', cfg.pontos.cor)}
                     ${chkN('mp-pts', 'Marcar pontos nos vértices', cfg.pontos.ativo, "mapPanelPontos('ativo', this.checked)", mapController.vertexCount === 0, nis('pontos', '', cfg.pontos.estilo))}
                     <div style="color:#64748b;line-height:1.35;margin:2px 0 4px">Clique num vértice (círculo branco) para marcar. O nome do ponto pode ser arrastado, girado (ícone ↻) e renomeado com dois cliques. A tabela sai logo abaixo do mapa; dois cliques em qualquer texto dela para editar.${mapController.verticesOmitidos ? ' <span style="color:#b45309">Mais de 400 vértices: marcadores omitidos.</span>' : ''}</div>
                     <select onchange="mapPanelPontos('sistema', this.value)" style="width:100%;padding:5px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:3px">
@@ -2111,6 +2120,12 @@
             renderMapToolsPanel();
         }
         function mapPanelConcluirMedicao() { if (mapController) { mapController.finishDraw(); renderMapToolsPanel(); } }
+        // cor dos textos e desenhos: grupo = medidas | pontos | medicoes | referencia | rotulos
+        function mapPanelCor(grupo, valor) {
+            if (!mapController || !/^(medidas|pontos|medicoes|referencia|rotulos)$/.test(grupo)) return;
+            mapController.setConfig({ [grupo]: { cor: valor } });
+            renderMapToolsPanel();
+        }
         function mapPanelMedicoes(k, v) { if (mapController) { mapController.setConfig({ medicoes: { [k]: v } }); renderMapToolsPanel(); } }
         function mapPanelMedNome(id, txt) { if (mapController) { mapController.setMedicaoNome(id, txt); renderMapToolsPanel(); } }
         function mapPanelMedRemover(id) { if (mapController) { mapController.removeMedicao(id); renderMapToolsPanel(); } }

@@ -25,6 +25,17 @@
         e = e || {};
         return 'font-weight:' + (e.n ? 700 : 400) + ';font-style:' + (e.i ? 'italic' : 'normal') + ';text-decoration:' + (e.s ? 'underline' : 'none') + ';';
     }
+    /** Contorno do texto que contrasta com a cor escolhida: cor clara ganha contorno escuro e vice-versa (para ler sobre satélite). */
+    function haloDe(cor) {
+        const h = String(cor || '').replace('#', '');
+        const lum = h.length === 6 ? (0.299 * parseInt(h.slice(0, 2), 16) + 0.587 * parseInt(h.slice(2, 4), 16) + 0.114 * parseInt(h.slice(4, 6), 16)) / 255 : 0;
+        const c = lum > 0.62 ? '#000' : '#fff';
+        return '0 0 2px ' + c + ', 0 0 2px ' + c + ', 0 0 3px ' + c;
+    }
+    /** CSS da cor do texto (e do contorno). Com padrao, a cor padrão não escreve nada (vale o CSS da folha). */
+    function corTexto(cor, padrao) {
+        return cor && cor !== padrao ? 'color:' + cor + ';text-shadow:' + haloDe(cor) + ';' : '';
+    }
     function labelTransform(deg) { return 'translate(-50%,-50%) rotate(' + (Number(deg) || 0) + 'deg)'; }
     const MOVEIS = ['norte', 'escala', 'escalaTexto', 'projecao', 'legenda'];
     const POINT_LABEL_OFFSET = [16, -13]; // px: onde o nome do ponto nasce em relação ao vértice
@@ -130,7 +141,7 @@
                 const aj = cfg.rotulos.itens[id] || {};
                 const ct = aj.lat !== undefined ? [aj.lng, aj.lat] : MT.bboxCenter(bb);
                 const rot = aj.rot !== undefined ? aj.rot : 0;
-                const html = '<span class="report-nlabel-l" style="transform:' + labelTransform(rot) + ';' + estiloCss(cfg.rotulos.estilo) + '" title="Arraste para mover">' + escapeHtml(x.properties[key]) + ROT_HANDLE + '</span>';
+                const html = '<span class="report-nlabel-l" style="transform:' + labelTransform(rot) + ';' + estiloCss(cfg.rotulos.estilo) + corTexto(cfg.rotulos.cor, MT.MAP_DEFAULTS.rotulos.cor) + '" title="Arraste para mover">' + escapeHtml(x.properties[key]) + ROT_HANDLE + '</span>';
                 const icon = L.divIcon({ className: 'report-nlabel', html: html, iconSize: [0, 0] });
                 const mk = L.marker([ct[1], ct[0]], { icon: icon, draggable: true, keyboard: false, zIndexOffset: 900 });
                 mk.addTo(map);
@@ -195,6 +206,13 @@
 
         // ------------------------------------------------------------ medidas (rótulos editáveis e arrastáveis)
         function notify() { if (opts.onChange) opts.onChange(JSON.parse(JSON.stringify(cfg))); }
+
+        /** Cor do texto de uma medida: medições livres e trechos (medicoes), distância até a camada (referencia) ou medidas da feição (medidas). */
+        function corDoItem(it) {
+            if (/^(med|mseg):/.test(it.id)) return corTexto(cfg.medicoes.cor, null);
+            if (/^dist:/.test(it.id)) return corTexto(cfg.referencia.cor, null);
+            return corTexto(cfg.medidas.cor, MT.MAP_DEFAULTS.medidas.cor);
+        }
 
         function visibleMeasures() {
             const m = cfg.medidas;
@@ -354,7 +372,7 @@
                 const off = p || !it.off ? [0, 0] : it.off; // depois de arrastado, o texto fica exatamente onde foi solto
                 const rot = cfg.rotacoes[it.id] !== undefined ? cfg.rotacoes[it.id] : (it.ang || 0);
                 const dica = it.editado ? 'Editado (calculado: ' + it.padrao + ')' : 'Duplo clique para editar • arraste para mover';
-                const html = '<span class="report-measure-label' + (it.editado ? ' edited' : '') + '" style="left:' + off[0] + 'px;top:' + (it.dy + off[1]) + 'px;transform:' + labelTransform(rot) + ';' + estiloCss(cfg.medidas.estilo[it.grupo]) + '" title="' + escapeHtml(dica) + '">' + escapeHtml(it.texto) + ROT_HANDLE + '</span>';
+                const html = '<span class="report-measure-label' + (it.editado ? ' edited' : '') + '" style="left:' + off[0] + 'px;top:' + (it.dy + off[1]) + 'px;transform:' + labelTransform(rot) + ';' + estiloCss(cfg.medidas.estilo[it.grupo]) + corDoItem(it) + '" title="' + escapeHtml(dica) + '">' + escapeHtml(it.texto) + ROT_HANDLE + '</span>';
                 const icon = L.divIcon({ className: 'report-measure', html: html, iconSize: [0, 0] });
                 const mk = L.marker(pos, { icon: icon, draggable: true, keyboard: false, zIndexOffset: 1000 });
                 mk.addTo(map);
@@ -385,29 +403,28 @@
         }
 
         // ------------------------------------------------------------ ferramentas de medição: ponto, distância e área
-        const COR_MED = '#0e7490';
         function clearMedLayers() { state.mlayers.forEach(l => map.removeLayer(l)); state.mlayers = []; }
         function addMedLayer(l) { l.addTo(map); state.mlayers.push(l); }
         function applyMedicoes() {
             clearMedLayers();
             cfg.medicoes.itens.forEach(m => {
-                if (m.tipo === 'ponto') addMedLayer(L.circleMarker(m.pts[0], { radius: 6, color: '#ffffff', weight: 2, fillColor: COR_MED, fillOpacity: 1, interactive: false }));
+                if (m.tipo === 'ponto') addMedLayer(L.circleMarker(m.pts[0], { radius: 6, color: '#ffffff', weight: 2, fillColor: cfg.medicoes.cor, fillOpacity: 1, interactive: false }));
                 else if (m.tipo === 'linha') {
-                    addMedLayer(L.polyline(m.pts, { color: COR_MED, weight: 2.5, interactive: false }));
+                    addMedLayer(L.polyline(m.pts, { color: cfg.medicoes.cor, weight: 2.5, interactive: false }));
                     // número de cada vértice da linha (1, 2, 3...), ao lado de uma bolinha
                     m.pts.forEach((p, k) => {
-                        const html = '<span class="report-point-dot" style="background:' + COR_MED + ';box-shadow:0 0 0 1px #164e63"></span><span class="report-point-label" style="left:10px;top:-10px;transform:translate(-50%,-50%);font-weight:700;color:' + COR_MED + '">' + (k + 1) + '</span>';
+                        const html = '<span class="report-point-dot" style="background:' + cfg.medicoes.cor + ';box-shadow:0 0 0 1px #164e63"></span><span class="report-point-label" style="left:10px;top:-10px;transform:translate(-50%,-50%);font-weight:700;color:' + cfg.medicoes.cor + ';text-shadow:' + haloDe(cfg.medicoes.cor) + '">' + (k + 1) + '</span>';
                         addMedLayer(L.marker(p, { icon: L.divIcon({ className: 'report-point', html: html, iconSize: [0, 0] }), interactive: false, keyboard: false, zIndexOffset: 1300 }));
                     });
-                } else addMedLayer(L.polygon(m.pts, { color: COR_MED, weight: 2.5, fillColor: COR_MED, fillOpacity: 0.2, interactive: false }));
+                } else addMedLayer(L.polygon(m.pts, { color: cfg.medicoes.cor, weight: 2.5, fillColor: cfg.medicoes.cor, fillOpacity: 0.2, interactive: false }));
             });
             // desenho em andamento: linha/polígono provisório com os cliques dados e o ponto sob o mouse
             const d = state.draw;
             if (d && d.pts.length) {
                 const seq = d.hover ? d.pts.concat([d.hover]) : d.pts;
-                if (d.tipo === 'area' && seq.length >= 3) addMedLayer(L.polygon(seq, { color: COR_MED, weight: 2, dashArray: '5 4', fillColor: COR_MED, fillOpacity: 0.12, interactive: false }));
-                else if (seq.length >= 2) addMedLayer(L.polyline(seq, { color: COR_MED, weight: 2, dashArray: '5 4', interactive: false }));
-                d.pts.forEach(p => addMedLayer(L.circleMarker(p, { radius: 3.5, color: COR_MED, weight: 1.5, fillColor: '#a5f3fc', fillOpacity: 1, interactive: false })));
+                if (d.tipo === 'area' && seq.length >= 3) addMedLayer(L.polygon(seq, { color: cfg.medicoes.cor, weight: 2, dashArray: '5 4', fillColor: cfg.medicoes.cor, fillOpacity: 0.12, interactive: false }));
+                else if (seq.length >= 2) addMedLayer(L.polyline(seq, { color: cfg.medicoes.cor, weight: 2, dashArray: '5 4', interactive: false }));
+                d.pts.forEach(p => addMedLayer(L.circleMarker(p, { radius: 3.5, color: cfg.medicoes.cor, weight: 1.5, fillColor: '#a5f3fc', fillOpacity: 1, interactive: false })));
             }
         }
         function drawChanged() { applyMedicoes(); if (opts.onMeasureState) opts.onMeasureState(state.draw ? state.draw.pts.length : 0); }
@@ -447,7 +464,7 @@
             clearDistLines();
             if (!cfg.referencia.ativo) return;
             cfg.referencia.medidas.forEach(m => {
-                const cor = '#b91c1c';
+                const cor = cfg.referencia.cor;
                 const ln = L.polyline([m.a, m.b], { color: cor, weight: 2, dashArray: '6 4', interactive: false });
                 ln.addTo(map);
                 state.dlines.push(ln);
@@ -463,7 +480,14 @@
                 state.dlines.push(c);
             }
         }
-        function setMeasureCursor(on) { if (map.getContainer && map.getContainer() && map.getContainer().style) map.getContainer().style.cursor = on ? 'crosshair' : ''; }
+        // Com uma ferramenta de medição ativa o mapa inteiro (feição, vértices, textos, camadas) deixa de reagir ao mouse e o cursor
+        // fica em mira: dá para desenhar por cima, dentro e encostando na feição. Só volta ao normal ao concluir ou cancelar.
+        function setMeasureCursor(on) {
+            const c = map.getContainer ? map.getContainer() : null;
+            if (!c) return;
+            if (c.style) c.style.cursor = on ? 'crosshair' : '';
+            if (c.classList) { if (on) c.classList.add('report-drawing'); else c.classList.remove('report-drawing'); }
+        }
         function measureChanged() { applyDistLines(); if (opts.onMeasureState) opts.onMeasureState(state.measure ? state.measure.fase : 0); }
         function onMapClick(e) {
             if (state.draw) { onDrawClick(e); return; }
@@ -618,14 +642,14 @@
             });
             // pontos marcados: a bolinha fica no vértice; o nome é um texto à parte (arrastar move, ↻ gira, dois cliques renomeiam)
             pointRowsNow().rows.forEach(r => {
-                const dot = L.marker([r.lat, r.lng], { icon: L.divIcon({ className: 'report-point', html: '<span class="report-point-dot"></span>', iconSize: [0, 0] }), interactive: false, keyboard: false, zIndexOffset: 1400 });
+                const dot = L.marker([r.lat, r.lng], { icon: L.divIcon({ className: 'report-point', html: '<span class="report-point-dot"' + (cfg.pontos.cor !== MT.MAP_DEFAULTS.pontos.cor ? ' style="background:' + cfg.pontos.cor + '"' : '') + '></span>', iconSize: [0, 0] }), interactive: false, keyboard: false, zIndexOffset: 1400 });
                 dot.addTo(map);
                 state.pts['d:' + r.vid] = dot;
                 const p = cfg.posicoes[r.vid];
                 const pos = p ? [p.lat, p.lng] : [r.lat, r.lng];
                 const off = p ? [0, 0] : POINT_LABEL_OFFSET; // sem posição escolhida, o nome fica ao lado do ponto
                 const rot = cfg.rotacoes[r.vid] !== undefined ? cfg.rotacoes[r.vid] : 0;
-                const html = '<span class="report-point-label" style="left:' + off[0] + 'px;top:' + off[1] + 'px;transform:' + labelTransform(rot) + ';' + estiloCss(cfg.pontos.estilo) + '" title="Duplo clique para renomear • arraste para mover">' + escapeHtml(r.titulo) + ROT_HANDLE + '</span>';
+                const html = '<span class="report-point-label" style="left:' + off[0] + 'px;top:' + off[1] + 'px;transform:' + labelTransform(rot) + ';' + estiloCss(cfg.pontos.estilo) + corTexto(cfg.pontos.cor, MT.MAP_DEFAULTS.pontos.cor) + '" title="Duplo clique para renomear • arraste para mover">' + escapeHtml(r.titulo) + ROT_HANDLE + '</span>';
                 const mk = L.marker(pos, { icon: L.divIcon({ className: 'report-point', html: html, iconSize: [0, 0] }), draggable: true, keyboard: false, zIndexOffset: 1500 });
                 mk.addTo(map);
                 mk.on('dblclick', (e) => {

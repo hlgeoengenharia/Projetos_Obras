@@ -153,7 +153,7 @@ eq('sem larguras: automático', [MT.normalizePontos({}).colunas, MT.normalizePon
         { id: 'med:4', tipo: 'area', pts: [[-7, -34], [-7.001, -34], [-7.001, -34.001]] },
         { id: 'x', tipo: 'ponto', pts: [[1, 1]] }, { id: 'med:5', tipo: 'circulo', pts: [[1, 1]] }, { id: 'med:6', tipo: 'ponto', pts: [[999, 1]] }], sistema: 'lixo' });
     eq('medições: só ids/tipos válidos, pontos mínimos, sem repetição; ponto guarda um só; sistema padrão UTM e aderência ligada', [med.itens.map(m => [m.id, m.tipo, m.pts.length]), med.sistema, med.aderencia], [[['med:1', 'ponto', 1], ['med:2', 'linha', 2], ['med:4', 'area', 3]], 'utm', true]);
-    eq('padrão do mapa: sem medições', MT.normalizeMapConfig({}).medicoes, { itens: [], sistema: 'utm', aderencia: true });
+    eq('padrão do mapa: sem medições', MT.normalizeMapConfig({}).medicoes, { itens: [], sistema: 'utm', aderencia: true, cor: '#0e7490' });
     eq('medições vêm dos ajustes do usuário', MT.mergeAjustes(MT.normalizeMapConfig({}), { medicoes: { itens: [{ id: 'med:1', tipo: 'ponto', pts: [[-7, -34]] }], aderencia: false } }).medicoes.aderencia, false);
     const lado100 = 100 / 111195; // ~100 m em graus de latitude
     const quad = { id: 'med:1', tipo: 'area', pts: [[-7, -34], [-7 - lado100, -34], [-7 - lado100, -34 - lado100 / Math.cos(7 * Math.PI / 180)], [-7, -34 - lado100 / Math.cos(7 * Math.PI / 180)]] };
@@ -187,6 +187,16 @@ eq('sem larguras: automático', [MT.normalizePontos({}).colunas, MT.normalizePon
     const uz = MT.parseCoordenadas('utm', { x: String(u.e), y: String(u.n) }, ref);
     ok('UTM sem zona: usa a da feição', Math.abs(uz.lat + 7.0195) < 1e-7);
     eq('UTM: erros', [MT.parseCoordenadas('utm', { x: '', y: '1' }, ref).erro, MT.parseCoordenadas('utm', { x: 'a', y: '1' }, ref).erro, MT.parseCoordenadas('utm', { x: '1', y: '1', zone: '99' }, ref).erro, MT.parseCoordenadas('xx', {}, ref).erro], ['Preencha as coordenadas X (Este) e Y (Norte).', 'Valores numéricos inválidos em X ou Y.', 'Zona UTM inválida (1 a 60).', 'Formato de coordenada desconhecido.']);
+}
+// cores dos textos e desenhos do mapa
+{
+    const c0 = MT.normalizeMapConfig({});
+    eq('cores padrão: medidas, pontos, medições, distância até a camada e rótulos', [c0.medidas.cor, c0.pontos.cor, c0.medicoes.cor, c0.referencia.cor, c0.rotulos.cor], ['#065f46', '#dc2626', '#0e7490', '#b91c1c', '#0f172a']);
+    const c1 = MT.normalizeMapConfig({ mapa: { medidas: { cor: '#112233' }, pontos: { cor: '#ffff00' }, medicoes: { cor: '#00ff00' }, referencia: { cor: '#ff00ff' }, rotulos: { cor: '#ffffff' } } });
+    eq('cores escolhidas são guardadas', [c1.medidas.cor, c1.pontos.cor, c1.medicoes.cor, c1.referencia.cor, c1.rotulos.cor], ['#112233', '#ffff00', '#00ff00', '#ff00ff', '#ffffff']);
+    const c2 = MT.normalizeMapConfig({ mapa: { medidas: { cor: 'vermelho' }, pontos: { cor: '#fff' }, medicoes: { cor: 12 }, referencia: { cor: 'url(x)' }, rotulos: { cor: '#12345g' } } });
+    eq('cor inválida (nome, 3 dígitos, texto solto) volta ao padrão', [c2.medidas.cor, c2.pontos.cor, c2.medicoes.cor, c2.referencia.cor, c2.rotulos.cor], ['#065f46', '#dc2626', '#0e7490', '#b91c1c', '#0f172a']);
+    eq('cores vêm dos ajustes do usuário (o que ele escolheu vale sobre o modelo)', [MT.mergeAjustes(c0, { medidas: { cor: '#123456' } }).medidas.cor, MT.mergeAjustes(c0, { pontos: { cor: '#654321' } }).pontos.cor, MT.mergeAjustes(c0, { medicoes: { cor: '#0a0a0a' } }).medicoes.cor], ['#123456', '#654321', '#0a0a0a']);
 }
 eq('base satélite e nenhum são aceitas', [MT.normalizeMapConfig({ mapa: { baseMap: 'satelite' } }).baseMap, MT.normalizeMapConfig({ mapa: { baseMap: 'nenhum' } }).baseMap], ['satelite', 'nenhum']);
 
@@ -313,7 +323,7 @@ eq('edição substitui texto e resumo e guarda o valor calculado', [ed[0].texto,
 eq('medida sem edição não muda', [ed[1].texto === mq.itens[1].texto, ed[1].editado], [true, false]);
 
 // configuração das medidas, edições e posições dos rótulos
-eq('medidas ligadas por padrão, perímetro desligado', (({ estilo, ...resto }) => resto)(MT.normalizeMapConfig({}).medidas), { ativo: true, lados: true, total: true, perimetro: false });
+eq('medidas ligadas por padrão, perímetro desligado', (({ estilo, ...resto }) => resto)(MT.normalizeMapConfig({}).medidas), { ativo: true, lados: true, total: true, perimetro: false, cor: '#065f46' });
 eq('medidas: o usuário pode desligar tudo ou só parte', [MT.mergeAjustes(c0, { medidas: { ativo: false } }).medidas.ativo, MT.mergeAjustes(c0, { medidas: { perimetro: true } }).medidas.perimetro, MT.mergeAjustes(c0, { medidas: { perimetro: true } }).medidas.lados], [false, true, true]);
 const e2 = MT.normalizeMapConfig({ mapa: { edicoes: { 'lado:1': '  20 m  ', area: 'x'.repeat(200), 'nao valido!': 'a', perimetro: '   ', trecho: 5, 'lado:2': 'a\nb' } } }).edicoes;
 eq('edições: limpa espaços, limita o tamanho, tira quebras e descarta o inválido/vazio', [e2['lado:1'], e2.area.length, e2['nao valido!'], e2.perimetro, e2.trecho, e2['lado:2']], ['20 m', 60, undefined, undefined, undefined, 'a b']);

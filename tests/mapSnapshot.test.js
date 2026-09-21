@@ -106,6 +106,13 @@ eq('texto sem retângulo calculado não é desenhado (nunca em posição inventa
     const semTam = fakeCtx();
     MS.paintOverlays(semTam, E('div', { r: R(100, 50, 600, 340) }, nota), env, 1);
     ok('sem o tamanho de layout, a caixa girada não é inventada (só o texto)', of(semTam, 'fill').length === 0 && of(semTam, 'fillText').length === 1);
+    // contorno do texto na cor que o navegador calculou (escuro em cor clara)
+    {
+        const escuro = E('div', { cls: 'leaflet-marker-icon report-measure', r: R(400, 220, 0, 0) }, E('span', { st: { color: 'rgb(255, 255, 0)', textShadow: 'rgb(0, 0, 0) 0px 0px 2px, rgb(0, 0, 0) 0px 0px 2px', fontWeight: '700' }, r: R(370, 213, 40, 14) }, T('12,00 m', R(372, 214, 36, 12))));
+        const ce = fakeCtx();
+        MS.paintOverlays(ce, E('div', { r: R(100, 50, 600, 340) }, escuro), env, 1);
+        ok('texto claro: contorno escuro (preto) e texto amarelo por cima', of(ce, 'strokeText').length === 1 && ce.calls.find(c => c[0] === 'fillText')[5] === 'rgb(255,255,0)');
+    }
     const sub = fakeCtx();
     MS.paintOverlays(sub, E('div', { r: R(0, 0, 100, 100) }, E('div', { cls: 'report-point', r: R(10, 10, 0, 0) }, E('span', { st: { textDecoration: 'underline' }, r: R(10, 10, 40, 12) }, T('P1', R(10, 10, 40, 12))))), env, 1);
     ok('sublinhado também no texto sem giro (a partir do início do texto)', of(sub, 'moveTo').some(x => x[1] === 10) && of(sub, 'lineTo').some(x => x[1] === 20));

@@ -182,8 +182,11 @@
             ctx.textAlign = 'left';
         }
         // brilho branco ao redor (rótulos sobre o mapa)
-        if (/#fff|255,\s*255,\s*255/i.test(String(st.textShadow || ''))) {
-            ctx.lineJoin = 'round'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+        const sombra = String(st.textShadow || '');
+        const mc = /rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(sombra);
+        const contorno = mc ? 'rgba(' + mc[1] + ',' + mc[2] + ',' + mc[3] + ',0.95)' : (/#fff\b/i.test(sombra) ? 'rgba(255,255,255,0.95)' : (/#000\b/i.test(sombra) ? 'rgba(0,0,0,0.95)' : null));
+        if (contorno) {
+            ctx.lineJoin = 'round'; ctx.lineWidth = 3; ctx.strokeStyle = contorno;
             ctx.strokeText(t, x, y);
         }
         ctx.fillStyle = colorCss(st.color) || '#000';

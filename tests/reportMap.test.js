@@ -894,6 +894,71 @@ t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefin
     eq('iniciar a medição até a camada de referência cancela o desenho', [d.ctl.drawState(), d.ctl.measureState()], [null, 1]);
 }
 
+// ---------------------------------------------------------------- cores dos textos e desenhos
+{
+    const cor = (h) => h.match(/color:(#[0-9a-f]{6})/i);
+    const padrao = build({ mapa: { pontos: { ativo: true, ordem: ['v:0'] }, rotulos: { ativo: true }, camadasLigadas: ['1'] } }, undefined, { camadas: [{ id: '1', name: 'L', color: '#f00', kind: 'polygon', features: [{ type: 'Feature', properties: { r: 'Lote 1' }, geometry: poly }] }] });
+    const lab = (b, re) => b.layersOf('marker').find(m => re.test(m.args.o.icon.html));
+    ok('cor padrão: nenhum estilo de cor escrito (vale o CSS da folha, com o destaque de "editado")', !/color:/.test(lab(padrao, /report-measure-label/).args.o.icon.html) && !/color:|text-shadow/.test(lab(padrao, /report-point-label/).args.o.icon.html) && !/background:/.test(lab(padrao, /report-point-dot/).args.o.icon.html) && !/color:/.test(lab(padrao, /report-nlabel-l/).args.o.icon.html));
+    const b = build({ mapa: { medidas: { cor: '#ffff00' }, pontos: { ativo: true, ordem: ['v:0'], cor: '#aaffaa' }, rotulos: { ativo: true, cor: '#111111' }, camadasLigadas: ['1'] } }, undefined, { camadas: [{ id: '1', name: 'L', color: '#f00', kind: 'polygon', features: [{ type: 'Feature', properties: { r: 'Lote 1' }, geometry: poly }] }] });
+    const m1 = lab(b, /report-measure-label/).args.o.icon.html;
+    ok('cor das medidas: escrita no texto, com contorno ESCURO porque o amarelo é claro', cor(m1)[1] === '#ffff00' && /text-shadow:0 0 2px #000/.test(m1));
+    ok('cor dos pontos: bolinha e nome; verde-claro ganha contorno escuro', /report-point-dot" style="background:#aaffaa"/.test(lab(b, /report-point-dot/).args.o.icon.html) && cor(lab(b, /report-point-label/).args.o.icon.html)[1] === '#aaffaa' && /text-shadow:0 0 2px #000/.test(lab(b, /report-point-label/).args.o.icon.html));
+    ok('cor dos rótulos das vizinhas: cor escura ganha contorno CLARO', cor(lab(b, /report-nlabel-l/).args.o.icon.html)[1] === '#111111' && /text-shadow:0 0 2px #fff/.test(lab(b, /report-nlabel-l/).args.o.icon.html));
+    b.ctl.setConfig({ medidas: { cor: '#065f46' } });
+    ok('voltar à cor padrão tira o estilo de cor', !/color:/.test(lab(b, /report-measure-label/).args.o.icon.html));
+    // medições livres e distância até a camada
+    const eventos = {};
+    const docE = makeDoc(ids);
+    docE.addEventListener = (n, fn) => { eventos[n] = fn; };
+    const w = build({ mapa: { medicoes: { cor: '#ff5500' }, referencia: { ativo: true, camada: '4', cor: '#00aaff' } } }, undefined, { doc: docE });
+    w.ctl.addMedicao('linha', [[-7.03, -34.85], [-7.03, -34.851], [-7.031, -34.851]]);
+    w.ctl.addMedicao('area', [[-7.03, -34.85], [-7.03, -34.851], [-7.031, -34.851]]);
+    w.ctl.addMedicao('ponto', [[-7.032, -34.852]]);
+    ok('medições: linhas, polígono e pontos desenhados na cor escolhida', w.layersOf('polyline').some(l => l.args.o.color === '#ff5500') && w.layersOf('polygon').some(l => l.args.o.color === '#ff5500' && l.args.o.fillColor === '#ff5500') && w.layersOf('circle').some(c => c.args.o.fillColor === '#ff5500'));
+    const txtMed = w.layersOf('marker').filter(x => /report-measure-label/.test(x.args.o.icon.html) && /(Total|Área|>P01<|[\d.,]+ m<)/.test(x.args.o.icon.html));
+    ok('medições: textos (trechos, total, área e ponto) na cor escolhida, sempre escritos; números dos vértices também', w.layersOf('marker').filter(x => /report-measure-label/.test(x.args.o.icon.html) && /color:#ff5500/.test(x.args.o.icon.html)).length >= 5 && txtMed.length >= 5 && w.layersOf('marker').filter(x => /report-point-label[^>]*>\d</.test(x.args.o.icon.html)).every(x => /color:#ff5500/.test(x.args.o.icon.html)));
+    w.ctl.addDistance([-7.02, -34.84], [-7.02, -34.82]);
+    ok('distância até a camada de referência: linha e texto na cor escolhida', w.layersOf('polyline').some(l => l.args.o.dashArray === '6 4' && l.args.o.color === '#00aaff') && w.layersOf('marker').some(x => /report-measure-label/.test(x.args.o.icon.html) && cor(x.args.o.icon.html) && cor(x.args.o.icon.html)[1] === '#00aaff'));
+    w.ctl.setConfig({ medicoes: { cor: '#0000ff' } });
+    ok('trocar a cor redesenha na hora', w.layersOf('polyline').some(l => l.args.o.color === '#0000ff') && !w.layersOf('polyline').some(l => l.args.o.color === '#ff5500'));
+    ok('as cores vão junto no que se salva', w.ctl.snapshot().medicoes.cor === '#0000ff' && w.ctl.snapshot().referencia.cor === '#00aaff' && w.ctl.snapshot().medidas.cor === '#065f46' && w.ctl.snapshot().pontos.cor === '#dc2626' && w.ctl.snapshot().rotulos.cor === '#0f172a');
+}
+
+// ---------------------------------------------------------------- ferramenta ativa: nada interfere no desenho
+{
+    const classes = new Set();
+    const eventos = {};
+    const docE = makeDoc(ids);
+    docE.addEventListener = (n, fn) => { eventos[n] = fn; };
+    const b = build({ mapa: { referencia: { ativo: true, camada: '1' } } }, undefined, { doc: docE });
+    b.map.cont.classList = { add: (c) => classes.add(c), remove: (c) => classes.delete(c) };
+    const tem = () => classes.has('report-drawing');
+    b.ctl.startDraw('linha');
+    ok('ferramenta ativa: mapa marcado como "em desenho" (feição, vértices e textos param de reagir; cursor em mira)', tem() && b.map.cont.style.cursor === 'crosshair');
+    b.map.handlers.click({ latlng: { lat: -7.03, lng: -34.85 } });
+    b.map.handlers.click({ latlng: { lat: -7.03, lng: -34.851 } });
+    ok('continua ativa entre os cliques (só termina ao concluir ou cancelar)', tem());
+    b.map.handlers.dblclick({});
+    ok('ao concluir volta ao normal', !tem() && b.map.cont.style.cursor === '');
+    b.ctl.startDraw('area');
+    eventos.keydown({ key: 'Escape' });
+    ok('ao cancelar volta ao normal', !tem());
+    b.ctl.startDraw('ponto');
+    ok('ponto: ativa', tem());
+    b.map.handlers.click({ latlng: { lat: -7.03, lng: -34.85 } });
+    ok('ponto: termina no clique', !tem());
+    b.ctl.startDistMeasure();
+    ok('distância até a camada de referência também usa a mira e ignora a feição', tem());
+    b.ctl.cancelDistMeasure();
+    ok('...e volta ao normal ao cancelar', !tem());
+    b.ctl.startDraw('linha');
+    b.ctl.startDistMeasure();
+    ok('trocar de ferramenta no meio não deixa o mapa preso (só uma ativa)', b.ctl.drawState() === null && tem());
+    b.ctl.cancelDistMeasure();
+    ok('...e depois de cancelar tudo volta ao normal', !tem());
+}
+
 // ---------------------------------------------------------------- quadriculado
 t = build({});
 eq('quadriculado desligado: nada desenhado', t.layersOf('polyline').length, 0);

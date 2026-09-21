@@ -412,6 +412,27 @@ async function runScenario(cfg) {
         eq('sem erro de execução', r.errors, []);
     }
 
+    // ---- cores dos textos e desenhos no painel; ferramenta ativa sem interferência (CSS)
+    {
+        const r = await runScenario({ width: 1900, opener: true, payload: Object.assign({}, cenarios[3].payload, { template: tplWith({ camadasLigadas: ['A'], rotulos: { ativo: true }, referencia: { ativo: true, camada: 'A' } }) }) });
+        const vm = require('vm');
+        const painel = () => r.registry['map-tools-panel']._html;
+        const cfg = () => vm.runInContext('mapController.getConfig()', r.sandbox);
+        ok('painel: seletor de cor nos textos das medidas, nos pontos, nas medições e na distância até a camada', /mapPanelCor\('medidas', this.value\)/.test(painel()) && /mapPanelCor\('pontos', this.value\)/.test(painel()) && /mapPanelCor\('medicoes', this.value\)/.test(painel()) && /mapPanelCor\('referencia', this.value\)/.test(painel()) && /Cor das medições \(linhas, áreas, pontos e textos\)/.test(painel()));
+        r.sandbox.mapPanelCor('medidas', '#ffff00');
+        r.sandbox.mapPanelCor('pontos', '#00ff00');
+        r.sandbox.mapPanelCor('medicoes', '#ff0000');
+        r.sandbox.mapPanelCor('referencia', '#0000ff');
+        eq('escolher a cor muda a configuração de cada grupo', [cfg().medidas.cor, cfg().pontos.cor, cfg().medicoes.cor, cfg().referencia.cor], ['#ffff00', '#00ff00', '#ff0000', '#0000ff']);
+        ok('a cor escolhida aparece no seletor do painel', /value="#ffff00"/.test(painel()) && /value="#ff0000"/.test(painel()));
+        r.sandbox.mapPanelCor('rotulos', '#123456');
+        eq('rótulos das vizinhas também têm cor (quando ativos)', cfg().rotulos.cor, '#123456');
+        r.sandbox.mapPanelCor('inexistente', '#000000');
+        eq('grupo desconhecido é ignorado; sem erro de execução', r.errors, []);
+        const css = html.slice(html.indexOf('<style'), html.indexOf('</style>'));
+        ok('ferramenta ativa: cursor em mira em todo o mapa e nada reage ao mouse (feição, textos, camadas, escala)', /\.report-drawing, \.report-drawing \* \{ cursor: crosshair !important; \}/.test(css) && /\.report-drawing \.leaflet-interactive, \.report-drawing \.leaflet-marker-icon, \.report-drawing \.leaflet-control-scale \{ pointer-events: none !important; \}/.test(css));
+    }
+
     // ---- ícone de girar e cards (CSS): área de clique que encosta no texto, visível ao passar o mouse e durante o giro
     {
         const css = html.slice(html.indexOf('<style'), html.indexOf('</style>'));

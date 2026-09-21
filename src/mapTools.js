@@ -28,20 +28,20 @@
         projecao: true,
         alturaMm: 90,            // altura do mapa na folha
         vista: null,             // { lat, lng, zoom } salvo pelo usuário; sem ele o mapa enquadra a feição
-        medidas: { ativo: true, lados: true, total: true, perimetro: false, estilo: { lados: { n: true, i: false, s: false }, total: { n: true, i: false, s: false }, perimetro: { n: true, i: false, s: false } } }, // o que aparece sobre o mapa e o estilo do texto (negrito, itálico, sublinhado)
+        medidas: { ativo: true, lados: true, total: true, perimetro: false, cor: '#065f46', estilo: { lados: { n: true, i: false, s: false }, total: { n: true, i: false, s: false }, perimetro: { n: true, i: false, s: false } } }, // o que aparece sobre o mapa e o estilo do texto (negrito, itálico, sublinhado)
         rotacoes: {},            // { idDoTexto: graus } (texto girado pelo usuário; sem ele vale o alinhamento automático)
         edicoes: {},             // { idDaMedida: 'texto que o usuário digitou' }
         posicoes: {},            // { idDaMedida: { lat, lng } } (rótulo arrastado)
-        pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false, ordem: [], titulos: {}, estilo: { n: true, i: false, s: false }, textos: {}, colConf: { ativo: false, camadas: [], tolM: 3, distLogM: 30 }, colunas: {} }, // pontos nos vértices; textos = células e título da tabela editados pelo usuário; colConf = coluna "Confrontantes" da tabela de pontos (camadas e campos escolhidos); colunas = largura (% da tabela) das colunas Distância (dist) e Confrontantes (cf) ajustada pelo usuário
+        pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false, ordem: [], titulos: {}, cor: '#dc2626', estilo: { n: true, i: false, s: false }, textos: {}, colConf: { ativo: false, camadas: [], tolM: 3, distLogM: 30 }, colunas: {} }, // pontos nos vértices; textos = células e título da tabela editados pelo usuário; colConf = coluna "Confrontantes" da tabela de pontos (camadas e campos escolhidos); colunas = largura (% da tabela) das colunas Distância (dist) e Confrontantes (cf) ajustada pelo usuário
         temporal: { ativo: false, ordem: 'asc', colunas: 2, alturaMm: 70, sincronizar: true, contorno: true, excluidas: [] }, // série de ortofotos por data
-        rotulos: { ativo: false, campo: 'rotulo', estilo: { n: true, i: false, s: false }, itens: {} }, // texto sobre as feições vizinhas ('rotulo' = Quadra/Lote; 'titulo' = nome principal); itens = posição/giro ajustados pelo usuário, por 'camada:índice'
+        rotulos: { ativo: false, campo: 'rotulo', cor: '#0f172a', estilo: { n: true, i: false, s: false }, itens: {} }, // texto sobre as feições vizinhas ('rotulo' = Quadra/Lote; 'titulo' = nome principal); itens = posição/giro ajustados pelo usuário, por 'camada:índice'
         confrontantes: { ativo: false, camada: '', tolM: 3, nomes: false, ordem: [], textos: {} },  // quem faz divisa com cada lado; ordem das linhas e textos (LADO / CONFRONTANTE) editados
-        referencia: { ativo: false, camada: '', medidas: [] },                // distância e sobreposição com uma camada de referência (ex.: LPM); medidas = distâncias tiradas pelo usuário { id:'dist:N', a:[lat,lng], b:[lat,lng] }
+        referencia: { ativo: false, camada: '', medidas: [], cor: '#b91c1c' },                // distância e sobreposição com uma camada de referência (ex.: LPM); medidas = distâncias tiradas pelo usuário { id:'dist:N', a:[lat,lng], b:[lat,lng] }
         comparacaoArea: { ativo: false, campo: '' },                          // área cadastral x área calculada
         situacao: { ativo: false },                                           // mapa de situação (localização) no canto
         quadriculado: { ativo: false, espacamento: 0 },                       // grade de coordenadas UTM (0 = automático)
         anotacoes: [],                                                        // textos livres no mapa: { id, lat, lng, texto }
-        medicoes: { itens: [], sistema: 'utm', aderencia: true },             // ferramentas de medição do mapa principal: ponto, distância e área desenhados no relatório { id:'med:N', tipo, pts:[[lat,lng]...] }
+        medicoes: { itens: [], sistema: 'utm', aderencia: true, cor: '#0e7490' },             // ferramentas de medição do mapa principal: ponto, distância e área desenhados no relatório { id:'med:N', tipo, pts:[[lat,lng]...] }
         elementos: {},                                                        // posição dos elementos sobre o mapa (norte, escala, escalaTexto, projecao, legenda): deslocamento { dx, dy } em fração do tamanho do mapa
         legenda: { nomes: {}, ocultos: [] }                                   // legenda editável: nomes trocados e itens ocultos, por chave ('feicao' | 'c:<camada>')
     };
@@ -118,7 +118,7 @@
                 if (item.lat !== undefined || item.rot !== undefined) itens[k] = item;
             });
         }
-        return { ativo: bool(x.ativo, false), campo: x.campo === 'titulo' ? 'titulo' : 'rotulo', estilo: normalizeEstilo(x.estilo, MAP_DEFAULTS.rotulos.estilo), itens };
+        return { ativo: bool(x.ativo, false), campo: x.campo === 'titulo' ? 'titulo' : 'rotulo', cor: isHexColor(x.cor) ? x.cor : MAP_DEFAULTS.rotulos.cor, estilo: normalizeEstilo(x.estilo, MAP_DEFAULTS.rotulos.estilo), itens };
     }
     function normalizeConfrontantes(x) {
         x = x || {};
@@ -160,7 +160,7 @@
             const nome = typeof m.nome === 'string' ? m.nome.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
             itens.push(nome ? { id: m.id, tipo: m.tipo, pts: pts, nome: nome } : { id: m.id, tipo: m.tipo, pts: pts });
         });
-        return { itens, sistema: ['utm', 'geo_dec', 'geo_gms'].indexOf(x.sistema) >= 0 ? x.sistema : 'utm', aderencia: x.aderencia === undefined ? true : !!x.aderencia };
+        return { itens, sistema: ['utm', 'geo_dec', 'geo_gms'].indexOf(x.sistema) >= 0 ? x.sistema : 'utm', aderencia: x.aderencia === undefined ? true : !!x.aderencia, cor: isHexColor(x.cor) ? x.cor : MAP_DEFAULTS.medicoes.cor };
     }
 
     /** Coordenadas nos três formatos do mapa principal (DEC, GMS e UTM). */
@@ -299,7 +299,7 @@
             vistos.add(m.id);
             medidas.push({ id: m.id, a: [Number(m.a[0]), Number(m.a[1])], b: [Number(m.b[0]), Number(m.b[1])] });
         });
-        return { ativo: bool(x.ativo, false), camada: ID_REF.test(String(x.camada || '')) ? String(x.camada) : '', medidas };
+        return { ativo: bool(x.ativo, false), camada: ID_REF.test(String(x.camada || '')) ? String(x.camada) : '', medidas, cor: isHexColor(x.cor) ? x.cor : MAP_DEFAULTS.referencia.cor };
     }
     function normalizeComparacaoArea(x) {
         x = x || {};
@@ -390,6 +390,7 @@
             tabela: p.tabela === undefined ? d.tabela : !!p.tabela,
             memorial: p.memorial === undefined ? d.memorial : !!p.memorial,
             ordem, titulos,
+            cor: isHexColor(p.cor) ? p.cor : d.cor,
             estilo: normalizeEstilo(p.estilo, d.estilo),
             textos,
             colConf: normalizeColConf(p.colConf),
@@ -439,6 +440,7 @@
             lados: m.lados === undefined ? d.lados : !!m.lados,
             total: m.total === undefined ? d.total : !!m.total,
             perimetro: m.perimetro === undefined ? d.perimetro : !!m.perimetro,
+            cor: isHexColor(m.cor) ? m.cor : d.cor,
             estilo: { lados: normalizeEstilo(est.lados, d.estilo.lados), total: normalizeEstilo(est.total, d.estilo.total), perimetro: normalizeEstilo(est.perimetro, d.estilo.perimetro) }
         };
     }
