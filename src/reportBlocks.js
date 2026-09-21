@@ -642,7 +642,11 @@
             return { split: { rowsHtml, chunkHtml } };
         }
 
-        function renderAnalyticalLaudo(bloco, featureData) {
+        function renderAnalyticalLaudo(bloco, featureData, opts) {
+            // opts (só no construtor): full = devolve o laudo inteiro (sem quebrar por folhas);
+            //   edit = { titleClass, titleAttrs, metaExtra, groupAttrs(tabId), containerAttrs, fieldAttrs(f, pct), lead(f, pct), tail(f, pct), photoHeader(f, modoLista) }
+            //   — os controles aparecem só no 1º registro de cada aba (os campos valem para todos os registros da aba)
+            const edit = (opts && opts.edit) || null;
             const TITLE = 'Laudo Analítico e Caderno Fotográfico';
             const { tabs, fieldIndex } = getReportSchema(featureData);
 
@@ -686,7 +690,10 @@
                 return p >= 98 ? '100%' : (p >= 65 ? '66.666%' : (p <= 28 ? '25%' : (p <= 38 ? '33.333%' : '50%')));
             };
 
-            const photosHtml = (r) => {
+            const photosHtml = (r, editando) => {
+                const cabecalhos = (editando && edit.photoHeader)
+                    ? (r.tab.fields || []).filter(f => String(f.type || '').toLowerCase() === 'photo').map(f => `<div class="flex items-center justify-between gap-1 pt-1"><span class="text-[9.5px] uppercase font-extrabold text-slate-600 truncate">${esc(f.label || f.name || f.id)}:</span>${edit.photoHeader(f, modes[f.id] === 'lista')}</div>`).join('')
+                    : '';
                 // Campos de foto que o usuário mandou exibir como LISTA saem como texto (título + arquivo)
                 const listFields = (r.tab.fields || []).filter(f => String(f.type || '').toLowerCase() === 'photo' && modes[f.id] === 'lista');
                 const listHtml = listFields.map(f => {
@@ -697,8 +704,8 @@
                         <div class="text-[10.5px] text-slate-800 font-semibold break-words">${v}</div></div>`;
                 }).join('');
                 const photos = RD.recordPhotos(r, listFields.map(f => f.id));
-                if (photos.length === 0) return listHtml;
-                return `<div class="grid ${gridClass} gap-3 pt-1">${photos.map(p => {
+                if (photos.length === 0) return cabecalhos + listHtml;
+                return cabecalhos + `<div class="grid ${gridClass} gap-3 pt-1">${photos.map(p => {
                     const href = FieldFormatter.normalizeUrl(p.url);
                     if (!href) return '';
                     return `<div class="border border-slate-200 rounded-lg overflow-hidden bg-white flex flex-col shadow-2xs">
@@ -713,7 +720,8 @@
                 }).join('')}</div>` + listHtml;
             };
 
-            const cardHtml = (r, idx) => {
+            const cardHtml = (r, idx, primeiro) => {
+                const editando = !!(edit && primeiro);
                 let cardBg = idx % 2 === 1 ? 'bg-slate-100/70 border-slate-300' : 'bg-white border-slate-200';
                 if (striping === 'sky') cardBg = idx % 2 === 1 ? 'bg-sky-50/50 border-sky-200' : 'bg-white border-slate-200';
                 else if (striping === 'white') cardBg = 'bg-white border-slate-200';
@@ -724,15 +732,18 @@
                     const type = String(f.type || '').toLowerCase();
                     const pct = larguras[f.id] || (WIDE.includes(type) ? 100 : 50);
                     const w = widthOf(pct);
-                    return `<div class="p-2 bg-white rounded-lg border border-slate-200 text-xs" style="flex: 0 0 ${w}; max-width: ${w}; width: ${w}; box-sizing: border-box;">
-                        <span class="font-bold text-slate-500 uppercase text-[9px] block truncate mb-0.5">${esc(f.label || f.name || f.id)}:</span>
+                    const rotulo = editando
+                        ? `<div class="flex items-center justify-between gap-1 mb-0.5"><div class="flex items-center gap-1 min-w-0 flex-1">${edit.lead ? edit.lead(f, pct) : ''}<span class="font-bold text-slate-500 uppercase text-[9px] truncate">${esc(f.label || f.name || f.id)}:</span></div><div class="flex items-center gap-1 shrink-0">${edit.tail ? edit.tail(f, pct) : ''}</div></div>`
+                        : `<span class="font-bold text-slate-500 uppercase text-[9px] block truncate mb-0.5">${esc(f.label || f.name || f.id)}:</span>`;
+                    return `<div class="${editando ? 'relative group/field select-none ' : ''}p-2 bg-white rounded-lg border border-slate-200 text-xs"${editando && edit.fieldAttrs ? ' ' + edit.fieldAttrs(f, pct) : ''} style="flex: 0 0 ${w}; max-width: ${w}; width: ${w}; box-sizing: border-box;">
+                        ${rotulo}
                         <div class="text-[10.5px] text-slate-800 font-semibold break-words whitespace-normal ${type === 'textarea' ? 'font-normal text-justify' : ''}">${FieldFormatter.toHtml(r.values[f.id], f, { geometryCenter, fileMode: modes[f.id], fileMeta })}</div>
                     </div>`;
                 }).join('');
 
                 return `<div class="border rounded-xl p-3 ${cardBg} space-y-2.5 shadow-2xs">
-                    ${cells ? `<div class="flex flex-wrap gap-2">${cells}</div>` : '<div class="text-[10px] italic text-slate-400">Nenhum campo desta aba foi selecionado para o laudo.</div>'}
-                    ${photosHtml(r)}
+                    ${cells ? `<div class="flex flex-wrap gap-2${editando ? ' a4-grid-fields-container' : ''}"${editando && edit.containerAttrs ? ' ' + edit.containerAttrs : ''}>${cells}</div>` : '<div class="text-[10px] italic text-slate-400">Nenhum campo desta aba foi selecionado para o laudo.</div>'}
+                    ${photosHtml(r, editando)}
                 </div>`;
             };
 
@@ -742,26 +753,28 @@
             const seenTab = {};
             const rowsHtml = records.map((r, i) => {
                 let groupHeader = '';
-                if (!seenTab[r.tabId]) {
+                const primeiro = !seenTab[r.tabId];
+                if (primeiro) {
                     seenTab[r.tabId] = true;
                     groupHeader = `<div class="flex items-center justify-between px-2.5 py-1.5 bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold text-slate-800 uppercase tracking-wide mb-2">
-                        <div class="flex items-center gap-1.5"><span>${esc(bloco['custom_tab_title_' + r.tabId] || ('Aba / Ente: ' + r.tabTitle))}</span></div>
+                        <div class="flex items-center gap-1.5"><span${edit && edit.groupAttrs ? ' ' + edit.groupAttrs(r.tabId) : ''}>${esc(bloco['custom_tab_title_' + r.tabId] || ('Aba / Ente: ' + r.tabTitle))}</span></div>
                         <span class="text-[9.5px] font-mono font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">${perTabCount[r.tabId]} registro(s)</span>
                     </div>`;
                 }
-                return `<div data-split-row>${groupHeader}${cardHtml(r, i)}</div>`;
+                return `<div data-split-row>${groupHeader}${cardHtml(r, i, primeiro)}</div>`;
             });
 
             const meta = `${records.length} registro(s) • ${sortOrder === 'asc' ? 'Antigo → Recente' : 'Recente → Antigo'}`;
             const chunkHtml = (rows, isFirst) => `
                 <div class="mb-4">
                     <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">
-                        <span class="whitespace-pre-line">${esc(bloco.titulo || TITLE)}${isFirst ? '' : ' (continuação)'}</span>
-                        <span class="text-[10px] font-mono text-slate-500 normal-case">${esc(meta)}</span>
+                        <span class="whitespace-pre-line${edit && edit.titleClass ? ' ' + edit.titleClass : ''}"${edit && edit.titleAttrs ? ' ' + edit.titleAttrs : ''}>${esc(bloco.titulo || TITLE)}${isFirst ? '' : ' (continuação)'}</span>
+                        <span class="text-[10px] font-mono text-slate-500 normal-case">${esc(meta)}${edit && edit.metaExtra ? edit.metaExtra : ''}</span>
                     </div>
                     <div class="space-y-3">${rows.join('')}</div>
                 </div>`;
 
+            if (opts && opts.full) return chunkHtml(rowsHtml, true);
             return { split: { rowsHtml, chunkHtml } };
         }
 

@@ -251,6 +251,26 @@ ok('voltando ao individual, o modelo geral não aparece na lista', !has(containe
     ok('quadro 1:N: aba escolhida que não existe mais mostra o aviso do relatório', has(h, 'não estão disponíveis'));
 }
 
+// ---------------------------------------------------------------- Laudo Analítico no construtor: desenho REAL + controles de campo no 1º registro de cada aba
+{
+    const tpl = RA.getReportTemplates('f1')[0];
+    const forms0 = window.forms[0];
+    forms0.tabs = forms0.tabs.filter(t => t.id !== 't_h');
+    forms0.tabs.push({ id: 't_h', title: 'PF', isMultiple: true, fields: [{ id: 'h_d', label: 'Data da vistoria', type: 'date' }, { id: 'h_o', label: 'Ocupação', type: 'text' }, { id: 'h_f', label: 'Fotos', type: 'photo' }] });
+    tpl.blocos = [{ id: 'l1', tipo: 'laudo_vistoria_fotos', titulo: 'Laudo <X>', abas_selecionadas: ['t_h'], campos_selecionados: ['h_d', 'h_o'], campos_larguras: { h_o: 100 } }];
+    RA.saveReportTemplate(tpl);
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+    const h = sheet['a4-blocks-list'].innerHTML;
+    const conta = (s) => h.split(s).length - 1;
+    ok('laudo: um cartão por registro de exemplo (2), como no relatório', conta('data-split-row') === 2 && has(h, '2 registro(s)'));
+    ok('laudo: valores de exemplo formatados pelo tipo (data dd/mm/aaaa)', has(h, '15/03/2026') && has(h, '10/02/2026'));
+    ok('laudo: título editável (escapado) e título da aba editável', has(h, "ReportBuilder.enableInlineEdit(this, 0, 'titulo')") && has(h, 'Laudo &lt;X&gt;') && has(h, "custom_tab_title_t_h"));
+    ok('laudo: controles do campo só no 1º registro (alça, largura, remover, contêiner de arrastar): 2 campos = 2 alças', conta('field-drag-handle') === 2 && conta('a4-grid-fields-container') === 1 && has(h, "ReportBuilder.removeFieldFromAnalytical1n(0, 'h_d', event)") && has(h, "ReportBuilder.changeFieldWidthStep(0, 'h_o', 1, event)"));
+    ok('laudo: largura do campo (100%) na folha e no botão', has(h, '>100%<') && has(h, 'flex: 0 0 100%'));
+    ok('laudo: campo de foto com o seletor de formato (lista/imagem) e as fotos de exemplo', has(h, 'Fotos:') && has(h, '<img '));
+    ok('laudo: sem o desenho antigo (por aba, com resumo/detalhes)', !has(h, '<details') && !has(h, 'Marque as abas do laudo'));
+}
+
 console.log(`reportScope: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {
     console.error(`${failed} falha(s)`);

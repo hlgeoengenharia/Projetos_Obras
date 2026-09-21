@@ -21,7 +21,7 @@ const inline = [];
 html.replace(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g, (m, code) => { inline.push(code); return m; });
 const pageScript = inline.find(c => c.includes('function initReportViewer'));
 const localScripts = [];
-html.replace(/<script[^>]*\bsrc="(src\/[^"]+)"/g, (m, src) => { localScripts.push(src); return m; });
+html.replace(/<script[^>]*\bsrc="(src\/[^"?]+)(?:\?[^"]*)?"/g, (m, src) => { localScripts.push(src); return m; });
 
 const quad = { type: 'Polygon', coordinates: [[[-34.84, -7.02], [-34.839, -7.02], [-34.839, -7.019], [-34.84, -7.019], [-34.84, -7.02]]] };
 const camadaA = { id: 'A', name: 'Lotes', color: '#ff0000', kind: 'polygon', features: [{ type: 'Feature', properties: {}, geometry: quad }], truncated: false };

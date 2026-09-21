@@ -1462,6 +1462,24 @@
      * Pré-visualização do Laudo Analítico na Folha A4 interativa: uma seção por aba, NA SEQUÊNCIA
      * escolhida e já ABERTA, com os campos escolhidos da aba prontos para arrastar, redimensionar ou remover.
      */
+    /** Abas do laudo: as escolhidas; senão as deduzidas dos campos escolhidos; senão todas as 1:N; na sequência definida pelo usuário. */
+    function laudoTabsSelecionadas(bloco, fields) {
+        const allTabs = getLaudoPreviewTabs(fields);
+        let selectedIds = (Array.isArray(bloco.abas_selecionadas) ? bloco.abas_selecionadas : []).map(String)
+            .filter(id => allTabs.some(t => String(t.id) === id));
+        if (!selectedIds.length && Array.isArray(bloco.campos_selecionados)) {
+            bloco.campos_selecionados.forEach(cf => {
+                const tid = (cf && typeof cf === 'object') ? String(cf.tabId || '') : '';
+                if (tid && allTabs.some(t => String(t.id) === tid) && !selectedIds.includes(tid)) selectedIds.push(tid);
+            });
+        }
+        if (!selectedIds.length) selectedIds = allTabs.filter(t => t.isMultiple).map(t => String(t.id));
+
+        const order = ((Array.isArray(bloco.ordem_abas) && bloco.ordem_abas.length) ? bloco.ordem_abas : current1nTabOrder).map(String);
+        const rank = (t) => { const i = order.indexOf(String(t.id)); return i < 0 ? 999 : i; };
+        return allTabs.filter(t => selectedIds.includes(String(t.id))).sort((a, b) => rank(a) - rank(b));
+    }
+
     function renderLaudoPreview(bloco, index, fields) {
         const layout = bloco.layoutFotos || '2_cols';
         const gridClass = layout === '1_col' ? 'grid-cols-1' : (layout === 'grid_4' ? 'grid-cols-4' : 'grid-cols-2');
@@ -1476,22 +1494,7 @@
         const cardBg = striping === 'sky' ? 'bg-sky-50/60 border-sky-200' : (striping === 'white' ? 'bg-white border-slate-200' : 'bg-slate-50/70 border-slate-200');
         const larguras = bloco.campos_larguras || {};
 
-        // Abas do laudo: as escolhidas; senão as deduzidas dos campos escolhidos; senão todas as 1:N
-        const allTabs = getLaudoPreviewTabs(fields);
-        let selectedIds = (Array.isArray(bloco.abas_selecionadas) ? bloco.abas_selecionadas : []).map(String)
-            .filter(id => allTabs.some(t => String(t.id) === id));
-        if (!selectedIds.length && Array.isArray(bloco.campos_selecionados)) {
-            bloco.campos_selecionados.forEach(cf => {
-                const tid = (cf && typeof cf === 'object') ? String(cf.tabId || '') : '';
-                if (tid && allTabs.some(t => String(t.id) === tid) && !selectedIds.includes(tid)) selectedIds.push(tid);
-            });
-        }
-        if (!selectedIds.length) selectedIds = allTabs.filter(t => t.isMultiple).map(t => String(t.id));
-
-        // Sequência definida pelo usuário
-        const order = ((Array.isArray(bloco.ordem_abas) && bloco.ordem_abas.length) ? bloco.ordem_abas : current1nTabOrder).map(String);
-        const rank = (t) => { const i = order.indexOf(String(t.id)); return i < 0 ? 999 : i; };
-        const tabs = allTabs.filter(t => selectedIds.includes(String(t.id))).sort((a, b) => rank(a) - rank(b));
+        const tabs = laudoTabsSelecionadas(bloco, fields);
 
         ensureLaudoFieldSelection(bloco, tabs);
         const selIds = (Array.isArray(bloco.campos_selecionados) ? bloco.campos_selecionados : [])
@@ -2498,6 +2501,7 @@
 
             case 'laudo_vistoria_fotos':
             case 'galeria_fotos': {
+                if (temDesenhoReal1n()) return renderLaudoReal(bloco, index, fields);
                 return renderLaudoPreview(bloco, index, fields);
             }
 
@@ -3338,6 +3342,31 @@
             ReportData: window.ReportData,
             formTabs: () => ((window.ReportAdapter && window.ReportAdapter.getFormTabs && currentTemplate) ? (window.ReportAdapter.getFormTabs(currentTemplate.form_id) || []) : [])
         });
+    }
+
+    /** Laudo Analítico: desenho do relatório com registros de exemplo; controles de campo (arrastar, largura, formato do arquivo, remover) no 1º registro de cada aba. */
+    function renderLaudoReal(bloco, index, fields) {
+        // a seleção padrão de campos do laudo é gravada como antes (abas escolhidas / deduzidas dos campos / todas as 1:N)
+        const tabsLaudo = laudoTabsSelecionadas(bloco, fields);
+        ensureLaudoFieldSelection(bloco, tabsLaudo);
+        const b = Object.assign({}, bloco, {
+            densidade: bloco.densidade || current1nLaudoDensity || 'compact',
+            zebrado: bloco.zebrado || current1nLaudoRowStriping || 'slate',
+            ordem_abas: (Array.isArray(bloco.ordem_abas) && bloco.ordem_abas.length) ? bloco.ordem_abas : current1nTabOrder
+        });
+        const edit = {
+            titleClass: 'cursor-text hover:bg-sky-50 px-1 rounded',
+            titleAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')"`,
+            metaExtra: ' • <span class="text-[9px] text-sky-600 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded font-medium print:hidden font-sans">Arraste ⠿ para reordenar campos (vale para todos os registros da aba)</span>',
+            groupAttrs: (tabId) => `class="cursor-text hover:bg-sky-50 px-1 rounded transition-colors" title="Duplo clique para editar o texto da aba" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'custom_tab_title_${escapeHtml(String(tabId))}')"`,
+            containerAttrs: `data-block-index="${index}"`,
+            fieldAttrs: (f) => `data-field-id="${escapeHtml(f.id)}" data-block-index="${index}"`,
+            lead: () => '<span class="field-drag-handle cursor-grab active:cursor-grabbing text-slate-300 group-hover/field:text-sky-600 hover:bg-slate-200/60 p-0.5 rounded transition-colors" title="Arraste para mover de posição no laudo"><span class="material-symbols-outlined text-[14px] leading-none">drag_indicator</span></span>',
+            tail: (f, pct) => fileModeToggleHtml(index, f, fileFieldMode(bloco, f)) + `<div class="inline-flex items-center bg-white border border-slate-200 rounded p-0.5 shadow-2xs"><button type="button" class="field-width-dec-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 hover:bg-slate-100 rounded cursor-pointer transition-colors" onclick="ReportBuilder.changeFieldWidthStep(${index}, '${escapeHtml(f.id)}', -1, event)" title="Diminuir largura do campo (-)"><span class="material-symbols-outlined text-[12px] leading-none">remove</span></button><button type="button" class="field-width-badge-btn px-1 py-0.5 text-[9px] font-extrabold text-slate-700 hover:text-sky-600 cursor-pointer transition-colors" onclick="ReportBuilder.toggleFieldWidthPopover(${index}, '${escapeHtml(f.id)}', event)" title="Clique para escolher proporção exata">${Math.round(pct)}%</button><button type="button" class="field-width-inc-btn px-1 py-0.5 text-slate-500 hover:text-sky-600 hover:bg-slate-100 rounded cursor-pointer transition-colors" onclick="ReportBuilder.changeFieldWidthStep(${index}, '${escapeHtml(f.id)}', 1, event)" title="Aumentar largura do campo (+)"><span class="material-symbols-outlined text-[12px] leading-none">add</span></button></div><button type="button" class="field-remove-btn p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors cursor-pointer print:hidden" onclick="ReportBuilder.removeFieldFromAnalytical1n(${index}, '${escapeHtml(f.id)}', event)" title="Remover este campo do laudo"><span class="material-symbols-outlined text-[13px] leading-none">close</span></button>`,
+            photoHeader: (f) => fileModeToggleHtml(index, f, fileFieldMode(bloco, f))
+        };
+        const r = blocosReais(fields).renderAnalyticalLaudo(b, dadosDeExemplo(), { full: true, edit: edit });
+        return typeof r === 'string' ? r : '';
     }
 
     /** As tabelas 1:N e o laudo só usam o desenho do relatório quando todos os módulos de dados estão carregados. */
