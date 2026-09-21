@@ -1155,108 +1155,9 @@
                     badge: existingMap ? 'Na folha' : 'Precisão Cartográfica',
                     content: `
                     <div class="flex flex-col gap-3">
-                        <p class="text-[11px] text-slate-500">O mapa é montado com a feição real quando o relatório é aberto. O que você marcar aqui é o <strong>padrão</strong>; o usuário pode mudar tudo no painel <em>Mapa</em> do relatório e salvar.</p>
-
-                        <div class="flex flex-col gap-1.5">
-                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Feição em destaque</label>
-                            <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                                ${chk('cfg-map-destaque', 'Destacar a feição no mapa', mcfg.destaque.ativo)}
-                                ${chk('cfg-map-esmaecer', 'Esmaecer o entorno (só polígonos)', mcfg.destaque.esmaecerEntorno)}
-                                <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300">
-                                    <span>Cor do destaque</span>
-                                    <input type="color" id="cfg-map-cor" value="${escapeHtml(mcfg.destaque.cor)}" class="w-9 h-6 p-0 border border-slate-300 rounded" />
-                                </label>
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-2">
-                            <div>
-                                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Mapa base</label>
-                                <select id="cfg-map-base" class="w-full px-2 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl dark:text-white">
-                                    <option value="osm" ${mcfg.baseMap === 'osm' ? 'selected' : ''}>Ruas (OpenStreetMap)</option>
-                                    <option value="satelite" ${mcfg.baseMap === 'satelite' ? 'selected' : ''}>Satélite</option>
-                                    <option value="nenhum" ${mcfg.baseMap === 'nenhum' ? 'selected' : ''}>Sem mapa base</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Altura do mapa</label>
-                                <select id="cfg-map-altura" class="w-full px-2 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl dark:text-white">
-                                    ${[60, 90, 120, 160, 200].map(v => `<option value="${v}" ${Number(mcfg.alturaMm) === v ? 'selected' : ''}>${v} mm</option>`).join('')}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="flex flex-col gap-1.5">
-                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Medidas da feição (o usuário edita com duplo clique)</label>
-                            <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                                ${chk('cfg-map-med-ativo', 'Mostrar medidas no mapa', mcfg.medidas.ativo)}
-                                ${chk('cfg-map-med-lados', 'Lados / trechos', mcfg.medidas.lados)}
-                                ${chk('cfg-map-med-total', 'Área (polígono), comprimento (linha) ou coordenada (ponto)', mcfg.medidas.total)}
-                                ${chk('cfg-map-med-perim', 'Perímetro (polígono)', mcfg.medidas.perimetro)}
-                            </div>
-                        </div>
-
-                        <div class="flex flex-col gap-1.5">
-                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Pontos nos vértices (tabela de coordenadas e memorial)</label>
-                            <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                                ${chk('cfg-map-pts-ativo', 'Permitir marcar pontos nos vértices', mcfg.pontos.ativo)}
-                                <select id="cfg-map-pts-sistema" class="w-full px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl dark:text-white">
-                                    ${(window.MapTools ? window.MapTools.COORD_SYSTEMS : [{ id: 'utm', label: 'SIRGAS 2000 / UTM' }]).map(s => `<option value="${s.id}" ${mcfg.pontos.sistema === s.id ? 'selected' : ''}>${escapeHtml(s.label)}</option>`).join('')}
-                                </select>
-                                ${chk('cfg-map-pts-tab', 'Tabela de pontos sob o mapa', mcfg.pontos.tabela)}
-                                ${chk('cfg-map-pts-mem', 'Memorial descritivo (azimute e distância)', mcfg.pontos.memorial)}
-                            </div>
-                        </div>
-
-                        <div class="flex flex-col gap-1.5">
-                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Extras do mapa (o usuário liga/desliga no relatório)</label>
-                            <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                                ${chk('cfg-map-x-rotulos', 'Rótulos (Quadra/Lote) nas feições vizinhas', mcfg.rotulos.ativo)}
-                                ${chk('cfg-map-x-confr', 'Tabela de confrontantes (quem faz divisa com cada lado)', mcfg.confrontantes.ativo)}
-                                ${chk('cfg-map-x-area', 'Área cadastral × área calculada', mcfg.comparacaoArea.ativo)}
-                                ${chk('cfg-map-x-sit', 'Mapa de situação (localização) no canto', mcfg.situacao.ativo)}
-                                ${chk('cfg-map-x-grade', 'Quadriculado de coordenadas UTM', mcfg.quadriculado.ativo)}
-                            </div>
-                        </div>
-
-                        <div class="flex flex-col gap-1.5">
-                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Elementos e camadas</label>
-                            <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                                ${chk('cfg-map-camadas', 'Permitir ligar as camadas ativas do mapa', mcfg.camadasVizinhas)}
-                                ${chk('cfg-map-norte', 'Norte', mcfg.norte)}
-                                ${chk('cfg-map-escala', 'Escala (gráfica e aproximada)', mcfg.escala)}
-                                ${chk('cfg-map-proj', 'Sistema de projeção (SIRGAS 2000 / UTM)', mcfg.projecao)}
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1">Anotações Técnicas / Nota Cartográfica</label>
-                            <input type="text" id="cfg-map-note" value="${escapeHtml(existingMap?.notaTecnica || 'Delimitação cadastral georreferenciada em conformidade com o sistema cartográfico municipal e SIRGAS 2000.')}" class="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs dark:text-white focus:outline-none focus:ring-1 focus:ring-primary" />
-                        </div>
-
-                        <div class="flex flex-col gap-1.5">
-                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Análise temporal (ortofotos por data)</label>
-                            <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                                ${chk('cfg-map-temp-ativo', 'Gerar um mapa para cada ortofoto que cubra a feição', mcfg.temporal.ativo)}
-                                <div class="grid grid-cols-3 gap-2">
-                                    <select id="cfg-map-temp-ordem" class="px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl dark:text-white">
-                                        <option value="asc" ${mcfg.temporal.ordem === 'asc' ? 'selected' : ''}>Antiga → recente</option>
-                                        <option value="desc" ${mcfg.temporal.ordem === 'desc' ? 'selected' : ''}>Recente → antiga</option>
-                                    </select>
-                                    <select id="cfg-map-temp-cols" class="px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl dark:text-white">
-                                        ${[1, 2, 3, 4].map(v => `<option value="${v}" ${Number(mcfg.temporal.colunas) === v ? 'selected' : ''}>${v} coluna${v > 1 ? 's' : ''}</option>`).join('')}
-                                    </select>
-                                    <select id="cfg-map-temp-altura" class="px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl dark:text-white">
-                                        ${[50, 70, 90, 120].map(v => `<option value="${v}" ${Number(mcfg.temporal.alturaMm) === v ? 'selected' : ''}>${v} mm</option>`).join('')}
-                                    </select>
-                                </div>
-                                ${chk('cfg-map-temp-contorno', 'Contorno da feição em cada imagem', mcfg.temporal.contorno)}
-                                ${chk('cfg-map-temp-sync', 'Mover/aproximar um quadro move todos', mcfg.temporal.sincronizar)}
-                            </div>
-                        </div>
-
+                        <p class="text-[11px] text-slate-500">O mapa é montado com a feição real quando o relatório é aberto, já com <strong>todas as opções ligadas</strong> (destaque, medidas, pontos e tabela, confrontantes, análise temporal, rótulos, quadriculado, mapa de situação e elementos). Quem gera o relatório escolhe o que mostrar e ajusta tudo no painel <em>Configurações do Mapa</em>, inclusive as escolhas que dependem dos dados (camadas dos confrontantes, campo da área e pontos dos vértices).</p>
                         <button type="button" onclick="ReportBuilder.insertMapBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
-                            <span class="material-symbols-outlined text-[16px]">${existingMap ? 'sync' : 'add_circle'}</span> ${existingMap ? 'Atualizar o Mini-Mapa da Folha' : 'Inserir Mini-Mapa na Folha'}
+                            <span class="material-symbols-outlined text-[16px]">${existingMap ? 'sync' : 'add_circle'}</span> ${existingMap ? 'Restaurar o padrão completo do Mini-Mapa' : 'Inserir Mini-Mapa na Folha'}
                         </button>
                     </div>
                     `
@@ -3416,28 +3317,31 @@
         currentMapMode = mode === 'temporal' ? 'atual' : mode; // série multitemporal: próxima etapa
     }
 
+    // Padrão do Mini-Mapa: TODAS as opções ligadas. As que dependem de escolha (camada dos confrontantes, campo da área,
+    // pontos dos vértices) ficam ligadas e o usuário escolhe no relatório, no painel "Configurações do Mapa".
+    const MAPA_PADRAO_COMPLETO = {
+        destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: true },
+        baseMap: 'osm',
+        camadasVizinhas: true,
+        norte: true,
+        escala: true,
+        projecao: true,
+        alturaMm: 90,
+        medidas: { ativo: true, lados: true, total: true, perimetro: true },
+        pontos: { ativo: true, sistema: 'utm', tabela: true, memorial: true, colConf: { ativo: true } },
+        rotulos: { ativo: true, campo: 'rotulo' },
+        confrontantes: { ativo: true },
+        referencia: { ativo: false }, // opção retirada
+        comparacaoArea: { ativo: true },
+        situacao: { ativo: true },
+        quadriculado: { ativo: true },
+        temporal: { ativo: true, ordem: 'asc', colunas: 2, alturaMm: 70, sincronizar: true, contorno: true }
+    };
+
     function insertMapBlock() {
-        const val = (id, fallback) => document.getElementById(id)?.value ?? fallback;
-        const on = (id, fallback) => document.getElementById(id)?.checked ?? fallback;
-        const config = {
-            destaque: { ativo: on('cfg-map-destaque', true), cor: val('cfg-map-cor', '#10b981'), esmaecerEntorno: on('cfg-map-esmaecer', false) },
-            baseMap: val('cfg-map-base', 'osm'),
-            camadasVizinhas: on('cfg-map-camadas', true),
-            norte: on('cfg-map-norte', true),
-            escala: on('cfg-map-escala', true),
-            projecao: on('cfg-map-proj', true),
-            alturaMm: Number(val('cfg-map-altura', 90)),
-            medidas: { ativo: on('cfg-map-med-ativo', true), lados: on('cfg-map-med-lados', true), total: on('cfg-map-med-total', true), perimetro: on('cfg-map-med-perim', false) },
-            pontos: { ativo: on('cfg-map-pts-ativo', false), sistema: val('cfg-map-pts-sistema', 'utm'), tabela: on('cfg-map-pts-tab', true), memorial: on('cfg-map-pts-mem', false) },
-            rotulos: { ativo: on('cfg-map-x-rotulos', false), campo: 'rotulo' },
-            confrontantes: { ativo: on('cfg-map-x-confr', false) },
-            referencia: { ativo: false }, // opção retirada
-            comparacaoArea: { ativo: on('cfg-map-x-area', false) },
-            situacao: { ativo: on('cfg-map-x-sit', false) },
-            quadriculado: { ativo: on('cfg-map-x-grade', false) },
-            temporal: { ativo: on('cfg-map-temp-ativo', false), ordem: val('cfg-map-temp-ordem', 'asc'), colunas: Number(val('cfg-map-temp-cols', 2)), alturaMm: Number(val('cfg-map-temp-altura', 70)), contorno: on('cfg-map-temp-contorno', true), sincronizar: on('cfg-map-temp-sync', true) }
-        };
-        const nota = val('cfg-map-note', '') || 'Delimitação cadastral georreferenciada.';
+        const config = JSON.parse(JSON.stringify(MAPA_PADRAO_COMPLETO));
+        const existente = currentTemplate.blocos.find(b => b.tipo === 'mapa_estatico');
+        const nota = (existente && existente.notaTecnica) || 'Delimitação cadastral georreferenciada em conformidade com o sistema cartográfico municipal e SIRGAS 2000.';
         const normalizado = window.MapTools ? window.MapTools.normalizeMapConfig({ mapa: config }) : config;
         // vista (zoom/posição), textos editados e rótulos arrastados são do usuário, não do modelo
         delete normalizado.vista;

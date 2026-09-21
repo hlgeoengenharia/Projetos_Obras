@@ -63,44 +63,35 @@ ok('A4 marcado por padrão', /setPageSize\('A4'\)"[^>]*bg-primary/.test(html) &&
 ok('folha A4 no título', has(html, 'Folha A4 Interativa') && has(html, '210 × 297 mm (Retrato)'));
 
 // ---------------------------------------------------------------- Mini-Mapa (card do Relatório Individual)
-ok('card do mapa tem destaque, mapa base, camadas, norte, escala e projeção', ['cfg-map-x-rotulos', 'cfg-map-x-confr', 'cfg-map-x-area', 'cfg-map-x-sit', 'cfg-map-x-grade', 'cfg-map-temp-ativo', 'cfg-map-temp-ordem', 'cfg-map-temp-cols', 'cfg-map-temp-altura', 'cfg-map-temp-contorno', 'cfg-map-temp-sync', 'cfg-map-pts-ativo', 'cfg-map-pts-sistema', 'cfg-map-pts-tab', 'cfg-map-pts-mem', 'cfg-map-med-ativo', 'cfg-map-med-lados', 'cfg-map-med-total', 'cfg-map-med-perim', 'cfg-map-destaque', 'cfg-map-esmaecer', 'cfg-map-cor', 'cfg-map-base', 'cfg-map-camadas', 'cfg-map-norte', 'cfg-map-escala', 'cfg-map-proj', 'cfg-map-altura'].every(id => has(html, 'id="' + id + '"')));
+ok('card do mapa: só o texto e o botão (nenhuma opção; tudo já vem ligado)', has(html, 'Mini-Mapa Cartográfico') && has(html, 'todas as opções ligadas') && ['cfg-map-x-rotulos', 'cfg-map-x-confr', 'cfg-map-x-area', 'cfg-map-x-sit', 'cfg-map-x-grade', 'cfg-map-temp-ativo', 'cfg-map-pts-ativo', 'cfg-map-pts-tab', 'cfg-map-pts-mem', 'cfg-map-med-ativo', 'cfg-map-destaque', 'cfg-map-base', 'cfg-map-altura', 'cfg-map-camadas', 'cfg-map-norte', 'cfg-map-escala', 'cfg-map-proj', 'cfg-map-note'].every(id => !has(html, 'id="' + id + '"')) && has(html, 'ReportBuilder.insertMapBlock()'));
 ok('rodapé oficial: opção do QR code de verificação', has(html, 'id="cfg-ftr-qr"') && has(html, 'QR code para verificar a autenticidade online'));
-ok('card explica que o usuário ajusta no relatório', has(html, 'painel <em>Mapa</em> do relatório'));
-ok('o modelo padrão já traz o mapa na folha: o botão é "Atualizar"', has(html, 'Atualizar o Mini-Mapa da Folha'));
+ok('card explica que o usuário ajusta no relatório (Configurações do Mapa)', has(html, 'painel <em>Configurações do Mapa</em>'));
+ok('o modelo padrão já traz o mapa na folha: o botão é "Restaurar o padrão completo"', has(html, 'Restaurar o padrão completo do Mini-Mapa') && !has(html, 'Atualizar o Mini-Mapa da Folha'));
 ok('card não diz mais que a série temporal é "próxima etapa"', !has(html, 'próxima etapa'));
 ok('modo "Série Multitemporal" com dados de mentira saiu', !has(html, 'Série Multitemporal</button>') && !has(html, 'Voo Aerofotogramétrico'));
-Object.assign(inputs, {
-    'cfg-map-destaque': { checked: true }, 'cfg-map-esmaecer': { checked: true }, 'cfg-map-cor': { value: '#ff8800' },
-    'cfg-map-base': { value: 'satelite' }, 'cfg-map-camadas': { checked: false }, 'cfg-map-norte': { checked: false },
-    'cfg-map-escala': { checked: true }, 'cfg-map-proj': { checked: true },
-    'cfg-map-x-rotulos': { checked: true }, 'cfg-map-x-confr': { checked: true }, 'cfg-map-x-ref': { checked: false }, 'cfg-map-x-area': { checked: true }, 'cfg-map-x-sit': { checked: true }, 'cfg-map-x-grade': { checked: false },
-    'cfg-map-temp-ativo': { checked: true }, 'cfg-map-temp-ordem': { value: 'desc' }, 'cfg-map-temp-cols': { value: '3' }, 'cfg-map-temp-altura': { value: '90' }, 'cfg-map-temp-contorno': { checked: false }, 'cfg-map-temp-sync': { checked: true },
-    'cfg-map-pts-ativo': { checked: true }, 'cfg-map-pts-sistema': { value: 'geo_gms' }, 'cfg-map-pts-tab': { checked: true }, 'cfg-map-pts-mem': { checked: true },
-    'cfg-map-med-ativo': { checked: true }, 'cfg-map-med-lados': { checked: false }, 'cfg-map-med-total': { checked: true }, 'cfg-map-med-perim': { checked: true }, 'cfg-map-altura': { value: '120' }, 'cfg-map-note': { value: 'Nota X' }
-});
+// mesmo que existam valores em campos antigos, o mapa nasce com o padrão completo
+inputs['cfg-map-note'] = { value: 'Nota X' };
+inputs['cfg-map-cor'] = { value: '#ff8800' };
 RB.insertMapBlock();
 RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
 let tplMapa = RA.getReportTemplates('f1')[0];
 let mapas = tplMapa.blocos.filter(b => b.tipo === 'mapa_estatico');
-eq('grava a configuração escolhida no UNICO bloco de mapa', [mapas.length, mapas[0].mapa.destaque.cor, mapas[0].mapa.destaque.esmaecerEntorno, mapas[0].mapa.baseMap, mapas[0].mapa.camadasVizinhas, mapas[0].mapa.norte, mapas[0].mapa.alturaMm, mapas[0].notaTecnica], [1, '#ff8800', true, 'satelite', false, false, 120, 'Nota X']);
-eq('medidas escolhidas ficam no modelo', mapas[0].mapa.medidas, { ativo: true, lados: false, total: true, perimetro: true, cor: '#065f46', estilo: { lados: { n: true, i: false, s: false }, total: { n: true, i: false, s: false }, perimetro: { n: true, i: false, s: false } } });
-eq('pontos: padrão do modelo (sem os pontos do usuário)', [mapas[0].mapa.pontos.ativo, mapas[0].mapa.pontos.sistema, mapas[0].mapa.pontos.tabela, mapas[0].mapa.pontos.memorial, mapas[0].mapa.pontos.ordem, mapas[0].mapa.pontos.titulos], [true, 'geo_gms', true, true, [], {}]);
-eq('análise temporal: padrão do modelo (sem ortofotos retiradas pelo usuário)', mapas[0].mapa.temporal, { ativo: true, ordem: 'desc', colunas: 3, alturaMm: 90, sincronizar: true, contorno: false, excluidas: [] });
-eq('extras: padrão do modelo (camada e campo são escolhidos pelo usuário no relatório)', [mapas[0].mapa.rotulos.ativo, mapas[0].mapa.confrontantes.ativo, mapas[0].mapa.confrontantes.camada, mapas[0].mapa.referencia.ativo, mapas[0].mapa.comparacaoArea.ativo, mapas[0].mapa.comparacaoArea.campo, mapas[0].mapa.situacao.ativo, mapas[0].mapa.quadriculado.ativo, mapas[0].mapa.anotacoes], [true, true, '', false, true, '', true, false, []]);
+eq('grava um UNICO bloco de mapa, com o padrão completo (a nota do modelo é mantida)', [mapas.length, mapas[0].mapa.destaque.cor, mapas[0].mapa.destaque.esmaecerEntorno, mapas[0].mapa.baseMap, mapas[0].mapa.camadasVizinhas, mapas[0].mapa.norte, mapas[0].mapa.alturaMm, mapas[0].notaTecnica === 'Nota X'], [1, '#10b981', true, 'osm', true, true, 90, false]);
+eq('todas as opções ligadas: medidas, pontos (tabela, memorial e coluna Confrontantes), extras, elementos e análise temporal', [mapas[0].mapa.medidas.ativo && mapas[0].mapa.medidas.lados && mapas[0].mapa.medidas.total && mapas[0].mapa.medidas.perimetro, mapas[0].mapa.pontos.ativo && mapas[0].mapa.pontos.tabela && mapas[0].mapa.pontos.memorial && mapas[0].mapa.pontos.colConf.ativo, mapas[0].mapa.rotulos.ativo && mapas[0].mapa.confrontantes.ativo && mapas[0].mapa.comparacaoArea.ativo && mapas[0].mapa.situacao.ativo && mapas[0].mapa.quadriculado.ativo, mapas[0].mapa.escala && mapas[0].mapa.projecao, mapas[0].mapa.temporal.ativo && mapas[0].mapa.temporal.contorno && mapas[0].mapa.temporal.sincronizar], [true, true, true, true, true]);
+eq('o que depende de escolha do usuário fica vazio no modelo (pontos, camada dos confrontantes, campo da área, ortofotos retiradas, textos)', [mapas[0].mapa.pontos.ordem, mapas[0].mapa.pontos.titulos, mapas[0].mapa.confrontantes.camada, mapas[0].mapa.comparacaoArea.campo, mapas[0].mapa.temporal.excluidas, mapas[0].mapa.anotacoes, mapas[0].mapa.referencia.ativo], [[], {}, '', '', [], [], false]);
 ok('a vista, os textos editados e os rótulos arrastados (do usuário) não vão para o modelo', !('vista' in mapas[0].mapa) && !('edicoes' in mapas[0].mapa) && !('posicoes' in mapas[0].mapa));
-inputs['cfg-map-cor'].value = '#0000ff';
 RB.insertMapBlock();
 RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
 tplMapa = RA.getReportTemplates('f1')[0];
 mapas = tplMapa.blocos.filter(b => b.tipo === 'mapa_estatico');
-eq('clicar de novo ATUALIZA o mesmo mapa (não duplica)', [mapas.length, mapas[0].mapa.destaque.cor], [1, '#0000ff']);
-ok('card passa a mostrar "Atualizar" e os valores salvos', has(container.innerHTML, 'Atualizar o Mini-Mapa da Folha') && has(container.innerHTML, 'value="#0000ff"'));
+eq('clicar de novo restaura o padrão no MESMO mapa (não duplica)', [mapas.length, mapas[0].mapa.destaque.cor], [1, '#10b981']);
+ok('card mostra "Restaurar o padrão completo" depois de inserido', has(container.innerHTML, 'Restaurar o padrão completo do Mini-Mapa'));
 RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
 const folha = sheet['a4-blocks-list'].innerHTML;
-ok('prévia na folha é esquemática e reflete a configuração', has(folha, 'Pré-visualização esquemática') && has(folha, 'Imagens © Esri') && has(folha, 'border: 3px solid #0000ff') && has(folha, 'height: 454px'));
-ok('prévia avisa da análise temporal (colunas e ordem)', has(folha, 'Análise temporal: um mapa por ortofoto') && has(folha, '3 coluna(s)') && has(folha, 'recente → antiga'));
-ok('prévia avisa que o usuário marca pontos e cita o memorial e o sistema', has(folha, 'marca pontos nos vértices') && has(folha, 'com memorial descritivo') && has(folha, 'graus, minutos e segundos'));
-ok('prévia mostra a área (medidas ligadas) e não os lados (desligados)', has(folha, 'Área 1.012,40 m²') && !has(folha, '25,40 m'));
+ok('prévia na folha é esquemática e reflete a configuração (padrão completo)', has(folha, 'Pré-visualização esquemática') && has(folha, 'border: 3px solid #10b981') && has(folha, 'height: 340px'));
+ok('prévia avisa da análise temporal (colunas e ordem do padrão)', has(folha, 'Análise temporal: um mapa por ortofoto') && has(folha, '2 coluna(s)') && has(folha, 'antiga → recente'));
+ok('prévia avisa que o usuário marca pontos e cita o memorial e o sistema (UTM)', has(folha, 'marca pontos nos vértices') && has(folha, 'com memorial descritivo') && has(folha, 'UTM'));
+ok('prévia mostra a área e os lados (medidas todas ligadas)', has(folha, 'Área 1.012,40 m²') && has(folha, '25,40 m'));
 Object.keys(inputs).forEach(k => delete inputs[k]);
 
 // ---------------------------------------------------------------- A3
