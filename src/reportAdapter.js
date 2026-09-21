@@ -385,7 +385,7 @@
                     nome: template.nome,
                     tipo: template.tipo,
                     disponibilizar_no_mapa: !!template.disponibilizar_no_mapa,
-                    config_pagina: template.config_pagina,
+                    config_pagina: packTemplate(template),
                     blocos: template.blocos,
                     updated_at: template.updatedAt
                 });
@@ -413,6 +413,102 @@
         saveToFormsTableFallback(template);
 
         return template;
+    }
+
+    // A tabela relatorios_templates só tem colunas para id, form_id, nome, tipo, disponibilizar_no_mapa, config_pagina e blocos.
+    // O resto do modelo (ex.: atalho_aba, que diz em qual aba o botão aparece) vai junto, dentro de config_pagina._extras.
+    const COLUNAS_MODELO = ['id', 'form_id', 'nome', 'tipo', 'disponibilizar_no_mapa', 'config_pagina', 'blocos', 'updatedAt', 'updated_at', 'created_at'];
+    function packTemplate(t) {
+        const extras = {};
+        Object.keys(t).forEach(k => { if (COLUNAS_MODELO.indexOf(k) < 0) extras[k] = t[k]; });
+        return Object.assign({}, t.config_pagina || {}, { _extras: extras });
+    }
+    function unpackRow(r) {
+        const cfg = Object.assign({}, r.config_pagina || {});
+        const extras = cfg._extras || {};
+        delete cfg._extras;
+        return Object.assign({}, extras, { id: r.id, form_id: r.form_id, nome: r.nome, tipo: r.tipo, disponibilizar_no_mapa: !!r.disponibilizar_no_mapa, config_pagina: cfg, blocos: r.blocos || [], updatedAt: r.updated_at });
+    }
+    const quando = (v) => { const n = Date.parse(v || ''); return isFinite(n) ? n : 0; };
+
+    /**
+     * Sincroniza os modelos de relatório com a tabela relatorios_templates (uma vez por carregamento da página).
+     * Os modelos moram no navegador de quem os criou; sem isto, outro navegador/aparelho (ou o site publicado) não os enxerga.
+     *  - baixa do servidor o que falta aqui ou é mais novo lá;
+     *  - envia ao servidor o que só existe aqui ou é mais novo aqui;
+     *  - se a tabela foi criada depois de uma tentativa que falhou, o "circuito fechado" é reaberto.
+     * Devolve { ok, baixados, enviados } ou { ok: false, motivo }.
+     */
+    let syncPromise = null;
+    async function syncTemplates(opts) {
+        if (syncPromise && !(opts && opts.force)) return syncPromise;
+        const p = (async () => {
+            if (typeof supabaseClient === 'undefined' || !supabaseClient) return { ok: false, motivo: 'sem-cliente' };
+            let sessao = null;
+            try { sessao = ((await supabaseClient.auth.getSession()) || {}).data; sessao = sessao && sessao.session; } catch (e) { sessao = null; }
+            if (!sessao) return { ok: false, motivo: 'sem-sessao' };
+            let remoto;
+            try {
+                const r = await supabaseClient.from('relatorios_templates').select('*');
+                if (r.error) {
+                    if (isMissingTableError(r.error)) {
+                        isRemoteTemplatesTableAvailable = false;
+                        try { localStorage.setItem(STORAGE_KEY_REMOTE_AVAILABLE, 'false'); } catch (e) {}
+                        return { ok: false, motivo: 'sem-tabela' };
+                    }
+                    return { ok: false, motivo: 'erro' };
+                }
+                remoto = r.data || [];
+            } catch (e) { return { ok: false, motivo: 'erro' }; }
+            isRemoteTemplatesTableAvailable = true;
+            try { localStorage.setItem(STORAGE_KEY_REMOTE_AVAILABLE, 'true'); } catch (e) {}
+
+            let locais = [];
+            try { locais = JSON.parse(localStorage.getItem(STORAGE_KEY_TEMPLATES) || '[]'); } catch (e) { locais = []; }
+            let baixados = 0, enviados = 0;
+            const idsRemotos = new Set();
+            remoto.forEach(row => {
+                idsRemotos.add(row.id);
+                const tpl = unpackRow(row);
+                const i = locais.findIndex(t => t.id === tpl.id);
+                if (i < 0) { locais.push(tpl); baixados++; }
+                else if (quando(tpl.updatedAt) > quando(locais[i].updatedAt)) { locais[i] = tpl; baixados++; }
+            });
+            const remotoPorId = {};
+            remoto.forEach(r => { remotoPorId[r.id] = r; });
+            for (const t of locais) {
+                if (!t || !t.id || !t.form_id) continue;
+                const r = remotoPorId[t.id];
+                if (r && quando(t.updatedAt) <= quando(r.updated_at)) continue;
+                try {
+                    const { error } = await supabaseClient.from('relatorios_templates').upsert({
+                        id: t.id, form_id: t.form_id, nome: t.nome || 'Relatório', tipo: t.tipo || 'individual', disponibilizar_no_mapa: !!t.disponibilizar_no_mapa,
+                        config_pagina: packTemplate(t), blocos: t.blocos || [], updated_at: t.updatedAt || new Date().toISOString()
+                    });
+                    if (!error) enviados++;
+                } catch (e) { /* segue com os outros */ }
+            }
+            if (baixados) {
+                try { localStorage.setItem(STORAGE_KEY_TEMPLATES, JSON.stringify(locais)); } catch (e) {}
+                try { if (typeof window !== 'undefined' && window.dispatchEvent && typeof CustomEvent === 'function') window.dispatchEvent(new CustomEvent('report-templates-synced', { detail: { baixados: baixados, enviados: enviados } })); } catch (e) {}
+            }
+            return { ok: true, baixados: baixados, enviados: enviados };
+        })();
+        syncPromise = p;
+        // sem sessão ou sem cliente ainda: permite tentar de novo depois
+        p.then(r => { if (!r.ok && r.motivo !== 'sem-tabela' && syncPromise === p) syncPromise = null; }).catch(() => { if (syncPromise === p) syncPromise = null; });
+        return p;
+    }
+
+    // tenta ao abrir a página, esperando o login terminar (até ~1 minuto)
+    function agendarSync(tentativa) {
+        if (typeof setTimeout !== 'function') return;
+        const t = setTimeout(async () => {
+            let r = { ok: false, motivo: 'erro' };
+            try { r = await syncTemplates(); } catch (e) {}
+            if (!r.ok && (r.motivo === 'sem-sessao' || r.motivo === 'sem-cliente') && tentativa < 15) agendarSync(tentativa + 1);
+        }, tentativa === 0 ? 1500 : 4000);
+        if (t && typeof t.unref === 'function') t.unref();
     }
 
     function saveToFormsTableFallback(template) {
@@ -730,7 +826,9 @@
         getReportTemplates,
         deleteReportTemplate,
         createDefaultTemplate,
-        resetRemoteTableCheck
+        resetRemoteTableCheck,
+        syncTemplates
     };
+    agendarSync(0);
 
 })();

@@ -1030,6 +1030,7 @@ assertTest('Mini-Mapa: o relatório gerado tem o painel "Mapa" (destaque, camada
     ['tests/verificarEmissao.test.js', 'Verificação pública: protocolo do QR code, SHA-256 digitado, respostas (registrado, autêntico, não confere, não encontrado) sem expor dados do relatório'],
     ['tests/viewerAnalises.test.js', 'Análises do relatório: confrontantes por lado, área cadastral x calculada, distância e sobreposição com camada de referência (escape, avisos, recorte)'],
     ['tests/viewerPoints.test.js', 'Tabela de pontos e memorial descritivo no relatório: coordenadas por sistema, azimute/distância, fechamento do polígono, quebra entre folhas e escape de HTML'],
+    ['tests/reportTemplatesSync.test.js', 'Modelos de relatório entre navegadores: baixa do servidor o que falta, envia o que só existe no navegador (com o atalho_aba nos extras), o mais novo vence e reabre o circuito quando a tabela passa a existir'],
     ['tests/reportAjustes.test.js', 'Ajustes do usuário no relatório: salva por modelo + feição no servidor com reserva no navegador e circuito fechado quando a tabela não existe'],
     ['tests/pageSize.test.js', 'Tamanho da folha: A4 e A3 (retrato/paisagem) com dimensões em mm e px; modelos antigos caem em A4'],
     ['tests/reportScope.test.js', 'Construtor: escopo Individual x Geral da camada (cards por escopo, sem "Gráficos do Dashboard" no individual) e seletor de folha A4 | A3'],
