@@ -1694,7 +1694,7 @@
             if (hdrIndex !== -1) {
                 const hdrBloco = currentTemplate.blocos[hdrIndex];
                 headerSlot.innerHTML = `
-                    <div class="report-block-item group relative transition-all print:border-none print:p-0 print:bg-transparent page-break-avoid w-full border-b border-slate-300 pb-2 mb-1" data-block-id="${hdrBloco.id || hdrIndex}">
+                    <div class="report-block-item group relative transition-all print:border-none print:p-0 print:bg-transparent page-break-avoid w-full${(window.ReportBlocks && window.ReportPreview) ? '' : ' border-b border-slate-300 pb-2 mb-1'}" data-block-id="${hdrBloco.id || hdrIndex}">
                         <!-- Barra de Controle Flutuante no Hover (Posicionada à esquerda para não sobrepor metadados à direita) -->
                         <div class="absolute -top-3.5 left-2 hidden group-hover:flex items-center gap-1 bg-slate-900/90 text-white rounded-lg shadow-md px-1.5 py-0.5 z-30 select-none print:hidden backdrop-blur-xs">
                             <div class="flex items-center gap-1 text-slate-300 px-1" title="Cabeçalho Oficial Institucional (Acima da Margem Superior)">
@@ -1723,7 +1723,7 @@
             if (ftrIndex !== -1) {
                 const ftrBloco = currentTemplate.blocos[ftrIndex];
                 footerSlot.innerHTML = `
-                    <div class="report-block-item group relative transition-all print:border-none print:p-0 print:bg-transparent page-break-avoid w-full border-t border-slate-300 pt-2 mt-auto" data-block-id="${ftrBloco.id || ftrIndex}">
+                    <div class="report-block-item group relative transition-all print:border-none print:p-0 print:bg-transparent page-break-avoid w-full mt-auto${(window.ReportBlocks && window.ReportPreview) ? '' : ' border-t border-slate-300 pt-2'}" data-block-id="${ftrBloco.id || ftrIndex}">
                         <!-- Barra de Controle Flutuante no Hover (Posicionada à esquerda para não sobrepor metadados à direita) -->
                         <div class="absolute -top-3.5 left-2 hidden group-hover:flex items-center gap-1 bg-slate-900/90 text-white rounded-lg shadow-md px-1.5 py-0.5 z-30 select-none print:hidden backdrop-blur-xs">
                             <div class="flex items-center gap-1 text-slate-300 px-1" title="Rodapé Oficial Fixo na Base da Folha (Abaixo da Margem Inferior)">
@@ -1826,6 +1826,7 @@
     function renderBlockContent(bloco, index, fields, charts) {
         switch (bloco.tipo) {
             case 'cabecalho':
+                if (window.ReportBlocks && window.ReportPreview) return renderCabecalhoReal(bloco, index, fields);
                 const repeatLabel = bloco.repetir_todas_folhas ? 'Todas as Folhas' : 'Apenas 1ª Folha';
                 return `
                     <div class="w-full">
@@ -2166,6 +2167,7 @@
                 `;
 
             case 'tabela_sintetica_1n': {
+                if (temDesenhoReal1n()) return renderSinteticaReal(bloco, index, fields);
                 const rawCols = (Array.isArray(bloco.colunas) && bloco.colunas.length > 0)
                     ? bloco.colunas
                     : ['aba', 'data', 'situacao_ocupacao', 'situacao_recuo', 'area_invadida', 'qtd_fotos'];
@@ -2641,6 +2643,7 @@
             }
 
             case 'rodape': {
+                if (window.ReportBlocks && window.ReportPreview) return renderRodapeReal(bloco, fields);
                 const isSecondPageStart = (bloco.inicio_numeracao === 'segunda');
                 const pageLabel = isSecondPageStart 
                     ? '<span class="text-sky-600 font-semibold">Página 02 de 10 (a partir da 2ª folha)</span>' 
@@ -3327,8 +3330,58 @@
             esc: escapeHtml,
             FieldFormatter: window.FieldFormatter,
             geometryCenter: () => window.ReportPreview.CENTRO,
-            formFields: () => fields || []
+            formFields: () => fields || [],
+            emissaoTexto: (k) => (k === 'protocolo' ? '#' + String((currentTemplate && currentTemplate.id) || 'EXEMPLO').slice(-6).toUpperCase() : '7f83b1657ff1…'),
+            emissaoTitulo: () => 'Exemplo: o protocolo e o SHA-256 reais são gerados na emissão',
+            emissaoProtocolo: () => '',
+            qrDataUrl: () => '',
+            ReportData: window.ReportData,
+            formTabs: () => ((window.ReportAdapter && window.ReportAdapter.getFormTabs && currentTemplate) ? (window.ReportAdapter.getFormTabs(currentTemplate.form_id) || []) : [])
         });
+    }
+
+    /** As tabelas 1:N e o laudo só usam o desenho do relatório quando todos os módulos de dados estão carregados. */
+    function temDesenhoReal1n() {
+        return !!(window.ReportBlocks && window.ReportPreview && window.ReportData);
+    }
+
+    /** Quadro Sintético 1:N: desenho do relatório com os registros de exemplo; colunas com mover, renomear (duplo clique) e remover. */
+    function renderSinteticaReal(bloco, index, fields) {
+        const b = Object.assign({}, bloco, {
+            densidade: bloco.densidade || current1nTableDensity || 'compact',
+            zebrado: bloco.zebrado || current1nRowStriping || 'slate'
+        });
+        const btn = (dir, cIdx, icone, dica) => `<button type="button" onclick="ReportBuilder.moveSynthetic1nColumn(${index}, ${cIdx}, ${dir}, event)" class="opacity-0 group-hover/th:opacity-100 p-0.5 text-slate-400 hover:text-slate-800 hover:bg-slate-200 rounded cursor-pointer print:hidden shrink-0" title="${dica}"><span class="material-symbols-outlined text-[13px] leading-none">${icone}</span></button>`;
+        const edit = {
+            titleClass: 'cursor-text hover:bg-sky-50 px-1 rounded',
+            titleAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')"`,
+            metaExtra: ` • ${b.colunas && b.colunas.length ? b.colunas.length : 3} coluna(s) • ${b.densidade}`,
+            th: (c, cIdx, cols, rotuloHtml) => `<div class="flex items-center justify-between gap-1"><div class="flex items-center gap-0.5 min-w-0">${cIdx > 0 ? btn(-1, cIdx, 'chevron_left', 'Mover coluna para a esquerda') : ''}<span class="cursor-pointer hover:bg-sky-100 px-1 py-0.5 rounded transition-colors whitespace-normal break-words leading-tight" title="Duplo clique para renomear ou abreviar título" ondblclick="ReportBuilder.editSynthetic1nColTitle(${index}, ${cIdx}, event)">${rotuloHtml}</span>${cIdx < cols.length - 1 ? btn(1, cIdx, 'chevron_right', 'Mover coluna para a direita') : ''}</div><button type="button" onclick="ReportBuilder.removeColumnFromSynthetic1n(${index}, '${escapeHtml(c.id)}', event)" class="field-remove-btn opacity-0 group-hover/th:opacity-100 p-0.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-all cursor-pointer print:hidden shrink-0" title="Remover esta coluna da tabela"><span class="material-symbols-outlined text-[13px] leading-none">close</span></button></div>`
+        };
+        const r = blocosReais(fields).renderSyntheticTable(b, dadosDeExemplo(), { full: true, edit: edit });
+        return typeof r === 'string' ? r : '';
+    }
+
+    /** Cabeçalho: desenho do relatório + títulos editáveis com duplo clique + selo de repetição. */
+    function renderCabecalhoReal(bloco, index, fields) {
+        const todas = !!bloco.repetir_todas_folhas;
+        const badgeHtml = `<span class="self-start text-[9px] font-sans font-bold ${todas ? 'text-sky-600 bg-sky-50 border-sky-200' : 'text-slate-500 bg-slate-100 border-slate-200'} border px-1.5 py-0.5 rounded select-none print:hidden">${todas ? 'Todas as Folhas' : 'Apenas 1ª Folha'}</span>`;
+        return blocosReais(fields).renderHeaderSlotHtml(bloco, currentTemplate || {}, 0, 0, {
+            bare: true,
+            edit: {
+                textClass: 'cursor-text hover:bg-sky-50 px-1 py-0.5 rounded',
+                subtituloAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'subtitulo')" title="Duplo clique para editar"`,
+                tituloAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')" title="Duplo clique para editar"`,
+                badgeHtml: badgeHtml
+            }
+        });
+    }
+
+    /** Rodapé: desenho do relatório; a numeração mostra como ficaria a partir da folha em que começa. */
+    function renderRodapeReal(bloco, fields) {
+        const segunda = bloco.inicio_numeracao === 'segunda';
+        const qrHtml = '<span class="text-slate-500 font-normal" title="O QR code é gerado na emissão do relatório">[QR code de verificação]</span>';
+        return blocosReais(fields).renderFooterSlotHtml(bloco, segunda ? 2 : 1, segunda ? 10 : 1, 0, 0, { bare: true, qrHtml: qrHtml });
     }
     function dadosDeExemplo() {
         const tabs = (window.ReportAdapter && window.ReportAdapter.getFormTabs && currentTemplate) ? (window.ReportAdapter.getFormTabs(currentTemplate.form_id) || []) : [];

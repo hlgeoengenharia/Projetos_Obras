@@ -41,7 +41,7 @@ window.window = window;
 const ctx = { window, document, localStorage, forms, console, setTimeout: () => 0, clearTimeout() {}, alert() {}, confirm: () => true, navigator: {} };
 ctx.self = window;
 vm.createContext(ctx);
-['src/pageSize.js', 'src/mapTools.js', 'src/fieldFormatter.js', 'src/reportBlocks.js', 'src/reportPreview.js', 'src/reportAdapter.js', 'src/reportBuilder.js'].forEach(f => vm.runInContext(read(f), ctx, { filename: f }));
+['src/pageSize.js', 'src/mapTools.js', 'src/fieldFormatter.js', 'src/reportData.js', 'src/reportBlocks.js', 'src/reportPreview.js', 'src/reportAdapter.js', 'src/reportBuilder.js'].forEach(f => vm.runInContext(read(f), ctx, { filename: f }));
 const RB = window.ReportBuilder;
 const RA = window.ReportAdapter;
 ok('construtor e adaptador carregaram', !!RB && !!RA && !!window.PageSize);
@@ -208,6 +208,47 @@ ok('voltando ao individual, o modelo geral não aparece na lista', !has(containe
     h = salvarGrade(2, { campos_selecionados: ['a', 'ar', 'dt', 'cp'], campos_larguras: {} });
     ok('grade: valores de exemplo formatados pelo tipo do campo (área com m², data dd/mm/aaaa, CPF com máscara)', has(h, '550,26 m²') && has(h, '15/03/2026') && has(h, '123.456.789-09'));
     ok('grade: sem o desenho antigo (esquemático) quando os módulos compartilhados estão carregados', !has(h, 'Valor de'));
+}
+
+// ---------------------------------------------------------------- Cabeçalho e rodapé no construtor: desenho REAL do relatório + edição
+{
+    const tpl = RA.getReportTemplates('f1')[0];
+    tpl.blocos = [
+        { id: 'h1', tipo: 'cabecalho', titulo: 'Ficha <X>', subtitulo: 'Órgão', logo: true, exibirDataHora: true, exibirProtocolo: true, repetir_todas_folhas: true },
+        { id: 'r1', tipo: 'rodape', exibirDataHora: true, exibirHash: true, exibirQr: true, numeracao: true, inicio_numeracao: 'segunda' }
+    ];
+    RA.saveReportTemplate(tpl);
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+    const h = sheet['a4-header-slot'].innerHTML;
+    const r = sheet['a4-footer-slot'].innerHTML;
+    ok('cabeçalho: título e subtítulo editáveis com duplo clique (título escapado)', has(h, "ReportBuilder.enableInlineEdit(this, 0, 'titulo')") && has(h, "ReportBuilder.enableInlineEdit(this, 0, 'subtitulo')") && has(h, 'Ficha &lt;X&gt;'));
+    ok('cabeçalho: emissão e protocolo (de exemplo) e selo "Todas as Folhas"; sem a linha extra do contêiner', has(h, 'Protocolo:') && has(h, 'data-emissao="protocolo"') && has(h, 'Todas as Folhas') && !has(h, 'border-b border-slate-300 pb-2 mb-1'));
+    ok('cabeçalho: mantém o botão de remover', has(h, 'ReportBuilder.removeBlock(0)'));
+    ok('rodapé: emissão, SHA-256 de exemplo e marcador do QR (o real só existe na emissão)', has(r, 'Emitido em') && has(r, 'SHA-256:') && has(r, '7f83b1657ff1') && has(r, '[QR code de verificação]') && !has(r, 'data-emissao="qr"'));
+    ok('rodapé: numeração a partir da 2ª folha mostra "Página 02 de 10"; sem a linha extra do contêiner', has(r, 'Página 02 de 10') && has(r, 'ReportBuilder.removeBlock(1)') && !has(r, 'border-t border-slate-300 pt-2 mt-auto'));
+}
+
+// ---------------------------------------------------------------- Quadro Sintético 1:N no construtor: desenho REAL + controles de coluna
+{
+    const tpl = RA.getReportTemplates('f1')[0];
+    const forms0 = window.forms[0];
+    forms0.tabs = forms0.tabs.filter(t => t.id !== 't_h');
+    forms0.tabs.push({ id: 't_h', title: 'PF', isMultiple: true, fields: [{ id: 'h_d', label: 'Data da vistoria', type: 'date' }, { id: 'h_o', label: 'Ocupação <x>', type: 'text' }] });
+    const salvar = (extra) => {
+        tpl.blocos = [Object.assign({ id: 's1', tipo: 'tabela_sintetica_1n', titulo: 'Histórico <1:N>', colunas: ['aba', 'h_d', 'h_o'] }, extra || {})];
+        RA.saveReportTemplate(tpl);
+        RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+        return sheet['a4-blocks-list'].innerHTML;
+    };
+    let h = salvar();
+    ok('quadro 1:N: registros de exemplo da aba (2 linhas) formatados pelo tipo do campo (data dd/mm/aaaa)', has(h, '15/03/2026') && has(h, '10/02/2026') && !has(h, '[Data da vistoria'));
+    ok('quadro 1:N: título editável (escapado) e cabeçalho de coluna com o nome do campo (escapado)', has(h, "ReportBuilder.enableInlineEdit(this, 0, 'titulo')") && has(h, 'Histórico &lt;1:N&gt;') && has(h, 'Ocupação &lt;x&gt;'));
+    ok('quadro 1:N: controles de coluna (mover, renomear com duplo clique, remover)', has(h, 'ReportBuilder.moveSynthetic1nColumn(0, 1, -1, event)') && has(h, 'ReportBuilder.moveSynthetic1nColumn(0, 1, 1, event)') && has(h, 'ReportBuilder.editSynthetic1nColTitle(0, 2, event)') && has(h, "ReportBuilder.removeColumnFromSynthetic1n(0, 'h_o', event)") && !has(h, 'moveSynthetic1nColumn(0, 0, -1'));
+    ok('quadro 1:N: resumo "2 registro(s)" e densidade', has(h, '2 registro(s)') && has(h, '3 coluna(s)') && has(h, 'compact'));
+    h = salvar({ ordem_cronologica: 'asc', zebrado: 'ente', densidade: 'ultracompact' });
+    ok('quadro 1:N: ordem, densidade e zebrado do bloco valem no desenho', has(h, 'Antigo → Recente') && has(h, 'py-0.5 px-1') && has(h, 'ultracompact'));
+    h = salvar({ abas_selecionadas: ['t_inexistente'] });
+    ok('quadro 1:N: aba escolhida que não existe mais mostra o aviso do relatório', has(h, 'não estão disponíveis'));
 }
 
 console.log(`reportScope: ${total - failed}/${total} verificações passaram`);

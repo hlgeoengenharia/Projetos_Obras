@@ -18,25 +18,12 @@ function extractFunction(name) {
     return lines.slice(start, end + 1).join('\n');
 }
 
-// região dos blocos novos: do comentário de abertura até o fim de renderAnalyticalLaudo
-const regionStart = lines.findIndex(l => l.includes('QUADRO SINTÉTICO E LAUDO ANALÍTICO')) - 1;
-const lastFnStart = lines.findIndex(l => l.startsWith('        function renderAnalyticalLaudo('));
-let regionEnd = lastFnStart;
-while (lines[regionEnd] !== '        }') regionEnd++;
-const region = lines.slice(regionStart, regionEnd + 1).join('\n');
-
 const window = { reportViewerFormTabs: [] };
-const reportPayload = { featureGeometry: null };
-// eslint-disable-next-line no-new-func
+// os desenhistas ficam em src/reportBlocks.js (o visualizador e o construtor usam os mesmos)
 const ReportBlocks = require('../src/reportBlocks.js');
-const load = new Function('FieldFormatter', 'ReportData', 'window', 'reportPayload', 'turf', 'ReportBlocks', `
-    ${extractFunction('escapeHtml')}
-    const B = ReportBlocks.create({ esc: escapeHtml, FieldFormatter: FieldFormatter, geometryCenter: () => null });
-    const { getGeometryCenter, getOrgBadgeHtml, getStatusBadgeHtml, getRecuoBadgeHtml } = B;
-    ${region}
-    return { renderSyntheticTable, renderAnalyticalLaudo };
-`);
-const { renderSyntheticTable, renderAnalyticalLaudo } = load(FieldFormatter, ReportData, window, reportPayload, undefined, ReportBlocks);
+const escapeHtml = new Function(extractFunction('escapeHtml') + '; return escapeHtml;')();
+const B = ReportBlocks.create({ esc: escapeHtml, FieldFormatter: FieldFormatter, ReportData: ReportData, formTabs: () => window.reportViewerFormTabs, geometryCenter: () => null });
+const { renderSyntheticTable, renderAnalyticalLaudo } = B;
 
 let total = 0;
 let failed = 0;

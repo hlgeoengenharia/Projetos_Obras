@@ -37,6 +37,14 @@ ok('slot do rodapé: emissão, SHA-256 (com o texto completo no título), QR e n
 const rod2 = B.renderFooterSlotHtml({ exibirDataHora: false, exibirHash: false, exibirQr: false, numeracao: false }, 1, 1, 10, 10);
 ok('rodapé com tudo desligado: sem emissão, hash, QR nem página', !/Emitido em/.test(rod2) && !/SHA-256/.test(rod2) && !/data-emissao="qr"/.test(rod2) && !/Página/.test(rod2));
 
+// modo do construtor: só o conteúdo (sem o recuo das margens), títulos editáveis, selo e marcador do QR
+const hb = B.renderHeaderSlotHtml({ titulo: 'Ficha', subtitulo: 'Órgão' }, {}, 12, 8, { bare: true, edit: { textClass: 'cursor-text', tituloAttrs: 'ondblclick="ed(this, \'titulo\')"', subtituloAttrs: 'ondblclick="ed(this, \'subtitulo\')"', badgeHtml: '<i>SELO</i>' } });
+ok('cabeçalho (construtor): sem contêiner de margens, com títulos editáveis e selo', !hb.includes('a4-page-header-slot') && !hb.includes('padding: 6mm') && hb.includes("ed(this, 'titulo')") && hb.includes("ed(this, 'subtitulo')") && hb.includes('cursor-text') && hb.includes('<i>SELO</i>') && hb.includes('Ficha') && hb.includes('Órgão'));
+ok('cabeçalho: a saída normal (relatório) não muda e não traz o modo de edição', slot.includes('a4-page-header-slot') && !slot.includes('ondblclick') && !slot.includes('cursor-text'));
+const fb = B.renderFooterSlotHtml({ exibirQr: true }, 2, 10, 5, 5, { bare: true, qrHtml: '<b>QR-EXEMPLO</b>' });
+ok('rodapé (construtor): sem contêiner, marcador no lugar do QR e numeração informada', !fb.includes('a4-page-footer-slot') && fb.includes('<b>QR-EXEMPLO</b>') && !fb.includes('data-emissao="qr"') && fb.includes('Página 02 de 10'));
+ok('rodapé: a saída normal (relatório) mantém o QR e o contêiner', rod.includes('a4-page-footer-slot') && rod.includes('data-emissao="qr"') && !rod.includes('QR-EXEMPLO'));
+
 // ---------------------------------------------------------------- texto livre com menções
 const dados = { f_nome: 'Maria <da> Silva', f_area: 550.26, f_cpf: '12345678909' };
 const menc = (id, label, fmt) => '<span class="mention-chip" data-field-id="' + id + '"' + (fmt || '') + '>@' + label + '</span>';

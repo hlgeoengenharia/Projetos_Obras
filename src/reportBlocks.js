@@ -7,6 +7,7 @@
 //   geometryCenter()                 centro da feição (campos de geolocalização não gravados) ou null
 //   emissaoTexto(kind), emissaoTitulo(), emissaoProtocolo(), qrDataUrl()  protocolo/SHA-256 da emissão e o QR do rodapé
 //   formFields()                     campos do cadastro (menções @ do texto livre)
+//   ReportData, formTabs()           src/reportData.js e as abas do formulário (tabelas 1:N e laudo)
 // As funções abaixo foram movidas do visualizador sem mudar o desenho.
 
 (function (root, factory) {
@@ -26,6 +27,8 @@
         const emissaoTitulo = () => (ctx.emissaoTitulo ? ctx.emissaoTitulo() : '');
         const emissaoProtocolo = () => (ctx.emissaoProtocolo ? ctx.emissaoProtocolo() : '');
         const qrDataUrl = () => (ctx.qrDataUrl ? ctx.qrDataUrl() : '');
+        const RD = ctx.ReportData || (typeof globalThis !== 'undefined' ? globalThis.ReportData : undefined);
+        const formTabs = () => (ctx.formTabs ? (ctx.formTabs() || []) : []);
 
         function getOrgBadgeHtml(org) {
             const o = String(org || '').toUpperCase().trim();
@@ -380,10 +383,16 @@
             }
         }
 
-        function renderHeaderSlotHtml(hdrBloco, tpl, padLeftMm, padRightMm) {
+        /**
+         * Cabeçalho da folha. opts (só no construtor):
+         *   bare: devolve só o conteúdo (o construtor já tem o contêiner da folha)
+         *   edit: { subtituloAttrs, tituloAttrs, textClass, badgeHtml } — títulos editáveis e selo (Todas as folhas / Apenas 1ª folha)
+         */
+        function renderHeaderSlotHtml(hdrBloco, tpl, padLeftMm, padRightMm, opts) {
             if (!hdrBloco) return '';
-            return `
-                <div class="a4-page-header-slot w-full select-none" style="padding: 6mm ${padRightMm}mm 0 ${padLeftMm}mm;">
+            const bare = !!(opts && opts.bare);
+            const edit = (opts && opts.edit) || null;
+            const conteudo = `
                     <div class="mb-2 page-break-avoid ${hdrBloco.repetir_todas_folhas ? 'cabecalho-repetir-todas' : ''}">
                         <!-- Metadados de Emissão e Protocolo fora do card/borda principal (topo direito) -->
                         ${(hdrBloco.exibirDataHora || hdrBloco.exibirProtocolo) ? `
@@ -411,31 +420,41 @@
                                     </div>
                                 ` : ''}
                                 <div>
-                                    <div class="text-[11px] uppercase font-bold text-slate-600 tracking-wider whitespace-pre-line">${(esc(hdrBloco.subtitulo || 'Prefeitura Municipal')).replace(/\r?\n/g, '<br>')}</div>
-                                    <div class="text-lg font-black uppercase text-slate-900 tracking-tight whitespace-pre-line">${(esc(hdrBloco.titulo || tpl.nome || 'FICHA CADASTRAL DO IMÓVEL')).replace(/\r?\n/g, '<br>')}</div>
+                                    <div class="text-[11px] uppercase font-bold text-slate-600 tracking-wider whitespace-pre-line${edit && edit.textClass ? ' ' + edit.textClass : ''}"${edit && edit.subtituloAttrs ? ' ' + edit.subtituloAttrs : ''}>${(esc(hdrBloco.subtitulo || 'Prefeitura Municipal')).replace(/\r?\n/g, '<br>')}</div>
+                                    <div class="text-lg font-black uppercase text-slate-900 tracking-tight whitespace-pre-line${edit && edit.textClass ? ' ' + edit.textClass : ''}"${edit && edit.tituloAttrs ? ' ' + edit.tituloAttrs : ''}>${(esc(hdrBloco.titulo || tpl.nome || 'FICHA CADASTRAL DO IMÓVEL')).replace(/\r?\n/g, '<br>')}</div>
                                 </div>
                             </div>
+                            ${edit && edit.badgeHtml ? edit.badgeHtml : ''}
                         </div>
                     </div>
+            `;
+            if (bare) return conteudo;
+            return `
+                <div class="a4-page-header-slot w-full select-none" style="padding: 6mm ${padRightMm}mm 0 ${padLeftMm}mm;">${conteudo}
                 </div>
             `;
         }
 
-        function renderFooterSlotHtml(ftrBloco, pageIdx, totalPages, padLeftMm, padRightMm) {
+        /** Rodapé da folha. opts (só no construtor): bare = só o conteúdo; qrHtml = marcador no lugar do QR (ainda sem protocolo). */
+        function renderFooterSlotHtml(ftrBloco, pageIdx, totalPages, padLeftMm, padRightMm, opts) {
             if (!ftrBloco) return '';
+            const bare = !!(opts && opts.bare);
             const pageText = getFooterPageNumberText(pageIdx, totalPages, ftrBloco);
-            return `
-                <div class="a4-page-footer-slot w-full mt-auto select-none" style="padding: 0 ${padRightMm}mm 6mm ${padLeftMm}mm;">
+            const conteudo = `
                     <div class="border-t border-slate-300 pt-2 text-[10px] text-slate-500 flex items-center justify-between font-mono page-break-avoid w-full">
                         <div>
                             ${ftrBloco.exibirDataHora !== false ? `Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}` : ''}
                             ${ftrBloco.exibirHash !== false ? `<span class="ml-2 font-bold text-slate-600">SHA-256: <span data-emissao="hash" title="${emissaoTitulo()}">${emissaoTexto('hash')}</span></span>` : ''}
                         </div>
                         <div class="font-bold text-slate-700 flex items-center gap-2">
-                            ${ftrBloco.exibirQr !== false ? `<img data-emissao="qr" alt="QR code de verificação de autenticidade" title="Aponte a câmera para verificar a autenticidade" style="width:36px;height:36px;image-rendering:pixelated;${emissaoProtocolo() ? '' : 'display:none;'}" ${emissaoProtocolo() ? `src="${qrDataUrl()}"` : ''}>` : ''}
+                            ${ftrBloco.exibirQr !== false ? (opts && opts.qrHtml ? opts.qrHtml : `<img data-emissao="qr" alt="QR code de verificação de autenticidade" title="Aponte a câmera para verificar a autenticidade" style="width:36px;height:36px;image-rendering:pixelated;${emissaoProtocolo() ? '' : 'display:none;'}" ${emissaoProtocolo() ? `src="${qrDataUrl()}"` : ''}>`) : ''}
                             <span>${pageText}</span>
                         </div>
                     </div>
+            `;
+            if (bare) return conteudo;
+            return `
+                <div class="a4-page-footer-slot w-full mt-auto select-none" style="padding: 0 ${padRightMm}mm 6mm ${padLeftMm}mm;">${conteudo}
                 </div>
             `;
         }
@@ -500,7 +519,254 @@
                     `;
         }
 
+        /** Converte a seleção do bloco (ids ou títulos de aba) nos ids das abas realmente disponíveis. */
+        function resolveTabIds(list, tabs) {
+            const out = [];
+            (Array.isArray(list) ? list : []).forEach(entry => {
+                const e = (entry && typeof entry === 'object') ? (entry.id || entry.tabId || entry.title) : entry;
+                const tab = tabs.find(t => String(t.id) === String(e)) ||
+                            tabs.find(t => RD.norm(t.title) === RD.norm(e));
+                if (tab && !out.includes(tab.id)) out.push(tab.id);
+            });
+            return out;
+        }
+
+        /** Abas visíveis (permissão e condição já aplicadas no snapshot; a condição é reaplicada por segurança). */
+        function getReportSchema(featureData) {
+            const tabs = RD.visibleTabs(formTabs(), featureData);
+            return { tabs, fieldIndex: RD.buildFieldIndex(tabs) };
+        }
+
+        function getTableDensityClasses(density) {
+            if (density === 'comfortable') {
+                return { th: 'p-2 text-[10.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300', td: 'p-2 text-[11px] border-b border-slate-200' };
+            }
+            if (density === 'ultracompact') {
+                return { th: 'py-0.5 px-1 text-[8.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300', td: 'py-0.5 px-1 text-[9px] font-medium border-b border-slate-200' };
+            }
+            return { th: 'py-1.5 px-2 text-[9.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300', td: 'py-1.5 px-2 text-[10px] border-b border-slate-200' };
+        }
+
+        function reportBlockNotice(bloco, defaultTitle, message) {
+            return `
+                <div class="mb-4 page-break-avoid">
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2">
+                        ${esc(bloco.titulo || defaultTitle)}
+                    </div>
+                    <div class="p-4 text-center text-slate-400 italic text-xs border border-dashed border-slate-300 rounded-lg bg-slate-50/60">${esc(message)}</div>
+                </div>`;
+        }
+
+        const MSG_TABS_UNAVAILABLE = 'As abas escolhidas para este quadro não estão disponíveis (ocultas por permissão ou condição, ou removidas do formulário). Revise a seleção de abas no construtor.';
+
+        const TONS_ENTE = ['bg-purple-50/40', 'bg-blue-50/40', 'bg-emerald-50/40', 'bg-amber-50/40', 'bg-sky-50/40', 'bg-rose-50/40', 'bg-teal-50/40', 'bg-indigo-50/40'];
+        /** Cor de fundo da linha no zebrado "Tons por Ente/Aba": estável para o mesmo título de aba. */
+        function enteTom(tabTitle, odd) {
+            const h = Math.abs(String(tabTitle || '').split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0));
+            return odd ? TONS_ENTE[h % TONS_ENTE.length] : 'bg-white';
+        }
+
+        function renderSyntheticTable(bloco, featureData, opts) {
+            // opts (só no construtor): full = devolve o quadro inteiro (sem quebrar por folhas);
+            //   edit = { titleClass, titleAttrs, metaExtra, th(c, cIdx, cols, rotuloHtml) } — controles por cima do mesmo desenho
+            const edit = (opts && opts.edit) || null;
+            const TITLE = 'Quadro Sintético de Vistorias (Histórico 1:N)';
+            const { tabs, fieldIndex } = getReportSchema(featureData);
+
+            const sortOrder = bloco.ordem_cronologica || 'desc';
+            const groupByTab = !!bloco.ordenar_por_aba;
+            const hasSelection = Array.isArray(bloco.abas_selecionadas) && bloco.abas_selecionadas.length > 0;
+            const tabIds = hasSelection ? resolveTabIds(bloco.abas_selecionadas, tabs) : [];
+            if (hasSelection && tabIds.length === 0) return reportBlockNotice(bloco, TITLE, MSG_TABS_UNAVAILABLE);
+
+            let records = RD.buildRecords(tabs, featureData, { tabIds });
+            records = RD.sortRecords(records, sortOrder, groupByTab, bloco.ordem_abas);
+            if (records.length === 0) {
+                return reportBlockNotice(bloco, TITLE, 'Nenhum registro cadastrado nas abas selecionadas para este imóvel.');
+            }
+
+            const rawCols = (Array.isArray(bloco.colunas) && bloco.colunas.length) ? bloco.colunas : ['aba', 'data', 'qtd_fotos'];
+            const cols = rawCols.map(c => ({
+                col: c,
+                id: (c && typeof c === 'object') ? c.id : c,
+                label: RD.columnLabel(c, fieldIndex)
+            }));
+            const ctx = { fieldIndex, geometryCenter: getGeometryCenter() };
+            const dens = getTableDensityClasses(bloco.densidade || 'compact');
+            const striping = bloco.zebrado || 'slate';
+            const NUMERIC = ['area_m2', 'length_m', 'volume_m3', 'currency'];
+
+            const cellHtml = (c, r) => {
+                const cell = RD.cellFor(c.col, r, ctx);
+                if (c.id === 'aba' || c.id === 'org') return getOrgBadgeHtml(r.tabTitle);
+                if (c.id === 'situacao_ocupacao') return getStatusBadgeHtml(cell.text);
+                if (c.id === 'situacao_recuo') return getRecuoBadgeHtml(cell.text);
+                return cell.html;
+            };
+
+            const rowsHtml = records.map((r, i) => {
+                const odd = i % 2 === 1;
+                let rowBg = odd ? 'bg-slate-50/70' : 'bg-white';
+                if (striping === 'sky') rowBg = odd ? 'bg-sky-50/50' : 'bg-white';
+                else if (striping === 'white') rowBg = 'bg-white';
+                else if (striping === 'ente') rowBg = enteTom(r.tabTitle, odd);
+                const tds = cols.map(c => {
+                    const field = RD.fieldForColumn(c.col, r, fieldIndex);
+                    const numeric = field && NUMERIC.includes(String(field.type || '').toLowerCase());
+                    return `<td class="${dens.td} border-r last:border-r-0 border-slate-200 whitespace-normal break-words ${numeric ? 'text-right font-mono' : 'text-slate-700'}">${cellHtml(c, r)}</td>`;
+                }).join('');
+                return `<tr data-split-row class="${rowBg}" style="page-break-inside: avoid;">
+                    <td class="${dens.td} border-r border-slate-200 text-center font-mono text-[10px] text-slate-400">${i + 1}</td>${tds}</tr>`;
+            });
+
+            const theadHtml = `<thead><tr class="bg-slate-100 border-b border-slate-200 text-slate-700">
+                <th class="${dens.th} border-r border-slate-200 w-8 text-center">#</th>
+                ${cols.map((c, cIdx) => edit && edit.th
+                    ? `<th class="${dens.th} border-r last:border-r-0 border-slate-200 group/th relative select-none whitespace-normal break-words leading-tight" style="min-width: 60px;">${edit.th(c, cIdx, cols, esc(c.label))}</th>`
+                    : `<th class="${dens.th} border-r last:border-r-0 border-slate-200 whitespace-normal break-words leading-tight">${esc(c.label)}</th>`).join('')}
+            </tr></thead>`;
+
+            const meta = `${records.length} registro(s) • ${sortOrder === 'asc' ? 'Antigo → Recente' : 'Recente → Antigo'}${groupByTab ? ' • Por Aba' : ''}`;
+            const chunkHtml = (rows, isFirst) => `
+                <div class="mb-4">
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
+                        <span class="whitespace-pre-line${edit && edit.titleClass ? ' ' + edit.titleClass : ''}"${edit && edit.titleAttrs ? ' ' + edit.titleAttrs : ''}>${esc(bloco.titulo || TITLE)}${isFirst ? '' : ' (continuação)'}</span>
+                        <span class="text-[10px] font-mono text-slate-500 normal-case">${esc(meta)}${edit && edit.metaExtra ? edit.metaExtra : ''}</span>
+                    </div>
+                    <div class="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+                        <table class="w-full text-left border-collapse">${theadHtml}<tbody>${rows.join('')}</tbody></table>
+                    </div>
+                </div>`;
+
+            if (opts && opts.full) return chunkHtml(rowsHtml, true);
+            return { split: { rowsHtml, chunkHtml } };
+        }
+
+        function renderAnalyticalLaudo(bloco, featureData) {
+            const TITLE = 'Laudo Analítico e Caderno Fotográfico';
+            const { tabs, fieldIndex } = getReportSchema(featureData);
+
+            const sortOrder = bloco.ordem_cronologica || 'desc';
+            const groupByTab = !!bloco.ordenar_por_aba;
+
+            // Campos escolhidos (por id) e abas: escolhidas no bloco, ou deduzidas dos campos, ou todas as 1:N
+            const rawSel = Array.isArray(bloco.campos_selecionados) ? bloco.campos_selecionados : [];
+            const selFieldIds = rawSel.map(cf => (typeof cf === 'string') ? cf : (cf && (cf.rawId || cf.id))).filter(id => id && fieldIndex[id]);
+            const hasTabSelection = Array.isArray(bloco.abas_selecionadas) && bloco.abas_selecionadas.length > 0;
+            let tabIds = hasTabSelection ? resolveTabIds(bloco.abas_selecionadas, tabs) : [];
+            if (!hasTabSelection && selFieldIds.length) {
+                selFieldIds.forEach(fid => {
+                    const ref = fieldIndex[fid];
+                    if (ref && !tabIds.includes(ref.tab.id)) tabIds.push(ref.tab.id);
+                });
+            }
+            if (hasTabSelection && tabIds.length === 0) return reportBlockNotice(bloco, TITLE, MSG_TABS_UNAVAILABLE);
+
+            let records = RD.buildRecords(tabs, featureData, { tabIds });
+            if (bloco.escopo === 'ultima') {
+                const seenTab = new Set();
+                records = RD.sortRecords(records, 'desc', true, bloco.ordem_abas).filter(r => !seenTab.has(r.tabId) && seenTab.add(r.tabId));
+            }
+            records = RD.sortRecords(records, sortOrder, true, bloco.ordem_abas);
+            if (records.length === 0) {
+                return reportBlockNotice(bloco, TITLE, 'Nenhum registro cadastrado nas abas selecionadas para este imóvel.');
+            }
+
+            const layout = bloco.layoutFotos || '2_cols';
+            const gridClass = layout === '1_col' ? 'grid-cols-1' : (layout === 'grid_4' ? 'grid-cols-4' : 'grid-cols-2');
+            const striping = bloco.zebrado || 'slate';
+            const larguras = bloco.campos_larguras || {};
+            const modes = bloco.campos_exibicao || {};   // { idDoCampo: 'lista' | 'imagem' }
+            const fileMeta = { titulo: bloco.exibirLegenda !== false, autor: bloco.exibirResp !== false, data: bloco.exibirData !== false };
+            const geometryCenter = getGeometryCenter();
+            const WIDE = ['textarea', 'hiperlink', 'hiperlink_1n', 'attachment', 'cep'];
+
+            const widthOf = (pct) => {
+                const p = Math.round(pct);
+                return p >= 98 ? '100%' : (p >= 65 ? '66.666%' : (p <= 28 ? '25%' : (p <= 38 ? '33.333%' : '50%')));
+            };
+
+            const photosHtml = (r) => {
+                // Campos de foto que o usuário mandou exibir como LISTA saem como texto (título + arquivo)
+                const listFields = (r.tab.fields || []).filter(f => String(f.type || '').toLowerCase() === 'photo' && modes[f.id] === 'lista');
+                const listHtml = listFields.map(f => {
+                    const v = FieldFormatter.toHtml(r.values[f.id], f, { fileMode: 'lista', fileMeta });
+                    if (v === FieldFormatter.EMPTY) return '';
+                    return `<div class="p-2 bg-white rounded-lg border border-slate-200 text-xs">
+                        <span class="font-bold text-slate-500 uppercase text-[9px] block mb-0.5">${esc(f.label || f.name || f.id)}:</span>
+                        <div class="text-[10.5px] text-slate-800 font-semibold break-words">${v}</div></div>`;
+                }).join('');
+                const photos = RD.recordPhotos(r, listFields.map(f => f.id));
+                if (photos.length === 0) return listHtml;
+                return `<div class="grid ${gridClass} gap-3 pt-1">${photos.map(p => {
+                    const href = FieldFormatter.normalizeUrl(p.url);
+                    if (!href) return '';
+                    return `<div class="border border-slate-200 rounded-lg overflow-hidden bg-white flex flex-col shadow-2xs">
+                        <a href="${esc(href)}" target="_blank" rel="noopener noreferrer" class="block h-44 bg-slate-100 overflow-hidden">
+                            <img src="${esc(href)}" class="w-full h-full object-cover" alt="${esc(p.title)}" />
+                        </a>
+                        <div class="p-2 text-[10.5px] space-y-0.5 text-slate-600">
+                            ${bloco.exibirLegenda !== false && p.title ? `<div class="font-bold text-slate-800 break-words">${esc(p.title)}</div>` : ''}
+                            ${bloco.exibirData !== false && p.date ? `<div class="text-slate-500">Data: ${esc(p.date)}</div>` : ''}
+                            ${bloco.exibirResp !== false && p.author ? `<div class="text-slate-500">Resp: ${esc(p.author)}</div>` : ''}
+                        </div></div>`;
+                }).join('')}</div>` + listHtml;
+            };
+
+            const cardHtml = (r, idx) => {
+                let cardBg = idx % 2 === 1 ? 'bg-slate-100/70 border-slate-300' : 'bg-white border-slate-200';
+                if (striping === 'sky') cardBg = idx % 2 === 1 ? 'bg-sky-50/50 border-sky-200' : 'bg-white border-slate-200';
+                else if (striping === 'white') cardBg = 'bg-white border-slate-200';
+
+                const fields = RD.recordFields(r, selFieldIds.length ? selFieldIds : null)
+                    .filter(f => String(f.type || '').toLowerCase() !== 'photo');
+                const cells = fields.map(f => {
+                    const type = String(f.type || '').toLowerCase();
+                    const pct = larguras[f.id] || (WIDE.includes(type) ? 100 : 50);
+                    const w = widthOf(pct);
+                    return `<div class="p-2 bg-white rounded-lg border border-slate-200 text-xs" style="flex: 0 0 ${w}; max-width: ${w}; width: ${w}; box-sizing: border-box;">
+                        <span class="font-bold text-slate-500 uppercase text-[9px] block truncate mb-0.5">${esc(f.label || f.name || f.id)}:</span>
+                        <div class="text-[10.5px] text-slate-800 font-semibold break-words whitespace-normal ${type === 'textarea' ? 'font-normal text-justify' : ''}">${FieldFormatter.toHtml(r.values[f.id], f, { geometryCenter, fileMode: modes[f.id], fileMeta })}</div>
+                    </div>`;
+                }).join('');
+
+                return `<div class="border rounded-xl p-3 ${cardBg} space-y-2.5 shadow-2xs">
+                    ${cells ? `<div class="flex flex-wrap gap-2">${cells}</div>` : '<div class="text-[10px] italic text-slate-400">Nenhum campo desta aba foi selecionado para o laudo.</div>'}
+                    ${photosHtml(r)}
+                </div>`;
+            };
+
+            // Uma "unidade" por registro (a primeira de cada aba leva o título do grupo). Cada unidade é indivisível.
+            const perTabCount = {};
+            records.forEach(r => { perTabCount[r.tabId] = (perTabCount[r.tabId] || 0) + 1; });
+            const seenTab = {};
+            const rowsHtml = records.map((r, i) => {
+                let groupHeader = '';
+                if (!seenTab[r.tabId]) {
+                    seenTab[r.tabId] = true;
+                    groupHeader = `<div class="flex items-center justify-between px-2.5 py-1.5 bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold text-slate-800 uppercase tracking-wide mb-2">
+                        <div class="flex items-center gap-1.5"><span>${esc(bloco['custom_tab_title_' + r.tabId] || ('Aba / Ente: ' + r.tabTitle))}</span></div>
+                        <span class="text-[9.5px] font-mono font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">${perTabCount[r.tabId]} registro(s)</span>
+                    </div>`;
+                }
+                return `<div data-split-row>${groupHeader}${cardHtml(r, i)}</div>`;
+            });
+
+            const meta = `${records.length} registro(s) • ${sortOrder === 'asc' ? 'Antigo → Recente' : 'Recente → Antigo'}`;
+            const chunkHtml = (rows, isFirst) => `
+                <div class="mb-4">
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">
+                        <span class="whitespace-pre-line">${esc(bloco.titulo || TITLE)}${isFirst ? '' : ' (continuação)'}</span>
+                        <span class="text-[10px] font-mono text-slate-500 normal-case">${esc(meta)}</span>
+                    </div>
+                    <div class="space-y-3">${rows.join('')}</div>
+                </div>`;
+
+            return { split: { rowsHtml, chunkHtml } };
+        }
+
         return {
+            resolveTabIds, getReportSchema, getTableDensityClasses, reportBlockNotice, renderSyntheticTable, renderAnalyticalLaudo,
             getOrgBadgeHtml, getStatusBadgeHtml, getRecuoBadgeHtml,
             getGeometryCenter, formatFieldValueForDisplay, readFieldRaw, isRichField, resolveFieldHtml, resolveFieldValue,
             getFieldWidthStyle, renderAttributeGrid, replaceMentionsWithData,
