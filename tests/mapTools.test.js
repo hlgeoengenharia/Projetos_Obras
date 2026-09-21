@@ -198,6 +198,8 @@ eq('sem larguras: automático', [MT.normalizePontos({}).colunas, MT.normalizePon
     eq('cor inválida (nome, 3 dígitos, texto solto) volta ao padrão', [c2.medidas.cor, c2.pontos.cor, c2.medicoes.cor, c2.referencia.cor, c2.rotulos.cor], ['#065f46', '#dc2626', '#0e7490', '#b91c1c', '#0f172a']);
     eq('cores vêm dos ajustes do usuário (o que ele escolheu vale sobre o modelo)', [MT.mergeAjustes(c0, { medidas: { cor: '#123456' } }).medidas.cor, MT.mergeAjustes(c0, { pontos: { cor: '#654321' } }).pontos.cor, MT.mergeAjustes(c0, { medicoes: { cor: '#0a0a0a' } }).medicoes.cor], ['#123456', '#654321', '#0a0a0a']);
 }
+eq('cards das análises: largura de 20 a 100%; 100% não é guardado; só ids comp e med:N', MT.normalizeAnalises({ largura: { comp: 50.26, 'med:1': 100, 'med:2': 5, 'med:3': 999, x: 30, 'med:4': 'a', 'med:12': 33.3 } }).largura, { comp: 50.3, 'med:2': 20, 'med:12': 33.3 });
+eq('padrão: sem larguras; vem dos ajustes do usuário', [MT.normalizeMapConfig({}).analises, MT.mergeAjustes(MT.normalizeMapConfig({}), { analises: { largura: { comp: 60 } } }).analises.largura], [{ largura: {} }, { comp: 60 }]);
 eq('base satélite e nenhum são aceitas', [MT.normalizeMapConfig({ mapa: { baseMap: 'satelite' } }).baseMap, MT.normalizeMapConfig({ mapa: { baseMap: 'nenhum' } }).baseMap], ['satelite', 'nenhum']);
 
 const aj = MT.mergeAjustes(c0, { norte: false, baseMap: 'satelite', camadasLigadas: [7, 'b'], destaque: { esmaecerEntorno: true }, lixo: 1 });

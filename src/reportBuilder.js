@@ -1213,7 +1213,6 @@
                             <div class="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
                                 ${chk('cfg-map-x-rotulos', 'Rótulos (Quadra/Lote) nas feições vizinhas', mcfg.rotulos.ativo)}
                                 ${chk('cfg-map-x-confr', 'Tabela de confrontantes (quem faz divisa com cada lado)', mcfg.confrontantes.ativo)}
-                                ${chk('cfg-map-x-ref', 'Distância e sobreposição com uma camada de referência (ex.: LPM)', mcfg.referencia.ativo)}
                                 ${chk('cfg-map-x-area', 'Área cadastral × área calculada', mcfg.comparacaoArea.ativo)}
                                 ${chk('cfg-map-x-sit', 'Mapa de situação (localização) no canto', mcfg.situacao.ativo)}
                                 ${chk('cfg-map-x-grade', 'Quadriculado de coordenadas UTM', mcfg.quadriculado.ativo)}
@@ -3432,7 +3431,7 @@
             pontos: { ativo: on('cfg-map-pts-ativo', false), sistema: val('cfg-map-pts-sistema', 'utm'), tabela: on('cfg-map-pts-tab', true), memorial: on('cfg-map-pts-mem', false) },
             rotulos: { ativo: on('cfg-map-x-rotulos', false), campo: 'rotulo' },
             confrontantes: { ativo: on('cfg-map-x-confr', false) },
-            referencia: { ativo: on('cfg-map-x-ref', false) },
+            referencia: { ativo: false }, // opção retirada
             comparacaoArea: { ativo: on('cfg-map-x-area', false) },
             situacao: { ativo: on('cfg-map-x-sit', false) },
             quadriculado: { ativo: on('cfg-map-x-grade', false) },

@@ -233,13 +233,11 @@ async function runScenario(cfg) {
         const campos = [{ id: 'f_area1', label: 'Área', type: 'area_m2', tabId: 't1', tabTitle: 'Dados Gerais' }, { id: 'f_area2', label: 'Área', type: 'area_m2', tabId: 't2', tabTitle: 'Regularização' }];
         const r = await runScenario({ width: 1900, opener: true, payload: { templateId: 'rpt_smoke', template: tplWith({ situacao: { ativo: true }, referencia: { ativo: true, camada: 'A' }, comparacaoArea: { ativo: true } }), formId: 'f1', formFields: campos, formTabs: [], featureData: { id_banco: 10 }, featureGeometry: quad, featureKey: '10', camadasMapa: [camadaA] } });
         const painel = r.registry['map-tools-panel']._html;
+        const vm0 = require('vm');
         eq('mapa de situação ligado: a caixa fica visível (display explícito; o CSS dela é "none")', r.registry['map-locator'].style.display, 'block');
-        ok('painel: botão para medir a distância até a camada de referência', /Medir distância no mapa/.test(painel) && /mapPanelMedirDist\(\)/.test(painel));
+        ok('"Distância e sobreposição (camada de referência)" foi retirada do painel (mesmo com modelo antigo que a tinha ligada)', !/Distância e sobreposição/.test(painel) && !/Medir distância no mapa/.test(painel) && !/mapPanelMedirDist/.test(painel) && vm0.runInContext('mapController.getConfig().referencia.ativo', r.sandbox) === false && !/Análises com a camada/.test(painel));
         ok('painel: campos de área com o nome da aba ao lado (mesmo título em abas diferentes)', /Área — Aba: Dados Gerais/.test(painel) && /Área — Aba: Regularização/.test(painel));
-        r.sandbox.mapPanelMedirDist();
-        ok('medir: o painel avisa o que clicar', /Clique num ponto da feição/.test(r.registry['map-tools-panel']._html) && /Cancelar a medição/.test(r.registry['map-tools-panel']._html));
-        r.sandbox.mapPanelMedirDist();
-        ok('cancelar volta ao botão de medir', /Medir distância no mapa/.test(r.registry['map-tools-panel']._html));
+
         eq('sem erro de execução', r.errors, []);
         const desl = await runScenario({ width: 1900, opener: true, payload: { templateId: 'rpt_smoke', template: tplWith({}), formId: 'f1', formFields: [], formTabs: [], featureData: { id_banco: 10 }, featureGeometry: quad, featureKey: '10' } });
         eq('situação desligada: caixa escondida', desl.registry['map-locator'].style.display, 'none');
@@ -328,7 +326,7 @@ async function runScenario(cfg) {
         const cfg = () => vm.runInContext('mapController.getConfig()', r.sandbox);
         const secExtras = () => { const m = /data-sec-h="extras"[\s\S]*?(?=data-sec-h="temporal")/.exec(painel()); return m ? m[0] : ''; };
         ok('card "Medições no mapa": as 4 ferramentas do mapa principal (sem o Analisador de Gabarito 3D)', ['Coordenadas do Ponto', 'Distância (m)', 'Área (m²)', 'Consultar Coordenadas'].every(t => secExtras().includes(t)) && !/Gabarito/.test(painel()));
-        ok('card: aderência e as análises antigas continuam; sem seletor de sistema (o mapa só mostra o nome do ponto)', /Aderência \(gruda nos contornos\)/.test(secExtras()) && !/Pontos em/.test(secExtras()) && /Distância e sobreposição/.test(secExtras()) && /Área cadastral × área calculada/.test(secExtras()));
+        ok('card: aderência e a comparação de área continuam; sem seletor de sistema (o mapa só mostra o nome do ponto) e sem distância/sobreposição', /Aderência \(gruda nos contornos\)/.test(secExtras()) && !/Pontos em/.test(secExtras()) && !/Distância e sobreposição/.test(secExtras()) && /Área cadastral × área calculada/.test(secExtras()));
         r.sandbox.mapPanelFerramenta('linha');
         ok('ferramenta ligada: o painel diz como desenhar e mostra Concluir e Cancelar', /Clique para adicionar pontos/.test(secExtras()) && /mapPanelConcluirMedicao\(\)/.test(secExtras()));
         r.sandbox.mapPanelFerramenta('linha');
@@ -418,12 +416,12 @@ async function runScenario(cfg) {
         const vm = require('vm');
         const painel = () => r.registry['map-tools-panel']._html;
         const cfg = () => vm.runInContext('mapController.getConfig()', r.sandbox);
-        ok('painel: seletor de cor nos textos das medidas, nos pontos, nas medições e na distância até a camada', /mapPanelCor\('medidas', this.value\)/.test(painel()) && /mapPanelCor\('pontos', this.value\)/.test(painel()) && /mapPanelCor\('medicoes', this.value\)/.test(painel()) && /mapPanelCor\('referencia', this.value\)/.test(painel()) && /Cor das medições \(linhas, áreas, pontos e textos\)/.test(painel()));
+        ok('painel: seletor de cor nos textos das medidas, nos pontos e nas medições (a distância até a camada saiu)', /mapPanelCor\('medidas', this.value\)/.test(painel()) && /mapPanelCor\('pontos', this.value\)/.test(painel()) && /mapPanelCor\('medicoes', this.value\)/.test(painel()) && !/mapPanelCor\('referencia'/.test(painel()) && /Cor das medições \(linhas, áreas, pontos e textos\)/.test(painel()));
         r.sandbox.mapPanelCor('medidas', '#ffff00');
         r.sandbox.mapPanelCor('pontos', '#00ff00');
         r.sandbox.mapPanelCor('medicoes', '#ff0000');
-        r.sandbox.mapPanelCor('referencia', '#0000ff');
-        eq('escolher a cor muda a configuração de cada grupo', [cfg().medidas.cor, cfg().pontos.cor, cfg().medicoes.cor, cfg().referencia.cor], ['#ffff00', '#00ff00', '#ff0000', '#0000ff']);
+        r.sandbox.mapPanelCor('referencia', '#0000ff'); // grupo retirado: ignorado
+        eq('escolher a cor muda a configuração de cada grupo; a da distância até a camada (retirada) não muda', [cfg().medidas.cor, cfg().pontos.cor, cfg().medicoes.cor, cfg().referencia.cor], ['#ffff00', '#00ff00', '#ff0000', '#b91c1c']);
         ok('a cor escolhida aparece no seletor do painel', /value="#ffff00"/.test(painel()) && /value="#ff0000"/.test(painel()));
         r.sandbox.mapPanelCor('rotulos', '#123456');
         eq('rótulos das vizinhas também têm cor (quando ativos)', cfg().rotulos.cor, '#123456');
@@ -431,6 +429,40 @@ async function runScenario(cfg) {
         eq('grupo desconhecido é ignorado; sem erro de execução', r.errors, []);
         const css = html.slice(html.indexOf('<style'), html.indexOf('</style>'));
         ok('ferramenta ativa: cursor em mira em todo o mapa e nada reage ao mouse (feição, textos, camadas, escala)', /\.report-drawing, \.report-drawing \* \{ cursor: crosshair !important; \}/.test(css) && /\.report-drawing \.leaflet-interactive, \.report-drawing \.leaflet-marker-icon, \.report-drawing \.leaflet-control-scale \{ pointer-events: none !important; \}/.test(css));
+    }
+
+    // ---- cards de "Análises da Feição" com largura ajustável
+    {
+        const campos = [{ id: 'f_area', label: 'Área do terreno (m²)', type: 'area_m2' }];
+        const r = await runScenario({ width: 1900, opener: true, payload: { templateId: 'rpt_smoke', template: tplWith({ comparacaoArea: { ativo: true, campo: 'f_area' } }), formId: 'f1', formFields: campos, formTabs: [], featureData: { id_banco: 10, f_area: '1.331,69' }, featureGeometry: quad, featureKey: '10' } });
+        const vm = require('vm');
+        const painel = () => r.registry['map-tools-panel']._html;
+        const folha = () => r.registry['a4-document-container']._html;
+        const cfg = () => vm.runInContext('mapController.getConfig().analises', r.sandbox);
+        vm.runInContext("mapController.addMedicao('ponto', [[-7.019, -34.839]]); mapController.addMedicao('area', [[-7.0195, -34.8395], [-7.0195, -34.8385], [-7.0185, -34.8385]]);", r.sandbox);
+        r.sandbox.renderMapToolsPanel();
+        await r.settle(8);
+        ok('folha: cada card das análises tem id e uma borda para arrastar; largura padrão 100%', /data-analise-id="comp"/.test(folha()) && /data-analise-id="med:1"/.test(folha()) && /data-analise-id="med:2"/.test(folha()) && /data-card-resize="med:2"/.test(folha()) && /class="col-resize no-print" data-card-resize/.test(folha()) && ['comp', 'med:1', 'med:2'].every(id => new RegExp('data-analise-id="' + id + '"[^>]*style="width: 100%').test(folha())));
+        ok('cards em linha que quebra (flex-wrap), com o mesmo espaçamento', /class="flex flex-wrap items-stretch" style="gap: 4px 6px;"/.test(folha()));
+        ok('painel: "Por linha" 1, 2 e 3 (só aparece com mais de um card)', /Cards das análises na folha/.test(painel()) && /mapPanelAnalisesPorLinha\(2\)/.test(painel()) && /Ou arraste a borda direita de um card/.test(painel()));
+        r.sandbox.mapPanelAnalisesPorLinha(2);
+        await r.settle(8);
+        eq('2 por linha: cada card com 50%', cfg().largura, { comp: 50, 'med:1': 50, 'med:2': 50 });
+        ok('a folha refaz os cards com a nova largura (50% menos a parte do espaçamento)', /data-analise-id="comp"[^>]*style="width: calc\(50% - 3\.0px\)/.test(folha()) && /data-analise-id="med:2"[^>]*style="width: calc\(50% - 3\.0px\)/.test(folha()));
+        r.sandbox.mapPanelAnalisesPorLinha(3);
+        eq('3 por linha: 33,3%', cfg().largura['med:1'], 33.3);
+        vm.runInContext("mapController.setAnaliseLargura('med:1', 71.26)", r.sandbox);
+        eq('largura de um card só (arrastando a borda)', [cfg().largura['med:1'], cfg().largura['comp']], [71.3, 33.3]);
+        vm.runInContext("mapController.setAnaliseLargura('med:1', undefined)", r.sandbox);
+        eq('largura total de novo (dois cliques na borda)', cfg().largura['med:1'], undefined);
+        r.sandbox.mapPanelAnalisesPorLinha(1);
+        eq('1 por linha: tudo volta a 100% (nada guardado)', cfg().largura, {});
+        vm.runInContext("mapController.setAnalisesLargura({ comp: 5, 'med:2': 500, x: 40 })", r.sandbox);
+        eq('limites: 20% a 100%; id desconhecido é ignorado', cfg().largura, { comp: 20 });
+        eq('encaixe ao arrastar: perto de 25, 33, 50, 67, 75 e 100% cola neles', [vm.runInContext('encaixeCard(49)', r.sandbox), vm.runInContext('encaixeCard(34.5)', r.sandbox), vm.runInContext('encaixeCard(97.6)', r.sandbox), vm.runInContext('encaixeCard(41)', r.sandbox)], [50, 33.3, 100, 41]);
+        eq('sem erro de execução', r.errors, []);
+        const css = html.slice(html.indexOf('<style'), html.indexOf('</style>'));
+        ok('a borda do card usa a mesma alça das colunas (aparece ao passar o mouse e não sai na impressão)', /\.col-resize \{[^}]*cursor: col-resize/.test(css));
     }
 
     // ---- ícone de girar e cards (CSS): área de clique que encosta no texto, visível ao passar o mouse e durante o giro
@@ -566,7 +598,7 @@ async function runScenario(cfg) {
             ok('"+ Anotação de texto" e as anotações (com N/I/S) estão em "Elementos do mapa"', /\+ Anotação de texto no centro do mapa/.test(secs.elementos) && /mapPanelNotaEstilo\('a1', 'n'\)/.test(secs.elementos) && !/Anotação de texto/.test(secs.extras));
             const iMem = secs.pontos.indexOf('Memorial (azimute e distância)'), iCol = secs.pontos.search(/Coluna (&quot;|")Confrontantes/), iTab = secs.pontos.indexOf('Tabela de confrontantes');
             ok('em "Pontos nos vértices": Memorial, depois a coluna "Confrontantes" (logo abaixo) e depois a tabela de confrontantes', iMem > 0 && iCol > iMem && iTab > iCol && !/Tabela de confrontantes/.test(secs.extras));
-            ok('"Medições no mapa" fica com distância e área cadastral × calculada', /Distância e sobreposição/.test(secs.extras) && /Área cadastral × área calculada/.test(secs.extras));
+            ok('"Medições no mapa" fica com as ferramentas e a área cadastral × calculada (sem distância e sobreposição)', /Área cadastral × área calculada/.test(secs.extras) && !/Distância e sobreposição/.test(secs.extras));
         }
         ok('extras: caixa do mapa de situação existe no bloco do mapa', /id="map-locator"/.test(r.doc));
         // mudar a camada de confrontantes repagina e mantém tudo funcionando

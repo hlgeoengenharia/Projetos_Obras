@@ -41,6 +41,7 @@
         situacao: { ativo: false },                                           // mapa de situação (localização) no canto
         quadriculado: { ativo: false, espacamento: 0 },                       // grade de coordenadas UTM (0 = automático)
         anotacoes: [],                                                        // textos livres no mapa: { id, lat, lng, texto }
+        analises: { largura: {} },                                            // largura (% da folha, 20 a 100) de cada card de "Análises da Feição": 'comp' (área cadastral x calculada) e 'med:N' (medições)
         medicoes: { itens: [], sistema: 'utm', aderencia: true, cor: '#0e7490' },             // ferramentas de medição do mapa principal: ponto, distância e área desenhados no relatório { id:'med:N', tipo, pts:[[lat,lng]...] }
         elementos: {},                                                        // posição dos elementos sobre o mapa (norte, escala, escalaTexto, projecao, legenda): deslocamento { dx, dy } em fração do tamanho do mapa
         legenda: { nomes: {}, ocultos: [] }                                   // legenda editável: nomes trocados e itens ocultos, por chave ('feicao' | 'c:<camada>')
@@ -93,6 +94,7 @@
             situacao: { ativo: !!(src.situacao && src.situacao.ativo) },
             quadriculado: normalizeQuadriculado(src.quadriculado),
             medicoes: normalizeMedicoes(src.medicoes),
+            analises: normalizeAnalises(src.analises),
             elementos: normalizeElementos(src.elementos),
             legenda: normalizeLegenda(src.legenda),
             anotacoes: normalizeAnotacoes(src.anotacoes)
@@ -145,6 +147,18 @@
             .sort((a, b) => ((a.pos < 0 ? 1e6 : a.pos) - (b.pos < 0 ? 1e6 : b.pos)) || (a.i - b.i))
             .map(x => Object.assign({}, x.r, { lado: tx[x.r.id + ':lado'] || x.r.rotuloLado, confTexto: tx[x.r.id + ':conf'] || '', editados: ['lado', 'conf'].filter(k => tx[x.r.id + ':' + k]) }));
     }
+    function normalizeAnalises(x) {
+        const largura = {};
+        const src = x && x.largura && typeof x.largura === 'object' ? x.largura : {};
+        Object.keys(src).slice(0, 60).forEach(k => {
+            const v = Number(src[k]);
+            if (!/^(comp|med:[0-9]{1,3})$/.test(k) || !isFinite(v)) return;
+            const p = Math.round(Math.min(100, Math.max(20, v)) * 10) / 10;
+            if (p < 100) largura[k] = p; // 100% é o padrão: não precisa guardar
+        });
+        return { largura };
+    }
+
     // ---------------------------------------------------------------- ferramentas de medição (ponto, distância e área)
     const MAX_MEDICOES = 30, MAX_PTS_MEDICAO = 200;
     const MIN_PTS = { ponto: 1, linha: 2, area: 3 };
@@ -507,7 +521,8 @@
             comparacaoArea: Object.assign({}, config.comparacaoArea, ajustes.comparacaoArea || {}),
             situacao: Object.assign({}, config.situacao, ajustes.situacao || {}),
             quadriculado: Object.assign({}, config.quadriculado, ajustes.quadriculado || {}),
-            medicoes: Object.assign({}, config.medicoes, ajustes.medicoes || {})
+            medicoes: Object.assign({}, config.medicoes, ajustes.medicoes || {}),
+            analises: Object.assign({}, config.analises, ajustes.analises || {})
         }) });
     }
 
@@ -1543,7 +1558,7 @@
 
     return {
         MAP_DEFAULTS, BASE_MAPS,
-        normalizeMapConfig, mergeAjustes, normalizeMedicoes, coordTriple, medicaoInfo, medicaoTexto, medicaoIds, parseCoordenadas, normalizeColConf, confrontantesDoTrecho, normalizeElementos, normalizeLegenda, applyConfrontantes, nearestOnGeometry, nearestOnCamada, edgeOffsetAbove, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
+        normalizeMapConfig, mergeAjustes, normalizeAnalises, normalizeMedicoes, coordTriple, medicaoInfo, medicaoTexto, medicaoIds, parseCoordenadas, normalizeColConf, confrontantesDoTrecho, normalizeElementos, normalizeLegenda, applyConfrontantes, nearestOnGeometry, nearestOnCamada, edgeOffsetAbove, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
         geometryBBox, bboxCenter, expandBBoxMeters, bboxIntersects, roundCoords, geomKind,
         normalizeTemporal, rasterDateInfo, fmtRasterDate, tileXY, tileUrl, probeZoom, rasterBBox, buildOrtofotoList, sortOrtofotos,
         COORD_SYSTEMS, normalizePontos, latLngToUtm, utmToLatLng, fmtGms, coordHeaders, coordCells, coordSystemLabel, azimuthDeg, fmtAzimuth, vertices, defaultPointTitle, pointRows,

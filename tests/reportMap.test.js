@@ -959,6 +959,20 @@ t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefin
     ok('...e depois de cancelar tudo volta ao normal', !tem());
 }
 
+// ---------------------------------------------------------------- largura dos cards das análises
+{
+    const b = build({});
+    const n0 = b.changes.length;
+    b.ctl.setAnaliseLargura('comp', 50);
+    b.ctl.setAnaliseLargura('med:1', 33.34);
+    eq('larguras guardadas e a mudança avisada (a folha refaz os cards)', [b.ctl.getConfig().analises.largura, b.changes.length, b.changes[b.changes.length - 1].analises.largura['med:1']], [{ comp: 50, 'med:1': 33.3 }, n0 + 2, 33.3]);
+    b.ctl.setAnaliseLargura('comp', undefined);
+    b.ctl.setAnaliseLargura('med:1', 100);
+    eq('vazio ou 100% tira a largura', b.ctl.getConfig().analises.largura, {});
+    b.ctl.setAnalisesLargura({ comp: 25, 'med:2': 75 });
+    eq('várias de uma vez; vai no que se salva', [b.ctl.snapshot().analises.largura, b.ctl.getConfig().analises.largura], [{ comp: 25, 'med:2': 75 }, { comp: 25, 'med:2': 75 }]);
+}
+
 // ---------------------------------------------------------------- quadriculado
 t = build({});
 eq('quadriculado desligado: nada desenhado', t.layersOf('polyline').length, 0);

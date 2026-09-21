@@ -860,6 +860,18 @@
                 if (state.measure && (!cfg.referencia.ativo || cfg.referencia.camada !== refAnt)) { state.measure = null; setMeasureCursor(false); }
                 apply();
             },
+            /** Largura (% da folha) de um card de "Análises da Feição": 'comp' ou 'med:N'. 100 (ou vazio) volta ao padrão. */
+            setAnaliseLargura(id, pct) {
+                const largura = Object.assign({}, cfg.analises.largura);
+                if (pct === undefined || pct === null || pct === '') delete largura[id]; else largura[id] = pct;
+                cfg.analises = MT.normalizeAnalises({ largura: largura });
+                notify();
+            },
+            /** Define de uma vez a largura de vários cards: { id: pct }. */
+            setAnalisesLargura(mapa) {
+                cfg.analises = MT.normalizeAnalises({ largura: mapa || {} });
+                notify();
+            },
             /** Liga/desliga uma camada vizinha pelo id. */
             toggleLayer(id, on) {
                 const set = new Set(cfg.camadasLigadas.map(String));
@@ -873,7 +885,7 @@
                     camadasLigadas: cfg.camadasLigadas.slice(), destaque: Object.assign({}, cfg.destaque), medidas: JSON.parse(JSON.stringify(cfg.medidas)),
                     edicoes: Object.assign({}, cfg.edicoes), posicoes: Object.assign({}, cfg.posicoes), rotacoes: Object.assign({}, cfg.rotacoes),
                     pontos: Object.assign({}, cfg.pontos, { ordem: cfg.pontos.ordem.slice(), titulos: Object.assign({}, cfg.pontos.titulos) }),
-                    rotulos: JSON.parse(JSON.stringify(cfg.rotulos)), confrontantes: JSON.parse(JSON.stringify(cfg.confrontantes)), referencia: JSON.parse(JSON.stringify(cfg.referencia)), medicoes: JSON.parse(JSON.stringify(cfg.medicoes)), elementos: JSON.parse(JSON.stringify(cfg.elementos)), legenda: JSON.parse(JSON.stringify(cfg.legenda)),
+                    rotulos: JSON.parse(JSON.stringify(cfg.rotulos)), confrontantes: JSON.parse(JSON.stringify(cfg.confrontantes)), referencia: JSON.parse(JSON.stringify(cfg.referencia)), analises: JSON.parse(JSON.stringify(cfg.analises)), medicoes: JSON.parse(JSON.stringify(cfg.medicoes)), elementos: JSON.parse(JSON.stringify(cfg.elementos)), legenda: JSON.parse(JSON.stringify(cfg.legenda)),
                     comparacaoArea: Object.assign({}, cfg.comparacaoArea), situacao: Object.assign({}, cfg.situacao), quadriculado: Object.assign({}, cfg.quadriculado),
                     anotacoes: cfg.anotacoes.map(a => Object.assign({}, a)), vista: currentView()
                 });
