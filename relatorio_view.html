@@ -16,23 +16,23 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260922f"></script>
-    <script src="src/mapTools.js?v=20260922f"></script>
-    <script src="src/reportMap.js?v=20260922f"></script>
-    <script src="src/reportTemporal.js?v=20260922f"></script>
-    <script src="src/reportExport.js?v=20260922f"></script>
-    <script src="src/reportBlocks.js?v=20260922f"></script>
-    <script src="src/reportEditor.js?v=20260922f"></script>
-    <script src="src/reportFreeText.js?v=20260922f"></script>
-    <script src="src/reportWord.js?v=20260922f"></script>
-    <script src="src/reportDocx.js?v=20260922f"></script>
-    <script src="src/mapSnapshot.js?v=20260922f"></script>
-    <script src="src/verificarEmissao.js?v=20260922f"></script>
+    <script src="src/pageSize.js?v=20260922g"></script>
+    <script src="src/mapTools.js?v=20260922g"></script>
+    <script src="src/reportMap.js?v=20260922g"></script>
+    <script src="src/reportTemporal.js?v=20260922g"></script>
+    <script src="src/reportExport.js?v=20260922g"></script>
+    <script src="src/reportBlocks.js?v=20260922g"></script>
+    <script src="src/reportEditor.js?v=20260922g"></script>
+    <script src="src/reportFreeText.js?v=20260922g"></script>
+    <script src="src/reportWord.js?v=20260922g"></script>
+    <script src="src/reportDocx.js?v=20260922g"></script>
+    <script src="src/mapSnapshot.js?v=20260922g"></script>
+    <script src="src/verificarEmissao.js?v=20260922g"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260922f"></script>
-    <script src="src/reportData.js?v=20260922f"></script>
-    <script src="src/layerFilter.js?v=20260922f"></script>
+    <script src="src/fieldFormatter.js?v=20260922g"></script>
+    <script src="src/reportData.js?v=20260922g"></script>
+    <script src="src/layerFilter.js?v=20260922g"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
@@ -1025,17 +1025,41 @@
                 if (opener && !opener.closed && themeId && Array.isArray(opener.themes)) {
                     const theme = opener.themes.find(t => String(t.id) === String(themeId));
                     if (theme && Array.isArray(theme.features)) {
+                        // resolve cada campo pelo MESMO caminho do Painel de Estatísticas do mapa (getFeaturePropertyValue),
+                        // que entende fórmulas/1:N (ex.: "valor mais recente da vistoria") — sem isso, um campo assim
+                        // fica sempre vazio aqui (não existe como properties[id] bruto), quebrando gráfico, tabela e filtro
+                        const resolvidas = theme.features.map(f => ({ properties: propriedadesResolvidasDaCamada(theme, f), geometry: f && f.geometry }));
                         // filtro do modelo: aplicado ANTES do teto de segurança, para não descartar por engano
                         // uma feição que casaria com o filtro só porque veio depois das primeiras LIMITE_FEICOES_GRAFICO
                         const fieldIndex = {};
                         (reportPayload.formFields || []).forEach(f => { if (f && f.id) fieldIndex[f.id] = f; });
-                        const filtradas = temFiltro ? LayerFilter.filtrarFeatures(theme.features, filtro, fieldIndex) : theme.features;
+                        const filtradas = temFiltro ? LayerFilter.filtrarFeatures(resolvidas, filtro, fieldIndex) : resolvidas;
                         featureListTruncada = filtradas.length > LIMITE_FEICOES_GRAFICO;
-                        return filtradas.slice(0, LIMITE_FEICOES_GRAFICO).map(f => ({ properties: (f && f.properties) || {}, geometry: f && f.geometry }));
+                        return filtradas.slice(0, LIMITE_FEICOES_GRAFICO);
                     }
                 }
             } catch (e) { /* sem janela de origem: fica sem dados */ }
             return [];
+        }
+
+        /**
+         * Propriedades de uma feição, resolvidas campo a campo pela janela de origem (window.opener.getFeaturePropertyValue),
+         * a mesma função que o Painel de Estatísticas do mapa usa — entende campo com fórmula (ex.: "valor mais recente
+         * entre as vistorias de uma aba 1:N"), não só a leitura direta de feature.properties[id]. Sem essa função na
+         * janela de origem (prévia, ou uma janela mais antiga), cai para as propriedades brutas da feição.
+         */
+        function propriedadesResolvidasDaCamada(theme, feature) {
+            const brutas = (feature && feature.properties) || {};
+            const opener = window.opener;
+            if (!opener || opener.closed || typeof opener.getFeaturePropertyValue !== 'function') return brutas;
+            const campos = (reportPayload && reportPayload.formFields) || [];
+            const out = {};
+            campos.forEach(f => {
+                if (!f || !f.id) return;
+                try { out[f.id] = opener.getFeaturePropertyValue(theme, feature, f.id); } catch (e) { out[f.id] = brutas[f.id]; }
+            });
+            Object.keys(brutas).forEach(k => { if (!(k in out)) out[k] = brutas[k]; });
+            return out;
         }
 
         /** Só as propriedades (para os gráficos e a tabela, que não precisam de geometria). */
@@ -1050,12 +1074,26 @@
             return texto === FieldFormatter.EMPTY ? 'Não informado' : texto;
         }
 
-        /** Conta quantas feições têm cada valor (formatado) de um campo. */
+        /**
+         * Conta quantas feições têm cada valor de um campo. Quando dá pela janela de origem, agrupa igual ao Painel
+         * de Estatísticas do mapa (normalizeStatValue — ex.: variações de "recuo" viram só 3 categorias); sem a
+         * janela (prévia com dados de exemplo), cai no formatador comum do relatório (chartValueLabel).
+         */
         function aggregateChart(fieldId) {
             const registros = resolveFeatureList();
+            const opener = window.opener;
+            const temNormalizador = opener && !opener.closed && typeof opener.normalizeStatValue === 'function';
+            const campo = (reportPayload && Array.isArray(reportPayload.formFields)) ? reportPayload.formFields.find(f => f.id === fieldId) : null;
             const contagem = new Map();
             registros.forEach(props => {
-                const rotulo = chartValueLabel(fieldId, props ? props[fieldId] : undefined);
+                const valor = props ? props[fieldId] : undefined;
+                let rotulo;
+                if (temNormalizador) {
+                    try { rotulo = opener.normalizeStatValue(valor, campo); } catch (e) { rotulo = chartValueLabel(fieldId, valor); }
+                    if (rotulo === 'N/I') rotulo = 'Não informado';
+                } else {
+                    rotulo = chartValueLabel(fieldId, valor);
+                }
                 contagem.set(rotulo, (contagem.get(rotulo) || 0) + 1);
             });
             const labels = Array.from(contagem.keys());

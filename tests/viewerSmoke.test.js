@@ -163,7 +163,7 @@ async function runScenario(cfg) {
     const listeners = {};
     // janela de origem (a página do mapa) com o adaptador de ajustes, como no uso real
     const captured = { blobs: [], alerts: [], registros: [], prints: 0, downloads: [], qrData: '', mensagens: [], reloads: 0, charts: [], templatesSalvos: [] };
-    const opener = cfg.opener ? { closed: false, themes: cfg.themes, ReportAdapter: { getAjustes: async () => cfg.ajustes || null, saveAjustes: async () => ({ ok: true, remoto: false }), registrarEmissao: async (e) => { captured.registros.push(e); return { ok: true, remoto: false }; }, saveReportTemplate: async (t) => { captured.templatesSalvos.push(JSON.parse(JSON.stringify(t))); return true; } } } : null;
+    const opener = cfg.opener ? { closed: false, themes: cfg.themes, ReportAdapter: { getAjustes: async () => cfg.ajustes || null, saveAjustes: async () => ({ ok: true, remoto: false }), registrarEmissao: async (e) => { captured.registros.push(e); return { ok: true, remoto: false }; }, saveReportTemplate: async (t) => { captured.templatesSalvos.push(JSON.parse(JSON.stringify(t))); return true; } }, getFeaturePropertyValue: cfg.getFeaturePropertyValue, normalizeStatValue: cfg.normalizeStatValue } : null;
     const windowStub = {
         addEventListener: (ev, fn) => { (listeners[ev] = listeners[ev] || []).push(fn); },
         location: { search: cfg.search || '?templateId=rpt_smoke', origin: 'http://localhost:8080', reload() { captured.reloads++; }, href: 'http://localhost:8080/relatorio_view.html?templateId=rpt_smoke' }, parent: cfg.edicao ? { postMessage: (m) => captured.mensagens.push(m) } : undefined, localStorage: storage, sessionStorage: storage, opener,
@@ -957,6 +957,59 @@ async function runScenario(cfg) {
         tplFiltroVazio.filtro = { grupos: [] };
         const rv = await runScenario({ opener: true, themes: [temaCamada], payload: Object.assign({}, payload, { template: tplFiltroVazio }) });
         eq('filtro vazio: continua mostrando as 3 feições da camada', rv.captured.charts[0].config.data.labels.sort(), ['Irregular', 'Regular']);
+    }
+
+    // ---- RELATÓRIO GERAL — CAMPO COM FÓRMULA/1:N: gráfico, tabela e filtro devem ler pelo MESMO caminho do Painel
+    // de Estatísticas do mapa (getFeaturePropertyValue/normalizeStatValue), não por feature.properties[id] direto —
+    // é o caso de um campo "valor mais recente da vistoria" (1:N), que não existe como propriedade bruta da feição.
+    {
+        const tplGeral = {
+            id: 'rpt_formula', nome: 'Relatório Geral', tipo: 'geral', form_id: 'f1',
+            config_pagina: { tamanho: 'A4', orientacao: 'portrait', margens_mm: { top: 15, bottom: 15, left: 15, right: 15 } },
+            blocos: [
+                { id: 'h', tipo: 'cabecalho' },
+                { id: 'g', tipo: 'grafico_existente', chart_ids: ['c1'], layout: 'largura_total' },
+                { id: 't', tipo: 'tabela_feicoes', titulo: 'Feições', colunas: ['recuo'] },
+                { id: 'f', tipo: 'rodape' }
+            ]
+        };
+        const charts = [{ id: 'c1', title: 'Situação do Recuo', type: 'pie', fieldId: 'recuo', fieldLabel: 'Recuo' }];
+        const formFields = [{ id: 'recuo', label: 'Situação do Recuo', type: 'select' }];
+        // as feições NÃO têm "recuo" como propriedade bruta (é calculado a partir da vistoria mais recente, 1:N);
+        // uma leitura ingênua (feature.properties.recuo) daria sempre undefined/"Não informado" para todas as 3
+        const temaFormula = {
+            id: 'tema-formula', features: [
+                { properties: { _id: 1, vistorias: [{ data: '2026-01-01', situacao_recuo: 'Recuo pendente' }] } },
+                { properties: { _id: 2, vistorias: [{ data: '2026-02-01', situacao_recuo: 'Já recuado' }] } },
+                { properties: { _id: 3, vistorias: [{ data: '2026-01-15', situacao_recuo: 'Recuo em andamento' }] } }
+            ]
+        };
+        // simula o getFeaturePropertyValue/normalizeStatValue reais do mapa: lê o campo calculado e agrupa em 3 categorias
+        const getFeaturePropertyValue = (theme, feature, key) => {
+            if (key !== 'recuo') return undefined;
+            const v = (feature.properties.vistorias || []).slice(-1)[0];
+            return v ? v.situacao_recuo : undefined;
+        };
+        const normalizeStatValue = (val) => {
+            const s = String(val || '').toLowerCase();
+            if (s.includes('pendente') || s.includes('não')) return 'Não Recuou';
+            if (s.includes('já') || s.includes('recuado')) return 'Já Recuou';
+            if (s.includes('andamento') || s.includes('parcial')) return 'Recuo Parcial';
+            return 'N/I';
+        };
+        const payload = { templateId: 'rpt_formula', template: tplGeral, formId: 'f1', themeId: 'tema-formula', formFields, formTabs: [], charts, featureData: {}, featureGeometry: null, featureList: null, preview: false };
+        const r = await runScenario({ opener: true, themes: [temaFormula], payload, getFeaturePropertyValue, normalizeStatValue });
+        eq('campo com fórmula: nenhum erro de execução', r.errors, []);
+        eq('gráfico: as 3 feições entram, cada uma na categoria certa (não "Não informado")', r.captured.charts[0].config.data.labels.sort(), ['Já Recuou', 'Não Recuou', 'Recuo Parcial']);
+        ok('tabela: mostra o valor resolvido do campo com fórmula (não vazio)', r.registry['a4-document-container']._html.includes('Recuo pendente'));
+
+        // filtro sobre o MESMO campo com fórmula: sem a resolução certa, "recuo" não existiria e o filtro não pegaria ninguém
+        const tplComFiltro = JSON.parse(JSON.stringify(tplGeral));
+        tplComFiltro.filtro = { grupos: [{ condicoes: [{ field: 'recuo', op: 'igual', value: 'Recuo pendente' }] }] };
+        const rf = await runScenario({ opener: true, themes: [temaFormula], payload: Object.assign({}, payload, { template: tplComFiltro }), getFeaturePropertyValue, normalizeStatValue });
+        eq('filtro no campo com fórmula: nenhum erro', rf.errors, []);
+        eq('filtro no campo com fórmula: só a feição "Recuo pendente" casa', rf.captured.charts[0].config.data.labels, ['Não Recuou']);
+        ok('filtro no campo com fórmula: mostra 1 feição, não 3', rf.registry['a4-document-container']._html.includes('1 feiç') && !rf.registry['a4-document-container']._html.includes('3 feiç'));
     }
 
     // ---- PAINEL "CONFIGURAÇÕES DA PESQUISA" (Relatório Geral): só 2 seções (Filtro de Feições, Gráficos do
