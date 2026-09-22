@@ -959,8 +959,9 @@ async function runScenario(cfg) {
         eq('filtro vazio: continua mostrando as 3 feições da camada', rv.captured.charts[0].config.data.labels.sort(), ['Irregular', 'Regular']);
     }
 
-    // ---- PAINEL "CONFIGURAÇÕES DA PESQUISA" (Relatório Geral): acordeão flutuante (filtro, gráficos, tabela, mapa),
-    // no mesmo estilo do painel "Configurações do Mapa" do Relatório Individual, com "Salvar ajustes" e "Restaurar"
+    // ---- PAINEL "CONFIGURAÇÕES DA PESQUISA" (Relatório Geral): só 2 seções (Filtro de Feições, Gráficos do
+    // Dashboard); dentro do Filtro, passo a passo com resultado imediato: Aplicar filtro → Incluir campos na
+    // tabela → Gerar mapa → Limpar filtro. "Salvar ajustes"/"Restaurar" continuam no rodapé do painel.
     {
         // não aparece no Relatório Individual
         const rInd = await runScenario({ payload: { templateId: 'rpt_smoke', template: tplWith(null), formId: 'f1', featureData: {}, featureGeometry: null, preview: true } });
@@ -983,38 +984,52 @@ async function runScenario(cfg) {
         const r = await runScenario({ payload, opener: true });
         eq('painel: nenhum erro de execução ao abrir', r.errors, []);
         const painel = () => r.registry['pesquisa-tools-panel'].innerHTML;
-        ok('geral: painel "Configurações da Pesquisa" criado, com as 4 seções', painel().includes('Configurações da Pesquisa') && painel().includes('Filtro de feições') && painel().includes('Gráficos do dashboard') && painel().includes('Tabela das feições') && painel().includes('Mapa das feições'));
+        ok('geral: painel "Configurações da Pesquisa" criado, com só 2 seções (Filtro e Gráficos)', painel().includes('Configurações da Pesquisa') && painel().includes('Filtro de feições') && painel().includes('Gráficos do dashboard') && !painel().includes('Tabela das feições') && !painel().includes('Mapa das feições'));
         ok('painel: mostra a condição existente (campo "sit" já selecionado)', painel().includes('value="sit" selected'));
         ok('painel: campo do filtro sugere os valores já existentes na camada (Regular e Irregular) numa datalist', /<datalist id="pp-vals-0-0">[\s\S]*?<option value="Irregular">[\s\S]*?<option value="Regular">[\s\S]*?<\/datalist>/.test(painel()) || /<datalist id="pp-vals-0-0">[\s\S]*?<option value="Regular">[\s\S]*?<option value="Irregular">[\s\S]*?<\/datalist>/.test(painel()));
         ok('painel: selects/input do filtro preenchem toda a largura do card', /updateFiltroCondicaoGeral\(0,0,'field'[^>]*style="width:100%"/.test(painel()));
+        ok('painel: mostra ao vivo quantas feições casam com o filtro (2 de 3, só Regular) mesmo sem aplicar', painel().includes('2 feições casam com o filtro atual'));
+        ok('painel: sem tabela ainda, "Incluir campos"/"Gerar mapa" não aparecem (só depois de Aplicar filtro)', !painel().includes('Incluir campos na tabela') && !painel().includes('Gerar mapa'));
         ok('painel: gráfico "c1" (já escolhido) vem marcado; "c2" (não escolhido) vem desmarcado', painel().includes('checked onchange="toggleGraficoEscolhidoGeral(\'c1\'') && !painel().includes('checked onchange="toggleGraficoEscolhidoGeral(\'c2\''));
-        ok('painel: mapa das feições vem desmarcado por padrão (sem bloco no modelo)', !painel().includes('checked onchange="toggleMapaFeicoesGeral'));
-        ok('painel: tabela das feições mostra a aba de cada campo (desambiguação)', painel().includes('>Situação<') && painel().includes('>Cadastro<') && painel().includes('>Área<') && painel().includes('>Medidas<'));
         ok('relatório: com o filtro atual (só Regular), o gráfico conta 2 feições', r.captured.charts[0].config.data.labels.sort().join(',') === 'Regular' && r.registry['a4-document-container']._html.includes('2 feições'));
 
-        // edita ao vivo: novo grupo (OU) pegando também "Irregular", liga o 2º gráfico, uma coluna extra na tabela e o mapa
+        // "Aplicar filtro": cria a 1ª tabela (ainda sem colunas) e mostra o resultado na folha na hora
+        r.sandbox.aplicarFiltroGeral();
+        ok('aplicar filtro: a folha já mostra a tabela (sem colunas escolhidas ainda)', r.registry['a4-document-container']._html.includes('Nenhuma coluna escolhida'));
+        ok('painel: com a tabela criada, aparecem os passos seguintes ("Incluir campos" e "Gerar mapa")', painel().includes('Incluir campos na tabela') && painel().includes('Gerar mapa'));
+
+        // edita mais o filtro (2º grupo, OU com "Irregular"): a folha só reage quando aplicar de novo
         r.sandbox.addFiltroGrupoGeral();
         r.sandbox.updateFiltroCondicaoGeral(1, 0, 'field', 'sit');
         r.sandbox.updateFiltroCondicaoGeral(1, 0, 'op', 'igual');
         r.sandbox.updateFiltroCondicaoGeral(1, 0, 'value', 'irregular');
-        r.sandbox.toggleGraficoEscolhidoGeral('c2', true);
-        r.sandbox.toggleColunaTabelaGeral('area', true);
-        r.sandbox.toggleMapaFeicoesGeral(true);
-        r.sandbox.renderPainelPesquisaGeral();
-        ok('edição ao vivo: painel reflete o 2º grupo, o 2º gráfico e o mapa marcados', painel().includes('Grupo 2') && painel().includes('checked onchange="toggleGraficoEscolhidoGeral(\'c2\'') && painel().includes('checked onchange="toggleMapaFeicoesGeral'));
-        ok('mapa das feições: liga com cor padrão e ajustes de título/cor/contagem visíveis', painel().includes("value=\"#0ea5e9\"") && painel().includes('Mostrar contagem de feições'));
-        r.sandbox.updateMapaFeicoesConfigGeral('cor', '#dc2626');
-        r.sandbox.renderPainelPesquisaGeral();
-        ok('mapa das feições: cor escolhida reflete no painel', painel().includes("value=\"#dc2626\""));
+        ok('painel: a contagem ao vivo já reflete o 2º grupo (3 de 3) antes mesmo de aplicar', painel().includes('3 feições casam com o filtro atual'));
+        ok('a folha ainda mostra o resultado anterior (só Regular) até aplicar de novo', r.registry['a4-document-container']._html.includes('2 feições'));
+        r.sandbox.aplicarFiltroGeral();
+        ok('depois de aplicar de novo: a folha já mostra as 3 feições (2º grupo valendo)', r.registry['a4-document-container']._html.includes('3 feições'));
+        ok('botão de aplicar agora avisa "atualizar" (já existe tabela na folha)', painel().includes('Aplicar filtro (atualizar tabela)'));
 
-        // só ao clicar em "Salvar ajustes" é que persiste e redesenha a folha
+        // "Incluir campos na tabela": expande a lista (com a aba de cada campo) e marcar já atualiza a folha na hora
+        r.sandbox.toggleColunasPesquisaGeral();
+        ok('painel: campos mostram a aba de cada um (desambiguação)', painel().includes('>Situação<') && painel().includes('>Cadastro<') && painel().includes('>Área<') && painel().includes('>Medidas<'));
+        r.sandbox.toggleColunaTabelaGeral('area', true);
+        ok('marcar uma coluna já atualiza a tabela na folha, sem precisar de outro clique', r.registry['a4-document-container']._html.includes('>Área<'));
+
+        // "Gerar mapa": liga na hora, com cor padrão e ajustes visíveis (título, cor, contagem)
+        r.sandbox.toggleMapaFeicoesGeral(true);
+        ok('painel: mapa ligado ("Remover mapa"), com ajustes de título/cor/contagem', painel().includes('Remover mapa') && painel().includes("value=\"#0ea5e9\"") && painel().includes('Mostrar contagem de feições'));
+        r.sandbox.updateMapaFeicoesConfigGeral('cor', '#dc2626');
+        ok('mudar a cor do mapa também aplica na hora', painel().includes("value=\"#dc2626\""));
+
+        // liga o 2º gráfico: reflete na hora, sem precisar salvar
+        r.sandbox.toggleGraficoEscolhidoGeral('c2', true);
+        ok('painel: 2º gráfico marcado', painel().includes('checked onchange="toggleGraficoEscolhidoGeral(\'c2\''));
+        eq('a folha já mostra os 2 gráficos escolhidos (Situação e Área), sem precisar salvar', r.captured.charts.slice(-2).map(c => c.config.type).sort(), ['bar', 'doughnut']);
+
+        // só ao clicar em "Salvar ajustes" é que persiste de verdade
         await r.sandbox.salvarPesquisaGeral();
         await r.settle(6);
         eq('salvar: nenhum erro', r.errors, []);
-        const docPosSalvar = r.registry['a4-document-container']._html;
-        ok('depois de salvar: filtro ampliado (OU) agora pega as 3 feições', docPosSalvar.includes('3 feições'));
-        ok('depois de salvar: a coluna extra ("Área") aparece na tabela de feições', docPosSalvar.includes('>Área<'));
-        eq('depois de salvar: os 2 gráficos escolhidos agora aparecem (Situação e Área)', r.captured.charts.slice(-2).map(c => c.config.type).sort(), ['bar', 'doughnut']);
         const salvosLocal = JSON.parse(r.storage.getItem('constructive_report_templates') || '[]');
         const tplSalvoLocal = salvosLocal.find(t => t.id === 'rpt_pesquisa');
         ok('salvar: gravado no localStorage com os 2 grupos, os 2 gráficos, a coluna extra e o mapa (cor certa)', !!tplSalvoLocal && tplSalvoLocal.filtro.grupos.length === 2
@@ -1024,19 +1039,22 @@ async function runScenario(cfg) {
         const tplSalvoOpener = r.captured.templatesSalvos[r.captured.templatesSalvos.length - 1];
         ok('salvar: também gravado pela janela de origem (ReportAdapter.saveReportTemplate)', !!tplSalvoOpener && tplSalvoOpener.id === 'rpt_pesquisa' && tplSalvoOpener.filtro.grupos.length === 2);
 
-        // "Restaurar" descarta uma edição feita depois do último salvamento, sem precisar salvar de novo
+        // "Restaurar" descarta edições feitas depois do último salvamento, sem precisar salvar de novo
         r.sandbox.limparFiltroGeral();
+        r.sandbox.aplicarFiltroGeral();
         r.sandbox.toggleMapaFeicoesGeral(false);
+        ok('antes de restaurar: mapa desligado', !painel().includes('Remover mapa'));
         r.sandbox.restaurarPesquisaGeral();
         await r.settle(6);
         eq('restaurar: nenhum erro', r.errors, []);
-        ok('restaurar: volta a mostrar as 3 feições do último salvo (filtro OU com 2 grupos) e o mapa continua ligado', r.registry['a4-document-container']._html.includes('3 feições') && painel().includes('checked onchange="toggleMapaFeicoesGeral'));
+        ok('restaurar: volta ao último salvo (filtro OU com 2 grupos, 3 feições) e o mapa continua ligado', r.registry['a4-document-container']._html.includes('3 feições') && painel().includes('Remover mapa'));
 
-        // limpar filtro de verdade + salvar: volta a não restringir nada
+        // limpar filtro de verdade + aplicar + salvar: volta a não restringir nada
         r.sandbox.limparFiltroGeral();
+        r.sandbox.aplicarFiltroGeral();
         await r.sandbox.salvarPesquisaGeral();
         await r.settle(6);
-        ok('limpar filtro + salvar: sem filtro, as 3 feições continuam aparecendo', r.registry['a4-document-container']._html.includes('3 feições'));
+        ok('limpar filtro + aplicar + salvar: sem filtro, as 3 feições continuam aparecendo', r.registry['a4-document-container']._html.includes('3 feições'));
     }
 
     // ---- REORDENAR BLOCOS DO RELATÓRIO GERAL: arrastar direto na folha (Caixa de Texto, Tabela, Mapa, Gráficos)

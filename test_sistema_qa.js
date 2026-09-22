@@ -591,7 +591,7 @@ if (relatorioViewExists) {
     // o visualizador + os desenhistas dos blocos (src/reportBlocks.js, movidos do visualizador sem mudar o desenho)
     const relatorioViewCode = lerVisualizador();
     const hasRelatorioViewFeatures = !relatorioViewCode.includes('Gerar PDF') && relatorioViewCode.includes('window.print()') &&
-        relatorioViewCode.includes('Gerar Word') &&
+        relatorioViewCode.includes('Gerar arquivo editável') &&
         relatorioViewCode.includes('gerarWord') &&
         relatorioViewCode.includes('initReportMiniMap') &&
         relatorioViewCode.includes('ReportMap.create') &&

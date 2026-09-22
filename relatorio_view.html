@@ -16,23 +16,23 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260922e"></script>
-    <script src="src/mapTools.js?v=20260922e"></script>
-    <script src="src/reportMap.js?v=20260922e"></script>
-    <script src="src/reportTemporal.js?v=20260922e"></script>
-    <script src="src/reportExport.js?v=20260922e"></script>
-    <script src="src/reportBlocks.js?v=20260922e"></script>
-    <script src="src/reportEditor.js?v=20260922e"></script>
-    <script src="src/reportFreeText.js?v=20260922e"></script>
-    <script src="src/reportWord.js?v=20260922e"></script>
-    <script src="src/reportDocx.js?v=20260922e"></script>
-    <script src="src/mapSnapshot.js?v=20260922e"></script>
-    <script src="src/verificarEmissao.js?v=20260922e"></script>
+    <script src="src/pageSize.js?v=20260922f"></script>
+    <script src="src/mapTools.js?v=20260922f"></script>
+    <script src="src/reportMap.js?v=20260922f"></script>
+    <script src="src/reportTemporal.js?v=20260922f"></script>
+    <script src="src/reportExport.js?v=20260922f"></script>
+    <script src="src/reportBlocks.js?v=20260922f"></script>
+    <script src="src/reportEditor.js?v=20260922f"></script>
+    <script src="src/reportFreeText.js?v=20260922f"></script>
+    <script src="src/reportWord.js?v=20260922f"></script>
+    <script src="src/reportDocx.js?v=20260922f"></script>
+    <script src="src/mapSnapshot.js?v=20260922f"></script>
+    <script src="src/verificarEmissao.js?v=20260922f"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260922e"></script>
-    <script src="src/reportData.js?v=20260922e"></script>
-    <script src="src/layerFilter.js?v=20260922e"></script>
+    <script src="src/fieldFormatter.js?v=20260922f"></script>
+    <script src="src/reportData.js?v=20260922f"></script>
+    <script src="src/layerFilter.js?v=20260922f"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
@@ -266,10 +266,10 @@
         </div>
 
         <div class="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
-            <!-- Botão Gerar Word -->
-            <button type="button" onclick="gerarWord()" class="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="Exportar como documento Word (.doc)">
+            <!-- Botão Gerar arquivo editável (Word) -->
+            <button type="button" onclick="gerarWord()" class="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="Exportar como documento Word (.doc), editável">
                 <span class="material-symbols-outlined text-[17px]">article</span>
-                <span>Gerar Word</span>
+                <span>Gerar arquivo editável</span>
             </button>
 
             <!-- Botão Imprimir -->
@@ -308,9 +308,11 @@
         let chartInstances = {};      // gráficos do Dashboard (Chart.js) desenhados na folha: canvasId -> instância
         let tplAtual = null;          // modelo em uso nesta folha (Relatório Geral: editável aqui mesmo, painel "Configurações da Pesquisa")
         let tplSalvoSnapshot = null;  // última versão salva de tplAtual (para o botão "Restaurar" do painel de pesquisa)
+        let ultimoTplIdSnapshot = null; // id do modelo já retratado em tplSalvoSnapshot (evita reatratar em toda prévia)
         let statusPesquisaGeral = ''; // mensagem do painel de pesquisa (some no próximo desenho)
         let pesquisaPanelOpen = null; // painel "Configurações da Pesquisa" aberto? (null = decide pela largura da tela)
         let pesquisaSecaoAberta = 'filtro'; // qual acordeão do painel de pesquisa está aberto
+        let mostrarColunasPesquisa = false; // "Incluir campos na tabela" expandido?
         let emissao = { hash: '', protocolo: '', erro: '' }; // protocolo e SHA-256 da emissão (recalculados quando o conteúdo muda)
         const emissaoData = new Date();                       // dia da emissão (entra no protocolo)
         let emissaoTimer = null;
@@ -818,7 +820,13 @@
             window.reportViewerFormTabs = formTabs;
             window.reportViewerFormFields = fields;
             tplAtual = tpl;
-            tplSalvoSnapshot = JSON.parse(JSON.stringify(tpl));
+            // o retrato "salvo" só é atualizado na 1ª vez que ESTE modelo é aberto (ou depois de salvar de verdade,
+            // ver salvarPesquisaGeral) — desenharRelatorio() também roda em prévias ao vivo (Aplicar filtro, ligar
+            // gráfico/mapa) que ainda não foram salvas, e essas não podem apagar o que "Restaurar" precisa voltar.
+            if (tpl.id !== ultimoTplIdSnapshot) {
+                tplSalvoSnapshot = JSON.parse(JSON.stringify(tpl));
+                ultimoTplIdSnapshot = tpl.id;
+            }
             renderPainelPesquisaGeral(fields);
             const isGeral = tpl.tipo === 'geral';
 
@@ -1186,7 +1194,7 @@
             const i = ids.indexOf(chartId);
             if (checked && i < 0) ids.push(chartId);
             if (!checked && i >= 0) ids.splice(i, 1);
-            renderPainelPesquisaGeral();
+            aplicarPesquisaGeral();
         }
 
         /** Bloco "Tabela de Feições" do modelo em uso; cria se faltar e algum campo for marcado. */
@@ -1206,7 +1214,7 @@
             const i = cols.indexOf(fieldId);
             if (checked && i < 0) cols.push(fieldId);
             if (!checked && i >= 0) cols.splice(i, 1);
-            renderPainelPesquisaGeral();
+            aplicarPesquisaGeral();
         }
 
         /** Bloco "Mapa das Feições" do modelo em uso (desligado por padrão: só existe se o usuário ativar). */
@@ -1222,14 +1230,14 @@
             } else {
                 tplAtual.blocos = (tplAtual.blocos || []).filter(b => b.tipo !== 'mapa_feicoes');
             }
-            renderPainelPesquisaGeral();
+            aplicarPesquisaGeral();
         }
 
         function updateMapaFeicoesConfigGeral(prop, value) {
             const bloco = mapaBlocoGeral();
             if (!bloco) return;
             bloco[prop] = value;
-            renderPainelPesquisaGeral();
+            aplicarPesquisaGeral();
         }
 
         /** Valores já existentes na camada para um campo (prévia: lista de exemplo bruta; emissão real: camada de verdade, sem o filtro atual — mostra tudo que existe). */
@@ -1321,31 +1329,42 @@
                 </label>`).join('')
                 : '<div style="color:#64748b;font-style:italic">Nenhum campo disponível neste formulário.</div>';
 
-            const mapaHtml = `
-                ${chkRowPesquisa('pp-mapa-on', 'Ativar mapa das feições', !!blocoMapa, "toggleMapaFeicoesGeral(this.checked)")}
-                ${blocoMapa ? `
-                    <label class="row">Título<input type="text" value="${esc(blocoMapa.titulo || '')}" onchange="updateMapaFeicoesConfigGeral('titulo', this.value)" style="flex:1;min-width:0"></label>
-                    <label class="row">Cor das feições<input type="color" value="${esc(blocoMapa.cor || '#0ea5e9')}" oninput="updateMapaFeicoesConfigGeral('cor', this.value)" style="width:34px;height:22px;padding:0;border:1px solid #cbd5e1;margin-left:auto"></label>
-                    ${chkRowPesquisa('pp-mapa-contagem', 'Mostrar contagem de feições em cada grupo', blocoMapa.exibirContagem !== false, "updateMapaFeicoesConfigGeral('exibirContagem', this.checked)")}
-                    <div style="color:#64748b;line-height:1.35;margin-top:3px">Agrupa por proximidade; acima de ${LIMITE_FEICOES_MAPA} feições filtradas, pede para refinar o filtro.</div>
-                ` : ''}`;
+            // contagem AO VIVO (sem precisar redesenhar a folha) do rascunho atual do filtro, para decidir se já aplica
+            const filtroLimpo = LayerFilter.normalizeFiltro(filtro);
+            const temFiltroAtivo = !LayerFilter.filtroVazio(filtroLimpo);
+            const totalFiltrado = resolveFeatureListFull().length;
+            const contagemHtml = `<div style="color:#64748b;margin:6px 0 4px">${totalFiltrado} feiç${totalFiltrado === 1 ? 'ão casa' : 'ões casam'} com o filtro atual${temFiltroAtivo ? '' : ' (sem filtro: todas)'}.</div>`;
+
+            // depois de aplicado (existe a tabela), aparecem os passos seguintes: colunas extras e o mapa
+            const passosSeguintesHtml = !blocoTabela ? '' : `
+                <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #cbd5e1">
+                    <button type="button" class="act" onclick="toggleColunasPesquisaGeral()">${mostrarColunasPesquisa ? 'Ocultar campos da tabela ▴' : 'Incluir campos na tabela ▾'}</button>
+                    ${mostrarColunasPesquisa ? `<div style="max-height:160px;overflow-y:auto;margin-top:5px">${colunasHtml}</div>` : ''}
+                </div>
+                <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #cbd5e1">
+                    <button type="button" class="act" onclick="toggleMapaFeicoesGeral(${blocoMapa ? 'false' : 'true'})">${blocoMapa ? 'Remover mapa' : 'Gerar mapa'}</button>
+                    ${blocoMapa ? `
+                        <div style="margin-top:5px">
+                            <label class="row">Título<input type="text" value="${esc(blocoMapa.titulo || '')}" onchange="updateMapaFeicoesConfigGeral('titulo', this.value)" style="flex:1;min-width:0"></label>
+                            <label class="row">Cor das feições<input type="color" value="${esc(blocoMapa.cor || '#0ea5e9')}" oninput="updateMapaFeicoesConfigGeral('cor', this.value)" style="width:34px;height:22px;padding:0;border:1px solid #cbd5e1;margin-left:auto"></label>
+                            ${chkRowPesquisa('pp-mapa-contagem', 'Mostrar contagem de feições em cada grupo', blocoMapa.exibirContagem !== false, "updateMapaFeicoesConfigGeral('exibirContagem', this.checked)")}
+                            <div style="color:#64748b;line-height:1.35;margin-top:3px">Agrupa por proximidade; acima de ${LIMITE_FEICOES_MAPA} feições filtradas, pede para refinar o filtro.</div>
+                        </div>
+                    ` : ''}
+                </div>`;
 
             return `
                 <h4 data-sec-h="filtro" class="${secH('filtro')}" onclick="pesquisaPanelSecao('filtro')">Filtro de feições<span class="chev">&#9662;</span></h4>
                 <div data-sec="filtro" class="sec-body" style="display:${secD('filtro')}">
                     ${gruposHtml}
                     <button type="button" class="act" onclick="addFiltroGrupoGeral()">+ grupo (ou)</button>
-                    ${filtro.grupos.length ? `<button type="button" class="act" style="margin-top:4px" onclick="limparFiltroGeral()">Limpar filtro</button>` : ''}
+                    ${contagemHtml}
+                    <button type="button" class="act primary" onclick="aplicarFiltroGeral()">${blocoTabela ? 'Aplicar filtro (atualizar tabela)' : 'Aplicar filtro'}</button>
+                    ${passosSeguintesHtml}
+                    ${filtro.grupos.length ? `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #cbd5e1"><button type="button" class="act" onclick="limparFiltroGeral()">Limpar filtro</button></div>` : ''}
                 </div>
                 <h4 data-sec-h="graficos" class="${secH('graficos')}" onclick="pesquisaPanelSecao('graficos')">Gráficos do dashboard<span class="chev">&#9662;</span></h4>
                 <div data-sec="graficos" class="sec-body" style="display:${secD('graficos')}">${graficosHtml}</div>
-                <h4 data-sec-h="tabela" class="${secH('tabela')}" onclick="pesquisaPanelSecao('tabela')">Tabela das feições<span class="chev">&#9662;</span></h4>
-                <div data-sec="tabela" class="sec-body" style="display:${secD('tabela')}">
-                    <div style="color:#64748b;line-height:1.35;margin-bottom:4px">Escolha os campos que complementam a tabela gerada pelo filtro (ex.: inscrição imobiliária, quadra, lote).</div>
-                    <div style="max-height:180px;overflow-y:auto">${colunasHtml}</div>
-                </div>
-                <h4 data-sec-h="mapa" class="${secH('mapa')}" onclick="pesquisaPanelSecao('mapa')">Mapa das feições<span class="chev">&#9662;</span></h4>
-                <div data-sec="mapa" class="sec-body" style="display:${secD('mapa')}">${mapaHtml}</div>
                 <div style="padding:10px 0 2px">
                     <div style="display:flex;gap:6px">
                         <button type="button" class="act primary" onclick="salvarPesquisaGeral()">Salvar ajustes</button>
@@ -1430,7 +1449,30 @@
                 try { await adapter.saveReportTemplate(tplAtual); remoto = true; } catch (e) { /* já ficou salvo localmente */ }
             }
             statusPesquisaGeral = remoto ? 'Ajustes salvos.' : 'Ajustes salvos neste navegador (servidor indisponível).';
+            tplSalvoSnapshot = JSON.parse(JSON.stringify(tplAtual)); // "Restaurar" passa a voltar para ESTE ponto
             desenharRelatorio();
+        }
+
+        /** Aplica o rascunho atual (filtro, gráficos, tabela, mapa) na folha, sem gravar ainda — só para o usuário ver o resultado. */
+        function aplicarPesquisaGeral() {
+            if (!tplAtual) return;
+            desenharRelatorio();
+        }
+
+        /** "Aplicar filtro": garante que exista uma tabela (a "primeira tabela" do filtro) e mostra o resultado na folha. */
+        function aplicarFiltroGeral() {
+            if (!tplAtual) return;
+            if (!tabelaBlocoGeral()) {
+                if (!Array.isArray(tplAtual.blocos)) tplAtual.blocos = [];
+                tplAtual.blocos.push({ id: 'b_tabela_' + Date.now(), tipo: 'tabela_feicoes', titulo: 'Feições da Camada', colunas: [] });
+            }
+            aplicarPesquisaGeral();
+        }
+
+        /** Mostra/esconde a lista de campos de "Incluir campos na tabela" (só estado de tela, não é salvo). */
+        function toggleColunasPesquisaGeral() {
+            mostrarColunasPesquisa = !mostrarColunasPesquisa;
+            renderPainelPesquisaGeral();
         }
 
         /**
