@@ -217,6 +217,35 @@ ok('voltando ao individual, o modelo geral não aparece na lista', !has(containe
 
 RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
 
+// ---------------------------------------------------------------- gavetas de campo (Grade de Atributos, Quadro Sintético 1:N, Laudo): começam com tudo desmarcado
+{
+    const forms0 = window.forms[0];
+    forms0.tabs = forms0.tabs.filter(t => t.id !== 't_check1n');
+    forms0.tabs.push({ id: 't_check1n', title: 'Histórico', isMultiple: true, fields: [{ id: 'hc_a', label: 'Campo A', type: 'text' }, { id: 'hc_b', label: 'Campo B', type: 'text' }] });
+    const tpl = RA.getReportTemplates('f1')[0];
+    const blocosOriginais = JSON.parse(JSON.stringify(tpl.blocos));
+    tpl.blocos = [{ id: 'h1', tipo: 'cabecalho' }];
+    RA.saveReportTemplate(tpl);
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+    html = container.innerHTML;
+    ok('Grade de Atributos: nenhum campo vem marcado por padrão', !/name="cfg-grid-field"[^>]*checked/.test(html) && (html.match(/name="cfg-grid-field"/g) || []).length > 0);
+    ok('Quadro Sintético 1:N (aba "1. Tabela Sintética"): nenhum campo vem marcado por padrão', !/name="cfg-1n-field"[^>]*checked/.test(html) && (html.match(/name="cfg-1n-field"/g) || []).length > 0);
+    ok('Laudo Analítico (aba "2."): sem laudo configurado ainda, nenhum campo vem marcado', !/name="cfg-1n-laudo-field"[^>]*checked/.test(html) && (html.match(/name="cfg-1n-laudo-field"/g) || []).length > 0);
+
+    // com um laudo JÁ configurado na folha, a gaveta volta a refletir o que está salvo (isso continua igual)
+    tpl.blocos = [{ id: 'h1', tipo: 'cabecalho' }, { id: 'l1', tipo: 'laudo_vistoria_fotos', abas_selecionadas: ['t_check1n'], campos_selecionados: [{ id: 'hc_a', rawId: 'hc_a', tabId: 't_check1n', tabTitle: 'Histórico' }] }];
+    RA.saveReportTemplate(tpl);
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+    html = container.innerHTML;
+    ok('laudo já configurado: o campo salvo aparece marcado na gaveta', new RegExp('name="cfg-1n-laudo-field"[^>]*value="hc_a"[^>]*checked').test(html));
+    ok('laudo já configurado: o outro campo (não salvo) continua desmarcado', !new RegExp('name="cfg-1n-laudo-field"[^>]*value="hc_b"[^>]*checked').test(html));
+
+    tpl.blocos = blocosOriginais; // devolve o modelo como estava, para não afetar os testes seguintes
+    RA.saveReportTemplate(tpl);
+}
+
+RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+
 // ---------------------------------------------------------------- dados que a página do mapa entrega ao relatório
 {
     const tplMapa = RA.getReportTemplates('f1')[0];

@@ -729,7 +729,7 @@
                                             ${tg.fields.map((f, i) => `
                                                 <div class="cfg-grid-field-item flex items-center justify-between gap-1.5 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 text-xs text-slate-700 dark:text-slate-300 transition-colors" data-field-label="${escapeHtml(f.label.toLowerCase())}" data-tab-id="${escapeHtml(tg.id)}">
                                                     <label class="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
-                                                        <input type="checkbox" name="cfg-grid-field" data-tab-id="${escapeHtml(tg.id)}" data-tab-title="${escapeHtml(tg.title)}" value="${escapeHtml(f.id)}" ${tgIdx === 0 && i < 6 ? 'checked' : ''} class="rounded text-primary focus:ring-0 shrink-0" />
+                                                        <input type="checkbox" name="cfg-grid-field" data-tab-id="${escapeHtml(tg.id)}" data-tab-title="${escapeHtml(tg.title)}" value="${escapeHtml(f.id)}" class="rounded text-primary focus:ring-0 shrink-0" />
                                                         <div class="flex flex-col min-w-0 flex-1">
                                                             <div class="flex items-center gap-1.5">
                                                                 <span class="truncate font-medium text-slate-800 dark:text-slate-200" title="${escapeHtml(f.label)}">${escapeHtml(f.label)}</span>
@@ -913,13 +913,6 @@
                                             }
                                         }
 
-                                        if (current1nSelectedFieldKeys.size === 0 && tabsFor1n.length > 0) {
-                                            const firstTab = tabsFor1n[0];
-                                            const firstTabFields = (firstTab.fields && firstTab.fields.length > 0) ? firstTab.fields : (tabGroupsMap.get(firstTab.id)?.fields || []);
-                                            firstTabFields.slice(0, 6).forEach(f => {
-                                                current1nSelectedFieldKeys.add(`${firstTab.id}:${f.id}`);
-                                            });
-                                        }
                                         return tabsFor1n.map((t, tIdx) => {
                                             const tFields = (t.fields && t.fields.length > 0) ? t.fields : (tabGroupsMap.get(t.id)?.fields || []);
                                             const isTabChecked = current1nSynSelectedTabs.has(t.id);
@@ -1131,24 +1124,15 @@
                                             }
                                         }
 
-                                        // 2. Inicializa campos selecionados do laudo
-                                        if (current1nLaudoSelectedFieldKeys.size === 0) {
-                                            if (existingAnalytical1nBlock?.campos_selecionados && Array.isArray(existingAnalytical1nBlock.campos_selecionados) && existingAnalytical1nBlock.campos_selecionados.length > 0) {
-                                                existingAnalytical1nBlock.campos_selecionados.forEach(cf => {
-                                                    const cId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
-                                                    const cTab = typeof cf === 'object' ? (cf.tabId || '') : '';
-                                                    if (cTab && cId) {
-                                                        current1nLaudoSelectedFieldKeys.add(`${cTab}:${cId}`);
-                                                    }
-                                                });
-                                            }
-                                            if (current1nLaudoSelectedFieldKeys.size === 0 && current1nLaudoSelectedTabs.size > 0) {
-                                                current1nLaudoSelectedTabs.forEach(selTabId => {
-                                                    const targetTab = tabsFor1n.find(t => t.id === selTabId);
-                                                    const flds = (targetTab && targetTab.fields && targetTab.fields.length > 0) ? targetTab.fields : (tabGroupsMap.get(selTabId)?.fields || []);
-                                                    flds.forEach(f => current1nLaudoSelectedFieldKeys.add(`${selTabId}:${f.id}`));
-                                                });
-                                            }
+                                        // 2. Inicializa campos selecionados do laudo (só o que já está configurado num laudo existente; sem laudo ainda, começa vazio)
+                                        if (current1nLaudoSelectedFieldKeys.size === 0 && existingAnalytical1nBlock?.campos_selecionados && Array.isArray(existingAnalytical1nBlock.campos_selecionados) && existingAnalytical1nBlock.campos_selecionados.length > 0) {
+                                            existingAnalytical1nBlock.campos_selecionados.forEach(cf => {
+                                                const cId = typeof cf === 'string' ? cf : (cf.rawId || cf.id);
+                                                const cTab = typeof cf === 'object' ? (cf.tabId || '') : '';
+                                                if (cTab && cId) {
+                                                    current1nLaudoSelectedFieldKeys.add(`${cTab}:${cId}`);
+                                                }
+                                            });
                                         }
 
                                         return tabsFor1n.map((t, tIdx) => {
