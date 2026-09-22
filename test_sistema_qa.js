@@ -1038,7 +1038,8 @@ assertTest('Mini-Mapa: o relatório gerado tem o painel "Mapa" (destaque, camada
     ['tests/reportScope.test.js', 'Construtor: escopo Individual x Geral da camada (cards por escopo, sem "Gráficos do Dashboard" no individual) e seletor de folha A4 | A3'],
     ['tests/reportsTab.test.js', 'Aba do tipo "Relatórios (A4)": popup da feição lista só os botões dos modelos individuais do cadastro (sem campos, sem edição, nomes escapados)'],
     ['tests/viewerGrid.test.js', 'Grade de Atributos e Laudo: fotos/anexos por campo em "Lista" (título + arquivo) ou "Imagem na íntegra" (título e metadados), sem URLs inseguras'],
-    ['tests/viewerTables.test.js', 'Quadro Sintético e Laudo Analítico: colunas por campo, seleção de abas, quebra por linhas entre folhas, escape de HTML e aviso quando a aba escolhida não existe']
+    ['tests/viewerTables.test.js', 'Quadro Sintético e Laudo Analítico: colunas por campo, seleção de abas, quebra por linhas entre folhas, escape de HTML e aviso quando a aba escolhida não existe'],
+    ['tests/layerFilter.test.js', 'Filtro profissional de feições: condições por tipo de campo (texto, número, data, lista), E dentro do grupo e OU entre grupos, contagem de resultados e descrição do filtro para o relatório']
 ].forEach(([testFile, description]) => {
     let passed = true;
     let output = '';
