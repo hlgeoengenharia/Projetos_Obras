@@ -14,7 +14,8 @@
       "Bash(node --check src/formRenderer.js)",
       "Bash(git commit -m ' *)",
       "Bash(awk 'NR==429,NR==1300' \"C:\\\\Users\\\\Windows 11\\\\Documents\\\\Projetos\\\\Projeto_V01\\\\Projetos_Obras\\\\src\\\\reportBuilder.js\")",
-      "Bash(git commit -q -m ' *)"
+      "Bash(git commit -q -m ' *)",
+      "Bash(grep -n \"gerarTabelaGeral\\('\\\\${esc\\(g.id\\)}'\\)\\\\\">Gerar tabela deste gráfico\" \"C:\\\\Users\\\\Windows 11\\\\Documents\\\\Projetos\\\\Projeto_V01\\\\Projetos_Obras\\\\relatorio_view.html\")"
     ]
   }
 }

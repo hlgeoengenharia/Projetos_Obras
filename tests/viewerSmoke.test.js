@@ -814,32 +814,35 @@ async function runScenario(cfg) {
         const r = await runScenario({ payload });
         eq('geral: nenhum erro de execução', r.errors, []);
         const doc = r.registry['a4-document-container']._html;
-        ok('geral: dois canvases (lado a lado), um por gráfico escolhido, com o título de cada um', doc.includes('grid-cols-2') && (doc.match(/data-chart-canvas/g) || []).length === 2 && doc.includes('>Situação<') && doc.includes('>Área média<'));
+        ok('geral: um bloco antigo com 2 chart_ids migra para 2 cards separados (um por gráfico), cada um com seu canvas e título', (doc.match(/data-chart-canvas/g) || []).length === 2 && doc.includes('>Situação<') && doc.includes('>Área média<'));
+        ok('geral: cada card de gráfico traz a alça de arrastar (é um bloco à parte, arrastável sozinho)', (doc.match(/class="geral-bloco-arrastavel"/g) || []).length >= 2);
+        ok('geral: cada card traz a tabela de valores absolutos e percentuais, com a linha de Total', doc.includes('>Categoria<') && doc.includes('>Qtde<') && doc.includes('>Total<') && doc.includes('100%'));
         eq('geral: um gráfico Chart.js criado por canvas (doughnut para pie, bar para bar)', r.captured.charts.map(c => c.config.type).sort(), ['bar', 'doughnut']);
         const pizza = r.captured.charts.find(c => c.config.type === 'doughnut');
         eq('geral: contagem por valor formatado do campo "sit" (2 Regular, 1 Irregular, 1 Não informado)', [pizza.config.data.labels.sort(), pizza.config.data.datasets[0].data.length], [['Irregular', 'Não informado', 'Regular'], 3]);
         const barra = r.captured.charts.find(c => c.config.type === 'bar');
         eq('geral: campo numérico agrupa por valor formatado (m²), um por área diferente', barra.config.data.labels.length, 4);
         ok('geral: doughnut mostra legenda; bar mostra o eixo Y começando do zero', pizza.config.options.plugins.legend.display === true && barra.config.options.plugins.legend.display === false && barra.config.options.scales.y.beginAtZero === true);
+        ok('geral: campo numérico (Área) traz soma e média, além da tabela de categorias', doc.includes('Soma:') && doc.includes('Média:'));
 
-        // repaginar (mesma prévia, só o título mudou) destrói os gráficos antigos e cria os novos, sem acumular
+        // repaginar (mesma prévia, o construtor reenviou o modelo) destrói os gráficos antigos e cria os novos, sem acumular
         const antigos = r.captured.charts.slice();
-        const p2 = JSON.parse(JSON.stringify(payload)); p2.template.blocos[0].titulo = 'Outro título';
-        r.storage.setItem('constructive_active_report_payload', JSON.stringify(p2));
         r.sandbox.initReportViewer();
         await r.settle(6);
         ok('repaginação: os gráficos antigos são destruídos e não sobra nenhum vivo além dos novos 2', antigos.every(c => c.destroyed) && r.captured.charts.length === 4);
 
-        // sem gráfico selecionado: aviso, sem canvas nem erro
-        const p3 = JSON.parse(JSON.stringify(payload)); p3.template.blocos[1].chart_ids = [];
+        // gráfico com chartId que não existe mais nas Estatísticas: aviso no lugar do canvas, sem erro
+        const p3 = JSON.parse(JSON.stringify(payload));
+        p3.template.blocos = [p3.template.blocos[0], { id: 'g1', tipo: 'grafico_existente', chartId: 'inexistente' }, p3.template.blocos[2]];
         r.storage.setItem('constructive_active_report_payload', JSON.stringify(p3));
         r.sandbox.initReportViewer();
         await r.settle(6);
-        ok('sem gráfico selecionado: aviso no lugar do canvas, sem erro', r.registry['a4-document-container']._html.includes('Nenhum gráfico selecionado') && !r.registry['a4-document-container']._html.includes('data-chart-canvas'));
+        ok('gráfico não encontrado: aviso no lugar do canvas, sem erro', r.registry['a4-document-container']._html.includes('Gráfico não encontrado') && !r.registry['a4-document-container']._html.includes('data-chart-canvas'));
         eq('sem erros em nenhuma das repaginações', r.errors, []);
 
-        // modelo padrão antigo (chart_id no singular, sem chart_ids): não quebra e mostra o gráfico dele
-        const p4 = JSON.parse(JSON.stringify(payload)); delete p4.template.blocos[1].chart_ids; p4.template.blocos[1].chart_id = 'c1';
+        // modelo padrão antigo (chart_id no singular, sem chart_ids): migra para 1 bloco novo e mostra o gráfico dele
+        const p4 = JSON.parse(JSON.stringify(payload));
+        p4.template.blocos = [p4.template.blocos[0], { id: 'g', tipo: 'grafico_existente', titulo: 'Estatísticas', chart_id: 'c1' }, p4.template.blocos[2]];
         r.storage.setItem('constructive_active_report_payload', JSON.stringify(p4));
         r.sandbox.initReportViewer();
         await r.settle(6);
@@ -1042,7 +1045,7 @@ async function runScenario(cfg) {
         ok('painel: campo do filtro sugere os valores já existentes na camada (Regular e Irregular) numa datalist', /<datalist id="pp-vals-0-0">[\s\S]*?<option value="Irregular">[\s\S]*?<option value="Regular">[\s\S]*?<\/datalist>/.test(painel()) || /<datalist id="pp-vals-0-0">[\s\S]*?<option value="Regular">[\s\S]*?<option value="Irregular">[\s\S]*?<\/datalist>/.test(painel()));
         ok('painel: selects/input do filtro preenchem toda a largura do card', /updateFiltroCondicaoGeral\(0,0,'field'[^>]*style="width:100%"/.test(painel()));
         ok('painel: mostra ao vivo quantas feições casam com o filtro (2 de 3, só Regular) mesmo sem aplicar', painel().includes('2 feições casam com o filtro atual'));
-        ok('painel: sem tabela ainda, "Incluir campos"/"Gerar mapa" não aparecem (só depois de Aplicar filtro)', !painel().includes('Incluir campos na tabela') && !painel().includes('Gerar mapa'));
+        ok('painel: sem tabela geral ainda, "Incluir campos"/"Gerar mapa" (do filtro) não aparecem (só depois de Aplicar filtro)', !painel().includes('Incluir campos na tabela') && !painel().includes('>Gerar mapa<'));
         ok('painel: gráfico "c1" (já escolhido) vem marcado; "c2" (não escolhido) vem desmarcado', painel().includes('checked onchange="toggleGraficoEscolhidoGeral(\'c1\'') && !painel().includes('checked onchange="toggleGraficoEscolhidoGeral(\'c2\''));
         ok('relatório: com o filtro atual (só Regular), o gráfico conta 2 feições', r.captured.charts[0].config.data.labels.sort().join(',') === 'Regular' && r.registry['a4-document-container']._html.includes('2 feições'));
 
@@ -1085,8 +1088,8 @@ async function runScenario(cfg) {
         eq('salvar: nenhum erro', r.errors, []);
         const salvosLocal = JSON.parse(r.storage.getItem('constructive_report_templates') || '[]');
         const tplSalvoLocal = salvosLocal.find(t => t.id === 'rpt_pesquisa');
-        ok('salvar: gravado no localStorage com os 2 grupos, os 2 gráficos, a coluna extra e o mapa (cor certa)', !!tplSalvoLocal && tplSalvoLocal.filtro.grupos.length === 2
-            && tplSalvoLocal.blocos.find(b => b.tipo === 'grafico_existente').chart_ids.length === 2
+        ok('salvar: gravado no localStorage com os 2 grupos, os 2 gráficos (em blocos separados), a coluna extra e o mapa (cor certa)', !!tplSalvoLocal && tplSalvoLocal.filtro.grupos.length === 2
+            && tplSalvoLocal.blocos.filter(b => b.tipo === 'grafico_existente').length === 2
             && tplSalvoLocal.blocos.find(b => b.tipo === 'tabela_feicoes').colunas.includes('area')
             && tplSalvoLocal.blocos.find(b => b.tipo === 'mapa_feicoes').cor === '#dc2626');
         const tplSalvoOpener = r.captured.templatesSalvos[r.captured.templatesSalvos.length - 1];
@@ -1108,6 +1111,63 @@ async function runScenario(cfg) {
         await r.sandbox.salvarPesquisaGeral();
         await r.settle(6);
         ok('limpar filtro + aplicar + salvar: sem filtro, as 3 feições continuam aparecendo', r.registry['a4-document-container']._html.includes('3 feições'));
+    }
+
+    // ---- CADA GRÁFICO COM SUA PRÓPRIA TABELA E MAPA: mesmo conjunto filtrado, colunas e mapa à parte por gráfico
+    {
+        const tpl = {
+            id: 'rpt_porgrafico', nome: 'Relatório Geral', tipo: 'geral', form_id: 'f1',
+            config_pagina: { tamanho: 'A4', orientacao: 'portrait', margens_mm: { top: 15, bottom: 15, left: 15, right: 15 } },
+            blocos: [
+                { id: 'h', tipo: 'cabecalho' },
+                { id: 'g1', tipo: 'grafico_existente', chartId: 'c1' },
+                { id: 'g2', tipo: 'grafico_existente', chartId: 'c2' },
+                { id: 'f', tipo: 'rodape' }
+            ]
+        };
+        const charts = [{ id: 'c1', title: 'Situação', type: 'pie', fieldId: 'sit', fieldLabel: 'Situação' }, { id: 'c2', title: 'Recuo', type: 'bar', fieldId: 'recuo', fieldLabel: 'Recuo' }];
+        const formFields = [
+            { id: 'sit', label: 'Situação', type: 'select' }, { id: 'recuo', label: 'Recuo', type: 'select' },
+            { id: 'proprietario', label: 'Proprietário', type: 'text' }, { id: 'cpf', label: 'CPF', type: 'cpf' }
+        ];
+        const featureListAll = [
+            { sit: 'Regular', recuo: 'Não Recuou', proprietario: 'Maria', cpf: '11111111111' },
+            { sit: 'Irregular', recuo: 'Já Recuou', proprietario: 'João', cpf: '22222222222' }
+        ];
+        const payload = { templateId: 'rpt_porgrafico', template: tpl, formId: 'f1', formFields, formTabs: [], charts, featureListAll, featureList: featureListAll, featureData: {}, featureGeometry: null, preview: true };
+        const r = await runScenario({ payload, opener: true });
+        eq('por gráfico: nenhum erro de execução ao abrir', r.errors, []);
+        const painel = () => r.registry['pesquisa-tools-panel'].innerHTML;
+        ok('painel: os 2 gráficos aparecem marcados, cada um com "Gerar tabela deste gráfico"', (painel().match(/Gerar tabela deste gráfico/g) || []).length === 2);
+
+        // gera a tabela SÓ do gráfico "Situação" (c1), com as colunas proprietário e CPF — o "Recuo" (c2) fica sem tabela
+        r.sandbox.gerarTabelaGeral('c1');
+        ok('painel: depois de gerar, "c1" ganha "Incluir campos"/"Gerar mapa"; "c2" continua só com "Gerar tabela"', painel().includes('Incluir campos na tabela') && (painel().match(/Gerar tabela deste gráfico/g) || []).length === 1);
+        r.sandbox.toggleColunasPesquisaGeral('c1');
+        r.sandbox.toggleColunaTabelaGeral('proprietario', true, 'c1');
+        r.sandbox.toggleColunaTabelaGeral('cpf', true, 'c1');
+        const doc1 = r.registry['a4-document-container']._html;
+        ok('folha: a tabela do gráfico "Situação" mostra Proprietário e CPF das 2 feições filtradas (mesmo conjunto do gráfico)', doc1.includes('>Proprietário<') && doc1.includes('>CPF<') && doc1.includes('>Maria<') && doc1.includes('>João<'));
+        ok('folha: a tabela do gráfico "Recuo" (c2) ainda não existe (só quando "Gerar tabela" for clicado nela)', !doc1.includes('Feições — Recuo'));
+
+        // gera o mapa SÓ do gráfico "Recuo" (c2) — o de "Situação" (c1) continua sem mapa
+        r.sandbox.toggleMapaFeicoesGeral(true, 'c2');
+        ok('painel: mapa do "Recuo" ligado, com título padrão próprio ("Mapa — Recuo") e "Remover mapa" no card de c2', painel().includes('value="Mapa — Recuo"') && painel().includes('Remover mapa'));
+
+        // salva e confere no modelo persistido: 2 gráficos em blocos separados, 1 tabela ligada a c1, 1 mapa ligado a c2
+        await r.sandbox.salvarPesquisaGeral();
+        await r.settle(6);
+        eq('salvar: nenhum erro', r.errors, []);
+        const salvos = JSON.parse(r.storage.getItem('constructive_report_templates') || '[]');
+        const tplSalvo = salvos.find(t => t.id === 'rpt_porgrafico');
+        const tabelaC1 = tplSalvo.blocos.find(b => b.tipo === 'tabela_feicoes' && b.origemGraficoId === 'c1');
+        const mapaC2 = tplSalvo.blocos.find(b => b.tipo === 'mapa_feicoes' && b.origemGraficoId === 'c2');
+        ok('salvo: a tabela ficou ligada ao gráfico "c1" (Situação), com as 2 colunas escolhidas', !!tabelaC1 && tabelaC1.colunas.includes('proprietario') && tabelaC1.colunas.includes('cpf'));
+        ok('salvo: o mapa ficou ligado ao gráfico "c2" (Recuo), sem tabela nem mapa cruzados para o outro gráfico', !!mapaC2 && !tplSalvo.blocos.some(b => b.tipo === 'mapa_feicoes' && b.origemGraficoId === 'c1') && !tplSalvo.blocos.some(b => b.tipo === 'tabela_feicoes' && b.origemGraficoId === 'c2'));
+
+        // remover o gráfico "Situação" (c1) também remove a tabela dedicada a ele (não fica órfã)
+        r.sandbox.toggleGraficoEscolhidoGeral('c1', false);
+        ok('remover o gráfico c1 remove também a tabela dele (sem órfão)', !r.registry['a4-document-container']._html.includes('>Proprietário<'));
     }
 
     // ---- REORDENAR BLOCOS DO RELATÓRIO GERAL: arrastar direto na folha (Caixa de Texto, Tabela, Mapa, Gráficos)

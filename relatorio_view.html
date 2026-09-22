@@ -16,23 +16,23 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260922g"></script>
-    <script src="src/mapTools.js?v=20260922g"></script>
-    <script src="src/reportMap.js?v=20260922g"></script>
-    <script src="src/reportTemporal.js?v=20260922g"></script>
-    <script src="src/reportExport.js?v=20260922g"></script>
-    <script src="src/reportBlocks.js?v=20260922g"></script>
-    <script src="src/reportEditor.js?v=20260922g"></script>
-    <script src="src/reportFreeText.js?v=20260922g"></script>
-    <script src="src/reportWord.js?v=20260922g"></script>
-    <script src="src/reportDocx.js?v=20260922g"></script>
-    <script src="src/mapSnapshot.js?v=20260922g"></script>
-    <script src="src/verificarEmissao.js?v=20260922g"></script>
+    <script src="src/pageSize.js?v=20260922h"></script>
+    <script src="src/mapTools.js?v=20260922h"></script>
+    <script src="src/reportMap.js?v=20260922h"></script>
+    <script src="src/reportTemporal.js?v=20260922h"></script>
+    <script src="src/reportExport.js?v=20260922h"></script>
+    <script src="src/reportBlocks.js?v=20260922h"></script>
+    <script src="src/reportEditor.js?v=20260922h"></script>
+    <script src="src/reportFreeText.js?v=20260922h"></script>
+    <script src="src/reportWord.js?v=20260922h"></script>
+    <script src="src/reportDocx.js?v=20260922h"></script>
+    <script src="src/mapSnapshot.js?v=20260922h"></script>
+    <script src="src/verificarEmissao.js?v=20260922h"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260922g"></script>
-    <script src="src/reportData.js?v=20260922g"></script>
-    <script src="src/layerFilter.js?v=20260922g"></script>
+    <script src="src/fieldFormatter.js?v=20260922h"></script>
+    <script src="src/reportData.js?v=20260922h"></script>
+    <script src="src/layerFilter.js?v=20260922h"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
@@ -312,7 +312,7 @@
         let statusPesquisaGeral = ''; // mensagem do painel de pesquisa (some no próximo desenho)
         let pesquisaPanelOpen = null; // painel "Configurações da Pesquisa" aberto? (null = decide pela largura da tela)
         let pesquisaSecaoAberta = 'filtro'; // qual acordeão do painel de pesquisa está aberto
-        let mostrarColunasPesquisa = false; // "Incluir campos na tabela" expandido?
+        let colunasReveladasPesquisa = new Set(); // "Incluir campos na tabela" expandido (chave: 'geral' ou id do gráfico)
         let emissao = { hash: '', protocolo: '', erro: '' }; // protocolo e SHA-256 da emissão (recalculados quando o conteúdo muda)
         const emissaoData = new Date();                       // dia da emissão (entra no protocolo)
         let emissaoTimer = null;
@@ -819,6 +819,9 @@
             }
             window.reportViewerFormTabs = formTabs;
             window.reportViewerFormFields = fields;
+            // migra modelos antigos: um bloco de gráfico só com vários chart_ids vira um bloco por gráfico (cada um
+            // arrastável e configurável à parte); "chart_id" (singular, do modelo padrão bem antigo) também migra
+            tpl.blocos = normalizarBlocosGraficosGeral(tpl.blocos || []);
             tplAtual = tpl;
             // o retrato "salvo" só é atualizado na 1ª vez que ESTE modelo é aberto (ou depois de salvar de verdade,
             // ver salvarPesquisaGeral) — desenharRelatorio() também roda em prévias ao vivo (Aplicar filtro, ligar
@@ -1101,34 +1104,58 @@
         }
 
         /** Bloco "Gráficos do Dashboard" (Relatório Geral): um cartão com um canvas por gráfico escolhido. */
+        /** Soma e média de um campo numérico (só faz sentido para campos desse tipo; complementa o resumo do gráfico). */
+        function agregacaoNumericaCampo(fieldId) {
+            const registros = resolveFeatureList();
+            let soma = 0, n = 0;
+            registros.forEach(props => {
+                const raw = props ? props[fieldId] : undefined;
+                const num = typeof raw === 'number' ? raw : parseFloat(String(raw == null ? '' : raw).replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, ''));
+                if (!isNaN(num)) { soma += num; n++; }
+            });
+            return { soma: soma, media: n ? soma / n : 0, n: n };
+        }
+
+        /** Bloco "Gráficos do Dashboard": um card por gráfico (arrastável sozinho), com tabela de valores absolutos e percentuais. */
         function renderChartsBlock(bloco, idx) {
-            const idsEscolhidos = Array.isArray(bloco.chart_ids) ? bloco.chart_ids : (bloco.chart_id ? [bloco.chart_id] : []);
             const catalogo = (reportPayload && Array.isArray(reportPayload.charts)) ? reportPayload.charts : [];
-            const graficos = idsEscolhidos.map(id => catalogo.find(c => c.id === id)).filter(Boolean);
-            const isSide = bloco.layout === 'lado_a_lado';
-            const tituloHtml = `<span class="whitespace-pre-line">${(escapeHtml(bloco.titulo || 'Estatísticas do Dashboard')).replace(/\r?\n/g, '<br>')}</span>`;
-            if (!graficos.length) {
+            const chartId = bloco.chartId || (Array.isArray(bloco.chart_ids) ? bloco.chart_ids[0] : bloco.chart_id);
+            const g = catalogo.find(c => c.id === chartId);
+            const tituloHtml = `<span class="whitespace-pre-line">${(escapeHtml(bloco.titulo || (g && (g.title || g.fieldLabel)) || 'Gráfico do Dashboard')).replace(/\r?\n/g, '<br>')}</span>`;
+            if (!g) {
                 return `
                     <div class="mb-4 page-break-avoid">
                         <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5">${tituloHtml}</div>
-                        <div class="p-4 text-center text-slate-400 italic text-xs border border-dashed border-slate-300 rounded-lg bg-slate-50/60">Nenhum gráfico selecionado. Escolha os gráficos no construtor (card "Gráficos do Dashboard").</div>
+                        <div class="p-4 text-center text-slate-400 italic text-xs border border-dashed border-slate-300 rounded-lg bg-slate-50/60">Gráfico não encontrado nas Estatísticas desta camada.</div>
                     </div>`;
             }
-            const total = resolveFeatureList().length; // também marca featureListTruncada, usada logo abaixo
+            const agg = aggregateChart(g.fieldId); // também marca featureListTruncada, usada logo abaixo
+            const total = agg.total;
             const metaHtml = `<span class="text-[10px] font-mono text-slate-500 normal-case">${total} feiç${total === 1 ? 'ão' : 'ões'}${featureListTruncada ? ` • mostrando as ${LIMITE_FEICOES_GRAFICO} primeiras` : ''}</span>`;
+            const canvasId = 'rpt-chart-' + idx;
+            const campoDef = (reportPayload.formFields || []).find(f => f.id === g.fieldId);
+            const ehNumerico = ['area_m2', 'number', 'currency', 'moeda'].includes(String((campoDef && campoDef.type) || '').toLowerCase());
+            const linhasResumo = agg.labels.map((l, i) => {
+                const pct = total ? (agg.data[i] / total * 100) : 0;
+                return `<tr>
+                    <td style="padding:2px 6px;border-bottom:1px solid #e2e8f0"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${CHART_COLORS[i % CHART_COLORS.length]};margin-right:4px"></span>${escapeHtml(l)}</td>
+                    <td style="padding:2px 6px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace">${agg.data[i]}</td>
+                    <td style="padding:2px 6px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace">${pct.toFixed(1)}%</td>
+                </tr>`;
+            }).join('');
+            const numAgg = ehNumerico ? agregacaoNumericaCampo(g.fieldId) : null;
+            const numHtml = (numAgg && numAgg.n) ? `<div style="font-size:10px;color:#475569;margin-top:4px">Soma: <b>${MapTools.fmtNumber(numAgg.soma, 2)}</b> • Média: <b>${MapTools.fmtNumber(numAgg.media, 2)}</b></div>` : '';
             return `
                 <div class="mb-4 page-break-avoid">
                     <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">${tituloHtml}${metaHtml}</div>
-                    <div class="grid ${isSide ? 'grid-cols-2' : 'grid-cols-1'} gap-3">
-                        ${graficos.map((g, gi) => {
-                            const canvasId = 'rpt-chart-' + idx + '-' + gi;
-                            return `
-                            <div class="h-52 border border-slate-200 rounded-lg p-2 bg-white flex flex-col">
-                                <div class="text-[10px] font-bold text-slate-600 uppercase text-center mb-1 truncate">${escapeHtml(g.title || g.fieldLabel || 'Gráfico')}</div>
-                                <div class="flex-1 min-h-0"><canvas id="${canvasId}" data-chart-canvas data-chart-field="${escapeHtml(g.fieldId || '')}" data-chart-type="${escapeHtml(g.type || 'pie')}"></canvas></div>
-                            </div>`;
-                        }).join('')}
-                    </div>
+                    <div class="h-52 border border-slate-200 rounded-lg p-2 bg-white"><canvas id="${canvasId}" data-chart-canvas data-chart-field="${escapeHtml(g.fieldId || '')}" data-chart-type="${escapeHtml(g.type || 'pie')}"></canvas></div>
+                    <table style="width:100%;border-collapse:collapse;font-size:10px;margin-top:6px">
+                        <thead><tr style="background:#f1f5f9"><th style="padding:2px 6px;text-align:left">Categoria</th><th style="padding:2px 6px;text-align:right">Qtde</th><th style="padding:2px 6px;text-align:right">%</th></tr></thead>
+                        <tbody>${linhasResumo}
+                            <tr style="font-weight:700"><td style="padding:2px 6px">Total</td><td style="padding:2px 6px;text-align:right;font-family:monospace">${total}</td><td style="padding:2px 6px;text-align:right;font-family:monospace">100%</td></tr>
+                        </tbody>
+                    </table>
+                    ${numHtml}
                 </div>`;
         }
 
@@ -1215,38 +1242,82 @@
             renderPainelPesquisaGeral();
         }
 
-        /** Bloco "Gráficos do Dashboard" do modelo em uso (o único que a folha desenha); cria se faltar e algum gráfico for marcado. */
-        function graficoBlocoGeral() {
-            return (tplAtual.blocos || []).find(b => b.tipo === 'grafico_existente');
+        /**
+         * Migração: um bloco "grafico_existente" antigo com vários chart_ids (ou o "chart_id" singular do modelo
+         * padrão bem antigo) vira um bloco por gráfico. Sem isso, gráfico nenhum fica órfão nem duplicado — cada
+         * id de gráfico do bloco antigo vira um bloco novo, na mesma ordem; blocos de outros tipos não mudam.
+         */
+        function normalizarBlocosGraficosGeral(blocos) {
+            const out = [];
+            (blocos || []).forEach(b => {
+                if (!b || b.tipo !== 'grafico_existente') { out.push(b); return; }
+                if (b.chartId) { out.push(b); return; } // já no formato novo
+                const ids = Array.isArray(b.chart_ids) ? b.chart_ids : (b.chart_id ? [b.chart_id] : []);
+                if (!ids.length) return; // bloco de gráfico sem nenhum gráfico escolhido: descarta
+                ids.forEach((id, i) => out.push({ id: ids.length > 1 ? (b.id + '_' + i) : b.id, tipo: 'grafico_existente', chartId: id, titulo: ids.length > 1 ? tituloDoGrafico(id) : b.titulo }));
+            });
+            return out;
+        }
+
+        /**
+         * Gráficos do Dashboard (Relatório Geral): CADA gráfico escolhido é o SEU PRÓPRIO bloco (arrastável e
+         * independente dos demais), não mais um bloco só com vários gráficos dentro.
+         */
+        function graficosBlocosGeral() {
+            return (tplAtual.blocos || []).filter(b => b.tipo === 'grafico_existente');
+        }
+        function graficoBlocoPara(chartId) {
+            return (tplAtual.blocos || []).find(b => b.tipo === 'grafico_existente' && b.chartId === chartId);
+        }
+        function tituloDoGrafico(chartId) {
+            const g = ((reportPayload && reportPayload.charts) || []).find(c => c.id === chartId);
+            return g ? (g.title || g.fieldLabel || 'Gráfico') : 'Gráfico';
         }
 
         function toggleGraficoEscolhidoGeral(chartId, checked) {
-            let bloco = graficoBlocoGeral();
-            if (!bloco) {
-                if (!checked) return;
+            if (checked) {
+                if (graficoBlocoPara(chartId)) { aplicarPesquisaGeral(); return; }
                 if (!Array.isArray(tplAtual.blocos)) tplAtual.blocos = [];
-                bloco = { id: 'b_chart_' + Date.now(), tipo: 'grafico_existente', titulo: 'Estatísticas do Dashboard', chart_ids: [] };
-                tplAtual.blocos.push(bloco);
+                tplAtual.blocos.push({ id: 'b_chart_' + chartId + '_' + Date.now(), tipo: 'grafico_existente', chartId: chartId, titulo: tituloDoGrafico(chartId) });
+            } else {
+                // remover o gráfico também remove a tabela/mapa dedicados a ele (senão ficam órfãos, sem sentido)
+                tplAtual.blocos = (tplAtual.blocos || []).filter(b => !(
+                    (b.tipo === 'grafico_existente' && b.chartId === chartId) ||
+                    (b.tipo === 'tabela_feicoes' && b.origemGraficoId === chartId) ||
+                    (b.tipo === 'mapa_feicoes' && b.origemGraficoId === chartId)
+                ));
             }
-            const ids = Array.isArray(bloco.chart_ids) ? bloco.chart_ids : (bloco.chart_ids = []);
-            const i = ids.indexOf(chartId);
-            if (checked && i < 0) ids.push(chartId);
-            if (!checked && i >= 0) ids.splice(i, 1);
             aplicarPesquisaGeral();
         }
 
-        /** Bloco "Tabela de Feições" do modelo em uso; cria se faltar e algum campo for marcado. */
-        function tabelaBlocoGeral() {
-            return (tplAtual.blocos || []).find(b => b.tipo === 'tabela_feicoes');
+        /**
+         * Bloco "Tabela de Feições" do modelo em uso. Sem origemGraficoId = a tabela geral (card "Filtro de
+         * Feições"); com origemGraficoId = a tabela própria de UM gráfico (mesmo conjunto filtrado, colunas à parte).
+         */
+        function tabelaBlocoGeral(origemGraficoId) {
+            return (tplAtual.blocos || []).find(b => b.tipo === 'tabela_feicoes' && (b.origemGraficoId || null) === (origemGraficoId || null));
         }
 
-        function toggleColunaTabelaGeral(fieldId, checked) {
-            let bloco = tabelaBlocoGeral();
+        /** Cria (se faltar) a tabela geral ou a de um gráfico específico, e mostra o resultado na folha. */
+        function gerarTabelaGeral(origemGraficoId) {
+            if (!tplAtual) return;
+            if (!tabelaBlocoGeral(origemGraficoId)) {
+                if (!Array.isArray(tplAtual.blocos)) tplAtual.blocos = [];
+                tplAtual.blocos.push({
+                    id: 'b_tabela_' + (origemGraficoId || 'geral') + '_' + Date.now(), tipo: 'tabela_feicoes',
+                    titulo: origemGraficoId ? ('Feições — ' + tituloDoGrafico(origemGraficoId)) : 'Feições da Camada',
+                    origemGraficoId: origemGraficoId || undefined, colunas: []
+                });
+            }
+            aplicarPesquisaGeral();
+        }
+
+        function toggleColunaTabelaGeral(fieldId, checked, origemGraficoId) {
+            let bloco = tabelaBlocoGeral(origemGraficoId);
             if (!bloco) {
                 if (!checked) return;
-                if (!Array.isArray(tplAtual.blocos)) tplAtual.blocos = [];
-                bloco = { id: 'b_tabela_' + Date.now(), tipo: 'tabela_feicoes', titulo: 'Feições da Camada', colunas: [] };
-                tplAtual.blocos.push(bloco);
+                gerarTabelaGeral(origemGraficoId);
+                bloco = tabelaBlocoGeral(origemGraficoId);
             }
             const cols = Array.isArray(bloco.colunas) ? bloco.colunas : (bloco.colunas = []);
             const i = cols.indexOf(fieldId);
@@ -1255,24 +1326,31 @@
             aplicarPesquisaGeral();
         }
 
-        /** Bloco "Mapa das Feições" do modelo em uso (desligado por padrão: só existe se o usuário ativar). */
-        function mapaBlocoGeral() {
-            return (tplAtual.blocos || []).find(b => b.tipo === 'mapa_feicoes');
+        /**
+         * Bloco "Mapa das Feições" do modelo em uso (desligado por padrão). Sem origemGraficoId = o mapa geral;
+         * com origemGraficoId = o mapa próprio de UM gráfico (mesmo conjunto filtrado).
+         */
+        function mapaBlocoGeral(origemGraficoId) {
+            return (tplAtual.blocos || []).find(b => b.tipo === 'mapa_feicoes' && (b.origemGraficoId || null) === (origemGraficoId || null));
         }
 
-        function toggleMapaFeicoesGeral(checked) {
+        function toggleMapaFeicoesGeral(checked, origemGraficoId) {
             if (checked) {
-                if (mapaBlocoGeral()) return;
+                if (mapaBlocoGeral(origemGraficoId)) { aplicarPesquisaGeral(); return; }
                 if (!Array.isArray(tplAtual.blocos)) tplAtual.blocos = [];
-                tplAtual.blocos.push({ id: 'b_mapa_' + Date.now(), tipo: 'mapa_feicoes', titulo: 'Mapa das Feições', cor: '#0ea5e9', exibirContagem: true });
+                tplAtual.blocos.push({
+                    id: 'b_mapa_' + (origemGraficoId || 'geral') + '_' + Date.now(), tipo: 'mapa_feicoes',
+                    titulo: origemGraficoId ? ('Mapa — ' + tituloDoGrafico(origemGraficoId)) : 'Mapa das Feições',
+                    origemGraficoId: origemGraficoId || undefined, cor: '#0ea5e9', exibirContagem: true
+                });
             } else {
-                tplAtual.blocos = (tplAtual.blocos || []).filter(b => b.tipo !== 'mapa_feicoes');
+                tplAtual.blocos = (tplAtual.blocos || []).filter(b => !(b.tipo === 'mapa_feicoes' && (b.origemGraficoId || null) === (origemGraficoId || null)));
             }
             aplicarPesquisaGeral();
         }
 
-        function updateMapaFeicoesConfigGeral(prop, value) {
-            const bloco = mapaBlocoGeral();
+        function updateMapaFeicoesConfigGeral(prop, value, origemGraficoId) {
+            const bloco = mapaBlocoGeral(origemGraficoId);
             if (!bloco) return;
             bloco[prop] = value;
             aplicarPesquisaGeral();
@@ -1332,7 +1410,77 @@
             return `<label class="row"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''} onchange="${handler}"> ${label}</label>`;
         }
 
-        /** Conteúdo (sanfona) do painel "Configurações da Pesquisa": filtro, gráficos, tabela e mapa. */
+        /** Lista de colunas (checkboxes com a aba de cada campo), reaproveitada pela tabela geral e pela de cada gráfico. */
+        function colunasChecklistHtml(camposList, colunasEscolhidas, origemGraficoId) {
+            const esc = escapeHtml;
+            if (!camposList.length) return '<div style="color:#64748b;font-style:italic">Nenhum campo disponível neste formulário.</div>';
+            const origemAttr = origemGraficoId ? `, '${esc(origemGraficoId)}'` : '';
+            return camposList.map(f => `
+                <label class="row"><input type="checkbox" ${colunasEscolhidas.indexOf(f.id) >= 0 ? 'checked' : ''} onchange="toggleColunaTabelaGeral('${esc(f.id)}', this.checked${origemAttr})">
+                    <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.label || f.name || f.id)}</span>
+                    ${f.tabTitle ? `<span style="color:#94a3b8;font-size:9.5px;flex:none;margin-left:4px">${esc(f.tabTitle)}</span>` : ''}
+                </label>`).join('');
+        }
+
+        /** Passos "Incluir campos na tabela" + "Gerar/Remover mapa" — reaproveitado pelo Filtro (geral) e por cada gráfico. */
+        function passosTabelaMapaHtml(camposList, origemGraficoId) {
+            const esc = escapeHtml;
+            const blocoTabela = tabelaBlocoGeral(origemGraficoId);
+            const blocoMapa = mapaBlocoGeral(origemGraficoId);
+            if (!blocoTabela) return '';
+            const chave = origemGraficoId || 'geral';
+            const revelado = colunasReveladasPesquisa.has(chave);
+            const colunas = Array.isArray(blocoTabela.colunas) ? blocoTabela.colunas : [];
+            const origemArg = origemGraficoId ? `, '${esc(origemGraficoId)}'` : '';
+            return `
+                <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #cbd5e1">
+                    <button type="button" class="act" onclick="toggleColunasPesquisaGeral(${origemGraficoId ? `'${esc(origemGraficoId)}'` : ''})">${revelado ? 'Ocultar campos da tabela ▴' : 'Incluir campos na tabela ▾'}</button>
+                    ${revelado ? `<div style="max-height:160px;overflow-y:auto;margin-top:5px">${colunasChecklistHtml(camposList, colunas, origemGraficoId)}</div>` : ''}
+                </div>
+                <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #cbd5e1">
+                    <button type="button" class="act" onclick="toggleMapaFeicoesGeral(${blocoMapa ? 'false' : 'true'}${origemArg})">${blocoMapa ? 'Remover mapa' : 'Gerar mapa'}</button>
+                    ${blocoMapa ? `
+                        <div style="margin-top:5px">
+                            <label class="row">Título<input type="text" value="${esc(blocoMapa.titulo || '')}" onchange="updateMapaFeicoesConfigGeral('titulo', this.value${origemArg})" style="flex:1;min-width:0"></label>
+                            <label class="row">Cor das feições<input type="color" value="${esc(blocoMapa.cor || '#0ea5e9')}" oninput="updateMapaFeicoesConfigGeral('cor', this.value${origemArg})" style="width:34px;height:22px;padding:0;border:1px solid #cbd5e1;margin-left:auto"></label>
+                            ${chkRowPesquisa('pp-mapa-contagem-' + esc(chave), 'Mostrar contagem de feições em cada grupo', blocoMapa.exibirContagem !== false, `updateMapaFeicoesConfigGeral('exibirContagem', this.checked${origemArg})`)}
+                            <div style="color:#64748b;line-height:1.35;margin-top:3px">Agrupa por proximidade; acima de ${LIMITE_FEICOES_MAPA} feições filtradas, pede para refinar o filtro.</div>
+                        </div>
+                    ` : ''}
+                </div>`;
+        }
+
+        /**
+         * Tabela e mapa de UM gráfico específico: independentes entre si (gerar um não depende do outro existir) —
+         * diferente do Filtro geral, onde o mapa só aparece depois da 1ª tabela (aqui o gráfico já É o "aplicar").
+         */
+        function passoTabelaGraficoHtml(camposList, chartId) {
+            const esc = escapeHtml;
+            const bloco = tabelaBlocoGeral(chartId);
+            if (!bloco) return `<button type="button" class="act" onclick="gerarTabelaGeral('${esc(chartId)}')">Gerar tabela deste gráfico</button>`;
+            const revelado = colunasReveladasPesquisa.has(chartId);
+            const colunas = Array.isArray(bloco.colunas) ? bloco.colunas : [];
+            return `
+                <button type="button" class="act" onclick="toggleColunasPesquisaGeral('${esc(chartId)}')">${revelado ? 'Ocultar campos da tabela ▴' : 'Incluir campos na tabela ▾'}</button>
+                ${revelado ? `<div style="max-height:160px;overflow-y:auto;margin-top:5px">${colunasChecklistHtml(camposList, colunas, chartId)}</div>` : ''}`;
+        }
+
+        function passoMapaGraficoHtml(chartId) {
+            const esc = escapeHtml;
+            const blocoMapa = mapaBlocoGeral(chartId);
+            return `
+                <button type="button" class="act" onclick="toggleMapaFeicoesGeral(${blocoMapa ? 'false' : 'true'}, '${esc(chartId)}')">${blocoMapa ? 'Remover mapa' : 'Gerar mapa deste gráfico'}</button>
+                ${blocoMapa ? `
+                    <div style="margin-top:5px">
+                        <label class="row">Título<input type="text" value="${esc(blocoMapa.titulo || '')}" onchange="updateMapaFeicoesConfigGeral('titulo', this.value, '${esc(chartId)}')" style="flex:1;min-width:0"></label>
+                        <label class="row">Cor das feições<input type="color" value="${esc(blocoMapa.cor || '#0ea5e9')}" oninput="updateMapaFeicoesConfigGeral('cor', this.value, '${esc(chartId)}')" style="width:34px;height:22px;padding:0;border:1px solid #cbd5e1;margin-left:auto"></label>
+                        ${chkRowPesquisa('pp-mapa-contagem-' + esc(chartId), 'Mostrar contagem de feições em cada grupo', blocoMapa.exibirContagem !== false, `updateMapaFeicoesConfigGeral('exibirContagem', this.checked, '${esc(chartId)}')`)}
+                        <div style="color:#64748b;line-height:1.35;margin-top:3px">Agrupa por proximidade; acima de ${LIMITE_FEICOES_MAPA} feições filtradas, pede para refinar o filtro.</div>
+                    </div>
+                ` : ''}`;
+        }
+
+        /** Conteúdo (sanfona) do painel "Configurações da Pesquisa": filtro (com tabela/mapa geral) e gráficos (cada um com sua própria tabela/mapa). */
         function pesquisaPanelConteudoHtml(fields) {
             const esc = escapeHtml;
             const secH = (id) => (pesquisaSecaoAberta === id ? 'open' : '');
@@ -1340,11 +1488,7 @@
             const camposList = fields || (reportPayload && reportPayload.formFields) || [];
             const catalogo = (reportPayload && reportPayload.charts) || [];
             const filtro = garantirFiltroGeral();
-            const blocoGrafico = graficoBlocoGeral();
-            const escolhidos = blocoGrafico && Array.isArray(blocoGrafico.chart_ids) ? blocoGrafico.chart_ids : [];
             const blocoTabela = tabelaBlocoGeral();
-            const colunas = blocoTabela && Array.isArray(blocoTabela.colunas) ? blocoTabela.colunas : [];
-            const blocoMapa = mapaBlocoGeral();
 
             const gruposHtml = filtro.grupos.length ? filtro.grupos.map((g, gIdx) => `
                 <div style="border:1px solid #fed7aa;border-radius:8px;padding:5px;margin-bottom:5px;background:#fff7ed">
@@ -1356,40 +1500,27 @@
                     <button type="button" class="act" onclick="addFiltroCondicaoGeral(${gIdx})" style="padding:3px;font-size:10px">+ condição (e)</button>
                 </div>`).join('') : '<div style="color:#64748b;font-style:italic;margin-bottom:5px">Sem filtro: considera todas as feições da camada.</div>';
 
-            const graficosHtml = catalogo.length ? catalogo.map(g => `
-                <label class="row"><input type="checkbox" ${escolhidos.indexOf(g.id) >= 0 ? 'checked' : ''} onchange="toggleGraficoEscolhidoGeral('${g.id}', this.checked)"> ${esc(g.title || g.fieldLabel || 'Gráfico')}</label>`).join('')
-                : '<div style="color:#64748b;font-style:italic">Nenhum gráfico configurado nas Estatísticas desta camada.</div>';
-
-            const colunasHtml = camposList.length ? camposList.map(f => `
-                <label class="row"><input type="checkbox" ${colunas.indexOf(f.id) >= 0 ? 'checked' : ''} onchange="toggleColunaTabelaGeral('${esc(f.id)}', this.checked)">
-                    <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.label || f.name || f.id)}</span>
-                    ${f.tabTitle ? `<span style="color:#94a3b8;font-size:9.5px;flex:none;margin-left:4px">${esc(f.tabTitle)}</span>` : ''}
-                </label>`).join('')
-                : '<div style="color:#64748b;font-style:italic">Nenhum campo disponível neste formulário.</div>';
-
             // contagem AO VIVO (sem precisar redesenhar a folha) do rascunho atual do filtro, para decidir se já aplica
             const filtroLimpo = LayerFilter.normalizeFiltro(filtro);
             const temFiltroAtivo = !LayerFilter.filtroVazio(filtroLimpo);
             const totalFiltrado = resolveFeatureListFull().length;
             const contagemHtml = `<div style="color:#64748b;margin:6px 0 4px">${totalFiltrado} feiç${totalFiltrado === 1 ? 'ão casa' : 'ões casam'} com o filtro atual${temFiltroAtivo ? '' : ' (sem filtro: todas)'}.</div>`;
 
-            // depois de aplicado (existe a tabela), aparecem os passos seguintes: colunas extras e o mapa
-            const passosSeguintesHtml = !blocoTabela ? '' : `
-                <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #cbd5e1">
-                    <button type="button" class="act" onclick="toggleColunasPesquisaGeral()">${mostrarColunasPesquisa ? 'Ocultar campos da tabela ▴' : 'Incluir campos na tabela ▾'}</button>
-                    ${mostrarColunasPesquisa ? `<div style="max-height:160px;overflow-y:auto;margin-top:5px">${colunasHtml}</div>` : ''}
-                </div>
-                <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #cbd5e1">
-                    <button type="button" class="act" onclick="toggleMapaFeicoesGeral(${blocoMapa ? 'false' : 'true'})">${blocoMapa ? 'Remover mapa' : 'Gerar mapa'}</button>
-                    ${blocoMapa ? `
-                        <div style="margin-top:5px">
-                            <label class="row">Título<input type="text" value="${esc(blocoMapa.titulo || '')}" onchange="updateMapaFeicoesConfigGeral('titulo', this.value)" style="flex:1;min-width:0"></label>
-                            <label class="row">Cor das feições<input type="color" value="${esc(blocoMapa.cor || '#0ea5e9')}" oninput="updateMapaFeicoesConfigGeral('cor', this.value)" style="width:34px;height:22px;padding:0;border:1px solid #cbd5e1;margin-left:auto"></label>
-                            ${chkRowPesquisa('pp-mapa-contagem', 'Mostrar contagem de feições em cada grupo', blocoMapa.exibirContagem !== false, "updateMapaFeicoesConfigGeral('exibirContagem', this.checked)")}
-                            <div style="color:#64748b;line-height:1.35;margin-top:3px">Agrupa por proximidade; acima de ${LIMITE_FEICOES_MAPA} feições filtradas, pede para refinar o filtro.</div>
+            // cada gráfico marcado vira seu próprio card, com o passo a passo de tabela/mapa dedicados a ele
+            const graficosHtml = catalogo.length ? catalogo.map(g => {
+                const marcado = !!graficoBlocoPara(g.id);
+                if (!marcado) {
+                    return `<label class="row"><input type="checkbox" onchange="toggleGraficoEscolhidoGeral('${esc(g.id)}', this.checked)"> ${esc(g.title || g.fieldLabel || 'Gráfico')}</label>`;
+                }
+                return `
+                    <div style="border:1px solid #fecdd3;border-radius:8px;padding:6px;margin-bottom:6px;background:#fff1f2">
+                        <label class="row" style="font-weight:700"><input type="checkbox" checked onchange="toggleGraficoEscolhidoGeral('${esc(g.id)}', this.checked)"> ${esc(g.title || g.fieldLabel || 'Gráfico')}</label>
+                        <div style="margin:5px 0 0 20px;padding-left:8px;border-left:2px solid #fecdd3">
+                            <div style="margin-bottom:6px">${passoTabelaGraficoHtml(camposList, g.id)}</div>
+                            <div>${passoMapaGraficoHtml(g.id)}</div>
                         </div>
-                    ` : ''}
-                </div>`;
+                    </div>`;
+            }).join('') : '<div style="color:#64748b;font-style:italic">Nenhum gráfico configurado nas Estatísticas desta camada.</div>';
 
             return `
                 <h4 data-sec-h="filtro" class="${secH('filtro')}" onclick="pesquisaPanelSecao('filtro')">Filtro de feições<span class="chev">&#9662;</span></h4>
@@ -1398,11 +1529,14 @@
                     <button type="button" class="act" onclick="addFiltroGrupoGeral()">+ grupo (ou)</button>
                     ${contagemHtml}
                     <button type="button" class="act primary" onclick="aplicarFiltroGeral()">${blocoTabela ? 'Aplicar filtro (atualizar tabela)' : 'Aplicar filtro'}</button>
-                    ${passosSeguintesHtml}
+                    ${passosTabelaMapaHtml(camposList, undefined)}
                     ${filtro.grupos.length ? `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #cbd5e1"><button type="button" class="act" onclick="limparFiltroGeral()">Limpar filtro</button></div>` : ''}
                 </div>
                 <h4 data-sec-h="graficos" class="${secH('graficos')}" onclick="pesquisaPanelSecao('graficos')">Gráficos do dashboard<span class="chev">&#9662;</span></h4>
-                <div data-sec="graficos" class="sec-body" style="display:${secD('graficos')}">${graficosHtml}</div>
+                <div data-sec="graficos" class="sec-body" style="display:${secD('graficos')}">
+                    <div style="color:#64748b;line-height:1.35;margin-bottom:5px">Cada gráfico marcado vira um card à parte na folha (pode ser arrastado sozinho). Dentro dele: tabela e mapa próprios, com colunas à sua escolha.</div>
+                    ${graficosHtml}
+                </div>
                 <div style="padding:10px 0 2px">
                     <div style="display:flex;gap:6px">
                         <button type="button" class="act primary" onclick="salvarPesquisaGeral()">Salvar ajustes</button>
@@ -1500,16 +1634,13 @@
         /** "Aplicar filtro": garante que exista uma tabela (a "primeira tabela" do filtro) e mostra o resultado na folha. */
         function aplicarFiltroGeral() {
             if (!tplAtual) return;
-            if (!tabelaBlocoGeral()) {
-                if (!Array.isArray(tplAtual.blocos)) tplAtual.blocos = [];
-                tplAtual.blocos.push({ id: 'b_tabela_' + Date.now(), tipo: 'tabela_feicoes', titulo: 'Feições da Camada', colunas: [] });
-            }
-            aplicarPesquisaGeral();
+            gerarTabelaGeral(); // "primeira tabela" do filtro (geral, sem origemGraficoId)
         }
 
-        /** Mostra/esconde a lista de campos de "Incluir campos na tabela" (só estado de tela, não é salvo). */
-        function toggleColunasPesquisaGeral() {
-            mostrarColunasPesquisa = !mostrarColunasPesquisa;
+        /** Mostra/esconde a lista de campos de "Incluir campos na tabela" (só estado de tela, não é salvo). chave: 'geral' ou o id do gráfico. */
+        function toggleColunasPesquisaGeral(origemGraficoId) {
+            const chave = origemGraficoId || 'geral';
+            if (colunasReveladasPesquisa.has(chave)) colunasReveladasPesquisa.delete(chave); else colunasReveladasPesquisa.add(chave);
             renderPainelPesquisaGeral();
         }
 
