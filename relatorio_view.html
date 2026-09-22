@@ -16,23 +16,23 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260922c"></script>
-    <script src="src/mapTools.js?v=20260922c"></script>
-    <script src="src/reportMap.js?v=20260922c"></script>
-    <script src="src/reportTemporal.js?v=20260922c"></script>
-    <script src="src/reportExport.js?v=20260922c"></script>
-    <script src="src/reportBlocks.js?v=20260922c"></script>
-    <script src="src/reportEditor.js?v=20260922c"></script>
-    <script src="src/reportFreeText.js?v=20260922c"></script>
-    <script src="src/reportWord.js?v=20260922c"></script>
-    <script src="src/reportDocx.js?v=20260922c"></script>
-    <script src="src/mapSnapshot.js?v=20260922c"></script>
-    <script src="src/verificarEmissao.js?v=20260922c"></script>
+    <script src="src/pageSize.js?v=20260922d"></script>
+    <script src="src/mapTools.js?v=20260922d"></script>
+    <script src="src/reportMap.js?v=20260922d"></script>
+    <script src="src/reportTemporal.js?v=20260922d"></script>
+    <script src="src/reportExport.js?v=20260922d"></script>
+    <script src="src/reportBlocks.js?v=20260922d"></script>
+    <script src="src/reportEditor.js?v=20260922d"></script>
+    <script src="src/reportFreeText.js?v=20260922d"></script>
+    <script src="src/reportWord.js?v=20260922d"></script>
+    <script src="src/reportDocx.js?v=20260922d"></script>
+    <script src="src/mapSnapshot.js?v=20260922d"></script>
+    <script src="src/verificarEmissao.js?v=20260922d"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260922c"></script>
-    <script src="src/reportData.js?v=20260922c"></script>
-    <script src="src/layerFilter.js?v=20260922c"></script>
+    <script src="src/fieldFormatter.js?v=20260922d"></script>
+    <script src="src/reportData.js?v=20260922d"></script>
+    <script src="src/layerFilter.js?v=20260922d"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
@@ -194,7 +194,7 @@
         #map-tools-toggle, #pesquisa-tools-toggle { position: fixed; top: 84px; right: 12px; z-index: 1200; background: #0f172a; color: #fff; border-radius: 999px; padding: 7px 12px; font-size: 12px; font-weight: 700; cursor: pointer; display: none; box-shadow: 0 6px 18px rgba(15,23,42,.3); }
         #pesquisa-tools-toggle { background: #ea580c; }
         #pesquisa-tools-panel .pesquisa-status { font-size: 10px; color: #64748b; min-height: 14px; margin-top: 4px; }
-        #pesquisa-tools-panel select, #pesquisa-tools-panel input[type="text"] { border: 1px solid #cbd5e1; border-radius: 6px; padding: 3px 5px; font-size: 11px; }
+        #pesquisa-tools-panel select, #pesquisa-tools-panel input[type="text"] { border: 1px solid #cbd5e1; border-radius: 6px; padding: 3px 5px; font-size: 11px; width: 100%; box-sizing: border-box; }
         .mention-rendered {
             font-weight: 600;
             color: #0f172a;
@@ -1163,26 +1163,52 @@
             renderPainelPesquisaGeral();
         }
 
+        /** Valores já existentes na camada para um campo (prévia: lista de exemplo bruta; emissão real: camada de verdade, sem o filtro atual — mostra tudo que existe). */
+        function valoresCampoFiltroGeral(fieldId) {
+            const campo = ((reportPayload && reportPayload.formFields) || []).find(f => f.id === fieldId);
+            let features = [];
+            if (reportPayload && Array.isArray(reportPayload.featureListAll)) {
+                features = reportPayload.featureListAll.map(p => ({ properties: p || {} }));
+            } else if (reportPayload && Array.isArray(reportPayload.featureList)) {
+                features = reportPayload.featureList.map(p => ({ properties: p || {} }));
+            } else {
+                try {
+                    const opener = window.opener;
+                    const themeId = reportPayload && reportPayload.themeId;
+                    if (opener && !opener.closed && themeId && Array.isArray(opener.themes)) {
+                        const theme = opener.themes.find(t => String(t.id) === String(themeId));
+                        if (theme && Array.isArray(theme.features)) features = theme.features;
+                    }
+                } catch (e) { /* sem janela de origem: fica sem sugestões */ }
+            }
+            return LayerFilter.valoresDistintos(features, fieldId, campo);
+        }
+
         function renderCondicaoGeralHtml(gIdx, cIdx, cond, fields) {
             const campo = (fields || []).find(f => f.id === cond.field);
             const tipo = campo ? LayerFilter.tipoDoCampo(campo) : 'texto';
             const ops = LayerFilter.operadoresValidos(tipo);
             const precisaValor = cond.op && cond.op !== 'vazio' && cond.op !== 'preenchido';
             const precisaValor2 = cond.op === 'entre';
+            const listId = 'pp-vals-' + gIdx + '-' + cIdx;
+            const valores = (precisaValor || precisaValor2) && cond.field ? valoresCampoFiltroGeral(cond.field) : [];
+            const datalistHtml = valores.length ? `<datalist id="${listId}">${valores.map(v => `<option value="${escapeHtml(v)}">`).join('')}</datalist>` : '';
             return `
-                <div class="rowx" style="align-items:flex-start;flex-wrap:wrap;margin-bottom:3px">
-                    <select onchange="updateFiltroCondicaoGeral(${gIdx},${cIdx},'field',this.value)" style="max-width:100px">
-                        <option value="">Campo...</option>
-                        ${(fields || []).map(f => `<option value="${escapeHtml(f.id)}" ${f.id === cond.field ? 'selected' : ''}>${escapeHtml(f.label || f.name || f.id)}</option>`).join('')}
-                    </select>
-                    ${cond.field ? `
-                    <select onchange="updateFiltroCondicaoGeral(${gIdx},${cIdx},'op',this.value)">
-                        <option value="">Operador...</option>
-                        ${ops.map(op => `<option value="${op}" ${op === cond.op ? 'selected' : ''}>${escapeHtml(LayerFilter.rotuloOperador(op))}</option>`).join('')}
-                    </select>` : ''}
-                    ${precisaValor ? `<input type="text" value="${escapeHtml(cond.value || '')}" oninput="updateFiltroCondicaoGeral(${gIdx},${cIdx},'value',this.value)" style="width:64px" placeholder="valor">` : ''}
-                    ${precisaValor2 ? `<input type="text" value="${escapeHtml(cond.value2 || '')}" oninput="updateFiltroCondicaoGeral(${gIdx},${cIdx},'value2',this.value)" style="width:64px" placeholder="e...">` : ''}
-                    <button type="button" onclick="removeFiltroCondicaoGeral(${gIdx},${cIdx},event)" title="Remover condição" style="border:0;background:none;cursor:pointer;color:#94a3b8">×</button>
+                <div style="display:flex;align-items:flex-start;gap:4px;margin-bottom:4px">
+                    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                        <select onchange="updateFiltroCondicaoGeral(${gIdx},${cIdx},'field',this.value)" style="width:100%">
+                            <option value="">Campo...</option>
+                            ${(fields || []).map(f => `<option value="${escapeHtml(f.id)}" ${f.id === cond.field ? 'selected' : ''}>${escapeHtml(f.label || f.name || f.id)}</option>`).join('')}
+                        </select>
+                        ${cond.field ? `
+                        <select onchange="updateFiltroCondicaoGeral(${gIdx},${cIdx},'op',this.value)" style="width:100%">
+                            <option value="">Operador...</option>
+                            ${ops.map(op => `<option value="${op}" ${op === cond.op ? 'selected' : ''}>${escapeHtml(LayerFilter.rotuloOperador(op))}</option>`).join('')}
+                        </select>` : ''}
+                        ${precisaValor ? `<input type="text" list="${listId}" value="${escapeHtml(cond.value || '')}" oninput="updateFiltroCondicaoGeral(${gIdx},${cIdx},'value',this.value)" style="width:100%" placeholder="valor">${datalistHtml}` : ''}
+                        ${precisaValor2 ? `<input type="text" list="${listId}" value="${escapeHtml(cond.value2 || '')}" oninput="updateFiltroCondicaoGeral(${gIdx},${cIdx},'value2',this.value)" style="width:100%" placeholder="e...">` : ''}
+                    </div>
+                    <button type="button" onclick="removeFiltroCondicaoGeral(${gIdx},${cIdx},event)" title="Remover condição" style="border:0;background:none;cursor:pointer;color:#94a3b8;flex:none">×</button>
                 </div>`;
         }
 
@@ -1220,7 +1246,10 @@
                 : '<div style="color:#64748b;font-style:italic">Nenhum gráfico configurado nas Estatísticas desta camada.</div>';
 
             const colunasHtml = camposList.length ? camposList.map(f => `
-                <label class="row"><input type="checkbox" ${colunas.indexOf(f.id) >= 0 ? 'checked' : ''} onchange="toggleColunaTabelaGeral('${esc(f.id)}', this.checked)"> ${esc(f.label || f.name || f.id)}</label>`).join('')
+                <label class="row"><input type="checkbox" ${colunas.indexOf(f.id) >= 0 ? 'checked' : ''} onchange="toggleColunaTabelaGeral('${esc(f.id)}', this.checked)">
+                    <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.label || f.name || f.id)}</span>
+                    ${f.tabTitle ? `<span style="color:#94a3b8;font-size:9.5px;flex:none;margin-left:4px">${esc(f.tabTitle)}</span>` : ''}
+                </label>`).join('')
                 : '<div style="color:#64748b;font-style:italic">Nenhum campo disponível neste formulário.</div>';
 
             const mapaHtml = `

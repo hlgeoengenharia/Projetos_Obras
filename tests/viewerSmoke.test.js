@@ -963,7 +963,7 @@ async function runScenario(cfg) {
             filtro: { grupos: [{ condicoes: [{ field: 'sit', op: 'igual', value: 'regular' }] }] }
         };
         const charts = [{ id: 'c1', title: 'Situação', type: 'pie', fieldId: 'sit', fieldLabel: 'Situação' }, { id: 'c2', title: 'Área', type: 'bar', fieldId: 'area', fieldLabel: 'Área' }];
-        const formFields = [{ id: 'sit', label: 'Situação', type: 'select' }, { id: 'area', label: 'Área', type: 'area_m2' }];
+        const formFields = [{ id: 'sit', label: 'Situação', type: 'select', tabTitle: 'Cadastro' }, { id: 'area', label: 'Área', type: 'area_m2', tabTitle: 'Medidas' }];
         const featureListAll = [{ sit: 'Regular', area: 100 }, { sit: 'Irregular', area: 200 }, { sit: 'Regular', area: 150 }];
         const payload = {
             templateId: 'rpt_pesquisa', template: tplPesquisa, formId: 'f1', formFields, formTabs: [], charts,
@@ -974,8 +974,11 @@ async function runScenario(cfg) {
         const painel = () => r.registry['pesquisa-tools-panel'].innerHTML;
         ok('geral: painel "Configurações da Pesquisa" criado, com as 4 seções', painel().includes('Configurações da Pesquisa') && painel().includes('Filtro de feições') && painel().includes('Gráficos do dashboard') && painel().includes('Tabela das feições') && painel().includes('Mapa das feições'));
         ok('painel: mostra a condição existente (campo "sit" já selecionado)', painel().includes('value="sit" selected'));
+        ok('painel: campo do filtro sugere os valores já existentes na camada (Regular e Irregular) numa datalist', /<datalist id="pp-vals-0-0">[\s\S]*?<option value="Irregular">[\s\S]*?<option value="Regular">[\s\S]*?<\/datalist>/.test(painel()) || /<datalist id="pp-vals-0-0">[\s\S]*?<option value="Regular">[\s\S]*?<option value="Irregular">[\s\S]*?<\/datalist>/.test(painel()));
+        ok('painel: selects/input do filtro preenchem toda a largura do card', /updateFiltroCondicaoGeral\(0,0,'field'[^>]*style="width:100%"/.test(painel()));
         ok('painel: gráfico "c1" (já escolhido) vem marcado; "c2" (não escolhido) vem desmarcado', painel().includes('checked onchange="toggleGraficoEscolhidoGeral(\'c1\'') && !painel().includes('checked onchange="toggleGraficoEscolhidoGeral(\'c2\''));
         ok('painel: mapa das feições vem desmarcado por padrão (sem bloco no modelo)', !painel().includes('checked onchange="toggleMapaFeicoesGeral'));
+        ok('painel: tabela das feições mostra a aba de cada campo (desambiguação)', painel().includes('>Situação<') && painel().includes('>Cadastro<') && painel().includes('>Área<') && painel().includes('>Medidas<'));
         ok('relatório: com o filtro atual (só Regular), o gráfico conta 2 feições', r.captured.charts[0].config.data.labels.sort().join(',') === 'Regular' && r.registry['a4-document-container']._html.includes('2 feições'));
 
         // edita ao vivo: novo grupo (OU) pegando também "Irregular", liga o 2º gráfico, uma coluna extra na tabela e o mapa
