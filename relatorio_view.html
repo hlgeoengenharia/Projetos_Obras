@@ -16,23 +16,23 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260922b"></script>
-    <script src="src/mapTools.js?v=20260922b"></script>
-    <script src="src/reportMap.js?v=20260922b"></script>
-    <script src="src/reportTemporal.js?v=20260922b"></script>
-    <script src="src/reportExport.js?v=20260922b"></script>
-    <script src="src/reportBlocks.js?v=20260922b"></script>
-    <script src="src/reportEditor.js?v=20260922b"></script>
-    <script src="src/reportFreeText.js?v=20260922b"></script>
-    <script src="src/reportWord.js?v=20260922b"></script>
-    <script src="src/reportDocx.js?v=20260922b"></script>
-    <script src="src/mapSnapshot.js?v=20260922b"></script>
-    <script src="src/verificarEmissao.js?v=20260922b"></script>
+    <script src="src/pageSize.js?v=20260922c"></script>
+    <script src="src/mapTools.js?v=20260922c"></script>
+    <script src="src/reportMap.js?v=20260922c"></script>
+    <script src="src/reportTemporal.js?v=20260922c"></script>
+    <script src="src/reportExport.js?v=20260922c"></script>
+    <script src="src/reportBlocks.js?v=20260922c"></script>
+    <script src="src/reportEditor.js?v=20260922c"></script>
+    <script src="src/reportFreeText.js?v=20260922c"></script>
+    <script src="src/reportWord.js?v=20260922c"></script>
+    <script src="src/reportDocx.js?v=20260922c"></script>
+    <script src="src/mapSnapshot.js?v=20260922c"></script>
+    <script src="src/verificarEmissao.js?v=20260922c"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260922b"></script>
-    <script src="src/reportData.js?v=20260922b"></script>
-    <script src="src/layerFilter.js?v=20260922b"></script>
+    <script src="src/fieldFormatter.js?v=20260922c"></script>
+    <script src="src/reportData.js?v=20260922c"></script>
+    <script src="src/layerFilter.js?v=20260922c"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
@@ -172,25 +172,29 @@
         .report-point-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: #7f1d1d; font: 10px/14px monospace; text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; cursor: move; }
         .report-measure-input { width: 120px; font: 700 9px monospace; border: 1px solid #059669; border-radius: 3px; padding: 0 3px; outline: none; }
         @media print {
-            .leaflet-control-zoom, #map-tools-panel, #map-tools-toggle { display: none !important; }
+            .leaflet-control-zoom, #map-tools-panel, #map-tools-toggle, #pesquisa-tools-panel, #pesquisa-tools-toggle { display: none !important; }
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
-        #map-tools-panel { position: fixed; top: 84px; right: 12px; width: 268px; max-height: calc(100vh - 100px); overflow-y: auto; z-index: 1200; background: #fff; border: 1px solid #cbd5e1; border-radius: 14px; box-shadow: 0 10px 30px rgba(15,23,42,.18); font-size: 12px; color: #0f172a; }
-                #map-tools-panel h4 { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #334155; font-weight: 800; margin: 8px 0 0; padding: 8px 10px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; background: #e2e8f0; border: 1px solid #cbd5e1; border-radius: 8px; user-select: none; }
-        #map-tools-panel h4:hover { color: #0f172a; background: #dbe3ee; }
-        #map-tools-panel h4.open { border-radius: 8px 8px 0 0; background: #cbd5e1; color: #0f172a; }
-        #map-tools-panel h4 .chev { font-size: 12px; transition: transform .15s; }
-        #map-tools-panel h4.open .chev { transform: rotate(180deg); }
-        #map-tools-panel .sec-body { padding: 8px 10px 10px; border: 1px solid #cbd5e1; border-top: 0; border-radius: 0 0 8px 8px; background: #f8fafc; }
-        #map-tools-panel label.row { display: flex; align-items: center; gap: 7px; padding: 2px 0; cursor: pointer; }
-        #map-tools-panel label.row.off { opacity: .45; cursor: not-allowed; }
-        #map-tools-panel .rowx { display: flex; align-items: center; gap: 4px; }
-        #map-tools-panel .nis { display: inline-flex; gap: 2px; flex: none; }
-        #map-tools-panel .nis button { width: 20px; height: 20px; padding: 0; border: 1px solid #cbd5e1; background: #fff; border-radius: 5px; font-size: 11px; line-height: 1; cursor: pointer; color: #0f172a; }
-        #map-tools-panel .nis button.on { background: #0f172a; border-color: #0f172a; color: #fff; }
-        #map-tools-panel button.act { width: 100%; padding: 7px 8px; border-radius: 9px; font-weight: 700; font-size: 12px; cursor: pointer; border: 1px solid #cbd5e1; background: #f8fafc; }
-        #map-tools-panel button.act.primary { background: #059669; border-color: #059669; color: #fff; }
-        #map-tools-toggle { position: fixed; top: 84px; right: 12px; z-index: 1200; background: #0f172a; color: #fff; border-radius: 999px; padding: 7px 12px; font-size: 12px; font-weight: 700; cursor: pointer; display: none; box-shadow: 0 6px 18px rgba(15,23,42,.3); }
+        #map-tools-panel, #pesquisa-tools-panel { position: fixed; top: 84px; right: 12px; width: 268px; max-height: calc(100vh - 100px); overflow-y: auto; z-index: 1200; background: #fff; border: 1px solid #cbd5e1; border-radius: 14px; box-shadow: 0 10px 30px rgba(15,23,42,.18); font-size: 12px; color: #0f172a; }
+                #map-tools-panel h4, #pesquisa-tools-panel h4 { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #334155; font-weight: 800; margin: 8px 0 0; padding: 8px 10px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; background: #e2e8f0; border: 1px solid #cbd5e1; border-radius: 8px; user-select: none; }
+        #map-tools-panel h4:hover, #pesquisa-tools-panel h4:hover { color: #0f172a; background: #dbe3ee; }
+        #map-tools-panel h4.open, #pesquisa-tools-panel h4.open { border-radius: 8px 8px 0 0; background: #cbd5e1; color: #0f172a; }
+        #map-tools-panel h4 .chev, #pesquisa-tools-panel h4 .chev { font-size: 12px; transition: transform .15s; }
+        #map-tools-panel h4.open .chev, #pesquisa-tools-panel h4.open .chev { transform: rotate(180deg); }
+        #map-tools-panel .sec-body, #pesquisa-tools-panel .sec-body { padding: 8px 10px 10px; border: 1px solid #cbd5e1; border-top: 0; border-radius: 0 0 8px 8px; background: #f8fafc; }
+        #map-tools-panel label.row, #pesquisa-tools-panel label.row { display: flex; align-items: center; gap: 7px; padding: 2px 0; cursor: pointer; }
+        #map-tools-panel label.row.off, #pesquisa-tools-panel label.row.off { opacity: .45; cursor: not-allowed; }
+        #map-tools-panel .rowx, #pesquisa-tools-panel .rowx { display: flex; align-items: center; gap: 4px; }
+        #map-tools-panel .nis, #pesquisa-tools-panel .nis { display: inline-flex; gap: 2px; flex: none; }
+        #map-tools-panel .nis button, #pesquisa-tools-panel .nis button { width: 20px; height: 20px; padding: 0; border: 1px solid #cbd5e1; background: #fff; border-radius: 5px; font-size: 11px; line-height: 1; cursor: pointer; color: #0f172a; }
+        #map-tools-panel .nis button.on, #pesquisa-tools-panel .nis button.on { background: #0f172a; border-color: #0f172a; color: #fff; }
+        #map-tools-panel button.act, #pesquisa-tools-panel button.act { width: 100%; padding: 7px 8px; border-radius: 9px; font-weight: 700; font-size: 12px; cursor: pointer; border: 1px solid #cbd5e1; background: #f8fafc; }
+        #map-tools-panel button.act.primary, #pesquisa-tools-panel button.act.primary { background: #059669; border-color: #059669; color: #fff; }
+        #pesquisa-tools-panel button.act.primary { background: #ea580c; border-color: #ea580c; }
+        #map-tools-toggle, #pesquisa-tools-toggle { position: fixed; top: 84px; right: 12px; z-index: 1200; background: #0f172a; color: #fff; border-radius: 999px; padding: 7px 12px; font-size: 12px; font-weight: 700; cursor: pointer; display: none; box-shadow: 0 6px 18px rgba(15,23,42,.3); }
+        #pesquisa-tools-toggle { background: #ea580c; }
+        #pesquisa-tools-panel .pesquisa-status { font-size: 10px; color: #64748b; min-height: 14px; margin-top: 4px; }
+        #pesquisa-tools-panel select, #pesquisa-tools-panel input[type="text"] { border: 1px solid #cbd5e1; border-radius: 6px; padding: 3px 5px; font-size: 11px; }
         .mention-rendered {
             font-weight: 600;
             color: #0f172a;
@@ -214,7 +218,8 @@
         /* MODO EDIÇÃO (?modo=edicao): a própria página do relatório dentro da Folha A4 Interativa do construtor */
         html.modo-edicao body { min-height: 0; background: transparent; }
         html.modo-edicao header.no-print, html.modo-edicao #dica-viewer, html.modo-edicao #aviso-previa,
-        html.modo-edicao #map-tools-panel, html.modo-edicao #map-tools-toggle { display: none !important; }
+        html.modo-edicao #map-tools-panel, html.modo-edicao #map-tools-toggle,
+        html.modo-edicao #pesquisa-tools-panel, html.modo-edicao #pesquisa-tools-toggle { display: none !important; }
         html.modo-edicao main { padding: 0; }
         .edit-bloco { --cor-bloco: #0ea5e9; position: relative; outline: 1px dashed transparent; outline-offset: 3px; border-radius: 6px; transition: outline-color .12s; }
         .edit-bloco:hover { outline-color: var(--cor-bloco); }
@@ -274,8 +279,8 @@
         <span>Você pode navegar pelo Mini-Mapa Cartográfico (pan/zoom/camadas) e editar a Caixa de Texto Livre diretamente na folha antes de imprimir (ou salvar em PDF) ou gerar o Word.</span>
     </div>
 
-    <!-- PAINEL "AJUSTAR PESQUISA" (só no Relatório Geral): filtro e gráficos editáveis direto aqui, com "Salvar e atualizar" -->
-    <div id="painel-pesquisa-geral" class="no-print" style="display:none"></div>
+    <!-- PAINEL "CONFIGURAÇÕES DA PESQUISA" (só no Relatório Geral): criado dinamicamente por renderPainelPesquisaGeral(),
+         no mesmo estilo do painel "Configurações do Mapa" do Relatório Individual (ver #pesquisa-tools-panel). -->
 
     <!-- CONTAINER DA FOLHA A4 -->
     <main class="flex-1 flex justify-center p-3 sm:p-6 overflow-y-auto">
@@ -294,8 +299,11 @@
         let keptMapWrap = null;       // elemento do mapa (com o Leaflet vivo) que sobrevive à repaginação
         let temporalController = null; // análise temporal (src/reportTemporal.js)
         let chartInstances = {};      // gráficos do Dashboard (Chart.js) desenhados na folha: canvasId -> instância
-        let tplAtual = null;          // modelo em uso nesta folha (Relatório Geral: editável aqui mesmo, ver painel-pesquisa-geral)
-        let statusPesquisaGeral = ''; // mensagem do painel "Ajustar pesquisa" (some no próximo desenho)
+        let tplAtual = null;          // modelo em uso nesta folha (Relatório Geral: editável aqui mesmo, painel "Configurações da Pesquisa")
+        let tplSalvoSnapshot = null;  // última versão salva de tplAtual (para o botão "Restaurar" do painel de pesquisa)
+        let statusPesquisaGeral = ''; // mensagem do painel de pesquisa (some no próximo desenho)
+        let pesquisaPanelOpen = null; // painel "Configurações da Pesquisa" aberto? (null = decide pela largura da tela)
+        let pesquisaSecaoAberta = 'filtro'; // qual acordeão do painel de pesquisa está aberto
         let emissao = { hash: '', protocolo: '', erro: '' }; // protocolo e SHA-256 da emissão (recalculados quando o conteúdo muda)
         const emissaoData = new Date();                       // dia da emissão (entra no protocolo)
         let emissaoTimer = null;
@@ -747,6 +755,7 @@
             window.reportViewerFormTabs = formTabs;
             window.reportViewerFormFields = fields;
             tplAtual = tpl;
+            tplSalvoSnapshot = JSON.parse(JSON.stringify(tpl));
             renderPainelPesquisaGeral(fields);
 
             const blocos = tpl.blocos || [];
@@ -1032,9 +1041,10 @@
         }
 
         // =====================================================================================
-        // PAINEL "AJUSTAR PESQUISA" (Relatório Geral): filtro e escolha de gráficos editáveis direto nesta
-        // página — na prévia ("Ver como sairá") e na emissão real, mesmo comportamento do mini-mapa individual
-        // (edita aqui, clica em Salvar, grava por cima do mesmo modelo). Uma pesquisa nova = outro modelo no construtor.
+        // PAINEL "CONFIGURAÇÕES DA PESQUISA" (Relatório Geral): filtro, gráficos, tabela e mapa editáveis direto
+        // nesta página — na prévia ("Ver como sairá") e na emissão real —, no mesmo estilo (acordeão flutuante à
+        // direita) e comportamento do painel "Configurações do Mapa" do Relatório Individual: edita aqui, clica em
+        // "Salvar ajustes", grava por cima do mesmo modelo. Uma pesquisa nova = outro modelo no construtor.
         // =====================================================================================
 
         function garantirFiltroGeral() {
@@ -1110,6 +1120,49 @@
             renderPainelPesquisaGeral();
         }
 
+        /** Bloco "Tabela de Feições" do modelo em uso; cria se faltar e algum campo for marcado. */
+        function tabelaBlocoGeral() {
+            return (tplAtual.blocos || []).find(b => b.tipo === 'tabela_feicoes');
+        }
+
+        function toggleColunaTabelaGeral(fieldId, checked) {
+            let bloco = tabelaBlocoGeral();
+            if (!bloco) {
+                if (!checked) return;
+                if (!Array.isArray(tplAtual.blocos)) tplAtual.blocos = [];
+                bloco = { id: 'b_tabela_' + Date.now(), tipo: 'tabela_feicoes', titulo: 'Feições da Camada', colunas: [] };
+                tplAtual.blocos.push(bloco);
+            }
+            const cols = Array.isArray(bloco.colunas) ? bloco.colunas : (bloco.colunas = []);
+            const i = cols.indexOf(fieldId);
+            if (checked && i < 0) cols.push(fieldId);
+            if (!checked && i >= 0) cols.splice(i, 1);
+            renderPainelPesquisaGeral();
+        }
+
+        /** Bloco "Mapa das Feições" do modelo em uso (desligado por padrão: só existe se o usuário ativar). */
+        function mapaBlocoGeral() {
+            return (tplAtual.blocos || []).find(b => b.tipo === 'mapa_feicoes');
+        }
+
+        function toggleMapaFeicoesGeral(checked) {
+            if (checked) {
+                if (mapaBlocoGeral()) return;
+                if (!Array.isArray(tplAtual.blocos)) tplAtual.blocos = [];
+                tplAtual.blocos.push({ id: 'b_mapa_' + Date.now(), tipo: 'mapa_feicoes', titulo: 'Mapa das Feições', cor: '#0ea5e9', exibirContagem: true });
+            } else {
+                tplAtual.blocos = (tplAtual.blocos || []).filter(b => b.tipo !== 'mapa_feicoes');
+            }
+            renderPainelPesquisaGeral();
+        }
+
+        function updateMapaFeicoesConfigGeral(prop, value) {
+            const bloco = mapaBlocoGeral();
+            if (!bloco) return;
+            bloco[prop] = value;
+            renderPainelPesquisaGeral();
+        }
+
         function renderCondicaoGeralHtml(gIdx, cIdx, cond, fields) {
             const campo = (fields || []).find(f => f.id === cond.field);
             const tipo = campo ? LayerFilter.tipoDoCampo(campo) : 'texto';
@@ -1117,80 +1170,152 @@
             const precisaValor = cond.op && cond.op !== 'vazio' && cond.op !== 'preenchido';
             const precisaValor2 = cond.op === 'entre';
             return `
-                <div class="flex flex-wrap items-center gap-1 mb-1">
-                    <select onchange="updateFiltroCondicaoGeral(${gIdx},${cIdx},'field',this.value)" class="text-[10px] border border-slate-300 rounded px-1 py-0.5 max-w-[130px]">
+                <div class="rowx" style="align-items:flex-start;flex-wrap:wrap;margin-bottom:3px">
+                    <select onchange="updateFiltroCondicaoGeral(${gIdx},${cIdx},'field',this.value)" style="max-width:100px">
                         <option value="">Campo...</option>
                         ${(fields || []).map(f => `<option value="${escapeHtml(f.id)}" ${f.id === cond.field ? 'selected' : ''}>${escapeHtml(f.label || f.name || f.id)}</option>`).join('')}
                     </select>
                     ${cond.field ? `
-                    <select onchange="updateFiltroCondicaoGeral(${gIdx},${cIdx},'op',this.value)" class="text-[10px] border border-slate-300 rounded px-1 py-0.5">
+                    <select onchange="updateFiltroCondicaoGeral(${gIdx},${cIdx},'op',this.value)">
                         <option value="">Operador...</option>
                         ${ops.map(op => `<option value="${op}" ${op === cond.op ? 'selected' : ''}>${escapeHtml(LayerFilter.rotuloOperador(op))}</option>`).join('')}
                     </select>` : ''}
-                    ${precisaValor ? `<input type="text" value="${escapeHtml(cond.value || '')}" oninput="updateFiltroCondicaoGeral(${gIdx},${cIdx},'value',this.value)" class="text-[10px] border border-slate-300 rounded px-1 py-0.5 w-20" placeholder="valor">` : ''}
-                    ${precisaValor2 ? `<input type="text" value="${escapeHtml(cond.value2 || '')}" oninput="updateFiltroCondicaoGeral(${gIdx},${cIdx},'value2',this.value)" class="text-[10px] border border-slate-300 rounded px-1 py-0.5 w-20" placeholder="e...">` : ''}
-                    <button type="button" onclick="removeFiltroCondicaoGeral(${gIdx},${cIdx},event)" class="text-slate-400 hover:text-rose-600" title="Remover condição"><span class="material-symbols-outlined text-[13px]">close</span></button>
+                    ${precisaValor ? `<input type="text" value="${escapeHtml(cond.value || '')}" oninput="updateFiltroCondicaoGeral(${gIdx},${cIdx},'value',this.value)" style="width:64px" placeholder="valor">` : ''}
+                    ${precisaValor2 ? `<input type="text" value="${escapeHtml(cond.value2 || '')}" oninput="updateFiltroCondicaoGeral(${gIdx},${cIdx},'value2',this.value)" style="width:64px" placeholder="e...">` : ''}
+                    <button type="button" onclick="removeFiltroCondicaoGeral(${gIdx},${cIdx},event)" title="Remover condição" style="border:0;background:none;cursor:pointer;color:#94a3b8">×</button>
                 </div>`;
         }
 
-        /** Desenha (ou esconde, fora do Relatório Geral) o painel "Ajustar pesquisa" no topo da página. */
-        function renderPainelPesquisaGeral(fields) {
-            const painel = document.getElementById('painel-pesquisa-geral');
-            if (!painel) return;
-            if (!tplAtual || tplAtual.tipo !== 'geral') { painel.style.display = 'none'; painel.innerHTML = ''; return; }
-            painel.style.display = '';
+        /** Linha com checkbox, no mesmo padrão visual do painel "Configurações do Mapa" (função chk() local dele). */
+        function chkRowPesquisa(id, label, checked, handler) {
+            return `<label class="row"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''} onchange="${handler}"> ${label}</label>`;
+        }
+
+        /** Conteúdo (sanfona) do painel "Configurações da Pesquisa": filtro, gráficos, tabela e mapa. */
+        function pesquisaPanelConteudoHtml(fields) {
+            const esc = escapeHtml;
+            const secH = (id) => (pesquisaSecaoAberta === id ? 'open' : '');
+            const secD = (id) => (pesquisaSecaoAberta === id ? 'block' : 'none');
             const camposList = fields || (reportPayload && reportPayload.formFields) || [];
             const catalogo = (reportPayload && reportPayload.charts) || [];
             const filtro = garantirFiltroGeral();
-            const bloco = graficoBlocoGeral();
-            const escolhidos = bloco && Array.isArray(bloco.chart_ids) ? bloco.chart_ids : [];
+            const blocoGrafico = graficoBlocoGeral();
+            const escolhidos = blocoGrafico && Array.isArray(blocoGrafico.chart_ids) ? blocoGrafico.chart_ids : [];
+            const blocoTabela = tabelaBlocoGeral();
+            const colunas = blocoTabela && Array.isArray(blocoTabela.colunas) ? blocoTabela.colunas : [];
+            const blocoMapa = mapaBlocoGeral();
 
             const gruposHtml = filtro.grupos.length ? filtro.grupos.map((g, gIdx) => `
-                <div class="border border-orange-200 rounded-lg p-2 bg-orange-50/40 mb-2">
-                    <div class="flex items-center justify-between mb-1">
-                        <span class="text-[10px] font-bold text-orange-700 uppercase">Grupo ${gIdx + 1}${gIdx > 0 ? ' <span class="font-normal normal-case text-slate-500">(ou)</span>' : ''}</span>
-                        <button type="button" onclick="removeFiltroGrupoGeral(${gIdx}, event)" class="text-slate-400 hover:text-rose-600" title="Remover grupo"><span class="material-symbols-outlined text-[15px]">close</span></button>
+                <div style="border:1px solid #fed7aa;border-radius:8px;padding:5px;margin-bottom:5px;background:#fff7ed">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+                        <span style="font-weight:700;color:#c2410c;font-size:10px;text-transform:uppercase">Grupo ${gIdx + 1}${gIdx > 0 ? ' <span style="font-weight:400;text-transform:none;color:#64748b">(ou)</span>' : ''}</span>
+                        <button type="button" onclick="removeFiltroGrupoGeral(${gIdx}, event)" title="Remover grupo" style="border:0;background:none;cursor:pointer;color:#94a3b8">×</button>
                     </div>
                     ${(g.condicoes || []).map((c, cIdx) => renderCondicaoGeralHtml(gIdx, cIdx, c, camposList)).join('')}
-                    <button type="button" onclick="addFiltroCondicaoGeral(${gIdx})" class="text-[10px] text-orange-700 hover:underline mt-1">+ condição (e)</button>
-                </div>`).join('') : '<div class="text-[11px] text-slate-400 italic mb-2">Sem filtro: considera todas as feições da camada.</div>';
+                    <button type="button" class="act" onclick="addFiltroCondicaoGeral(${gIdx})" style="padding:3px;font-size:10px">+ condição (e)</button>
+                </div>`).join('') : '<div style="color:#64748b;font-style:italic;margin-bottom:5px">Sem filtro: considera todas as feições da camada.</div>';
 
             const graficosHtml = catalogo.length ? catalogo.map(g => `
-                <label class="flex items-center gap-1.5 text-[11px] text-slate-700 py-0.5">
-                    <input type="checkbox" ${escolhidos.indexOf(g.id) >= 0 ? 'checked' : ''} onchange="toggleGraficoEscolhidoGeral('${g.id}', this.checked)">
-                    ${escapeHtml(g.title || g.fieldLabel || 'Gráfico')}
-                </label>`).join('') : '<div class="text-[11px] text-slate-400 italic">Nenhum gráfico configurado nas Estatísticas desta camada.</div>';
+                <label class="row"><input type="checkbox" ${escolhidos.indexOf(g.id) >= 0 ? 'checked' : ''} onchange="toggleGraficoEscolhidoGeral('${g.id}', this.checked)"> ${esc(g.title || g.fieldLabel || 'Gráfico')}</label>`).join('')
+                : '<div style="color:#64748b;font-style:italic">Nenhum gráfico configurado nas Estatísticas desta camada.</div>';
 
-            painel.innerHTML = `
-                <div class="max-w-4xl mx-auto px-4 pt-3">
-                    <details class="bg-white border border-slate-200 rounded-xl shadow-xs" open>
-                        <summary class="cursor-pointer select-none px-3 py-2 text-xs font-bold text-slate-700 flex items-center gap-2">
-                            <span class="material-symbols-outlined text-[16px] text-orange-600">filter_alt</span> Ajustar pesquisa (filtro e gráficos)
-                            <span class="ml-auto text-[10px] font-normal text-slate-500" id="painel-pesquisa-status">${escapeHtml(statusPesquisaGeral)}</span>
-                        </summary>
-                        <div class="px-3 pb-3 pt-1 grid sm:grid-cols-2 gap-3 border-t border-slate-100">
-                            <div class="pt-2">
-                                <div class="text-[10px] font-bold text-slate-500 uppercase mb-1">Filtro de feições</div>
-                                ${gruposHtml}
-                                <button type="button" onclick="addFiltroGrupoGeral()" class="text-[10px] text-orange-700 hover:underline">+ grupo (ou)</button>
-                                ${filtro.grupos.length ? `<button type="button" onclick="limparFiltroGeral()" class="text-[10px] text-slate-400 hover:underline ml-3">limpar filtro</button>` : ''}
-                            </div>
-                            <div class="pt-2">
-                                <div class="text-[10px] font-bold text-slate-500 uppercase mb-1">Gráficos do dashboard a mostrar</div>
-                                ${graficosHtml}
-                            </div>
-                        </div>
-                        <div class="px-3 pb-3 pt-2 flex flex-wrap items-center gap-2 border-t border-slate-100">
-                            <button type="button" onclick="salvarPesquisaGeral()" class="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-[11px] font-bold cursor-pointer">
-                                <span class="material-symbols-outlined text-[15px]">save</span> Salvar e atualizar
-                            </button>
-                            <span class="text-[10px] text-slate-400">Salva por cima deste relatório. Para uma pesquisa nova sem mexer neste, crie outro modelo no construtor.</span>
-                        </div>
-                    </details>
+            const colunasHtml = camposList.length ? camposList.map(f => `
+                <label class="row"><input type="checkbox" ${colunas.indexOf(f.id) >= 0 ? 'checked' : ''} onchange="toggleColunaTabelaGeral('${esc(f.id)}', this.checked)"> ${esc(f.label || f.name || f.id)}</label>`).join('')
+                : '<div style="color:#64748b;font-style:italic">Nenhum campo disponível neste formulário.</div>';
+
+            const mapaHtml = `
+                ${chkRowPesquisa('pp-mapa-on', 'Ativar mapa das feições', !!blocoMapa, "toggleMapaFeicoesGeral(this.checked)")}
+                ${blocoMapa ? `
+                    <label class="row">Título<input type="text" value="${esc(blocoMapa.titulo || '')}" onchange="updateMapaFeicoesConfigGeral('titulo', this.value)" style="flex:1;min-width:0"></label>
+                    <label class="row">Cor das feições<input type="color" value="${esc(blocoMapa.cor || '#0ea5e9')}" oninput="updateMapaFeicoesConfigGeral('cor', this.value)" style="width:34px;height:22px;padding:0;border:1px solid #cbd5e1;margin-left:auto"></label>
+                    ${chkRowPesquisa('pp-mapa-contagem', 'Mostrar contagem de feições em cada grupo', blocoMapa.exibirContagem !== false, "updateMapaFeicoesConfigGeral('exibirContagem', this.checked)")}
+                    <div style="color:#64748b;line-height:1.35;margin-top:3px">Agrupa por proximidade; acima de ${LIMITE_FEICOES_MAPA} feições filtradas, pede para refinar o filtro.</div>
+                ` : ''}`;
+
+            return `
+                <h4 data-sec-h="filtro" class="${secH('filtro')}" onclick="pesquisaPanelSecao('filtro')">Filtro de feições<span class="chev">&#9662;</span></h4>
+                <div data-sec="filtro" class="sec-body" style="display:${secD('filtro')}">
+                    ${gruposHtml}
+                    <button type="button" class="act" onclick="addFiltroGrupoGeral()">+ grupo (ou)</button>
+                    ${filtro.grupos.length ? `<button type="button" class="act" style="margin-top:4px" onclick="limparFiltroGeral()">Limpar filtro</button>` : ''}
+                </div>
+                <h4 data-sec-h="graficos" class="${secH('graficos')}" onclick="pesquisaPanelSecao('graficos')">Gráficos do dashboard<span class="chev">&#9662;</span></h4>
+                <div data-sec="graficos" class="sec-body" style="display:${secD('graficos')}">${graficosHtml}</div>
+                <h4 data-sec-h="tabela" class="${secH('tabela')}" onclick="pesquisaPanelSecao('tabela')">Tabela das feições<span class="chev">&#9662;</span></h4>
+                <div data-sec="tabela" class="sec-body" style="display:${secD('tabela')}">
+                    <div style="color:#64748b;line-height:1.35;margin-bottom:4px">Escolha os campos que complementam a tabela gerada pelo filtro (ex.: inscrição imobiliária, quadra, lote).</div>
+                    <div style="max-height:180px;overflow-y:auto">${colunasHtml}</div>
+                </div>
+                <h4 data-sec-h="mapa" class="${secH('mapa')}" onclick="pesquisaPanelSecao('mapa')">Mapa das feições<span class="chev">&#9662;</span></h4>
+                <div data-sec="mapa" class="sec-body" style="display:${secD('mapa')}">${mapaHtml}</div>
+                <div style="padding:10px 0 2px">
+                    <div style="display:flex;gap:6px">
+                        <button type="button" class="act primary" onclick="salvarPesquisaGeral()">Salvar ajustes</button>
+                        <button type="button" class="act" onclick="restaurarPesquisaGeral()">Restaurar</button>
+                    </div>
+                    <div class="pesquisa-status" id="pesquisa-panel-status">${esc(statusPesquisaGeral)}</div>
+                    <div style="color:#94a3b8;line-height:1.3;margin-top:2px">Salva por cima deste relatório. Para uma pesquisa nova, crie outro modelo no construtor.</div>
                 </div>`;
         }
 
-        /** Persiste o filtro/gráficos editados (opener + LocalStorage, como o modelo de relatórios) e redesenha a folha. */
+        /** Cria (ou atualiza) o painel flutuante "Configurações da Pesquisa" — some fora do Relatório Geral. */
+        function renderPainelPesquisaGeral(fields) {
+            if (!tplAtual || tplAtual.tipo !== 'geral') {
+                const p = document.getElementById('pesquisa-tools-panel');
+                const t = document.getElementById('pesquisa-tools-toggle');
+                if (p) p.remove();
+                if (t) t.remove();
+                return;
+            }
+            let panel = document.getElementById('pesquisa-tools-panel');
+            let toggle = document.getElementById('pesquisa-tools-toggle');
+            if (!panel) {
+                panel = document.createElement('div');
+                panel.id = 'pesquisa-tools-panel';
+                panel.className = 'no-print';
+                document.body.appendChild(panel);
+                toggle = document.createElement('button');
+                toggle.id = 'pesquisa-tools-toggle';
+                toggle.type = 'button';
+                toggle.className = 'no-print';
+                toggle.textContent = 'Pesquisa';
+                toggle.onclick = () => { pesquisaPanelOpen = true; applyPesquisaPanelVisibility(); };
+                document.body.appendChild(toggle);
+            }
+            panel.innerHTML = `
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #e2e8f0">
+                    <strong style="font-size:13px">Configurações da Pesquisa</strong>
+                    <button type="button" onclick="pesquisaPanelHide()" style="border:0;background:none;cursor:pointer;font-size:16px;line-height:1" title="Recolher">×</button>
+                </div>
+                <div style="padding:0 12px 12px">${pesquisaPanelConteudoHtml(fields)}</div>`;
+            if (pesquisaPanelOpen === null) pesquisaPanelOpen = window.innerWidth >= 1360;
+            applyPesquisaPanelVisibility();
+        }
+
+        function applyPesquisaPanelVisibility() {
+            const panel = document.getElementById('pesquisa-tools-panel');
+            const toggle = document.getElementById('pesquisa-tools-toggle');
+            if (panel) panel.style.display = pesquisaPanelOpen ? 'block' : 'none';
+            if (toggle) toggle.style.display = pesquisaPanelOpen ? 'none' : 'block';
+        }
+
+        function pesquisaPanelHide() { pesquisaPanelOpen = false; applyPesquisaPanelVisibility(); }
+
+        function pesquisaPanelSecao(id) {
+            pesquisaSecaoAberta = pesquisaSecaoAberta === id ? null : id;
+            renderPainelPesquisaGeral();
+        }
+
+        /** Descarta as edições ainda não salvas do painel, voltando ao que está gravado (tplSalvoSnapshot). */
+        function restaurarPesquisaGeral() {
+            if (!tplSalvoSnapshot) return;
+            tplAtual.filtro = JSON.parse(JSON.stringify(tplSalvoSnapshot.filtro || { grupos: [] }));
+            tplAtual.blocos = JSON.parse(JSON.stringify(tplSalvoSnapshot.blocos || []));
+            statusPesquisaGeral = 'Ajustes restaurados (não salvos ainda eram descartados).';
+            desenharRelatorio();
+        }
+
+        /** Persiste o filtro/gráficos/tabela/mapa editados (opener + LocalStorage, como o modelo de relatórios) e redesenha a folha. */
         async function salvarPesquisaGeral() {
             if (!tplAtual) return;
             if (!tplAtual.id) tplAtual.id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'rpt_' + Math.random().toString(36).substr(2, 9);
@@ -1206,9 +1331,8 @@
             if (adapter && typeof adapter.saveReportTemplate === 'function') {
                 try { await adapter.saveReportTemplate(tplAtual); remoto = true; } catch (e) { /* já ficou salvo localmente */ }
             }
-            statusPesquisaGeral = remoto ? 'Salvo.' : 'Salvo neste navegador.';
+            statusPesquisaGeral = remoto ? 'Ajustes salvos.' : 'Ajustes salvos neste navegador (servidor indisponível).';
             desenharRelatorio();
-            setTimeout(() => { statusPesquisaGeral = ''; const s = document.getElementById('painel-pesquisa-status'); if (s) s.textContent = ''; }, 4000);
         }
 
         /**
@@ -1288,12 +1412,14 @@
             }
             const centros = registros.map(r => MapTools.bboxCenter(MapTools.geometryBBox(r.geometry)) || [0, 0]);
             const grupos = MapTools.agruparPorProximidade(centros, ALVO_POR_MAPA);
+            const cor = bloco.cor || '#0ea5e9';
+            const exibirContagem = bloco.exibirContagem !== false;
             const rowsHtml = grupos.map((idxs, gi) => {
                 const mapId = 'rpt-mapafeicoes-' + idx + '-' + gi;
                 return `
                     <div data-split-row class="mb-3 page-break-avoid">
-                        <div class="text-[10px] font-mono text-slate-500 mb-1">Grupo ${gi + 1} de ${grupos.length} • ${idxs.length} feiç${idxs.length === 1 ? 'ão' : 'ões'}</div>
-                        <div id="${mapId}" data-mapa-feicoes data-mapa-indices="${idxs.join(',')}" class="w-full rounded-lg border border-slate-300 overflow-hidden bg-slate-100" style="height: 260px;"></div>
+                        ${exibirContagem ? `<div class="text-[10px] font-mono text-slate-500 mb-1">Grupo ${gi + 1} de ${grupos.length} • ${idxs.length} feiç${idxs.length === 1 ? 'ão' : 'ões'}</div>` : ''}
+                        <div id="${mapId}" data-mapa-feicoes data-mapa-indices="${idxs.join(',')}" data-mapa-cor="${escapeHtml(cor)}" class="w-full rounded-lg border border-slate-300 overflow-hidden bg-slate-100" style="height: 260px;"></div>
                     </div>`;
             });
             const meta = `${registros.length} feiç${registros.length === 1 ? 'ão' : 'ões'} em ${grupos.length} grupo(s)`;
@@ -1318,11 +1444,12 @@
                 const idxs = (div.getAttribute('data-mapa-indices') || '').split(',').filter(Boolean).map(Number);
                 const feats = idxs.map(i => registros[i]).filter(Boolean);
                 if (!feats.length) return;
+                const cor = div.getAttribute('data-mapa-cor') || '#0ea5e9';
                 const mapa = L.map(div, { attributionControl: true, zoomControl: false, scrollWheelZoom: false });
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true, attribution: '© OpenStreetMap contributors' }).addTo(mapa);
                 const camada = L.geoJSON(feats.map(f => ({ type: 'Feature', properties: {}, geometry: f.geometry })), {
-                    style: () => ({ color: '#0ea5e9', weight: 2, fillColor: '#0ea5e9', fillOpacity: 0.25 }),
-                    pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 5, color: '#0ea5e9', weight: 2, fillColor: '#0ea5e9', fillOpacity: 0.85 })
+                    style: () => ({ color: cor, weight: 2, fillColor: cor, fillOpacity: 0.25 }),
+                    pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 5, color: cor, weight: 2, fillColor: cor, fillOpacity: 0.85 })
                 }).addTo(mapa);
                 const limites = camada.getBounds ? camada.getBounds() : null;
                 if (limites && limites.isValid && limites.isValid()) mapa.fitBounds(limites, { padding: [20, 20] });

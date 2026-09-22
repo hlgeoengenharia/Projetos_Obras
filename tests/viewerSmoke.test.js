@@ -92,7 +92,7 @@ async function runScenario(cfg) {
         const re = /\bid="([^"]+)"/g; let m;
         while ((m = re.exec(s))) if (!registry[m[1]] || !registry[m[1]]._real) registry[m[1]] = makeEl('div', m[1]);
     }
-    ['a4-document-container', 'report-header-title', 'painel-pesquisa-geral'].forEach(id => { registry[id] = makeEl('div', id); registry[id]._real = true; });
+    ['a4-document-container', 'report-header-title'].forEach(id => { registry[id] = makeEl('div', id); registry[id]._real = true; });
     const documentStub = {
         body: makeEl('body'), documentElement: { style: { setProperty() {} }, classList: { add(c) { (documentStub.classes = documentStub.classes || []).push(c); }, remove() {} } }, head: makeEl('head'), title: '',
         getElementById: (id) => registry[id] || null, createElement: (tag) => makeEl(tag),
@@ -536,7 +536,7 @@ async function runScenario(cfg) {
         ok('ícone de girar aparece ao passar o mouse em todo tipo de texto e durante o giro', ['report-measure-label', 'report-point-label', 'report-nlabel-l', 'report-note-label'].every(c => css.includes('.' + c + ':hover .report-rot')) && /\.rotating \.report-rot/.test(css));
         ok('alça de altura do mapa: cursor de redimensionar, aparece ao passar o mouse e durante o arrasto', /#map-resize \{[^}]*cursor: ns-resize/.test(css) && /#map-wrap:hover #map-resize, #map-resize\.ativo \{ opacity: 1/.test(css));
         ok('anotação no mapa: fundo branco e borda preta', /\.report-note-label \{[^}]*background: #ffffff[^}]*border: 1px solid #000000/.test(css));
-        ok('cards do painel: título com fundo próprio (um tom só) e corpo com moldura', /#map-tools-panel h4 \{[^}]*background: #e2e8f0[^}]*border: 1px solid #cbd5e1/.test(css) && /#map-tools-panel \.sec-body \{[^}]*border: 1px solid #cbd5e1[^}]*background: #f8fafc/.test(css) && /#map-tools-panel h4\.open \{[^}]*background: #cbd5e1/.test(css));
+        ok('cards do painel: título com fundo próprio (um tom só) e corpo com moldura', /#map-tools-panel h4(, #pesquisa-tools-panel h4)? \{[^}]*background: #e2e8f0[^}]*border: 1px solid #cbd5e1/.test(css) && /#map-tools-panel \.sec-body(, #pesquisa-tools-panel \.sec-body)? \{[^}]*border: 1px solid #cbd5e1[^}]*background: #f8fafc/.test(css) && /#map-tools-panel h4\.open(, #pesquisa-tools-panel h4\.open)? \{[^}]*background: #cbd5e1/.test(css));
     }
 
     // ---- medidas: negrito / itálico / sublinhado pelo painel
@@ -948,12 +948,13 @@ async function runScenario(cfg) {
         eq('filtro vazio: continua mostrando as 3 feições da camada', rv.captured.charts[0].config.data.labels.sort(), ['Irregular', 'Regular']);
     }
 
-    // ---- PAINEL "AJUSTAR PESQUISA" (Relatório Geral): filtro e gráficos editáveis direto na página, com "Salvar e atualizar"
+    // ---- PAINEL "CONFIGURAÇÕES DA PESQUISA" (Relatório Geral): acordeão flutuante (filtro, gráficos, tabela, mapa),
+    // no mesmo estilo do painel "Configurações do Mapa" do Relatório Individual, com "Salvar ajustes" e "Restaurar"
     {
         // não aparece no Relatório Individual
         const rInd = await runScenario({ payload: { templateId: 'rpt_smoke', template: tplWith(null), formId: 'f1', featureData: {}, featureGeometry: null, preview: true } });
         eq('individual: painel não aparece', rInd.errors, []);
-        ok('individual: painel escondido e vazio', rInd.registry['painel-pesquisa-geral'].style.display === 'none' && rInd.registry['painel-pesquisa-geral'].innerHTML === '');
+        ok('individual: painel de pesquisa não é criado', !rInd.registry['pesquisa-tools-panel'] && !rInd.registry['pesquisa-tools-toggle']);
 
         const tplPesquisa = {
             id: 'rpt_pesquisa', nome: 'Relatório Geral', tipo: 'geral', form_id: 'f1',
@@ -970,34 +971,54 @@ async function runScenario(cfg) {
         };
         const r = await runScenario({ payload, opener: true });
         eq('painel: nenhum erro de execução ao abrir', r.errors, []);
-        const painel = () => r.registry['painel-pesquisa-geral'].innerHTML;
-        ok('geral: painel aparece com o filtro e os gráficos já configurados', painel().includes('Ajustar pesquisa') && r.registry['painel-pesquisa-geral'].style.display !== 'none');
+        const painel = () => r.registry['pesquisa-tools-panel'].innerHTML;
+        ok('geral: painel "Configurações da Pesquisa" criado, com as 4 seções', painel().includes('Configurações da Pesquisa') && painel().includes('Filtro de feições') && painel().includes('Gráficos do dashboard') && painel().includes('Tabela das feições') && painel().includes('Mapa das feições'));
         ok('painel: mostra a condição existente (campo "sit" já selecionado)', painel().includes('value="sit" selected'));
         ok('painel: gráfico "c1" (já escolhido) vem marcado; "c2" (não escolhido) vem desmarcado', painel().includes('checked onchange="toggleGraficoEscolhidoGeral(\'c1\'') && !painel().includes('checked onchange="toggleGraficoEscolhidoGeral(\'c2\''));
+        ok('painel: mapa das feições vem desmarcado por padrão (sem bloco no modelo)', !painel().includes('checked onchange="toggleMapaFeicoesGeral'));
         ok('relatório: com o filtro atual (só Regular), o gráfico conta 2 feições', r.captured.charts[0].config.data.labels.sort().join(',') === 'Regular' && r.registry['a4-document-container']._html.includes('2 feições'));
 
-        // edita ao vivo: novo grupo (OU) pegando também "Irregular", e liga o segundo gráfico
+        // edita ao vivo: novo grupo (OU) pegando também "Irregular", liga o 2º gráfico, uma coluna extra na tabela e o mapa
         r.sandbox.addFiltroGrupoGeral();
         r.sandbox.updateFiltroCondicaoGeral(1, 0, 'field', 'sit');
         r.sandbox.updateFiltroCondicaoGeral(1, 0, 'op', 'igual');
         r.sandbox.updateFiltroCondicaoGeral(1, 0, 'value', 'irregular');
         r.sandbox.toggleGraficoEscolhidoGeral('c2', true);
-        ok('edição ao vivo: painel reflete o 2º grupo e o 2º gráfico marcado', painel().includes('Grupo 2') && painel().includes('checked onchange="toggleGraficoEscolhidoGeral(\'c2\''));
+        r.sandbox.toggleColunaTabelaGeral('area', true);
+        r.sandbox.toggleMapaFeicoesGeral(true);
+        r.sandbox.renderPainelPesquisaGeral();
+        ok('edição ao vivo: painel reflete o 2º grupo, o 2º gráfico e o mapa marcados', painel().includes('Grupo 2') && painel().includes('checked onchange="toggleGraficoEscolhidoGeral(\'c2\'') && painel().includes('checked onchange="toggleMapaFeicoesGeral'));
+        ok('mapa das feições: liga com cor padrão e ajustes de título/cor/contagem visíveis', painel().includes("value=\"#0ea5e9\"") && painel().includes('Mostrar contagem de feições'));
+        r.sandbox.updateMapaFeicoesConfigGeral('cor', '#dc2626');
+        r.sandbox.renderPainelPesquisaGeral();
+        ok('mapa das feições: cor escolhida reflete no painel', painel().includes("value=\"#dc2626\""));
 
-        // só ao clicar em "Salvar e atualizar" é que persiste e redesenha a folha
+        // só ao clicar em "Salvar ajustes" é que persiste e redesenha a folha
         await r.sandbox.salvarPesquisaGeral();
         await r.settle(6);
         eq('salvar: nenhum erro', r.errors, []);
         const docPosSalvar = r.registry['a4-document-container']._html;
         ok('depois de salvar: filtro ampliado (OU) agora pega as 3 feições', docPosSalvar.includes('3 feições'));
+        ok('depois de salvar: a coluna extra ("Área") aparece na tabela de feições', docPosSalvar.includes('>Área<'));
         eq('depois de salvar: os 2 gráficos escolhidos agora aparecem (Situação e Área)', r.captured.charts.slice(-2).map(c => c.config.type).sort(), ['bar', 'doughnut']);
         const salvosLocal = JSON.parse(r.storage.getItem('constructive_report_templates') || '[]');
         const tplSalvoLocal = salvosLocal.find(t => t.id === 'rpt_pesquisa');
-        ok('salvar: gravado no localStorage com os 2 grupos e os 2 gráficos', !!tplSalvoLocal && tplSalvoLocal.filtro.grupos.length === 2 && tplSalvoLocal.blocos.find(b => b.tipo === 'grafico_existente').chart_ids.length === 2);
+        ok('salvar: gravado no localStorage com os 2 grupos, os 2 gráficos, a coluna extra e o mapa (cor certa)', !!tplSalvoLocal && tplSalvoLocal.filtro.grupos.length === 2
+            && tplSalvoLocal.blocos.find(b => b.tipo === 'grafico_existente').chart_ids.length === 2
+            && tplSalvoLocal.blocos.find(b => b.tipo === 'tabela_feicoes').colunas.includes('area')
+            && tplSalvoLocal.blocos.find(b => b.tipo === 'mapa_feicoes').cor === '#dc2626');
         const tplSalvoOpener = r.captured.templatesSalvos[r.captured.templatesSalvos.length - 1];
         ok('salvar: também gravado pela janela de origem (ReportAdapter.saveReportTemplate)', !!tplSalvoOpener && tplSalvoOpener.id === 'rpt_pesquisa' && tplSalvoOpener.filtro.grupos.length === 2);
 
-        // limpar filtro: volta a não restringir nada
+        // "Restaurar" descarta uma edição feita depois do último salvamento, sem precisar salvar de novo
+        r.sandbox.limparFiltroGeral();
+        r.sandbox.toggleMapaFeicoesGeral(false);
+        r.sandbox.restaurarPesquisaGeral();
+        await r.settle(6);
+        eq('restaurar: nenhum erro', r.errors, []);
+        ok('restaurar: volta a mostrar as 3 feições do último salvo (filtro OU com 2 grupos) e o mapa continua ligado', r.registry['a4-document-container']._html.includes('3 feições') && painel().includes('checked onchange="toggleMapaFeicoesGeral'));
+
+        // limpar filtro de verdade + salvar: volta a não restringir nada
         r.sandbox.limparFiltroGeral();
         await r.sandbox.salvarPesquisaGeral();
         await r.settle(6);
