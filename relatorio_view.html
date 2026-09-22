@@ -16,22 +16,23 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260921r"></script>
-    <script src="src/mapTools.js?v=20260921r"></script>
-    <script src="src/reportMap.js?v=20260921r"></script>
-    <script src="src/reportTemporal.js?v=20260921r"></script>
-    <script src="src/reportExport.js?v=20260921r"></script>
-    <script src="src/reportBlocks.js?v=20260921r"></script>
-    <script src="src/reportEditor.js?v=20260921r"></script>
-    <script src="src/reportFreeText.js?v=20260921r"></script>
-    <script src="src/reportWord.js?v=20260921r"></script>
-    <script src="src/reportDocx.js?v=20260921r"></script>
-    <script src="src/mapSnapshot.js?v=20260921r"></script>
-    <script src="src/verificarEmissao.js?v=20260921r"></script>
+    <script src="src/pageSize.js?v=20260921s"></script>
+    <script src="src/mapTools.js?v=20260921s"></script>
+    <script src="src/reportMap.js?v=20260921s"></script>
+    <script src="src/reportTemporal.js?v=20260921s"></script>
+    <script src="src/reportExport.js?v=20260921s"></script>
+    <script src="src/reportBlocks.js?v=20260921s"></script>
+    <script src="src/reportEditor.js?v=20260921s"></script>
+    <script src="src/reportFreeText.js?v=20260921s"></script>
+    <script src="src/reportWord.js?v=20260921s"></script>
+    <script src="src/reportDocx.js?v=20260921s"></script>
+    <script src="src/mapSnapshot.js?v=20260921s"></script>
+    <script src="src/verificarEmissao.js?v=20260921s"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260921r"></script>
-    <script src="src/reportData.js?v=20260921r"></script>
+    <script src="src/fieldFormatter.js?v=20260921s"></script>
+    <script src="src/reportData.js?v=20260921s"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -288,6 +289,7 @@
         let renderArgs = null;        // últimos argumentos de renderBlocks (para repaginar sem perder o mapa)
         let keptMapWrap = null;       // elemento do mapa (com o Leaflet vivo) que sobrevive à repaginação
         let temporalController = null; // análise temporal (src/reportTemporal.js)
+        let chartInstances = {};      // gráficos do Dashboard (Chart.js) desenhados na folha: canvasId -> instância
         let emissao = { hash: '', protocolo: '', erro: '' }; // protocolo e SHA-256 da emissão (recalculados quando o conteúdo muda)
         const emissaoData = new Date();                       // dia da emissão (entra no protocolo)
         let emissaoTimer = null;
@@ -872,6 +874,7 @@
             });
 
             docContainer.innerHTML = pagesHtml;
+            renderPendingCharts();
 
             if (mapController && keptMapWrap) {
                 // repaginação: o mapa (Leaflet vivo) volta para o novo lugar, sem recarregar nada
@@ -889,6 +892,98 @@
             if (temporalController) temporalController.attach();
             if (EDICAO) { ligarArrastoCampos(); ligarRedimensionarCampos(); } // as alças voltam a cada repaginação
             scheduleEmissao();
+        }
+
+        // =====================================================================================
+        // GRÁFICOS DO DASHBOARD NO RELATÓRIO GERAL: mesmo Chart.js do painel de estatísticas, com os dados
+        // da lista de exemplo (prévia) ou da camada de verdade (emissão, lida da janela de origem por themeId).
+        // =====================================================================================
+        const CHART_COLORS = ['#0ea5e9', '#f59e0b', '#10b981', '#f43f5e', '#8b5cf6', '#06b6d4', '#eab308', '#64748b'];
+
+        /** Feições do Relatório Geral: da prévia (featureList no payload) ou, na emissão real, da camada (window.opener, por themeId). */
+        function resolveFeatureList() {
+            if (reportPayload && Array.isArray(reportPayload.featureList)) return reportPayload.featureList;
+            try {
+                const opener = window.opener;
+                const themeId = reportPayload && reportPayload.themeId;
+                if (opener && !opener.closed && themeId && Array.isArray(opener.themes)) {
+                    const theme = opener.themes.find(t => String(t.id) === String(themeId));
+                    if (theme && Array.isArray(theme.features)) return theme.features.map(f => (f && f.properties) || {});
+                }
+            } catch (e) { /* sem janela de origem: fica sem dados */ }
+            return [];
+        }
+
+        /** Rótulo de exibição do valor de um campo (pelo tipo, como no resto do relatório); "Não informado" quando vazio. */
+        function chartValueLabel(fieldId, valor) {
+            const campo = (reportPayload && Array.isArray(reportPayload.formFields)) ? reportPayload.formFields.find(f => f.id === fieldId) : null;
+            const texto = campo ? FieldFormatter.toText(valor, campo) : ((valor === undefined || valor === null || valor === '') ? FieldFormatter.EMPTY : String(valor));
+            return texto === FieldFormatter.EMPTY ? 'Não informado' : texto;
+        }
+
+        /** Conta quantas feições têm cada valor (formatado) de um campo. */
+        function aggregateChart(fieldId) {
+            const registros = resolveFeatureList();
+            const contagem = new Map();
+            registros.forEach(props => {
+                const rotulo = chartValueLabel(fieldId, props ? props[fieldId] : undefined);
+                contagem.set(rotulo, (contagem.get(rotulo) || 0) + 1);
+            });
+            const labels = Array.from(contagem.keys());
+            return { labels: labels, data: labels.map(l => contagem.get(l)), total: registros.length };
+        }
+
+        /** Bloco "Gráficos do Dashboard" (Relatório Geral): um cartão com um canvas por gráfico escolhido. */
+        function renderChartsBlock(bloco, idx) {
+            const idsEscolhidos = Array.isArray(bloco.chart_ids) ? bloco.chart_ids : (bloco.chart_id ? [bloco.chart_id] : []);
+            const catalogo = (reportPayload && Array.isArray(reportPayload.charts)) ? reportPayload.charts : [];
+            const graficos = idsEscolhidos.map(id => catalogo.find(c => c.id === id)).filter(Boolean);
+            const isSide = bloco.layout === 'lado_a_lado';
+            const tituloHtml = `<span class="whitespace-pre-line">${(escapeHtml(bloco.titulo || 'Estatísticas do Dashboard')).replace(/\r?\n/g, '<br>')}</span>`;
+            if (!graficos.length) {
+                return `
+                    <div class="mb-4 page-break-avoid">
+                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5">${tituloHtml}</div>
+                        <div class="p-4 text-center text-slate-400 italic text-xs border border-dashed border-slate-300 rounded-lg bg-slate-50/60">Nenhum gráfico selecionado. Escolha os gráficos no construtor (card "Gráficos do Dashboard").</div>
+                    </div>`;
+            }
+            return `
+                <div class="mb-4 page-break-avoid">
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5">${tituloHtml}</div>
+                    <div class="grid ${isSide ? 'grid-cols-2' : 'grid-cols-1'} gap-3">
+                        ${graficos.map((g, gi) => {
+                            const canvasId = 'rpt-chart-' + idx + '-' + gi;
+                            return `
+                            <div class="h-52 border border-slate-200 rounded-lg p-2 bg-white flex flex-col">
+                                <div class="text-[10px] font-bold text-slate-600 uppercase text-center mb-1 truncate">${escapeHtml(g.title || g.fieldLabel || 'Gráfico')}</div>
+                                <div class="flex-1 min-h-0"><canvas id="${canvasId}" data-chart-canvas data-chart-field="${escapeHtml(g.fieldId || '')}" data-chart-type="${escapeHtml(g.type || 'pie')}"></canvas></div>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </div>`;
+        }
+
+        /** Depois que o HTML entra na página: cria (ou recria) os gráficos reais nos canvases da folha. */
+        function renderPendingCharts() {
+            Object.keys(chartInstances).forEach(id => { try { chartInstances[id].destroy(); } catch (e) { /* já sumiu com a repaginação */ } });
+            chartInstances = {};
+            if (typeof Chart === 'undefined') return;
+            document.querySelectorAll('[data-chart-canvas]').forEach(canvas => {
+                const fieldId = canvas.getAttribute('data-chart-field');
+                const tipo = canvas.getAttribute('data-chart-type');
+                const agg = aggregateChart(fieldId);
+                const ehPizza = tipo === 'pie' || tipo === 'donut';
+                const cores = agg.labels.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]);
+                chartInstances[canvas.id] = new Chart(canvas.getContext('2d'), {
+                    type: ehPizza ? 'doughnut' : 'bar',
+                    data: { labels: agg.labels, datasets: [{ data: agg.data, backgroundColor: cores, borderWidth: 0, cutout: tipo === 'donut' ? '65%' : (tipo === 'pie' ? '0%' : undefined) }] },
+                    options: {
+                        responsive: true, maintainAspectRatio: false, animation: false,
+                        plugins: { legend: { display: ehPizza, position: 'right', labels: { boxWidth: 8, font: { size: 9 } } } },
+                        scales: ehPizza ? {} : { y: { beginAtZero: true, ticks: { precision: 0 } } }
+                    }
+                });
+            });
         }
 
         function renderSingleBlock(bloco, idx, featureData, featureGeometry, fields, tpl) {
@@ -960,6 +1055,9 @@
                     if (EDICAO) return Editor.laudo(bloco, idx, featureData, { recolhivel: true, recolhidos: Array.from(quadrosRecolhidos).filter(k => k.startsWith('laudo:' + idx + ':')).map(k => k.split(':').slice(2).join(':')) });
                     return renderAnalyticalLaudo(bloco, featureData);
                 }
+
+                case 'grafico_existente':
+                    return renderChartsBlock(bloco, idx);
 
                 case 'rodape': {
                     const startMode = bloco.inicio_numeracao || 'primeira';

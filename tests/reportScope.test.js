@@ -32,6 +32,8 @@ const document = {
     addEventListener(tipo, fn) { (docHandlers[tipo] = docHandlers[tipo] || []).push(fn); }
 };
 const localStorage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
+const sessionStore = {};
+const sessionStorage = { getItem: (k) => (k in sessionStore ? sessionStore[k] : null), setItem: (k, v) => { sessionStore[k] = String(v); }, removeItem: (k) => { delete sessionStore[k]; } };
 const forms = [{
     id: 'f1', name: 'MPF',
     tabs: [{ id: 't1', title: 'Dados', isPrimary: true, fields: [{ id: 'a', label: 'Nome', type: 'text' }] },
@@ -39,9 +41,9 @@ const forms = [{
     statsConfig: [{ id: 'g1', title: 'Situação do recuo', type: 'pie', fieldId: 'a', fieldLabel: 'Nome' }]
 }];
 const winHandlers = {};
-const window = { localStorage, forms, currentFormId: 'f1', location: { origin: 'http://localhost:8080' }, addEventListener(t, fn) { (winHandlers[t] = winHandlers[t] || []).push(fn); } };
+const window = { localStorage, sessionStorage, forms, currentFormId: 'f1', location: { origin: 'http://localhost:8080' }, addEventListener(t, fn) { (winHandlers[t] = winHandlers[t] || []).push(fn); } };
 window.window = window;
-const ctx = { window, document, localStorage, forms, console, setTimeout: (fn) => { pendentes.push(fn); return 0; }, clearTimeout() {}, alert() {}, confirm: () => true, navigator: {} };
+const ctx = { window, document, localStorage, sessionStorage, forms, console, setTimeout: (fn) => { pendentes.push(fn); return 0; }, clearTimeout() {}, alert() {}, confirm: () => true, navigator: {} };
 ctx.self = window;
 vm.createContext(ctx);
 ['src/pageSize.js', 'src/mapTools.js', 'src/fieldFormatter.js', 'src/reportData.js', 'src/reportBlocks.js', 'src/reportEditor.js', 'src/reportFreeText.js', 'src/reportPreview.js', 'src/reportAdapter.js', 'src/reportBuilder.js'].forEach(f => vm.runInContext(read(f), ctx, { filename: f }));
@@ -67,7 +69,7 @@ ok('folha A4 no título', has(html, 'Folha A4 Interativa') && has(html, '210 × 
 
 // ---------------------------------------------------------------- Mini-Mapa (card do Relatório Individual)
 ok('card do mapa: só o texto e o botão (nenhuma opção; tudo já vem ligado)', has(html, 'Mini-Mapa Cartográfico') && has(html, 'todas as opções ligadas') && ['cfg-map-x-rotulos', 'cfg-map-x-confr', 'cfg-map-x-area', 'cfg-map-x-sit', 'cfg-map-x-grade', 'cfg-map-temp-ativo', 'cfg-map-pts-ativo', 'cfg-map-pts-tab', 'cfg-map-pts-mem', 'cfg-map-med-ativo', 'cfg-map-destaque', 'cfg-map-base', 'cfg-map-altura', 'cfg-map-camadas', 'cfg-map-norte', 'cfg-map-escala', 'cfg-map-proj', 'cfg-map-note'].every(id => !has(html, 'id="' + id + '"')) && has(html, 'ReportBuilder.insertMapBlock()'));
-ok('individual: botão "Ver como sairá" abre o relatório real com a feição de teste; o geral não tem', has(html, 'ReportBuilder.previewReal()') && has(html, 'Ver como sairá') && typeof RB.previewReal === 'function');
+ok('individual: botão "Ver como sairá" abre o relatório real com a feição de teste', has(html, 'ReportBuilder.previewReal()') && has(html, 'Ver como sairá') && typeof RB.previewReal === 'function');
 ok('rodapé oficial: opção do QR code de verificação', has(html, 'id="cfg-ftr-qr"') && has(html, 'QR code para verificar a autenticidade online'));
 ok('card explica que o usuário ajusta no relatório (Configurações do Mapa)', has(html, 'painel <em>Configurações do Mapa</em>'));
 ok('o modelo padrão já traz o mapa na folha: o botão é "Restaurar o padrão completo"', has(html, 'Restaurar o padrão completo do Mini-Mapa') && !has(html, 'Atualizar o Mini-Mapa da Folha'));
@@ -121,6 +123,34 @@ ok('geral: lista os gráficos do Dashboard do cadastro', has(html, 'Situação d
 ok('geral: NÃO tem Grade, Quadro Analítico nem Mapa', !has(html, 'Grade de Atributos') && !has(html, 'Quadro Analítico e Sintético') && !has(html, 'Mini-Mapa Cartográfico'));
 ok('geral: sem atalho no popup da feição', !has(html, 'Atalho no Popup da Feição'));
 ok('geral: também escolhe A4 | A3', has(html, "ReportBuilder.setPageSize('A3')"));
+ok('geral: também tem o botão "Ver como sairá" (usa a lista de exemplo, sem feição única)', has(html, 'ReportBuilder.previewReal()') && has(html, 'Ver como sairá') && has(html, 'lista de exemplo'));
+{
+    let abertaGeral;
+    const openAntes = window.open;
+    window.open = (url) => { abertaGeral = url; };
+    RB.previewReal();
+    window.open = openAntes;
+    const payloadGeral = JSON.parse(store.constructive_active_report_payload);
+    eq('geral: "Ver como sairá" abre com os gráficos do Dashboard e sem feição única', [payloadGeral.template.tipo, payloadGeral.charts.map(c => c.title), Object.keys(payloadGeral.featureData).length, Array.isArray(payloadGeral.featureList)], ['geral', ['Situação do recuo'], 0, true]);
+    ok('geral: a janela abre em modo prévia', /previa=1/.test(abertaGeral));
+}
+
+// gráficos: sem duplicar ao inserir de novo; a seleção e a disposição refletem o que já está na folha
+{
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
+    RB.selectChartLayout('side');
+    RB.insertChartBlock();
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
+    let tplG = RA.getReportTemplates('f1').find(t => t.tipo === 'geral');
+    eq('1º clique: um único bloco, com o layout escolhido', [tplG.blocos.filter(b => b.tipo === 'grafico_existente').length, tplG.blocos.find(b => b.tipo === 'grafico_existente').layout], [1, 'lado_a_lado']);
+    RB.selectChartLayout('full');
+    RB.insertChartBlock();
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
+    tplG = RA.getReportTemplates('f1').find(t => t.tipo === 'geral');
+    eq('2º clique: atualiza o mesmo bloco (não duplica)', [tplG.blocos.filter(b => b.tipo === 'grafico_existente').length, tplG.blocos.find(b => b.tipo === 'grafico_existente').layout], [1, 'largura_total']);
+    html = container.innerHTML;
+    ok('card mostra "Gráficos ativos na Folha A4" e o botão vira "Atualizar"', has(html, 'Gráficos ativos na Folha A4') && has(html, 'Atualizar Gráficos na Folha') && !has(html, 'Inserir Gráficos na Folha'));
+}
 
 // o modelo geral é gravado à parte e o individual não o enxerga
 RB.saveCurrentTemplate(false);

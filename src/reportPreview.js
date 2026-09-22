@@ -109,24 +109,42 @@
         return out;
     }
 
+    /** Lista de exemplo para o Relatório Geral (várias feições): n linhas de campos planos, com valores variados por campo (bons para gráficos). */
+    function sampleFeatureList(fields, n) {
+        n = n || 8;
+        const flds = Array.isArray(fields) ? fields : [];
+        const out = [];
+        for (let seq = 0; seq < n; seq++) {
+            const props = { id_banco: 'exemplo-' + (seq + 1), _created_at: DATAS[seq % DATAS.length] };
+            flds.forEach(f => { if (f && f.id) props[f.id] = sampleValue(f, seq); });
+            out.push(props);
+        }
+        return out;
+    }
+
     /**
-     * Dados para abrir o relatório real com a feição de teste.
-     * opts: { template (o modelo em edição), formId, formTabs }.
+     * Dados para abrir o relatório real com a feição de teste (Ficha Individual) ou com uma lista de
+     * exemplo (Relatório Geral, conforme tpl.tipo).
+     * opts: { template (o modelo em edição), formId, formTabs, charts (gráficos do Dashboard, para o Relatório Geral) }.
      */
     function buildPreviewPayload(opts) {
         opts = opts || {};
         const tabs = Array.isArray(opts.formTabs) ? opts.formTabs : [];
         const tpl = opts.template || null;
+        const geral = !!(tpl && tpl.tipo === 'geral');
         const temMapa = !!(tpl && Array.isArray(tpl.blocos) && tpl.blocos.some(b => b.tipo === 'mapa_estatico'));
+        const campos = fieldsFromTabs(tabs);
         return {
             templateId: tpl && tpl.id,
             template: tpl,
             formId: opts.formId || (tpl && tpl.form_id) || null,
-            formFields: fieldsFromTabs(tabs),
+            formFields: campos,
             formTabs: tabs,
-            featureData: sampleFeatureData(tabs),
-            featureGeometry: sampleGeometry(),
-            featureKey: 'exemplo-previa',
+            featureData: geral ? {} : sampleFeatureData(tabs),
+            featureGeometry: geral ? null : sampleGeometry(),
+            featureKey: geral ? null : 'exemplo-previa',
+            featureList: geral ? sampleFeatureList(campos, 8) : null,
+            charts: Array.isArray(opts.charts) ? opts.charts : [],
             camadasMapa: temMapa ? sampleLayers() : [],
             ortofotos: [],
             preview: true, // o relatório avisa que é prévia e não salva ajustes nem registra emissões
@@ -134,5 +152,5 @@
         };
     }
 
-    return { CENTRO, sampleGeometry, sampleLayers, sampleValue, sampleFeatureData, fieldsFromTabs, buildPreviewPayload };
+    return { CENTRO, sampleGeometry, sampleLayers, sampleValue, sampleFeatureData, sampleFeatureList, fieldsFromTabs, buildPreviewPayload };
 });

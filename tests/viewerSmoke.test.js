@@ -97,7 +97,27 @@ async function runScenario(cfg) {
         body: makeEl('body'), documentElement: { style: { setProperty() {} }, classList: { add(c) { (documentStub.classes = documentStub.classes || []).push(c); }, remove() {} } }, head: makeEl('head'), title: '',
         getElementById: (id) => registry[id] || null, createElement: (tag) => makeEl(tag),
         querySelector: () => null, addEventListener() {},
-        querySelectorAll: (sel) => (String(sel).includes('report-tframe-wrap') ? Object.values(registry).filter(e => e.id && e.id.startsWith('tmap-wrap-')) : [])
+        querySelectorAll: (sel) => {
+            if (String(sel).includes('report-tframe-wrap')) return Object.values(registry).filter(e => e.id && e.id.startsWith('tmap-wrap-'));
+            if (sel === '[data-chart-canvas]') {
+                const html = (registry['a4-document-container'] && registry['a4-document-container']._html) || '';
+                const out = [];
+                const re = /<canvas([^>]*data-chart-canvas[^>]*)>/g;
+                let m;
+                while ((m = re.exec(html))) {
+                    const tag = m[1];
+                    const attr = (name) => { const mm = new RegExp(name + '="([^"]*)"').exec(tag); return mm ? mm[1] : ''; };
+                    const id = attr('id');
+                    const el = registry[id] || makeEl('canvas', id);
+                    el.getAttribute = (n) => attr(n);
+                    el.getContext = () => ({});
+                    registry[id] = el;
+                    out.push(el);
+                }
+                return out;
+            }
+            return [];
+        }
     };
 
     const mapsCreated = [];
@@ -115,7 +135,7 @@ async function runScenario(cfg) {
     const timers = [];
     const listeners = {};
     // janela de origem (a página do mapa) com o adaptador de ajustes, como no uso real
-    const captured = { blobs: [], alerts: [], registros: [], prints: 0, downloads: [], qrData: '', mensagens: [], reloads: 0 };
+    const captured = { blobs: [], alerts: [], registros: [], prints: 0, downloads: [], qrData: '', mensagens: [], reloads: 0, charts: [] };
     const opener = cfg.opener ? { closed: false, ReportAdapter: { getAjustes: async () => cfg.ajustes || null, saveAjustes: async () => ({ ok: true, remoto: false }), registrarEmissao: async (e) => { captured.registros.push(e); return { ok: true, remoto: false }; } } } : null;
     const windowStub = {
         addEventListener: (ev, fn) => { (listeners[ev] = listeners[ev] || []).push(fn); },
@@ -134,7 +154,8 @@ async function runScenario(cfg) {
         Blob: function (parts, opts) { this.parts = parts; this.type = opts && opts.type; captured.blobs.push(this); },
         crypto: require('crypto').webcrypto, TextEncoder, btoa, atob,
         qrcode: () => ({ addData(t) { captured.qrData = t; }, make() {}, createDataURL() { return 'data:image/gif;base64,R0lGODlhAQABAAAAACw='; } }),
-        html2canvas: cfg.semHtml2canvas ? undefined : async () => { if (cfg.capturaFalha) throw new Error('CORS'); return { getContext: () => new Proxy({}, { get: (t, k) => (k === 'canvas' ? null : () => {}), set: () => true }), toDataURL: () => 'data:image/png;base64,QUJD' }; }
+        html2canvas: cfg.semHtml2canvas ? undefined : async () => { if (cfg.capturaFalha) throw new Error('CORS'); return { getContext: () => new Proxy({}, { get: (t, k) => (k === 'canvas' ? null : () => {}), set: () => true }), toDataURL: () => 'data:image/png;base64,QUJD' }; },
+        Chart: function (ctx, config) { this.ctx = ctx; this.config = config; this.destroy = () => { this.destroyed = true; }; captured.charts.push(this); }
     };
     sandbox.self = sandbox.window;
     vm.createContext(sandbox);
@@ -156,7 +177,7 @@ async function runScenario(cfg) {
         process.removeListener('unhandledRejection', onRej);
     }
     await settle(14);
-    return { sandbox, registry, errors, mapsCreated, captured, listeners, documentStub, settle, doc: registry['a4-document-container']._html, panel: registry['map-tools-panel'] ? registry['map-tools-panel']._html : '' };
+    return { sandbox, registry, errors, mapsCreated, captured, listeners, documentStub, storage, settle, doc: registry['a4-document-container']._html, panel: registry['map-tools-panel'] ? registry['map-tools-panel']._html : '' };
 }
 
 (async () => {
@@ -744,6 +765,58 @@ async function runScenario(cfg) {
         const p3 = JSON.parse(JSON.stringify(payload)); p3.template.blocos[1].notaTecnica = 'Nota nova';
         enviar(p3);
         ok('edição: alteração no bloco do mapa recarrega a página (que pede os dados de novo)', r.captured.reloads === 1);
+    }
+
+    // ---- RELATÓRIO GERAL: bloco "Gráficos do Dashboard" com Chart.js de verdade, a partir da lista de exemplo (prévia)
+    {
+        const tplGeral = {
+            id: 'rpt_geral', nome: 'Relatório Geral', tipo: 'geral', form_id: 'f1',
+            config_pagina: { tamanho: 'A4', orientacao: 'portrait', margens_mm: { top: 15, bottom: 15, left: 15, right: 15 } },
+            blocos: [
+                { id: 'h', tipo: 'cabecalho', titulo: 'RELATÓRIO GERAL' },
+                { id: 'g', tipo: 'grafico_existente', titulo: 'Estatísticas', chart_ids: ['c1', 'c2'], layout: 'lado_a_lado' },
+                { id: 'f', tipo: 'rodape', numeracao: true }
+            ]
+        };
+        const charts = [{ id: 'c1', title: 'Situação', type: 'pie', fieldId: 'sit', fieldLabel: 'Situação' }, { id: 'c2', title: 'Área média', type: 'bar', fieldId: 'area', fieldLabel: 'Área' }];
+        const formFields = [{ id: 'sit', label: 'Situação', type: 'select' }, { id: 'area', label: 'Área', type: 'area_m2' }];
+        const featureList = [
+            { sit: 'Regular', area: 500 }, { sit: 'Irregular', area: 300 }, { sit: 'Regular', area: 700 }, { sit: '', area: 400 }
+        ];
+        const payload = { templateId: 'rpt_geral', template: tplGeral, formId: 'f1', formFields, formTabs: [], charts, featureList, featureData: {}, featureGeometry: null, preview: true };
+        const r = await runScenario({ payload });
+        eq('geral: nenhum erro de execução', r.errors, []);
+        const doc = r.registry['a4-document-container']._html;
+        ok('geral: dois canvases (lado a lado), um por gráfico escolhido, com o título de cada um', doc.includes('grid-cols-2') && (doc.match(/data-chart-canvas/g) || []).length === 2 && doc.includes('>Situação<') && doc.includes('>Área média<'));
+        eq('geral: um gráfico Chart.js criado por canvas (doughnut para pie, bar para bar)', r.captured.charts.map(c => c.config.type).sort(), ['bar', 'doughnut']);
+        const pizza = r.captured.charts.find(c => c.config.type === 'doughnut');
+        eq('geral: contagem por valor formatado do campo "sit" (2 Regular, 1 Irregular, 1 Não informado)', [pizza.config.data.labels.sort(), pizza.config.data.datasets[0].data.length], [['Irregular', 'Não informado', 'Regular'], 3]);
+        const barra = r.captured.charts.find(c => c.config.type === 'bar');
+        eq('geral: campo numérico agrupa por valor formatado (m²), um por área diferente', barra.config.data.labels.length, 4);
+        ok('geral: doughnut mostra legenda; bar mostra o eixo Y começando do zero', pizza.config.options.plugins.legend.display === true && barra.config.options.plugins.legend.display === false && barra.config.options.scales.y.beginAtZero === true);
+
+        // repaginar (mesma prévia, só o título mudou) destrói os gráficos antigos e cria os novos, sem acumular
+        const antigos = r.captured.charts.slice();
+        const p2 = JSON.parse(JSON.stringify(payload)); p2.template.blocos[0].titulo = 'Outro título';
+        r.storage.setItem('constructive_active_report_payload', JSON.stringify(p2));
+        r.sandbox.initReportViewer();
+        await r.settle(6);
+        ok('repaginação: os gráficos antigos são destruídos e não sobra nenhum vivo além dos novos 2', antigos.every(c => c.destroyed) && r.captured.charts.length === 4);
+
+        // sem gráfico selecionado: aviso, sem canvas nem erro
+        const p3 = JSON.parse(JSON.stringify(payload)); p3.template.blocos[1].chart_ids = [];
+        r.storage.setItem('constructive_active_report_payload', JSON.stringify(p3));
+        r.sandbox.initReportViewer();
+        await r.settle(6);
+        ok('sem gráfico selecionado: aviso no lugar do canvas, sem erro', r.registry['a4-document-container']._html.includes('Nenhum gráfico selecionado') && !r.registry['a4-document-container']._html.includes('data-chart-canvas'));
+        eq('sem erros em nenhuma das repaginações', r.errors, []);
+
+        // modelo padrão antigo (chart_id no singular, sem chart_ids): não quebra e mostra o gráfico dele
+        const p4 = JSON.parse(JSON.stringify(payload)); delete p4.template.blocos[1].chart_ids; p4.template.blocos[1].chart_id = 'c1';
+        r.storage.setItem('constructive_active_report_payload', JSON.stringify(p4));
+        r.sandbox.initReportViewer();
+        await r.settle(6);
+        ok('compatibilidade com o modelo padrão antigo ("chart_id" no singular): mostra o gráfico dele', (r.registry['a4-document-container']._html.match(/data-chart-canvas/g) || []).length === 1 && r.errors.length === 0);
     }
 
     console.log(`viewerSmoke: ${total - failed}/${total} verificações passaram`);

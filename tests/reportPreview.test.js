@@ -60,6 +60,22 @@ eq('com mapa no modelo: as camadas de exemplo vão junto; sem mapa não', [p.cam
 ok('cabe no armazenamento do navegador (menos de 200 kB) e é JSON puro', (() => { const s = JSON.stringify(p); return s.length < 200000 && JSON.stringify(JSON.parse(s)) === s; })());
 eq('sem nenhum argumento não quebra', (() => { const q = RP.buildPreviewPayload(); return [q.template, q.formId, q.preview, q.featureData.id_banco]; })(), [null, null, true, 'exemplo']);
 
+// ---------------------------------------------------------------- lista de exemplo (Relatório Geral)
+const camposFlat = RP.fieldsFromTabs([{ id: 'aba1', title: 'Dados', fields: [{ id: 'sit', label: 'Situação', type: 'select', options: ['Regular', 'Irregular'] }, { id: 'area', label: 'Área', type: 'area_m2' }] }]);
+const lista = RP.sampleFeatureList(camposFlat, 4);
+eq('sampleFeatureList: 4 linhas, cada uma com todos os campos e um id próprio', [lista.length, lista.every(r => 'sit' in r && 'area' in r && 'id_banco' in r), new Set(lista.map(r => r.id_banco)).size], [4, true, 4]);
+ok('valores variam entre as linhas (dá para montar gráfico)', new Set(lista.map(r => r.sit)).size > 1 && new Set(lista.map(r => r.area)).size > 1);
+eq('padrão de 8 linhas quando n não é informado', RP.sampleFeatureList(camposFlat).length, 8);
+eq('sem campos: cada linha só com o essencial, sem erro', RP.sampleFeatureList([], 2).map(r => Object.keys(r).sort()), [['_created_at', 'id_banco'], ['_created_at', 'id_banco']]);
+
+// ---------------------------------------------------------------- pacote do Relatório Geral (tipo 'geral'): lista de exemplo e gráficos, sem feição única
+const tplGeral = { id: 'rpt_g', form_id: 'f1', tipo: 'geral', blocos: [{ tipo: 'cabecalho' }, { tipo: 'grafico_existente', chart_ids: ['c1'] }] };
+const chartsCfg = [{ id: 'c1', title: 'Situação do imóvel', type: 'pie', fieldId: 'f_sit', fieldLabel: 'Situação' }];
+const pg = RP.buildPreviewPayload({ template: tplGeral, formId: 'f1', formTabs: abas, charts: chartsCfg });
+eq('geral: sem feição única (dados vazios, geometria e chave nulas) e com a lista de exemplo e os gráficos', [pg.featureGeometry, pg.featureKey, Object.keys(pg.featureData).length, Array.isArray(pg.featureList), pg.featureList.length, pg.charts], [null, null, 0, true, 8, chartsCfg]);
+ok('geral: cabe no armazenamento do navegador e é JSON puro', (() => { const s = JSON.stringify(pg); return s.length < 200000 && JSON.stringify(JSON.parse(s)) === s; })());
+eq('individual (sem tipo "geral"): sem lista de exemplo e sem gráficos por padrão', [p.featureList, p.charts], [null, []]);
+
 console.log(`reportPreview: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {
     console.error(`${failed} falha(s)`);

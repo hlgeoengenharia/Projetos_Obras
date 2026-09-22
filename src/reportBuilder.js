@@ -142,11 +142,10 @@
                                 <button type="button" onclick="ReportBuilder.setPageSize('A3')" class="px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${pd.name === 'A3' ? 'bg-primary text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-primary'}">A3</button>
                             </div>
                         </div>
-                        ${isGeral ? '' : `
-                        <button type="button" onclick="ReportBuilder.previewReal()" class="flex items-center gap-1.5 px-4 py-2.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="Abre o relatório de verdade (o mesmo da impressão, do PDF e do Word) com uma feição de teste e o modelo como está agora, sem precisar salvar">
+                        <button type="button" onclick="ReportBuilder.previewReal()" class="flex items-center gap-1.5 px-4 py-2.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="${isGeral ? 'Abre o relatório de verdade com uma lista de exemplo (várias feições) e o modelo como está agora, sem precisar salvar' : 'Abre o relatório de verdade (o mesmo da impressão, do PDF e do Word) com uma feição de teste e o modelo como está agora, sem precisar salvar'}">
                             <span class="material-symbols-outlined text-[18px]">visibility</span>
                             <span>Ver como sairá</span>
-                        </button>`}
+                        </button>
                         <button type="button" onclick="ReportBuilder.saveCurrentTemplate()" class="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="Salvar Modelo">
                             <span class="material-symbols-outlined text-[18px]">save</span>
                             <span>Salvar Modelo</span>
@@ -285,7 +284,8 @@
         const fields = (window.ReportAdapter && window.ReportAdapter.getFormFields) ? window.ReportAdapter.getFormFields(currentTemplate.form_id) : [];
         const template = JSON.parse(JSON.stringify(currentTemplate));
         template.blocos = (template.blocos || []).map(b => blocoParaFolha(b, fields));
-        return window.ReportPreview.buildPreviewPayload({ template: template, formId: currentTemplate.form_id, formTabs: JSON.parse(JSON.stringify(formTabs || [])) });
+        const charts = (window.ReportAdapter && window.ReportAdapter.getExistingCharts) ? window.ReportAdapter.getExistingCharts(currentTemplate.form_id) : [];
+        return window.ReportPreview.buildPreviewPayload({ template: template, formId: currentTemplate.form_id, formTabs: JSON.parse(JSON.stringify(formTabs || [])), charts: JSON.parse(JSON.stringify(charts || [])) });
     }
 
     /** Envia o modelo atual para a página (com um pequeno atraso: várias alterações seguidas viram um envio só). */
@@ -479,6 +479,11 @@
         const activeAnalyticalFieldCount = existingAnalytical1nBlock?.campos_selecionados?.length || 0;
         const activeLaudoDensity = existingAnalytical1nBlock?.densidade || current1nLaudoDensity || current1nTableDensity || 'compact';
         const activeLaudoStriping = existingAnalytical1nBlock?.zebrado || current1nLaudoRowStriping || current1nRowStriping || 'slate';
+
+        const existingChartBlock = currentTemplate?.blocos?.find(b => b.tipo === 'grafico_existente');
+        // o modelo padrão (src/reportAdapter.js) ainda cria o bloco com "chart_id" (um só); o construtor sempre lê/grava "chart_ids" (lista)
+        const existingChartIds = existingChartBlock ? (Array.isArray(existingChartBlock.chart_ids) ? existingChartBlock.chart_ids : (existingChartBlock.chart_id ? [existingChartBlock.chart_id] : [])) : [];
+        const activeChartLayout = existingChartBlock ? (existingChartBlock.layout === 'lado_a_lado' ? 'side' : 'full') : selectedChartLayout;
 
         return `
             <!-- CARD 0: CONFIGURAÇÃO DA FOLHA (LAYOUT DA PÁGINA) -->
@@ -1273,9 +1278,18 @@
                 id: 'acc-charts',
                 title: 'Gráficos do Dashboard',
                 icon: 'pie_chart',
-                badge: `${charts.length} disponíveis`,
+                badge: existingChartBlock ? `${existingChartIds.length} na Folha • ${charts.length} disp.` : `${charts.length} disponíveis`,
                 content: `
                     <div class="flex flex-col gap-3">
+                        ${existingChartBlock ? `
+                            <div class="p-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl flex items-center justify-between text-xs">
+                                <div class="flex items-center gap-1.5 min-w-0">
+                                    <span class="material-symbols-outlined text-rose-600 text-[18px]">check_circle</span>
+                                    <span class="font-bold text-rose-900 dark:text-rose-200 truncate">Gráficos ativos na Folha A4 (${existingChartIds.length})</span>
+                                </div>
+                                <span class="text-[10px] font-mono text-rose-700 dark:text-rose-300 font-bold bg-rose-100 dark:bg-rose-900 px-2 py-0.5 rounded">Pronto</span>
+                            </div>
+                        ` : ''}
                         <p class="text-[11px] text-slate-500">Selecione quais gráficos do Dashboard Estatístico você deseja embutir neste relatório:</p>
                         ${charts.length === 0 ? `
                             <div class="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center text-xs text-slate-400">
@@ -1285,7 +1299,7 @@
                             <div class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
                                 ${charts.map((c, i) => `
                                     <label class="flex items-center gap-2.5 p-2 bg-slate-50 dark:bg-slate-900/50 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs cursor-pointer">
-                                        <input type="checkbox" name="cfg-chart-select" value="${c.id}" ${i === 0 ? 'checked' : ''} class="rounded text-primary focus:ring-0" />
+                                        <input type="checkbox" name="cfg-chart-select" value="${c.id}" ${(existingChartBlock ? existingChartIds.includes(c.id) : i === 0) ? 'checked' : ''} class="rounded text-primary focus:ring-0" />
                                         <div class="flex flex-col min-w-0 flex-1">
                                             <span class="font-bold text-slate-800 dark:text-slate-200 truncate">${c.title}</span>
                                             <span class="text-[10px] text-slate-400 font-mono">Tipo: ${c.type.toUpperCase()} • Campo: ${c.fieldLabel}</span>
@@ -1296,13 +1310,13 @@
                             <div class="flex items-center justify-between pt-1">
                                 <label class="text-xs font-bold text-slate-600 dark:text-slate-400">Disposição na Folha:</label>
                                 <div class="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
-                                    <button type="button" id="btn-chart-layout-full" onclick="ReportBuilder.selectChartLayout('full')" class="px-3 py-1 rounded-md text-xs font-bold bg-primary text-white shadow-xs">Largura Total</button>
-                                    <button type="button" id="btn-chart-layout-side" onclick="ReportBuilder.selectChartLayout('side')" class="px-3 py-1 rounded-md text-xs font-bold text-slate-500 hover:text-primary">Lado a Lado (2)</button>
+                                    <button type="button" id="btn-chart-layout-full" onclick="ReportBuilder.selectChartLayout('full')" class="px-3 py-1 rounded-md text-xs font-bold transition-all ${activeChartLayout === 'full' ? 'bg-primary text-white shadow-xs' : 'text-slate-500 hover:text-primary'}">Largura Total</button>
+                                    <button type="button" id="btn-chart-layout-side" onclick="ReportBuilder.selectChartLayout('side')" class="px-3 py-1 rounded-md text-xs font-bold transition-all ${activeChartLayout === 'side' ? 'bg-primary text-white shadow-xs' : 'text-slate-500 hover:text-primary'}">Lado a Lado (2)</button>
                                 </div>
                             </div>
                         `}
                         <button type="button" onclick="ReportBuilder.insertChartBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
-                            <span class="material-symbols-outlined text-[16px]">add_circle</span> Inserir Gráficos na Folha
+                            <span class="material-symbols-outlined text-[16px]">add_circle</span> ${existingChartBlock ? 'Atualizar Gráficos na Folha' : 'Inserir Gráficos na Folha'}
                         </button>
                     </div>
                 `
@@ -2789,13 +2803,25 @@
 
     function insertChartBlock() {
         const checked = Array.from(document.querySelectorAll("input[name='cfg-chart-select']:checked")).map(cb => cb.value);
-        currentTemplate.blocos.push({
-            id: 'blk_chart_' + Date.now(),
-            tipo: 'grafico_existente',
-            titulo: 'Estatísticas do Dashboard',
-            chart_ids: checked,
-            layout: selectedChartLayout === 'side' ? 'lado_a_lado' : 'largura_total'
-        });
+        const layout = selectedChartLayout === 'side' ? 'lado_a_lado' : 'largura_total';
+        const existing = currentTemplate.blocos.find(b => b.tipo === 'grafico_existente');
+        if (existing) {
+            // já existe um bloco de gráficos na folha: atualiza no lugar (não duplica); "chart_id" (singular) era do modelo padrão antigo
+            existing.chart_ids = checked;
+            existing.layout = layout;
+            delete existing.chart_id;
+        } else {
+            currentTemplate.blocos.push({
+                id: 'blk_chart_' + Date.now(),
+                tipo: 'grafico_existente',
+                titulo: 'Estatísticas do Dashboard',
+                chart_ids: checked,
+                layout: layout
+            });
+        }
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
         renderA4Blocks();
     }
 
