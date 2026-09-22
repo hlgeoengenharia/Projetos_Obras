@@ -306,6 +306,7 @@ ok('voltando ao individual, o modelo geral não aparece na lista', !has(containe
 
 // ---------------------------------------------------------------- Lista de campos do "@" (texto livre): fecha ao clicar fora
 {
+    RB.insertFreeTextBlock(); // desenha um bloco de texto livre: só aí o editor (src/reportFreeText.js) é criado e liga o ouvinte
     const blocoEl = { style: { zIndex: '' } };
     const mkDrop = (id) => { const cls = new Set(); return { id, closest: () => blocoEl, classList: { add: (c) => cls.add(c), remove: (c) => cls.delete(c), contains: (c) => cls.has(c) }, _cls: cls }; };
     const dd = mkDrop('mention-dropdown-3');

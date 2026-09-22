@@ -2000,7 +2000,7 @@
 
             case 'caixa_texto_livre':
             case 'texto_livre':
-                return FT.renderEditor(bloco, index);
+                return FT().renderEditor(bloco, index);
 
             case 'rodape':
                 return renderRodapeReal(bloco, fields);
@@ -3993,28 +3993,36 @@
         renderA4Blocks();
     }
 
-    // Editor do texto livre (barra de formatação, "@ Inserir Campo"): src/reportFreeText.js (a página real usa o mesmo)
-    const FT = window.ReportFreeText.create({
-        esc: escapeHtml,
-        getFields: () => ((window.ReportAdapter && currentTemplate) ? window.ReportAdapter.getFormFields(currentTemplate.form_id) : []),
-        save: (blockIndex, html) => {
-            if (!currentTemplate || !currentTemplate.blocos || !currentTemplate.blocos[blockIndex]) return;
-            currentTemplate.blocos[blockIndex].conteudo = html;
-            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') window.ReportAdapter.saveReportTemplate(currentTemplate);
-        },
-        setLineHeight: (blockIndex, lineHeight) => {
-            if (!currentTemplate || !currentTemplate.blocos || !currentTemplate.blocos[blockIndex]) return;
-            currentTemplate.blocos[blockIndex].espacamento = lineHeight;
-            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') window.ReportAdapter.saveReportTemplate(currentTemplate);
+    // Editor do texto livre (barra de formatação, "@ Inserir Campo"): src/reportFreeText.js (a página real usa o mesmo).
+    // Criado só na primeira vez que é usado: páginas que carregam reportBuilder.js sem reportFreeText.js (ex.: index.html,
+    // que só usa este módulo para abrir o relatório) não podem depender dele já existir no momento em que este arquivo carrega.
+    let FTinstancia = null;
+    function FT() {
+        if (!FTinstancia) {
+            FTinstancia = window.ReportFreeText.create({
+                esc: escapeHtml,
+                getFields: () => ((window.ReportAdapter && currentTemplate) ? window.ReportAdapter.getFormFields(currentTemplate.form_id) : []),
+                save: (blockIndex, html) => {
+                    if (!currentTemplate || !currentTemplate.blocos || !currentTemplate.blocos[blockIndex]) return;
+                    currentTemplate.blocos[blockIndex].conteudo = html;
+                    if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') window.ReportAdapter.saveReportTemplate(currentTemplate);
+                },
+                setLineHeight: (blockIndex, lineHeight) => {
+                    if (!currentTemplate || !currentTemplate.blocos || !currentTemplate.blocos[blockIndex]) return;
+                    currentTemplate.blocos[blockIndex].espacamento = lineHeight;
+                    if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') window.ReportAdapter.saveReportTemplate(currentTemplate);
+                }
+            });
         }
-    });
-    const execFormat = (...a) => FT.execFormat(...a);
-    const changeLineHeight = (...a) => FT.changeLineHeight(...a);
-    const saveFreeTextContent = (...a) => FT.saveFreeTextContent(...a);
-    const handleFreeTextInput = (...a) => FT.handleFreeTextInput(...a);
-    const handleFreeTextKeyDown = (...a) => FT.handleFreeTextKeyDown(...a);
-    const showMentionDropdown = (...a) => FT.showMentionDropdown(...a);
-    const insertMentionField = (...a) => FT.insertMentionField(...a);
+        return FTinstancia;
+    }
+    const execFormat = (...a) => FT().execFormat(...a);
+    const changeLineHeight = (...a) => FT().changeLineHeight(...a);
+    const saveFreeTextContent = (...a) => FT().saveFreeTextContent(...a);
+    const handleFreeTextInput = (...a) => FT().handleFreeTextInput(...a);
+    const handleFreeTextKeyDown = (...a) => FT().handleFreeTextKeyDown(...a);
+    const showMentionDropdown = (...a) => FT().showMentionDropdown(...a);
+    const insertMentionField = (...a) => FT().insertMentionField(...a);
 
     // --- MANIPULADORES DO CARD 9: PARECER E RODAPÉ ---
     function insertTextBlock() {
