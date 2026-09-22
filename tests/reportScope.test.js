@@ -396,6 +396,16 @@ ok('voltando ao individual, o modelo geral não aparece na lista', !has(containe
     delete inputs['sec-tabela-sintetica'];
 }
 
+// ---------------------------------------------------------------- Relatório Geral (camada): teste geral dos cards e das inserções
+{
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
+    const h = container.innerHTML;
+    const geral = () => RA.getReportTemplates('f1').find(t => t.tipo === 'geral') || {};
+    ok('geral: mostra só os cards da camada (folha, cabeçalho, texto livre, gráficos, rodapé)', ['Configuração da Folha', 'Cabeçalho Institucional', 'Caixa de texto livre', 'Gráficos do Dashboard', 'Rodapé Oficial'].every(x => h.includes(x)));
+    ok('geral: não mostra os cards do relatório individual (grade, mapa, quadro 1:N)', !h.includes('Grade de Atributos') && !h.includes('Mini-Mapa') && !h.includes('Quadro Analítico'));
+    eq('geral: o modelo padrão traz cabeçalho, gráficos e rodapé', [geral().tipo, (geral().blocos || []).map(b => b.tipo)], ['geral', ['cabecalho', 'grafico_existente', 'rodape']]);
+}
+
 console.log(`reportScope: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {
     console.error(`${failed} falha(s)`);
