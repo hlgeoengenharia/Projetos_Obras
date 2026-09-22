@@ -168,6 +168,55 @@ ok('geral não aparece como atalho no popup', todos.filter(t => t.tipo === 'gera
 RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
 ok('voltando ao individual, o modelo geral não aparece na lista', !has(container.innerHTML, 'Relatório Geral'));
 
+// ---------------------------------------------------------------- "+ Criar Novo Modelo de Relatório...": folha em branco, até nome e atalho serem preenchidos
+{
+    // onTemplateChange com um id que não existe entre os modelos salvos é um "redesenhar sem trocar de modelo":
+    // útil aqui para ver na tela o efeito de updateTemplateName/updateAtalhoAba, que não redesenham sozinhos.
+    const redesenhar = () => RB.onTemplateChange('__id_inexistente__');
+
+    RB.onTemplateChange('__new__');
+    html = container.innerHTML;
+    ok('novo modelo: "Nome do Documento" e a seleção do atalho aparecem vazios na tela', has(html, 'id="rpt-template-name" value=""') && has(html, 'Selecione onde exibir o atalho...'));
+    ok('novo modelo: nenhum card de bloco mostra estado "ativo" (a folha está limpa)', !has(html, 'Grade ativa na Folha A4') && !has(html, 'Gráficos ativos na Folha A4') && !has(html, 'Laudo ativo na Folha A4'));
+    ok('novo modelo: o botão "Salvar Modelo" vem desabilitado, com o motivo no título', has(html, '<button type="button" disabled') && has(html, 'Preencha o nome do documento e o atalho no popup da feição'));
+
+    RB.saveCurrentTemplate(false);
+    ok('tentar salvar sem nome nem atalho: nada novo é gravado', !RA.getReportTemplates('f1').some(t => !t.nome || !t.nome.trim()));
+
+    RB.updateTemplateName('Ficha de Teste');
+    redesenhar();
+    html = container.innerHTML;
+    ok('só o nome preenchido: o botão continua desabilitado (falta o atalho)', has(html, '<button type="button" disabled'));
+
+    const alertas = [];
+    const alertAntes = ctx.alert;
+    ctx.alert = (m) => alertas.push(m);
+    RB.saveCurrentTemplate();
+    ok('tentar salvar só com o nome: não grava e avisa', !RA.getReportTemplates('f1').some(t => t.nome === 'Ficha de Teste') && alertas.length === 1);
+
+    RB.updateAtalhoAba('header'); // escolher o atalho já tenta salvar sozinho (silencioso)
+    redesenhar();
+    html = container.innerHTML;
+    ok('com os dois preenchidos: o botão fica habilitado e o auto-save ao escolher o atalho grava', has(html, 'onclick="ReportBuilder.saveCurrentTemplate()"') && !has(html, '<button type="button" disabled') && RA.getReportTemplates('f1').some(t => t.nome === 'Ficha de Teste' && t.atalho_aba === 'header'));
+    ctx.alert = alertAntes;
+}
+
+// no Relatório Geral, o atalho no popup não existe: só o nome é exigido para salvar
+{
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
+    RB.onTemplateChange('__new__');
+    html = container.innerHTML;
+    ok('geral, novo modelo: sem blocos e o botão desabilitado até ter nome', !has(html, 'Gráficos ativos na Folha A4') && has(html, '<button type="button" disabled') && has(html, 'Preencha o nome do documento'));
+    RB.updateTemplateName('Camada de Teste');
+    RB.onTemplateChange('__id_inexistente__');
+    html = container.innerHTML;
+    ok('geral: só com o nome já habilita (não pede atalho)', has(html, 'onclick="ReportBuilder.saveCurrentTemplate()"') && !has(html, '<button type="button" disabled'));
+    RB.saveCurrentTemplate(false);
+    ok('geral: salvou com só o nome preenchido', RA.getReportTemplates('f1').some(t => t.tipo === 'geral' && t.nome === 'Camada de Teste'));
+}
+
+RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+
 // ---------------------------------------------------------------- dados que a página do mapa entrega ao relatório
 {
     const tplMapa = RA.getReportTemplates('f1')[0];

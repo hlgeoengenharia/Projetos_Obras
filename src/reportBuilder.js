@@ -93,6 +93,8 @@
         const pd = pageDims();
         // o atalho no popup lista TODAS as abas do cadastro (inclusive a de Relatórios); as demais listas do módulo não
         const formTabs = window.ReportAdapter.getFormTabs ? window.ReportAdapter.getFormTabs(formId, { includeReportsTab: true }) : [];
+        // só salva com o nome do documento preenchido e, na ficha individual, o atalho no popup escolhido
+        const podeSalvar = !!(currentTemplate.nome && currentTemplate.nome.trim()) && (isGeral || !!(currentTemplate.atalho_aba && currentTemplate.atalho_aba.trim()));
 
         container.innerHTML = `
             <div class="flex flex-col gap-6 w-full font-sans">
@@ -103,7 +105,7 @@
                         <div class="flex flex-col min-w-[180px]">
                             <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Modelo de Relatório</label>
                             <select id="rpt-select-template" onchange="ReportBuilder.onTemplateChange(this.value)" class="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold dark:text-white focus:ring-2 focus:ring-primary/40 focus:outline-none">
-                                ${templates.map(t => `<option value="${t.id}" ${t.id === currentTemplate.id ? 'selected' : ''}>${t.nome} (${t.tipo === 'geral' ? 'Relatório Geral da Camada' : 'Ficha Individual'})</option>`).join('')}
+                                ${templates.map(t => `<option value="${t.id}" ${t.id === currentTemplate.id ? 'selected' : ''}>${escapeHtml(t.nome && t.nome.trim() ? t.nome : '(sem nome)')} (${t.tipo === 'geral' ? 'Relatório Geral da Camada' : 'Ficha Individual'})</option>`).join('')}
                                 <option value="__new__">+ Criar Novo Modelo de Relatório...</option>
                             </select>
                         </div>
@@ -122,6 +124,7 @@
                                 <span>Atalho no Popup da Feição</span>
                             </label>
                             <select id="rpt-select-atalho-aba" onchange="ReportBuilder.updateAtalhoAba(this.value)" class="px-3 py-2 bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700/60 rounded-xl text-xs font-bold text-emerald-900 dark:text-emerald-200 focus:ring-2 focus:ring-emerald-500/40 focus:outline-none">
+                                ${!currentTemplate.atalho_aba ? `<option value="" disabled selected>Selecione onde exibir o atalho...</option>` : ''}
                                 <option value="header" ${currentTemplate.atalho_aba === 'header' ? 'selected' : ''}>📌 Cabeçalho do Card (Topo Geral)</option>
                                 <option value="todas" ${currentTemplate.atalho_aba === 'todas' ? 'selected' : ''}>🌐 Em Todas as Abas da Feição</option>
                                 ${formTabs.map(tab => `
@@ -146,7 +149,7 @@
                             <span class="material-symbols-outlined text-[18px]">visibility</span>
                             <span>Ver como sairá</span>
                         </button>
-                        <button type="button" onclick="ReportBuilder.saveCurrentTemplate()" class="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="Salvar Modelo">
+                        <button type="button" ${podeSalvar ? 'onclick="ReportBuilder.saveCurrentTemplate()"' : 'disabled'} class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${podeSalvar ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer' : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed'}" title="${podeSalvar ? 'Salvar Modelo' : `Preencha ${isGeral ? 'o nome do documento' : 'o nome do documento e o atalho no popup da feição'} para salvar`}">
                             <span class="material-symbols-outlined text-[18px]">save</span>
                             <span>Salvar Modelo</span>
                         </button>
@@ -4165,7 +4168,8 @@
         if (!formId) return;
 
         if (selectedVal === '__new__') {
-            currentTemplate = window.ReportAdapter.createDefaultTemplate(formId, builderScope, builderScope === 'geral' ? 'Nova Camada' : 'Novo Modelo');
+            // folha em branco: sem blocos, sem nome e sem atalho no popup, até o usuário preencher os dois (ver saveCurrentTemplate)
+            currentTemplate = window.ReportAdapter.createBlankTemplate(formId, builderScope);
         } else {
             const templates = window.ReportAdapter.getReportTemplates(formId);
             const found = templates.find(t => t.id === selectedVal);
@@ -4180,6 +4184,13 @@
             document.activeElement.blur();
         }
         if (!currentTemplate) return;
+        // só salva com o nome do documento preenchido e, na ficha individual, o atalho no popup escolhido
+        const temNome = !!(currentTemplate.nome && currentTemplate.nome.trim());
+        const temAtalho = builderScope === 'geral' || !!(currentTemplate.atalho_aba && currentTemplate.atalho_aba.trim());
+        if (!temNome || !temAtalho) {
+            if (showAlert) alert(`Preencha ${!temNome ? 'o nome do documento' : ''}${!temNome && !temAtalho ? ' e ' : ''}${!temAtalho ? 'o atalho no popup da feição' : ''} antes de salvar.`);
+            return;
+        }
         const ok = window.ReportAdapter.saveReportTemplate(currentTemplate);
         if (showAlert) {
             if (ok) alert('Modelo de Relatório salvo com sucesso!');

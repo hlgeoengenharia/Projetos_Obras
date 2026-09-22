@@ -699,6 +699,32 @@
         }
     }
 
+    /**
+     * Modelo em branco, para "+ Criar Novo Modelo de Relatório...": folha sem blocos, sem nome e sem atalho no popup
+     * (a ficha individual só é salva depois que o usuário preenche os dois; ver saveCurrentTemplate em src/reportBuilder.js).
+     * @param {string} formId ID do formulário
+     * @param {'individual'|'geral'} tipo
+     */
+    function createBlankTemplate(formId, tipo = 'individual') {
+        const ehGeral = tipo === 'geral';
+        return {
+            id: 'rpt_' + Math.random().toString(36).substr(2, 9),
+            nome: '',
+            tipo: ehGeral ? 'geral' : 'individual',
+            form_id: formId,
+            disponibilizar_no_mapa: false,
+            atalho_aba: '',
+            config_pagina: {
+                tamanho: 'A4',
+                orientacao: 'portrait',
+                margem_tipo: 'padrao',
+                margens: { top: '15mm', bottom: '15mm', left: '15mm', right: '15mm' },
+                margens_mm: { top: 15, bottom: 15, left: 15, right: 15 }
+            },
+            blocos: []
+        };
+    }
+
     // =====================================================================================
     // AJUSTES DO USUÁRIO NO RELATÓRIO GERADO (por modelo + feição)
     // Guardados no Supabase (tabela relatorios_ajustes, só o próprio usuário enxerga) e, sempre, no navegador.
@@ -836,6 +862,7 @@
         getReportTemplates,
         deleteReportTemplate,
         createDefaultTemplate,
+        createBlankTemplate,
         resetRemoteTableCheck,
         syncTemplates
     };
