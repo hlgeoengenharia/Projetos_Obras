@@ -16,22 +16,22 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260921p"></script>
-    <script src="src/mapTools.js?v=20260921p"></script>
-    <script src="src/reportMap.js?v=20260921p"></script>
-    <script src="src/reportTemporal.js?v=20260921p"></script>
-    <script src="src/reportExport.js?v=20260921p"></script>
-    <script src="src/reportBlocks.js?v=20260921p"></script>
-    <script src="src/reportEditor.js?v=20260921p"></script>
-    <script src="src/reportFreeText.js?v=20260921p"></script>
-    <script src="src/reportWord.js?v=20260921p"></script>
-    <script src="src/reportDocx.js?v=20260921p"></script>
-    <script src="src/mapSnapshot.js?v=20260921p"></script>
-    <script src="src/verificarEmissao.js?v=20260921p"></script>
+    <script src="src/pageSize.js?v=20260921r"></script>
+    <script src="src/mapTools.js?v=20260921r"></script>
+    <script src="src/reportMap.js?v=20260921r"></script>
+    <script src="src/reportTemporal.js?v=20260921r"></script>
+    <script src="src/reportExport.js?v=20260921r"></script>
+    <script src="src/reportBlocks.js?v=20260921r"></script>
+    <script src="src/reportEditor.js?v=20260921r"></script>
+    <script src="src/reportFreeText.js?v=20260921r"></script>
+    <script src="src/reportWord.js?v=20260921r"></script>
+    <script src="src/reportDocx.js?v=20260921r"></script>
+    <script src="src/mapSnapshot.js?v=20260921r"></script>
+    <script src="src/verificarEmissao.js?v=20260921r"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260921p"></script>
-    <script src="src/reportData.js?v=20260921p"></script>
+    <script src="src/fieldFormatter.js?v=20260921r"></script>
+    <script src="src/reportData.js?v=20260921r"></script>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -137,7 +137,7 @@
         /* divisória ajustável das colunas Distância e Confrontantes (só na tela) */
         .col-resize { position: absolute; top: 0; right: -4px; width: 9px; height: 100%; cursor: col-resize; z-index: 5; touch-action: none; }
         .col-resize:hover, .col-resize.ativo { background: rgba(5,150,105,.35); }
-        #map-north, #map-legend, .leaflet-control-scale { pointer-events: auto; cursor: move; touch-action: none; }
+        #map-north, #map-legend, #map-locator, .leaflet-control-scale { pointer-events: auto; cursor: move; touch-action: none; }
         #map-legend [data-leg] span { cursor: text; }
         #map-legend { bottom: 22px; right: 8px; background: rgba(255,255,255,.92); border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 7px; font: 9px sans-serif; color: #0f172a; max-width: 45%; }
         #map-legend div { display: flex; align-items: center; gap: 5px; line-height: 1.5; }
@@ -153,6 +153,8 @@
         .report-tframe-title span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .report-tframe-wrap { border: 1px solid #cbd5e1; border-top: 0; background: #e2e8f0; position: relative; overflow: hidden; border-radius: 0 0 6px 6px; }
         #map-locator { top: 8px; left: 46px; width: 128px; height: 128px; border: 2px solid #0f172a; border-radius: 6px; background: #e2e8f0; overflow: hidden; display: none; }
+        .report-locator-north { position: absolute; top: 3px; right: 3px; width: 16px; height: 16px; display: none; align-items: center; justify-content: center; background: rgba(15,23,42,.75); color: #fbbf24; border-radius: 4px; z-index: 600; pointer-events: none; }
+        .report-locator-north .material-symbols-outlined { font-size: 13px; }
         .report-nlabel, .report-glabel { background: transparent; border: 0; }
         .report-glabel { pointer-events: none; }
         .report-nlabel-l { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; font: 8px/10px monospace; color: #0f172a; text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; cursor: move; }
@@ -1465,9 +1467,24 @@
                 ${cfg.comparacaoArea.ativo ? sel("mapPanelExtra('comparacaoArea', 'campo', this.value)", '<option value="">Campo da área cadastral…</option>' + camposArea.map(f => `<option value="${esc(f.id || f.name)}" ${cfg.comparacaoArea.campo === (f.id || f.name) ? 'selected' : ''}>${esc(f.label || f.name || f.id)}${abaDoCampo(f) ? ' — Aba: ' + esc(abaDoCampo(f)) : ''}</option>`).join('')) : ''}
             `;
             const situacaoGradeHtml = `
-                ${chk('mp-x-sit', 'Mapa de situação (localização)', cfg.situacao.ativo, "mapPanelExtra('situacao', 'ativo', this.checked)")}
                 ${chk('mp-x-grade', 'Quadriculado UTM', cfg.quadriculado.ativo, "mapPanelExtra('quadriculado', 'ativo', this.checked)")}
                 ${cfg.quadriculado.ativo ? sel("mapPanelExtra('quadriculado', 'espacamento', Number(this.value))", [0, 10, 20, 50, 100, 200, 500, 1000].map(v => `<option value="${v}" ${cfg.quadriculado.espacamento === v ? 'selected' : ''}>${v ? 'Grade de ' + v + ' m' : 'Espaçamento automático'}</option>`).join('')) : ''}
+            `;
+            // MAPA DE LOCALIZAÇÃO (card próprio, logo abaixo de "Mapa base"): mapa de referência, camadas e norte da própria caixa
+            const locCamadasOn = new Set((cfg.situacao.camadas || []).map(String));
+            const localizacaoHtml = `
+                ${chk('mp-loc-ativo', 'Mostrar o mapa de localização', cfg.situacao.ativo, "mapPanelExtra('situacao', 'ativo', this.checked)")}
+                ${cfg.situacao.ativo ? `
+                    <select onchange="mapPanelExtra('situacao', 'baseMap', this.value)" style="width:100%;padding:5px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:3px">
+                        <option value="osm" ${cfg.situacao.baseMap === 'osm' ? 'selected' : ''}>Ruas (OpenStreetMap)</option>
+                        <option value="satelite" ${cfg.situacao.baseMap === 'satelite' ? 'selected' : ''}>Satélite</option>
+                        <option value="nenhum" ${cfg.situacao.baseMap === 'nenhum' ? 'selected' : ''}>Sem mapa base</option>
+                    </select>
+                    <div style="font-weight:700;margin:4px 0 2px">Camadas na caixa</div>
+                    ${!camadas.length ? '<div style="color:#64748b">Nenhuma outra camada estava ativa no mapa ao abrir este relatório.</div>' : camadas.map(c => `<label class="row"><input type="checkbox" ${locCamadasOn.has(String(c.id)) ? 'checked' : ''} onchange="mapPanelLocatorLayer('${esc(c.id)}', this.checked)"><i style="display:inline-block;width:12px;height:8px;border-radius:2px;background:${esc(c.color)}"></i><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span></label>`).join('')}
+                    ${chk('mp-loc-norte', 'Seta do norte', cfg.situacao.norte, "mapPanelExtra('situacao', 'norte', this.checked)")}
+                    <div style="color:#64748b;line-height:1.35;margin-top:3px">Arraste a caixa, no mapa, para mudar de lugar.</div>
+                ` : ''}
             `;
             const notasHtml = `
                 <button type="button" class="act" style="margin-top:5px" onclick="mapPanelNotaAdd()">+ Anotação de texto no centro do mapa</button>
@@ -1560,6 +1577,9 @@
                     </select>
                     ${/^ortofoto:/.test(cfg.baseMap) ? '<div style="color:#64748b;line-height:1.35;margin-top:3px">A ortofoto fica sobre o satélite, que preenche o que ela não cobre.</div>' : ''}
                     ${situacaoGradeHtml}
+                    </div>
+<h4 data-sec-h="localizacao" class="${secH('localizacao')}" onclick="mapPanelSecao('localizacao')">Mapa de localização<span class="chev">&#9662;</span></h4><div data-sec="localizacao" class="sec-body" style="display:${secD('localizacao')}">
+                    ${localizacaoHtml}
                     </div>
 <h4 data-sec-h="medidas" class="${secH('medidas')}" onclick="mapPanelSecao('medidas')">Medição da feição<span class="chev">&#9662;</span></h4><div data-sec="medidas" class="sec-body" style="display:${secD('medidas')}">
                     ${chkN('mp-med', 'Mostrar medidas no mapa', cfg.medidas.ativo, "mapPanelMedidas('ativo', this.checked)", false, nis('medidas', 'todos', estTodos))}
@@ -1902,6 +1922,7 @@
         function mapPanelMedidas(key, value) { if (mapController) mapController.setConfig({ medidas: { [key]: value } }); }
         function mapPanelResetMedidas() { if (mapController) mapController.resetMeasures(); }
         function mapPanelLayer(id, on) { if (mapController) mapController.toggleLayer(id, on); }
+        function mapPanelLocatorLayer(id, on) { if (mapController) mapController.toggleLocatorLayer(id, on); }
 
         async function mapPanelSave() {
             const status = document.getElementById('map-panel-status');

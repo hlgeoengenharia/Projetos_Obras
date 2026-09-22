@@ -91,7 +91,7 @@
             confrontantes: normalizeConfrontantes(src.confrontantes),
             referencia: normalizeReferencia(src.referencia),
             comparacaoArea: normalizeComparacaoArea(src.comparacaoArea),
-            situacao: { ativo: !!(src.situacao && src.situacao.ativo) },
+            situacao: normalizeSituacao(src.situacao),
             quadriculado: normalizeQuadriculado(src.quadriculado),
             medicoes: normalizeMedicoes(src.medicoes),
             analises: normalizeAnalises(src.analises),
@@ -272,7 +272,7 @@
         return { lat: lat, lng: lng };
     }
 
-    const ELEMENTOS_MOVEIS = ['norte', 'escala', 'escalaTexto', 'projecao', 'legenda'];
+    const ELEMENTOS_MOVEIS = ['norte', 'escala', 'escalaTexto', 'projecao', 'legenda', 'situacao'];
     function normalizeElementos(e) {
         const out = {};
         if (!e || typeof e !== 'object') return out;
@@ -318,6 +318,13 @@
     function normalizeComparacaoArea(x) {
         x = x || {};
         return { ativo: bool(x.ativo, false), campo: ID_REF.test(String(x.campo || '')) ? String(x.campo) : '' };
+    }
+    /** Mapa de localização (card próprio): liga/desliga, mapa de referência dele, camadas mostradas e seta do norte. */
+    function normalizeSituacao(s) {
+        s = s || {};
+        const baseMap = ['osm', 'satelite', 'nenhum'].indexOf(s.baseMap) >= 0 ? s.baseMap : 'osm';
+        const camadas = (Array.isArray(s.camadas) ? s.camadas : []).map(String).filter(Boolean).slice(0, 30);
+        return { ativo: bool(s.ativo, false), baseMap: baseMap, camadas: camadas, norte: bool(s.norte, false) };
     }
     function normalizeQuadriculado(x) {
         x = x || {};
@@ -1558,7 +1565,7 @@
 
     return {
         MAP_DEFAULTS, BASE_MAPS,
-        normalizeMapConfig, mergeAjustes, normalizeAnalises, normalizeMedicoes, coordTriple, medicaoInfo, medicaoTexto, medicaoIds, parseCoordenadas, normalizeColConf, confrontantesDoTrecho, normalizeElementos, normalizeLegenda, applyConfrontantes, nearestOnGeometry, nearestOnCamada, edgeOffsetAbove, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
+        normalizeMapConfig, normalizeSituacao, mergeAjustes, normalizeAnalises, normalizeMedicoes, coordTriple, medicaoInfo, medicaoTexto, medicaoIds, parseCoordenadas, normalizeColConf, confrontantesDoTrecho, normalizeElementos, normalizeLegenda, applyConfrontantes, nearestOnGeometry, nearestOnCamada, edgeOffsetAbove, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
         geometryBBox, bboxCenter, expandBBoxMeters, bboxIntersects, roundCoords, geomKind,
         normalizeTemporal, rasterDateInfo, fmtRasterDate, tileXY, tileUrl, probeZoom, rasterBBox, buildOrtofotoList, sortOrtofotos,
         COORD_SYSTEMS, normalizePontos, latLngToUtm, utmToLatLng, fmtGms, coordHeaders, coordCells, coordSystemLabel, azimuthDeg, fmtAzimuth, vertices, defaultPointTitle, pointRows,

@@ -17,7 +17,7 @@
     'use strict';
 
     /** Classes/ids dos elementos de texto sobre o mapa (o html2canvas os ignora; este módulo os desenha). */
-    const OVERLAY_CLASSES = ['report-measure', 'report-point', 'report-note', 'report-nlabel', 'report-glabel', 'leaflet-control-scale', 'leaflet-control-attribution'];
+    const OVERLAY_CLASSES = ['report-measure', 'report-point', 'report-note', 'report-nlabel', 'report-glabel', 'report-locator-north', 'leaflet-control-scale', 'leaflet-control-attribution'];
     const OVERLAY_IDS = ['map-north', 'map-info-bar', 'map-escala-txt', 'map-proj-txt', 'map-legend'];
     const IGNORED_ONLY = ['leaflet-control-zoom', 'no-print'];
 

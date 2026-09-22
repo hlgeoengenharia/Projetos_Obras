@@ -83,7 +83,7 @@ function makeL() {
 
 function makeDoc(ids) {
     const els = {};
-    ids.forEach(id => { els[id] = { style: {}, innerHTML: '', textContent: '' }; });
+    ids.forEach(id => { els[id] = { style: {}, innerHTML: '', textContent: '', children: [], appendChild(c) { this.children.push(c); } }; });
     return { els, getElementById: (id) => els[id] || null, createElement: (tag) => makeEl(tag) };
 }
 
@@ -1002,6 +1002,32 @@ eq('a caixa não cria um segundo mapa a cada movimento', t.L.__maps.length, 2);
 ok('só um retângulo (o antigo é removido)', Array.from(loc.layers).filter(l => l.kind === 'rectangle').length === 1);
 t.ctl.setConfig({ situacao: { ativo: false } });
 eq('situação desligada de novo: caixa escondida', t.doc.els['map-locator'].style.display, 'none');
+
+// ---------------------------------------------------------------- mapa de localização: mapa de referência, camadas e norte próprios (card separado)
+t = build({});
+t.ctl.setConfig({ situacao: { ativo: true } });
+let loc2 = t.L.__maps[1];
+ok('seta do norte da caixa: criada escondida por padrão', t.doc.els['map-locator'].children.length === 1 && t.doc.els['map-locator'].children[0].className === 'report-locator-north' && t.doc.els['map-locator'].children[0].style.display !== 'flex');
+ok('mapa de referência padrão: ruas (OSM)', Array.from(loc2.layers).some(l => l.kind === 'tile' && /openstreetmap/.test(l.args.u)));
+t.ctl.setConfig({ situacao: { baseMap: 'satelite' } });
+ok('trocar para satélite: tile antigo sai, o novo é de satélite', !Array.from(loc2.layers).some(l => l.kind === 'tile' && /openstreetmap/.test(l.args.u)) && Array.from(loc2.layers).some(l => l.kind === 'tile' && /arcgisonline/.test(l.args.u)));
+t.ctl.setConfig({ situacao: { baseMap: 'nenhum' } });
+ok('"Sem mapa base": nenhum tile na caixa', !Array.from(loc2.layers).some(l => l.kind === 'tile'));
+t.ctl.setConfig({ situacao: { norte: true } });
+eq('seta do norte: liga', t.doc.els['map-locator'].children[0].style.display, 'flex');
+t.ctl.setConfig({ situacao: { norte: false } });
+eq('seta do norte: desliga', t.doc.els['map-locator'].children[0].style.display, 'none');
+ok('camada escolhida para a caixa entra nela (cor própria, sem clique)', !Array.from(loc2.layers).some(l => l.kind === 'geojson'));
+t.ctl.toggleLocatorLayer('1', true);
+ok('toggleLocatorLayer liga a camada 1 na caixa', Array.from(loc2.layers).filter(l => l.kind === 'geojson').length === 1);
+t.ctl.toggleLocatorLayer('4', true);
+eq('duas camadas ligadas na caixa', Array.from(loc2.layers).filter(l => l.kind === 'geojson').length, 2);
+t.ctl.toggleLocatorLayer('1', false);
+eq('desligar uma remove só ela', Array.from(loc2.layers).filter(l => l.kind === 'geojson').length, 1);
+ok('a camada da caixa de localização não aparece no mapa principal (é independente das "Camadas ativas")', t.layersOf('geojson').length === 1); // só o destaque da feição
+t.ctl.setConfig({ situacao: { ativo: false } });
+t.ctl.setConfig({ situacao: { ativo: true } });
+eq('desligar e religar (sem recriar o mapa) mantém a camada escolhida', Array.from(loc2.layers).filter(l => l.kind === 'geojson').length, 1);
 
 // ---------------------------------------------------------------- anotações de texto
 const notas = (tt) => tt.layersOf('marker').filter(m => m.args.o.icon.className === 'report-note');

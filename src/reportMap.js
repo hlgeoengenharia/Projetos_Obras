@@ -37,7 +37,7 @@
         return cor && cor !== padrao ? 'color:' + cor + ';text-shadow:' + haloDe(cor) + ';' : '';
     }
     function labelTransform(deg) { return 'translate(-50%,-50%) rotate(' + (Number(deg) || 0) + 'deg)'; }
-    const MOVEIS = ['norte', 'escala', 'escalaTexto', 'projecao', 'legenda'];
+    const MOVEIS = ['norte', 'escala', 'escalaTexto', 'projecao', 'legenda', 'situacao'];
     const POINT_LABEL_OFFSET = [16, -13]; // px: onde o nome do ponto nasce em relação ao vértice
     const ROT_HANDLE = '<span class="report-rot no-print" title="Girar (arraste; Shift = de 15 em 15°) • dois cliques voltam ao automático">&#8635;</span>';
 
@@ -537,7 +537,7 @@
             });
         }
 
-        // ------------------------------------------------------------ mapa de situação (mapa pequeno com a visão geral)
+        // ------------------------------------------------------------ mapa de localização (card próprio: mapa de referência, camadas e norte da própria caixa)
         function applySituacao() {
             const box = el('map-locator');
             // display explícito: o CSS da caixa é "display:none", então '' (voltar ao CSS) a deixaria invisível
@@ -545,17 +545,54 @@
             if (!cfg.situacao.ativo || !box) return;
             if (!state.locator) {
                 const lm = L.map(box, { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false, preferCanvas: true });
-                L.tileLayer(TILES.osm.url, { maxZoom: 19, crossOrigin: true }).addTo(lm);
                 const ct = center || [-34.8, -7];
                 if (L.circleMarker) L.circleMarker([ct[1], ct[0]], { radius: 4, color: '#dc2626', weight: 2, fillColor: '#dc2626', fillOpacity: 1, interactive: false }).addTo(lm);
-                state.locator = { map: lm, rect: null };
+                let norteEl = null;
+                if (box.appendChild && doc && doc.createElement) {
+                    norteEl = doc.createElement('div');
+                    norteEl.className = 'report-locator-north';
+                    norteEl.innerHTML = '<span class="material-symbols-outlined">navigation</span>';
+                    box.appendChild(norteEl);
+                }
+                state.locator = { map: lm, rect: null, base: null, baseKey: null, camadaLayers: {}, norteEl: norteEl };
             }
-            const lm = state.locator.map;
+            const loc = state.locator;
+            const lm = loc.map;
+
+            // mapa de referência da própria caixa (independente do mapa base principal)
+            const baseKey = cfg.situacao.baseMap || 'osm';
+            if (loc.baseKey !== baseKey) {
+                if (loc.base) { lm.removeLayer(loc.base); loc.base = null; }
+                if (baseKey !== 'nenhum') {
+                    const src = TILES[baseKey] || TILES.osm;
+                    loc.base = L.tileLayer(src.url, { maxZoom: 19, crossOrigin: true });
+                    loc.base.addTo(lm);
+                }
+                loc.baseKey = baseKey;
+            }
+
+            // camadas escolhidas para aparecer no mapa de localização (além do ponto vermelho da feição)
+            const idsOn = new Set((cfg.situacao.camadas || []).map(String));
+            Object.keys(loc.camadaLayers).forEach(id => { if (!idsOn.has(id)) { lm.removeLayer(loc.camadaLayers[id]); delete loc.camadaLayers[id]; } });
+            camadas.forEach(c => {
+                const id = String(c.id);
+                if (!idsOn.has(id) || loc.camadaLayers[id]) return;
+                loc.camadaLayers[id] = L.geoJSON({ type: 'FeatureCollection', features: c.features }, {
+                    style: () => ({ color: c.color, weight: 1, fillColor: c.color, fillOpacity: 0.15 }),
+                    pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 3, color: c.color, weight: 1, fillColor: c.color, fillOpacity: 0.8 }),
+                    interactive: false
+                });
+                loc.camadaLayers[id].addTo(lm);
+            });
+
+            // seta do norte da caixa (a caixa toda gira com a rotação do próprio mapa de localização, sempre 0° por ora)
+            if (loc.norteEl && loc.norteEl.style) loc.norteEl.style.display = cfg.situacao.norte ? 'flex' : 'none';
+
             if (lm.invalidateSize) lm.invalidateSize();
             const ct = center || [-34.8, -7];
             lm.setView([ct[1], ct[0]], Math.max(1, Math.round(map.getZoom()) - 6), { animate: false });
-            if (state.locator.rect) { lm.removeLayer(state.locator.rect); state.locator.rect = null; }
-            if (L.rectangle && map.getBounds) state.locator.rect = L.rectangle(map.getBounds(), { color: '#dc2626', weight: 1.5, fill: false, interactive: false }).addTo(lm);
+            if (loc.rect) { lm.removeLayer(loc.rect); loc.rect = null; }
+            if (L.rectangle && map.getBounds) loc.rect = L.rectangle(map.getBounds(), { color: '#dc2626', weight: 1.5, fill: false, interactive: false }).addTo(lm);
         }
 
         // ------------------------------------------------------------ anotações de texto (arraste = mover; duplo clique = editar)
@@ -725,6 +762,7 @@
             if (key === 'escalaTexto') return el('map-escala-txt');
             if (key === 'projecao') return el('map-proj-txt');
             if (key === 'legenda') return el('map-legend');
+            if (key === 'situacao') return el('map-locator');
             if (key === 'escala') return state.scaleControl && state.scaleControl.getContainer ? state.scaleControl.getContainer() : null;
             return null;
         }
@@ -878,6 +916,14 @@
                 if (on) set.add(String(id)); else set.delete(String(id));
                 cfg = Object.assign({}, cfg, { camadasLigadas: Array.from(set) });
                 apply();
+            },
+            /** Liga/desliga uma camada pelo id no mapa de localização (card próprio, independente das camadas do mapa principal). */
+            toggleLocatorLayer(id, on) {
+                const set = new Set(cfg.situacao.camadas.map(String));
+                if (on) set.add(String(id)); else set.delete(String(id));
+                cfg.situacao = MT.normalizeSituacao(Object.assign({}, cfg.situacao, { camadas: Array.from(set) }));
+                applySituacao();
+                notify();
             },
             /** Configuração completa para salvar (inclui a vista atual). */
             snapshot() {

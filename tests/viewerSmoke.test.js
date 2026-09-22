@@ -206,8 +206,8 @@ async function runScenario(cfg) {
         const abertas = () => (r.panel_() .match(/data-sec="([a-z]+)" class="sec-body" style="display:block"/g) || []).map(s => /data-sec="([a-z]+)"/.exec(s)[1]);
         r.panel_ = () => r.registry['map-tools-panel']._html;
         const cabecalhos = (r.panel_().match(/data-sec-h="[a-z]+"/g) || []).length;
-        eq('sanfona: nove títulos', cabecalhos, 9);
-        eq('ordem fixa dos cards no painel (e, portanto, dos blocos na folha)', (r.panel_().match(/data-sec-h="([a-z]+)"/g) || []).map(s => /"([a-z]+)"/.exec(s)[1]), ['destaque', 'camadas', 'elementos', 'base', 'medidas', 'pontos', 'extras', 'temporal', 'exportar']);
+        eq('sanfona: dez títulos', cabecalhos, 10);
+        eq('ordem fixa dos cards no painel (e, portanto, dos blocos na folha)', (r.panel_().match(/data-sec-h="([a-z]+)"/g) || []).map(s => /"([a-z]+)"/.exec(s)[1]), ['destaque', 'camadas', 'elementos', 'base', 'localizacao', 'medidas', 'pontos', 'extras', 'temporal', 'exportar']);
         eq('sanfona: ao abrir só "Feição em destaque" está aberta', abertas(), ['destaque']);
         r.sandbox.mapPanelSecao('medidas');
         r.sandbox.renderMapToolsPanel();
@@ -618,9 +618,9 @@ async function runScenario(cfg) {
             const re = /data-sec-h="([a-z]+)"[\s\S]*?(?=data-sec-h=|map-panel-status)/g;
             let mm;
             while ((mm = re.exec(r.panel))) secs[mm[1]] = mm[0];
-            eq('cards do painel na ordem definida (fixa)', Object.keys(secs), ['destaque', 'camadas', 'elementos', 'base', 'medidas', 'pontos', 'extras', 'temporal', 'exportar']);
+            eq('cards do painel na ordem definida (fixa)', Object.keys(secs), ['destaque', 'camadas', 'elementos', 'base', 'localizacao', 'medidas', 'pontos', 'extras', 'temporal', 'exportar']);
             ok('"Rótulos nas feições vizinhas" está em "Camadas ativas no mapa"', /Rótulos nas feições vizinhas/.test(secs.camadas) && !/Rótulos nas feições vizinhas/.test(secs.extras));
-            ok('"Mapa de situação" e "Quadriculado UTM" estão em "Mapa base"', /Mapa de situação/.test(secs.base) && /Quadriculado UTM/.test(secs.base) && !/Mapa de situação|Quadriculado UTM/.test(secs.extras));
+            ok('"Quadriculado UTM" está em "Mapa base"; "Mostrar o mapa de localização" tem card próprio, logo abaixo', /Quadriculado UTM/.test(secs.base) && !/Mapa de situação|Mostrar o mapa de localização/.test(secs.base) && /Mostrar o mapa de localização/.test(secs.localizacao) && !/Quadriculado UTM/.test(secs.extras));
             ok('"+ Anotação de texto" e as anotações (com N/I/S) estão em "Elementos do mapa"', /\+ Anotação de texto no centro do mapa/.test(secs.elementos) && /mapPanelNotaEstilo\('a1', 'n'\)/.test(secs.elementos) && !/Anotação de texto/.test(secs.extras));
             const iMem = secs.pontos.indexOf('Memorial (azimute e distância)'), iCol = secs.pontos.search(/Coluna (&quot;|")Confrontantes/), iTab = secs.pontos.indexOf('Tabela de confrontantes');
             ok('em "Pontos nos vértices": Memorial, depois a coluna "Confrontantes" (logo abaixo) e depois a tabela de confrontantes', iMem > 0 && iCol > iMem && iTab > iCol && !/Tabela de confrontantes/.test(secs.extras));

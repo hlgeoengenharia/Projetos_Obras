@@ -68,6 +68,18 @@ ok('brilho branco do rótulo do vizinho (contorno antes do texto)', of(ctx, 'str
 ok('elemento oculto (display:none) e o zoom não são desenhados', !ft.some(c => c[1] === 'Legenda' || c[1] === '+'));
 ok('texto do painel de tiles não é desenhado por aqui', !ft.some(c => c[1] === 'não é texto do mapa'));
 ok('marcadores são desenhados antes dos controles (controles por cima)', ft.findIndex(c => c[1] === '26,12 m') < ft.findIndex(c => c[1] === '30 m'));
+
+// ---------------------------------------------------------------- mapa de localização (card próprio): tiles/vetores capturados normalmente; só a seta do norte é redesenhada
+const locNorte = E('div', { cls: 'report-locator-north', r: R(748, 54, 16, 16) },
+    E('span', { cls: 'material-symbols-outlined', st: { color: 'rgb(251, 191, 36)' }, text: 'navigation', r: R(750, 56, 13, 13) }, T('navigation', R(750, 56, 13, 13))));
+const locTile = E('div', { cls: 'leaflet-tile-pane', r: R(740, 50, 128, 128) }, T('não é texto', R(740, 50, 10, 10)));
+const locBox = E('div', { id: 'map-locator', r: R(740, 50, 128, 128) }, locTile, locNorte);
+ok('a seta do norte da caixa de localização é ignorada pelo html2canvas (redesenhada manualmente)', MS.shouldIgnore(locNorte) && MS.isOverlay(locNorte));
+ok('a caixa em si e os tiles dela NÃO são ignorados (capturados normalmente, com o resto do mapa)', !MS.shouldIgnore(locBox) && !MS.shouldIgnore(locTile) && !MS.isOverlay(locBox));
+const ctxLoc = fakeCtx();
+const nLoc = MS.paintOverlays(ctxLoc, locBox, env, 2);
+eq('só a seta entra como sobreposição (a caixa não é percorrida por inteiro)', nLoc, 1);
+ok('a seta vira o mesmo triângulo amarelo do norte principal, sem desenhar o texto "navigation"', !of(ctxLoc, 'fillText').some(c => c[1] === 'navigation') && of(ctxLoc, 'fill').some(c => c[1] === 'rgb(251,191,36)'));
 eq('salva e restaura o estado do canvas', [of(ctx, 'save').length, of(ctx, 'restore').length], [1, 1]);
 
 // texto em caixa alta e espaço em branco
