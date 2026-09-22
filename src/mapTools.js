@@ -570,6 +570,51 @@
         return !!a && !!b && a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
     }
 
+    /**
+     * Agrupa pontos [lng, lat] por proximidade, para um mini-mapa por grupo (Relatório Geral): uma grade sobre a área
+     * de todos os pontos, com o número de células escolhido para cada uma ter, em média, `alvoPorGrupo` pontos — os
+     * grupos saem menores que isso quando os pontos estão espalhados, e podem passar um pouco quando muitos caem
+     * bem próximos. Devolve os grupos ordenados de norte para sul e de oeste para leste (ordem previsível na folha).
+     * @param {Array<[number,number]>} pontos
+     * @param {number} alvoPorGrupo
+     * @returns {Array<number[]>} índices (em `pontos`) de cada grupo
+     */
+    function agruparPorProximidade(pontos, alvoPorGrupo) {
+        const alvo = Math.max(1, alvoPorGrupo || 1);
+        if (!Array.isArray(pontos) || pontos.length === 0) return [];
+        if (pontos.length <= alvo) return [pontos.map((_, i) => i)];
+
+        let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
+        pontos.forEach(p => {
+            if (p[0] < minLng) minLng = p[0]; if (p[0] > maxLng) maxLng = p[0];
+            if (p[1] < minLat) minLat = p[1]; if (p[1] > maxLat) maxLat = p[1];
+        });
+
+        // grade com pelo menos nGrupos células, o mais "quadrada" possível em NÚMERO de colunas/linhas (não em graus:
+        // uma área larga e baixa (ou alta e estreita) não deve ganhar uma divisão na dimensão que não precisa)
+        const nGrupos = Math.ceil(pontos.length / alvo);
+        const colunas = Math.max(1, Math.ceil(Math.sqrt(nGrupos)));
+        const linhas = Math.max(1, Math.ceil(nGrupos / colunas));
+        const passoLng = (maxLng - minLng) / colunas || 1;
+        const passoLat = (maxLat - minLat) / linhas || 1;
+
+        const celulas = new Map();
+        pontos.forEach((p, i) => {
+            const cx = Math.min(colunas - 1, Math.floor((p[0] - minLng) / passoLng));
+            const cy = Math.min(linhas - 1, Math.floor((p[1] - minLat) / passoLat));
+            const chave = cx + ':' + cy;
+            if (!celulas.has(chave)) celulas.set(chave, []);
+            celulas.get(chave).push(i);
+        });
+
+        return Array.from(celulas.entries())
+            .sort((a, b) => {
+                const [ax, ay] = a[0].split(':').map(Number), [bx, by] = b[0].split(':').map(Number);
+                return by - ay || ax - bx; // norte (y maior) primeiro, depois oeste para leste
+            })
+            .map(([, idxs]) => idxs);
+    }
+
     function roundCoords(c, decimals) {
         if (!Array.isArray(c)) return c;
         if (typeof c[0] === 'number') {
@@ -1566,7 +1611,7 @@
     return {
         MAP_DEFAULTS, BASE_MAPS,
         normalizeMapConfig, normalizeSituacao, mergeAjustes, normalizeAnalises, normalizeMedicoes, coordTriple, medicaoInfo, medicaoTexto, medicaoIds, parseCoordenadas, normalizeColConf, confrontantesDoTrecho, normalizeElementos, normalizeLegenda, applyConfrontantes, nearestOnGeometry, nearestOnCamada, edgeOffsetAbove, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
-        geometryBBox, bboxCenter, expandBBoxMeters, bboxIntersects, roundCoords, geomKind,
+        geometryBBox, bboxCenter, expandBBoxMeters, bboxIntersects, roundCoords, geomKind, agruparPorProximidade,
         normalizeTemporal, rasterDateInfo, fmtRasterDate, tileXY, tileUrl, probeZoom, rasterBBox, buildOrtofotoList, sortOrtofotos,
         COORD_SYSTEMS, normalizePontos, latLngToUtm, utmToLatLng, fmtGms, coordHeaders, coordCells, coordSystemLabel, azimuthDeg, fmtAzimuth, vertices, defaultPointTitle, pointRows,
         localProjector, confrontantes, distanciaCamada, sobreposicaoCamada, parseNumeroBR, compararAreas, autoGridSpacing, gradeUTM, normalizeAnotacoes, normalizeRotulos, normalizeConfrontantes, normalizeReferencia, normalizeComparacaoArea, normalizeQuadriculado,

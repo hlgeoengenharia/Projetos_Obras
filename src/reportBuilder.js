@@ -1275,6 +1275,9 @@
             <!-- CARD: TABELA DE FEIÇÕES (só na camada inteira: lista as feições filtradas, com as colunas escolhidas) -->
             ${!isGeral ? '' : renderTabelaFeicoesCard(fields)}
 
+            <!-- CARD: MAPA DAS FEIÇÕES (só na camada inteira: desligado por padrão, o mais pesado de montar) -->
+            ${!isGeral ? '' : renderMapaFeicoesCard()}
+
             <!-- CARD: GRÁFICOS DO DASHBOARD -->
             ${!isGeral ? '' : renderAccordionCard({
                 id: 'acc-charts',
@@ -1417,6 +1420,7 @@
         'acc-charts': { barra: 'border-l-rose-500', icone: 'bg-rose-600 text-white', cabecalho: 'bg-rose-100/80 dark:bg-rose-950/40', corpo: 'bg-rose-50/70 dark:bg-rose-950/20', borda: 'border-rose-300 dark:border-rose-800', texto: 'text-rose-800 dark:text-rose-300' },
         'acc-filtro': { barra: 'border-l-orange-500', icone: 'bg-orange-600 text-white', cabecalho: 'bg-orange-100/80 dark:bg-orange-950/40', corpo: 'bg-orange-50/70 dark:bg-orange-950/20', borda: 'border-orange-300 dark:border-orange-800', texto: 'text-orange-800 dark:text-orange-300' },
         'acc-tabela-feicoes': { barra: 'border-l-teal-500', icone: 'bg-teal-600 text-white', cabecalho: 'bg-teal-100/80 dark:bg-teal-950/40', corpo: 'bg-teal-50/70 dark:bg-teal-950/20', borda: 'border-teal-300 dark:border-teal-800', texto: 'text-teal-800 dark:text-teal-300' },
+        'acc-mapa-feicoes': { barra: 'border-l-blue-500', icone: 'bg-blue-600 text-white', cabecalho: 'bg-blue-100/80 dark:bg-blue-950/40', corpo: 'bg-blue-50/70 dark:bg-blue-950/20', borda: 'border-blue-300 dark:border-blue-800', texto: 'text-blue-800 dark:text-blue-300' },
         'acc-text-footer': { barra: 'border-l-cyan-500', icone: 'bg-cyan-600 text-white', cabecalho: 'bg-cyan-100/80 dark:bg-cyan-950/40', corpo: 'bg-cyan-50/70 dark:bg-cyan-950/20', borda: 'border-cyan-300 dark:border-cyan-800', texto: 'text-cyan-800 dark:text-cyan-300' },
     };
     const COR_CARD_PADRAO = { barra: 'border-l-slate-400', icone: 'bg-slate-600 text-white', cabecalho: 'bg-slate-100 dark:bg-slate-700/40', corpo: 'bg-slate-50 dark:bg-slate-800/40', borda: 'border-slate-300 dark:border-slate-700', texto: 'text-slate-700 dark:text-slate-300' };
@@ -3004,6 +3008,64 @@
                 colunas: checked
             });
         }
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderA4Blocks();
+        const formId = currentTemplate.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    // --- MANIPULADORES DO CARD "MAPA DAS FEIÇÕES" (Relatório Geral) ---
+    const LIMITE_FEICOES_MAPA = 200; // igual ao usado no relatório (src/relatorio_view.html): acima disso, pede para refinar o filtro
+
+    /** Card de liga/desliga: o mapa das feições só existe se o usuário ativar (é o mais pesado de montar dos blocos). */
+    function renderMapaFeicoesCard() {
+        const existing = (currentTemplate?.blocos || []).find(b => b.tipo === 'mapa_feicoes');
+        return renderAccordionCard({
+            id: 'acc-mapa-feicoes',
+            title: 'Mapa das Feições',
+            icon: 'map',
+            badge: existing ? 'Ativo' : 'Desligado',
+            content: `
+                <div class="flex flex-col gap-3">
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400">Mostra as feições filtradas em mini-mapas, agrupados por proximidade (um mapa por grupo geográfico). Como cada mapa é bem mais pesado de montar que uma linha de tabela, isso só acontece se você ativar aqui — e no máximo com <strong>${LIMITE_FEICOES_MAPA} feições</strong> de uma vez; acima disso, o relatório pede para refinar o filtro (a tabela e os gráficos continuam mostrando todas).</p>
+                    ${existing ? `
+                        <div class="p-2.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl flex items-center justify-between text-xs">
+                            <div class="flex items-center gap-1.5 min-w-0">
+                                <span class="material-symbols-outlined text-blue-600 text-[18px]">check_circle</span>
+                                <span class="font-bold text-blue-900 dark:text-blue-200 truncate">Mapa ativo na Folha A4</span>
+                            </div>
+                            <span class="text-[10px] font-mono text-blue-700 dark:text-blue-300 font-bold bg-blue-100 dark:bg-blue-900 px-2 py-0.5 rounded">Pronto</span>
+                        </div>
+                        <button type="button" onclick="ReportBuilder.removeMapaFeicoesBlock()" class="w-full py-2 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl border border-red-200 dark:border-red-800 cursor-pointer">Desativar Mapa das Feições</button>
+                    ` : `
+                        <div class="p-2.5 bg-slate-50 dark:bg-slate-900/50 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl text-[10.5px] text-slate-400 italic">A prévia com dados de exemplo não tem coordenadas para mostrar o mapa; ele aparece na emissão real, com a camada de verdade.</div>
+                        <button type="button" onclick="ReportBuilder.insertMapaFeicoesBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                            <span class="material-symbols-outlined text-[16px]">add_circle</span> Ativar Mapa das Feições
+                        </button>
+                    `}
+                </div>
+            `
+        });
+    }
+
+    function insertMapaFeicoesBlock() {
+        if (!currentTemplate.blocos.some(b => b.tipo === 'mapa_feicoes')) {
+            currentTemplate.blocos.push({ id: 'blk_mapageral_' + Date.now(), tipo: 'mapa_feicoes', titulo: 'Mapa das Feições' });
+        }
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderA4Blocks();
+        const formId = currentTemplate.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    function removeMapaFeicoesBlock() {
+        currentTemplate.blocos = (currentTemplate.blocos || []).filter(b => b.tipo !== 'mapa_feicoes');
         if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
             window.ReportAdapter.saveReportTemplate(currentTemplate);
         }
@@ -4931,6 +4993,8 @@
         selectGridColumns,
         selectMapMode,
         insertTabelaFeicoesBlock,
+        insertMapaFeicoesBlock,
+        removeMapaFeicoesBlock,
         addFiltroGrupo,
         removeFiltroGrupo,
         addFiltroCondicao,

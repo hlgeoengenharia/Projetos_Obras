@@ -224,6 +224,35 @@ ok('buffer em longitude é maior que em latitude (cos φ<1)', (-34.84 - big[0]) 
 ok('bbox intersecta', MT.bboxIntersects([0, 0, 2, 2], [1, 1, 3, 3]) && !MT.bboxIntersects([0, 0, 1, 1], [2, 2, 3, 3]));
 eq('arredonda coordenadas', MT.roundCoords([[-34.83914159265, -7.018949999]], 6), [[-34.839142, -7.01895]]);
 
+// ---------------------------------------------------------------- agrupar por proximidade (mini-mapas do Relatório Geral)
+eq('sem pontos: nenhum grupo', MT.agruparPorProximidade([], 40), []);
+eq('menos pontos que o alvo: um único grupo, com todos', MT.agruparPorProximidade([[0, 0], [1, 1], [2, 2]], 40), [[0, 1, 2]]);
+eq('exatamente o alvo: ainda um único grupo', MT.agruparPorProximidade([[0, 0], [1, 1]], 2), [[0, 1]]);
+{
+    // dois blocos bem separados de pontos (um a oeste, outro a leste), mais pontos que o alvo: viram 2 grupos, um por bloco
+    const oeste = [[-34.90, -7.00], [-34.901, -7.001], [-34.899, -7.002]];
+    const leste = [[-34.70, -7.00], [-34.701, -7.001], [-34.699, -7.002]];
+    const pontos = oeste.concat(leste);
+    const grupos = MT.agruparPorProximidade(pontos, 3);
+    eq('2 blocos separados viram 2 grupos', grupos.length, 2);
+    ok('cada grupo tem só os índices do seu próprio bloco (sem misturar oeste com leste)', grupos.every(g => g.every(i => i < 3) || g.every(i => i >= 3)));
+    eq('nenhum índice se perde e nenhum se repete', grupos.flat().slice().sort((a, b) => a - b), [0, 1, 2, 3, 4, 5]);
+    ok('grupos vêm ordenados de norte para sul / oeste para leste (o de oeste, mesma latitude, vem antes)', grupos[0].every(i => i < 3));
+}
+{
+    // todos os pontos exatamente no mesmo lugar: não quebra (evita divisão por zero) e cabe num grupo só
+    const mesmoLugar = Array.from({ length: 10 }, () => [-34.83, -7.02]);
+    eq('pontos idênticos: um grupo com todos, sem erro', MT.agruparPorProximidade(mesmoLugar, 3).flat().sort((a, b) => a - b), Array.from({ length: 10 }, (_, i) => i));
+}
+{
+    // muitos pontos espalhados uniformemente: nenhum grupo muito acima do alvo pedido
+    const grade = [];
+    for (let x = 0; x < 10; x++) for (let y = 0; y < 10; y++) grade.push([-35 + x * 0.05, -8 + y * 0.05]);
+    const grupos = MT.agruparPorProximidade(grade, 20);
+    ok('100 pontos bem espalhados, alvo 20: vários grupos, nenhum muito acima do alvo', grupos.length > 1 && grupos.every(g => g.length <= 30));
+    eq('nenhum ponto some', grupos.reduce((n, g) => n + g.length, 0), 100);
+}
+
 // ---------------------------------------------------------------- projeção e escala
 const pj = MT.projectionInfo(-7.019, -34.833);
 eq('Cabedelo-PB: zona 25S, SIRGAS 2000 (EPSG:31985)', [pj.zone, pj.hemisphere, pj.epsg, pj.datum], [25, 'S', 31985, 'SIRGAS 2000']);

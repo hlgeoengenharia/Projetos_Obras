@@ -245,6 +245,36 @@ ok('geral: também tem o botão "Ver como sairá" (usa a lista de exemplo, sem f
     eq('2º clique: atualiza o mesmo bloco (não duplica)', tplT.blocos.filter(b => b.tipo === 'tabela_feicoes').length, 1);
 }
 
+// ---------------------------------------------------------------- Mapa das Feições (só no Relatório Geral): liga/desliga, sem duplicar
+{
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+    ok('individual: sem o card de mapa das feições', !has(container.innerHTML, 'Mapa das Feições'));
+
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
+    html = container.innerHTML;
+    ok('geral: tem o card "Mapa das Feições", desligado por padrão', has(html, 'Mapa das Feições') && has(html, 'Desligado') && !has(html, 'Mapa ativo na Folha A4'));
+    ok('card explica o teto de feições e que a prévia não mostra o mapa', has(html, '200 feições') && has(html, 'não tem coordenadas para mostrar o mapa'));
+
+    RB.insertMapaFeicoesBlock();
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
+    let tplM = RA.getReportTemplates('f1').find(t => t.tipo === 'geral');
+    html = container.innerHTML;
+    eq('ativar: cria um único bloco "mapa_feicoes"', tplM.blocos.filter(b => b.tipo === 'mapa_feicoes').length, 1);
+    ok('card mostra "Mapa ativo" e o botão vira "Desativar"', has(html, 'Mapa ativo na Folha A4') && has(html, 'Desativar Mapa das Feições') && !has(html, 'Ativar Mapa das Feições'));
+
+    RB.insertMapaFeicoesBlock(); // ativar de novo não duplica
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
+    tplM = RA.getReportTemplates('f1').find(t => t.tipo === 'geral');
+    eq('ativar de novo: continua um único bloco (não duplica)', tplM.blocos.filter(b => b.tipo === 'mapa_feicoes').length, 1);
+
+    RB.removeMapaFeicoesBlock();
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
+    tplM = RA.getReportTemplates('f1').find(t => t.tipo === 'geral');
+    html = container.innerHTML;
+    eq('desativar: remove o bloco', tplM.blocos.filter(b => b.tipo === 'mapa_feicoes').length, 0);
+    ok('card volta a mostrar "Desligado" e o botão "Ativar"', has(html, 'Desligado') && has(html, 'Ativar Mapa das Feições'));
+}
+
 // gráficos: sem duplicar ao inserir de novo; a seleção e a disposição refletem o que já está na folha
 {
     RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });

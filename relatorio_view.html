@@ -16,23 +16,23 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260921z"></script>
-    <script src="src/mapTools.js?v=20260921z"></script>
-    <script src="src/reportMap.js?v=20260921z"></script>
-    <script src="src/reportTemporal.js?v=20260921z"></script>
-    <script src="src/reportExport.js?v=20260921z"></script>
-    <script src="src/reportBlocks.js?v=20260921z"></script>
-    <script src="src/reportEditor.js?v=20260921z"></script>
-    <script src="src/reportFreeText.js?v=20260921z"></script>
-    <script src="src/reportWord.js?v=20260921z"></script>
-    <script src="src/reportDocx.js?v=20260921z"></script>
-    <script src="src/mapSnapshot.js?v=20260921z"></script>
-    <script src="src/verificarEmissao.js?v=20260921z"></script>
+    <script src="src/pageSize.js?v=20260922a"></script>
+    <script src="src/mapTools.js?v=20260922a"></script>
+    <script src="src/reportMap.js?v=20260922a"></script>
+    <script src="src/reportTemporal.js?v=20260922a"></script>
+    <script src="src/reportExport.js?v=20260922a"></script>
+    <script src="src/reportBlocks.js?v=20260922a"></script>
+    <script src="src/reportEditor.js?v=20260922a"></script>
+    <script src="src/reportFreeText.js?v=20260922a"></script>
+    <script src="src/reportWord.js?v=20260922a"></script>
+    <script src="src/reportDocx.js?v=20260922a"></script>
+    <script src="src/mapSnapshot.js?v=20260922a"></script>
+    <script src="src/verificarEmissao.js?v=20260922a"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260921z"></script>
-    <script src="src/reportData.js?v=20260921z"></script>
-    <script src="src/layerFilter.js?v=20260921z"></script>
+    <script src="src/fieldFormatter.js?v=20260922a"></script>
+    <script src="src/reportData.js?v=20260922a"></script>
+    <script src="src/layerFilter.js?v=20260922a"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
@@ -318,7 +318,7 @@
             if (mapController) keptMapWrap = document.getElementById('map-wrap');
             desenharRelatorio();
         }
-        const NOMES_BLOCO = { cabecalho: 'Cabeçalho oficial', grade_campos: 'Grade de atributos', mapa_estatico: 'Mini-mapa cartográfico', grafico_existente: 'Gráficos do dashboard', kpis: 'Painel de indicadores', galeria_fotos: 'Laudo analítico', laudo_vistoria_fotos: 'Laudo analítico', tabela_sintetica: 'Tabela sintética', tabela_sintetica_1n: 'Quadro sintético 1:N', tabela_analitica: 'Tabela analítica', tabela_feicoes: 'Tabela de feições', caixa_texto_livre: 'Texto livre', texto_livre: 'Texto livre', rodape: 'Rodapé oficial' };
+        const NOMES_BLOCO = { cabecalho: 'Cabeçalho oficial', grade_campos: 'Grade de atributos', mapa_estatico: 'Mini-mapa cartográfico', grafico_existente: 'Gráficos do dashboard', kpis: 'Painel de indicadores', galeria_fotos: 'Laudo analítico', laudo_vistoria_fotos: 'Laudo analítico', tabela_sintetica: 'Tabela sintética', tabela_sintetica_1n: 'Quadro sintético 1:N', tabela_analitica: 'Tabela analítica', tabela_feicoes: 'Tabela de feições', mapa_feicoes: 'Mapa das feições', caixa_texto_livre: 'Texto livre', texto_livre: 'Texto livre', rodape: 'Rodapé oficial' };
 
         window.addEventListener('DOMContentLoaded', () => {
             initReportViewer();
@@ -344,7 +344,7 @@
 
         /** Moldura de edição de um bloco: barra (nome, subir, descer, remover) e contorno ao passar o mouse / selecionar. */
         // mesma cor do card do painel lateral do construtor (uma cor por tipo de informação)
-        const COR_BLOCO = { cabecalho: '#6366f1', rodape: '#06b6d4', caixa_texto_livre: '#8b5cf6', texto_livre: '#8b5cf6', grade_campos: '#0ea5e9', tabela_sintetica_1n: '#f59e0b', tabela_sintetica: '#f59e0b', tabela_analitica: '#f59e0b', laudo_vistoria_fotos: '#f59e0b', galeria_fotos: '#f59e0b', mapa_estatico: '#10b981', grafico_existente: '#f43f5e', kpis: '#f43f5e', tabela_feicoes: '#14b8a6' };
+        const COR_BLOCO = { cabecalho: '#6366f1', rodape: '#06b6d4', caixa_texto_livre: '#8b5cf6', texto_livre: '#8b5cf6', grade_campos: '#0ea5e9', tabela_sintetica_1n: '#f59e0b', tabela_sintetica: '#f59e0b', tabela_analitica: '#f59e0b', laudo_vistoria_fotos: '#f59e0b', galeria_fotos: '#f59e0b', mapa_estatico: '#10b981', grafico_existente: '#f43f5e', kpis: '#f43f5e', tabela_feicoes: '#14b8a6', mapa_feicoes: '#0d9488' };
         function envolverEdicao(html, idx, bloco, opts) {
             if (!EDICAO || idx < 0 || !bloco) return html;
             const nome = NOMES_BLOCO[bloco.tipo] || bloco.tipo;
@@ -876,6 +876,7 @@
 
             docContainer.innerHTML = pagesHtml;
             renderPendingCharts();
+            renderPendingMapasFeicoes();
 
             if (mapController && keptMapWrap) {
                 // repaginação: o mapa (Leaflet vivo) volta para o novo lugar, sem recarregar nada
@@ -905,8 +906,14 @@
         const LIMITE_FEICOES_GRAFICO = 5000; // acima disso, os gráficos usam só as primeiras (evita travar a folha)
         let featureListTruncada = false;
 
-        function resolveFeatureList() {
-            if (reportPayload && Array.isArray(reportPayload.featureList)) return reportPayload.featureList;
+        /**
+         * Feições do Relatório Geral, com propriedades e geometria: da prévia (featureList no payload, sem geometria —
+         * a lista de exemplo não tem coordenadas) ou da camada de verdade (emissão, lida do opener por themeId).
+         */
+        function resolveFeatureListFull() {
+            if (reportPayload && Array.isArray(reportPayload.featureList)) {
+                return reportPayload.featureList.map(p => ({ properties: p || {}, geometry: null }));
+            }
             try {
                 const opener = window.opener;
                 const themeId = reportPayload && reportPayload.themeId;
@@ -920,11 +927,16 @@
                         (reportPayload.formFields || []).forEach(f => { if (f && f.id) fieldIndex[f.id] = f; });
                         const filtradas = (filtro && !LayerFilter.filtroVazio(filtro)) ? LayerFilter.filtrarFeatures(theme.features, filtro, fieldIndex) : theme.features;
                         featureListTruncada = filtradas.length > LIMITE_FEICOES_GRAFICO;
-                        return filtradas.slice(0, LIMITE_FEICOES_GRAFICO).map(f => (f && f.properties) || {});
+                        return filtradas.slice(0, LIMITE_FEICOES_GRAFICO).map(f => ({ properties: (f && f.properties) || {}, geometry: f && f.geometry }));
                     }
                 }
             } catch (e) { /* sem janela de origem: fica sem dados */ }
             return [];
+        }
+
+        /** Só as propriedades (para os gráficos e a tabela, que não precisam de geometria). */
+        function resolveFeatureList() {
+            return resolveFeatureListFull().map(r => r.properties);
         }
 
         /** Rótulo de exibição do valor de um campo (pelo tipo, como no resto do relatório); "Não informado" quando vazio. */
@@ -1049,6 +1061,78 @@
             return { split: { rowsHtml, chunkHtml } };
         }
 
+        // =====================================================================================
+        // MAPA DAS FEIÇÕES (Relatório Geral): um mini-mapa Leaflet por grupo de feições próximas entre si.
+        // Só existe se o usuário ligar o card no construtor (é o mais pesado de montar); com muitas feições
+        // filtradas, pede para refinar o filtro em vez de tentar montar dezenas de mapas.
+        // =====================================================================================
+        const LIMITE_FEICOES_MAPA = 200; // acima disso, pede para refinar o filtro em vez de montar os mini-mapas
+        const ALVO_POR_MAPA = 40;        // quantas feições cabem, em média, num mini-mapa antes de abrir outro (legibilidade)
+        let mapaFeicoesInstances = {};
+
+        function renderMapaFeicoesBlock(bloco, idx) {
+            const tituloBase = (escapeHtml(bloco.titulo || 'Mapa das Feições')).replace(/\r?\n/g, '<br>');
+            const avisoHtml = (msg) => `
+                <div class="mb-4 page-break-avoid">
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5"><span class="whitespace-pre-line">${tituloBase}</span></div>
+                    <div class="p-4 text-center text-xs border border-dashed rounded-lg ${msg.aviso ? 'text-amber-800 bg-amber-50 border-amber-300' : 'text-slate-400 italic bg-slate-50/60 border-slate-300'}">${msg.texto}</div>
+                </div>`;
+            const todos = resolveFeatureListFull();
+            if (!todos.length) {
+                return avisoHtml({ aviso: false, texto: 'Nenhuma feição passou pelo filtro escolhido.' });
+            }
+            const registros = todos.filter(r => r.geometry);
+            if (!registros.length) {
+                return avisoHtml({ aviso: false, texto: reportPayload.preview ? 'A prévia com dados de exemplo não tem coordenadas para desenhar o mapa; ele aparece na emissão real, com a camada de verdade.' : 'Nenhuma das feições filtradas tem geometria para desenhar no mapa.' });
+            }
+            if (registros.length > LIMITE_FEICOES_MAPA) {
+                return avisoHtml({ aviso: true, texto: `${registros.length} feições passaram pelo filtro — acima do limite de ${LIMITE_FEICOES_MAPA} para o mapa. Refine o filtro para gerar os mini-mapas (a tabela e os gráficos continuam mostrando todas).` });
+            }
+            const centros = registros.map(r => MapTools.bboxCenter(MapTools.geometryBBox(r.geometry)) || [0, 0]);
+            const grupos = MapTools.agruparPorProximidade(centros, ALVO_POR_MAPA);
+            const rowsHtml = grupos.map((idxs, gi) => {
+                const mapId = 'rpt-mapafeicoes-' + idx + '-' + gi;
+                return `
+                    <div data-split-row class="mb-3 page-break-avoid">
+                        <div class="text-[10px] font-mono text-slate-500 mb-1">Grupo ${gi + 1} de ${grupos.length} • ${idxs.length} feiç${idxs.length === 1 ? 'ão' : 'ões'}</div>
+                        <div id="${mapId}" data-mapa-feicoes data-mapa-indices="${idxs.join(',')}" class="w-full rounded-lg border border-slate-300 overflow-hidden bg-slate-100" style="height: 260px;"></div>
+                    </div>`;
+            });
+            const meta = `${registros.length} feiç${registros.length === 1 ? 'ão' : 'ões'} em ${grupos.length} grupo(s)`;
+            const chunkHtml = (rows, isFirst) => `
+                <div class="mb-4">
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
+                        <span class="whitespace-pre-line">${tituloBase}${isFirst ? '' : ' (continuação)'}</span>
+                        <span class="text-[10px] font-mono text-slate-500 normal-case">${escapeHtml(meta)}</span>
+                    </div>
+                    ${rows.join('')}
+                </div>`;
+            return { split: { rowsHtml, chunkHtml } };
+        }
+
+        /** Depois que o HTML entra na página: cria (ou recria) o Leaflet de cada mini-mapa, enquadrado no seu grupo. */
+        function renderPendingMapasFeicoes() {
+            Object.keys(mapaFeicoesInstances).forEach(id => { try { mapaFeicoesInstances[id].remove(); } catch (e) { /* já sumiu com a repaginação */ } });
+            mapaFeicoesInstances = {};
+            if (typeof L === 'undefined') return;
+            const registros = resolveFeatureListFull().filter(r => r.geometry);
+            document.querySelectorAll('[data-mapa-feicoes]').forEach(div => {
+                const idxs = (div.getAttribute('data-mapa-indices') || '').split(',').filter(Boolean).map(Number);
+                const feats = idxs.map(i => registros[i]).filter(Boolean);
+                if (!feats.length) return;
+                const mapa = L.map(div, { attributionControl: true, zoomControl: false, scrollWheelZoom: false });
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true, attribution: '© OpenStreetMap contributors' }).addTo(mapa);
+                const camada = L.geoJSON(feats.map(f => ({ type: 'Feature', properties: {}, geometry: f.geometry })), {
+                    style: () => ({ color: '#0ea5e9', weight: 2, fillColor: '#0ea5e9', fillOpacity: 0.25 }),
+                    pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 5, color: '#0ea5e9', weight: 2, fillColor: '#0ea5e9', fillOpacity: 0.85 })
+                }).addTo(mapa);
+                const limites = camada.getBounds ? camada.getBounds() : null;
+                if (limites && limites.isValid && limites.isValid()) mapa.fitBounds(limites, { padding: [20, 20] });
+                else mapa.setView([-15, -47], 4);
+                mapaFeicoesInstances[div.id] = mapa;
+            });
+        }
+
         function renderSingleBlock(bloco, idx, featureData, featureGeometry, fields, tpl) {
             switch(bloco.tipo) {
                 case 'cabecalho':
@@ -1124,6 +1208,9 @@
 
                 case 'tabela_feicoes':
                     return renderTabelaFeicoesBlock(bloco);
+
+                case 'mapa_feicoes':
+                    return renderMapaFeicoesBlock(bloco, idx);
 
                 case 'rodape': {
                     const startMode = bloco.inicio_numeracao || 'primeira';

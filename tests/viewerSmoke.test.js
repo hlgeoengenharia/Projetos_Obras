@@ -116,6 +116,22 @@ async function runScenario(cfg) {
                 }
                 return out;
             }
+            if (sel === '[data-mapa-feicoes]') {
+                const html = (registry['a4-document-container'] && registry['a4-document-container']._html) || '';
+                const out = [];
+                const re = /<div([^>]*data-mapa-feicoes[^>]*)>/g;
+                let m;
+                while ((m = re.exec(html))) {
+                    const tag = m[1];
+                    const attr = (name) => { const mm = new RegExp(name + '="([^"]*)"').exec(tag); return mm ? mm[1] : ''; };
+                    const id = attr('id');
+                    const el = registry[id] || makeEl('div', id);
+                    el.getAttribute = (n) => attr(n);
+                    registry[id] = el;
+                    out.push(el);
+                }
+                return out;
+            }
             return [];
         }
     };
@@ -855,6 +871,43 @@ async function runScenario(cfg) {
         p4.template.filtro = { grupos: [{ condicoes: [{ field: 'sit', op: 'igual', value: 'inexistente' }] }] };
         const r4 = await runScenario({ opener: true, themes: [temaTabela], payload: p4 });
         ok('nenhuma feição casa com o filtro: aviso, sem erro', r4.registry['a4-document-container']._html.includes('Nenhuma feição casa com o filtro') && r4.errors.length === 0);
+    }
+
+    // ---- RELATÓRIO GERAL — "Mapa das Feições": um Leaflet por grupo de proximidade, só com dados de verdade (por themeId)
+    {
+        const tplMapa = {
+            id: 'rpt_mapageral', nome: 'Relatório Geral', tipo: 'geral', form_id: 'f1',
+            config_pagina: { tamanho: 'A4', orientacao: 'portrait', margens_mm: { top: 15, bottom: 15, left: 15, right: 15 } },
+            blocos: [{ id: 'h', tipo: 'cabecalho' }, { id: 'm', tipo: 'mapa_feicoes', titulo: 'Mapa <X>' }, { id: 'f', tipo: 'rodape' }]
+        };
+        const ponto = (lng, lat) => ({ type: 'Point', coordinates: [lng, lat] });
+        // 50 feições em dois blocos bem separados (25 a oeste, 25 a leste): com o alvo de 40 por mapa, viram 2 grupos
+        const feats = [];
+        for (let i = 0; i < 25; i++) feats.push({ properties: {}, geometry: ponto(-34.90 + i * 0.0005, -7.00 + i * 0.0005) });
+        for (let i = 0; i < 25; i++) feats.push({ properties: {}, geometry: ponto(-34.70 + i * 0.0005, -7.00 + i * 0.0005) });
+        const temaMapa = { id: 'tema-mapa', features: feats };
+        const payload = { templateId: 'rpt_mapageral', template: tplMapa, formId: 'f1', themeId: 'tema-mapa', formFields: [], formTabs: [], charts: [], featureData: {}, featureGeometry: null, featureList: null, preview: false };
+        const r = await runScenario({ opener: true, themes: [temaMapa], payload });
+        eq('mapa das feições: nenhum erro de execução', r.errors, []);
+        const doc = r.registry['a4-document-container']._html;
+        ok('mapa: título escapado e 2 caixas de mapa (uma por grupo), com a contagem certa', doc.includes('Mapa &lt;X&gt;') && (doc.match(/data-mapa-feicoes/g) || []).length === 2 && doc.includes('50 feições em 2 grupo(s)'));
+        ok('mapa: cada grupo tem 25 feições (os dois blocos não se misturam)', doc.includes('25 feições') && !doc.includes('26 feições'));
+        eq('mapa: um Leaflet real criado por grupo', r.mapsCreated.filter(m => m.container && String(m.container.id || '').startsWith('rpt-mapafeicoes-')).length, 2);
+
+        // sem geometria (prévia com dados de exemplo): aviso específico, sem tentar montar mapa
+        const rPreview = await runScenario({ payload: Object.assign({}, payload, { themeId: undefined, featureList: [{}], preview: true }) });
+        ok('prévia (sem coordenadas): aviso explicando, sem erro', rPreview.registry['a4-document-container']._html.includes('não tem coordenadas para desenhar o mapa') && rPreview.errors.length === 0);
+
+        // acima do limite de 200: pede para refinar o filtro em vez de montar dezenas de mapas
+        const muitas = { id: 'tema-muitas', features: Array.from({ length: 201 }, (_, i) => ({ properties: {}, geometry: ponto(-34.8 + i * 0.001, -7.0) })) };
+        const rMuitas = await runScenario({ opener: true, themes: [muitas], payload: Object.assign({}, payload, { themeId: 'tema-muitas' }) });
+        ok('acima de 200 feições: aviso para refinar o filtro, sem tentar montar os mapas', rMuitas.registry['a4-document-container']._html.includes('acima do limite de 200') && (rMuitas.registry['a4-document-container']._html.match(/data-mapa-feicoes/g) || []).length === 0 && rMuitas.errors.length === 0);
+
+        // filtro do modelo também vale para o mapa (mesma fonte de dados que a tabela e os gráficos): ninguém casa
+        const tplComFiltro = JSON.parse(JSON.stringify(tplMapa));
+        tplComFiltro.filtro = { grupos: [{ condicoes: [{ field: 'inexistente', op: 'preenchido' }] }] };
+        const rFiltro = await runScenario({ opener: true, themes: [temaMapa], payload: Object.assign({}, payload, { template: tplComFiltro }) });
+        ok('filtro que não bate com ninguém: aviso certo (filtro, não "sem geometria"), sem erro', rFiltro.registry['a4-document-container']._html.includes('Nenhuma feição passou pelo filtro escolhido') && rFiltro.errors.length === 0);
     }
 
     // ---- RELATÓRIO GERAL — EMISSÃO DE VERDADE: sem featureList no payload; os dados vêm da camada, na janela de origem (por themeId)
