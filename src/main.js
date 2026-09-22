@@ -8242,11 +8242,54 @@ window.openLayerGeneralReport = function() {
         return;
     }
     if (!window.ReportAdapter || typeof window.ReportAdapter.getReportTemplates !== 'function') return;
-    const tpl = window.ReportAdapter.getReportTemplates(theme.formId).find(t => t.tipo === 'geral');
-    if (!tpl) {
+    const modelos = window.ReportAdapter.getReportTemplates(theme.formId).filter(t => t.tipo === 'geral');
+    if (!modelos.length) {
         alert('Configure o Relatório Geral desta camada primeiro: em Cadastros, edite o formulário e abra a aba "Relatório Geral".');
         return;
     }
+    if (modelos.length === 1) { abrirRelatorioGeralComModelo(modelos[0], theme); return; }
+    mostrarEscolhaRelatorioGeral(modelos, theme);
+};
+
+/**
+ * Mais de um Relatório Geral salvo para o formulário desta camada (várias pesquisas diferentes): pede para
+ * escolher qual abrir, em vez de abrir sempre o primeiro encontrado.
+ */
+function mostrarEscolhaRelatorioGeral(modelos, theme) {
+    const anterior = document.getElementById('escolha-relatorio-geral-overlay');
+    if (anterior) anterior.remove();
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const ordenados = modelos.slice().sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+    const overlay = document.createElement('div');
+    overlay.id = 'escolha-relatorio-geral-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:99999;display:flex;align-items:center;justify-content:center;';
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    overlay.innerHTML = `
+        <div style="background:#fff;border-radius:14px;max-width:420px;width:92%;padding:18px;box-shadow:0 20px 50px rgba(0,0,0,.25);font-family:inherit;">
+            <div style="font-weight:700;font-size:14px;color:#1e293b;margin-bottom:4px;">Qual Relatório Geral abrir?</div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:12px;">Esta camada tem ${ordenados.length} relatórios gerais salvos (pesquisas diferentes).</div>
+            <div style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto;">
+                ${ordenados.map(m => `
+                    <button type="button" data-tpl-id="${esc(m.id)}" style="text-align:left;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;cursor:pointer;font-size:12.5px;color:#0f172a;font-weight:600;">
+                        ${esc(m.nome || 'Relatório sem nome')}
+                    </button>`).join('')}
+            </div>
+            <button type="button" id="escolha-relatorio-geral-cancelar" style="margin-top:12px;width:100%;padding:8px;border:none;background:transparent;color:#64748b;font-size:12px;cursor:pointer;">Cancelar</button>
+        </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelectorAll('button[data-tpl-id]').forEach((btn) => {
+        btn.onclick = () => {
+            const tpl = ordenados.find((m) => String(m.id) === btn.getAttribute('data-tpl-id'));
+            overlay.remove();
+            if (tpl) abrirRelatorioGeralComModelo(tpl, theme);
+        };
+    });
+    const cancelar = document.getElementById('escolha-relatorio-geral-cancelar');
+    if (cancelar) cancelar.onclick = () => overlay.remove();
+}
+
+/** Abre de fato o relatório de verdade (relatorio_view.html) com o modelo "geral" escolhido para o formulário da camada. */
+function abrirRelatorioGeralComModelo(tpl, theme) {
     const formFields = window.ReportAdapter.getFormFields ? window.ReportAdapter.getFormFields(theme.formId) : [];
     const charts = window.ReportAdapter.getExistingCharts ? window.ReportAdapter.getExistingCharts(theme.formId) : [];
     const payload = {
@@ -8275,7 +8318,7 @@ window.openLayerGeneralReport = function() {
         return;
     }
     window.open('relatorio_view.html?templateId=' + encodeURIComponent(tpl.id), '_blank');
-};
+}
 
 window.refreshActiveLayerStats = async function() {
     const themeId = window.activeLayerStatsThemeId;

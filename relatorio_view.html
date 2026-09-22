@@ -16,23 +16,23 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260922a"></script>
-    <script src="src/mapTools.js?v=20260922a"></script>
-    <script src="src/reportMap.js?v=20260922a"></script>
-    <script src="src/reportTemporal.js?v=20260922a"></script>
-    <script src="src/reportExport.js?v=20260922a"></script>
-    <script src="src/reportBlocks.js?v=20260922a"></script>
-    <script src="src/reportEditor.js?v=20260922a"></script>
-    <script src="src/reportFreeText.js?v=20260922a"></script>
-    <script src="src/reportWord.js?v=20260922a"></script>
-    <script src="src/reportDocx.js?v=20260922a"></script>
-    <script src="src/mapSnapshot.js?v=20260922a"></script>
-    <script src="src/verificarEmissao.js?v=20260922a"></script>
+    <script src="src/pageSize.js?v=20260922b"></script>
+    <script src="src/mapTools.js?v=20260922b"></script>
+    <script src="src/reportMap.js?v=20260922b"></script>
+    <script src="src/reportTemporal.js?v=20260922b"></script>
+    <script src="src/reportExport.js?v=20260922b"></script>
+    <script src="src/reportBlocks.js?v=20260922b"></script>
+    <script src="src/reportEditor.js?v=20260922b"></script>
+    <script src="src/reportFreeText.js?v=20260922b"></script>
+    <script src="src/reportWord.js?v=20260922b"></script>
+    <script src="src/reportDocx.js?v=20260922b"></script>
+    <script src="src/mapSnapshot.js?v=20260922b"></script>
+    <script src="src/verificarEmissao.js?v=20260922b"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260922a"></script>
-    <script src="src/reportData.js?v=20260922a"></script>
-    <script src="src/layerFilter.js?v=20260922a"></script>
+    <script src="src/fieldFormatter.js?v=20260922b"></script>
+    <script src="src/reportData.js?v=20260922b"></script>
+    <script src="src/layerFilter.js?v=20260922b"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
@@ -274,6 +274,9 @@
         <span>Você pode navegar pelo Mini-Mapa Cartográfico (pan/zoom/camadas) e editar a Caixa de Texto Livre diretamente na folha antes de imprimir (ou salvar em PDF) ou gerar o Word.</span>
     </div>
 
+    <!-- PAINEL "AJUSTAR PESQUISA" (só no Relatório Geral): filtro e gráficos editáveis direto aqui, com "Salvar e atualizar" -->
+    <div id="painel-pesquisa-geral" class="no-print" style="display:none"></div>
+
     <!-- CONTAINER DA FOLHA A4 -->
     <main class="flex-1 flex justify-center p-3 sm:p-6 overflow-y-auto">
         <div id="a4-document-container" class="w-full flex flex-col items-center gap-6">
@@ -291,6 +294,8 @@
         let keptMapWrap = null;       // elemento do mapa (com o Leaflet vivo) que sobrevive à repaginação
         let temporalController = null; // análise temporal (src/reportTemporal.js)
         let chartInstances = {};      // gráficos do Dashboard (Chart.js) desenhados na folha: canvasId -> instância
+        let tplAtual = null;          // modelo em uso nesta folha (Relatório Geral: editável aqui mesmo, ver painel-pesquisa-geral)
+        let statusPesquisaGeral = ''; // mensagem do painel "Ajustar pesquisa" (some no próximo desenho)
         let emissao = { hash: '', protocolo: '', erro: '' }; // protocolo e SHA-256 da emissão (recalculados quando o conteúdo muda)
         const emissaoData = new Date();                       // dia da emissão (entra no protocolo)
         let emissaoTimer = null;
@@ -741,6 +746,8 @@
             }
             window.reportViewerFormTabs = formTabs;
             window.reportViewerFormFields = fields;
+            tplAtual = tpl;
+            renderPainelPesquisaGeral(fields);
 
             const blocos = tpl.blocos || [];
             const hdrBloco = blocos.find(b => b.tipo === 'cabecalho');
@@ -911,6 +918,18 @@
          * a lista de exemplo não tem coordenadas) ou da camada de verdade (emissão, lida do opener por themeId).
          */
         function resolveFeatureListFull() {
+            // filtro do modelo (Relatório Geral): lido de tplAtual, que é a MESMA referência editada ao vivo pelo
+            // painel "Ajustar pesquisa" — assim o filtro reage tanto na prévia quanto na emissão real.
+            const filtro = LayerFilter ? LayerFilter.normalizeFiltro((tplAtual && tplAtual.filtro) || (reportPayload && reportPayload.template && reportPayload.template.filtro)) : null;
+            const temFiltro = !!(filtro && LayerFilter && !LayerFilter.filtroVazio(filtro));
+            if (reportPayload && Array.isArray(reportPayload.featureListAll)) {
+                // prévia: lista de exemplo BRUTA, refiltrada aqui a cada mudança do painel (sem gerar prévia nova)
+                const fieldIndex = {};
+                (reportPayload.formFields || []).forEach(f => { if (f && f.id) fieldIndex[f.id] = f; });
+                const base = reportPayload.featureListAll;
+                const filtradas = temFiltro ? LayerFilter.filtrarFeatures(base.map(p => ({ properties: p })), filtro, fieldIndex).map(f => f.properties) : base;
+                return filtradas.map(p => ({ properties: p || {}, geometry: null }));
+            }
             if (reportPayload && Array.isArray(reportPayload.featureList)) {
                 return reportPayload.featureList.map(p => ({ properties: p || {}, geometry: null }));
             }
@@ -920,12 +939,11 @@
                 if (opener && !opener.closed && themeId && Array.isArray(opener.themes)) {
                     const theme = opener.themes.find(t => String(t.id) === String(themeId));
                     if (theme && Array.isArray(theme.features)) {
-                        // filtro do modelo (Relatório Geral): aplicado ANTES do teto de segurança, para não descartar por engano
+                        // filtro do modelo: aplicado ANTES do teto de segurança, para não descartar por engano
                         // uma feição que casaria com o filtro só porque veio depois das primeiras LIMITE_FEICOES_GRAFICO
-                        const filtro = LayerFilter ? LayerFilter.normalizeFiltro(reportPayload.template && reportPayload.template.filtro) : null;
                         const fieldIndex = {};
                         (reportPayload.formFields || []).forEach(f => { if (f && f.id) fieldIndex[f.id] = f; });
-                        const filtradas = (filtro && !LayerFilter.filtroVazio(filtro)) ? LayerFilter.filtrarFeatures(theme.features, filtro, fieldIndex) : theme.features;
+                        const filtradas = temFiltro ? LayerFilter.filtrarFeatures(theme.features, filtro, fieldIndex) : theme.features;
                         featureListTruncada = filtradas.length > LIMITE_FEICOES_GRAFICO;
                         return filtradas.slice(0, LIMITE_FEICOES_GRAFICO).map(f => ({ properties: (f && f.properties) || {}, geometry: f && f.geometry }));
                     }
@@ -1011,6 +1029,186 @@
                     }
                 });
             });
+        }
+
+        // =====================================================================================
+        // PAINEL "AJUSTAR PESQUISA" (Relatório Geral): filtro e escolha de gráficos editáveis direto nesta
+        // página — na prévia ("Ver como sairá") e na emissão real, mesmo comportamento do mini-mapa individual
+        // (edita aqui, clica em Salvar, grava por cima do mesmo modelo). Uma pesquisa nova = outro modelo no construtor.
+        // =====================================================================================
+
+        function garantirFiltroGeral() {
+            if (!tplAtual.filtro || !Array.isArray(tplAtual.filtro.grupos)) tplAtual.filtro = { grupos: [] };
+            return tplAtual.filtro;
+        }
+
+        function condicaoFiltroVaziaGeral() { return { field: '', op: '', value: '', value2: '' }; }
+
+        function addFiltroGrupoGeral() {
+            const f = garantirFiltroGeral();
+            if (f.grupos.length >= (LayerFilter.MAX_GRUPOS || 6)) return;
+            f.grupos.push({ condicoes: [condicaoFiltroVaziaGeral()] });
+            renderPainelPesquisaGeral();
+        }
+
+        function removeFiltroGrupoGeral(gIdx, evt) {
+            if (evt) evt.stopPropagation();
+            const f = garantirFiltroGeral();
+            f.grupos.splice(gIdx, 1);
+            renderPainelPesquisaGeral();
+        }
+
+        function addFiltroCondicaoGeral(gIdx) {
+            const f = garantirFiltroGeral();
+            const g = f.grupos[gIdx];
+            if (!g || g.condicoes.length >= (LayerFilter.MAX_CONDICOES || 6)) return;
+            g.condicoes.push(condicaoFiltroVaziaGeral());
+            renderPainelPesquisaGeral();
+        }
+
+        function removeFiltroCondicaoGeral(gIdx, cIdx, evt) {
+            if (evt) evt.stopPropagation();
+            const f = garantirFiltroGeral();
+            const g = f.grupos[gIdx];
+            if (!g) return;
+            g.condicoes.splice(cIdx, 1);
+            if (g.condicoes.length === 0) f.grupos.splice(gIdx, 1);
+            renderPainelPesquisaGeral();
+        }
+
+        function updateFiltroCondicaoGeral(gIdx, cIdx, prop, value) {
+            const f = garantirFiltroGeral();
+            const cond = f.grupos[gIdx] && f.grupos[gIdx].condicoes[cIdx];
+            if (!cond) return;
+            if (prop === 'field') { cond.field = value; cond.op = ''; cond.value = ''; cond.value2 = ''; }
+            else cond[prop] = value;
+            renderPainelPesquisaGeral();
+        }
+
+        function limparFiltroGeral() {
+            tplAtual.filtro = { grupos: [] };
+            renderPainelPesquisaGeral();
+        }
+
+        /** Bloco "Gráficos do Dashboard" do modelo em uso (o único que a folha desenha); cria se faltar e algum gráfico for marcado. */
+        function graficoBlocoGeral() {
+            return (tplAtual.blocos || []).find(b => b.tipo === 'grafico_existente');
+        }
+
+        function toggleGraficoEscolhidoGeral(chartId, checked) {
+            let bloco = graficoBlocoGeral();
+            if (!bloco) {
+                if (!checked) return;
+                if (!Array.isArray(tplAtual.blocos)) tplAtual.blocos = [];
+                bloco = { id: 'b_chart_' + Date.now(), tipo: 'grafico_existente', titulo: 'Estatísticas do Dashboard', chart_ids: [] };
+                tplAtual.blocos.push(bloco);
+            }
+            const ids = Array.isArray(bloco.chart_ids) ? bloco.chart_ids : (bloco.chart_ids = []);
+            const i = ids.indexOf(chartId);
+            if (checked && i < 0) ids.push(chartId);
+            if (!checked && i >= 0) ids.splice(i, 1);
+            renderPainelPesquisaGeral();
+        }
+
+        function renderCondicaoGeralHtml(gIdx, cIdx, cond, fields) {
+            const campo = (fields || []).find(f => f.id === cond.field);
+            const tipo = campo ? LayerFilter.tipoDoCampo(campo) : 'texto';
+            const ops = LayerFilter.operadoresValidos(tipo);
+            const precisaValor = cond.op && cond.op !== 'vazio' && cond.op !== 'preenchido';
+            const precisaValor2 = cond.op === 'entre';
+            return `
+                <div class="flex flex-wrap items-center gap-1 mb-1">
+                    <select onchange="updateFiltroCondicaoGeral(${gIdx},${cIdx},'field',this.value)" class="text-[10px] border border-slate-300 rounded px-1 py-0.5 max-w-[130px]">
+                        <option value="">Campo...</option>
+                        ${(fields || []).map(f => `<option value="${escapeHtml(f.id)}" ${f.id === cond.field ? 'selected' : ''}>${escapeHtml(f.label || f.name || f.id)}</option>`).join('')}
+                    </select>
+                    ${cond.field ? `
+                    <select onchange="updateFiltroCondicaoGeral(${gIdx},${cIdx},'op',this.value)" class="text-[10px] border border-slate-300 rounded px-1 py-0.5">
+                        <option value="">Operador...</option>
+                        ${ops.map(op => `<option value="${op}" ${op === cond.op ? 'selected' : ''}>${escapeHtml(LayerFilter.rotuloOperador(op))}</option>`).join('')}
+                    </select>` : ''}
+                    ${precisaValor ? `<input type="text" value="${escapeHtml(cond.value || '')}" oninput="updateFiltroCondicaoGeral(${gIdx},${cIdx},'value',this.value)" class="text-[10px] border border-slate-300 rounded px-1 py-0.5 w-20" placeholder="valor">` : ''}
+                    ${precisaValor2 ? `<input type="text" value="${escapeHtml(cond.value2 || '')}" oninput="updateFiltroCondicaoGeral(${gIdx},${cIdx},'value2',this.value)" class="text-[10px] border border-slate-300 rounded px-1 py-0.5 w-20" placeholder="e...">` : ''}
+                    <button type="button" onclick="removeFiltroCondicaoGeral(${gIdx},${cIdx},event)" class="text-slate-400 hover:text-rose-600" title="Remover condição"><span class="material-symbols-outlined text-[13px]">close</span></button>
+                </div>`;
+        }
+
+        /** Desenha (ou esconde, fora do Relatório Geral) o painel "Ajustar pesquisa" no topo da página. */
+        function renderPainelPesquisaGeral(fields) {
+            const painel = document.getElementById('painel-pesquisa-geral');
+            if (!painel) return;
+            if (!tplAtual || tplAtual.tipo !== 'geral') { painel.style.display = 'none'; painel.innerHTML = ''; return; }
+            painel.style.display = '';
+            const camposList = fields || (reportPayload && reportPayload.formFields) || [];
+            const catalogo = (reportPayload && reportPayload.charts) || [];
+            const filtro = garantirFiltroGeral();
+            const bloco = graficoBlocoGeral();
+            const escolhidos = bloco && Array.isArray(bloco.chart_ids) ? bloco.chart_ids : [];
+
+            const gruposHtml = filtro.grupos.length ? filtro.grupos.map((g, gIdx) => `
+                <div class="border border-orange-200 rounded-lg p-2 bg-orange-50/40 mb-2">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-[10px] font-bold text-orange-700 uppercase">Grupo ${gIdx + 1}${gIdx > 0 ? ' <span class="font-normal normal-case text-slate-500">(ou)</span>' : ''}</span>
+                        <button type="button" onclick="removeFiltroGrupoGeral(${gIdx}, event)" class="text-slate-400 hover:text-rose-600" title="Remover grupo"><span class="material-symbols-outlined text-[15px]">close</span></button>
+                    </div>
+                    ${(g.condicoes || []).map((c, cIdx) => renderCondicaoGeralHtml(gIdx, cIdx, c, camposList)).join('')}
+                    <button type="button" onclick="addFiltroCondicaoGeral(${gIdx})" class="text-[10px] text-orange-700 hover:underline mt-1">+ condição (e)</button>
+                </div>`).join('') : '<div class="text-[11px] text-slate-400 italic mb-2">Sem filtro: considera todas as feições da camada.</div>';
+
+            const graficosHtml = catalogo.length ? catalogo.map(g => `
+                <label class="flex items-center gap-1.5 text-[11px] text-slate-700 py-0.5">
+                    <input type="checkbox" ${escolhidos.indexOf(g.id) >= 0 ? 'checked' : ''} onchange="toggleGraficoEscolhidoGeral('${g.id}', this.checked)">
+                    ${escapeHtml(g.title || g.fieldLabel || 'Gráfico')}
+                </label>`).join('') : '<div class="text-[11px] text-slate-400 italic">Nenhum gráfico configurado nas Estatísticas desta camada.</div>';
+
+            painel.innerHTML = `
+                <div class="max-w-4xl mx-auto px-4 pt-3">
+                    <details class="bg-white border border-slate-200 rounded-xl shadow-xs" open>
+                        <summary class="cursor-pointer select-none px-3 py-2 text-xs font-bold text-slate-700 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-[16px] text-orange-600">filter_alt</span> Ajustar pesquisa (filtro e gráficos)
+                            <span class="ml-auto text-[10px] font-normal text-slate-500" id="painel-pesquisa-status">${escapeHtml(statusPesquisaGeral)}</span>
+                        </summary>
+                        <div class="px-3 pb-3 pt-1 grid sm:grid-cols-2 gap-3 border-t border-slate-100">
+                            <div class="pt-2">
+                                <div class="text-[10px] font-bold text-slate-500 uppercase mb-1">Filtro de feições</div>
+                                ${gruposHtml}
+                                <button type="button" onclick="addFiltroGrupoGeral()" class="text-[10px] text-orange-700 hover:underline">+ grupo (ou)</button>
+                                ${filtro.grupos.length ? `<button type="button" onclick="limparFiltroGeral()" class="text-[10px] text-slate-400 hover:underline ml-3">limpar filtro</button>` : ''}
+                            </div>
+                            <div class="pt-2">
+                                <div class="text-[10px] font-bold text-slate-500 uppercase mb-1">Gráficos do dashboard a mostrar</div>
+                                ${graficosHtml}
+                            </div>
+                        </div>
+                        <div class="px-3 pb-3 pt-2 flex flex-wrap items-center gap-2 border-t border-slate-100">
+                            <button type="button" onclick="salvarPesquisaGeral()" class="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-[11px] font-bold cursor-pointer">
+                                <span class="material-symbols-outlined text-[15px]">save</span> Salvar e atualizar
+                            </button>
+                            <span class="text-[10px] text-slate-400">Salva por cima deste relatório. Para uma pesquisa nova sem mexer neste, crie outro modelo no construtor.</span>
+                        </div>
+                    </details>
+                </div>`;
+        }
+
+        /** Persiste o filtro/gráficos editados (opener + LocalStorage, como o modelo de relatórios) e redesenha a folha. */
+        async function salvarPesquisaGeral() {
+            if (!tplAtual) return;
+            if (!tplAtual.id) tplAtual.id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'rpt_' + Math.random().toString(36).substr(2, 9);
+            try {
+                let all = [];
+                try { all = JSON.parse(localStorage.getItem('constructive_report_templates') || '[]'); } catch (e) {}
+                const idx = all.findIndex(t => t.id === tplAtual.id);
+                if (idx >= 0) all[idx] = tplAtual; else all.push(tplAtual);
+                localStorage.setItem('constructive_report_templates', JSON.stringify(all));
+            } catch (e) { /* segue tentando pelo opener */ }
+            const adapter = getOpenerAdapter();
+            let remoto = false;
+            if (adapter && typeof adapter.saveReportTemplate === 'function') {
+                try { await adapter.saveReportTemplate(tplAtual); remoto = true; } catch (e) { /* já ficou salvo localmente */ }
+            }
+            statusPesquisaGeral = remoto ? 'Salvo.' : 'Salvo neste navegador.';
+            desenharRelatorio();
+            setTimeout(() => { statusPesquisaGeral = ''; const s = document.getElementById('painel-pesquisa-status'); if (s) s.textContent = ''; }, 4000);
         }
 
         /**

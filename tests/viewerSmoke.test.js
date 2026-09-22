@@ -92,7 +92,7 @@ async function runScenario(cfg) {
         const re = /\bid="([^"]+)"/g; let m;
         while ((m = re.exec(s))) if (!registry[m[1]] || !registry[m[1]]._real) registry[m[1]] = makeEl('div', m[1]);
     }
-    ['a4-document-container', 'report-header-title'].forEach(id => { registry[id] = makeEl('div', id); registry[id]._real = true; });
+    ['a4-document-container', 'report-header-title', 'painel-pesquisa-geral'].forEach(id => { registry[id] = makeEl('div', id); registry[id]._real = true; });
     const documentStub = {
         body: makeEl('body'), documentElement: { style: { setProperty() {} }, classList: { add(c) { (documentStub.classes = documentStub.classes || []).push(c); }, remove() {} } }, head: makeEl('head'), title: '',
         getElementById: (id) => registry[id] || null, createElement: (tag) => makeEl(tag),
@@ -151,8 +151,8 @@ async function runScenario(cfg) {
     const timers = [];
     const listeners = {};
     // janela de origem (a página do mapa) com o adaptador de ajustes, como no uso real
-    const captured = { blobs: [], alerts: [], registros: [], prints: 0, downloads: [], qrData: '', mensagens: [], reloads: 0, charts: [] };
-    const opener = cfg.opener ? { closed: false, themes: cfg.themes, ReportAdapter: { getAjustes: async () => cfg.ajustes || null, saveAjustes: async () => ({ ok: true, remoto: false }), registrarEmissao: async (e) => { captured.registros.push(e); return { ok: true, remoto: false }; } } } : null;
+    const captured = { blobs: [], alerts: [], registros: [], prints: 0, downloads: [], qrData: '', mensagens: [], reloads: 0, charts: [], templatesSalvos: [] };
+    const opener = cfg.opener ? { closed: false, themes: cfg.themes, ReportAdapter: { getAjustes: async () => cfg.ajustes || null, saveAjustes: async () => ({ ok: true, remoto: false }), registrarEmissao: async (e) => { captured.registros.push(e); return { ok: true, remoto: false }; }, saveReportTemplate: async (t) => { captured.templatesSalvos.push(JSON.parse(JSON.stringify(t))); return true; } } } : null;
     const windowStub = {
         addEventListener: (ev, fn) => { (listeners[ev] = listeners[ev] || []).push(fn); },
         location: { search: cfg.search || '?templateId=rpt_smoke', origin: 'http://localhost:8080', reload() { captured.reloads++; }, href: 'http://localhost:8080/relatorio_view.html?templateId=rpt_smoke' }, parent: cfg.edicao ? { postMessage: (m) => captured.mensagens.push(m) } : undefined, localStorage: storage, sessionStorage: storage, opener,
@@ -946,6 +946,62 @@ async function runScenario(cfg) {
         tplFiltroVazio.filtro = { grupos: [] };
         const rv = await runScenario({ opener: true, themes: [temaCamada], payload: Object.assign({}, payload, { template: tplFiltroVazio }) });
         eq('filtro vazio: continua mostrando as 3 feições da camada', rv.captured.charts[0].config.data.labels.sort(), ['Irregular', 'Regular']);
+    }
+
+    // ---- PAINEL "AJUSTAR PESQUISA" (Relatório Geral): filtro e gráficos editáveis direto na página, com "Salvar e atualizar"
+    {
+        // não aparece no Relatório Individual
+        const rInd = await runScenario({ payload: { templateId: 'rpt_smoke', template: tplWith(null), formId: 'f1', featureData: {}, featureGeometry: null, preview: true } });
+        eq('individual: painel não aparece', rInd.errors, []);
+        ok('individual: painel escondido e vazio', rInd.registry['painel-pesquisa-geral'].style.display === 'none' && rInd.registry['painel-pesquisa-geral'].innerHTML === '');
+
+        const tplPesquisa = {
+            id: 'rpt_pesquisa', nome: 'Relatório Geral', tipo: 'geral', form_id: 'f1',
+            config_pagina: { tamanho: 'A4', orientacao: 'portrait', margens_mm: { top: 15, bottom: 15, left: 15, right: 15 } },
+            blocos: [{ id: 'h', tipo: 'cabecalho' }, { id: 'g', tipo: 'grafico_existente', titulo: 'Estatísticas', chart_ids: ['c1'], layout: 'largura_total' }, { id: 'f', tipo: 'rodape' }],
+            filtro: { grupos: [{ condicoes: [{ field: 'sit', op: 'igual', value: 'regular' }] }] }
+        };
+        const charts = [{ id: 'c1', title: 'Situação', type: 'pie', fieldId: 'sit', fieldLabel: 'Situação' }, { id: 'c2', title: 'Área', type: 'bar', fieldId: 'area', fieldLabel: 'Área' }];
+        const formFields = [{ id: 'sit', label: 'Situação', type: 'select' }, { id: 'area', label: 'Área', type: 'area_m2' }];
+        const featureListAll = [{ sit: 'Regular', area: 100 }, { sit: 'Irregular', area: 200 }, { sit: 'Regular', area: 150 }];
+        const payload = {
+            templateId: 'rpt_pesquisa', template: tplPesquisa, formId: 'f1', formFields, formTabs: [], charts,
+            featureListAll, featureList: featureListAll.filter(p => p.sit === 'Regular'), featureData: {}, featureGeometry: null, preview: true
+        };
+        const r = await runScenario({ payload, opener: true });
+        eq('painel: nenhum erro de execução ao abrir', r.errors, []);
+        const painel = () => r.registry['painel-pesquisa-geral'].innerHTML;
+        ok('geral: painel aparece com o filtro e os gráficos já configurados', painel().includes('Ajustar pesquisa') && r.registry['painel-pesquisa-geral'].style.display !== 'none');
+        ok('painel: mostra a condição existente (campo "sit" já selecionado)', painel().includes('value="sit" selected'));
+        ok('painel: gráfico "c1" (já escolhido) vem marcado; "c2" (não escolhido) vem desmarcado', painel().includes('checked onchange="toggleGraficoEscolhidoGeral(\'c1\'') && !painel().includes('checked onchange="toggleGraficoEscolhidoGeral(\'c2\''));
+        ok('relatório: com o filtro atual (só Regular), o gráfico conta 2 feições', r.captured.charts[0].config.data.labels.sort().join(',') === 'Regular' && r.registry['a4-document-container']._html.includes('2 feições'));
+
+        // edita ao vivo: novo grupo (OU) pegando também "Irregular", e liga o segundo gráfico
+        r.sandbox.addFiltroGrupoGeral();
+        r.sandbox.updateFiltroCondicaoGeral(1, 0, 'field', 'sit');
+        r.sandbox.updateFiltroCondicaoGeral(1, 0, 'op', 'igual');
+        r.sandbox.updateFiltroCondicaoGeral(1, 0, 'value', 'irregular');
+        r.sandbox.toggleGraficoEscolhidoGeral('c2', true);
+        ok('edição ao vivo: painel reflete o 2º grupo e o 2º gráfico marcado', painel().includes('Grupo 2') && painel().includes('checked onchange="toggleGraficoEscolhidoGeral(\'c2\''));
+
+        // só ao clicar em "Salvar e atualizar" é que persiste e redesenha a folha
+        await r.sandbox.salvarPesquisaGeral();
+        await r.settle(6);
+        eq('salvar: nenhum erro', r.errors, []);
+        const docPosSalvar = r.registry['a4-document-container']._html;
+        ok('depois de salvar: filtro ampliado (OU) agora pega as 3 feições', docPosSalvar.includes('3 feições'));
+        eq('depois de salvar: os 2 gráficos escolhidos agora aparecem (Situação e Área)', r.captured.charts.slice(-2).map(c => c.config.type).sort(), ['bar', 'doughnut']);
+        const salvosLocal = JSON.parse(r.storage.getItem('constructive_report_templates') || '[]');
+        const tplSalvoLocal = salvosLocal.find(t => t.id === 'rpt_pesquisa');
+        ok('salvar: gravado no localStorage com os 2 grupos e os 2 gráficos', !!tplSalvoLocal && tplSalvoLocal.filtro.grupos.length === 2 && tplSalvoLocal.blocos.find(b => b.tipo === 'grafico_existente').chart_ids.length === 2);
+        const tplSalvoOpener = r.captured.templatesSalvos[r.captured.templatesSalvos.length - 1];
+        ok('salvar: também gravado pela janela de origem (ReportAdapter.saveReportTemplate)', !!tplSalvoOpener && tplSalvoOpener.id === 'rpt_pesquisa' && tplSalvoOpener.filtro.grupos.length === 2);
+
+        // limpar filtro: volta a não restringir nada
+        r.sandbox.limparFiltroGeral();
+        await r.sandbox.salvarPesquisaGeral();
+        await r.settle(6);
+        ok('limpar filtro + salvar: sem filtro, as 3 feições continuam aparecendo', r.registry['a4-document-container']._html.includes('3 feições'));
     }
 
     console.log(`viewerSmoke: ${total - failed}/${total} verificações passaram`);

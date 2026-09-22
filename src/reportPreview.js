@@ -144,6 +144,7 @@
         const geral = !!(tpl && tpl.tipo === 'geral');
         const temMapa = !!(tpl && Array.isArray(tpl.blocos) && tpl.blocos.some(b => b.tipo === 'mapa_estatico'));
         const campos = fieldsFromTabs(tabs);
+        const listaExemplo = geral ? sampleFeatureList(campos, 8) : null;
         return {
             templateId: tpl && tpl.id,
             template: tpl,
@@ -153,7 +154,10 @@
             featureData: geral ? {} : sampleFeatureData(tabs),
             featureGeometry: geral ? null : sampleGeometry(),
             featureKey: geral ? null : 'exemplo-previa',
-            featureList: geral ? filtrarListaExemplo(sampleFeatureList(campos, 8), tpl && tpl.filtro, campos) : null,
+            // featureListAll: lista de exemplo BRUTA (sem filtro) — a página do relatório reaplica o filtro do modelo
+            // a cada mudança, ao vivo, sem precisar gerar uma prévia nova. featureList (já filtrada) fica por compatibilidade.
+            featureListAll: listaExemplo,
+            featureList: geral ? filtrarListaExemplo(listaExemplo, tpl && tpl.filtro, campos) : null,
             charts: Array.isArray(opts.charts) ? opts.charts : [],
             camadasMapa: temMapa ? sampleLayers() : [],
             ortofotos: [],
