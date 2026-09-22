@@ -136,7 +136,7 @@ async function runScenario(cfg) {
     const listeners = {};
     // janela de origem (a página do mapa) com o adaptador de ajustes, como no uso real
     const captured = { blobs: [], alerts: [], registros: [], prints: 0, downloads: [], qrData: '', mensagens: [], reloads: 0, charts: [] };
-    const opener = cfg.opener ? { closed: false, ReportAdapter: { getAjustes: async () => cfg.ajustes || null, saveAjustes: async () => ({ ok: true, remoto: false }), registrarEmissao: async (e) => { captured.registros.push(e); return { ok: true, remoto: false }; } } } : null;
+    const opener = cfg.opener ? { closed: false, themes: cfg.themes, ReportAdapter: { getAjustes: async () => cfg.ajustes || null, saveAjustes: async () => ({ ok: true, remoto: false }), registrarEmissao: async (e) => { captured.registros.push(e); return { ok: true, remoto: false }; } } } : null;
     const windowStub = {
         addEventListener: (ev, fn) => { (listeners[ev] = listeners[ev] || []).push(fn); },
         location: { search: cfg.search || '?templateId=rpt_smoke', origin: 'http://localhost:8080', reload() { captured.reloads++; }, href: 'http://localhost:8080/relatorio_view.html?templateId=rpt_smoke' }, parent: cfg.edicao ? { postMessage: (m) => captured.mensagens.push(m) } : undefined, localStorage: storage, sessionStorage: storage, opener,
@@ -817,6 +817,30 @@ async function runScenario(cfg) {
         r.sandbox.initReportViewer();
         await r.settle(6);
         ok('compatibilidade com o modelo padrão antigo ("chart_id" no singular): mostra o gráfico dele', (r.registry['a4-document-container']._html.match(/data-chart-canvas/g) || []).length === 1 && r.errors.length === 0);
+    }
+
+    // ---- RELATÓRIO GERAL — EMISSÃO DE VERDADE: sem featureList no payload; os dados vêm da camada, na janela de origem (por themeId)
+    {
+        const tplGeral = {
+            id: 'rpt_geral2', nome: 'Relatório Geral', tipo: 'geral', form_id: 'f1',
+            config_pagina: { tamanho: 'A4', orientacao: 'portrait', margens_mm: { top: 15, bottom: 15, left: 15, right: 15 } },
+            blocos: [{ id: 'h', tipo: 'cabecalho', titulo: 'RELATÓRIO GERAL' }, { id: 'g', tipo: 'grafico_existente', chart_ids: ['c1'], layout: 'largura_total' }, { id: 'f', tipo: 'rodape' }]
+        };
+        const charts = [{ id: 'c1', title: 'Situação', type: 'pie', fieldId: 'sit', fieldLabel: 'Situação' }];
+        const formFields = [{ id: 'sit', label: 'Situação', type: 'select' }];
+        const temaCamada = { id: 'tema-1', features: [{ properties: { sit: 'Regular' } }, { properties: { sit: 'Regular' } }, { properties: { sit: 'Irregular' } }] };
+        const payload = { templateId: 'rpt_geral2', template: tplGeral, formId: 'f1', themeId: 'tema-1', formFields, formTabs: [], charts, featureData: {}, featureGeometry: null, featureList: null, preview: false };
+        const r = await runScenario({ opener: true, themes: [temaCamada], payload });
+        eq('emissão real: nenhum erro de execução', r.errors, []);
+        eq('emissão real: os dados do gráfico vêm das feições de verdade da camada (2 Regular, 1 Irregular)', r.captured.charts[0].config.data.labels.sort(), ['Irregular', 'Regular']);
+        ok('emissão real: mostra o total de feições da camada (3)', r.registry['a4-document-container']._html.includes('3 feições'));
+        ok('emissão real: sem preview, não mostra o aviso de prévia', !r.registry['aviso-previa']);
+
+        // camada não encontrada na janela de origem (ou sem opener): gráfico sem dados, sem erro
+        const semTema = await runScenario({ opener: true, themes: [], payload });
+        eq('camada não encontrada na janela de origem: sem erro, gráfico com zero feições', [semTema.errors, semTema.captured.charts[0].config.data.labels], [[], []]);
+        const semOpener = await runScenario({ opener: false, payload });
+        eq('sem janela de origem: sem erro, gráfico com zero feições', [semOpener.errors, semOpener.captured.charts[0].config.data.labels], [[], []]);
     }
 
     console.log(`viewerSmoke: ${total - failed}/${total} verificações passaram`);

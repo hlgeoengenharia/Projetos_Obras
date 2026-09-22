@@ -8228,14 +8228,53 @@ window.handleStatToggle = function(themeId, chartIndex, checkbox) {
     }
 };
 
-// Relatório Geral (várias feições) da camada aberta no Painel de Estatísticas.
-// Ponto de entrada já disponível; a emissão do relatório geral ainda está em construção.
+// Relatório Geral (várias feições) da camada aberta no Painel de Estatísticas: abre o relatório de verdade
+// (relatorio_view.html) com o modelo "geral" configurado para o formulário da camada. Os dados das feições
+// (para os gráficos) são lidos pela própria página do relatório, na janela de origem (window.opener), por
+// themeId — evitam-se, assim, os limites de armazenamento do navegador para camadas com muitas feições.
 window.openLayerGeneralReport = function() {
     const themeId = window.activeLayerStatsThemeId;
     if (!themeId) return;
-    const msg = 'Relatório Geral da camada: em construção. O botão já fica aqui, ao lado de "Atualizar dados", e será liberado na próxima etapa.';
-    if (typeof showSuccessToast === 'function') showSuccessToast(msg);
-    else alert(msg);
+    const theme = (typeof themes !== 'undefined' ? themes : window.themes || []).find(t => String(t.id) === String(themeId));
+    if (!theme) return;
+    if (!theme.formId) {
+        alert('Esta camada não tem um formulário (cadastro) associado. Associe um formulário a ela primeiro (Editar Camada).');
+        return;
+    }
+    if (!window.ReportAdapter || typeof window.ReportAdapter.getReportTemplates !== 'function') return;
+    const tpl = window.ReportAdapter.getReportTemplates(theme.formId).find(t => t.tipo === 'geral');
+    if (!tpl) {
+        alert('Configure o Relatório Geral desta camada primeiro: em Cadastros, edite o formulário e abra a aba "Relatório Geral".');
+        return;
+    }
+    const formFields = window.ReportAdapter.getFormFields ? window.ReportAdapter.getFormFields(theme.formId) : [];
+    const charts = window.ReportAdapter.getExistingCharts ? window.ReportAdapter.getExistingCharts(theme.formId) : [];
+    const payload = {
+        templateId: tpl.id,
+        template: JSON.parse(JSON.stringify(tpl)),
+        formId: theme.formId,
+        themeId: theme.id,
+        formFields: formFields,
+        formTabs: [],
+        charts: charts,
+        featureData: {},
+        featureGeometry: null,
+        featureKey: null,
+        featureList: null, // sem lista embutida: a página lê as feições de verdade do opener, por themeId
+        camadasMapa: [],
+        ortofotos: [],
+        preview: false,
+        timestamp: Date.now()
+    };
+    try {
+        const json = JSON.stringify(payload);
+        sessionStorage.setItem('constructive_active_report_payload', json);
+        localStorage.setItem('constructive_active_report_payload', json);
+    } catch (e) {
+        alert('Não foi possível preparar o relatório (armazenamento do navegador cheio).');
+        return;
+    }
+    window.open('relatorio_view.html?templateId=' + encodeURIComponent(tpl.id), '_blank');
 };
 
 window.refreshActiveLayerStats = async function() {

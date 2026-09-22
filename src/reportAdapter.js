@@ -158,8 +158,18 @@
         if (typeof currentFormId !== 'undefined' && currentFormId === formId && typeof window._currentFormStatsConfig !== 'undefined' && Array.isArray(window._currentFormStatsConfig)) {
             rawConfig = window._currentFormStatsConfig;
         } else {
-            const formsList = (typeof forms !== 'undefined' && Array.isArray(forms)) ? forms : [];
-            const targetForm = formsList.find(f => f.id === formId);
+            // mesma cadeia de fallback do getFormFields: builder (settings.html) -> app principal (index.html) -> janela
+            const formsList = (typeof forms !== 'undefined' && Array.isArray(forms)) ? forms :
+                ((typeof allForms !== 'undefined' && Array.isArray(allForms)) ? allForms :
+                (typeof window !== 'undefined' && Array.isArray(window.allForms) ? window.allForms :
+                (typeof window !== 'undefined' && Array.isArray(window.forms) ? window.forms : [])));
+            let targetForm = formsList.find(f => f.id === formId);
+            if (!targetForm && typeof localStorage !== 'undefined') {
+                try {
+                    const storedForms = JSON.parse(localStorage.getItem('constructive_forms') || '[]');
+                    targetForm = storedForms.find(f => f.id === formId);
+                } catch (e) {}
+            }
             if (targetForm && Array.isArray(targetForm.statsConfig)) {
                 rawConfig = targetForm.statsConfig;
             }

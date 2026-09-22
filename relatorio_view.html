@@ -16,22 +16,22 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260921s"></script>
-    <script src="src/mapTools.js?v=20260921s"></script>
-    <script src="src/reportMap.js?v=20260921s"></script>
-    <script src="src/reportTemporal.js?v=20260921s"></script>
-    <script src="src/reportExport.js?v=20260921s"></script>
-    <script src="src/reportBlocks.js?v=20260921s"></script>
-    <script src="src/reportEditor.js?v=20260921s"></script>
-    <script src="src/reportFreeText.js?v=20260921s"></script>
-    <script src="src/reportWord.js?v=20260921s"></script>
-    <script src="src/reportDocx.js?v=20260921s"></script>
-    <script src="src/mapSnapshot.js?v=20260921s"></script>
-    <script src="src/verificarEmissao.js?v=20260921s"></script>
+    <script src="src/pageSize.js?v=20260921t"></script>
+    <script src="src/mapTools.js?v=20260921t"></script>
+    <script src="src/reportMap.js?v=20260921t"></script>
+    <script src="src/reportTemporal.js?v=20260921t"></script>
+    <script src="src/reportExport.js?v=20260921t"></script>
+    <script src="src/reportBlocks.js?v=20260921t"></script>
+    <script src="src/reportEditor.js?v=20260921t"></script>
+    <script src="src/reportFreeText.js?v=20260921t"></script>
+    <script src="src/reportWord.js?v=20260921t"></script>
+    <script src="src/reportDocx.js?v=20260921t"></script>
+    <script src="src/mapSnapshot.js?v=20260921t"></script>
+    <script src="src/verificarEmissao.js?v=20260921t"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260921s"></script>
-    <script src="src/reportData.js?v=20260921s"></script>
+    <script src="src/fieldFormatter.js?v=20260921t"></script>
+    <script src="src/reportData.js?v=20260921t"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
@@ -901,6 +901,9 @@
         const CHART_COLORS = ['#0ea5e9', '#f59e0b', '#10b981', '#f43f5e', '#8b5cf6', '#06b6d4', '#eab308', '#64748b'];
 
         /** Feições do Relatório Geral: da prévia (featureList no payload) ou, na emissão real, da camada (window.opener, por themeId). */
+        const LIMITE_FEICOES_GRAFICO = 5000; // acima disso, os gráficos usam só as primeiras (evita travar a folha)
+        let featureListTruncada = false;
+
         function resolveFeatureList() {
             if (reportPayload && Array.isArray(reportPayload.featureList)) return reportPayload.featureList;
             try {
@@ -908,7 +911,10 @@
                 const themeId = reportPayload && reportPayload.themeId;
                 if (opener && !opener.closed && themeId && Array.isArray(opener.themes)) {
                     const theme = opener.themes.find(t => String(t.id) === String(themeId));
-                    if (theme && Array.isArray(theme.features)) return theme.features.map(f => (f && f.properties) || {});
+                    if (theme && Array.isArray(theme.features)) {
+                        featureListTruncada = theme.features.length > LIMITE_FEICOES_GRAFICO;
+                        return theme.features.slice(0, LIMITE_FEICOES_GRAFICO).map(f => (f && f.properties) || {});
+                    }
                 }
             } catch (e) { /* sem janela de origem: fica sem dados */ }
             return [];
@@ -947,9 +953,11 @@
                         <div class="p-4 text-center text-slate-400 italic text-xs border border-dashed border-slate-300 rounded-lg bg-slate-50/60">Nenhum gráfico selecionado. Escolha os gráficos no construtor (card "Gráficos do Dashboard").</div>
                     </div>`;
             }
+            const total = resolveFeatureList().length; // também marca featureListTruncada, usada logo abaixo
+            const metaHtml = `<span class="text-[10px] font-mono text-slate-500 normal-case">${total} feiç${total === 1 ? 'ão' : 'ões'}${featureListTruncada ? ` • mostrando as ${LIMITE_FEICOES_GRAFICO} primeiras` : ''}</span>`;
             return `
                 <div class="mb-4 page-break-avoid">
-                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5">${tituloHtml}</div>
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">${tituloHtml}${metaHtml}</div>
                     <div class="grid ${isSide ? 'grid-cols-2' : 'grid-cols-1'} gap-3">
                         ${graficos.map((g, gi) => {
                             const canvasId = 'rpt-chart-' + idx + '-' + gi;
