@@ -76,6 +76,16 @@ eq('geral: sem feição única (dados vazios, geometria e chave nulas) e com a l
 ok('geral: cabe no armazenamento do navegador e é JSON puro', (() => { const s = JSON.stringify(pg); return s.length < 200000 && JSON.stringify(JSON.parse(s)) === s; })());
 eq('individual (sem tipo "geral"): sem lista de exemplo e sem gráficos por padrão', [p.featureList, p.charts], [null, []]);
 
+// ---------------------------------------------------------------- filtro do Relatório Geral aplicado sobre a lista de exemplo
+{
+    const tplComFiltro = Object.assign({}, tplGeral, { filtro: { grupos: [{ condicoes: [{ field: 'f_area', op: 'maior', value: '600' }] }] } });
+    const pf = RP.buildPreviewPayload({ template: tplComFiltro, formId: 'f1', formTabs: abas, charts: chartsCfg });
+    ok('com filtro: só as feições de exemplo com área > 600 (menos de 8, mais de zero)', pf.featureList.length > 0 && pf.featureList.length < 8 && pf.featureList.every(f => f.f_area > 600));
+    const tplSemGrupoValido = Object.assign({}, tplGeral, { filtro: { grupos: [{ condicoes: [{ field: '', op: 'contem', value: '' }] }] } });
+    eq('filtro sem nenhum grupo válido (rascunho incompleto): não restringe nada', RP.buildPreviewPayload({ template: tplSemGrupoValido, formId: 'f1', formTabs: abas, charts: chartsCfg }).featureList.length, 8);
+    eq('sem filtro no modelo: lista completa, como antes', RP.buildPreviewPayload({ template: tplGeral, formId: 'f1', formTabs: abas, charts: chartsCfg }).featureList.length, 8);
+}
+
 console.log(`reportPreview: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {
     console.error(`${failed} falha(s)`);

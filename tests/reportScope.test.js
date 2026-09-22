@@ -46,7 +46,7 @@ window.window = window;
 const ctx = { window, document, localStorage, sessionStorage, forms, console, setTimeout: (fn) => { pendentes.push(fn); return 0; }, clearTimeout() {}, alert() {}, confirm: () => true, navigator: {} };
 ctx.self = window;
 vm.createContext(ctx);
-['src/pageSize.js', 'src/mapTools.js', 'src/fieldFormatter.js', 'src/reportData.js', 'src/reportBlocks.js', 'src/reportEditor.js', 'src/reportFreeText.js', 'src/reportPreview.js', 'src/reportAdapter.js', 'src/reportBuilder.js'].forEach(f => vm.runInContext(read(f), ctx, { filename: f }));
+['src/pageSize.js', 'src/mapTools.js', 'src/fieldFormatter.js', 'src/reportData.js', 'src/layerFilter.js', 'src/reportBlocks.js', 'src/reportEditor.js', 'src/reportFreeText.js', 'src/reportPreview.js', 'src/reportAdapter.js', 'src/reportBuilder.js'].forEach(f => vm.runInContext(read(f), ctx, { filename: f }));
 const RB = window.ReportBuilder;
 const RA = window.ReportAdapter;
 ok('construtor e adaptador carregaram', !!RB && !!RA && !!window.PageSize);
@@ -133,6 +133,88 @@ ok('geral: também tem o botão "Ver como sairá" (usa a lista de exemplo, sem f
     const payloadGeral = JSON.parse(store.constructive_active_report_payload);
     eq('geral: "Ver como sairá" abre com os gráficos do Dashboard e sem feição única', [payloadGeral.template.tipo, payloadGeral.charts.map(c => c.title), Object.keys(payloadGeral.featureData).length, Array.isArray(payloadGeral.featureList)], ['geral', ['Situação do recuo'], 0, true]);
     ok('geral: a janela abre em modo prévia', /previa=1/.test(abertaGeral));
+}
+
+// ---------------------------------------------------------------- Filtro de Feições (só no Relatório Geral)
+{
+    // salvarFiltro() atualiza o painel lateral direto (accordion-blocks-panel); neste teste, sem esse elemento
+    // na tela simulada, redesenha a aba inteira para conferir o resultado — como o teste dos gráficos já faz.
+    const redesenhar = () => RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
+
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+    ok('individual: sem o card de filtro', !has(container.innerHTML, 'Filtro de Feições'));
+
+    const forms0 = window.forms[0];
+    forms0.tabs = forms0.tabs.filter(t => t.id !== 't_filtro');
+    forms0.tabs.push({ id: 't_filtro', title: 'Dados', fields: [{ id: 'sit', label: 'Situação', type: 'select' }, { id: 'area', label: 'Área', type: 'area_m2' }] });
+
+    redesenhar();
+    html = container.innerHTML;
+    ok('geral: tem o card "Filtro de Feições", sem nenhum grupo ainda', has(html, 'Filtro de Feições') && has(html, 'Sem filtro (todas as feições)') && !has(html, 'Grupo 1'));
+
+    RB.addFiltroGrupo();
+    redesenhar();
+    html = container.innerHTML;
+    ok('1º grupo: uma condição em branco (campo vazio, operador "contém" por padrão)', has(html, 'Grupo 1') && has(html, "ReportBuilder.updateFiltroCondicao(0, 0, 'field', this.value)") && /<option value="sit"[^>]*>Situação<\/option>/.test(html) && /<option value="contem" selected>/.test(html));
+    ok('badge mostra "1 grupo(s)"', has(html, '1 grupo(s)'));
+
+    RB.updateFiltroCondicao(0, 0, 'field', 'sit');
+    redesenhar();
+    html = container.innerHTML;
+    ok('campo do tipo lista: operadores sem "contém"/"entre" (só igual, diferente, vazio, preenchido)', has(html, "value=\"igual\" selected") && !has(html, 'value="contem"') && !has(html, 'value="entre"'));
+
+    RB.updateFiltroCondicao(0, 0, 'field', 'area');
+    redesenhar();
+    html = container.innerHTML;
+    ok('trocar para um campo numérico: operadores certos (maior/menor/entre) e campo de valor numérico', has(html, 'value="maior"') && has(html, 'value="entre"') && /type="number"[^>]*oninput="ReportBuilder.updateFiltroCondicao\(0, 0, 'value'/.test(html));
+
+    RB.updateFiltroCondicao(0, 0, 'op', 'entre');
+    RB.updateFiltroCondicao(0, 0, 'value', '100');
+    RB.updateFiltroCondicao(0, 0, 'value2', '500');
+    redesenhar();
+    html = container.innerHTML;
+    ok('operador "entre": aparece o segundo campo de valor, com "e" entre os dois', /value="100"/.test(html) && /value="500"/.test(html) && has(html, '<span class="text-[10px] text-slate-400">e</span>'));
+
+    RB.addFiltroCondicao(0);
+    redesenhar();
+    html = container.innerHTML;
+    ok('2ª condição no mesmo grupo: aparece o separador "E"', (html.match(/text-orange-500 uppercase">E</g) || []).length === 1 && has(html, "ReportBuilder.updateFiltroCondicao(0, 1, 'field', this.value)"));
+    RB.updateFiltroCondicao(0, 1, 'field', 'sit');
+    RB.updateFiltroCondicao(0, 1, 'op', 'igual');
+    RB.updateFiltroCondicao(0, 1, 'value', 'irregular');
+
+    RB.addFiltroGrupo();
+    redesenhar();
+    html = container.innerHTML;
+    ok('2º grupo: aparece o separador "OU" entre os grupos', has(html, 'Grupo 2 (OU)') && has(html, 'uppercase tracking-wider">OU<'));
+    ok('badge agora mostra "2 grupo(s)"', has(html, '2 grupo(s)'));
+    ok('a prévia já aparece com o 1º grupo válido (o 2º, ainda em branco, é ignorado até ficar completo)', has(html, 'Na prévia (dados de exemplo):'));
+
+    RB.updateFiltroCondicao(1, 0, 'field', 'sit');
+    RB.updateFiltroCondicao(1, 0, 'op', 'preenchido');
+    redesenhar();
+    html = container.innerHTML;
+    ok('"preenchido"/"vazio": some o campo de valor (não faz sentido digitar nada)', has(html, "ReportBuilder.updateFiltroCondicao(1, 0, 'op', this.value)") && !has(html, "ReportBuilder.updateFiltroCondicao(1, 0, 'value',"));
+    ok('agora com os dois grupos completos, a prévia com dados de exemplo aparece', has(html, 'Na prévia (dados de exemplo):') && /de 8 feições casam com o filtro\./.test(html));
+
+    RB.removeFiltroCondicao(0, 1);
+    redesenhar();
+    html = container.innerHTML;
+    ok('remover a 2ª condição do grupo 1: volta a ter só uma, sem o separador "E"', (html.match(/text-orange-500 uppercase">E</g) || []).length === 0);
+
+    RB.removeFiltroCondicao(1, 0);
+    redesenhar();
+    html = container.innerHTML;
+    ok('remover a única condição de um grupo remove o grupo inteiro (não sobra um grupo vazio)', !has(html, 'Grupo 2') && has(html, '1 grupo(s)'));
+
+    redesenhar();
+    html = container.innerHTML;
+    ok('o filtro persiste ao trocar de aba/voltar (foi salvo)', /value="100"/.test(html) && /value="500"/.test(html) && has(html, '1 grupo(s)'));
+
+    RB.limparFiltro();
+    redesenhar();
+    html = container.innerHTML;
+    ok('"Limpar filtro" volta ao estado sem nenhum grupo', has(html, 'Sem filtro (todas as feições)') && !has(html, 'Grupo 1'));
 }
 
 // gráficos: sem duplicar ao inserir de novo; a seleção e a disposição refletem o que já está na folha

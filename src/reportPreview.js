@@ -6,11 +6,11 @@
 
 (function (root, factory) {
     if (typeof module === 'object' && module.exports) {
-        module.exports = factory();
+        module.exports = factory(require('./layerFilter.js'));
     } else {
-        root.ReportPreview = factory();
+        root.ReportPreview = factory(root.LayerFilter);
     }
-})(typeof self !== 'undefined' ? self : this, function () {
+})(typeof self !== 'undefined' ? self : this, function (LF) {
     'use strict';
 
     const CENTRO = { lat: -7.0195, lng: -34.8326 }; // Cabedelo-PB
@@ -122,6 +122,16 @@
         return out;
     }
 
+    /** Aplica o filtro do modelo (Relatório Geral) sobre a lista de exemplo, quando o módulo do filtro está carregado. */
+    function filtrarListaExemplo(lista, filtro, campos) {
+        if (!LF || !filtro) return lista;
+        const filtroLimpo = LF.normalizeFiltro(filtro);
+        if (LF.filtroVazio(filtroLimpo)) return lista;
+        const fieldIndex = {};
+        (campos || []).forEach(f => { if (f && f.id) fieldIndex[f.id] = f; });
+        return LF.filtrarFeatures(lista.map(p => ({ properties: p })), filtroLimpo, fieldIndex).map(f => f.properties);
+    }
+
     /**
      * Dados para abrir o relatório real com a feição de teste (Ficha Individual) ou com uma lista de
      * exemplo (Relatório Geral, conforme tpl.tipo).
@@ -143,7 +153,7 @@
             featureData: geral ? {} : sampleFeatureData(tabs),
             featureGeometry: geral ? null : sampleGeometry(),
             featureKey: geral ? null : 'exemplo-previa',
-            featureList: geral ? sampleFeatureList(campos, 8) : null,
+            featureList: geral ? filtrarListaExemplo(sampleFeatureList(campos, 8), tpl && tpl.filtro, campos) : null,
             charts: Array.isArray(opts.charts) ? opts.charts : [],
             camadasMapa: temMapa ? sampleLayers() : [],
             ortofotos: [],

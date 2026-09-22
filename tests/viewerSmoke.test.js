@@ -160,7 +160,7 @@ async function runScenario(cfg) {
     sandbox.self = sandbox.window;
     vm.createContext(sandbox);
     localScripts.forEach(src => { try { vm.runInContext(read(src), sandbox, { filename: src }); } catch (e) { errors.push('script ' + src + ': ' + e.message); } });
-    ['PageSize', 'MapTools', 'ReportMap', 'ReportTemporal', 'ReportExport', 'ReportBlocks', 'ReportEditor', 'ReportFreeText', 'ReportWord', 'ReportDocx', 'MapSnapshot', 'VerificarEmissao', 'FieldFormatter', 'ReportData'].forEach(n => { if (windowStub[n]) sandbox[n] = windowStub[n]; });
+    ['PageSize', 'MapTools', 'ReportMap', 'ReportTemporal', 'ReportExport', 'ReportBlocks', 'ReportEditor', 'ReportFreeText', 'ReportWord', 'ReportDocx', 'MapSnapshot', 'VerificarEmissao', 'FieldFormatter', 'ReportData', 'LayerFilter'].forEach(n => { if (windowStub[n]) sandbox[n] = windowStub[n]; });
     sandbox.unhandled = [];
     try { vm.runInContext(pageScript, sandbox, { filename: 'relatorio_view.html(inline)' }); } catch (e) { errors.push('script da página: ' + e.stack); }
     (listeners.DOMContentLoaded || []).forEach(fn => { try { fn(); } catch (e) { errors.push('DOMContentLoaded: ' + e.stack); } });
@@ -841,6 +841,20 @@ async function runScenario(cfg) {
         eq('camada não encontrada na janela de origem: sem erro, gráfico com zero feições', [semTema.errors, semTema.captured.charts[0].config.data.labels], [[], []]);
         const semOpener = await runScenario({ opener: false, payload });
         eq('sem janela de origem: sem erro, gráfico com zero feições', [semOpener.errors, semOpener.captured.charts[0].config.data.labels], [[], []]);
+
+        // filtro do modelo (Relatório Geral): só as feições que casam entram no gráfico e na contagem
+        const tplComFiltro = JSON.parse(JSON.stringify(tplGeral));
+        tplComFiltro.filtro = { grupos: [{ condicoes: [{ field: 'sit', op: 'igual', value: 'irregular' }] }] };
+        const rf = await runScenario({ opener: true, themes: [temaCamada], payload: Object.assign({}, payload, { template: tplComFiltro }) });
+        eq('com filtro no modelo: nenhum erro', rf.errors, []);
+        eq('com filtro: só a feição Irregular entra no gráfico', rf.captured.charts[0].config.data.labels, ['Irregular']);
+        ok('com filtro: mostra o total já filtrado (1 feição), não o total da camada', rf.registry['a4-document-container']._html.includes('1 feição') && !rf.registry['a4-document-container']._html.includes('3 feições'));
+
+        // filtro vazio (rascunho sem nenhum grupo válido) não restringe nada
+        const tplFiltroVazio = JSON.parse(JSON.stringify(tplGeral));
+        tplFiltroVazio.filtro = { grupos: [] };
+        const rv = await runScenario({ opener: true, themes: [temaCamada], payload: Object.assign({}, payload, { template: tplFiltroVazio }) });
+        eq('filtro vazio: continua mostrando as 3 feições da camada', rv.captured.charts[0].config.data.labels.sort(), ['Irregular', 'Regular']);
     }
 
     console.log(`viewerSmoke: ${total - failed}/${total} verificações passaram`);

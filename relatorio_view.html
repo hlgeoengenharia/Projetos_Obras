@@ -16,22 +16,23 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260921w"></script>
-    <script src="src/mapTools.js?v=20260921w"></script>
-    <script src="src/reportMap.js?v=20260921w"></script>
-    <script src="src/reportTemporal.js?v=20260921w"></script>
-    <script src="src/reportExport.js?v=20260921w"></script>
-    <script src="src/reportBlocks.js?v=20260921w"></script>
-    <script src="src/reportEditor.js?v=20260921w"></script>
-    <script src="src/reportFreeText.js?v=20260921w"></script>
-    <script src="src/reportWord.js?v=20260921w"></script>
-    <script src="src/reportDocx.js?v=20260921w"></script>
-    <script src="src/mapSnapshot.js?v=20260921w"></script>
-    <script src="src/verificarEmissao.js?v=20260921w"></script>
+    <script src="src/pageSize.js?v=20260921x"></script>
+    <script src="src/mapTools.js?v=20260921x"></script>
+    <script src="src/reportMap.js?v=20260921x"></script>
+    <script src="src/reportTemporal.js?v=20260921x"></script>
+    <script src="src/reportExport.js?v=20260921x"></script>
+    <script src="src/reportBlocks.js?v=20260921x"></script>
+    <script src="src/reportEditor.js?v=20260921x"></script>
+    <script src="src/reportFreeText.js?v=20260921x"></script>
+    <script src="src/reportWord.js?v=20260921x"></script>
+    <script src="src/reportDocx.js?v=20260921x"></script>
+    <script src="src/mapSnapshot.js?v=20260921x"></script>
+    <script src="src/verificarEmissao.js?v=20260921x"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260921w"></script>
-    <script src="src/reportData.js?v=20260921w"></script>
+    <script src="src/fieldFormatter.js?v=20260921x"></script>
+    <script src="src/reportData.js?v=20260921x"></script>
+    <script src="src/layerFilter.js?v=20260921x"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
@@ -912,8 +913,14 @@
                 if (opener && !opener.closed && themeId && Array.isArray(opener.themes)) {
                     const theme = opener.themes.find(t => String(t.id) === String(themeId));
                     if (theme && Array.isArray(theme.features)) {
-                        featureListTruncada = theme.features.length > LIMITE_FEICOES_GRAFICO;
-                        return theme.features.slice(0, LIMITE_FEICOES_GRAFICO).map(f => (f && f.properties) || {});
+                        // filtro do modelo (Relatório Geral): aplicado ANTES do teto de segurança, para não descartar por engano
+                        // uma feição que casaria com o filtro só porque veio depois das primeiras LIMITE_FEICOES_GRAFICO
+                        const filtro = LayerFilter ? LayerFilter.normalizeFiltro(reportPayload.template && reportPayload.template.filtro) : null;
+                        const fieldIndex = {};
+                        (reportPayload.formFields || []).forEach(f => { if (f && f.id) fieldIndex[f.id] = f; });
+                        const filtradas = (filtro && !LayerFilter.filtroVazio(filtro)) ? LayerFilter.filtrarFeatures(theme.features, filtro, fieldIndex) : theme.features;
+                        featureListTruncada = filtradas.length > LIMITE_FEICOES_GRAFICO;
+                        return filtradas.slice(0, LIMITE_FEICOES_GRAFICO).map(f => (f && f.properties) || {});
                     }
                 }
             } catch (e) { /* sem janela de origem: fica sem dados */ }
