@@ -43,6 +43,10 @@
 
         if (templates.length > 0) {
             currentTemplate = JSON.parse(JSON.stringify(templates[0]));
+        } else if (builderScope === 'geral') {
+            // Relatório Geral é um relatório à parte, sem vínculo com a ficha individual: a 1ª vez que a aba é aberta
+            // começa em branco (sem blocos, nome e atalho vazios), como o "Criar Novo Modelo de Relatório..."
+            currentTemplate = window.ReportAdapter.createBlankTemplate(formId, 'geral');
         } else {
             currentTemplate = window.ReportAdapter.createDefaultTemplate(formId, builderScope, formName);
         }

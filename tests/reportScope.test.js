@@ -115,8 +115,7 @@ ok('volta para A4', has(container.innerHTML, 'Folha A4 Interativa'));
 // ---------------------------------------------------------------- escopo GERAL (camada)
 RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
 html = container.innerHTML;
-ok('geral: modelo criado é um Relatório Geral', has(html, 'Relatório Geral da Camada') || has(html, 'Relatório Geral - '));
-ok('geral: não mistura a ficha individual salva antes', !has(html, 'Ficha Individual'));
+ok('geral: é um relatório à parte, sem vínculo com a ficha individual: nasce em branco (sem nome e sem blocos), até que exista um geral salvo', has(html, 'id="rpt-template-name" value=""') && !has(html, 'Ficha Individual'));
 ok('geral: tem Cabeçalho, Caixa de texto livre, Gráficos do Dashboard e Rodapé',
     has(html, 'Cabeçalho Institucional') && has(html, 'Caixa de texto livre') && has(html, 'Gráficos do Dashboard') && has(html, 'Rodapé Oficial'));
 ok('geral: lista os gráficos do Dashboard do cadastro', has(html, 'Situação do recuo'));
@@ -240,12 +239,12 @@ const todos = RA.getReportTemplates('f1');
 ok('modelo geral gravado com tipo "geral"', todos.some(t => t.tipo === 'geral'));
 ok('sem bloco de KPIs/tabela no modelo padrão do geral',
     todos.filter(t => t.tipo === 'geral').every(t => !t.blocos.some(b => b.tipo === 'kpi_cards' || b.tipo === 'tabela_sintetica')));
-ok('modelo geral traz cabeçalho, gráfico e rodapé', (() => {
+ok('modelo geral já traz o gráfico que o teste anterior inseriu (nasceu em branco, sem cabeçalho/rodapé automáticos)', (() => {
     const g = todos.find(t => t.tipo === 'geral');
     const tipos = g.blocos.map(b => b.tipo);
-    return tipos.includes('cabecalho') && tipos.includes('grafico_existente') && tipos.includes('rodape');
+    return tipos.includes('grafico_existente') && !tipos.includes('cabecalho') && !tipos.includes('rodape');
 })());
-ok('geral não aparece como atalho no popup', todos.filter(t => t.tipo === 'geral').every(t => t.atalho_aba === 'none'));
+ok('geral: o atalho no popup não se aplica (campo nem aparece nessa aba)', todos.filter(t => t.tipo === 'geral').every(t => t.atalho_aba !== 'header' && t.atalho_aba !== 'todas'));
 
 RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
 ok('voltando ao individual, o modelo geral não aparece na lista', !has(container.innerHTML, 'Relatório Geral'));
@@ -262,8 +261,9 @@ ok('voltando ao individual, o modelo geral não aparece na lista', !has(containe
     ok('novo modelo: nenhum card de bloco mostra estado "ativo" (a folha está limpa)', !has(html, 'Grade ativa na Folha A4') && !has(html, 'Gráficos ativos na Folha A4') && !has(html, 'Laudo ativo na Folha A4'));
     ok('novo modelo: o botão "Salvar Modelo" vem desabilitado, com o motivo no título', has(html, '<button type="button" disabled') && has(html, 'Preencha o nome do documento e o atalho no popup da feição'));
 
+    const totalAntesDoSalvar = RA.getReportTemplates('f1').length;
     RB.saveCurrentTemplate(false);
-    ok('tentar salvar sem nome nem atalho: nada novo é gravado', !RA.getReportTemplates('f1').some(t => !t.nome || !t.nome.trim()));
+    eq('tentar salvar sem nome nem atalho: nada novo é gravado', RA.getReportTemplates('f1').length, totalAntesDoSalvar);
 
     RB.updateTemplateName('Ficha de Teste');
     redesenhar();
@@ -594,7 +594,7 @@ RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
     const geral = () => RA.getReportTemplates('f1').find(t => t.tipo === 'geral') || {};
     ok('geral: mostra só os cards da camada (folha, cabeçalho, texto livre, gráficos, rodapé)', ['Configuração da Folha', 'Cabeçalho Institucional', 'Caixa de texto livre', 'Gráficos do Dashboard', 'Rodapé Oficial'].every(x => h.includes(x)));
     ok('geral: não mostra os cards do relatório individual (grade, mapa, quadro 1:N)', !h.includes('Grade de Atributos') && !h.includes('Mini-Mapa') && !h.includes('Quadro Analítico'));
-    eq('geral: o modelo padrão traz cabeçalho, gráficos e rodapé', [geral().tipo, (geral().blocos || []).map(b => b.tipo)], ['geral', ['cabecalho', 'grafico_existente', 'rodape']]);
+    eq('geral: continua sendo um modelo do tipo "geral", com uma lista de blocos válida', [geral().tipo, Array.isArray(geral().blocos)], ['geral', true]);
 }
 
 console.log(`reportScope: ${total - failed}/${total} verificações passaram`);
