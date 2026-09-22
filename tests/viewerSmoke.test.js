@@ -819,6 +819,44 @@ async function runScenario(cfg) {
         ok('compatibilidade com o modelo padrão antigo ("chart_id" no singular): mostra o gráfico dele', (r.registry['a4-document-container']._html.match(/data-chart-canvas/g) || []).length === 1 && r.errors.length === 0);
     }
 
+    // ---- RELATÓRIO GERAL — "Tabela de Feições": uma linha por feição filtrada, com as colunas escolhidas
+    {
+        const tplTabela = {
+            id: 'rpt_tabela', nome: 'Relatório Geral', tipo: 'geral', form_id: 'f1',
+            config_pagina: { tamanho: 'A4', orientacao: 'portrait', margens_mm: { top: 15, bottom: 15, left: 15, right: 15 } },
+            blocos: [{ id: 'h', tipo: 'cabecalho' }, { id: 't', tipo: 'tabela_feicoes', titulo: 'Feições <X>', colunas: ['nome', 'sit'] }, { id: 'f', tipo: 'rodape' }]
+        };
+        const formFields = [{ id: 'nome', label: 'Proprietário', type: 'text' }, { id: 'sit', label: 'Situação', type: 'select' }];
+        const featureList = [{ nome: 'Maria', sit: 'Regular' }, { nome: 'João <B>', sit: 'Irregular' }];
+        const payload = { templateId: 'rpt_tabela', template: tplTabela, formId: 'f1', formFields, formTabs: [], charts: [], featureData: {}, featureGeometry: null, featureList, preview: true };
+        const r = await runScenario({ payload });
+        eq('tabela: nenhum erro de execução', r.errors, []);
+        const doc = r.registry['a4-document-container']._html;
+        ok('tabela: título escapado, cabeçalho das colunas e uma linha por feição (com o valor escapado)', doc.includes('Feições &lt;X&gt;') && doc.includes('>Proprietário<') && doc.includes('>Situação<') && doc.includes('>Maria<') && doc.includes('João &lt;B&gt;') && doc.includes('2 feições'));
+        ok('tabela: cada linha é uma unidade que pode quebrar de folha (data-split-row)', (doc.match(/data-split-row/g) || []).length === 2);
+
+        // sem coluna escolhida: aviso, sem tabela
+        const p2 = JSON.parse(JSON.stringify(payload)); p2.template.blocos[1].colunas = [];
+        const r2 = await runScenario({ payload: p2 });
+        ok('sem coluna escolhida: aviso, sem erro', r2.registry['a4-document-container']._html.includes('Nenhuma coluna escolhida') && r2.errors.length === 0);
+
+        // filtro do modelo, na emissão real (dados da camada, via themeId + janela de origem): só a feição que casa entra na tabela
+        const temaTabela = { id: 'tema-tabela', features: featureList.map(p => ({ properties: p })) };
+        const p3 = { templateId: 'rpt_tabela', template: JSON.parse(JSON.stringify(tplTabela)), formId: 'f1', themeId: 'tema-tabela', formFields, formTabs: [], charts: [], featureData: {}, featureGeometry: null, featureList: null, preview: false };
+        p3.template.filtro = { grupos: [{ condicoes: [{ field: 'sit', op: 'igual', value: 'irregular' }] }] };
+        const r3 = await runScenario({ opener: true, themes: [temaTabela], payload: p3 });
+        eq('emissão real com filtro: nenhum erro', r3.errors, []);
+        const doc3 = r3.registry['a4-document-container']._html;
+        ok('com filtro: só a feição Irregular entra na tabela', !doc3.includes('>Maria<') && doc3.includes('João &lt;B&gt;') && doc3.includes('1 feição<'));
+
+        // sem nenhuma feição (filtro não bate com ninguém): aviso
+        const p4 = JSON.parse(JSON.stringify(p3));
+        p4.filtro = undefined; // (evita confundir com template.filtro, mantido abaixo)
+        p4.template.filtro = { grupos: [{ condicoes: [{ field: 'sit', op: 'igual', value: 'inexistente' }] }] };
+        const r4 = await runScenario({ opener: true, themes: [temaTabela], payload: p4 });
+        ok('nenhuma feição casa com o filtro: aviso, sem erro', r4.registry['a4-document-container']._html.includes('Nenhuma feição casa com o filtro') && r4.errors.length === 0);
+    }
+
     // ---- RELATÓRIO GERAL — EMISSÃO DE VERDADE: sem featureList no payload; os dados vêm da camada, na janela de origem (por themeId)
     {
         const tplGeral = {

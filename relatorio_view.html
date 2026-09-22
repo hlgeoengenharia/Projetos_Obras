@@ -16,23 +16,23 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260921y"></script>
-    <script src="src/mapTools.js?v=20260921y"></script>
-    <script src="src/reportMap.js?v=20260921y"></script>
-    <script src="src/reportTemporal.js?v=20260921y"></script>
-    <script src="src/reportExport.js?v=20260921y"></script>
-    <script src="src/reportBlocks.js?v=20260921y"></script>
-    <script src="src/reportEditor.js?v=20260921y"></script>
-    <script src="src/reportFreeText.js?v=20260921y"></script>
-    <script src="src/reportWord.js?v=20260921y"></script>
-    <script src="src/reportDocx.js?v=20260921y"></script>
-    <script src="src/mapSnapshot.js?v=20260921y"></script>
-    <script src="src/verificarEmissao.js?v=20260921y"></script>
+    <script src="src/pageSize.js?v=20260921z"></script>
+    <script src="src/mapTools.js?v=20260921z"></script>
+    <script src="src/reportMap.js?v=20260921z"></script>
+    <script src="src/reportTemporal.js?v=20260921z"></script>
+    <script src="src/reportExport.js?v=20260921z"></script>
+    <script src="src/reportBlocks.js?v=20260921z"></script>
+    <script src="src/reportEditor.js?v=20260921z"></script>
+    <script src="src/reportFreeText.js?v=20260921z"></script>
+    <script src="src/reportWord.js?v=20260921z"></script>
+    <script src="src/reportDocx.js?v=20260921z"></script>
+    <script src="src/mapSnapshot.js?v=20260921z"></script>
+    <script src="src/verificarEmissao.js?v=20260921z"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260921y"></script>
-    <script src="src/reportData.js?v=20260921y"></script>
-    <script src="src/layerFilter.js?v=20260921y"></script>
+    <script src="src/fieldFormatter.js?v=20260921z"></script>
+    <script src="src/reportData.js?v=20260921z"></script>
+    <script src="src/layerFilter.js?v=20260921z"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
@@ -318,7 +318,7 @@
             if (mapController) keptMapWrap = document.getElementById('map-wrap');
             desenharRelatorio();
         }
-        const NOMES_BLOCO = { cabecalho: 'Cabeçalho oficial', grade_campos: 'Grade de atributos', mapa_estatico: 'Mini-mapa cartográfico', grafico_existente: 'Gráficos do dashboard', kpis: 'Painel de indicadores', galeria_fotos: 'Laudo analítico', laudo_vistoria_fotos: 'Laudo analítico', tabela_sintetica: 'Tabela sintética', tabela_sintetica_1n: 'Quadro sintético 1:N', tabela_analitica: 'Tabela analítica', caixa_texto_livre: 'Texto livre', texto_livre: 'Texto livre', rodape: 'Rodapé oficial' };
+        const NOMES_BLOCO = { cabecalho: 'Cabeçalho oficial', grade_campos: 'Grade de atributos', mapa_estatico: 'Mini-mapa cartográfico', grafico_existente: 'Gráficos do dashboard', kpis: 'Painel de indicadores', galeria_fotos: 'Laudo analítico', laudo_vistoria_fotos: 'Laudo analítico', tabela_sintetica: 'Tabela sintética', tabela_sintetica_1n: 'Quadro sintético 1:N', tabela_analitica: 'Tabela analítica', tabela_feicoes: 'Tabela de feições', caixa_texto_livre: 'Texto livre', texto_livre: 'Texto livre', rodape: 'Rodapé oficial' };
 
         window.addEventListener('DOMContentLoaded', () => {
             initReportViewer();
@@ -344,7 +344,7 @@
 
         /** Moldura de edição de um bloco: barra (nome, subir, descer, remover) e contorno ao passar o mouse / selecionar. */
         // mesma cor do card do painel lateral do construtor (uma cor por tipo de informação)
-        const COR_BLOCO = { cabecalho: '#6366f1', rodape: '#06b6d4', caixa_texto_livre: '#8b5cf6', texto_livre: '#8b5cf6', grade_campos: '#0ea5e9', tabela_sintetica_1n: '#f59e0b', tabela_sintetica: '#f59e0b', tabela_analitica: '#f59e0b', laudo_vistoria_fotos: '#f59e0b', galeria_fotos: '#f59e0b', mapa_estatico: '#10b981', grafico_existente: '#f43f5e', kpis: '#f43f5e' };
+        const COR_BLOCO = { cabecalho: '#6366f1', rodape: '#06b6d4', caixa_texto_livre: '#8b5cf6', texto_livre: '#8b5cf6', grade_campos: '#0ea5e9', tabela_sintetica_1n: '#f59e0b', tabela_sintetica: '#f59e0b', tabela_analitica: '#f59e0b', laudo_vistoria_fotos: '#f59e0b', galeria_fotos: '#f59e0b', mapa_estatico: '#10b981', grafico_existente: '#f43f5e', kpis: '#f43f5e', tabela_feicoes: '#14b8a6' };
         function envolverEdicao(html, idx, bloco, opts) {
             if (!EDICAO || idx < 0 || !bloco) return html;
             const nome = NOMES_BLOCO[bloco.tipo] || bloco.tipo;
@@ -1001,6 +1001,54 @@
             });
         }
 
+        /**
+         * Bloco "Tabela de Feições" (Relatório Geral): uma linha por feição que passou pelo filtro, com as colunas
+         * escolhidas no construtor. Divisível entre folhas, como o Quadro Sintético do relatório individual.
+         */
+        function renderTabelaFeicoesBlock(bloco) {
+            const colunas = Array.isArray(bloco.colunas) ? bloco.colunas : [];
+            const tituloBase = (escapeHtml(bloco.titulo || 'Feições da Camada')).replace(/\r?\n/g, '<br>');
+            if (!colunas.length) {
+                return `
+                    <div class="mb-4 page-break-avoid">
+                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5"><span class="whitespace-pre-line">${tituloBase}</span></div>
+                        <div class="p-4 text-center text-slate-400 italic text-xs border border-dashed border-slate-300 rounded-lg bg-slate-50/60">Nenhuma coluna escolhida. Escolha os campos no construtor (card "Tabela de Feições").</div>
+                    </div>`;
+            }
+            const registros = resolveFeatureList();
+            if (!registros.length) {
+                return `
+                    <div class="mb-4 page-break-avoid">
+                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5"><span class="whitespace-pre-line">${tituloBase}</span></div>
+                        <div class="p-4 text-center text-slate-400 italic text-xs border border-dashed border-slate-300 rounded-lg bg-slate-50/60">Nenhuma feição casa com o filtro escolhido.</div>
+                    </div>`;
+            }
+            const fieldIndex = {};
+            (reportPayload.formFields || []).forEach(f => { if (f && f.id) fieldIndex[f.id] = f; });
+            const cols = colunas.map(id => ({ id: id, campo: fieldIndex[id], label: (fieldIndex[id] && (fieldIndex[id].label || fieldIndex[id].name)) || id }));
+            const rowsHtml = registros.map((props, i) => `
+                <tr data-split-row class="${i % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}" style="page-break-inside: avoid;">
+                    <td class="py-1.5 px-2 text-[10px] border-r border-slate-200 text-center font-mono text-slate-400">${i + 1}</td>
+                    ${cols.map(c => `<td class="py-1.5 px-2 text-[10px] border-r last:border-r-0 border-slate-200 whitespace-normal break-words text-slate-700">${escapeHtml(FieldFormatter.toText(props[c.id], c.campo))}</td>`).join('')}
+                </tr>`);
+            const theadHtml = `<thead><tr class="bg-slate-100 border-b-2 border-slate-300 text-slate-700">
+                <th class="py-1.5 px-2 text-[9.5px] font-bold uppercase border-r border-slate-200 w-8 text-center">#</th>
+                ${cols.map(c => `<th class="py-1.5 px-2 text-[9.5px] font-bold uppercase border-r last:border-r-0 border-slate-200 whitespace-normal break-words">${escapeHtml(c.label)}</th>`).join('')}
+            </tr></thead>`;
+            const meta = `${registros.length} feiç${registros.length === 1 ? 'ão' : 'ões'}${featureListTruncada ? ' (mostrando as primeiras)' : ''}`;
+            const chunkHtml = (rows, isFirst) => `
+                <div class="mb-4">
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
+                        <span class="whitespace-pre-line">${tituloBase}${isFirst ? '' : ' (continuação)'}</span>
+                        <span class="text-[10px] font-mono text-slate-500 normal-case">${escapeHtml(meta)}</span>
+                    </div>
+                    <div class="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+                        <table class="w-full text-left border-collapse">${theadHtml}<tbody class="divide-y divide-slate-200">${rows.join('')}</tbody></table>
+                    </div>
+                </div>`;
+            return { split: { rowsHtml, chunkHtml } };
+        }
+
         function renderSingleBlock(bloco, idx, featureData, featureGeometry, fields, tpl) {
             switch(bloco.tipo) {
                 case 'cabecalho':
@@ -1073,6 +1121,9 @@
 
                 case 'grafico_existente':
                     return renderChartsBlock(bloco, idx);
+
+                case 'tabela_feicoes':
+                    return renderTabelaFeicoesBlock(bloco);
 
                 case 'rodape': {
                     const startMode = bloco.inicio_numeracao || 'primeira';

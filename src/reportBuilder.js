@@ -1272,6 +1272,9 @@
             <!-- CARD: FILTRO DE FEIÇÕES (só na camada inteira: define quais feições entram nos gráficos, tabela e mapas) -->
             ${!isGeral ? '' : renderFiltroCard(fields)}
 
+            <!-- CARD: TABELA DE FEIÇÕES (só na camada inteira: lista as feições filtradas, com as colunas escolhidas) -->
+            ${!isGeral ? '' : renderTabelaFeicoesCard(fields)}
+
             <!-- CARD: GRÁFICOS DO DASHBOARD -->
             ${!isGeral ? '' : renderAccordionCard({
                 id: 'acc-charts',
@@ -1413,6 +1416,7 @@
         'acc-map': { barra: 'border-l-emerald-500', icone: 'bg-emerald-600 text-white', cabecalho: 'bg-emerald-100/80 dark:bg-emerald-950/40', corpo: 'bg-emerald-50/70 dark:bg-emerald-950/20', borda: 'border-emerald-300 dark:border-emerald-800', texto: 'text-emerald-800 dark:text-emerald-300' },
         'acc-charts': { barra: 'border-l-rose-500', icone: 'bg-rose-600 text-white', cabecalho: 'bg-rose-100/80 dark:bg-rose-950/40', corpo: 'bg-rose-50/70 dark:bg-rose-950/20', borda: 'border-rose-300 dark:border-rose-800', texto: 'text-rose-800 dark:text-rose-300' },
         'acc-filtro': { barra: 'border-l-orange-500', icone: 'bg-orange-600 text-white', cabecalho: 'bg-orange-100/80 dark:bg-orange-950/40', corpo: 'bg-orange-50/70 dark:bg-orange-950/20', borda: 'border-orange-300 dark:border-orange-800', texto: 'text-orange-800 dark:text-orange-300' },
+        'acc-tabela-feicoes': { barra: 'border-l-teal-500', icone: 'bg-teal-600 text-white', cabecalho: 'bg-teal-100/80 dark:bg-teal-950/40', corpo: 'bg-teal-50/70 dark:bg-teal-950/20', borda: 'border-teal-300 dark:border-teal-800', texto: 'text-teal-800 dark:text-teal-300' },
         'acc-text-footer': { barra: 'border-l-cyan-500', icone: 'bg-cyan-600 text-white', cabecalho: 'bg-cyan-100/80 dark:bg-cyan-950/40', corpo: 'bg-cyan-50/70 dark:bg-cyan-950/20', borda: 'border-cyan-300 dark:border-cyan-800', texto: 'text-cyan-800 dark:text-cyan-300' },
     };
     const COR_CARD_PADRAO = { barra: 'border-l-slate-400', icone: 'bg-slate-600 text-white', cabecalho: 'bg-slate-100 dark:bg-slate-700/40', corpo: 'bg-slate-50 dark:bg-slate-800/40', borda: 'border-slate-300 dark:border-slate-700', texto: 'text-slate-700 dark:text-slate-300' };
@@ -2926,6 +2930,84 @@
         if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
             window.ReportAdapter.saveReportTemplate(currentTemplate);
         }
+        const formId = currentTemplate.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    // --- MANIPULADORES DO CARD "TABELA DE FEIÇÕES" (Relatório Geral) ---
+
+    /** Card com a lista de campos (como a Grade de Atributos) para escolher as colunas da tabela. */
+    function renderTabelaFeicoesCard(fields) {
+        const existing = (currentTemplate?.blocos || []).find(b => b.tipo === 'tabela_feicoes');
+        const colunas = existing && Array.isArray(existing.colunas) ? existing.colunas : [];
+        const fieldIndex = {};
+        fields.forEach(f => { fieldIndex[f.id] = f; });
+
+        let previaHtml = '';
+        if (colunas.length > 0 && window.ReportPreview && window.LayerFilter) {
+            const filtroLimpo = window.LayerFilter.normalizeFiltro(currentTemplate.filtro);
+            const amostra = window.ReportPreview.sampleFeatureList(fields, 8).map(p => ({ properties: p }));
+            const n = window.LayerFilter.filtroVazio(filtroLimpo) ? amostra.length : window.LayerFilter.filtrarFeatures(amostra, filtroLimpo, fieldIndex).length;
+            previaHtml = `<div class="p-2 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded-xl text-[10.5px] text-teal-800 dark:text-teal-200">
+                <span class="font-bold">Na prévia (dados de exemplo):</span> a tabela sairia com ${n} linha(s) e ${colunas.length} coluna(s).
+            </div>`;
+        }
+
+        return renderAccordionCard({
+            id: 'acc-tabela-feicoes',
+            title: 'Tabela de Feições',
+            icon: 'table_chart',
+            badge: existing ? `${colunas.length} coluna(s) na Folha` : `${colunas.length} escolhida(s)`,
+            content: `
+                <div class="flex flex-col gap-3">
+                    ${existing ? `
+                        <div class="p-2.5 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded-xl flex items-center justify-between text-xs">
+                            <div class="flex items-center gap-1.5 min-w-0">
+                                <span class="material-symbols-outlined text-teal-600 text-[18px]">check_circle</span>
+                                <span class="font-bold text-teal-900 dark:text-teal-200 truncate">Tabela ativa na Folha A4 (${colunas.length} colunas)</span>
+                            </div>
+                            <span class="text-[10px] font-mono text-teal-700 dark:text-teal-300 font-bold bg-teal-100 dark:bg-teal-900 px-2 py-0.5 rounded">Pronta</span>
+                        </div>
+                    ` : ''}
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400">Escolha os campos que viram coluna na tabela (proprietário, CPF, quadra, lote, bairro...). A tabela lista as feições que passaram pelo filtro, em quantas folhas forem precisas.</p>
+                    <div class="max-h-56 overflow-y-auto space-y-1 p-1 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 custom-scrollbar">
+                        ${fields.map(f => `
+                            <label class="flex items-center justify-between gap-2 p-1.5 rounded-lg hover:bg-white dark:hover:bg-slate-800 text-xs cursor-pointer">
+                                <span class="flex items-center gap-2 min-w-0">
+                                    <input type="checkbox" name="cfg-tabela-feicoes-col" value="${escapeHtml(f.id)}" ${colunas.includes(f.id) ? 'checked' : ''} class="rounded text-primary focus:ring-0" />
+                                    <span class="truncate font-medium text-slate-800 dark:text-slate-200">${escapeHtml(f.label || f.name || f.id)}</span>
+                                </span>
+                                <span class="text-[9px] font-mono text-slate-400 uppercase">${escapeHtml(f.type || 'text')}</span>
+                            </label>
+                        `).join('')}
+                    </div>
+                    ${previaHtml}
+                    <button type="button" onclick="ReportBuilder.insertTabelaFeicoesBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
+                        <span class="material-symbols-outlined text-[16px]">add_circle</span> ${existing ? 'Atualizar Tabela na Folha' : 'Inserir Tabela na Folha'}
+                    </button>
+                </div>
+            `
+        });
+    }
+
+    function insertTabelaFeicoesBlock() {
+        const checked = Array.from(document.querySelectorAll("input[name='cfg-tabela-feicoes-col']:checked")).map(cb => cb.value);
+        const existing = currentTemplate.blocos.find(b => b.tipo === 'tabela_feicoes');
+        if (existing) {
+            existing.colunas = checked;
+        } else {
+            currentTemplate.blocos.push({
+                id: 'blk_tabela_' + Date.now(),
+                tipo: 'tabela_feicoes',
+                titulo: 'Feições da Camada',
+                colunas: checked
+            });
+        }
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        renderA4Blocks();
         const formId = currentTemplate.form_id;
         const panel = document.getElementById('accordion-blocks-panel');
         if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
@@ -4848,6 +4930,7 @@
         filterGridFieldsInDrawer,
         selectGridColumns,
         selectMapMode,
+        insertTabelaFeicoesBlock,
         addFiltroGrupo,
         removeFiltroGrupo,
         addFiltroCondicao,

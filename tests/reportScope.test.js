@@ -216,6 +216,35 @@ ok('geral: também tem o botão "Ver como sairá" (usa a lista de exemplo, sem f
     ok('"Limpar filtro" volta ao estado sem nenhum grupo', has(html, 'Sem filtro (todas as feições)') && !has(html, 'Grupo 1'));
 }
 
+// ---------------------------------------------------------------- Tabela de Feições (só no Relatório Geral): colunas escolhidas, sem duplicar ao inserir de novo
+{
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
+    ok('individual: sem o card de tabela de feições', !has(container.innerHTML, 'Tabela de Feições'));
+
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
+    html = container.innerHTML;
+    ok('geral: tem o card "Tabela de Feições", sem coluna nenhuma ainda', has(html, 'Tabela de Feições') && has(html, '0 escolhida(s)') && !has(html, 'Tabela ativa na Folha A4'));
+    ok('lista os campos do cadastro com o tipo de cada um', has(html, "name=\"cfg-tabela-feicoes-col\" value=\"a\"") && has(html, '>text<'));
+
+    const qsaAntes = document.querySelectorAll;
+    document.querySelectorAll = () => [{ value: 'a' }]; // simula o checkbox do campo 'a' marcado na hora de inserir
+    RB.insertTabelaFeicoesBlock();
+    document.querySelectorAll = qsaAntes;
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
+    html = container.innerHTML;
+    let tplT = RA.getReportTemplates('f1').find(t => t.tipo === 'geral');
+    let tabelaBloco = tplT.blocos.find(b => b.tipo === 'tabela_feicoes');
+    eq('1º clique: cria o bloco com a coluna escolhida', [tplT.blocos.filter(b => b.tipo === 'tabela_feicoes').length, tabelaBloco.colunas], [1, ['a']]);
+    ok('card mostra "Tabela ativa na Folha A4" e o botão vira "Atualizar"', has(html, 'Tabela ativa na Folha A4') && has(html, 'Atualizar Tabela na Folha') && !has(html, 'Inserir Tabela na Folha'));
+    ok('checkbox da coluna já escolhida vem marcado', new RegExp('name="cfg-tabela-feicoes-col" value="a" checked').test(html));
+    ok('com coluna escolhida: prévia com dados de exemplo (linhas e colunas)', /Na prévia \(dados de exemplo\):<\/span> a tabela sairia com \d+ linha\(s\) e 1 coluna\(s\)\./.test(html));
+
+    RB.insertTabelaFeicoesBlock(); // clicar de novo sem nada marcado (querySelectorAll padrão devolve []): esvazia as colunas do MESMO bloco, não duplica
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
+    tplT = RA.getReportTemplates('f1').find(t => t.tipo === 'geral');
+    eq('2º clique: atualiza o mesmo bloco (não duplica)', tplT.blocos.filter(b => b.tipo === 'tabela_feicoes').length, 1);
+}
+
 // gráficos: sem duplicar ao inserir de novo; a seleção e a disposição refletem o que já está na folha
 {
     RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
