@@ -428,7 +428,6 @@
      */
     function renderAccordionPanel(formId) {
         const fields = window.ReportAdapter.getFormFields(formId);
-        const charts = window.ReportAdapter.getExistingCharts(formId);
         const formTabs = (window.ReportAdapter && window.ReportAdapter.getFormTabs) ? window.ReportAdapter.getFormTabs(formId) : [];
         const multipleTabs = (window.ReportAdapter && window.ReportAdapter.getMultipleTabs) ? window.ReportAdapter.getMultipleTabs(formId) : [];
         const cfg = currentTemplate.config_pagina;
@@ -491,11 +490,6 @@
         const activeAnalyticalFieldCount = existingAnalytical1nBlock?.campos_selecionados?.length || 0;
         const activeLaudoDensity = existingAnalytical1nBlock?.densidade || current1nLaudoDensity || current1nTableDensity || 'compact';
         const activeLaudoStriping = existingAnalytical1nBlock?.zebrado || current1nLaudoRowStriping || current1nRowStriping || 'slate';
-
-        const existingChartBlock = currentTemplate?.blocos?.find(b => b.tipo === 'grafico_existente');
-        // o modelo padrão (src/reportAdapter.js) ainda cria o bloco com "chart_id" (um só); o construtor sempre lê/grava "chart_ids" (lista)
-        const existingChartIds = existingChartBlock ? (Array.isArray(existingChartBlock.chart_ids) ? existingChartBlock.chart_ids : (existingChartBlock.chart_id ? [existingChartBlock.chart_id] : [])) : [];
-        const activeChartLayout = existingChartBlock ? (existingChartBlock.layout === 'lado_a_lado' ? 'side' : 'full') : selectedChartLayout;
 
         return `
             <!-- CARD 0: CONFIGURAÇÃO DA FOLHA (LAYOUT DA PÁGINA) -->
@@ -1269,63 +1263,9 @@
                 });
             })()}
 
-            <!-- CARD: FILTRO DE FEIÇÕES (só na camada inteira: define quais feições entram nos gráficos, tabela e mapas) -->
-            ${!isGeral ? '' : renderFiltroCard(fields)}
-
-            <!-- CARD: TABELA DE FEIÇÕES (só na camada inteira: lista as feições filtradas, com as colunas escolhidas) -->
-            ${!isGeral ? '' : renderTabelaFeicoesCard(fields)}
-
-            <!-- CARD: MAPA DAS FEIÇÕES (só na camada inteira: desligado por padrão, o mais pesado de montar) -->
-            ${!isGeral ? '' : renderMapaFeicoesCard()}
-
-            <!-- CARD: GRÁFICOS DO DASHBOARD -->
-            ${!isGeral ? '' : renderAccordionCard({
-                id: 'acc-charts',
-                title: 'Gráficos do Dashboard',
-                icon: 'pie_chart',
-                badge: existingChartBlock ? `${existingChartIds.length} na Folha • ${charts.length} disp.` : `${charts.length} disponíveis`,
-                content: `
-                    <div class="flex flex-col gap-3">
-                        ${existingChartBlock ? `
-                            <div class="p-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl flex items-center justify-between text-xs">
-                                <div class="flex items-center gap-1.5 min-w-0">
-                                    <span class="material-symbols-outlined text-rose-600 text-[18px]">check_circle</span>
-                                    <span class="font-bold text-rose-900 dark:text-rose-200 truncate">Gráficos ativos na Folha A4 (${existingChartIds.length})</span>
-                                </div>
-                                <span class="text-[10px] font-mono text-rose-700 dark:text-rose-300 font-bold bg-rose-100 dark:bg-rose-900 px-2 py-0.5 rounded">Pronto</span>
-                            </div>
-                        ` : ''}
-                        <p class="text-[11px] text-slate-500">Selecione quais gráficos do Dashboard Estatístico você deseja embutir neste relatório:</p>
-                        ${charts.length === 0 ? `
-                            <div class="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center text-xs text-slate-400">
-                                Nenhum gráfico criado na aba "Dashboard Estatístico" ainda. Crie gráficos lá para embuti-los no relatório.
-                            </div>
-                        ` : `
-                            <div class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
-                                ${charts.map((c, i) => `
-                                    <label class="flex items-center gap-2.5 p-2 bg-slate-50 dark:bg-slate-900/50 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs cursor-pointer">
-                                        <input type="checkbox" name="cfg-chart-select" value="${c.id}" ${(existingChartBlock ? existingChartIds.includes(c.id) : i === 0) ? 'checked' : ''} class="rounded text-primary focus:ring-0" />
-                                        <div class="flex flex-col min-w-0 flex-1">
-                                            <span class="font-bold text-slate-800 dark:text-slate-200 truncate">${c.title}</span>
-                                            <span class="text-[10px] text-slate-400 font-mono">Tipo: ${c.type.toUpperCase()} • Campo: ${c.fieldLabel}</span>
-                                        </div>
-                                    </label>
-                                `).join('')}
-                            </div>
-                            <div class="flex items-center justify-between pt-1">
-                                <label class="text-xs font-bold text-slate-600 dark:text-slate-400">Disposição na Folha:</label>
-                                <div class="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
-                                    <button type="button" id="btn-chart-layout-full" onclick="ReportBuilder.selectChartLayout('full')" class="px-3 py-1 rounded-md text-xs font-bold transition-all ${activeChartLayout === 'full' ? 'bg-primary text-white shadow-xs' : 'text-slate-500 hover:text-primary'}">Largura Total</button>
-                                    <button type="button" id="btn-chart-layout-side" onclick="ReportBuilder.selectChartLayout('side')" class="px-3 py-1 rounded-md text-xs font-bold transition-all ${activeChartLayout === 'side' ? 'bg-primary text-white shadow-xs' : 'text-slate-500 hover:text-primary'}">Lado a Lado (2)</button>
-                                </div>
-                            </div>
-                        `}
-                        <button type="button" onclick="ReportBuilder.insertChartBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
-                            <span class="material-symbols-outlined text-[16px]">add_circle</span> ${existingChartBlock ? 'Atualizar Gráficos na Folha' : 'Inserir Gráficos na Folha'}
-                        </button>
-                    </div>
-                `
-            })}
+            <!-- O filtro da camada, a lista de campos da tabela, o mini-mapa por proximidade e a escolha dos gráficos
+                 saíram daqui: agora são ajustados ao vivo direto na página real do relatório (painel "Configurações
+                 da Pesquisa" em relatorio_view.html), incluindo a posição de cada bloco na folha (arrastar). -->
 
             <!-- CARD: RODAPÉ OFICIAL (FIXO NO RODAPÉ) -->
             ${(() => {
@@ -1417,10 +1357,6 @@
         'acc-grid': { barra: 'border-l-sky-500', icone: 'bg-sky-600 text-white', cabecalho: 'bg-sky-100/80 dark:bg-sky-950/40', corpo: 'bg-sky-50/70 dark:bg-sky-950/20', borda: 'border-sky-300 dark:border-sky-800', texto: 'text-sky-800 dark:text-sky-300' },
         'acc-photos': { barra: 'border-l-amber-500', icone: 'bg-amber-600 text-white', cabecalho: 'bg-amber-100/80 dark:bg-amber-950/40', corpo: 'bg-amber-50/70 dark:bg-amber-950/20', borda: 'border-amber-300 dark:border-amber-800', texto: 'text-amber-800 dark:text-amber-300' },
         'acc-map': { barra: 'border-l-emerald-500', icone: 'bg-emerald-600 text-white', cabecalho: 'bg-emerald-100/80 dark:bg-emerald-950/40', corpo: 'bg-emerald-50/70 dark:bg-emerald-950/20', borda: 'border-emerald-300 dark:border-emerald-800', texto: 'text-emerald-800 dark:text-emerald-300' },
-        'acc-charts': { barra: 'border-l-rose-500', icone: 'bg-rose-600 text-white', cabecalho: 'bg-rose-100/80 dark:bg-rose-950/40', corpo: 'bg-rose-50/70 dark:bg-rose-950/20', borda: 'border-rose-300 dark:border-rose-800', texto: 'text-rose-800 dark:text-rose-300' },
-        'acc-filtro': { barra: 'border-l-orange-500', icone: 'bg-orange-600 text-white', cabecalho: 'bg-orange-100/80 dark:bg-orange-950/40', corpo: 'bg-orange-50/70 dark:bg-orange-950/20', borda: 'border-orange-300 dark:border-orange-800', texto: 'text-orange-800 dark:text-orange-300' },
-        'acc-tabela-feicoes': { barra: 'border-l-teal-500', icone: 'bg-teal-600 text-white', cabecalho: 'bg-teal-100/80 dark:bg-teal-950/40', corpo: 'bg-teal-50/70 dark:bg-teal-950/20', borda: 'border-teal-300 dark:border-teal-800', texto: 'text-teal-800 dark:text-teal-300' },
-        'acc-mapa-feicoes': { barra: 'border-l-blue-500', icone: 'bg-blue-600 text-white', cabecalho: 'bg-blue-100/80 dark:bg-blue-950/40', corpo: 'bg-blue-50/70 dark:bg-blue-950/20', borda: 'border-blue-300 dark:border-blue-800', texto: 'text-blue-800 dark:text-blue-300' },
         'acc-text-footer': { barra: 'border-l-cyan-500', icone: 'bg-cyan-600 text-white', cabecalho: 'bg-cyan-100/80 dark:bg-cyan-950/40', corpo: 'bg-cyan-50/70 dark:bg-cyan-950/20', borda: 'border-cyan-300 dark:border-cyan-800', texto: 'text-cyan-800 dark:text-cyan-300' },
     };
     const COR_CARD_PADRAO = { barra: 'border-l-slate-400', icone: 'bg-slate-600 text-white', cabecalho: 'bg-slate-100 dark:bg-slate-700/40', corpo: 'bg-slate-50 dark:bg-slate-800/40', borda: 'border-slate-300 dark:border-slate-700', texto: 'text-slate-700 dark:text-slate-300' };
@@ -2794,325 +2730,10 @@
         if (panel && currentTemplate.form_id) panel.innerHTML = renderAccordionPanel(currentTemplate.form_id);
     }
 
-    // --- MANIPULADORES DO CARD "FILTRO DE FEIÇÕES" (Relatório Geral) ---
-
-    /** Desenha o card inteiro: explicação, grupos (E dentro, OU entre grupos), botões e a prévia com dados de exemplo. */
-    function renderFiltroCard(fields) {
-        const filtro = (currentTemplate.filtro && Array.isArray(currentTemplate.filtro.grupos)) ? currentTemplate.filtro : { grupos: [] };
-        const filtroLimpo = window.LayerFilter ? window.LayerFilter.normalizeFiltro(filtro) : { grupos: [] };
-        const temFiltro = window.LayerFilter ? !window.LayerFilter.filtroVazio(filtroLimpo) : false;
-
-        let previaHtml = '';
-        if (temFiltro && window.ReportPreview) {
-            const fieldIndex = {};
-            fields.forEach(f => { fieldIndex[f.id] = f; });
-            const amostra = window.ReportPreview.sampleFeatureList(fields, 8).map(p => ({ properties: p }));
-            const n = window.LayerFilter.filtrarFeatures(amostra, filtroLimpo, fieldIndex).length;
-            previaHtml = `<div class="p-2 bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-800 rounded-xl text-[10.5px] text-orange-800 dark:text-orange-200">
-                <span class="font-bold">Na prévia (dados de exemplo):</span> ${n} de ${amostra.length} feições casam com o filtro.
-            </div>`;
-        }
-
-        return renderAccordionCard({
-            id: 'acc-filtro',
-            title: 'Filtro de Feições',
-            icon: 'filter_alt',
-            badge: filtro.grupos.length > 0 ? `${filtro.grupos.length} grupo(s)` : 'Sem filtro (todas as feições)',
-            content: `
-                <div class="flex flex-col gap-3">
-                    <p class="text-[11px] text-slate-500 dark:text-slate-400">Escolha quais feições da camada entram nos gráficos, na tabela e nos mapas deste relatório. Condições dentro do mesmo grupo precisam valer todas ao mesmo tempo (E); grupos diferentes bastam um valer (OU). Sem nenhum grupo, entram todas as feições.</p>
-                    <div class="flex flex-col gap-2" id="cfg-filtro-grupos">
-                        ${filtro.grupos.map((g, gIdx) => renderFiltroGrupoHtml(g, gIdx, fields)).join('<div class="text-center text-[9.5px] font-bold text-orange-500 uppercase tracking-wider">OU</div>')}
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <button type="button" onclick="ReportBuilder.addFiltroGrupo()" class="flex-1 py-1.5 text-[10.5px] font-bold text-orange-700 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-900/40 rounded-lg border border-dashed border-orange-300 dark:border-orange-700 cursor-pointer">+ Grupo (OU)</button>
-                        ${filtro.grupos.length > 0 ? `<button type="button" onclick="ReportBuilder.limparFiltro()" class="py-1.5 px-3 text-[10.5px] font-bold text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer">Limpar filtro</button>` : ''}
-                    </div>
-                    ${previaHtml}
-                </div>
-            `
-        });
-    }
-
-    function renderFiltroGrupoHtml(g, gIdx, fields) {
-        return `
-            <div class="border border-orange-200 dark:border-orange-800 rounded-xl p-2 bg-orange-50/40 dark:bg-orange-950/20 space-y-1.5" data-filtro-grupo="${gIdx}">
-                <div class="flex items-center justify-between">
-                    <span class="text-[9.5px] font-bold uppercase text-orange-700 dark:text-orange-300">Grupo ${gIdx + 1}${gIdx > 0 ? ' (OU)' : ''}</span>
-                    <button type="button" onclick="ReportBuilder.removeFiltroGrupo(${gIdx}, event)" class="text-[9.5px] font-bold text-slate-400 hover:text-red-500 cursor-pointer">Remover grupo</button>
-                </div>
-                ${(g.condicoes || []).map((c, cIdx) => renderFiltroCondicaoHtml(gIdx, cIdx, c, fields)).join('<div class="text-center text-[9px] font-bold text-orange-500 uppercase">E</div>')}
-                <button type="button" onclick="ReportBuilder.addFiltroCondicao(${gIdx})" class="w-full py-1 text-[10px] font-bold text-orange-700 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-900/40 rounded-lg border border-dashed border-orange-300 dark:border-orange-700 cursor-pointer">+ Condição (E)</button>
-            </div>`;
-    }
-
-    function renderFiltroCondicaoHtml(gIdx, cIdx, cond, fields) {
-        const fieldDef = fields.find(f => f.id === cond.field);
-        const tipo = window.LayerFilter ? window.LayerFilter.tipoDoCampo(fieldDef) : 'texto';
-        const ops = window.LayerFilter ? window.LayerFilter.operadoresValidos(tipo) : ['contem'];
-        const precisaValor = cond.op !== 'vazio' && cond.op !== 'preenchido';
-        const precisaValor2 = cond.op === 'entre';
-        const inputType = tipo === 'numero' ? 'number' : (tipo === 'data' ? 'date' : 'text');
-        const inputBase = 'min-w-[90px] flex-1 text-[10.5px] px-1.5 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded';
-        return `
-            <div class="flex flex-wrap items-center gap-1.5 p-1.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-                <select onchange="ReportBuilder.updateFiltroCondicao(${gIdx}, ${cIdx}, 'field', this.value)" class="min-w-[120px] flex-1 text-[10.5px] px-1.5 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded">
-                    <option value="">Campo...</option>
-                    ${fields.map(f => `<option value="${escapeHtml(f.id)}" ${cond.field === f.id ? 'selected' : ''}>${escapeHtml(f.label || f.name || f.id)}</option>`).join('')}
-                </select>
-                <select onchange="ReportBuilder.updateFiltroCondicao(${gIdx}, ${cIdx}, 'op', this.value)" class="text-[10.5px] px-1.5 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded">
-                    ${ops.map(op => `<option value="${op}" ${cond.op === op ? 'selected' : ''}>${escapeHtml(window.LayerFilter ? window.LayerFilter.rotuloOperador(op) : op)}</option>`).join('')}
-                </select>
-                ${precisaValor ? `<input type="${inputType}" value="${escapeHtml(cond.value)}" oninput="ReportBuilder.updateFiltroCondicao(${gIdx}, ${cIdx}, 'value', this.value)" placeholder="Valor" class="${inputBase}" />` : ''}
-                ${precisaValor2 ? `<span class="text-[10px] text-slate-400">e</span><input type="${inputType}" value="${escapeHtml(cond.value2)}" oninput="ReportBuilder.updateFiltroCondicao(${gIdx}, ${cIdx}, 'value2', this.value)" placeholder="Valor final" class="${inputBase}" />` : ''}
-                <button type="button" onclick="ReportBuilder.removeFiltroCondicao(${gIdx}, ${cIdx}, event)" class="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition-colors cursor-pointer print:hidden" title="Remover condição">
-                    <span class="material-symbols-outlined text-[14px] leading-none">close</span>
-                </button>
-            </div>`;
-    }
-
-    function condicaoFiltroVazia() { return { field: '', op: 'contem', value: '', value2: '' }; }
-
-    function garantirFiltro() {
-        if (!currentTemplate.filtro || !Array.isArray(currentTemplate.filtro.grupos)) currentTemplate.filtro = { grupos: [] };
-        return currentTemplate.filtro;
-    }
-
-    function addFiltroGrupo() {
-        const f = garantirFiltro();
-        f.grupos.push({ condicoes: [condicaoFiltroVazia()] });
-        salvarFiltro();
-    }
-
-    function removeFiltroGrupo(gIdx, evt) {
-        if (evt) evt.stopPropagation();
-        const f = garantirFiltro();
-        f.grupos.splice(gIdx, 1);
-        salvarFiltro();
-    }
-
-    function addFiltroCondicao(gIdx) {
-        const f = garantirFiltro();
-        if (!f.grupos[gIdx]) return;
-        if (!Array.isArray(f.grupos[gIdx].condicoes)) f.grupos[gIdx].condicoes = [];
-        f.grupos[gIdx].condicoes.push(condicaoFiltroVazia());
-        salvarFiltro();
-    }
-
-    function removeFiltroCondicao(gIdx, cIdx, evt) {
-        if (evt) evt.stopPropagation();
-        const f = garantirFiltro();
-        if (!f.grupos[gIdx] || !Array.isArray(f.grupos[gIdx].condicoes)) return;
-        f.grupos[gIdx].condicoes.splice(cIdx, 1);
-        if (f.grupos[gIdx].condicoes.length === 0) f.grupos.splice(gIdx, 1); // grupo sem nenhuma condição não faz sentido
-        salvarFiltro();
-    }
-
-    /** Muda campo, operador ou valor de uma condição. Trocar o campo escolhe o 1º operador válido para o novo tipo e limpa os valores. */
-    function updateFiltroCondicao(gIdx, cIdx, prop, value) {
-        const f = garantirFiltro();
-        const c = f.grupos[gIdx] && f.grupos[gIdx].condicoes && f.grupos[gIdx].condicoes[cIdx];
-        if (!c) return;
-        c[prop] = value;
-        if (prop === 'field') {
-            const fieldDef = (window.ReportAdapter && window.ReportAdapter.getFormFields ? window.ReportAdapter.getFormFields(currentTemplate.form_id) : []).find(x => x.id === value);
-            const tipo = window.LayerFilter ? window.LayerFilter.tipoDoCampo(fieldDef) : 'texto';
-            const ops = window.LayerFilter ? window.LayerFilter.operadoresValidos(tipo) : ['contem'];
-            c.op = ops[0];
-            c.value = '';
-            c.value2 = '';
-        }
-        salvarFiltro();
-    }
-
-    function limparFiltro() {
-        currentTemplate.filtro = { grupos: [] };
-        salvarFiltro();
-    }
-
-    function salvarFiltro() {
-        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
-            window.ReportAdapter.saveReportTemplate(currentTemplate);
-        }
-        const formId = currentTemplate.form_id;
-        const panel = document.getElementById('accordion-blocks-panel');
-        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
-    }
-
-    // --- MANIPULADORES DO CARD "TABELA DE FEIÇÕES" (Relatório Geral) ---
-
-    /** Card com a lista de campos (como a Grade de Atributos) para escolher as colunas da tabela. */
-    function renderTabelaFeicoesCard(fields) {
-        const existing = (currentTemplate?.blocos || []).find(b => b.tipo === 'tabela_feicoes');
-        const colunas = existing && Array.isArray(existing.colunas) ? existing.colunas : [];
-        const fieldIndex = {};
-        fields.forEach(f => { fieldIndex[f.id] = f; });
-
-        let previaHtml = '';
-        if (colunas.length > 0 && window.ReportPreview && window.LayerFilter) {
-            const filtroLimpo = window.LayerFilter.normalizeFiltro(currentTemplate.filtro);
-            const amostra = window.ReportPreview.sampleFeatureList(fields, 8).map(p => ({ properties: p }));
-            const n = window.LayerFilter.filtroVazio(filtroLimpo) ? amostra.length : window.LayerFilter.filtrarFeatures(amostra, filtroLimpo, fieldIndex).length;
-            previaHtml = `<div class="p-2 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded-xl text-[10.5px] text-teal-800 dark:text-teal-200">
-                <span class="font-bold">Na prévia (dados de exemplo):</span> a tabela sairia com ${n} linha(s) e ${colunas.length} coluna(s).
-            </div>`;
-        }
-
-        return renderAccordionCard({
-            id: 'acc-tabela-feicoes',
-            title: 'Tabela de Feições',
-            icon: 'table_chart',
-            badge: existing ? `${colunas.length} coluna(s) na Folha` : `${colunas.length} escolhida(s)`,
-            content: `
-                <div class="flex flex-col gap-3">
-                    ${existing ? `
-                        <div class="p-2.5 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded-xl flex items-center justify-between text-xs">
-                            <div class="flex items-center gap-1.5 min-w-0">
-                                <span class="material-symbols-outlined text-teal-600 text-[18px]">check_circle</span>
-                                <span class="font-bold text-teal-900 dark:text-teal-200 truncate">Tabela ativa na Folha A4 (${colunas.length} colunas)</span>
-                            </div>
-                            <span class="text-[10px] font-mono text-teal-700 dark:text-teal-300 font-bold bg-teal-100 dark:bg-teal-900 px-2 py-0.5 rounded">Pronta</span>
-                        </div>
-                    ` : ''}
-                    <p class="text-[11px] text-slate-500 dark:text-slate-400">Escolha os campos que viram coluna na tabela (proprietário, CPF, quadra, lote, bairro...). A tabela lista as feições que passaram pelo filtro, em quantas folhas forem precisas.</p>
-                    <div class="max-h-56 overflow-y-auto space-y-1 p-1 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 custom-scrollbar">
-                        ${fields.map(f => `
-                            <label class="flex items-center justify-between gap-2 p-1.5 rounded-lg hover:bg-white dark:hover:bg-slate-800 text-xs cursor-pointer">
-                                <span class="flex items-center gap-2 min-w-0">
-                                    <input type="checkbox" name="cfg-tabela-feicoes-col" value="${escapeHtml(f.id)}" ${colunas.includes(f.id) ? 'checked' : ''} class="rounded text-primary focus:ring-0" />
-                                    <span class="truncate font-medium text-slate-800 dark:text-slate-200">${escapeHtml(f.label || f.name || f.id)}</span>
-                                </span>
-                                <span class="text-[9px] font-mono text-slate-400 uppercase">${escapeHtml(f.type || 'text')}</span>
-                            </label>
-                        `).join('')}
-                    </div>
-                    ${previaHtml}
-                    <button type="button" onclick="ReportBuilder.insertTabelaFeicoesBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
-                        <span class="material-symbols-outlined text-[16px]">add_circle</span> ${existing ? 'Atualizar Tabela na Folha' : 'Inserir Tabela na Folha'}
-                    </button>
-                </div>
-            `
-        });
-    }
-
-    function insertTabelaFeicoesBlock() {
-        const checked = Array.from(document.querySelectorAll("input[name='cfg-tabela-feicoes-col']:checked")).map(cb => cb.value);
-        const existing = currentTemplate.blocos.find(b => b.tipo === 'tabela_feicoes');
-        if (existing) {
-            existing.colunas = checked;
-        } else {
-            currentTemplate.blocos.push({
-                id: 'blk_tabela_' + Date.now(),
-                tipo: 'tabela_feicoes',
-                titulo: 'Feições da Camada',
-                colunas: checked
-            });
-        }
-        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
-            window.ReportAdapter.saveReportTemplate(currentTemplate);
-        }
-        renderA4Blocks();
-        const formId = currentTemplate.form_id;
-        const panel = document.getElementById('accordion-blocks-panel');
-        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
-    }
-
-    // --- MANIPULADORES DO CARD "MAPA DAS FEIÇÕES" (Relatório Geral) ---
-    const LIMITE_FEICOES_MAPA = 200; // igual ao usado no relatório (src/relatorio_view.html): acima disso, pede para refinar o filtro
-
-    /** Card de liga/desliga: o mapa das feições só existe se o usuário ativar (é o mais pesado de montar dos blocos). */
-    function renderMapaFeicoesCard() {
-        const existing = (currentTemplate?.blocos || []).find(b => b.tipo === 'mapa_feicoes');
-        return renderAccordionCard({
-            id: 'acc-mapa-feicoes',
-            title: 'Mapa das Feições',
-            icon: 'map',
-            badge: existing ? 'Ativo' : 'Desligado',
-            content: `
-                <div class="flex flex-col gap-3">
-                    <p class="text-[11px] text-slate-500 dark:text-slate-400">Mostra as feições filtradas em mini-mapas, agrupados por proximidade (um mapa por grupo geográfico). Como cada mapa é bem mais pesado de montar que uma linha de tabela, isso só acontece se você ativar aqui — e no máximo com <strong>${LIMITE_FEICOES_MAPA} feições</strong> de uma vez; acima disso, o relatório pede para refinar o filtro (a tabela e os gráficos continuam mostrando todas).</p>
-                    ${existing ? `
-                        <div class="p-2.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl flex items-center justify-between text-xs">
-                            <div class="flex items-center gap-1.5 min-w-0">
-                                <span class="material-symbols-outlined text-blue-600 text-[18px]">check_circle</span>
-                                <span class="font-bold text-blue-900 dark:text-blue-200 truncate">Mapa ativo na Folha A4</span>
-                            </div>
-                            <span class="text-[10px] font-mono text-blue-700 dark:text-blue-300 font-bold bg-blue-100 dark:bg-blue-900 px-2 py-0.5 rounded">Pronto</span>
-                        </div>
-                        <button type="button" onclick="ReportBuilder.removeMapaFeicoesBlock()" class="w-full py-2 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl border border-red-200 dark:border-red-800 cursor-pointer">Desativar Mapa das Feições</button>
-                    ` : `
-                        <div class="p-2.5 bg-slate-50 dark:bg-slate-900/50 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl text-[10.5px] text-slate-400 italic">A prévia com dados de exemplo não tem coordenadas para mostrar o mapa; ele aparece na emissão real, com a camada de verdade.</div>
-                        <button type="button" onclick="ReportBuilder.insertMapaFeicoesBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
-                            <span class="material-symbols-outlined text-[16px]">add_circle</span> Ativar Mapa das Feições
-                        </button>
-                    `}
-                </div>
-            `
-        });
-    }
-
-    function insertMapaFeicoesBlock() {
-        if (!currentTemplate.blocos.some(b => b.tipo === 'mapa_feicoes')) {
-            currentTemplate.blocos.push({ id: 'blk_mapageral_' + Date.now(), tipo: 'mapa_feicoes', titulo: 'Mapa das Feições' });
-        }
-        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
-            window.ReportAdapter.saveReportTemplate(currentTemplate);
-        }
-        renderA4Blocks();
-        const formId = currentTemplate.form_id;
-        const panel = document.getElementById('accordion-blocks-panel');
-        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
-    }
-
-    function removeMapaFeicoesBlock() {
-        currentTemplate.blocos = (currentTemplate.blocos || []).filter(b => b.tipo !== 'mapa_feicoes');
-        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
-            window.ReportAdapter.saveReportTemplate(currentTemplate);
-        }
-        renderA4Blocks();
-        const formId = currentTemplate.form_id;
-        const panel = document.getElementById('accordion-blocks-panel');
-        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
-    }
-
-    // --- MANIPULADORES DO CARD 4: GRÁFICOS ---
-    let selectedChartLayout = 'full';
-    function selectChartLayout(layout) {
-        selectedChartLayout = layout;
-        const btnFull = document.getElementById('btn-chart-layout-full');
-        const btnSide = document.getElementById('btn-chart-layout-side');
-        if (layout === 'side') {
-            if (btnSide) btnSide.className = 'px-3 py-1 rounded-md text-xs font-bold bg-primary text-white shadow-xs';
-            if (btnFull) btnFull.className = 'px-3 py-1 rounded-md text-xs font-bold text-slate-500 hover:text-primary';
-        } else {
-            if (btnFull) btnFull.className = 'px-3 py-1 rounded-md text-xs font-bold bg-primary text-white shadow-xs';
-            if (btnSide) btnSide.className = 'px-3 py-1 rounded-md text-xs font-bold text-slate-500 hover:text-primary';
-        }
-    }
-
-    function insertChartBlock() {
-        const checked = Array.from(document.querySelectorAll("input[name='cfg-chart-select']:checked")).map(cb => cb.value);
-        const layout = selectedChartLayout === 'side' ? 'lado_a_lado' : 'largura_total';
-        const existing = currentTemplate.blocos.find(b => b.tipo === 'grafico_existente');
-        if (existing) {
-            // já existe um bloco de gráficos na folha: atualiza no lugar (não duplica); "chart_id" (singular) era do modelo padrão antigo
-            existing.chart_ids = checked;
-            existing.layout = layout;
-            delete existing.chart_id;
-        } else {
-            currentTemplate.blocos.push({
-                id: 'blk_chart_' + Date.now(),
-                tipo: 'grafico_existente',
-                titulo: 'Estatísticas do Dashboard',
-                chart_ids: checked,
-                layout: layout
-            });
-        }
-        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
-            window.ReportAdapter.saveReportTemplate(currentTemplate);
-        }
-        renderA4Blocks();
-    }
+    // Filtro de Feições, Tabela de Feições, Mapa das Feições e Gráficos do Dashboard (Relatório Geral) não têm mais
+    // cards nem manipuladores aqui — são configurados ao vivo em relatorio_view.html (painel "Configurações da
+    // Pesquisa"): ver garantirFiltroGeral, toggleGraficoEscolhidoGeral, toggleColunaTabelaGeral, toggleMapaFeicoesGeral
+    // e o arrastar-para-reordenar (reordenarBlocosGeraisPelaTela) naquele arquivo.
 
     // --- MANIPULADORES DO CARD 5: KPIS ---
     // --- MANIPULADORES DO CARD 6: VISTORIA FOTOGRÁFICA & ANEXOS 1:N ---
@@ -4992,16 +4613,6 @@
         filterGridFieldsInDrawer,
         selectGridColumns,
         selectMapMode,
-        insertTabelaFeicoesBlock,
-        insertMapaFeicoesBlock,
-        removeMapaFeicoesBlock,
-        addFiltroGrupo,
-        removeFiltroGrupo,
-        addFiltroCondicao,
-        removeFiltroCondicao,
-        updateFiltroCondicao,
-        limparFiltro,
-        selectChartLayout,
         selectPhotoLayout,
         handleLogoUpload,
         insertHeaderBlock,
@@ -5017,7 +4628,6 @@
         toggleFieldWidthPopover,
         closeFieldWidthPopover,
         insertMapBlock,
-        insertChartBlock,
         selectPhotoLayout,
         select1nScope,
         on1nSourceTabChange,

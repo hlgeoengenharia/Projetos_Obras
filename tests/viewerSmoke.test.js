@@ -132,6 +132,17 @@ async function runScenario(cfg) {
                 }
                 return out;
             }
+            if (sel === '.geral-bloco-arrastavel') {
+                const html = (registry['a4-document-container'] && registry['a4-document-container']._html) || '';
+                const out = [];
+                const re = /<div class="geral-bloco-arrastavel" data-bloco-id="([^"]*)">/g;
+                let m;
+                while ((m = re.exec(html))) {
+                    const blocoId = m[1];
+                    out.push({ getAttribute: (n) => (n === 'data-bloco-id' ? blocoId : null) });
+                }
+                return out;
+            }
             return [];
         }
     };
@@ -1026,6 +1037,45 @@ async function runScenario(cfg) {
         await r.sandbox.salvarPesquisaGeral();
         await r.settle(6);
         ok('limpar filtro + salvar: sem filtro, as 3 feições continuam aparecendo', r.registry['a4-document-container']._html.includes('3 feições'));
+    }
+
+    // ---- REORDENAR BLOCOS DO RELATÓRIO GERAL: arrastar direto na folha (Caixa de Texto, Tabela, Mapa, Gráficos)
+    {
+        const tpl = {
+            id: 'rpt_ordem', nome: 'Relatório Geral', tipo: 'geral', form_id: 'f1',
+            config_pagina: { tamanho: 'A4', orientacao: 'portrait', margens_mm: { top: 15, bottom: 15, left: 15, right: 15 } },
+            blocos: [
+                { id: 'h', tipo: 'cabecalho' },
+                { id: 'g1', tipo: 'grafico_existente', titulo: 'Estatísticas', chart_ids: ['c1'], layout: 'largura_total' },
+                { id: 't1', tipo: 'caixa_texto_livre', conteudo: 'Texto livre de teste' },
+                { id: 'f', tipo: 'rodape' }
+            ]
+        };
+        const charts = [{ id: 'c1', title: 'Situação', type: 'pie', fieldId: 'sit', fieldLabel: 'Situação' }];
+        const formFields = [{ id: 'sit', label: 'Situação', type: 'select' }];
+        const payload = { templateId: 'rpt_ordem', template: tpl, formId: 'f1', formFields, formTabs: [], charts, featureListAll: [{ sit: 'Regular' }], featureData: {}, featureGeometry: null, preview: true };
+        const r = await runScenario({ payload, opener: true });
+        eq('reordenar: nenhum erro de execução', r.errors, []);
+        const doc = () => r.registry['a4-document-container']._html;
+        ok('reordenar: os 2 blocos móveis vêm com a alça de arrastar, na ordem do modelo (gráfico antes do texto)', doc().indexOf('data-bloco-id="g1"') >= 0 && doc().indexOf('data-bloco-id="g1"') < doc().indexOf('data-bloco-id="t1"'));
+        ok('reordenar: o cabeçalho não ganha alça (não é bloco móvel)', !doc().includes('data-bloco-id="h"'));
+
+        // simula o fim de um arrasto: a tela passou a mostrar "t1" antes de "g1"
+        const original = r.sandbox.document.querySelectorAll;
+        r.sandbox.document.querySelectorAll = (sel) => (sel === '.geral-bloco-arrastavel'
+            ? [{ getAttribute: () => 't1' }, { getAttribute: () => 'g1' }]
+            : original(sel));
+        r.sandbox.reordenarBlocosGeraisPelaTela();
+        r.sandbox.document.querySelectorAll = original;
+
+        // só ao salvar (que redesenha a folha) a nova ordem aparece de fato no HTML
+        await r.sandbox.salvarPesquisaGeral();
+        await r.settle(6);
+        eq('reordenar + salvar: nenhum erro', r.errors, []);
+        ok('reordenar + salvar: a folha agora mostra o texto antes do gráfico (ordem trocada)', doc().indexOf('data-bloco-id="t1"') >= 0 && doc().indexOf('data-bloco-id="t1"') < doc().indexOf('data-bloco-id="g1"'));
+        const salvos = JSON.parse(r.storage.getItem('constructive_report_templates') || '[]');
+        const tplSalvo = salvos.find(t => t.id === 'rpt_ordem');
+        eq('reordenar + salvar: a nova ordem foi persistida no modelo (blocos: cabeçalho, texto, gráfico, rodapé)', tplSalvo.blocos.map(b => b.id), ['h', 't1', 'g1', 'f']);
     }
 
     console.log(`viewerSmoke: ${total - failed}/${total} verificações passaram`);

@@ -16,23 +16,23 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260922d"></script>
-    <script src="src/mapTools.js?v=20260922d"></script>
-    <script src="src/reportMap.js?v=20260922d"></script>
-    <script src="src/reportTemporal.js?v=20260922d"></script>
-    <script src="src/reportExport.js?v=20260922d"></script>
-    <script src="src/reportBlocks.js?v=20260922d"></script>
-    <script src="src/reportEditor.js?v=20260922d"></script>
-    <script src="src/reportFreeText.js?v=20260922d"></script>
-    <script src="src/reportWord.js?v=20260922d"></script>
-    <script src="src/reportDocx.js?v=20260922d"></script>
-    <script src="src/mapSnapshot.js?v=20260922d"></script>
-    <script src="src/verificarEmissao.js?v=20260922d"></script>
+    <script src="src/pageSize.js?v=20260922e"></script>
+    <script src="src/mapTools.js?v=20260922e"></script>
+    <script src="src/reportMap.js?v=20260922e"></script>
+    <script src="src/reportTemporal.js?v=20260922e"></script>
+    <script src="src/reportExport.js?v=20260922e"></script>
+    <script src="src/reportBlocks.js?v=20260922e"></script>
+    <script src="src/reportEditor.js?v=20260922e"></script>
+    <script src="src/reportFreeText.js?v=20260922e"></script>
+    <script src="src/reportWord.js?v=20260922e"></script>
+    <script src="src/reportDocx.js?v=20260922e"></script>
+    <script src="src/mapSnapshot.js?v=20260922e"></script>
+    <script src="src/verificarEmissao.js?v=20260922e"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260922d"></script>
-    <script src="src/reportData.js?v=20260922d"></script>
-    <script src="src/layerFilter.js?v=20260922d"></script>
+    <script src="src/fieldFormatter.js?v=20260922e"></script>
+    <script src="src/reportData.js?v=20260922e"></script>
+    <script src="src/layerFilter.js?v=20260922e"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
@@ -195,6 +195,13 @@
         #pesquisa-tools-toggle { background: #ea580c; }
         #pesquisa-tools-panel .pesquisa-status { font-size: 10px; color: #64748b; min-height: 14px; margin-top: 4px; }
         #pesquisa-tools-panel select, #pesquisa-tools-panel input[type="text"] { border: 1px solid #cbd5e1; border-radius: 6px; padding: 3px 5px; font-size: 11px; width: 100%; box-sizing: border-box; }
+        /* Blocos móveis do Relatório Geral (arrastar para reordenar direto na folha) */
+        .geral-bloco-arrastavel { position: relative; }
+        .bloco-drag-handle { display: flex; align-items: center; gap: 3px; font-size: 9px; color: #94a3b8; cursor: grab; user-select: none; padding: 0 0 3px; opacity: .7; }
+        .bloco-drag-handle:hover { opacity: 1; color: #475569; }
+        .bloco-drag-handle .material-symbols-outlined { font-size: 13px; }
+        .geral-bloco-arrastavel.sortable-chosen { outline: 2px dashed #ea580c; outline-offset: 2px; border-radius: 6px; }
+        @media print { .bloco-drag-handle { display: none !important; } }
         .mention-rendered {
             font-weight: 600;
             color: #0f172a;
@@ -454,6 +461,62 @@
             if (ev) { ev.stopPropagation(); ev.preventDefault(); }
             fecharPopoverLargura();
             avisarConstrutor({ tipo: 'construtor:acao', nome: 'setFieldWidthExact', args: [idx, fid, pct] });
+        }
+
+        /**
+         * REORDENAR BLOCOS DO RELATÓRIO GERAL: arrastar direto na folha (não no construtor — esses blocos só
+         * existem/se configuram aqui). Cabeçalho e rodapé não entram (são slots fixos, fora do corpo).
+         */
+        const MOVABLE_BLOCK_TYPES = new Set(['caixa_texto_livre', 'texto_livre', 'tabela_feicoes', 'mapa_feicoes', 'grafico_existente']);
+
+        function envolverArrastoBloco(html, blocoId) {
+            return `<div class="geral-bloco-arrastavel" data-bloco-id="${escapeHtml(blocoId)}">
+                <div class="bloco-drag-handle no-print" title="Arraste para mudar a posição deste bloco na folha"><span class="material-symbols-outlined">drag_indicator</span> arrastar para reordenar</div>
+                ${html}
+            </div>`;
+        }
+
+        let arrastosBlocosGerais = [];
+        function ligarArrastoBlocosGerais() {
+            arrastosBlocosGerais.forEach(s => { try { s.destroy(); } catch (e) { /* já removido */ } });
+            arrastosBlocosGerais = [];
+            const montar = () => {
+                if (typeof Sortable === 'undefined') return;
+                document.querySelectorAll('.a4-page-body-slot').forEach(cont => {
+                    arrastosBlocosGerais.push(new Sortable(cont, {
+                        draggable: '.geral-bloco-arrastavel', handle: '.bloco-drag-handle', group: 'geral-blocos-pesquisa',
+                        animation: 200, ghostClass: 'opacity-40', chosenClass: 'ring-2',
+                        onEnd: reordenarBlocosGeraisPelaTela
+                    }));
+                });
+            };
+            if (typeof Sortable === 'undefined') {
+                const s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js';
+                s.onload = montar;
+                document.head.appendChild(s);
+            } else {
+                montar();
+            }
+        }
+
+        /** Depois de soltar um bloco: lê a nova ordem visual (em toda a folha, entre páginas) e grava no modelo (rascunho, some ao salvar). */
+        function reordenarBlocosGeraisPelaTela() {
+            if (!tplAtual || !Array.isArray(tplAtual.blocos)) return;
+            const idsNaTela = [];
+            document.querySelectorAll('.geral-bloco-arrastavel').forEach(el => {
+                const id = el.getAttribute('data-bloco-id');
+                if (id && idsNaTela.indexOf(id) < 0) idsNaTela.push(id);
+            });
+            if (idsNaTela.length < 2) return; // nada para reordenar
+            const porId = {};
+            tplAtual.blocos.forEach(b => { porId[b.id] = b; });
+            const fila = idsNaTela.map(id => porId[id]).filter(Boolean);
+            if (fila.length !== idsNaTela.length) return; // segurança: algum id não bate (ex.: bloco recém-criado sem redesenhar) — não mexe em nada
+            let cursor = 0;
+            tplAtual.blocos = tplAtual.blocos.map(b => (idsNaTela.indexOf(b.id) >= 0) ? fila[cursor++] : b);
+            statusPesquisaGeral = 'Ordem alterada (clique em "Salvar ajustes" para guardar).';
+            renderPainelPesquisaGeral();
         }
 
         /** Arrastar campos (alça ⠿) dentro da grade e do laudo: a nova ordem vai para o construtor. */
@@ -757,6 +820,7 @@
             tplAtual = tpl;
             tplSalvoSnapshot = JSON.parse(JSON.stringify(tpl));
             renderPainelPesquisaGeral(fields);
+            const isGeral = tpl.tipo === 'geral';
 
             const blocos = tpl.blocos || [];
             const hdrBloco = blocos.find(b => b.tipo === 'cabecalho');
@@ -846,7 +910,7 @@
                     let used = 0;
                     while (take < rows.length && used + heights[take] <= room) { used += heights[take]; take++; }
                     if (take === 0) take = 1; // linha maior que a folha: entra sozinha
-                    currentPage().push({ bloco: rb.bloco, html: rb.split.chunkHtml(rows.slice(0, take), isFirstChunk) });
+                    currentPage().push({ bloco: rb.bloco, html: rb.split.chunkHtml(rows.slice(0, take), isFirstChunk), primeiroChunk: isFirstChunk });
                     pageAcc += rb.overheadH + used + BLOCK_GAP;
                     isFirstChunk = false;
                     rows = rows.slice(take);
@@ -868,7 +932,11 @@
                 const padTopMm = showHeader ? Math.max(2, mm.top - 8) : mm.top;
                 const padBotMm = showFooter ? Math.max(2, mm.bottom - 8) : mm.bottom;
 
-                const bodyHtml = pageBlocks.map(b => envolverEdicao(b.html, blocos.indexOf(b.bloco), b.bloco)).join('');
+                const bodyHtml = pageBlocks.map(b => {
+                    const ehPrimeiro = b.primeiroChunk !== false; // ausente (bloco inteiro, não dividido) ou true = primeira aparição
+                    const html = (isGeral && !EDICAO && ehPrimeiro && MOVABLE_BLOCK_TYPES.has(b.bloco.tipo)) ? envolverArrastoBloco(b.html, b.bloco.id) : b.html;
+                    return envolverEdicao(html, blocos.indexOf(b.bloco), b.bloco);
+                }).join('');
                 const pageIdAttr = isFirst ? 'id="report-blocks-render"' : '';
 
                 pagesHtml += `
@@ -893,6 +961,7 @@
             docContainer.innerHTML = pagesHtml;
             renderPendingCharts();
             renderPendingMapasFeicoes();
+            if (isGeral && !EDICAO) ligarArrastoBlocosGerais();
 
             if (mapController && keptMapWrap) {
                 // repaginação: o mapa (Leaflet vivo) volta para o novo lugar, sem recarregar nada

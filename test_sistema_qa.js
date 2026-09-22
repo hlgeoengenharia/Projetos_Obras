@@ -511,13 +511,13 @@ if (reportBuilderExists) {
         reportBuilderCode.includes("id: 'acc-header'") &&
         reportBuilderCode.includes("id: 'acc-grid'") &&
         reportBuilderCode.includes("id: 'acc-map'") &&
-        reportBuilderCode.includes("id: 'acc-charts'") &&
+        !reportBuilderCode.includes("id: 'acc-charts'") && // Gráficos do Dashboard: virou painel ao vivo em relatorio_view.html
         !reportBuilderCode.includes("id: 'acc-kpis'") &&
         reportBuilderCode.includes("id: 'acc-photos'") &&
         !reportBuilderCode.includes("id: 'acc-table-syn'") &&
         !reportBuilderCode.includes("id: 'acc-table-ana'") &&
         reportBuilderCode.includes("id: 'acc-text-footer'");
-    assertTest('Relatórios A4: Gavetas Acordeon do painel lateral (sem os cards de KPIs, Tabela Sintética/Lote e Tabela Analítica Aprofundada)', hasTenAccordionCards);
+    assertTest('Relatórios A4: Gavetas Acordeon do painel lateral (sem os cards de KPIs, Tabela Sintética/Lote, Tabela Analítica Aprofundada e Gráficos do Dashboard)', hasTenAccordionCards);
 
     const hasA4CanvasStyles = reportBuilderCode.includes('a4-sheet-stage') &&
         reportBuilderCode.includes('page-break-avoid') &&

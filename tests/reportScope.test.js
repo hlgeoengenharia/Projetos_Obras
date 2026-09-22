@@ -57,7 +57,7 @@ const has = (html, text) => html.includes(text);
 RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
 let html = container.innerHTML;
 ok('individual: modelo criado é uma Ficha Individual', has(html, 'Ficha Individual'));
-ok('individual: NÃO tem o card Gráficos do Dashboard', !has(html, "acc-charts") && !has(html, 'Gráficos do Dashboard'));
+ok('individual: sem os cards de Filtro/Tabela/Mapa/Gráficos (só existem no relatório real)', !has(html, 'Filtro de Feições') && !has(html, 'Tabela de Feições') && !has(html, 'Mapa das Feições') && !has(html, 'Gráficos do Dashboard'));
 ok('individual: tem Grade de Atributos, Quadro Analítico e Mapa', has(html, 'Grade de Atributos') && has(html, 'Quadro Analítico e Sintético') && has(html, 'Mini-Mapa Cartográfico'));
 ok('individual: mantém Cabeçalho, Caixa de texto livre e Rodapé', has(html, 'Cabeçalho Institucional') && has(html, 'Caixa de texto livre') && has(html, 'Rodapé Oficial'));
 ok('individual: tem o atalho no popup da feição', has(html, 'Atalho no Popup da Feição'));
@@ -116,9 +116,8 @@ ok('volta para A4', has(container.innerHTML, 'Folha A4 Interativa'));
 RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
 html = container.innerHTML;
 ok('geral: é um relatório à parte, sem vínculo com a ficha individual: nasce em branco (sem nome e sem blocos), até que exista um geral salvo', has(html, 'id="rpt-template-name" value=""') && !has(html, 'Ficha Individual'));
-ok('geral: tem Cabeçalho, Caixa de texto livre, Gráficos do Dashboard e Rodapé',
-    has(html, 'Cabeçalho Institucional') && has(html, 'Caixa de texto livre') && has(html, 'Gráficos do Dashboard') && has(html, 'Rodapé Oficial'));
-ok('geral: lista os gráficos do Dashboard do cadastro', has(html, 'Situação do recuo'));
+ok('geral: tem Cabeçalho, Caixa de texto livre e Rodapé', has(html, 'Cabeçalho Institucional') && has(html, 'Caixa de texto livre') && has(html, 'Rodapé Oficial'));
+ok('geral: sem os cards de Filtro/Tabela/Mapa/Gráficos no construtor (agora ao vivo no relatório real)', !has(html, 'Filtro de Feições') && !has(html, 'Tabela de Feições') && !has(html, 'Mapa das Feições') && !has(html, 'Gráficos do Dashboard'));
 ok('geral: NÃO tem Grade, Quadro Analítico nem Mapa', !has(html, 'Grade de Atributos') && !has(html, 'Quadro Analítico e Sintético') && !has(html, 'Mini-Mapa Cartográfico'));
 ok('geral: sem atalho no popup da feição', !has(html, 'Atalho no Popup da Feição'));
 ok('geral: também escolhe A4 | A3', has(html, "ReportBuilder.setPageSize('A3')"));
@@ -134,175 +133,40 @@ ok('geral: também tem o botão "Ver como sairá" (usa a lista de exemplo, sem f
     ok('geral: a janela abre em modo prévia', /previa=1/.test(abertaGeral));
 }
 
-// ---------------------------------------------------------------- Filtro de Feições (só no Relatório Geral)
-{
-    // salvarFiltro() atualiza o painel lateral direto (accordion-blocks-panel); neste teste, sem esse elemento
-    // na tela simulada, redesenha a aba inteira para conferir o resultado — como o teste dos gráficos já faz.
-    const redesenhar = () => RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
-
-    RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
-    ok('individual: sem o card de filtro', !has(container.innerHTML, 'Filtro de Feições'));
-
-    const forms0 = window.forms[0];
-    forms0.tabs = forms0.tabs.filter(t => t.id !== 't_filtro');
-    forms0.tabs.push({ id: 't_filtro', title: 'Dados', fields: [{ id: 'sit', label: 'Situação', type: 'select' }, { id: 'area', label: 'Área', type: 'area_m2' }] });
-
-    redesenhar();
-    html = container.innerHTML;
-    ok('geral: tem o card "Filtro de Feições", sem nenhum grupo ainda', has(html, 'Filtro de Feições') && has(html, 'Sem filtro (todas as feições)') && !has(html, 'Grupo 1'));
-
-    RB.addFiltroGrupo();
-    redesenhar();
-    html = container.innerHTML;
-    ok('1º grupo: uma condição em branco (campo vazio, operador "contém" por padrão)', has(html, 'Grupo 1') && has(html, "ReportBuilder.updateFiltroCondicao(0, 0, 'field', this.value)") && /<option value="sit"[^>]*>Situação<\/option>/.test(html) && /<option value="contem" selected>/.test(html));
-    ok('badge mostra "1 grupo(s)"', has(html, '1 grupo(s)'));
-
-    RB.updateFiltroCondicao(0, 0, 'field', 'sit');
-    redesenhar();
-    html = container.innerHTML;
-    ok('campo do tipo lista: operadores sem "contém"/"entre" (só igual, diferente, vazio, preenchido)', has(html, "value=\"igual\" selected") && !has(html, 'value="contem"') && !has(html, 'value="entre"'));
-
-    RB.updateFiltroCondicao(0, 0, 'field', 'area');
-    redesenhar();
-    html = container.innerHTML;
-    ok('trocar para um campo numérico: operadores certos (maior/menor/entre) e campo de valor numérico', has(html, 'value="maior"') && has(html, 'value="entre"') && /type="number"[^>]*oninput="ReportBuilder.updateFiltroCondicao\(0, 0, 'value'/.test(html));
-
-    RB.updateFiltroCondicao(0, 0, 'op', 'entre');
-    RB.updateFiltroCondicao(0, 0, 'value', '100');
-    RB.updateFiltroCondicao(0, 0, 'value2', '500');
-    redesenhar();
-    html = container.innerHTML;
-    ok('operador "entre": aparece o segundo campo de valor, com "e" entre os dois', /value="100"/.test(html) && /value="500"/.test(html) && has(html, '<span class="text-[10px] text-slate-400">e</span>'));
-
-    RB.addFiltroCondicao(0);
-    redesenhar();
-    html = container.innerHTML;
-    ok('2ª condição no mesmo grupo: aparece o separador "E"', (html.match(/text-orange-500 uppercase">E</g) || []).length === 1 && has(html, "ReportBuilder.updateFiltroCondicao(0, 1, 'field', this.value)"));
-    RB.updateFiltroCondicao(0, 1, 'field', 'sit');
-    RB.updateFiltroCondicao(0, 1, 'op', 'igual');
-    RB.updateFiltroCondicao(0, 1, 'value', 'irregular');
-
-    RB.addFiltroGrupo();
-    redesenhar();
-    html = container.innerHTML;
-    ok('2º grupo: aparece o separador "OU" entre os grupos', has(html, 'Grupo 2 (OU)') && has(html, 'uppercase tracking-wider">OU<'));
-    ok('badge agora mostra "2 grupo(s)"', has(html, '2 grupo(s)'));
-    ok('a prévia já aparece com o 1º grupo válido (o 2º, ainda em branco, é ignorado até ficar completo)', has(html, 'Na prévia (dados de exemplo):'));
-
-    RB.updateFiltroCondicao(1, 0, 'field', 'sit');
-    RB.updateFiltroCondicao(1, 0, 'op', 'preenchido');
-    redesenhar();
-    html = container.innerHTML;
-    ok('"preenchido"/"vazio": some o campo de valor (não faz sentido digitar nada)', has(html, "ReportBuilder.updateFiltroCondicao(1, 0, 'op', this.value)") && !has(html, "ReportBuilder.updateFiltroCondicao(1, 0, 'value',"));
-    ok('agora com os dois grupos completos, a prévia com dados de exemplo aparece', has(html, 'Na prévia (dados de exemplo):') && /de 8 feições casam com o filtro\./.test(html));
-
-    RB.removeFiltroCondicao(0, 1);
-    redesenhar();
-    html = container.innerHTML;
-    ok('remover a 2ª condição do grupo 1: volta a ter só uma, sem o separador "E"', (html.match(/text-orange-500 uppercase">E</g) || []).length === 0);
-
-    RB.removeFiltroCondicao(1, 0);
-    redesenhar();
-    html = container.innerHTML;
-    ok('remover a única condição de um grupo remove o grupo inteiro (não sobra um grupo vazio)', !has(html, 'Grupo 2') && has(html, '1 grupo(s)'));
-
-    redesenhar();
-    html = container.innerHTML;
-    ok('o filtro persiste ao trocar de aba/voltar (foi salvo)', /value="100"/.test(html) && /value="500"/.test(html) && has(html, '1 grupo(s)'));
-
-    RB.limparFiltro();
-    redesenhar();
-    html = container.innerHTML;
-    ok('"Limpar filtro" volta ao estado sem nenhum grupo', has(html, 'Sem filtro (todas as feições)') && !has(html, 'Grupo 1'));
-}
-
-// ---------------------------------------------------------------- Tabela de Feições (só no Relatório Geral): colunas escolhidas, sem duplicar ao inserir de novo
-{
-    RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
-    ok('individual: sem o card de tabela de feições', !has(container.innerHTML, 'Tabela de Feições'));
-
-    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
-    html = container.innerHTML;
-    ok('geral: tem o card "Tabela de Feições", sem coluna nenhuma ainda', has(html, 'Tabela de Feições') && has(html, '0 escolhida(s)') && !has(html, 'Tabela ativa na Folha A4'));
-    ok('lista os campos do cadastro com o tipo de cada um', has(html, "name=\"cfg-tabela-feicoes-col\" value=\"a\"") && has(html, '>text<'));
-
-    const qsaAntes = document.querySelectorAll;
-    document.querySelectorAll = () => [{ value: 'a' }]; // simula o checkbox do campo 'a' marcado na hora de inserir
-    RB.insertTabelaFeicoesBlock();
-    document.querySelectorAll = qsaAntes;
-    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
-    html = container.innerHTML;
-    let tplT = RA.getReportTemplates('f1').find(t => t.tipo === 'geral');
-    let tabelaBloco = tplT.blocos.find(b => b.tipo === 'tabela_feicoes');
-    eq('1º clique: cria o bloco com a coluna escolhida', [tplT.blocos.filter(b => b.tipo === 'tabela_feicoes').length, tabelaBloco.colunas], [1, ['a']]);
-    ok('card mostra "Tabela ativa na Folha A4" e o botão vira "Atualizar"', has(html, 'Tabela ativa na Folha A4') && has(html, 'Atualizar Tabela na Folha') && !has(html, 'Inserir Tabela na Folha'));
-    ok('checkbox da coluna já escolhida vem marcado', new RegExp('name="cfg-tabela-feicoes-col" value="a" checked').test(html));
-    ok('com coluna escolhida: prévia com dados de exemplo (linhas e colunas)', /Na prévia \(dados de exemplo\):<\/span> a tabela sairia com \d+ linha\(s\) e 1 coluna\(s\)\./.test(html));
-
-    RB.insertTabelaFeicoesBlock(); // clicar de novo sem nada marcado (querySelectorAll padrão devolve []): esvazia as colunas do MESMO bloco, não duplica
-    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
-    tplT = RA.getReportTemplates('f1').find(t => t.tipo === 'geral');
-    eq('2º clique: atualiza o mesmo bloco (não duplica)', tplT.blocos.filter(b => b.tipo === 'tabela_feicoes').length, 1);
-}
-
-// ---------------------------------------------------------------- Mapa das Feições (só no Relatório Geral): liga/desliga, sem duplicar
-{
-    RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
-    ok('individual: sem o card de mapa das feições', !has(container.innerHTML, 'Mapa das Feições'));
-
-    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
-    html = container.innerHTML;
-    ok('geral: tem o card "Mapa das Feições", desligado por padrão', has(html, 'Mapa das Feições') && has(html, 'Desligado') && !has(html, 'Mapa ativo na Folha A4'));
-    ok('card explica o teto de feições e que a prévia não mostra o mapa', has(html, '200 feições') && has(html, 'não tem coordenadas para mostrar o mapa'));
-
-    RB.insertMapaFeicoesBlock();
-    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
-    let tplM = RA.getReportTemplates('f1').find(t => t.tipo === 'geral');
-    html = container.innerHTML;
-    eq('ativar: cria um único bloco "mapa_feicoes"', tplM.blocos.filter(b => b.tipo === 'mapa_feicoes').length, 1);
-    ok('card mostra "Mapa ativo" e o botão vira "Desativar"', has(html, 'Mapa ativo na Folha A4') && has(html, 'Desativar Mapa das Feições') && !has(html, 'Ativar Mapa das Feições'));
-
-    RB.insertMapaFeicoesBlock(); // ativar de novo não duplica
-    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
-    tplM = RA.getReportTemplates('f1').find(t => t.tipo === 'geral');
-    eq('ativar de novo: continua um único bloco (não duplica)', tplM.blocos.filter(b => b.tipo === 'mapa_feicoes').length, 1);
-
-    RB.removeMapaFeicoesBlock();
-    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
-    tplM = RA.getReportTemplates('f1').find(t => t.tipo === 'geral');
-    html = container.innerHTML;
-    eq('desativar: remove o bloco', tplM.blocos.filter(b => b.tipo === 'mapa_feicoes').length, 0);
-    ok('card volta a mostrar "Desligado" e o botão "Ativar"', has(html, 'Desligado') && has(html, 'Ativar Mapa das Feições'));
-}
-
-// gráficos: sem duplicar ao inserir de novo; a seleção e a disposição refletem o que já está na folha
-{
-    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
-    RB.selectChartLayout('side');
-    RB.insertChartBlock();
-    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
-    let tplG = RA.getReportTemplates('f1').find(t => t.tipo === 'geral');
-    eq('1º clique: um único bloco, com o layout escolhido', [tplG.blocos.filter(b => b.tipo === 'grafico_existente').length, tplG.blocos.find(b => b.tipo === 'grafico_existente').layout], [1, 'lado_a_lado']);
-    RB.selectChartLayout('full');
-    RB.insertChartBlock();
-    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
-    tplG = RA.getReportTemplates('f1').find(t => t.tipo === 'geral');
-    eq('2º clique: atualiza o mesmo bloco (não duplica)', [tplG.blocos.filter(b => b.tipo === 'grafico_existente').length, tplG.blocos.find(b => b.tipo === 'grafico_existente').layout], [1, 'largura_total']);
-    html = container.innerHTML;
-    ok('card mostra "Gráficos ativos na Folha A4" e o botão vira "Atualizar"', has(html, 'Gráficos ativos na Folha A4') && has(html, 'Atualizar Gráficos na Folha') && !has(html, 'Inserir Gráficos na Folha'));
-}
-
 // o modelo geral é gravado à parte e o individual não o enxerga
+RB.updateTemplateName('Relatório Geral de Teste'); // sem card algum mais mexendo no modelo, precisa de nome para "Salvar Modelo" liberar
 RB.saveCurrentTemplate(false);
 const todos = RA.getReportTemplates('f1');
 ok('modelo geral gravado com tipo "geral"', todos.some(t => t.tipo === 'geral'));
 ok('sem bloco de KPIs/tabela no modelo padrão do geral',
     todos.filter(t => t.tipo === 'geral').every(t => !t.blocos.some(b => b.tipo === 'kpi_cards' || b.tipo === 'tabela_sintetica')));
-ok('modelo geral já traz o gráfico que o teste anterior inseriu (nasceu em branco, sem cabeçalho/rodapé automáticos)', (() => {
+ok('modelo geral nasceu em branco (sem cabeçalho/rodapé automáticos)', (() => {
     const g = todos.find(t => t.tipo === 'geral');
     const tipos = g.blocos.map(b => b.tipo);
-    return tipos.includes('grafico_existente') && !tipos.includes('cabecalho') && !tipos.includes('rodape');
+    return !tipos.includes('cabecalho') && !tipos.includes('rodape');
 })());
+
+// Filtro/Tabela de Feições/Mapa das Feições/Gráficos do Dashboard: sem card no construtor — configurados ao vivo
+// direto em relatorio_view.html (painel "Configurações da Pesquisa", ver tests/viewerSmoke.test.js). O construtor
+// não edita mais esses blocos, mas o modelo continua aceitando-os (quem grava agora é a página real).
+{
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
+    ok('geral: as funções dos cards antigos não existem mais no construtor', [
+        'addFiltroGrupo', 'removeFiltroGrupo', 'addFiltroCondicao', 'removeFiltroCondicao', 'updateFiltroCondicao', 'limparFiltro',
+        'insertTabelaFeicoesBlock', 'insertMapaFeicoesBlock', 'removeMapaFeicoesBlock', 'insertChartBlock', 'selectChartLayout'
+    ].every(fn => typeof RB[fn] !== 'function'));
+
+    const tplGeral = RA.getReportTemplates('f1').find(t => t.tipo === 'geral');
+    tplGeral.filtro = { grupos: [{ condicoes: [{ field: 'a', op: 'igual', value: 'x' }] }] };
+    tplGeral.blocos.push({ id: 'blk_tabela_x', tipo: 'tabela_feicoes', titulo: 'Feições', colunas: ['a'] });
+    tplGeral.blocos.push({ id: 'blk_mapa_x', tipo: 'mapa_feicoes', titulo: 'Mapa' });
+    RA.saveReportTemplate(tplGeral);
+    RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
+    const tplRecarregado = RA.getReportTemplates('f1').find(t => t.tipo === 'geral');
+    eq('geral: o modelo continua guardando filtro/tabela/mapa gravados por fora (como o painel ao vivo faria)',
+        [tplRecarregado.filtro.grupos.length, tplRecarregado.blocos.some(b => b.tipo === 'tabela_feicoes'), tplRecarregado.blocos.some(b => b.tipo === 'mapa_feicoes')],
+        [1, true, true]);
+}
 ok('geral: o atalho no popup não se aplica (campo nem aparece nessa aba)', todos.filter(t => t.tipo === 'geral').every(t => t.atalho_aba !== 'header' && t.atalho_aba !== 'todas'));
 
 RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
@@ -651,7 +515,8 @@ RB.initReportBuilderTab('f1', 'MPF', { scope: 'individual' });
     RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
     const h = container.innerHTML;
     const geral = () => RA.getReportTemplates('f1').find(t => t.tipo === 'geral') || {};
-    ok('geral: mostra só os cards da camada (folha, cabeçalho, texto livre, gráficos, rodapé)', ['Configuração da Folha', 'Cabeçalho Institucional', 'Caixa de texto livre', 'Gráficos do Dashboard', 'Rodapé Oficial'].every(x => h.includes(x)));
+    ok('geral: mostra só os cards da camada (folha, cabeçalho, texto livre, rodapé)', ['Configuração da Folha', 'Cabeçalho Institucional', 'Caixa de texto livre', 'Rodapé Oficial'].every(x => h.includes(x)));
+    ok('geral: sem o card de Gráficos do Dashboard (ao vivo no relatório real)', !h.includes('Gráficos do Dashboard'));
     ok('geral: não mostra os cards do relatório individual (grade, mapa, quadro 1:N)', !h.includes('Grade de Atributos') && !h.includes('Mini-Mapa') && !h.includes('Quadro Analítico'));
     eq('geral: continua sendo um modelo do tipo "geral", com uma lista de blocos válida', [geral().tipo, Array.isArray(geral().blocos)], ['geral', true]);
 }
