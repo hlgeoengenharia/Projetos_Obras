@@ -258,14 +258,46 @@
     // -------------------------------------------------------------------------
     async function searchRecord(termo, options) {
         const {
-            supabaseClient,
-            userProfile,
+            supabaseClient: passedClient,
+            userProfile: passedUserProfile,
             tipoDado = 'todos',
-            municipiosAprovados = [],
-            todosMunicipios = []
+            municipiosAprovados: passedMunicipiosAprovados,
+            todosMunicipios: passedTodosMunicipios
         } = options || {};
 
+        let supabaseClient = passedClient 
+            || (typeof window !== 'undefined' && window.supabaseClient)
+            || (typeof globalThis !== 'undefined' && globalThis.supabaseClient);
+
+        if (!supabaseClient && typeof window !== 'undefined' && window.supabase) {
+            try {
+                if (typeof SUPABASE_URL !== 'undefined' && typeof SUPABASE_ANON_KEY !== 'undefined') {
+                    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+                        auth: {
+                            storage: window.sessionStorage,
+                            persistSession: true,
+                            autoRefreshToken: true,
+                            detectSessionInUrl: true
+                        }
+                    });
+                    window.supabaseClient = supabaseClient;
+                }
+            } catch(e) {}
+        }
+
         if (!supabaseClient) throw new Error('Cliente Supabase não configurado');
+
+        const userProfile = passedUserProfile 
+            || (typeof window !== 'undefined' && (window.currentUserProfile || window.homeUserProfile))
+            || null;
+
+        let todosMunicipios = passedTodosMunicipios 
+            || (typeof window !== 'undefined' && window.municipiosParaMostrarCache)
+            || [];
+
+        let municipiosAprovados = passedMunicipiosAprovados
+            || (typeof window !== 'undefined' && (window.municipiosAprovadosCache || todosMunicipios))
+            || todosMunicipios;
 
         const cleanTerm = String(termo || '').trim().toLowerCase();
         const rawDigits = digitsOf(termo);
@@ -325,6 +357,15 @@
         const temasMap = {};
         allTemas.forEach(t => { temasMap[t.id] = t; });
 
+        if ((!todosMunicipios || todosMunicipios.length === 0) && supabaseClient) {
+            try {
+                const { data: mData } = await supabaseClient.from('municipios').select('id, nome, uf, brasao_url');
+                if (mData && mData.length > 0) {
+                    todosMunicipios = mData;
+                    if (typeof window !== 'undefined') window.municipiosParaMostrarCache = mData;
+                }
+            } catch(eMun) {}
+        }
         const municipiosMap = {};
         (todosMunicipios || []).forEach(m => { municipiosMap[m.id] = m; });
 
@@ -682,8 +723,24 @@
         if (btnIcon) { btnIcon.textContent = 'progress_activity'; btnIcon.classList.add('animate-spin'); }
 
         try {
-            const client = window.supabaseClient || null;
-            const userProfile = window.currentUserProfile || null;
+            let client = window.supabaseClient || (typeof globalThis !== 'undefined' && globalThis.supabaseClient) || null;
+            if (!client && typeof window !== 'undefined' && window.supabase) {
+                try {
+                    if (typeof SUPABASE_URL !== 'undefined' && typeof SUPABASE_ANON_KEY !== 'undefined') {
+                        client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+                            auth: {
+                                storage: window.sessionStorage,
+                                persistSession: true,
+                                autoRefreshToken: true,
+                                detectSessionInUrl: true
+                            }
+                        });
+                        window.supabaseClient = client;
+                    }
+                } catch(eClient) {}
+            }
+
+            const userProfile = window.currentUserProfile || window.homeUserProfile || null;
             const todosMunicipios = window.municipiosParaMostrarCache || [];
             const municipiosAprovados = (window.municipiosAprovadosCache || todosMunicipios);
 

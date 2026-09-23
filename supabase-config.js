@@ -24,6 +24,7 @@ try {
                 detectSessionInUrl: true
             }
         });
+        window.supabaseClient = supabaseClient;
         console.log("Supabase client initialized (sessionStorage scoped).");
 
         const currentPath = window.location.pathname;
@@ -71,5 +72,9 @@ try {
     }
 } catch (e) {
     console.error("Failed to initialize Supabase:", e);
+}
+
+if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+    window.supabaseClient = supabaseClient;
 }
 

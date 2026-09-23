@@ -3249,6 +3249,11 @@ async function init() {
             homeUserProfile.entidade = mData[0].entidade;
         }
     }
+    window.homeUserProfile = homeUserProfile;
+    window.currentUserProfile = homeUserProfile;
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        window.supabaseClient = supabaseClient;
+    }
     applyCurrentUserToProfileModal();
 
     document.getElementById('loading-section').classList.add('hidden');
