@@ -195,10 +195,10 @@
         if (Array.isArray(val)) {
             for (const item of val) {
                 if (propertyMatchesTerm(item, term, rawDigits)) {
-                    return String(item);
+                    return extractMatchedValue(item, term, rawDigits);
                 }
             }
-            return val.length > 0 ? String(val[0]) : '';
+            return '';
         }
 
         if (typeof val === 'string' && (val.startsWith('[') || val.startsWith('{'))) {
@@ -206,6 +206,15 @@
                 const parsed = JSON.parse(val);
                 return extractMatchedValue(parsed, term, rawDigits);
             } catch (e) {}
+        }
+
+        if (typeof val === 'object' && val !== null) {
+            for (const k in val) {
+                if (propertyMatchesTerm(val[k], term, rawDigits)) {
+                    return extractMatchedValue(val[k], term, rawDigits);
+                }
+            }
+            return '';
         }
 
         return String(val);
@@ -318,16 +327,19 @@
             tiposAlvo = ['ipl', 'ipf', 'epol', 'epol_1n', 'rip', 'rip_1n'];
         }
 
-        // 1. Busca Formulários cadastrados
+        // 1. Busca Formulários cadastrados (usando select('*') para compatibilidade de schema)
         const { data: formsData, error: formsErr } = await supabaseClient
             .from('forms')
-            .select('id, name, schema, tabs, municipio_id');
+            .select('*');
         if (formsErr) console.warn('Aviso ao consultar forms:', formsErr);
 
         const allForms = formsData || [];
         const formFieldsTargetMap = {};
         allForms.forEach(form => {
-            const schema = form.schema || form.tabs || [];
+            let schema = form.schema || form.tabs || [];
+            if (form.schema && !Array.isArray(form.schema) && form.schema.tabs) {
+                schema = form.schema.tabs;
+            }
             if (!Array.isArray(schema)) return;
 
             schema.forEach(tab => {
@@ -347,10 +359,10 @@
             });
         });
 
-        // 2. Busca Temas cadastrados
+        // 2. Busca Temas cadastrados (usando select('*') para obter nome, tipo_cadastro, metadata, municipio_id)
         const { data: temasData, error: temasErr } = await supabaseClient
             .from('temas')
-            .select('id, name, municipio_id, form_id, metadata');
+            .select('*');
         if (temasErr) console.warn('Aviso ao consultar temas:', temasErr);
 
         const allTemas = temasData || [];
@@ -369,13 +381,14 @@
         const municipiosMap = {};
         (todosMunicipios || []).forEach(m => { municipiosMap[m.id] = m; });
 
+        // Identifica temas alvo (se tiver até 100 camadas ou se candidateThemes estiver vazio, busca em todas para não perder nenhum dado)
         const candidateThemes = allTemas.filter(t => {
-            const formId = t.form_id || (t.metadata && t.metadata.formId);
+            const formId = t.tipo_cadastro || t.form_id || t.formId || t.cadastroType || (t.metadata && (t.metadata.formId || t.metadata.tipo_cadastro));
             return formId && formFieldsTargetMap[formId] && formFieldsTargetMap[formId].length > 0;
         });
 
         let targetThemeIds = candidateThemes.map(t => t.id);
-        if (targetThemeIds.length === 0) {
+        if (targetThemeIds.length === 0 || allTemas.length <= 100) {
             targetThemeIds = allTemas.map(t => t.id);
         }
 
@@ -394,7 +407,7 @@
 
             const { data: feicoesData, error: feicoesErr } = await supabaseClient
                 .from('feicoes')
-                .select('id, theme_id, municipio_id, propriedades')
+                .select('id, theme_id, propriedades')
                 .in('theme_id', batchThemes);
 
             if (feicoesErr) {
@@ -407,7 +420,7 @@
                 if (!props || typeof props !== 'object') return;
 
                 const tema = temasMap[feat.theme_id];
-                const formId = tema ? (tema.form_id || (tema.metadata && tema.metadata.formId)) : null;
+                const formId = tema ? (tema.tipo_cadastro || tema.form_id || tema.formId || tema.cadastroType || (tema.metadata && (tema.metadata.formId || tema.metadata.tipo_cadastro))) : null;
                 const targetFields = (formId && formFieldsTargetMap[formId]) ? formFieldsTargetMap[formId] : null;
 
                 let matchEncontrado = false;
@@ -415,6 +428,7 @@
                 let matchedType = '';
                 let matchedRawValue = '';
 
+                // A. Tenta primeiro nos campos explicitamente mapeados pelo schema
                 if (targetFields && targetFields.length > 0) {
                     for (const tf of targetFields) {
                         const val = props[tf.fieldId];
@@ -428,32 +442,49 @@
                     }
                 }
 
+                // B. Se não encontrou pelo schema, varre todas as propriedades (inclusive sub-abas 1:N e chaves livres)
                 if (!matchEncontrado) {
                     for (const propKey in props) {
                         if (propKey.startsWith('_') || propKey === 'themeId' || propKey === 'id_banco') continue;
-                        const keyLower = propKey.toLowerCase();
-                        const isRelevantKey = tiposAlvo.some(t => keyLower.includes(t)) ||
-                            keyLower.includes('inquerito') || keyLower.includes('processo') || keyLower.includes('rip');
+                        const val = props[propKey];
+                        if (propertyMatchesTerm(val, cleanTerm, rawDigits)) {
+                            matchEncontrado = true;
+                            matchedFieldLabel = propKey;
+                            
+                            const keyLower = propKey.toLowerCase();
+                            const extractedVal = extractMatchedValue(val, cleanTerm, rawDigits);
+                            const valDigits = digitsOf(extractedVal);
 
-                        if (isRelevantKey || !targetFields) {
-                            const val = props[propKey];
-                            if (propertyMatchesTerm(val, cleanTerm, rawDigits)) {
-                                matchEncontrado = true;
-                                matchedFieldLabel = propKey;
-                                matchedType = tiposAlvo[0] || 'geral';
-                                matchedRawValue = extractMatchedValue(val, cleanTerm, rawDigits);
-                                break;
+                            if (keyLower.includes('epol') || (valDigits.length === 11 && String(extractedVal).includes('-'))) {
+                                matchedType = 'epol';
+                            } else if (keyLower.includes('rip') || (valDigits.length >= 8 && (keyLower.includes('imovel') || keyLower.includes('patrimonio')))) {
+                                matchedType = 'rip';
+                            } else if (keyLower.includes('ipl') || keyLower.includes('inquerito') || keyLower.includes('processo') || valDigits.length === 20) {
+                                matchedType = 'ipl';
+                            } else {
+                                matchedType = tipoEscolhido !== 'todos' ? tipoEscolhido : 'geral';
                             }
+
+                            // Se o usuário selecionou um filtro específico (ex: IPL), só ignora se tiver certeza que é outro tipo incompatível
+                            if (tipoEscolhido !== 'todos' && tipoEscolhido === 'ipl') {
+                                if (valDigits.length !== 20 && !keyLower.includes('ipl') && !keyLower.includes('inquerito') && !keyLower.includes('processo') && matchedType !== 'ipl') {
+                                    matchEncontrado = false;
+                                    continue;
+                                }
+                            }
+
+                            matchedRawValue = extractedVal;
+                            break;
                         }
                     }
                 }
 
                 if (matchEncontrado) {
-                    const munId = feat.municipio_id || (tema && tema.municipio_id);
+                    const munId = (tema && tema.municipio_id) || (feat && feat.municipio_id) || (props && props.municipio_id);
                     const mun = municipiosMap[munId];
                     const munNome = mun ? mun.nome : 'Município Não Identificado';
                     const munUf = mun ? (mun.uf || 'PB') : 'PB';
-                    const temaNome = tema ? tema.name : 'Camada Sem Nome';
+                    const temaNome = tema ? (tema.nome || tema.name || tema.title || 'Camada Sem Nome') : 'Camada Sem Nome';
 
                     const hasAccess = isSuperAdmin || approvedMunIds.has(munId);
 
