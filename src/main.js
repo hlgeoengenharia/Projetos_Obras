@@ -2501,6 +2501,10 @@ function renderThemes() {
         ? `linear-gradient(135deg, ${theme.color}22 0%, rgba(15,23,42,0.75) 100%)` 
         : `rgba(15,23,42,0.55)`;
     
+    const customFilterFields = typeof getThemeFilterCustomFields === 'function' ? getThemeFilterCustomFields(theme.id) : null;
+    const hasCustomFilterFields = Array.isArray(customFilterFields) && customFilterFields.length > 0;
+    const customFilterFieldsCount = hasCustomFilterFields ? customFilterFields.length : 0;
+
     card.innerHTML = `
       <div class="px-3.5 py-3 flex flex-col cursor-pointer select-none" onclick="toggleThemeListAndSelection('${theme.id}')" title="Clique para expandir ferramentas, filtro e lista">
         
@@ -2576,6 +2580,10 @@ function renderThemes() {
                    <span id="filter-badge-${theme.id}" class="hidden ml-1 px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shrink-0"></span>
                 </span>
                 <div class="flex items-center gap-1.5 shrink-0">
+                   <button type="button" onclick="openFilterFieldsModal('${theme.id}')" id="btn-custom-fields-${theme.id}" class="px-2 py-1 rounded-lg ${hasCustomFilterFields ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white border-white/15'} active:scale-95 text-[11px] font-semibold transition-all border flex items-center gap-1 cursor-pointer shadow-xs" title="${hasCustomFilterFields ? `Filtro personalizado ativo (${customFilterFieldsCount} campos)` : 'Personalizar campos visíveis no filtro'}">
+                      <span class="material-symbols-outlined text-[14px] text-cyan-400">tune</span>
+                      <span>Campos${hasCustomFilterFields ? ` (${customFilterFieldsCount})` : ''}</span>
+                   </button>
                    <button type="button" onclick="addFilterRow('${theme.id}')" class="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 text-[11px] font-semibold text-slate-200 hover:text-white transition-all border border-white/15 flex items-center gap-1 cursor-pointer shadow-xs" title="Adicionar campo em cascata (+ Condição)">
                       <span class="material-symbols-outlined text-[15px] text-cyan-400">add</span>
                       <span>Condição</span>
@@ -3006,22 +3014,283 @@ function renderFeatureListItems(theme) {
 }
 
 
+// ==========================================
+// PERSONALIZAÇÃO DE CAMPOS DO FILTRO DE CAMADA
+// ==========================================
+
+let _currentFilterThemeId = null;
+
+function getThemeFilterCustomFieldsKey(themeId) {
+    const userId = (typeof currentUserProfile !== 'undefined' && currentUserProfile && currentUserProfile.id) || window.currentUserProfile?.id || 'default_user';
+    const munId = (typeof activeMunicipioId !== 'undefined' && activeMunicipioId) || sessionStorage.getItem('municipio_ativo') || 'geral';
+    return `filter_custom_fields_${userId}_${munId}_${themeId}`;
+}
+
+function getThemeFilterCustomFields(themeId) {
+    if (!themeId) return null;
+    try {
+        const raw = localStorage.getItem(getThemeFilterCustomFieldsKey(themeId));
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+    } catch(e) {}
+    return null;
+}
+
+function setThemeFilterCustomFields(themeId, fieldsList) {
+    if (!themeId) return;
+    const key = getThemeFilterCustomFieldsKey(themeId);
+    if (!fieldsList || !Array.isArray(fieldsList) || fieldsList.length === 0) {
+        localStorage.removeItem(key);
+    } else {
+        localStorage.setItem(key, JSON.stringify(fieldsList));
+    }
+}
+
+window.openFilterFieldsModal = function(themeId) {
+    _currentFilterThemeId = themeId;
+    const theme = themes.find(t => t.id === themeId);
+    if (!theme) return;
+
+    const modal = document.getElementById('filter-fields-modal');
+    const bodyEl = document.getElementById('filter-fields-modal-body');
+    const subtitleEl = document.getElementById('filter-fields-modal-subtitle');
+    if (!modal || !bodyEl) return;
+
+    if (subtitleEl) {
+        subtitleEl.textContent = `Camada: ${theme.name || 'Camada'}`;
+    }
+
+    const activeCustom = getThemeFilterCustomFields(themeId);
+    const seen = new Set();
+    const tabsList = [];
+
+    // 1. Agrupa campos por Aba do Formulário
+    if (theme.formId && typeof allForms !== 'undefined') {
+        const form = allForms.find(f => f.id === theme.formId);
+        if (form && (form.schema || form.tabs)) {
+            const schema = form.schema || form.tabs;
+            schema.forEach(tab => {
+                const canSee = (typeof window !== 'undefined' && typeof window.canSeeFormTab === 'function')
+                    ? window.canSeeFormTab(theme.formId, tab.id, { tabTitle: tab.title, tab })
+                    : true;
+                if (!canSee) return;
+
+                const tabTitle = (tab.title || tab.name || tab.id || 'Geral').trim();
+                const fields = [];
+                if (tab.fields) {
+                    tab.fields.forEach(f => {
+                        const key = f.id || f.name || f.label;
+                        if (!key) return;
+                        const keyLower = String(key).toLowerCase();
+                        if (!seen.has(keyLower)) {
+                            seen.add(keyLower);
+                            fields.push({
+                                id: String(f.id),
+                                label: (f.label || f.name || f.id || '').trim()
+                            });
+                        }
+                    });
+                }
+                if (fields.length > 0) {
+                    tabsList.push({ tabTitle, fields });
+                }
+            });
+        }
+    }
+
+    // 2. Extrai propriedades reais das feições já carregadas não mapeadas no formulário
+    const otherFields = [];
+    if (theme.features && theme.features.length > 0) {
+        const sampleSize = Math.min(30, theme.features.length);
+        for (let i = 0; i < sampleSize; i++) {
+            const props = theme.features[i].properties;
+            if (props) {
+                for (let key in props) {
+                    if (!key.startsWith('_') && key !== 'themeId' && key !== 'id_banco') {
+                        const keyLower = String(key).toLowerCase();
+                        if (!seen.has(keyLower)) {
+                            seen.add(keyLower);
+                            const label = getThemeFieldLabel(theme, key) || key;
+                            otherFields.push({ id: String(key), label: label });
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (otherFields.length > 0) {
+        tabsList.push({ tabTitle: 'Outros Atributos da Camada', fields: otherFields });
+    }
+
+    if (tabsList.length === 0) {
+        bodyEl.innerHTML = `
+            <div class="p-6 text-center text-slate-400">
+               <span class="material-symbols-outlined text-[32px] text-slate-500 mb-2">info</span>
+               <p>Nenhum campo disponível para personalização nesta camada.</p>
+            </div>
+        `;
+    } else {
+        bodyEl.innerHTML = tabsList.map((tabGroup, gIdx) => {
+            const fieldsHtml = tabGroup.fields.map(f => {
+                const isChecked = !activeCustom || activeCustom.includes(f.id);
+                return `
+                    <label class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/60 border border-transparent hover:border-slate-200 dark:hover:border-slate-700/60 transition-all cursor-pointer select-none">
+                        <input type="checkbox" name="filter_field_item" data-group="${gIdx}" value="${f.id}" ${isChecked ? 'checked' : ''} onchange="window.updateFilterFieldsCounter()" class="w-4 h-4 rounded text-cyan-600 focus:ring-cyan-500 border-slate-300 dark:border-slate-600 cursor-pointer accent-cyan-500 shrink-0">
+                        <span class="text-xs text-slate-700 dark:text-slate-300 truncate font-medium" title="${f.label}">${f.label}</span>
+                    </label>
+                `;
+            }).join('');
+
+            return `
+                <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden shadow-2xs">
+                    <div class="px-3.5 py-2 bg-slate-100/80 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
+                        <span class="font-bold text-[11px] text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-[14px] text-cyan-400">tab</span>
+                            ${tabGroup.tabTitle}
+                        </span>
+                        <button type="button" onclick="window.toggleTabFieldsGroup(${gIdx})" class="text-[10px] font-semibold text-cyan-600 dark:text-cyan-400 hover:underline cursor-pointer">Alternar todos</button>
+                    </div>
+                    <div class="p-2.5 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                        ${fieldsHtml}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    window.updateFilterFieldsCounter();
+    modal.classList.remove('hidden');
+};
+
+window.closeFilterFieldsModal = function() {
+    const modal = document.getElementById('filter-fields-modal');
+    if (modal) modal.classList.add('hidden');
+    _currentFilterThemeId = null;
+};
+
+window.toggleTabFieldsGroup = function(groupIdx) {
+    const inputs = document.querySelectorAll(`input[name="filter_field_item"][data-group="${groupIdx}"]`);
+    if (inputs.length === 0) return;
+    const hasUnchecked = Array.from(inputs).some(i => !i.checked);
+    inputs.forEach(i => i.checked = hasUnchecked);
+    window.updateFilterFieldsCounter();
+};
+
+window.filterFieldsSelectAll = function(selectAll) {
+    const inputs = document.querySelectorAll('input[name="filter_field_item"]');
+    inputs.forEach(i => i.checked = selectAll);
+    window.updateFilterFieldsCounter();
+};
+
+window.filterFieldsRestoreDefault = function() {
+    if (!_currentFilterThemeId) return;
+    setThemeFilterCustomFields(_currentFilterThemeId, null);
+    window.updateAllFilterSelectsForTheme(_currentFilterThemeId);
+    window.closeFilterFieldsModal();
+    if (typeof showToast === 'function') {
+        showToast('Personalização limpa. Todos os campos estão visíveis no filtro.', 'info');
+    }
+};
+
+window.saveFilterFieldsCustomSelection = function() {
+    if (!_currentFilterThemeId) return;
+    const allBoxes = Array.from(document.querySelectorAll('input[name="filter_field_item"]'));
+    const checkedBoxes = Array.from(document.querySelectorAll('input[name="filter_field_item"]:checked'));
+
+    if (checkedBoxes.length === 0) {
+        alert('Selecione pelo menos um campo para manter no filtro ou clique em "Restaurar Padrão".');
+        return;
+    }
+
+    if (checkedBoxes.length === allBoxes.length) {
+        setThemeFilterCustomFields(_currentFilterThemeId, null);
+    } else {
+        const selectedIds = checkedBoxes.map(b => b.value);
+        setThemeFilterCustomFields(_currentFilterThemeId, selectedIds);
+    }
+
+    window.updateAllFilterSelectsForTheme(_currentFilterThemeId);
+    window.closeFilterFieldsModal();
+    if (typeof showToast === 'function') {
+        showToast('Campos do filtro personalizados com sucesso!', 'success');
+    }
+};
+
+window.updateFilterFieldsCounter = function() {
+    const allBoxes = document.querySelectorAll('input[name="filter_field_item"]');
+    const checkedBoxes = document.querySelectorAll('input[name="filter_field_item"]:checked');
+    const counterEl = document.getElementById('filter-fields-modal-counter');
+    if (counterEl) {
+        counterEl.textContent = `${checkedBoxes.length} de ${allBoxes.length} campos visíveis`;
+    }
+};
+
+window.updateAllFilterSelectsForTheme = function(themeId) {
+    const theme = themes.find(t => t.id === themeId);
+    if (!theme) return;
+    const container = document.getElementById('filters-container-' + themeId);
+    if (!container) return;
+
+    const options = `<option value="ALL">Tudo</option>` + getThemeFieldsOptions(theme);
+    container.querySelectorAll('.filter-field, .filter-col').forEach(selectEl => {
+        const currentVal = selectEl.value;
+        selectEl.innerHTML = options;
+        if (currentVal && Array.from(selectEl.options).some(o => o.value === currentVal)) {
+            selectEl.value = currentVal;
+        } else {
+            selectEl.value = 'ALL';
+        }
+    });
+
+    const customFields = getThemeFilterCustomFields(themeId);
+    const hasCustom = Array.isArray(customFields) && customFields.length > 0;
+    const btn = document.getElementById('btn-custom-fields-' + themeId);
+    if (btn) {
+        if (hasCustom) {
+            btn.className = "px-2 py-1 rounded-lg bg-cyan-500/20 text-cyan-300 border-cyan-500/40 active:scale-95 text-[11px] font-semibold transition-all border flex items-center gap-1 cursor-pointer shadow-xs";
+            btn.innerHTML = `<span class="material-symbols-outlined text-[14px] text-cyan-400">tune</span><span>Campos (${customFields.length})</span>`;
+            btn.title = `Filtro personalizado ativo (${customFields.length} campos). Clique para editar.`;
+        } else {
+            btn.className = "px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 text-[11px] font-semibold text-slate-200 hover:text-white transition-all border border-white/15 flex items-center gap-1 cursor-pointer shadow-xs";
+            btn.innerHTML = `<span class="material-symbols-outlined text-[14px] text-cyan-400">tune</span><span>Campos</span>`;
+            btn.title = "Personalizar campos visíveis no filtro";
+        }
+    }
+};
+
 function getThemeFieldsOptions(theme) {
     const seen = new Set();
     let optionsHtml = '';
+    const customFields = (theme && !theme._ignoreCustomFilter) ? getThemeFilterCustomFields(theme.id) : null;
+    const hasCustomFilter = Array.isArray(customFields) && customFields.length > 0;
 
-    // 1. Campos do formulário associado se houver
+    // 1. Campos do formulário associado se houver (com nome da aba de referência)
     if (theme && theme.formId && typeof allForms !== 'undefined') {
         const form = allForms.find(f => f.id === theme.formId);
         if (form && (form.schema || form.tabs)) {
             const schema = form.schema || form.tabs;
             schema.forEach(tab => {
+                const canSee = (typeof window !== 'undefined' && typeof window.canSeeFormTab === 'function')
+                    ? window.canSeeFormTab(theme.formId, tab.id, { tabTitle: tab.title, tab })
+                    : true;
+                if (!canSee) return;
+
+                const tabTitle = (tab.title || tab.name || tab.id || 'Geral').trim();
                 if (tab.fields) {
                     tab.fields.forEach(f => {
                         const key = f.id || f.name || f.label;
-                        if (key && !seen.has(String(key).toLowerCase())) {
-                            seen.add(String(key).toLowerCase());
-                            optionsHtml += `<option value="${f.id}">${f.label || f.name || f.id}</option>`;
+                        if (!key) return;
+                        const keyStr = String(key);
+                        const keyLower = keyStr.toLowerCase();
+                        if (!seen.has(keyLower)) {
+                            seen.add(keyLower);
+                            if (hasCustomFilter && !customFields.includes(keyStr) && !customFields.includes(String(f.id))) {
+                                return;
+                            }
+                            const fieldLabel = (f.label || f.name || f.id || '').trim();
+                            optionsHtml += `<option value="${f.id}">${fieldLabel} (${tabTitle})</option>`;
                         }
                     });
                 }
@@ -3037,8 +3306,13 @@ function getThemeFieldsOptions(theme) {
             if (props) {
                 for (let key in props) {
                     if (!key.startsWith('_') && key !== 'themeId' && key !== 'id_banco') {
-                        if (!seen.has(String(key).toLowerCase())) {
-                            seen.add(String(key).toLowerCase());
+                        const keyStr = String(key);
+                        const keyLower = keyStr.toLowerCase();
+                        if (!seen.has(keyLower)) {
+                            seen.add(keyLower);
+                            if (hasCustomFilter && !customFields.includes(keyStr)) {
+                                continue;
+                            }
                             const label = getThemeFieldLabel(theme, key) || key;
                             optionsHtml += `<option value="${key}">${label}</option>`;
                         }
@@ -3046,6 +3320,11 @@ function getThemeFieldsOptions(theme) {
                 }
             }
         }
+    }
+
+    // Fallback: se o filtro personalizado filtrou tudo a ponto de ficar vazio, exibe todos os campos
+    if (hasCustomFilter && !optionsHtml && theme) {
+        return getThemeFieldsOptions({ ...theme, _ignoreCustomFilter: true });
     }
 
     return optionsHtml;

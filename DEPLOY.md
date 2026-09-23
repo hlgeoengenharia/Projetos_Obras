@@ -20,7 +20,7 @@ Sempre teste as alterações localmente antes de enviar para produção:
      ```bash
      node test_sistema_qa.js
      ```
-   * **Critério de segurança:** O comando DEVE terminar com `TODAS AS VERIFICAÇÕES PASSARAM COM SUCESSO! CÓDIGO SEGURO PARA COMMIT.` (208+ testes aprovados, 0 falhas).
+   * **Critério de segurança:** O comando DEVE terminar com `TODAS AS VERIFICAÇÕES PASSARAM COM SUCESSO! CÓDIGO SEGURO PARA COMMIT.` (210+ testes aprovados, 0 falhas).
    * *Nota:* O git possui um hook de `pre-commit` configurado que impede commits caso qualquer verificação quebre.
 
 ---
@@ -116,4 +116,4 @@ Se você publicou algo e precisar reverter imediatamente:
   *(Desfaz o último commit criando um novo commit seguro de reversão).*
 
 ---
-*Manual atualizado em 23/09/2026 com instruções de deploy na Vercel, auditoria QA e sincronização interinstitucional de permissões no Supabase.*
+*Manual atualizado em 23/09/2026 com persistência de ordenação de camadas por arrastar e soltar, personalização de campos do filtro de camadas com indicação de abas e manual de deploy na Vercel.*
