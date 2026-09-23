@@ -1090,13 +1090,21 @@ async function runScenario(cfg) {
         const rf = await runScenario({ opener: true, themes: [temaCamada], payload: Object.assign({}, payload, { template: tplComFiltro }) });
         eq('com filtro no modelo: nenhum erro', rf.errors, []);
         eq('com filtro: só a feição Irregular entra no gráfico', rf.captured.charts[0].config.data.labels, ['Irregular']);
-        ok('com filtro: mostra o total já filtrado (1 feição), não o total da camada', rf.registry['a4-document-container']._html.includes('1 feição') && !rf.registry['a4-document-container']._html.includes('3 feições'));
+        ok('com filtro: mostra o total já filtrado (1 feição) no card do gráfico, e o aviso "filtro ativo: 1 de 3"', rf.registry['a4-document-container']._html.includes('1 feição') && /Filtro ativo:.*mostrando 1 de 3 feições/.test(rf.registry['a4-document-container']._html.replace(/\s+/g, ' ')));
 
         // filtro vazio (rascunho sem nenhum grupo válido) não restringe nada
         const tplFiltroVazio = JSON.parse(JSON.stringify(tplGeral));
         tplFiltroVazio.filtro = { grupos: [] };
         const rv = await runScenario({ opener: true, themes: [temaCamada], payload: Object.assign({}, payload, { template: tplFiltroVazio }) });
         eq('filtro vazio: continua mostrando as 3 feições da camada', rv.captured.charts[0].config.data.labels.sort(), ['Irregular', 'Regular']);
+
+        // sem filtro nenhum: SEM o aviso "Filtro ativo" (uma contagem "estranha" só é avisada quando há filtro cortando)
+        ok('sem filtro: não mostra o aviso "Filtro ativo" (nada foi cortado)', !r.registry['a4-document-container']._html.includes('Filtro ativo:'));
+        ok('sem filtro: botão flutuante "Pesquisa" sem indicação de filtro', r.sandbox.document.getElementById('pesquisa-tools-toggle').textContent === 'Pesquisa');
+
+        // com filtro cortando: aviso aparece na 1ª folha (visível mesmo impresso) E o botão flutuante avisa, mesmo com o painel fechado
+        ok('com filtro: mostra o aviso "Filtro ativo: mostrando 1 de 3 feições..." na folha (não só dentro do painel)', /Filtro ativo:.*mostrando 1 de 3 feições da camada/.test(rf.registry['a4-document-container']._html.replace(/\s+/g, ' ')));
+        eq('com filtro: botão flutuante avisa "filtro ativo (1/3)" mesmo com o painel fechado', rf.sandbox.document.getElementById('pesquisa-tools-toggle').textContent, 'Pesquisa • filtro ativo (1/3)');
     }
 
     // ---- RELATÓRIO GERAL — CAMPO COM FÓRMULA/1:N: gráfico, tabela e filtro devem ler pelo MESMO caminho do Painel
@@ -1160,7 +1168,7 @@ async function runScenario(cfg) {
         const rf = await runScenario({ opener: true, themes: [temaFormula], payload: Object.assign({}, payload, { template: tplComFiltro }), getFeaturePropertyValue, normalizeStatValue, computeChartAggregation });
         eq('filtro no campo com fórmula: nenhum erro', rf.errors, []);
         eq('filtro no campo com fórmula: só a feição "Recuo pendente" casa', rf.captured.charts[0].config.data.labels, ['Não Recuou']);
-        ok('filtro no campo com fórmula: mostra 1 feição, não 3', rf.registry['a4-document-container']._html.includes('1 feiç') && !rf.registry['a4-document-container']._html.includes('3 feiç'));
+        ok('filtro no campo com fórmula: mostra 1 feição no card do gráfico, e o aviso "filtro ativo: 1 de 3"', rf.registry['a4-document-container']._html.includes('1 feiç') && /Filtro ativo:.*mostrando 1 de 3 feições/.test(rf.registry['a4-document-container']._html.replace(/\s+/g, ' ')));
     }
 
     // ---- PAINEL "CONFIGURAÇÕES DA PESQUISA" (Relatório Geral): só 2 seções (Filtro de Feições, Gráficos do

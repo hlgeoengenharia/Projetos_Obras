@@ -16,23 +16,23 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260922m"></script>
-    <script src="src/mapTools.js?v=20260922m"></script>
-    <script src="src/reportMap.js?v=20260922m"></script>
-    <script src="src/reportTemporal.js?v=20260922m"></script>
-    <script src="src/reportExport.js?v=20260922m"></script>
-    <script src="src/reportBlocks.js?v=20260922m"></script>
-    <script src="src/reportEditor.js?v=20260922m"></script>
-    <script src="src/reportFreeText.js?v=20260922m"></script>
-    <script src="src/reportWord.js?v=20260922m"></script>
-    <script src="src/reportDocx.js?v=20260922m"></script>
-    <script src="src/mapSnapshot.js?v=20260922m"></script>
-    <script src="src/verificarEmissao.js?v=20260922m"></script>
+    <script src="src/pageSize.js?v=20260922n"></script>
+    <script src="src/mapTools.js?v=20260922n"></script>
+    <script src="src/reportMap.js?v=20260922n"></script>
+    <script src="src/reportTemporal.js?v=20260922n"></script>
+    <script src="src/reportExport.js?v=20260922n"></script>
+    <script src="src/reportBlocks.js?v=20260922n"></script>
+    <script src="src/reportEditor.js?v=20260922n"></script>
+    <script src="src/reportFreeText.js?v=20260922n"></script>
+    <script src="src/reportWord.js?v=20260922n"></script>
+    <script src="src/reportDocx.js?v=20260922n"></script>
+    <script src="src/mapSnapshot.js?v=20260922n"></script>
+    <script src="src/verificarEmissao.js?v=20260922n"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260922m"></script>
-    <script src="src/reportData.js?v=20260922m"></script>
-    <script src="src/layerFilter.js?v=20260922m"></script>
+    <script src="src/fieldFormatter.js?v=20260922n"></script>
+    <script src="src/reportData.js?v=20260922n"></script>
+    <script src="src/layerFilter.js?v=20260922n"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
@@ -952,6 +952,21 @@
 
             const totalPages = pagesBlocks.length;
 
+            // aviso bem visível (também na impressão/Word) quando o filtro do modelo está cortando a lista de
+            // feições — sem ele, uma contagem "estranha" (ex.: 44 de 282) parece bug de carregamento, quando na
+            // verdade é um filtro salvo de uma pesquisa anterior; aparece só na 1ª folha, antes do resto do corpo.
+            let avisoFiltroHtml = '';
+            if (isGeral) {
+                const totalComFiltro = resolveFeatureListFull().length;
+                const totalSemFiltro = ultimoTotalSemFiltroGeral;
+                if (typeof totalSemFiltro === 'number' && totalSemFiltro !== totalComFiltro) {
+                    avisoFiltroHtml = `
+                        <div class="page-break-avoid" style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:#9a3412">
+                            <b>Filtro ativo:</b> mostrando ${totalComFiltro} de ${totalSemFiltro} feições da camada. Para ver todas, abra "Configurações da Pesquisa" → "Filtro de feições" e clique em "Limpar filtro".
+                        </div>`;
+                }
+            }
+
             let pagesHtml = '';
             pagesBlocks.forEach((pageBlocks, pIdx) => {
                 const pageNum = pIdx + 1;
@@ -962,7 +977,7 @@
                 const padTopMm = showHeader ? Math.max(2, mm.top - 8) : mm.top;
                 const padBotMm = showFooter ? Math.max(2, mm.bottom - 8) : mm.bottom;
 
-                const bodyHtml = pageBlocks.map(b => {
+                const bodyHtml = (isFirst ? avisoFiltroHtml : '') + pageBlocks.map(b => {
                     const ehPrimeiro = b.primeiroChunk !== false; // ausente (bloco inteiro, não dividido) ou true = primeira aparição
                     const html = (isGeral && !EDICAO && ehPrimeiro && MOVABLE_BLOCK_TYPES.has(b.bloco.tipo)) ? envolverArrastoBloco(b.html, b.bloco.id) : b.html;
                     return envolverEdicao(html, blocos.indexOf(b.bloco), b.bloco);
@@ -1025,20 +1040,26 @@
          * Feições do Relatório Geral, com propriedades e geometria: da prévia (featureList no payload, sem geometria —
          * a lista de exemplo não tem coordenadas) ou da camada de verdade (emissão, lida do opener por themeId).
          */
-        function resolveFeatureListFull() {
+        // conta as feições da camada, sem passar pelo filtro do modelo — só para o aviso "N de TOTAL feições"
+        // saber quantas existiam ANTES do filtro cortar (não reaproveita a mesma lista filtrada por engano)
+        let ultimoTotalSemFiltroGeral = null;
+
+        function resolveFeatureListFull(ignorarFiltro) {
             // filtro do modelo (Relatório Geral): lido de tplAtual, que é a MESMA referência editada ao vivo pelo
             // painel "Ajustar pesquisa" — assim o filtro reage tanto na prévia quanto na emissão real.
             const filtro = LayerFilter ? LayerFilter.normalizeFiltro((tplAtual && tplAtual.filtro) || (reportPayload && reportPayload.template && reportPayload.template.filtro)) : null;
-            const temFiltro = !!(filtro && LayerFilter && !LayerFilter.filtroVazio(filtro));
+            const temFiltro = !ignorarFiltro && !!(filtro && LayerFilter && !LayerFilter.filtroVazio(filtro));
             if (reportPayload && Array.isArray(reportPayload.featureListAll)) {
                 // prévia: lista de exemplo BRUTA, refiltrada aqui a cada mudança do painel (sem gerar prévia nova)
                 const fieldIndex = {};
                 (reportPayload.formFields || []).forEach(f => { if (f && f.id) fieldIndex[f.id] = f; });
                 const base = reportPayload.featureListAll;
+                if (!ignorarFiltro) ultimoTotalSemFiltroGeral = base.length;
                 const filtradas = temFiltro ? LayerFilter.filtrarFeatures(base.map(p => ({ properties: p })), filtro, fieldIndex).map(f => f.properties) : base;
                 return filtradas.map(p => ({ properties: p || {}, geometry: null }));
             }
             if (reportPayload && Array.isArray(reportPayload.featureList)) {
+                if (!ignorarFiltro) ultimoTotalSemFiltroGeral = reportPayload.featureList.length;
                 return reportPayload.featureList.map(p => ({ properties: p || {}, geometry: null }));
             }
             try {
@@ -1047,6 +1068,7 @@
                 if (opener && !opener.closed && themeId && Array.isArray(opener.themes)) {
                     const theme = opener.themes.find(t => String(t.id) === String(themeId));
                     if (theme && Array.isArray(theme.features)) {
+                        if (!ignorarFiltro) ultimoTotalSemFiltroGeral = theme.features.length;
                         // resolve cada campo pelo MESMO caminho do Painel de Estatísticas do mapa (getFeaturePropertyValue),
                         // que entende fórmulas/1:N (ex.: "valor mais recente da vistoria") — sem isso, um campo assim
                         // fica sempre vazio aqui (não existe como properties[id] bruto), quebrando tabela e filtro.
@@ -1623,6 +1645,10 @@
                     <button type="button" onclick="pesquisaPanelHide()" style="border:0;background:none;cursor:pointer;font-size:16px;line-height:1" title="Recolher">×</button>
                 </div>
                 <div style="padding:0 12px 12px">${pesquisaPanelConteudoHtml(fields)}</div>`;
+            // botão flutuante avisa "filtro ativo" mesmo com o painel fechado, pra não passar despercebido
+            const totalComFiltro = resolveFeatureListFull().length;
+            const filtroAtivoBotao = typeof ultimoTotalSemFiltroGeral === 'number' && ultimoTotalSemFiltroGeral !== totalComFiltro;
+            toggle.textContent = filtroAtivoBotao ? `Pesquisa • filtro ativo (${totalComFiltro}/${ultimoTotalSemFiltroGeral})` : 'Pesquisa';
             if (pesquisaPanelOpen === null) pesquisaPanelOpen = window.innerWidth >= 1360;
             applyPesquisaPanelVisibility();
         }
