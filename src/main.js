@@ -1212,6 +1212,36 @@ function initMap() {
     
     loadAllFeaturesToMap();
     
+    // Pulo direto para feição (vindo da Pesquisa Rápida Interinstitucional de home.html)
+    const pendingJumpRaw = sessionStorage.getItem('target_feature_jump');
+    if (pendingJumpRaw) {
+        sessionStorage.removeItem('target_feature_jump');
+        try {
+            const jumpData = JSON.parse(pendingJumpRaw);
+            if (jumpData && (jumpData.featureId || jumpData.id_banco)) {
+                const targetId = jumpData.featureId || jumpData.id_banco;
+                const themeId = jumpData.themeId;
+                setTimeout(async () => {
+                    if (themeId && Array.isArray(themes)) {
+                        const targetTheme = themes.find(t => String(t.id) === String(themeId));
+                        if (targetTheme) {
+                            targetTheme.visible = true;
+                            if (Array.isArray(window.activeWorkspaceThemes) && !window.activeWorkspaceThemes.some(x => String(x) === String(themeId))) {
+                                window.activeWorkspaceThemes.push(targetTheme.id);
+                            }
+                            if (typeof renderThemes === 'function') renderThemes();
+                        }
+                    }
+                    if (typeof zoomToFeature === 'function') {
+                        await zoomToFeature(targetId);
+                    }
+                }, 500);
+            }
+        } catch(eJump) {
+            console.warn('Erro ao processar pulo de feição interinstitucional:', eJump);
+        }
+    }
+    
     if (typeof hideSplashScreen === 'function') {
         hideSplashScreen();
     }

@@ -224,6 +224,12 @@
       <img src="assets/globo.png" alt="Início" class="w-5 h-5 sm:w-6 sm:h-6 object-contain drop-shadow-xs transition-transform hover:scale-110 select-none pointer-events-none">
     </a>
 
+    <!-- Botão Busca Interinstitucional no Portal -->
+    <button id="btn-interinstitutional-search-portal" onclick="if(window.interinstitutionalSearch){ window.interinstitutionalSearch.openModal(); }" class="header-glass-card flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-slate-700 dark:text-slate-200 hover:text-cyan-500 dark:hover:text-cyan-400 border border-slate-200/80 dark:border-slate-800 transition-all cursor-pointer shadow-xs text-xs font-semibold ml-2 sm:ml-3" title="Busca Interinstitucional de Feições">
+      <span class="material-symbols-outlined text-cyan-500 text-[18px]">manage_search</span>
+      <span class="hidden sm:inline">Busca Interinstitucional</span>
+    </button>
+
     <!-- Canto Direito: [ Nome + Ente ] [ Perfil ] [ Configurações Globais ] -->
     <div class="flex items-center gap-1.5 sm:gap-2.5 ml-auto shrink-0">
       <!-- Nome e Entidade do Usuário (à esquerda do perfil) -->
@@ -280,6 +286,12 @@
           <span class="material-symbols-outlined text-[18px] sm:text-[20px]">arrow_back</span>
         </button>
       </div>
+
+      <!-- Botão Busca Interinstitucional no Município -->
+      <button id="btn-interinstitutional-search-mun" onclick="if(window.interinstitutionalSearch){ window.interinstitutionalSearch.openModal(); }" class="header-glass-card flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-slate-700 dark:text-slate-200 hover:text-cyan-500 dark:hover:text-cyan-400 border border-slate-200/80 dark:border-slate-800 transition-all cursor-pointer shadow-xs text-xs font-semibold ml-2 sm:ml-3 shrink-0" title="Busca Interinstitucional de Feições">
+        <span class="material-symbols-outlined text-cyan-500 text-[18px]">manage_search</span>
+        <span class="hidden sm:inline">Busca Interinstitucional</span>
+      </button>
 
     </div>
 
@@ -4237,6 +4249,7 @@ window.filterMunicipiosList = function(query) {
 init();
 </script>
 <script src="src/auditLogger.js"></script>
+<script src="src/interinstitutional-search.js?v=20260924"></script>
 <script src="src/usuarios-gestao.js?v=20260915_filtro_entes_ativos"></script>
 <script src="src/session-security.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
