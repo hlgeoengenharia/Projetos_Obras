@@ -931,6 +931,51 @@ async function runScenario(cfg) {
         ok('filtro que não bate com ninguém: aviso certo (filtro, não "sem geometria"), sem erro', rFiltro.registry['a4-document-container']._html.includes('Nenhuma feição passou pelo filtro escolhido') && rFiltro.errors.length === 0);
     }
 
+    // ---- MAPA "DE UM GRÁFICO": cada feição pintada com a cor da SUA categoria (igual ao index.html), não uma cor só;
+    // e norte + escala em cada mini-mapa (Leaflet real, por themeId)
+    {
+        const ponto = (lng, lat) => ({ type: 'Point', coordinates: [lng, lat] });
+        const tpl = {
+            id: 'rpt_mapacor', nome: 'Relatório Geral', tipo: 'geral', form_id: 'f1',
+            config_pagina: { tamanho: 'A4', orientacao: 'portrait', margens_mm: { top: 15, bottom: 15, left: 15, right: 15 } },
+            blocos: [
+                { id: 'h', tipo: 'cabecalho' },
+                { id: 'g', tipo: 'grafico_existente', chartId: 'c1' },
+                { id: 'm', tipo: 'mapa_feicoes', origemGraficoId: 'c1', cor: '#0ea5e9' },
+                { id: 'f', tipo: 'rodape' }
+            ]
+        };
+        const charts = [{ id: 'c1', title: 'Situação', type: 'pie', fieldId: 'sit', fieldLabel: 'Situação' }];
+        const formFields = [{ id: 'sit', label: 'Situação', type: 'select' }];
+        const temaCor = {
+            id: 'tema-cor', features: [
+                { properties: { sit: 'Regular' }, geometry: ponto(-34.90, -7.00) },
+                { properties: { sit: 'Irregular' }, geometry: ponto(-34.901, -7.001) }
+            ]
+        };
+        const getFeaturePropertyValue = (theme, feature, key) => feature.properties[key];
+        const normalizeStatValue = (val) => String(val || 'N/I');
+        const computeChartAggregation = (theme, widget, features) => {
+            const counts = {};
+            (features || []).forEach(f => { const v = normalizeStatValue(getFeaturePropertyValue(theme, f, widget.fieldId)); counts[v] = (counts[v] || 0) + 1; });
+            const rawLabels = Object.keys(counts);
+            return { rawLabels, data: rawLabels.map(l => counts[l]), colorsMap: { Regular: '#10b981', Irregular: '#ef4444' }, total: (features || []).length };
+        };
+        const payload = { templateId: 'rpt_mapacor', template: tpl, formId: 'f1', themeId: 'tema-cor', formFields, formTabs: [], charts, featureData: {}, featureGeometry: null, featureList: null, preview: false };
+        const r = await runScenario({ opener: true, themes: [temaCor], payload, getFeaturePropertyValue, normalizeStatValue, computeChartAggregation });
+        eq('mapa do gráfico: nenhum erro de execução', r.errors, []);
+        const mapaCriado = r.mapsCreated.find(m => m.container && String(m.container.id || '').startsWith('rpt-mapafeicoes-'));
+        ok('mapa do gráfico: existe (Leaflet real criado)', !!mapaCriado);
+        const norteEl = mapaCriado && mapaCriado.container && mapaCriado.container.children && mapaCriado.container.children.find(c => c.className === 'mapa-feicoes-norte');
+        ok('mapa do gráfico: tem a seta do norte anexada ao mapa', !!norteEl);
+
+        // a função que decide a cor de cada feição (usada dentro de renderPendingMapasFeicoes) pinta pela categoria
+        const featsComRaw = temaCor.features.map(f => ({ geometry: f.geometry, rawFeature: f }));
+        const cores = r.sandbox.coresPorFeicaoMapaFeicoes({ origemGraficoId: 'c1' }, featsComRaw);
+        eq('cor por feição: Regular vira verde, Irregular vira vermelho (cores do próprio gráfico, não uma cor só)', cores, ['#10b981', '#ef4444']);
+        eq('sem gráfico de origem (mapa geral do Filtro): não calcula cor por feição, usa a única do painel', r.sandbox.coresPorFeicaoMapaFeicoes({}, featsComRaw), null);
+    }
+
     // ---- RELATÓRIO GERAL — EMISSÃO DE VERDADE: sem featureList no payload; os dados vêm da camada, na janela de origem (por themeId)
     {
         const tplGeral = {

@@ -8298,7 +8298,7 @@ window.handleStatToggle = function(themeId, chartIndex, checkbox) {
 // (relatorio_view.html) com o modelo "geral" configurado para o formulário da camada. Os dados das feições
 // (para os gráficos) são lidos pela própria página do relatório, na janela de origem (window.opener), por
 // themeId — evitam-se, assim, os limites de armazenamento do navegador para camadas com muitas feições.
-window.openLayerGeneralReport = function() {
+window.openLayerGeneralReport = async function() {
     const themeId = window.activeLayerStatsThemeId;
     if (!themeId) return;
     const theme = (typeof themes !== 'undefined' ? themes : window.themes || []).find(t => String(t.id) === String(themeId));
@@ -8312,6 +8312,12 @@ window.openLayerGeneralReport = function() {
     if (!modelos.length) {
         alert('Configure o Relatório Geral desta camada primeiro: em Cadastros, edite o formulário e abra a aba "Relatório Geral".');
         return;
+    }
+    // mesma garantia do Painel de Estatísticas (openStatsDashboard): força carregar TODAS as feições da camada antes
+    // de contar/filtrar — sem isso, o relatório contava só o que já estava em memória (ex.: 44 de 282), batendo
+    // errado com o Dashboard.
+    if (typeof loadThemeProperties === 'function') {
+        try { await loadThemeProperties(theme.id, true); } catch (e) { console.warn('[Relatório Geral] Falha ao recarregar feições da camada antes do relatório:', e); }
     }
     if (modelos.length === 1) { abrirRelatorioGeralComModelo(modelos[0], theme); return; }
     mostrarEscolhaRelatorioGeral(modelos, theme);
