@@ -16,23 +16,23 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260922l"></script>
-    <script src="src/mapTools.js?v=20260922l"></script>
-    <script src="src/reportMap.js?v=20260922l"></script>
-    <script src="src/reportTemporal.js?v=20260922l"></script>
-    <script src="src/reportExport.js?v=20260922l"></script>
-    <script src="src/reportBlocks.js?v=20260922l"></script>
-    <script src="src/reportEditor.js?v=20260922l"></script>
-    <script src="src/reportFreeText.js?v=20260922l"></script>
-    <script src="src/reportWord.js?v=20260922l"></script>
-    <script src="src/reportDocx.js?v=20260922l"></script>
-    <script src="src/mapSnapshot.js?v=20260922l"></script>
-    <script src="src/verificarEmissao.js?v=20260922l"></script>
+    <script src="src/pageSize.js?v=20260922m"></script>
+    <script src="src/mapTools.js?v=20260922m"></script>
+    <script src="src/reportMap.js?v=20260922m"></script>
+    <script src="src/reportTemporal.js?v=20260922m"></script>
+    <script src="src/reportExport.js?v=20260922m"></script>
+    <script src="src/reportBlocks.js?v=20260922m"></script>
+    <script src="src/reportEditor.js?v=20260922m"></script>
+    <script src="src/reportFreeText.js?v=20260922m"></script>
+    <script src="src/reportWord.js?v=20260922m"></script>
+    <script src="src/reportDocx.js?v=20260922m"></script>
+    <script src="src/mapSnapshot.js?v=20260922m"></script>
+    <script src="src/verificarEmissao.js?v=20260922m"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260922l"></script>
-    <script src="src/reportData.js?v=20260922l"></script>
-    <script src="src/layerFilter.js?v=20260922l"></script>
+    <script src="src/fieldFormatter.js?v=20260922m"></script>
+    <script src="src/reportData.js?v=20260922m"></script>
+    <script src="src/layerFilter.js?v=20260922m"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
@@ -1475,6 +1475,10 @@
                     ${/^ortofoto:/.test(blocoMapa.baseMap || '') ? '<div style="color:#64748b;line-height:1.35;margin-bottom:3px">A ortofoto fica sobre o satélite, que preenche o que ela não cobre.</div>' : ''}
                     ${chkRowPesquisa('pp-mapa-grade-' + esc(chave), 'Quadriculado UTM', !!blocoMapa.quadriculado, `updateMapaFeicoesConfigGeral('quadriculado', this.checked${origemArg})`)}
                     ${chkRowPesquisa('pp-mapa-contagem-' + esc(chave), 'Mostrar contagem de feições em cada grupo', blocoMapa.exibirContagem !== false, `updateMapaFeicoesConfigGeral('exibirContagem', this.checked${origemArg})`)}
+                    <div style="font-weight:700;margin:6px 0 2px">Zoom dos mapas</div>
+                    ${blocoMapa.zoomManual
+                        ? `<div style="color:#334155">Zoom fixo: <b>${esc(String(blocoMapa.zoomManual))}</b> — os mapas adicionais cobrem o resto das feições nesse mesmo zoom. <button type="button" class="act" onclick="updateMapaFeicoesConfigGeral('zoomManual', undefined${origemArg})">Voltar ao automático</button></div>`
+                        : `<div style="color:#64748b">Automático (cada mapa se ajusta ao seu grupo). Para escolher, dê zoom no 1º mapa da folha e clique em "Usar este zoom nos demais mapas".</div>`}
                     <div style="color:#64748b;line-height:1.35;margin-top:3px">Agrupa por proximidade; acima de ${LIMITE_FEICOES_MAPA} feições filtradas, pede para refinar o filtro. A altura ajusta arrastando a borda de baixo do mapa, na folha.</div>
                 </div>`;
         }
@@ -1788,6 +1792,7 @@
         // =====================================================================================
         const LIMITE_FEICOES_MAPA = 200; // acima disso, pede para refinar o filtro em vez de montar os mini-mapas
         const ALVO_POR_MAPA = 40;        // quantas feições cabem, em média, num mini-mapa antes de abrir outro (legibilidade)
+        const LIMITE_MAPAS_ZOOM_FIXO = 60; // com zoom manual, o sistema "ladrilha" a área — acima disso, pede pra diminuir o zoom
         let mapaFeicoesInstances = {};
 
         function renderMapaFeicoesBlock(bloco, idx) {
@@ -1808,19 +1813,39 @@
             if (registros.length > LIMITE_FEICOES_MAPA) {
                 return avisoHtml({ aviso: true, texto: `${registros.length} feições passaram pelo filtro — acima do limite de ${LIMITE_FEICOES_MAPA} para o mapa. Refine o filtro para gerar os mini-mapas (a tabela e os gráficos continuam mostrando todas).` });
             }
-            const centros = registros.map(r => MapTools.bboxCenter(MapTools.geometryBBox(r.geometry)) || [0, 0]);
-            const grupos = MapTools.agruparPorProximidade(centros, ALVO_POR_MAPA);
             const cor = bloco.cor || '#0ea5e9';
             const exibirContagem = bloco.exibirContagem !== false;
             const baseMap = /^ortofoto:/.test(bloco.baseMap || '') ? bloco.baseMap : (bloco.baseMap === 'satelite' ? 'satelite' : 'osm');
             const alturaPx = Math.max(120, Math.min(800, Number(bloco.alturaPx) || 260));
+            const centros = registros.map(r => MapTools.bboxCenter(MapTools.geometryBBox(r.geometry)) || [0, 0]);
+
+            // zoom automático (cada mapa se ajusta ao seu grupo) ou zoom FIXO definido pelo usuário (o sistema
+            // "ladrilha" a área inteira em mapas do mesmo tamanho/zoom, criando quantos forem precisos)
+            let grupos, centrosFixos = null;
+            if (bloco.zoomManual) {
+                const pd = PageSize.dims(tplAtual && tplAtual.config_pagina);
+                const mm = (tplAtual && tplAtual.config_pagina && tplAtual.config_pagina.margens_mm) || { left: 15, right: 15 };
+                const larguraMapaPx = Math.max(200, pd.widthPx - Math.round((mm.left + mm.right) * 3.78));
+                const tiles = MapTools.agruparPorZoomFixo(centros, bloco.zoomManual, larguraMapaPx, alturaPx);
+                if (tiles.length > LIMITE_MAPAS_ZOOM_FIXO) {
+                    return avisoHtml({ aviso: true, texto: `No zoom ${bloco.zoomManual} definido, seriam necessários ${tiles.length} mapas para cobrir todas as feições — acima do limite de ${LIMITE_MAPAS_ZOOM_FIXO}. Diminua o zoom ou volte ao ajuste automático.` });
+                }
+                grupos = tiles.map(t => t.idxs);
+                centrosFixos = tiles.map(t => t.center);
+            } else {
+                grupos = MapTools.agruparPorProximidade(centros, ALVO_POR_MAPA);
+            }
             const rowsHtml = grupos.map((idxs, gi) => {
                 const mapId = 'rpt-mapafeicoes-' + idx + '-' + gi;
+                const zoomAttrs = bloco.zoomManual ? `data-mapa-zoom="${bloco.zoomManual}" data-mapa-centro="${centrosFixos[gi][0]},${centrosFixos[gi][1]}"` : '';
+                // o botão "usar este zoom" só faz sentido no 1º mapa do bloco, e só enquanto não há zoom fixo definido
+                const botaoZoom = (gi === 0 && !bloco.zoomManual) ? `<button type="button" class="no-print" data-usar-zoom-mapa data-bloco-id="${escapeHtml(bloco.id)}" data-map-id="${mapId}" style="position:absolute;z-index:401;top:6px;right:6px;background:#0f172a;color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.3)" title="Dê zoom neste mapa até o nível de detalhe que quiser; ao clicar, os demais mapas usam o mesmo zoom">Usar este zoom nos demais mapas</button>` : '';
                 return `
                     <div data-split-row class="mb-3 page-break-avoid">
                         ${exibirContagem ? `<div class="text-[10px] font-mono text-slate-500 mb-1">Grupo ${gi + 1} de ${grupos.length} • ${idxs.length} feiç${idxs.length === 1 ? 'ão' : 'ões'}</div>` : ''}
                         <div class="relative" data-mapa-feicoes-wrap data-bloco-id="${escapeHtml(bloco.id)}">
-                            <div id="${mapId}" data-mapa-feicoes data-mapa-indices="${idxs.join(',')}" data-mapa-cor="${escapeHtml(cor)}" data-mapa-basemap="${escapeHtml(baseMap)}" data-mapa-grade="${bloco.quadriculado ? '1' : '0'}" data-bloco-id="${escapeHtml(bloco.id)}" class="w-full rounded-lg border border-slate-300 overflow-hidden bg-slate-100" style="height: ${alturaPx}px;"></div>
+                            <div id="${mapId}" data-mapa-feicoes data-mapa-indices="${idxs.join(',')}" data-mapa-cor="${escapeHtml(cor)}" data-mapa-basemap="${escapeHtml(baseMap)}" data-mapa-grade="${bloco.quadriculado ? '1' : '0'}" data-bloco-id="${escapeHtml(bloco.id)}" ${zoomAttrs} class="w-full rounded-lg border border-slate-300 overflow-hidden bg-slate-100" style="height: ${alturaPx}px;"></div>
+                            ${botaoZoom}
                             <div class="mapa-feicoes-resize no-print" data-bloco-id="${escapeHtml(bloco.id)}" title="Arraste para ajustar a altura do mapa"></div>
                         </div>
                     </div>`;
@@ -1916,7 +1941,9 @@
                 const orto = ortoMatch ? ortofotosDisponiveisGeral().find(o => String(o.id) === ortoMatch[1]) : null;
                 // ortofoto vai sobre o satélite, que preenche o que ela não cobre (mesma lógica do mini-mapa individual)
                 const tile = TILES_MAPA_FEICOES[orto ? 'satelite' : baseMapValue] || TILES_MAPA_FEICOES.osm;
-                const mapa = L.map(div, { attributionControl: true, zoomControl: false, scrollWheelZoom: false });
+                // zoomControl/scrollWheelZoom ligados: é como o usuário ajusta o enquadramento manualmente (botão
+                // "Usar este zoom nos demais mapas") antes de imprimir/gerar o Word — no impresso, o controle some (no-print)
+                const mapa = L.map(div, { attributionControl: true, zoomControl: true, scrollWheelZoom: true });
                 L.tileLayer(tile.url, { maxZoom: 19, crossOrigin: true, attribution: tile.attribution }).addTo(mapa);
                 if (orto) {
                     if (orto.tipo === 'xyz_tiles' || String(orto.url).indexOf('{z}') >= 0) {
@@ -1929,9 +1956,17 @@
                     style: (f) => ({ color: f.properties._cor, weight: 2, fillColor: f.properties._cor, fillOpacity: 0.25 }),
                     pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 5, color: f.properties._cor, weight: 2, fillColor: f.properties._cor, fillOpacity: 0.85 })
                 }).addTo(mapa);
-                const limites = camada.getBounds ? camada.getBounds() : null;
-                if (limites && limites.isValid && limites.isValid()) mapa.fitBounds(limites, { padding: [20, 20] });
-                else mapa.setView([-15, -47], 4);
+                // zoom automático (ajusta ao grupo) ou o zoom FIXO que o usuário escolheu (mesmo enquadramento em todos)
+                const zoomFixo = Number(div.getAttribute('data-mapa-zoom')) || null;
+                const centroStr = div.getAttribute('data-mapa-centro');
+                if (zoomFixo && centroStr) {
+                    const partes = centroStr.split(',').map(Number);
+                    mapa.setView([partes[1], partes[0]], zoomFixo);
+                } else {
+                    const limites = camada.getBounds ? camada.getBounds() : null;
+                    if (limites && limites.isValid && limites.isValid()) mapa.fitBounds(limites, { padding: [20, 20] });
+                    else mapa.setView([-15, -47], 4);
+                }
                 if (div.getAttribute('data-mapa-grade') === '1') {
                     desenharGradeUtmMapaFeicoes(mapa);
                     mapa.on('moveend zoomend', () => desenharGradeUtmMapaFeicoes(mapa));
@@ -1940,6 +1975,30 @@
                 mapaFeicoesInstances[div.id] = mapa;
             });
             ligarRedimensionarMapasFeicoes();
+            ligarBotaoUsarZoomMapaFeicoes();
+        }
+
+        /**
+         * Botão "Usar este zoom nos demais mapas" (só no 1º mapa do bloco, enquanto não há zoom fixo definido):
+         * lê o zoom atual daquele mapa (o usuário já pode ter dado zoom/arrastado à vontade) e o sistema passa a
+         * "ladrilhar" a área inteira nesse mesmo zoom, criando quantos mapas forem precisos para cobrir tudo.
+         */
+        function ligarBotaoUsarZoomMapaFeicoes() {
+            document.querySelectorAll('[data-usar-zoom-mapa]').forEach(btn => {
+                if (btn._ligado) return;
+                btn._ligado = true;
+                btn.addEventListener('click', (ev) => {
+                    ev.preventDefault(); ev.stopPropagation();
+                    const blocoId = btn.getAttribute('data-bloco-id');
+                    const mapId = btn.getAttribute('data-map-id');
+                    const mapa = mapaFeicoesInstances[mapId];
+                    if (!mapa || !tplAtual) return;
+                    const bloco = (tplAtual.blocos || []).find(b => b.id === blocoId);
+                    if (!bloco) return;
+                    bloco.zoomManual = mapa.getZoom();
+                    aplicarPesquisaGeral();
+                });
+            });
         }
 
         /** Arrastar a borda de baixo de um mini-mapa de feições muda a altura de TODOS os grupos do mesmo bloco. */

@@ -150,7 +150,7 @@ async function runScenario(cfg) {
     const mapsCreated = [];
     const layer = (kind) => { const l = { kind, addTo(m) { (m.layers = m.layers || []).push(l); return l; }, on() { return l; }, bringToFront() {}, getBounds: () => ({}), setStyle() {} }; return l; };
     const Lstub = {
-        map: (c, o) => { const m = { container: c, options: o, layers: [], attributionControl: { setPrefix() {} }, removeLayer() {}, removeControl() {}, on() {}, fitBounds() {}, setView() {}, getCenter: () => ({ lat: -7.015, lng: -34.835 }), getZoom: () => 18, getContainer: () => ({ style: {} }), invalidateSize() {}, remove() {} }; mapsCreated.push(m); return m; },
+        map: (c, o) => { const m = { container: c, options: o, layers: [], attributionControl: { setPrefix() {} }, removeLayer() {}, removeControl() {}, on() {}, fitBoundsCalls: [], setViewCalls: [], fitBounds(b, o2) { m.fitBoundsCalls.push({ b: b, o: o2 }); }, setView(c2, z) { m.setViewCalls.push({ center: c2, zoom: z }); }, getCenter: () => ({ lat: -7.015, lng: -34.835 }), getZoom: () => 18, getContainer: () => ({ style: {} }), invalidateSize() {}, remove() {} }; mapsCreated.push(m); return m; },
         tileLayer: () => layer('tile'), imageOverlay: () => layer('image'), geoJSON: () => layer('geojson'), polygon: () => layer('polygon'), polyline: () => layer('polyline'),
         circleMarker: () => layer('circle'), divIcon: (o) => o, marker: () => { const l = layer('marker'); l.dragging = { disable() {} }; l.getElement = () => null; l.getLatLng = () => ({ lat: 0, lng: 0 }); return l; },
         control: { scale: () => ({ addTo() {} }) }, DomEvent: { stopPropagation() {} }
@@ -997,6 +997,68 @@ async function runScenario(cfg) {
         ok('mapa com ortofoto: existe (Leaflet real criado)', !!mapaCriado);
         const tileLayers = (mapaCriado.layers || []).filter(l => l.kind === 'tile');
         eq('mapa com ortofoto: 2 camadas tile (satélite por baixo + ortofoto por cima, mesma lógica do mini-mapa individual)', tileLayers.length, 2);
+    }
+
+    // ---- MAPA DAS FEIÇÕES: zoom automático (padrão) mostra o botão "Usar este zoom nos demais mapas" só no 1º mapa
+    {
+        const ponto = (lng, lat) => ({ type: 'Point', coordinates: [lng, lat] });
+        const tpl = {
+            id: 'rpt_zoomauto', nome: 'Relatório Geral', tipo: 'geral', form_id: 'f1',
+            config_pagina: { tamanho: 'A4', orientacao: 'portrait', margens_mm: { top: 15, bottom: 15, left: 15, right: 15 } },
+            blocos: [{ id: 'h', tipo: 'cabecalho' }, { id: 'm', tipo: 'mapa_feicoes' }, { id: 'f', tipo: 'rodape' }]
+        };
+        const tema = { id: 'tema-zoomauto', features: [{ properties: {}, geometry: ponto(-34.90, -7.00) }, { properties: {}, geometry: ponto(-34.70, -7.00) }] };
+        const payload = { templateId: 'rpt_zoomauto', template: tpl, formId: 'f1', themeId: 'tema-zoomauto', formFields: [], formTabs: [], charts: [], featureData: {}, featureGeometry: null, featureList: null, preview: false };
+        const r = await runScenario({ opener: true, themes: [tema], payload });
+        eq('zoom automático: nenhum erro de execução', r.errors, []);
+        const html = r.registry['a4-document-container']._html;
+        eq('zoom automático: botão "usar este zoom" aparece exatamente 1 vez (só no 1º mapa do bloco)', (html.match(/data-usar-zoom-mapa/g) || []).length, 1);
+        const mapas = r.mapsCreated.filter(m => m.container && String(m.container.id || '').startsWith('rpt-mapafeicoes-'));
+        // o stub de Leaflet não simula getBounds() de verdade (isValid ausente), então cai no fallback [-15,-47]/zoom 4 —
+        // o que importa aqui é que NÃO usou o zoom "fixo" do usuário (esse caminho só existe com bloco.zoomManual)
+        ok('zoom automático: nenhum mapa usa um zoom "fixo" (não há zoomManual no bloco)', mapas.every(m => m.setViewCalls.length === 1 && m.setViewCalls[0].zoom === 4));
+    }
+
+    // ---- MAPA DAS FEIÇÕES: zoom FIXO definido pelo usuário — o sistema "ladrilha" a área em mais mapas no mesmo zoom
+    {
+        const ponto = (lng, lat) => ({ type: 'Point', coordinates: [lng, lat] });
+        const tpl = {
+            id: 'rpt_zoomfixo', nome: 'Relatório Geral', tipo: 'geral', form_id: 'f1',
+            config_pagina: { tamanho: 'A4', orientacao: 'portrait', margens_mm: { top: 15, bottom: 15, left: 15, right: 15 } },
+            // tabela_feicoes precisa existir para o painel mostrar a config do mapa (mesmo gating do card "Filtro")
+            blocos: [{ id: 'h', tipo: 'cabecalho' }, { id: 't', tipo: 'tabela_feicoes', colunas: [] }, { id: 'm', tipo: 'mapa_feicoes', zoomManual: 18 }, { id: 'f', tipo: 'rodape' }]
+        };
+        // 2 pontos bem separados (oeste/leste): num zoom "de rua" (18), não cabem no mesmo ladrilho — viram 2 mapas
+        const tema = { id: 'tema-zoomfixo', features: [{ properties: {}, geometry: ponto(-34.90, -7.00) }, { properties: {}, geometry: ponto(-34.70, -7.00) }] };
+        const payload = { templateId: 'rpt_zoomfixo', template: tpl, formId: 'f1', themeId: 'tema-zoomfixo', formFields: [], formTabs: [], charts: [], featureData: {}, featureGeometry: null, featureList: null, preview: false };
+        const r = await runScenario({ opener: true, themes: [tema], payload });
+        eq('zoom fixo: nenhum erro de execução', r.errors, []);
+        const mapas = r.mapsCreated.filter(m => m.container && String(m.container.id || '').startsWith('rpt-mapafeicoes-'));
+        ok('zoom fixo: 2 pontos separados viram 2 mapas (ladrilhados), cobrindo tudo', mapas.length >= 2);
+        ok('zoom fixo: cada mapa usa o MESMO zoom definido (18), via setView (não fitBounds)', mapas.every(m => m.setViewCalls.length === 1 && m.setViewCalls[0].zoom === 18 && m.fitBoundsCalls.length === 0));
+        const html = r.registry['a4-document-container']._html;
+        eq('zoom fixo: sem o botão "usar este zoom" (já está fixo, não precisa mais escolher)', (html.match(/data-usar-zoom-mapa/g) || []).length, 0);
+        const painel = r.registry['pesquisa-tools-panel'].innerHTML;
+        ok('zoom fixo: painel mostra o valor do zoom e a opção de voltar ao automático', /Zoom fixo:.*18/.test(painel.replace(/\s+/g, ' ')) && /Voltar ao automático/i.test(painel));
+    }
+
+    // ---- MAPA DAS FEIÇÕES: zoom fixo demais (muito próximo) para a área toda: pede pra diminuir em vez de gerar dezenas de mapas
+    {
+        const ponto = (lng, lat) => ({ type: 'Point', coordinates: [lng, lat] });
+        const tpl = {
+            id: 'rpt_zoomfixodemais', nome: 'Relatório Geral', tipo: 'geral', form_id: 'f1',
+            config_pagina: { tamanho: 'A4', orientacao: 'portrait', margens_mm: { top: 15, bottom: 15, left: 15, right: 15 } },
+            blocos: [{ id: 'h', tipo: 'cabecalho' }, { id: 'm', tipo: 'mapa_feicoes', zoomManual: 22 }, { id: 'f', tipo: 'rodape' }]
+        };
+        // pontos espalhados por uma área grande, com zoom bem próximo (22): precisaria de dezenas de ladrilhos
+        const feats = [];
+        for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) feats.push({ properties: {}, geometry: ponto(-35 + x * 0.3, -7 - y * 0.3) });
+        const tema = { id: 'tema-zoomfixodemais', features: feats };
+        const payload = { templateId: 'rpt_zoomfixodemais', template: tpl, formId: 'f1', themeId: 'tema-zoomfixodemais', formFields: [], formTabs: [], charts: [], featureData: {}, featureGeometry: null, featureList: null, preview: false };
+        const r = await runScenario({ opener: true, themes: [tema], payload });
+        eq('zoom fixo demais: nenhum erro de execução', r.errors, []);
+        const html = r.registry['a4-document-container']._html;
+        ok('zoom fixo demais: mostra aviso pedindo para diminuir o zoom (não tenta criar dezenas de mapas)', /diminua o zoom|acima do limite/i.test(html));
     }
 
     // ---- RELATÓRIO GERAL — EMISSÃO DE VERDADE: sem featureList no payload; os dados vêm da camada, na janela de origem (por themeId)

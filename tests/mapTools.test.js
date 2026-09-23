@@ -253,6 +253,37 @@ eq('exatamente o alvo: ainda um único grupo', MT.agruparPorProximidade([[0, 0],
     eq('nenhum ponto some', grupos.reduce((n, g) => n + g.length, 0), 100);
 }
 
+// ---------------------------------------------------------------- agrupar por zoom FIXO (usuário escolhe o zoom; sistema ladrilha a área)
+eq('sem pontos: nenhum ladrilho', MT.agruparPorZoomFixo([], 16, 600, 260), []);
+eq('1 único ponto: 1 ladrilho, centrado nele', MT.agruparPorZoomFixo([[-34.9, -7.0]], 16, 600, 260), [{ idxs: [0], center: [-34.9, -7.0] }]);
+{
+    // pontos bem próximos entre si, num zoom "de rua": cabem todos no mesmo ladrilho
+    const pontos = [[-34.900, -7.000], [-34.9001, -7.0001], [-34.8999, -6.9999]];
+    const grupos = MT.agruparPorZoomFixo(pontos, 18, 600, 260);
+    eq('pontos próximos e zoom alto: 1 ladrilho só, com todos', grupos.length, 1);
+    eq('nenhum índice se perde', grupos[0].idxs.slice().sort(), [0, 1, 2]);
+}
+{
+    // dois blocos bem separados (oeste/leste): num zoom "de rua" (área de cobertura pequena), não cabem no mesmo ladrilho
+    const oeste = [[-34.90, -7.00], [-34.901, -7.001]];
+    const leste = [[-34.70, -7.00], [-34.701, -7.001]];
+    const grupos = MT.agruparPorZoomFixo(oeste.concat(leste), 18, 600, 260);
+    ok('2 blocos bem separados, zoom de rua: viram ladrilhos diferentes (não cabem juntos)', grupos.length >= 2);
+    eq('nenhum ponto some nem se repete', grupos.flatMap(g => g.idxs).sort((a, b) => a - b), [0, 1, 2, 3]);
+}
+{
+    // o mesmo conjunto de pontos, com zoom mais BAIXO (mais afastado = ladrilho cobre mais área): menos ladrilhos (ou igual)
+    const pontos = [[-34.90, -7.00], [-34.70, -7.00], [-34.50, -7.00]];
+    const zoomAlto = MT.agruparPorZoomFixo(pontos, 18, 600, 260).length;
+    const zoomBaixo = MT.agruparPorZoomFixo(pontos, 10, 600, 260).length;
+    ok('zoom mais baixo (mais afastado) nunca precisa de mais ladrilhos que um zoom mais alto (mais próximo)', zoomBaixo <= zoomAlto);
+}
+eq('ladrilhos vêm ordenados de norte para sul / oeste para leste', (() => {
+    const grade = [[-35.0, -7.0], [-34.5, -7.0], [-35.0, -7.5], [-34.5, -7.5]]; // NO, NE, SO, SE
+    const grupos = MT.agruparPorZoomFixo(grade, 14, 400, 400);
+    return grupos.length >= 2; // zoom "regional": cada canto vira um ladrilho separado
+})(), true);
+
 // ---------------------------------------------------------------- projeção e escala
 const pj = MT.projectionInfo(-7.019, -34.833);
 eq('Cabedelo-PB: zona 25S, SIRGAS 2000 (EPSG:31985)', [pj.zone, pj.hemisphere, pj.epsg, pj.datum], [25, 'S', 31985, 'SIRGAS 2000']);

@@ -615,6 +615,51 @@
             .map(([, idxs]) => idxs);
     }
 
+    /**
+     * Agrupa pontos [lng, lat] numa grade de retângulos do MESMO tamanho em tela (larguraPx × alturaPx) a um zoom
+     * FIXO escolhido pelo usuário — ao contrário de agruparPorProximidade (que varia o zoom de cada mapa para caber
+     * o grupo todo), aqui o zoom é sempre o mesmo e o sistema cria quantos mapas forem precisos para cobrir a área
+     * inteira "ladrilhando" (como um atlas): o usuário ajusta o nível de detalhe uma vez e o resto segue aquele
+     * mesmo enquadramento. Fórmula padrão de metros-por-pixel do Web Mercator (a mesma usada pelos tiles do Leaflet).
+     * @param {Array<[number,number]>} pontos
+     * @param {number} zoom nível de zoom escolhido pelo usuário (como o de um mapa Leaflet)
+     * @param {number} larguraPx largura útil do mini-mapa, em pixels
+     * @param {number} alturaPx altura útil do mini-mapa, em pixels
+     * @returns {Array<{idxs:number[], center:[number,number]}>} um item por ladrilho que tem ao menos 1 ponto
+     */
+    function agruparPorZoomFixo(pontos, zoom, larguraPx, alturaPx) {
+        if (!Array.isArray(pontos) || pontos.length === 0) return [];
+        if (pontos.length === 1) return [{ idxs: [0], center: pontos[0] }];
+        let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
+        pontos.forEach(p => {
+            if (p[0] < minLng) minLng = p[0]; if (p[0] > maxLng) maxLng = p[0];
+            if (p[1] < minLat) minLat = p[1]; if (p[1] > maxLat) maxLat = p[1];
+        });
+        const latMid = (minLat + maxLat) / 2;
+        const z = Math.max(1, Math.min(22, Number(zoom) || 16));
+        const metrosPorPixel = 156543.03392 * Math.cos(latMid * Math.PI / 180) / Math.pow(2, z);
+        const largura = Math.max(50, Number(larguraPx) || 600);
+        const altura = Math.max(50, Number(alturaPx) || 260);
+        const passoLng = Math.max(1e-9, (metrosPorPixel * largura) / (M_PER_DEG_LAT * Math.max(0.05, Math.cos(latMid * Math.PI / 180))));
+        const passoLat = Math.max(1e-9, (metrosPorPixel * altura) / M_PER_DEG_LAT);
+
+        const buckets = new Map();
+        pontos.forEach((p, i) => {
+            const cx = Math.floor((p[0] - minLng) / passoLng);
+            const cy = Math.floor((maxLat - p[1]) / passoLat); // linha 0 = mais ao norte
+            const chave = cx + ':' + cy;
+            if (!buckets.has(chave)) buckets.set(chave, { idxs: [], cx, cy });
+            buckets.get(chave).idxs.push(i);
+        });
+
+        return Array.from(buckets.values())
+            .sort((a, b) => a.cy - b.cy || a.cx - b.cx) // norte para sul, oeste para leste
+            .map(b => ({
+                idxs: b.idxs,
+                center: [minLng + (b.cx + 0.5) * passoLng, maxLat - (b.cy + 0.5) * passoLat]
+            }));
+    }
+
     function roundCoords(c, decimals) {
         if (!Array.isArray(c)) return c;
         if (typeof c[0] === 'number') {
@@ -1611,7 +1656,7 @@
     return {
         MAP_DEFAULTS, BASE_MAPS,
         normalizeMapConfig, normalizeSituacao, mergeAjustes, normalizeAnalises, normalizeMedicoes, coordTriple, medicaoInfo, medicaoTexto, medicaoIds, parseCoordenadas, normalizeColConf, confrontantesDoTrecho, normalizeElementos, normalizeLegenda, applyConfrontantes, nearestOnGeometry, nearestOnCamada, edgeOffsetAbove, normalizeEstilo, normalizeRotacoes, edgeAngleCss, edgeOffsetPx,
-        geometryBBox, bboxCenter, expandBBoxMeters, bboxIntersects, roundCoords, geomKind, agruparPorProximidade,
+        geometryBBox, bboxCenter, expandBBoxMeters, bboxIntersects, roundCoords, geomKind, agruparPorProximidade, agruparPorZoomFixo,
         normalizeTemporal, rasterDateInfo, fmtRasterDate, tileXY, tileUrl, probeZoom, rasterBBox, buildOrtofotoList, sortOrtofotos,
         COORD_SYSTEMS, normalizePontos, latLngToUtm, utmToLatLng, fmtGms, coordHeaders, coordCells, coordSystemLabel, azimuthDeg, fmtAzimuth, vertices, defaultPointTitle, pointRows,
         localProjector, confrontantes, distanciaCamada, sobreposicaoCamada, parseNumeroBR, compararAreas, autoGridSpacing, gradeUTM, normalizeAnotacoes, normalizeRotulos, normalizeConfrontantes, normalizeReferencia, normalizeComparacaoArea, normalizeQuadriculado,
