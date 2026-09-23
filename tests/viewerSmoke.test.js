@@ -119,7 +119,7 @@ async function runScenario(cfg) {
             if (sel === '[data-mapa-feicoes]') {
                 const html = (registry['a4-document-container'] && registry['a4-document-container']._html) || '';
                 const out = [];
-                const re = /<div([^>]*data-mapa-feicoes[^>]*)>/g;
+                const re = /<div([^>]*\bdata-mapa-feicoes(?!-)[^>]*)>/g;
                 let m;
                 while ((m = re.exec(html))) {
                     const tag = m[1];
@@ -904,9 +904,16 @@ async function runScenario(cfg) {
         const r = await runScenario({ opener: true, themes: [temaMapa], payload });
         eq('mapa das feições: nenhum erro de execução', r.errors, []);
         const doc = r.registry['a4-document-container']._html;
-        ok('mapa: título escapado e 2 caixas de mapa (uma por grupo), com a contagem certa', doc.includes('Mapa &lt;X&gt;') && (doc.match(/data-mapa-feicoes/g) || []).length === 2 && doc.includes('50 feições em 2 grupo(s)'));
+        ok('mapa: título escapado e 2 caixas de mapa (uma por grupo), com a contagem certa', doc.includes('Mapa &lt;X&gt;') && (doc.match(/data-mapa-feicoes /g) || []).length === 2 && doc.includes('50 feições em 2 grupo(s)'));
         ok('mapa: cada grupo tem 25 feições (os dois blocos não se misturam)', doc.includes('25 feições') && !doc.includes('26 feições'));
         eq('mapa: um Leaflet real criado por grupo', r.mapsCreated.filter(m => m.container && String(m.container.id || '').startsWith('rpt-mapafeicoes-')).length, 2);
+        ok('mapa: base OSM por padrão e alça de arrastar a altura em cada grupo', (doc.match(/data-mapa-basemap="osm"/g) || []).length === 2 && (doc.match(/class="mapa-feicoes-resize no-print"/g) || []).length === 2);
+
+        // "Mapa base" (satélite) e "Quadriculado UTM", como no Mini-Mapa do Relatório Individual
+        r.sandbox.updateMapaFeicoesConfigGeral('baseMap', 'satelite');
+        r.sandbox.updateMapaFeicoesConfigGeral('quadriculado', true);
+        const docSat = r.registry['a4-document-container']._html;
+        eq('mapa base virou satélite e o quadriculado ligou, sem erro', [(docSat.match(/data-mapa-basemap="satelite"/g) || []).length, (docSat.match(/data-mapa-grade="1"/g) || []).length, r.errors], [2, 2, []]);
 
         // sem geometria (prévia com dados de exemplo): aviso específico, sem tentar montar mapa
         const rPreview = await runScenario({ payload: Object.assign({}, payload, { themeId: undefined, featureList: [{}], preview: true }) });
@@ -1160,6 +1167,15 @@ async function runScenario(cfg) {
         const doc1 = r.registry['a4-document-container']._html;
         ok('folha: a tabela do gráfico "Situação" mostra Proprietário e CPF das 2 feições filtradas (mesmo conjunto do gráfico)', doc1.includes('>Proprietário<') && doc1.includes('>CPF<') && doc1.includes('>Maria<') && doc1.includes('>João<'));
         ok('folha: a tabela do gráfico "Recuo" (c2) ainda não existe (só quando "Gerar tabela" for clicado nela)', !doc1.includes('Feições — Recuo'));
+        // o cabeçalho (com as alças) se repete a cada folha; com poucas linhas pode entrar em 1 ou mais folhas — o que
+        // importa é que toda vez que a tabela aparece, vem com colgroup e uma alça por coluna escolhida
+        ok('folha: a tabela tem colgroup com largura por coluna e alça de arrastar em cada cabeçalho', doc1.includes('<colgroup>') && (doc1.match(/class="tf-col-resize no-print"/g) || []).length >= 2 && (doc1.match(/class="tf-col-resize no-print"/g) || []).length % 2 === 0 && doc1.includes('data-field-id="proprietario"') && doc1.includes('data-field-id="cpf"'));
+        eq('largura da coluna por arrasto: mesma conta do arrasto de campos (px -> %, com mínimo e máximo)', [
+            r.sandbox.larguraColunaPorArrasto(100, 50, 750), // (100+50)/750 = 20%
+            r.sandbox.larguraColunaPorArrasto(100, -1000, 750), // não deixa passar de 4% mínimo
+            r.sandbox.larguraColunaPorArrasto(100, 5000, 750) // não deixa passar de 75% máximo
+        ], [20, 4, 75]);
+
 
         // gera o mapa SÓ do gráfico "Recuo" (c2) — o de "Situação" (c1) continua sem mapa
         r.sandbox.toggleMapaFeicoesGeral(true, 'c2');

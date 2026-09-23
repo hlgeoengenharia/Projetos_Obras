@@ -16,23 +16,23 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260922i"></script>
-    <script src="src/mapTools.js?v=20260922i"></script>
-    <script src="src/reportMap.js?v=20260922i"></script>
-    <script src="src/reportTemporal.js?v=20260922i"></script>
-    <script src="src/reportExport.js?v=20260922i"></script>
-    <script src="src/reportBlocks.js?v=20260922i"></script>
-    <script src="src/reportEditor.js?v=20260922i"></script>
-    <script src="src/reportFreeText.js?v=20260922i"></script>
-    <script src="src/reportWord.js?v=20260922i"></script>
-    <script src="src/reportDocx.js?v=20260922i"></script>
-    <script src="src/mapSnapshot.js?v=20260922i"></script>
-    <script src="src/verificarEmissao.js?v=20260922i"></script>
+    <script src="src/pageSize.js?v=20260922j"></script>
+    <script src="src/mapTools.js?v=20260922j"></script>
+    <script src="src/reportMap.js?v=20260922j"></script>
+    <script src="src/reportTemporal.js?v=20260922j"></script>
+    <script src="src/reportExport.js?v=20260922j"></script>
+    <script src="src/reportBlocks.js?v=20260922j"></script>
+    <script src="src/reportEditor.js?v=20260922j"></script>
+    <script src="src/reportFreeText.js?v=20260922j"></script>
+    <script src="src/reportWord.js?v=20260922j"></script>
+    <script src="src/reportDocx.js?v=20260922j"></script>
+    <script src="src/mapSnapshot.js?v=20260922j"></script>
+    <script src="src/verificarEmissao.js?v=20260922j"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260922i"></script>
-    <script src="src/reportData.js?v=20260922i"></script>
-    <script src="src/layerFilter.js?v=20260922i"></script>
+    <script src="src/fieldFormatter.js?v=20260922j"></script>
+    <script src="src/reportData.js?v=20260922j"></script>
+    <script src="src/layerFilter.js?v=20260922j"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
@@ -136,6 +136,10 @@
         #map-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 12px; cursor: ns-resize; z-index: 700; touch-action: none; display: flex; justify-content: center; align-items: flex-end; background: linear-gradient(to top, rgba(15,23,42,.30), transparent); opacity: 0; transition: opacity .15s; }
         #map-wrap:hover #map-resize, #map-resize.ativo { opacity: 1; }
         #map-resize::after { content: ''; width: 46px; height: 4px; margin-bottom: 3px; border-radius: 2px; background: #fff; box-shadow: 0 0 0 1px rgba(15,23,42,.55); }
+        /* mesma alça, para cada mini-mapa do "Mapa das Feições" (Relatório Geral) */
+        .mapa-feicoes-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 12px; cursor: ns-resize; z-index: 700; touch-action: none; display: flex; justify-content: center; align-items: flex-end; background: linear-gradient(to top, rgba(15,23,42,.30), transparent); opacity: 0; transition: opacity .15s; }
+        [data-mapa-feicoes-wrap]:hover .mapa-feicoes-resize { opacity: 1; }
+        .mapa-feicoes-resize::after { content: ''; width: 46px; height: 4px; margin-bottom: 3px; border-radius: 2px; background: #fff; box-shadow: 0 0 0 1px rgba(15,23,42,.55); }
         /* divisória ajustável das colunas Distância e Confrontantes (só na tela) */
         .col-resize { position: absolute; top: 0; right: -4px; width: 9px; height: 100%; cursor: col-resize; z-index: 5; touch-action: none; }
         .col-resize:hover, .col-resize.ativo { background: rgba(5,150,105,.35); }
@@ -243,6 +247,9 @@
         [data-field-id]:hover > .campo-resize, .campo-resize.arrastando { display: block; }
         .campo-resize .campo-resize-rotulo { display: none; position: absolute; bottom: 100%; right: 0; margin-bottom: 2px; background: #0f172a; color: #fff; font: 700 10px/1 ui-monospace, monospace; padding: 3px 5px; border-radius: 5px; white-space: nowrap; }
         .campo-resize.arrastando .campo-resize-rotulo { display: block; }
+        /* mesma ideia, para as colunas da "Tabela das Feições" (Relatório Geral) */
+        .tf-col-resize { display: none; position: absolute; top: 0; bottom: 0; right: -5px; width: 9px; cursor: ew-resize; z-index: 20; border-radius: 5px; background: rgba(14,165,233,.35); touch-action: none; }
+        th:hover > .tf-col-resize { display: block; }
         .edit-bloco-barra button { background: none; border: 0; color: inherit; cursor: pointer; padding: 2px; border-radius: 4px; display: inline-flex; }
         .edit-bloco-barra button:hover { background: rgba(255,255,255,.18); }
         .edit-bloco-barra .material-symbols-outlined { font-size: 14px; }
@@ -973,7 +980,7 @@
             docContainer.innerHTML = pagesHtml;
             renderPendingCharts();
             renderPendingMapasFeicoes();
-            if (isGeral && !EDICAO) ligarArrastoBlocosGerais();
+            if (isGeral && !EDICAO) { ligarArrastoBlocosGerais(); ligarRedimensionarTabelaFeicoes(); }
 
             if (mapController && keptMapWrap) {
                 // repaginação: o mapa (Leaflet vivo) volta para o novo lugar, sem recarregar nada
@@ -1353,7 +1360,8 @@
                 tplAtual.blocos.push({
                     id: 'b_mapa_' + (origemGraficoId || 'geral') + '_' + Date.now(), tipo: 'mapa_feicoes',
                     titulo: origemGraficoId ? ('Mapa — ' + tituloDoGrafico(origemGraficoId)) : 'Mapa das Feições',
-                    origemGraficoId: origemGraficoId || undefined, cor: '#0ea5e9', exibirContagem: true
+                    origemGraficoId: origemGraficoId || undefined, cor: '#0ea5e9', exibirContagem: true,
+                    baseMap: 'osm', quadriculado: false, alturaPx: 260
                 });
             } else {
                 tplAtual.blocos = (tplAtual.blocos || []).filter(b => !(b.tipo === 'mapa_feicoes' && (b.origemGraficoId || null) === (origemGraficoId || null)));
@@ -1435,6 +1443,24 @@
         }
 
         /** Passos "Incluir campos na tabela" + "Gerar/Remover mapa" — reaproveitado pelo Filtro (geral) e por cada gráfico. */
+        /** Ajustes de um bloco "Mapa das Feições" já ligado: título, cor, contagem, mapa base e quadriculado UTM — igual ao "Mapa Base" do Relatório Individual. A altura se ajusta arrastando a borda de baixo, direto na folha. */
+        function mapaConfigCamposHtml(blocoMapa, chave, origemArg) {
+            const esc = escapeHtml;
+            return `
+                <div style="margin-top:5px">
+                    <label class="row">Título<input type="text" value="${esc(blocoMapa.titulo || '')}" onchange="updateMapaFeicoesConfigGeral('titulo', this.value${origemArg})" style="flex:1;min-width:0"></label>
+                    <label class="row">Cor das feições<input type="color" value="${esc(blocoMapa.cor || '#0ea5e9')}" oninput="updateMapaFeicoesConfigGeral('cor', this.value${origemArg})" style="width:34px;height:22px;padding:0;border:1px solid #cbd5e1;margin-left:auto"></label>
+                    <div style="font-weight:700;margin:4px 0 2px">Mapa base</div>
+                    <select onchange="updateMapaFeicoesConfigGeral('baseMap', this.value${origemArg})" style="width:100%;margin-bottom:3px">
+                        <option value="osm" ${(blocoMapa.baseMap || 'osm') === 'osm' ? 'selected' : ''}>Ruas (OpenStreetMap)</option>
+                        <option value="satelite" ${blocoMapa.baseMap === 'satelite' ? 'selected' : ''}>Satélite</option>
+                    </select>
+                    ${chkRowPesquisa('pp-mapa-grade-' + esc(chave), 'Quadriculado UTM', !!blocoMapa.quadriculado, `updateMapaFeicoesConfigGeral('quadriculado', this.checked${origemArg})`)}
+                    ${chkRowPesquisa('pp-mapa-contagem-' + esc(chave), 'Mostrar contagem de feições em cada grupo', blocoMapa.exibirContagem !== false, `updateMapaFeicoesConfigGeral('exibirContagem', this.checked${origemArg})`)}
+                    <div style="color:#64748b;line-height:1.35;margin-top:3px">Agrupa por proximidade; acima de ${LIMITE_FEICOES_MAPA} feições filtradas, pede para refinar o filtro. A altura ajusta arrastando a borda de baixo do mapa, na folha.</div>
+                </div>`;
+        }
+
         function passosTabelaMapaHtml(camposList, origemGraficoId) {
             const esc = escapeHtml;
             const blocoTabela = tabelaBlocoGeral(origemGraficoId);
@@ -1451,14 +1477,7 @@
                 </div>
                 <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #cbd5e1">
                     <button type="button" class="act" onclick="toggleMapaFeicoesGeral(${blocoMapa ? 'false' : 'true'}${origemArg})">${blocoMapa ? 'Remover mapa' : 'Gerar mapa'}</button>
-                    ${blocoMapa ? `
-                        <div style="margin-top:5px">
-                            <label class="row">Título<input type="text" value="${esc(blocoMapa.titulo || '')}" onchange="updateMapaFeicoesConfigGeral('titulo', this.value${origemArg})" style="flex:1;min-width:0"></label>
-                            <label class="row">Cor das feições<input type="color" value="${esc(blocoMapa.cor || '#0ea5e9')}" oninput="updateMapaFeicoesConfigGeral('cor', this.value${origemArg})" style="width:34px;height:22px;padding:0;border:1px solid #cbd5e1;margin-left:auto"></label>
-                            ${chkRowPesquisa('pp-mapa-contagem-' + esc(chave), 'Mostrar contagem de feições em cada grupo', blocoMapa.exibirContagem !== false, `updateMapaFeicoesConfigGeral('exibirContagem', this.checked${origemArg})`)}
-                            <div style="color:#64748b;line-height:1.35;margin-top:3px">Agrupa por proximidade; acima de ${LIMITE_FEICOES_MAPA} feições filtradas, pede para refinar o filtro.</div>
-                        </div>
-                    ` : ''}
+                    ${blocoMapa ? mapaConfigCamposHtml(blocoMapa, chave, origemArg) : ''}
                 </div>`;
         }
 
@@ -1482,14 +1501,7 @@
             const blocoMapa = mapaBlocoGeral(chartId);
             return `
                 <button type="button" class="act" onclick="toggleMapaFeicoesGeral(${blocoMapa ? 'false' : 'true'}, '${esc(chartId)}')">${blocoMapa ? 'Remover mapa' : 'Gerar mapa deste gráfico'}</button>
-                ${blocoMapa ? `
-                    <div style="margin-top:5px">
-                        <label class="row">Título<input type="text" value="${esc(blocoMapa.titulo || '')}" onchange="updateMapaFeicoesConfigGeral('titulo', this.value, '${esc(chartId)}')" style="flex:1;min-width:0"></label>
-                        <label class="row">Cor das feições<input type="color" value="${esc(blocoMapa.cor || '#0ea5e9')}" oninput="updateMapaFeicoesConfigGeral('cor', this.value, '${esc(chartId)}')" style="width:34px;height:22px;padding:0;border:1px solid #cbd5e1;margin-left:auto"></label>
-                        ${chkRowPesquisa('pp-mapa-contagem-' + esc(chartId), 'Mostrar contagem de feições em cada grupo', blocoMapa.exibirContagem !== false, `updateMapaFeicoesConfigGeral('exibirContagem', this.checked, '${esc(chartId)}')`)}
-                        <div style="color:#64748b;line-height:1.35;margin-top:3px">Agrupa por proximidade; acima de ${LIMITE_FEICOES_MAPA} feições filtradas, pede para refinar o filtro.</div>
-                    </div>
-                ` : ''}`;
+                ${blocoMapa ? mapaConfigCamposHtml(blocoMapa, chartId, `, '${esc(chartId)}'`) : ''}`;
         }
 
         /** Conteúdo (sanfona) do painel "Configurações da Pesquisa": filtro (com tabela/mapa geral) e gráficos (cada um com sua própria tabela/mapa). */
@@ -1681,14 +1693,17 @@
             const fieldIndex = {};
             (reportPayload.formFields || []).forEach(f => { if (f && f.id) fieldIndex[f.id] = f; });
             const cols = colunas.map(id => ({ id: id, campo: fieldIndex[id], label: (fieldIndex[id] && (fieldIndex[id].label || fieldIndex[id].name)) || id }));
+            const larguras = bloco.larguras || {};
+            const larguraPadrao = cols.length ? (94 / cols.length) : 94; // 94%: reserva ~6% pra coluna "#"
+            const colgroupHtml = `<colgroup><col style="width:34px">${cols.map(c => `<col data-field-id="${escapeHtml(c.id)}" style="width:${(larguras[c.id] || larguraPadrao).toFixed(2)}%">`).join('')}</colgroup>`;
             const rowsHtml = registros.map((props, i) => `
                 <tr data-split-row class="${i % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}" style="page-break-inside: avoid;">
                     <td class="py-1.5 px-2 text-[10px] border-r border-slate-200 text-center font-mono text-slate-400">${i + 1}</td>
                     ${cols.map(c => `<td class="py-1.5 px-2 text-[10px] border-r last:border-r-0 border-slate-200 whitespace-normal break-words text-slate-700">${escapeHtml(FieldFormatter.toText(props[c.id], c.campo))}</td>`).join('')}
                 </tr>`);
             const theadHtml = `<thead><tr class="bg-slate-100 border-b-2 border-slate-300 text-slate-700">
-                <th class="py-1.5 px-2 text-[9.5px] font-bold uppercase border-r border-slate-200 w-8 text-center">#</th>
-                ${cols.map(c => `<th class="py-1.5 px-2 text-[9.5px] font-bold uppercase border-r last:border-r-0 border-slate-200 whitespace-normal break-words">${escapeHtml(c.label)}</th>`).join('')}
+                <th class="py-1.5 px-2 text-[9.5px] font-bold uppercase border-r border-slate-200 text-center">#</th>
+                ${cols.map(c => `<th class="relative py-1.5 px-2 text-[9.5px] font-bold uppercase border-r last:border-r-0 border-slate-200 whitespace-normal break-words">${escapeHtml(c.label)}<div class="tf-col-resize no-print" data-bloco-id="${escapeHtml(bloco.id)}" data-field-id="${escapeHtml(c.id)}" title="Arraste para ajustar a largura da coluna"></div></th>`).join('')}
             </tr></thead>`;
             const meta = `${registros.length} feiç${registros.length === 1 ? 'ão' : 'ões'}${featureListTruncada ? ' (mostrando as primeiras)' : ''}`;
             const chunkHtml = (rows, isFirst) => `
@@ -1698,10 +1713,54 @@
                         <span class="text-[10px] font-mono text-slate-500 normal-case">${escapeHtml(meta)}</span>
                     </div>
                     <div class="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
-                        <table class="w-full text-left border-collapse">${theadHtml}<tbody class="divide-y divide-slate-200">${rows.join('')}</tbody></table>
+                        <table class="w-full text-left border-collapse" style="table-layout:fixed" data-tf-bloco-id="${escapeHtml(bloco.id)}">${colgroupHtml}${theadHtml}<tbody class="divide-y divide-slate-200">${rows.join('')}</tbody></table>
                     </div>
                 </div>`;
             return { split: { rowsHtml, chunkHtml } };
+        }
+
+        /** Nova largura (%) de uma coluna da Tabela de Feições após arrastar — mesma ideia de larguraPorArrasto (campos da Grade). */
+        function larguraColunaPorArrasto(larguraInicialPx, deslocamentoPx, larguraTabelaPx) {
+            if (!(larguraTabelaPx > 0)) return 50;
+            const px = Math.max(24, larguraInicialPx + deslocamentoPx);
+            return Math.max(4, Math.min(75, Math.round((px / larguraTabelaPx) * 10000) / 100));
+        }
+
+        /** Arrastar a alça no canto de um cabeçalho de coluna muda a largura dela (table-layout:fixed reajusta as demais). */
+        function ligarRedimensionarTabelaFeicoes() {
+            document.querySelectorAll('.tf-col-resize').forEach(alca => {
+                if (alca._ligada) return;
+                alca._ligada = true;
+                alca.addEventListener('mousedown', (ev) => {
+                    ev.preventDefault(); ev.stopPropagation();
+                    const blocoId = alca.getAttribute('data-bloco-id');
+                    const fieldId = alca.getAttribute('data-field-id');
+                    const th = alca.closest('th');
+                    const tabela = th ? th.closest('table') : null;
+                    if (!tabela) return;
+                    const larguraTabela = tabela.getBoundingClientRect().width;
+                    const wInicial = th.getBoundingClientRect().width;
+                    const x0 = ev.clientX;
+                    let pctFinal = null;
+                    const mover = (e) => {
+                        pctFinal = larguraColunaPorArrasto(wInicial, e.clientX - x0, larguraTabela);
+                        document.querySelectorAll(`table[data-tf-bloco-id="${blocoId}"] col[data-field-id="${fieldId}"]`).forEach(col => {
+                            col.style.width = pctFinal.toFixed(2) + '%';
+                        });
+                    };
+                    const soltar = () => {
+                        document.removeEventListener('mousemove', mover);
+                        document.removeEventListener('mouseup', soltar);
+                        if (pctFinal === null || !tplAtual) return;
+                        const bloco = (tplAtual.blocos || []).find(b => b.id === blocoId);
+                        if (!bloco) return;
+                        if (!bloco.larguras) bloco.larguras = {};
+                        bloco.larguras[fieldId] = Number(pctFinal.toFixed(2));
+                    };
+                    document.addEventListener('mousemove', mover);
+                    document.addEventListener('mouseup', soltar);
+                });
+            });
         }
 
         // =====================================================================================
@@ -1735,12 +1794,17 @@
             const grupos = MapTools.agruparPorProximidade(centros, ALVO_POR_MAPA);
             const cor = bloco.cor || '#0ea5e9';
             const exibirContagem = bloco.exibirContagem !== false;
+            const baseMap = bloco.baseMap === 'satelite' ? 'satelite' : 'osm';
+            const alturaPx = Math.max(120, Math.min(800, Number(bloco.alturaPx) || 260));
             const rowsHtml = grupos.map((idxs, gi) => {
                 const mapId = 'rpt-mapafeicoes-' + idx + '-' + gi;
                 return `
                     <div data-split-row class="mb-3 page-break-avoid">
                         ${exibirContagem ? `<div class="text-[10px] font-mono text-slate-500 mb-1">Grupo ${gi + 1} de ${grupos.length} • ${idxs.length} feiç${idxs.length === 1 ? 'ão' : 'ões'}</div>` : ''}
-                        <div id="${mapId}" data-mapa-feicoes data-mapa-indices="${idxs.join(',')}" data-mapa-cor="${escapeHtml(cor)}" class="w-full rounded-lg border border-slate-300 overflow-hidden bg-slate-100" style="height: 260px;"></div>
+                        <div class="relative" data-mapa-feicoes-wrap data-bloco-id="${escapeHtml(bloco.id)}">
+                            <div id="${mapId}" data-mapa-feicoes data-mapa-indices="${idxs.join(',')}" data-mapa-cor="${escapeHtml(cor)}" data-mapa-basemap="${baseMap}" data-mapa-grade="${bloco.quadriculado ? '1' : '0'}" class="w-full rounded-lg border border-slate-300 overflow-hidden bg-slate-100" style="height: ${alturaPx}px;"></div>
+                            <div class="mapa-feicoes-resize no-print" data-bloco-id="${escapeHtml(bloco.id)}" title="Arraste para ajustar a altura do mapa"></div>
+                        </div>
                     </div>`;
             });
             const meta = `${registros.length} feiç${registros.length === 1 ? 'ão' : 'ões'} em ${grupos.length} grupo(s)`;
@@ -1755,6 +1819,25 @@
             return { split: { rowsHtml, chunkHtml } };
         }
 
+        const TILES_MAPA_FEICOES = {
+            osm: { url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© OpenStreetMap contributors' },
+            satelite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Imagens © Esri, Maxar, Earthstar Geographics' }
+        };
+
+        /** Desenha o quadriculado UTM (mesma malha do Mini-Mapa individual) sobre um mini-mapa de feições. */
+        function desenharGradeUtmMapaFeicoes(mapa) {
+            if (!mapa.getBounds) return;
+            (mapa._gradeLayers || []).forEach(l => { try { mapa.removeLayer(l); } catch (e) {} });
+            mapa._gradeLayers = [];
+            const b = mapa.getBounds();
+            const g = MapTools.gradeUTM([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()], 0);
+            (g.linhas || []).forEach(l => {
+                const pl = L.polyline(l.pts, { color: '#1e293b', weight: 0.8, opacity: 0.65, dashArray: '4 4', interactive: false });
+                pl.addTo(mapa);
+                mapa._gradeLayers.push(pl);
+            });
+        }
+
         /** Depois que o HTML entra na página: cria (ou recria) o Leaflet de cada mini-mapa, enquadrado no seu grupo. */
         function renderPendingMapasFeicoes() {
             Object.keys(mapaFeicoesInstances).forEach(id => { try { mapaFeicoesInstances[id].remove(); } catch (e) { /* já sumiu com a repaginação */ } });
@@ -1766,8 +1849,9 @@
                 const feats = idxs.map(i => registros[i]).filter(Boolean);
                 if (!feats.length) return;
                 const cor = div.getAttribute('data-mapa-cor') || '#0ea5e9';
+                const tile = TILES_MAPA_FEICOES[div.getAttribute('data-mapa-basemap')] || TILES_MAPA_FEICOES.osm;
                 const mapa = L.map(div, { attributionControl: true, zoomControl: false, scrollWheelZoom: false });
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true, attribution: '© OpenStreetMap contributors' }).addTo(mapa);
+                L.tileLayer(tile.url, { maxZoom: 19, crossOrigin: true, attribution: tile.attribution }).addTo(mapa);
                 const camada = L.geoJSON(feats.map(f => ({ type: 'Feature', properties: {}, geometry: f.geometry })), {
                     style: () => ({ color: cor, weight: 2, fillColor: cor, fillOpacity: 0.25 }),
                     pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 5, color: cor, weight: 2, fillColor: cor, fillOpacity: 0.85 })
@@ -1775,7 +1859,44 @@
                 const limites = camada.getBounds ? camada.getBounds() : null;
                 if (limites && limites.isValid && limites.isValid()) mapa.fitBounds(limites, { padding: [20, 20] });
                 else mapa.setView([-15, -47], 4);
+                if (div.getAttribute('data-mapa-grade') === '1') {
+                    desenharGradeUtmMapaFeicoes(mapa);
+                    mapa.on('moveend zoomend', () => desenharGradeUtmMapaFeicoes(mapa));
+                }
                 mapaFeicoesInstances[div.id] = mapa;
+            });
+            ligarRedimensionarMapasFeicoes();
+        }
+
+        /** Arrastar a borda de baixo de um mini-mapa de feições muda a altura de TODOS os grupos do mesmo bloco. */
+        function ligarRedimensionarMapasFeicoes() {
+            document.querySelectorAll('.mapa-feicoes-resize').forEach(alca => {
+                if (alca._ligada) return;
+                alca._ligada = true;
+                alca.addEventListener('mousedown', (ev) => {
+                    ev.preventDefault(); ev.stopPropagation();
+                    const blocoId = alca.getAttribute('data-bloco-id');
+                    const mapasDoBloco = () => Array.from(document.querySelectorAll(`[data-mapa-feicoes-wrap][data-bloco-id="${blocoId}"] [data-mapa-feicoes]`));
+                    const primeiro = mapasDoBloco()[0];
+                    const inicial = primeiro ? primeiro.getBoundingClientRect().height : 260;
+                    const y0 = ev.clientY;
+                    const mover = (e) => {
+                        const nova = Math.max(120, Math.min(800, Math.round(inicial + (e.clientY - y0))));
+                        mapasDoBloco().forEach(div => { div.style.height = nova + 'px'; });
+                    };
+                    const soltar = () => {
+                        document.removeEventListener('mousemove', mover);
+                        document.removeEventListener('mouseup', soltar);
+                        const alturaFinal = primeiro ? primeiro.getBoundingClientRect().height : null;
+                        if (alturaFinal && tplAtual) {
+                            const bloco = (tplAtual.blocos || []).find(b => b.id === blocoId);
+                            if (bloco) bloco.alturaPx = Math.round(alturaFinal);
+                        }
+                        mapasDoBloco().forEach(div => { const m = mapaFeicoesInstances[div.id]; if (m) m.invalidateSize(); });
+                    };
+                    document.addEventListener('mousemove', mover);
+                    document.addEventListener('mouseup', soltar);
+                });
             });
         }
 
