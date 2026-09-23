@@ -16,23 +16,23 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260922h"></script>
-    <script src="src/mapTools.js?v=20260922h"></script>
-    <script src="src/reportMap.js?v=20260922h"></script>
-    <script src="src/reportTemporal.js?v=20260922h"></script>
-    <script src="src/reportExport.js?v=20260922h"></script>
-    <script src="src/reportBlocks.js?v=20260922h"></script>
-    <script src="src/reportEditor.js?v=20260922h"></script>
-    <script src="src/reportFreeText.js?v=20260922h"></script>
-    <script src="src/reportWord.js?v=20260922h"></script>
-    <script src="src/reportDocx.js?v=20260922h"></script>
-    <script src="src/mapSnapshot.js?v=20260922h"></script>
-    <script src="src/verificarEmissao.js?v=20260922h"></script>
+    <script src="src/pageSize.js?v=20260922i"></script>
+    <script src="src/mapTools.js?v=20260922i"></script>
+    <script src="src/reportMap.js?v=20260922i"></script>
+    <script src="src/reportTemporal.js?v=20260922i"></script>
+    <script src="src/reportExport.js?v=20260922i"></script>
+    <script src="src/reportBlocks.js?v=20260922i"></script>
+    <script src="src/reportEditor.js?v=20260922i"></script>
+    <script src="src/reportFreeText.js?v=20260922i"></script>
+    <script src="src/reportWord.js?v=20260922i"></script>
+    <script src="src/reportDocx.js?v=20260922i"></script>
+    <script src="src/mapSnapshot.js?v=20260922i"></script>
+    <script src="src/verificarEmissao.js?v=20260922i"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260922h"></script>
-    <script src="src/reportData.js?v=20260922h"></script>
-    <script src="src/layerFilter.js?v=20260922h"></script>
+    <script src="src/fieldFormatter.js?v=20260922i"></script>
+    <script src="src/reportData.js?v=20260922i"></script>
+    <script src="src/layerFilter.js?v=20260922i"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
@@ -176,6 +176,7 @@
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
         #map-tools-panel, #pesquisa-tools-panel { position: fixed; top: 84px; right: 12px; width: 268px; max-height: calc(100vh - 100px); overflow-y: auto; z-index: 1200; background: #fff; border: 1px solid #cbd5e1; border-radius: 14px; box-shadow: 0 10px 30px rgba(15,23,42,.18); font-size: 12px; color: #0f172a; }
+        #pesquisa-tools-panel { width: 360px; font-size: 12.5px; } /* mais largo que o do mapa: listas de campos/gráficos precisam de mais espaço */
                 #map-tools-panel h4, #pesquisa-tools-panel h4 { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #334155; font-weight: 800; margin: 8px 0 0; padding: 8px 10px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; background: #e2e8f0; border: 1px solid #cbd5e1; border-radius: 8px; user-select: none; }
         #map-tools-panel h4:hover, #pesquisa-tools-panel h4:hover { color: #0f172a; background: #dbe3ee; }
         #map-tools-panel h4.open, #pesquisa-tools-panel h4.open { border-radius: 8px 8px 0 0; background: #cbd5e1; color: #0f172a; }
@@ -1030,8 +1031,10 @@
                     if (theme && Array.isArray(theme.features)) {
                         // resolve cada campo pelo MESMO caminho do Painel de Estatísticas do mapa (getFeaturePropertyValue),
                         // que entende fórmulas/1:N (ex.: "valor mais recente da vistoria") — sem isso, um campo assim
-                        // fica sempre vazio aqui (não existe como properties[id] bruto), quebrando gráfico, tabela e filtro
-                        const resolvidas = theme.features.map(f => ({ properties: propriedadesResolvidasDaCamada(theme, f), geometry: f && f.geometry }));
+                        // fica sempre vazio aqui (não existe como properties[id] bruto), quebrando tabela e filtro.
+                        // rawFeature guarda a feição ORIGINAL (não resolvida): os gráficos usam ela + computeChartAggregation
+                        // (também do opener) para contar exatamente como o Painel de Estatísticas conta, sem recalcular aqui.
+                        const resolvidas = theme.features.map(f => ({ properties: propriedadesResolvidasDaCamada(theme, f), geometry: f && f.geometry, rawFeature: f }));
                         // filtro do modelo: aplicado ANTES do teto de segurança, para não descartar por engano
                         // uma feição que casaria com o filtro só porque veio depois das primeiras LIMITE_FEICOES_GRAFICO
                         const fieldIndex = {};
@@ -1078,29 +1081,34 @@
         }
 
         /**
-         * Conta quantas feições têm cada valor de um campo. Quando dá pela janela de origem, agrupa igual ao Painel
-         * de Estatísticas do mapa (normalizeStatValue — ex.: variações de "recuo" viram só 3 categorias); sem a
-         * janela (prévia com dados de exemplo), cai no formatador comum do relatório (chartValueLabel).
+         * Conta quantas feições têm cada valor do campo de um gráfico. Na emissão real (por themeId), delega para
+         * window.opener.computeChartAggregation — a MESMA função que o Painel de Estatísticas do mapa usa — passando
+         * a feição original (rawFeature) e a lista já filtrada, para dar exatamente os mesmos valores e as mesmas
+         * cores de lá (nada recalculado por conta própria). Sem essa função (prévia com dados de exemplo, sem janela
+         * de origem), cai no formatador comum do relatório (chartValueLabel), sobre a lista de exemplo.
          */
-        function aggregateChart(fieldId) {
-            const registros = resolveFeatureList();
+        function aggregateChart(chartEntry) {
+            const fieldId = chartEntry && chartEntry.fieldId;
+            const registrosFull = resolveFeatureListFull();
             const opener = window.opener;
-            const temNormalizador = opener && !opener.closed && typeof opener.normalizeStatValue === 'function';
-            const campo = (reportPayload && Array.isArray(reportPayload.formFields)) ? reportPayload.formFields.find(f => f.id === fieldId) : null;
-            const contagem = new Map();
-            registros.forEach(props => {
-                const valor = props ? props[fieldId] : undefined;
-                let rotulo;
-                if (temNormalizador) {
-                    try { rotulo = opener.normalizeStatValue(valor, campo); } catch (e) { rotulo = chartValueLabel(fieldId, valor); }
-                    if (rotulo === 'N/I') rotulo = 'Não informado';
-                } else {
-                    rotulo = chartValueLabel(fieldId, valor);
+            if (opener && !opener.closed && typeof opener.computeChartAggregation === 'function') {
+                const themeId = reportPayload && reportPayload.themeId;
+                const theme = (themeId && Array.isArray(opener.themes)) ? opener.themes.find(t => String(t.id) === String(themeId)) : null;
+                if (theme) {
+                    const featuresRaw = registrosFull.map(r => r.rawFeature).filter(Boolean);
+                    try {
+                        const agg = opener.computeChartAggregation(theme, chartEntry, featuresRaw);
+                        return { labels: agg.rawLabels, data: agg.data, total: agg.total, cores: agg.colorsMap };
+                    } catch (e) { /* cai para o cálculo local abaixo */ }
                 }
+            }
+            const contagem = new Map();
+            registrosFull.forEach(r => {
+                const rotulo = chartValueLabel(fieldId, r.properties ? r.properties[fieldId] : undefined);
                 contagem.set(rotulo, (contagem.get(rotulo) || 0) + 1);
             });
             const labels = Array.from(contagem.keys());
-            return { labels: labels, data: labels.map(l => contagem.get(l)), total: registros.length };
+            return { labels: labels, data: labels.map(l => contagem.get(l)), total: registrosFull.length, cores: null };
         }
 
         /** Bloco "Gráficos do Dashboard" (Relatório Geral): um cartão com um canvas por gráfico escolhido. */
@@ -1129,16 +1137,17 @@
                         <div class="p-4 text-center text-slate-400 italic text-xs border border-dashed border-slate-300 rounded-lg bg-slate-50/60">Gráfico não encontrado nas Estatísticas desta camada.</div>
                     </div>`;
             }
-            const agg = aggregateChart(g.fieldId); // também marca featureListTruncada, usada logo abaixo
+            const agg = aggregateChart(g); // também marca featureListTruncada, usada logo abaixo
             const total = agg.total;
             const metaHtml = `<span class="text-[10px] font-mono text-slate-500 normal-case">${total} feiç${total === 1 ? 'ão' : 'ões'}${featureListTruncada ? ` • mostrando as ${LIMITE_FEICOES_GRAFICO} primeiras` : ''}</span>`;
             const canvasId = 'rpt-chart-' + idx;
             const campoDef = (reportPayload.formFields || []).find(f => f.id === g.fieldId);
             const ehNumerico = ['area_m2', 'number', 'currency', 'moeda'].includes(String((campoDef && campoDef.type) || '').toLowerCase());
+            const corDe = (l, i) => (agg.cores && agg.cores[l]) || CHART_COLORS[i % CHART_COLORS.length];
             const linhasResumo = agg.labels.map((l, i) => {
                 const pct = total ? (agg.data[i] / total * 100) : 0;
                 return `<tr>
-                    <td style="padding:2px 6px;border-bottom:1px solid #e2e8f0"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${CHART_COLORS[i % CHART_COLORS.length]};margin-right:4px"></span>${escapeHtml(l)}</td>
+                    <td style="padding:2px 6px;border-bottom:1px solid #e2e8f0"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${corDe(l, i)};margin-right:4px"></span>${escapeHtml(l)}</td>
                     <td style="padding:2px 6px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace">${agg.data[i]}</td>
                     <td style="padding:2px 6px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace">${pct.toFixed(1)}%</td>
                 </tr>`;
@@ -1148,7 +1157,7 @@
             return `
                 <div class="mb-4 page-break-avoid">
                     <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">${tituloHtml}${metaHtml}</div>
-                    <div class="h-52 border border-slate-200 rounded-lg p-2 bg-white"><canvas id="${canvasId}" data-chart-canvas data-chart-field="${escapeHtml(g.fieldId || '')}" data-chart-type="${escapeHtml(g.type || 'pie')}"></canvas></div>
+                    <div class="h-52 border border-slate-200 rounded-lg p-2 bg-white"><canvas id="${canvasId}" data-chart-canvas data-chart-id="${escapeHtml(g.id || '')}" data-chart-field="${escapeHtml(g.fieldId || '')}" data-chart-type="${escapeHtml(g.type || 'pie')}"></canvas></div>
                     <table style="width:100%;border-collapse:collapse;font-size:10px;margin-top:6px">
                         <thead><tr style="background:#f1f5f9"><th style="padding:2px 6px;text-align:left">Categoria</th><th style="padding:2px 6px;text-align:right">Qtde</th><th style="padding:2px 6px;text-align:right">%</th></tr></thead>
                         <tbody>${linhasResumo}
@@ -1164,12 +1173,15 @@
             Object.keys(chartInstances).forEach(id => { try { chartInstances[id].destroy(); } catch (e) { /* já sumiu com a repaginação */ } });
             chartInstances = {};
             if (typeof Chart === 'undefined') return;
+            const catalogo = (reportPayload && Array.isArray(reportPayload.charts)) ? reportPayload.charts : [];
             document.querySelectorAll('[data-chart-canvas]').forEach(canvas => {
+                const chartId = canvas.getAttribute('data-chart-id');
                 const fieldId = canvas.getAttribute('data-chart-field');
                 const tipo = canvas.getAttribute('data-chart-type');
-                const agg = aggregateChart(fieldId);
+                const chartEntry = catalogo.find(c => c.id === chartId) || { fieldId: fieldId, type: tipo };
+                const agg = aggregateChart(chartEntry);
                 const ehPizza = tipo === 'pie' || tipo === 'donut';
-                const cores = agg.labels.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]);
+                const cores = agg.labels.map((l, i) => (agg.cores && agg.cores[l]) || CHART_COLORS[i % CHART_COLORS.length]);
                 chartInstances[canvas.id] = new Chart(canvas.getContext('2d'), {
                     type: ehPizza ? 'doughnut' : 'bar',
                     data: { labels: agg.labels, datasets: [{ data: agg.data, backgroundColor: cores, borderWidth: 0, cutout: tipo === 'donut' ? '65%' : (tipo === 'pie' ? '0%' : undefined) }] },

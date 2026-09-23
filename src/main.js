@@ -264,6 +264,72 @@ function getFeaturePropertyValue(theme, feature, requestedKey) {
    return undefined;
 }
 
+/**
+ * Agregação (rótulos, contagens e cores) de um gráfico de pizza/rosca/barra do Dashboard Estatístico — mesma conta
+ * usada no modal de Estatísticas (openStatsDashboard), extraída para dar exatamente o mesmo resultado também no
+ * Relatório Geral (relatorio_view.html, via window.opener.computeChartAggregation), sem recalcular por conta própria.
+ * widget: a entrada do statsConfig (fieldId, colorMap...). featuresOverride: lista de feições já filtrada (opcional;
+ * sem ela, usa todas as de theme.features).
+ */
+function computeChartAggregation(theme, widget, featuresOverride) {
+    const fieldId = widget && widget.fieldId;
+    const features = Array.isArray(featuresOverride) ? featuresOverride : ((theme && theme.features) || []);
+    if (!fieldId) return { rawLabels: [], data: [], colorsMap: {}, total: features.length };
+
+    // Busca metadados do campo para normalização refinada
+    let fieldInfo = null;
+    if (typeof allForms !== 'undefined' && Array.isArray(allForms)) {
+        for (const form of allForms) {
+            const schema = form.schema || form.tabs || [];
+            for (const tab of schema) {
+                const fld = (tab.fields || []).find(f => f.id === fieldId || (f.label && f.label.toLowerCase() === fieldId.toLowerCase()));
+                if (fld) { fieldInfo = fld; break; }
+            }
+            if (fieldInfo) break;
+        }
+    }
+
+    const counts = {};
+    features.forEach(f => {
+        let rawVal = getFeaturePropertyValue(theme, f, fieldId);
+        let val = typeof normalizeStatValue === 'function' ? normalizeStatValue(rawVal, fieldInfo) : (rawVal || 'N/I');
+        counts[val] = (counts[val] || 0) + 1;
+    });
+
+    // Ordena as categorias: as informadas primeiro em ordem decrescente de contagem, e "N/I" sempre por último
+    const rawLabels = Object.keys(counts).sort((a, b) => {
+        if (a === 'N/I') return 1;
+        if (b === 'N/I') return -1;
+        return counts[b] - counts[a];
+    });
+    const data = rawLabels.map(l => counts[l]);
+
+    // Gerar mapa de cores para cada label com matching resiliente e normalizado
+    const defaultColors = ['#06b6d4', '#3b82f6', '#8b5cf6', '#14b8a6', '#6366f1', '#475569', '#10b981', '#ef4444', '#f59e0b'];
+    const colorsMap = {};
+    rawLabels.forEach((label, i) => {
+        let resolvedColor = null;
+        if (widget.colorMap) {
+            if (widget.colorMap[label]) {
+                resolvedColor = widget.colorMap[label];
+            } else {
+                const matchKey = Object.keys(widget.colorMap).find(k => {
+                    const normK = typeof normalizeStatValue === 'function' ? normalizeStatValue(k, fieldInfo) : k;
+                    return normK.toLowerCase() === label.toLowerCase() || k.trim().toLowerCase() === label.trim().toLowerCase();
+                });
+                if (matchKey) resolvedColor = widget.colorMap[matchKey];
+            }
+            if (!resolvedColor && (label === 'N/I' || label === 'Não Informado' || label === '')) {
+                resolvedColor = widget.colorMap['N/I'] || widget.colorMap['Não Informado'];
+            }
+        }
+        colorsMap[label] = resolvedColor || defaultColors[i % defaultColors.length];
+    });
+
+    return { rawLabels: rawLabels, data: data, colorsMap: colorsMap, total: features.length };
+}
+window.computeChartAggregation = computeChartAggregation;
+
 function getThemeFieldLabel(theme, key) {
     if (!key) return '';
     if (theme && theme.formId && typeof allForms !== 'undefined') {
@@ -8608,34 +8674,13 @@ async function openStatsDashboard(themeId, specificIndex) {
             const fieldId = widget.fieldId;
             if (!fieldId) return;
 
-            // Busca metadados do campo para normalização refinada
-            let fieldInfo = null;
-            if (typeof allForms !== 'undefined' && Array.isArray(allForms)) {
-                for (const form of allForms) {
-                    const schema = form.schema || form.tabs || [];
-                    for (const tab of schema) {
-                        const fld = (tab.fields || []).find(f => f.id === fieldId || (f.label && f.label.toLowerCase() === fieldId.toLowerCase()));
-                        if (fld) { fieldInfo = fld; break; }
-                    }
-                    if (fieldInfo) break;
-                }
-            }
+            // Cálculo (rótulos, contagens e cores) extraído para computeChartAggregation — reaproveitado também
+            // pelo Relatório Geral (relatorio_view.html, via window.opener), para mostrar os MESMOS valores daqui.
+            const agg = computeChartAggregation(theme, widget, features);
+            const rawLabels = agg.rawLabels;
+            const data = agg.data;
+            const colorsMap = agg.colorsMap;
 
-            const counts = {};
-            features.forEach(f => {
-                let rawVal = getFeaturePropertyValue(theme, f, fieldId);
-                let val = typeof normalizeStatValue === 'function' ? normalizeStatValue(rawVal, fieldInfo) : (rawVal || 'N/I');
-                counts[val] = (counts[val] || 0) + 1;
-            });
-
-            // Ordena as categorias: as informadas primeiro em ordem decrescente de contagem, e "N/I" sempre por último
-            const rawLabels = Object.keys(counts).sort((a, b) => {
-                if (a === 'N/I') return 1;
-                if (b === 'N/I') return -1;
-                return counts[b] - counts[a];
-            });
-            const data = rawLabels.map(l => counts[l]);
-            
             // Helper seguro para converter qualquer cor para RGBA válido no Chart.js
             function safeChartColor(colorStr, alpha = 0.85) {
                 if (!colorStr || colorStr === 'none') {
@@ -8662,30 +8707,6 @@ async function openStatsDashboard(themeId, specificIndex) {
                 }
                 return colorStr;
             }
-
-            // Gerar mapa de cores para cada label com matching resiliente e normalizado
-            const defaultColors = ['#06b6d4', '#3b82f6', '#8b5cf6', '#14b8a6', '#6366f1', '#475569', '#10b981', '#ef4444', '#f59e0b'];
-            const colorsMap = {};
-            
-            rawLabels.forEach((label, i) => {
-                let resolvedColor = null;
-                if (widget.colorMap) {
-                    if (widget.colorMap[label]) {
-                        resolvedColor = widget.colorMap[label];
-                    } else {
-                        const matchKey = Object.keys(widget.colorMap).find(k => {
-                            const normK = typeof normalizeStatValue === 'function' ? normalizeStatValue(k, fieldInfo) : k;
-                            return normK.toLowerCase() === label.toLowerCase() || k.trim().toLowerCase() === label.trim().toLowerCase();
-                        });
-                        if (matchKey) resolvedColor = widget.colorMap[matchKey];
-                    }
-                    if (!resolvedColor && (label === 'N/I' || label === 'Não Informado' || label === '')) {
-                        resolvedColor = widget.colorMap['N/I'] || widget.colorMap['Não Informado'];
-                    }
-                }
-                colorsMap[label] = resolvedColor || defaultColors[i % defaultColors.length];
-            });
-            const colorsJson = JSON.stringify(colorsMap);
 
             const chartLabels = rawLabels.map((label, i) => {
                 const count = data[i];
