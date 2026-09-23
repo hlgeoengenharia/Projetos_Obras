@@ -338,10 +338,11 @@ assertTest('Frontend: home.html reconhece entidade_admin e papel admin sem ocult
 const hasUsuariosGestaoEntidadeAdmin = usuariosGestaoCode.includes('_currentUserProfile.entidade_admin') && usuariosGestaoCode.includes('minhaSigla === \'Município\' && _targetMunicipioId');
 assertTest('Frontend: usuarios-gestao.js reconhece entidade_admin e isola apenas municípios por _targetMunicipioId', hasUsuariosGestaoEntidadeAdmin);
 
-const hasGerenciadorIconInMunCard = homeHtmlContent.includes('title="Gerenciador"') &&
+const hasGerenciadorInHeader = homeHtmlContent.includes('title="Gerenciador"') &&
     homeHtmlContent.includes('more_vert') &&
-    homeHtmlContent.includes("abrirPainelMunicipio('${authData.id}'");
-assertTest('Frontend: Ícone de três pontos (Gerenciador) presente no card de município em home.html', hasGerenciadorIconInMunCard);
+    homeHtmlContent.includes('profile-admin-settings-btn-portal') &&
+    !homeHtmlContent.includes("abrirPainelMunicipio('${authData.id}'");
+assertTest('Frontend: Ícone de três pontos (Gerenciador) posicionado no cabeçalho ao lado do perfil e removido do card de município', hasGerenciadorInHeader);
 
 const hasFitMapToAuthorizedBounds = homeHtmlContent.includes('function fitMapToAuthorizedBounds(') &&
     homeHtmlContent.includes('window.fitMapToAuthorizedBounds = fitMapToAuthorizedBounds') &&

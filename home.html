@@ -237,6 +237,11 @@
         <img class="profile-avatar-img w-full h-full object-contain p-0.5" src="assets/logo.png" alt="Perfil">
       </button>
 
+      <!-- Botão Gerenciador (Três Pontos na Vertical, ao lado do perfil) -->
+      <button id="profile-admin-settings-btn-portal" onclick="window.abrirGerenciadorPortal()" class="flex w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-primary dark:hover:text-sky-400 items-center justify-center transition-all cursor-pointer tooltip tooltip-bottom shrink-0" title="Gerenciador">
+        <span class="material-symbols-outlined text-[22px] md:text-[24px]">more_vert</span>
+      </button>
+
       <!-- Botão CONFIGURAÇÕES (exclusivo SuperAdmin, estilo circular idêntico ao perfil, à DIREITA do perfil) -->
       <button id="btn-global-config" onclick="abrirConfiguracoesGlobais()" class="hidden w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all items-center justify-center cursor-pointer shadow-sm shrink-0 tooltip tooltip-bottom" title="Configurações Globais (Entidades e Novo Município)">
         <span class="material-symbols-outlined text-[18px] sm:text-[20px]">settings</span>
@@ -867,7 +872,7 @@
     <!-- Grid de Cards Retangulares com Bordas Arredondadas (3 cards por linha no desktop, 2 no tablet, 1 no mobile) -->
     <div class="flex flex-wrap justify-center gap-3 sm:gap-4 md:gap-5 w-full my-auto py-2">
       <!-- Card 1: MAPA (DESTAQUE ESPECIAL PARA RETORNAR À BASE CARTOGRÁFICA) -->
-      <button onclick="window.abrirMapaMunicipioAtivo()" class="group relative flex items-center gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-500/20 via-lime-400/20 to-amber-500/25 dark:from-emerald-950/60 dark:via-lime-950/50 dark:to-amber-950/60 border-2 border-sky-500/80 hover:border-sky-500 shadow-md hover:shadow-xl hover:shadow-sky-500/20 hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.6rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer ring-2 ring-sky-500/20 hover:ring-sky-500/40 backdrop-blur-xs">
+      <button id="card-gestao-mapa" onclick="window.abrirMapaMunicipioAtivo()" class="group relative flex items-center gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-500/20 via-lime-400/20 to-amber-500/25 dark:from-emerald-950/60 dark:via-lime-950/50 dark:to-amber-950/60 border-2 border-sky-500/80 hover:border-sky-500 shadow-md hover:shadow-xl hover:shadow-sky-500/20 hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.6rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer ring-2 ring-sky-500/20 hover:ring-sky-500/40 backdrop-blur-xs">
         <!-- Badge indicativo superior -->
         <span class="absolute -top-2.5 right-3 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-xs flex items-center gap-1 border border-white dark:border-slate-800 pointer-events-none">
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-ping"></span>
@@ -1201,15 +1206,31 @@ window.abrirMunicipioComProjeto = function(id, nome, papel, projetoId = null) {
     abrirMunicipio(id, nome, papel);
 };
 
-// Painel de Gestão e Boas-Vindas do Município (acessado ao clicar em HOME no menu lateral do mapa ou via URL ?view=municipio)
+// Abre a Central de Gerenciamento diretamente a partir do portal (sem município selecionado)
+window.abrirGerenciadorPortal = function() {
+    window._gerenciadorSemMunicipio = true;
+    abrirPainelMunicipio(null, 'Gerenciador Institucional', null);
+};
+
+// Painel de Gestão e Boas-Vindas (acessado via botão Gerenciador ou após escolher município)
 window.abrirPainelMunicipio = function(id, nome, papel = null) {
-    if (id) sessionStorage.setItem('municipio_ativo', id);
+    if (id) {
+        window._gerenciadorSemMunicipio = false;
+        sessionStorage.setItem('municipio_ativo', id);
+    } else {
+        window._gerenciadorSemMunicipio = true;
+    }
     if (nome) sessionStorage.setItem('municipio_ativo_nome', nome);
     if (papel) sessionStorage.setItem('municipio_ativo_papel', papel);
 
     try {
         const url = new URL(window.location.href);
         url.searchParams.set('view', 'municipio');
+        if (window._gerenciadorSemMunicipio) {
+            url.searchParams.set('modo', 'gerenciador');
+        } else {
+            url.searchParams.delete('modo');
+        }
         url.searchParams.delete('tab');
         window.history.pushState({}, '', url.toString());
     } catch(e) {}
@@ -1225,12 +1246,12 @@ window.abrirPainelMunicipio = function(id, nome, papel = null) {
         munHeader.classList.add('flex');
     }
 
-    // Exibe card padrão do município (Globo apenas para quem gerencia múltiplos municípios ou é SuperAdmin)
+    // Exibe card padrão do início (Globo visível se autorizado OU se estiver no modo gerenciador geral para permitir retornar ao início)
     const defaultCard = document.getElementById('header-mun-default-card');
     const activeBox = document.getElementById('header-mun-card-active-box');
     const podeVerGlobo = typeof window.userPodeVerGlobo === 'function' && window.userPodeVerGlobo();
     if (defaultCard) {
-        if (podeVerGlobo) {
+        if (podeVerGlobo || window._gerenciadorSemMunicipio) {
             defaultCard.classList.remove('hidden');
             defaultCard.style.display = 'flex';
         } else {
@@ -1246,7 +1267,7 @@ window.abrirPainelMunicipio = function(id, nome, papel = null) {
 
     const headerTitle = document.getElementById('header-municipio-nome');
     if (headerTitle) {
-        headerTitle.textContent = '';
+        headerTitle.textContent = window._gerenciadorSemMunicipio ? 'Gerenciador Institucional' : '';
     }
 
     const badgeEl = document.getElementById('header-municipio-card-badge');
@@ -1265,13 +1286,13 @@ window.abrirPainelMunicipio = function(id, nome, papel = null) {
     document.querySelectorAll('#municipio-tabs .tab-btn').forEach(b => b.classList.remove('active'));
 
     // Identifica se o usuário é administrador do município, administrador de ente ou superadmin
-    const munObj = (window.municipiosParaMostrarCache || []).find(m => m.id === id);
+    const munObj = id ? (window.municipiosParaMostrarCache || []).find(m => m.id === id) : null;
     const isMunAdmin = !!(homeUserProfile && (homeUserProfile.super_admin || homeUserProfile.is_superadmin || homeUserProfile.papel === 'superadmin' || homeUserProfile.papel === 'admin' || homeUserProfile.entidade_admin)) || (munObj && munObj.papel === 'admin');
 
     // Identifica se o usuário pertence a órgão externo apenas se NÃO for administrador
     const userEnt = ((homeUserProfile && (homeUserProfile.entidade || homeUserProfile.entidade_nome)) || '').trim();
     const userSigla = typeof getEntitySigla === 'function' ? getEntitySigla(userEnt) : userEnt;
-    const isExternalRestricted = !isMunAdmin && !!userEnt && userEnt.toLowerCase() !== 'geral' && userSigla !== 'Município' && !userEnt.toLowerCase().includes('prefeitura') && !userEnt.toLowerCase().includes('municip');
+    const isExternalRestricted = !isMunAdmin && !!userEnt && userEnt.toLowerCase() !== 'geral' && userSigla !== 'Município' && !userEnt.toLowerCase().includes('prefeitura') && !userEnt.toLowerCase().includes('municip') && !window._gerenciadorSemMunicipio;
 
     const welcomeSec = document.getElementById('municipio-welcome-section');
 
@@ -1290,12 +1311,24 @@ window.abrirPainelMunicipio = function(id, nome, papel = null) {
         }
     }
 
+    // Controle do Card MAPA: Quando acessado do portal/gerenciador geral (sem município selecionado), oculta a aba MAPA
+    const cardMapa = document.getElementById('card-gestao-mapa');
+    if (cardMapa) {
+        if (window._gerenciadorSemMunicipio || !id) {
+            cardMapa.classList.add('hidden');
+            cardMapa.style.display = 'none';
+        } else {
+            cardMapa.classList.remove('hidden');
+            cardMapa.style.display = '';
+        }
+    }
+
     // Fecha qualquer popup aberto no mapa da Paraíba
     if (typeof paraibaMapInstance !== 'undefined' && paraibaMapInstance) {
         paraibaMapInstance.closePopup();
     }
 
-    // Exibe apenas a tela neutra de boas-vindas se for usuário municipal (nenhum iframe ou aba aberta)
+    // Exibe apenas a tela neutra de boas-vindas (nenhum iframe ou aba aberta)
     document.querySelectorAll('main > section').forEach(s => s.classList.remove('active'));
     const munSec = document.getElementById('municipios-section');
     if (munSec) munSec.classList.remove('active');
@@ -1312,6 +1345,10 @@ window.abrirPainelMunicipio = function(id, nome, papel = null) {
 };
 
 window.voltarParaCardsMunicipio = function() {
+    if (window._gerenciadorSemMunicipio) {
+        window.abrirGerenciadorPortal();
+        return;
+    }
     const munId = sessionStorage.getItem('municipio_ativo');
     const munNome = sessionStorage.getItem('municipio_ativo_nome');
     if (typeof abrirPainelMunicipio === 'function') {
@@ -1326,6 +1363,7 @@ window.voltarParaCardsMunicipio = function() {
 };
 
 window.voltarParaMunicipios = function(forcePortal = false) {
+    window._gerenciadorSemMunicipio = false;
     const frameSec = document.getElementById('settings-frame-section');
     const pendingSec = document.getElementById('pending-section');
     const configSec = document.getElementById('configuracoes-section');
@@ -1954,12 +1992,27 @@ function applyCurrentUserToProfileModal() {
         }
     }
 
-    // Visibilidade do botão de configurações no perfil (exclusivo para admins)
+    // Visibilidade do botão de configurações no perfil e gerenciador no cabeçalho
     const isSuperAdmin = !!(homeUserProfile && homeUserProfile.super_admin);
-    const isAdmin = isSuperAdmin || homeUserProfile.entidade_admin || homeUserProfile.papel === 'admin';
+    const isEntidadeAdmin = !!(homeUserProfile && homeUserProfile.entidade_admin);
+    const isMunAdmin = !!(homeUserProfile && (homeUserProfile.papel === 'admin' || (window.municipiosParaMostrarCache || []).some(m => m.papel === 'admin')));
+    const isExternalUser = !!(homeUserProfile && homeUserProfile.entidade && !homeUserProfile.entidade.toLowerCase().includes('prefeitura'));
+    const canAccessGerenciador = isSuperAdmin || isEntidadeAdmin || isMunAdmin || isExternalUser;
+
+    const btnGerenciadorPortal = document.getElementById('profile-admin-settings-btn-portal');
+    if (btnGerenciadorPortal) {
+        if (canAccessGerenciador) {
+            btnGerenciadorPortal.classList.remove('hidden');
+            btnGerenciadorPortal.style.display = 'flex';
+        } else {
+            btnGerenciadorPortal.classList.add('hidden');
+            btnGerenciadorPortal.style.display = 'none';
+        }
+    }
+
     const adminBtnHome = document.getElementById('profile-admin-settings-btn-home');
     if (adminBtnHome) {
-        if (isAdmin) {
+        if (canAccessGerenciador) {
             adminBtnHome.classList.remove('hidden');
             adminBtnHome.style.display = 'flex';
         } else {
@@ -3636,17 +3689,24 @@ async function init() {
                     }
                 }
             }
-        } else if (targetView === 'municipio' || targetView === 'welcome') {
-            let activeMunId = sessionStorage.getItem('municipio_ativo');
-            let activeMunNome = sessionStorage.getItem('municipio_ativo_nome');
-            if (!activeMunId && municipiosParaMostrar && municipiosParaMostrar.length > 0) {
-                activeMunId = municipiosParaMostrar[0].id;
-                activeMunNome = municipiosParaMostrar[0].nome;
-                sessionStorage.setItem('municipio_ativo', activeMunId);
-                sessionStorage.setItem('municipio_ativo_nome', activeMunNome);
-            }
-            if (activeMunId) {
-                abrirPainelMunicipio(activeMunId, activeMunNome || 'Município');
+        } else if (targetView === 'municipio' || targetView === 'welcome' || targetView === 'gerenciador') {
+            const isGerenciadorMode = (targetView === 'gerenciador') || (urlParams.get('modo') === 'gerenciador');
+            if (isGerenciadorMode) {
+                window.abrirGerenciadorPortal();
+            } else {
+                let activeMunId = sessionStorage.getItem('municipio_ativo');
+                let activeMunNome = sessionStorage.getItem('municipio_ativo_nome');
+                if (!activeMunId && municipiosParaMostrar && municipiosParaMostrar.length > 0) {
+                    activeMunId = municipiosParaMostrar[0].id;
+                    activeMunNome = municipiosParaMostrar[0].nome;
+                    sessionStorage.setItem('municipio_ativo', activeMunId);
+                    sessionStorage.setItem('municipio_ativo_nome', activeMunNome);
+                }
+                if (activeMunId) {
+                    abrirPainelMunicipio(activeMunId, activeMunNome || 'Município');
+                } else {
+                    window.abrirGerenciadorPortal();
+                }
             }
         }
     } catch(e) {}
@@ -3903,24 +3963,18 @@ window.initParaibaMap = async function(municipiosAutorizados = []) {
 
             return `
             <div class="p-3.5 min-w-[270px] max-w-[320px] flex flex-col gap-2.5">
-                <div class="flex items-center justify-between gap-2.5">
-                    <div class="flex items-center gap-2.5 min-w-0 flex-1">
-                        <div class="w-11 h-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shrink-0 overflow-hidden p-1">
-                            ${logoEnte 
-                                ? `<img src="${logoEnte}" class="w-full h-full object-contain" alt="Logo Ente">` 
-                                : `<span class="material-symbols-outlined text-cyan-400 text-[24px]">location_city</span>`}
-                        </div>
-                        <div class="min-w-0 flex-1">
-                            <h4 class="text-sm font-bold text-white tracking-wide truncate">${authData.nome} - PB</h4>
-                            <span class="inline-block text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${ehAdmin ? 'bg-indigo-950/80 text-indigo-300 border border-indigo-700/60' : 'bg-slate-800 text-slate-300 border border-slate-700'} mt-0.5">
-                                ${papelLabel}
-                            </span>
-                        </div>
+                <div class="flex items-center gap-2.5 min-w-0 pr-6">
+                    <div class="w-11 h-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shrink-0 overflow-hidden p-1">
+                        ${logoEnte 
+                            ? `<img src="${logoEnte}" class="w-full h-full object-contain" alt="Logo Ente">` 
+                            : `<span class="material-symbols-outlined text-cyan-400 text-[24px]">location_city</span>`}
                     </div>
-                    ${ehAdmin ? `
-                    <button type="button" onclick="event.stopPropagation(); abrirPainelMunicipio('${authData.id}', '${(authData.nome || '').replace(/'/g, "\\'")}', '${authData.papel}');" class="w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 hover:border-white/30 text-slate-200 hover:text-white flex items-center justify-center transition-all cursor-pointer shrink-0 shadow-xs mr-4" title="Gerenciador">
-                        <span class="material-symbols-outlined text-[24px]">more_vert</span>
-                    </button>` : ''}
+                    <div class="min-w-0 flex-1">
+                        <h4 class="text-sm font-bold text-white tracking-wide truncate">${authData.nome} - PB</h4>
+                        <span class="inline-block text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${ehAdmin ? 'bg-indigo-950/80 text-indigo-300 border border-indigo-700/60' : 'bg-slate-800 text-slate-300 border border-slate-700'} mt-0.5">
+                            ${papelLabel}
+                        </span>
+                    </div>
                 </div>
                 ${projectsContentHtml}
             </div>`;
