@@ -976,6 +976,29 @@ async function runScenario(cfg) {
         eq('sem gráfico de origem (mapa geral do Filtro): não calcula cor por feição, usa a única do painel', r.sandbox.coresPorFeicaoMapaFeicoes({}, featsComRaw), null);
     }
 
+    // ---- MAPA DAS FEIÇÕES: ortofoto do projeto como Mapa Base (mesma ideia do mini-mapa individual: vai sobre o satélite)
+    {
+        const ponto = (lng, lat) => ({ type: 'Point', coordinates: [lng, lat] });
+        const tpl = {
+            id: 'rpt_orto', nome: 'Relatório Geral', tipo: 'geral', form_id: 'f1',
+            config_pagina: { tamanho: 'A4', orientacao: 'portrait', margens_mm: { top: 15, bottom: 15, left: 15, right: 15 } },
+            blocos: [
+                { id: 'h', tipo: 'cabecalho' },
+                { id: 'm', tipo: 'mapa_feicoes', baseMap: 'ortofoto:orto1', cor: '#0ea5e9' },
+                { id: 'f', tipo: 'rodape' }
+            ]
+        };
+        const temaOrto = { id: 'tema-orto', features: [{ properties: {}, geometry: ponto(-34.90, -7.00) }] };
+        const ortofotos = [{ id: 'orto1', nome: 'Voo 2024', url: 'https://tiles.exemplo/{z}/{x}/{y}.png', tipo: 'xyz_tiles', zoomMin: 12, zoomMax: 20, opacidade: 1 }];
+        const payload = { templateId: 'rpt_orto', template: tpl, formId: 'f1', themeId: 'tema-orto', formFields: [], formTabs: [], charts: [], featureData: {}, featureGeometry: null, featureList: null, ortofotos, preview: false };
+        const r = await runScenario({ opener: true, themes: [temaOrto], payload });
+        eq('mapa com ortofoto: nenhum erro de execução', r.errors, []);
+        const mapaCriado = r.mapsCreated.find(m => m.container && String(m.container.id || '').startsWith('rpt-mapafeicoes-'));
+        ok('mapa com ortofoto: existe (Leaflet real criado)', !!mapaCriado);
+        const tileLayers = (mapaCriado.layers || []).filter(l => l.kind === 'tile');
+        eq('mapa com ortofoto: 2 camadas tile (satélite por baixo + ortofoto por cima, mesma lógica do mini-mapa individual)', tileLayers.length, 2);
+    }
+
     // ---- RELATÓRIO GERAL — EMISSÃO DE VERDADE: sem featureList no payload; os dados vêm da camada, na janela de origem (por themeId)
     {
         const tplGeral = {

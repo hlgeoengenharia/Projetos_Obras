@@ -8364,6 +8364,16 @@ function mostrarEscolhaRelatorioGeral(modelos, theme) {
 function abrirRelatorioGeralComModelo(tpl, theme) {
     const formFields = window.ReportAdapter.getFormFields ? window.ReportAdapter.getFormFields(theme.formId) : [];
     const charts = window.ReportAdapter.getExistingCharts ? window.ReportAdapter.getExistingCharts(theme.formId) : [];
+    // ortofotos ativas no projeto que cobrem a área da camada inteira (mesma lógica do relatório individual,
+    // mas com a bbox de TODAS as feições no lugar da geometria de uma feição só) — opção de Mapa Base no Mapa das Feições
+    let ortofotosGeral = [];
+    try {
+        if (window.MapTools && typeof window.MapTools.buildOrtofotoList === 'function' && Array.isArray(window.rasterLayers)) {
+            ortofotosGeral = window.MapTools.buildOrtofotoList(window.rasterLayers, { type: 'FeatureCollection', features: theme.features || [] }, {
+                storedDate: (id) => { try { return localStorage.getItem('raster_date_' + id); } catch (e) { return null; } }
+            }).slice(0, 24);
+        }
+    } catch (e) { ortofotosGeral = []; }
     const payload = {
         templateId: tpl.id,
         template: JSON.parse(JSON.stringify(tpl)),
@@ -8377,7 +8387,7 @@ function abrirRelatorioGeralComModelo(tpl, theme) {
         featureKey: null,
         featureList: null, // sem lista embutida: a página lê as feições de verdade do opener, por themeId
         camadasMapa: [],
-        ortofotos: [],
+        ortofotos: ortofotosGeral,
         preview: false,
         timestamp: Date.now()
     };
