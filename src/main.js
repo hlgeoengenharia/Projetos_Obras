@@ -3053,15 +3053,34 @@ let _openFilterTabs = new Set(); // Todas as abas recolhidas por padrão
 function isFilterFieldChecked(activeCustom, tabKey, tabTitle, fieldId, keyStr) {
     if (!activeCustom) return true;
     if (!Array.isArray(activeCustom) || activeCustom.length === 0) return true;
-    const fId = String(fieldId || keyStr || '');
-    const kStr = String(keyStr || fieldId || '');
-    const hasComposite = activeCustom.some(k => typeof k === 'string' && k.includes(':::'));
-    if (hasComposite) {
-        return activeCustom.includes(`${tabKey}:::${fId}`) ||
-               activeCustom.includes(`${tabKey}:::${kStr}`) ||
-               (tabTitle && (activeCustom.includes(`${tabTitle}:::${fId}`) || activeCustom.includes(`${tabTitle}:::${kStr}`)));
-    }
-    return activeCustom.includes(fId) || activeCustom.includes(kStr);
+    const fId = String(fieldId || keyStr || '').trim();
+    const kStr = String(keyStr || fieldId || '').trim();
+    const tKey = String(tabKey || '').trim();
+    const tTitle = String(tabTitle || '').trim();
+
+    // Verificação direta rápida
+    if (activeCustom.includes(fId) || activeCustom.includes(kStr)) return true;
+    if (activeCustom.includes(`${tKey}:::${fId}`) || activeCustom.includes(`${tKey}:::${kStr}`)) return true;
+    if (tTitle && (activeCustom.includes(`${tTitle}:::${fId}`) || activeCustom.includes(`${tTitle}:::${kStr}`))) return true;
+
+    // Verificação case-insensitive resiliente
+    const fIdLower = fId.toLowerCase();
+    const kStrLower = kStr.toLowerCase();
+    const tKeyLower = tKey.toLowerCase();
+    const tTitleLower = tTitle.toLowerCase();
+
+    return activeCustom.some(item => {
+        if (typeof item !== 'string') return false;
+        const itemLower = item.toLowerCase();
+        if (itemLower === fIdLower || itemLower === kStrLower) return true;
+        if (itemLower === `${tKeyLower}:::${fIdLower}` || itemLower === `${tKeyLower}:::${kStrLower}`) return true;
+        if (tTitleLower && (itemLower === `${tTitleLower}:::${fIdLower}` || itemLower === `${tTitleLower}:::${kStrLower}`)) return true;
+        return false;
+    });
+}
+window.isFilterFieldChecked = isFilterFieldChecked;
+if (typeof global !== 'undefined') {
+    global.isFilterFieldChecked = isFilterFieldChecked;
 }
 
 window.openFilterFieldsModal = function(themeId) {
@@ -3441,30 +3460,41 @@ function getThemeFieldsOptions(theme) {
     let optionsHtml = '';
     const customFields = (theme && !theme._ignoreCustomFilter) ? getThemeFilterCustomFields(theme.id) : null;
     const hasCustomFilter = Array.isArray(customFields) && customFields.length > 0;
+    const checkFilter = (typeof isFilterFieldChecked === 'function') 
+        ? isFilterFieldChecked 
+        : ((typeof window !== 'undefined' && typeof window.isFilterFieldChecked === 'function') 
+            ? window.isFilterFieldChecked 
+            : ((typeof global !== 'undefined' && typeof global.isFilterFieldChecked === 'function') 
+                ? global.isFilterFieldChecked 
+                : null));
 
     // 1. Campos do formulário associado se houver (com nome da aba de referência)
     if (theme && theme.formId && typeof allForms !== 'undefined') {
         const form = allForms.find(f => f.id === theme.formId);
         if (form && (form.schema || form.tabs)) {
             const schema = form.schema || form.tabs;
-            schema.forEach(tab => {
+            schema.forEach((tab, tIdx) => {
                 const canSee = (typeof window !== 'undefined' && typeof window.canSeeFormTab === 'function')
                     ? window.canSeeFormTab(theme.formId, tab.id, { tabTitle: tab.title, tab })
                     : true;
                 if (!canSee) return;
                 if (tab.tabType === 'reports' || tab.isReportsTab) return;
 
+                const tabId = tab.id || `tab_${tIdx}`;
                 const tabTitle = (tab.title || tab.name || tab.id || 'Geral').trim();
                 if (tab.fields && Array.isArray(tab.fields)) {
                     tab.fields.forEach(f => {
                         const key = f.id || f.name || f.label;
                         if (!key) return;
                         const keyStr = String(f.id || f.name || key);
-                        const uniqueKey = `${tab.id || tabTitle}_${keyStr}`.toLowerCase();
+                        const uniqueKey = `${tabId}_${keyStr}`.toLowerCase();
                         if (!seen.has(uniqueKey)) {
                             seen.add(uniqueKey);
-                            if (hasCustomFilter && !customFields.includes(keyStr) && !customFields.includes(String(f.id))) {
-                                return;
+                            if (hasCustomFilter) {
+                                const isAllowed = checkFilter 
+                                    ? checkFilter(customFields, tabId, tabTitle, f.id, keyStr)
+                                    : (customFields.includes(keyStr) || customFields.includes(String(f.id)));
+                                if (!isAllowed) return;
                             }
                             const fieldLabel = (f.label || f.name || f.id || '').trim();
                             optionsHtml += `<option value="${f.id || keyStr}">${fieldLabel} (${tabTitle})</option>`;
@@ -3487,8 +3517,11 @@ function getThemeFieldsOptions(theme) {
                         const keyLower = keyStr.toLowerCase();
                         if (!seen.has(keyLower)) {
                             seen.add(keyLower);
-                            if (hasCustomFilter && !customFields.includes(keyStr)) {
-                                continue;
+                            if (hasCustomFilter) {
+                                const isAllowed = checkFilter 
+                                    ? checkFilter(customFields, 'outros_atributos', 'Outros Atributos da Camada', keyStr, keyStr)
+                                    : customFields.includes(keyStr);
+                                if (!isAllowed) continue;
                             }
                             const label = getThemeFieldLabel(theme, key) || key;
                             optionsHtml += `<option value="${key}">${label}</option>`;
