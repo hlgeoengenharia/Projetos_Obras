@@ -16,23 +16,23 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260922o"></script>
-    <script src="src/mapTools.js?v=20260922o"></script>
-    <script src="src/reportMap.js?v=20260922o"></script>
-    <script src="src/reportTemporal.js?v=20260922o"></script>
-    <script src="src/reportExport.js?v=20260922o"></script>
-    <script src="src/reportBlocks.js?v=20260922o"></script>
-    <script src="src/reportEditor.js?v=20260922o"></script>
-    <script src="src/reportFreeText.js?v=20260922o"></script>
-    <script src="src/reportWord.js?v=20260922o"></script>
-    <script src="src/reportDocx.js?v=20260922o"></script>
-    <script src="src/mapSnapshot.js?v=20260922o"></script>
-    <script src="src/verificarEmissao.js?v=20260922o"></script>
+    <script src="src/pageSize.js?v=20260922p"></script>
+    <script src="src/mapTools.js?v=20260922p"></script>
+    <script src="src/reportMap.js?v=20260922p"></script>
+    <script src="src/reportTemporal.js?v=20260922p"></script>
+    <script src="src/reportExport.js?v=20260922p"></script>
+    <script src="src/reportBlocks.js?v=20260922p"></script>
+    <script src="src/reportEditor.js?v=20260922p"></script>
+    <script src="src/reportFreeText.js?v=20260922p"></script>
+    <script src="src/reportWord.js?v=20260922p"></script>
+    <script src="src/reportDocx.js?v=20260922p"></script>
+    <script src="src/mapSnapshot.js?v=20260922p"></script>
+    <script src="src/verificarEmissao.js?v=20260922p"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260922o"></script>
-    <script src="src/reportData.js?v=20260922o"></script>
-    <script src="src/layerFilter.js?v=20260922o"></script>
+    <script src="src/fieldFormatter.js?v=20260922p"></script>
+    <script src="src/reportData.js?v=20260922p"></script>
+    <script src="src/layerFilter.js?v=20260922p"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
@@ -900,11 +900,23 @@
                         rb.rowHeights = rb.split.rowHeightsFixas;
                         rb.overheadH = rb.split.overheadFixo || 0;
                     } else {
-                        measureBox.innerHTML = rb.split.chunkHtml(rb.split.rowsHtml, true);
-                        const rowEls = Array.from(measureBox.querySelectorAll('[data-split-row]'));
-                        rb.rowHeights = rowEls.map(el => Math.max(1, Math.ceil(el.getBoundingClientRect().height)));
-                        const total = measureBox.firstElementChild ? measureBox.firstElementChild.offsetHeight : measureBox.offsetHeight;
-                        rb.overheadH = Math.max(0, total - rb.rowHeights.reduce((a, c) => a + c, 0));
+                        // overhead (título + cabeçalho da tabela) medido À PARTE, sem nenhuma linha — mais confiável
+                        // que subtrair de uma tabela com centenas de linhas de uma vez só (uma tabela invisível
+                        // gigante, medida inteira de uma vez, deixava sobrar espaço em branco na folha: a subtração
+                        // ficava sensível a qualquer diferença de arredondamento entre o total e a soma das linhas).
+                        measureBox.innerHTML = rb.split.chunkHtml([], true);
+                        rb.overheadH = measureBox.firstElementChild ? measureBox.firstElementChild.offsetHeight : measureBox.offsetHeight;
+                        // linhas medidas em LOTES (não todas de uma vez): tabelas com centenas/milhares de linhas
+                        // não viram uma única árvore DOM enorme escondida na página, o que também ajuda a medição
+                        // a ficar fiel ao que realmente aparece depois, linha por linha
+                        const LOTE_MEDICAO = 80;
+                        rb.rowHeights = [];
+                        for (let i = 0; i < rb.split.rowsHtml.length; i += LOTE_MEDICAO) {
+                            measureBox.innerHTML = rb.split.chunkHtml(rb.split.rowsHtml.slice(i, i + LOTE_MEDICAO), true);
+                            Array.from(measureBox.querySelectorAll('[data-split-row]')).forEach(el => {
+                                rb.rowHeights.push(Math.max(1, Math.ceil(el.getBoundingClientRect().height)));
+                            });
+                        }
                     }
                 } else {
                     measureBox.innerHTML = rb.html;
@@ -940,6 +952,13 @@
                     let used = 0;
                     while (take < rows.length && used + heights[take] <= room) { used += heights[take]; take++; }
                     if (take === 0) take = 1; // linha maior que a folha: entra sozinha
+                    // diagnóstico: uma folha nova (pageAcc==0) que aproveita menos da metade do espaço disponível,
+                    // com mais linhas ainda por vir, é exatamente o sintoma de "espaço em branco enorme antes do
+                    // rodapé" — fica no console (não na folha) pra confirmar se a medição bateu ou não, sem precisar
+                    // adivinhar de novo a partir de um print
+                    if (pageAcc === 0 && used < room * 0.5 && rows.length > take) {
+                        console.warn('[Paginação] folha nova aproveitou pouco espaço:', { bloco: rb.bloco && rb.bloco.tipo, room, used, overheadH: rb.overheadH, linhasNestaFolha: take, linhasRestantes: rows.length - take, alturasLinhas: heights.slice(0, take) });
+                    }
                     currentPage().push({ bloco: rb.bloco, html: rb.split.chunkHtml(rows.slice(0, take), isFirstChunk), primeiroChunk: isFirstChunk });
                     pageAcc += rb.overheadH + used + BLOCK_GAP;
                     isFirstChunk = false;
