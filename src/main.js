@@ -3048,6 +3048,8 @@ function setThemeFilterCustomFields(themeId, fieldsList) {
     }
 }
 
+let _openFilterTabs = new Set([0]); // Primeira aba aberta por padrão
+
 window.openFilterFieldsModal = function(themeId) {
     _currentFilterThemeId = themeId;
     const theme = themes.find(t => t.id === themeId);
@@ -3056,45 +3058,61 @@ window.openFilterFieldsModal = function(themeId) {
     const modal = document.getElementById('filter-fields-modal');
     const bodyEl = document.getElementById('filter-fields-modal-body');
     const subtitleEl = document.getElementById('filter-fields-modal-subtitle');
+    const searchInput = document.getElementById('filter-fields-search-input');
     if (!modal || !bodyEl) return;
 
+    if (searchInput) searchInput.value = '';
     if (subtitleEl) {
-        subtitleEl.textContent = `Camada: ${theme.name || 'Camada'}`;
+        subtitleEl.textContent = `Camada: ${theme.name || 'Camada'} • Clique nas abas para expandir e configurar`;
     }
 
     const activeCustom = getThemeFilterCustomFields(themeId);
-    const seen = new Set();
     const tabsList = [];
+    const seenInForm = new Set();
 
-    // 1. Agrupa campos por Aba do Formulário
+    // 1. Agrupa campos por Aba do Formulário (mantendo campos de cada aba independentes)
     if (theme.formId && typeof allForms !== 'undefined') {
         const form = allForms.find(f => f.id === theme.formId);
         if (form && (form.schema || form.tabs)) {
             const schema = form.schema || form.tabs;
-            schema.forEach(tab => {
+            schema.forEach((tab, tIdx) => {
                 const canSee = (typeof window !== 'undefined' && typeof window.canSeeFormTab === 'function')
                     ? window.canSeeFormTab(theme.formId, tab.id, { tabTitle: tab.title, tab })
                     : true;
                 if (!canSee) return;
+                if (tab.tabType === 'reports' || tab.isReportsTab) return;
 
                 const tabTitle = (tab.title || tab.name || tab.id || 'Geral').trim();
                 const fields = [];
-                if (tab.fields) {
+                const seenInThisTab = new Set();
+
+                if (tab.fields && Array.isArray(tab.fields)) {
                     tab.fields.forEach(f => {
                         const key = f.id || f.name || f.label;
                         if (!key) return;
-                        const keyLower = String(key).toLowerCase();
-                        if (!seen.has(keyLower)) {
-                            seen.add(keyLower);
-                            fields.push({
-                                id: String(f.id),
-                                label: (f.label || f.name || f.id || '').trim()
-                            });
-                        }
+                        const fieldId = String(f.id || f.name || key);
+                        const keyLower = fieldId.toLowerCase();
+                        if (seenInThisTab.has(keyLower)) return;
+                        seenInThisTab.add(keyLower);
+                        seenInForm.add(keyLower);
+                        if (f.name) seenInForm.add(String(f.name).toLowerCase());
+                        if (f.id) seenInForm.add(String(f.id).toLowerCase());
+
+                        const label = (f.label || f.name || f.id || '').trim();
+                        fields.push({
+                            id: fieldId,
+                            label: label,
+                            type: f.type || 'text',
+                            tabTitle: tabTitle
+                        });
                     });
                 }
                 if (fields.length > 0) {
-                    tabsList.push({ tabTitle, fields });
+                    tabsList.push({
+                        tabId: tab.id || `tab_${tIdx}`,
+                        tabTitle: tabTitle,
+                        fields: fields
+                    });
                 }
             });
         }
@@ -3102,6 +3120,7 @@ window.openFilterFieldsModal = function(themeId) {
 
     // 2. Extrai propriedades reais das feições já carregadas não mapeadas no formulário
     const otherFields = [];
+    const seenOther = new Set();
     if (theme.features && theme.features.length > 0) {
         const sampleSize = Math.min(30, theme.features.length);
         for (let i = 0; i < sampleSize; i++) {
@@ -3110,10 +3129,15 @@ window.openFilterFieldsModal = function(themeId) {
                 for (let key in props) {
                     if (!key.startsWith('_') && key !== 'themeId' && key !== 'id_banco') {
                         const keyLower = String(key).toLowerCase();
-                        if (!seen.has(keyLower)) {
-                            seen.add(keyLower);
+                        if (!seenInForm.has(keyLower) && !seenOther.has(keyLower)) {
+                            seenOther.add(keyLower);
                             const label = getThemeFieldLabel(theme, key) || key;
-                            otherFields.push({ id: String(key), label: label });
+                            otherFields.push({
+                                id: String(key),
+                                label: label,
+                                type: 'propriedade',
+                                tabTitle: 'Outros Atributos da Camada'
+                            });
                         }
                     }
                 }
@@ -3121,38 +3145,58 @@ window.openFilterFieldsModal = function(themeId) {
         }
     }
     if (otherFields.length > 0) {
-        tabsList.push({ tabTitle: 'Outros Atributos da Camada', fields: otherFields });
+        tabsList.push({
+            tabId: 'outros_atributos',
+            tabTitle: 'Outros Atributos da Camada',
+            fields: otherFields
+        });
     }
 
     if (tabsList.length === 0) {
         bodyEl.innerHTML = `
-            <div class="p-6 text-center text-slate-400">
-               <span class="material-symbols-outlined text-[32px] text-slate-500 mb-2">info</span>
-               <p>Nenhum campo disponível para personalização nesta camada.</p>
+            <div class="p-8 text-center text-slate-400">
+               <span class="material-symbols-outlined text-[36px] text-slate-400 mb-2">info</span>
+               <p class="font-medium">Nenhum campo disponível para personalização nesta camada.</p>
             </div>
         `;
     } else {
         bodyEl.innerHTML = tabsList.map((tabGroup, gIdx) => {
+            const isOpen = _openFilterTabs.has(gIdx) || tabsList.length === 1;
+            let checkedInGroup = 0;
+
             const fieldsHtml = tabGroup.fields.map(f => {
                 const isChecked = !activeCustom || activeCustom.includes(f.id);
+                if (isChecked) checkedInGroup++;
+                const typeLabel = (f.type || 'texto').replace(/_/g, ' ');
                 return `
-                    <label class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/60 border border-transparent hover:border-slate-200 dark:hover:border-slate-700/60 transition-all cursor-pointer select-none">
-                        <input type="checkbox" name="filter_field_item" data-group="${gIdx}" value="${f.id}" ${isChecked ? 'checked' : ''} onchange="window.updateFilterFieldsCounter()" class="w-4 h-4 rounded text-cyan-600 focus:ring-cyan-500 border-slate-300 dark:border-slate-600 cursor-pointer accent-cyan-500 shrink-0">
-                        <span class="text-xs text-slate-700 dark:text-slate-300 truncate font-medium" title="${f.label}">${f.label}</span>
+                    <label class="filter-field-item flex items-center justify-between gap-2.5 p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 hover:border-cyan-400 dark:hover:border-cyan-500 hover:shadow-xs transition-all cursor-pointer select-none" data-label="${(f.label || '').toLowerCase()}" data-id="${f.id.toLowerCase()}">
+                        <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                            <input type="checkbox" name="filter_field_item" data-group="${gIdx}" value="${f.id}" ${isChecked ? 'checked' : ''} onchange="window.updateFilterFieldsCounter()" class="w-4 h-4 rounded text-cyan-600 focus:ring-cyan-500 border-slate-300 dark:border-slate-600 cursor-pointer accent-cyan-500 shrink-0">
+                            <span class="text-xs text-slate-800 dark:text-slate-200 truncate font-semibold" title="${f.label}">${f.label}</span>
+                        </div>
+                        <span class="text-[9.5px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-400 shrink-0 border border-slate-200/60 dark:border-slate-700/60 capitalize">${typeLabel}</span>
                     </label>
                 `;
             }).join('');
 
             return `
-                <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden shadow-2xs">
-                    <div class="px-3.5 py-2 bg-slate-100/80 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
-                        <span class="font-bold text-[11px] text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                            <span class="material-symbols-outlined text-[14px] text-cyan-400">tab</span>
-                            ${tabGroup.tabTitle}
-                        </span>
-                        <button type="button" onclick="window.toggleTabFieldsGroup(${gIdx})" class="text-[10px] font-semibold text-cyan-600 dark:text-cyan-400 hover:underline cursor-pointer">Alternar todos</button>
+                <div class="filter-tab-accordion rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/50 overflow-hidden shadow-xs transition-all" data-tab-index="${gIdx}">
+                    <!-- Cabeçalho Acordeão da Aba -->
+                    <div class="px-3.5 py-2.5 bg-slate-100/90 dark:bg-slate-800 hover:bg-slate-200/80 dark:hover:bg-slate-700/80 border-b border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between cursor-pointer select-none transition-colors" onclick="window.toggleFilterTabAccordion(${gIdx})">
+                        <div class="flex items-center gap-2 min-w-0 flex-1">
+                            <span id="filter-tab-chevron-${gIdx}" class="material-symbols-outlined text-[18px] text-slate-500 dark:text-slate-400 transition-transform">${isOpen ? 'expand_more' : 'chevron_right'}</span>
+                            <span class="material-symbols-outlined text-[16px] text-cyan-500 shrink-0">tab</span>
+                            <span class="font-bold text-xs text-slate-800 dark:text-slate-100 uppercase tracking-wide truncate">${tabGroup.tabTitle}</span>
+                            <span id="filter-tab-badge-${gIdx}" class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-200/80 dark:bg-slate-700/80 px-2 py-0.5 rounded-full font-mono shrink-0">${checkedInGroup}/${tabGroup.fields.length}</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0 ml-2" onclick="event.stopPropagation()">
+                            <button type="button" onclick="window.toggleTabFieldsGroup(${gIdx}, true)" class="text-[10.5px] font-semibold text-cyan-600 dark:text-cyan-400 hover:underline cursor-pointer px-1">Todos</button>
+                            <span class="text-slate-300 dark:text-slate-600 text-[10px]">|</span>
+                            <button type="button" onclick="window.toggleTabFieldsGroup(${gIdx}, false)" class="text-[10.5px] font-semibold text-slate-500 dark:text-slate-400 hover:underline cursor-pointer px-1">Nenhum</button>
+                        </div>
                     </div>
-                    <div class="p-2.5 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    <!-- Corpo Expansível dos Campos -->
+                    <div id="filter-tab-body-${gIdx}" class="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-50/50 dark:bg-slate-900/40 ${isOpen ? '' : 'hidden'}">
                         ${fieldsHtml}
                     </div>
                 </div>
@@ -3170,11 +3214,94 @@ window.closeFilterFieldsModal = function() {
     _currentFilterThemeId = null;
 };
 
-window.toggleTabFieldsGroup = function(groupIdx) {
+window.toggleFilterTabAccordion = function(groupIdx) {
+    const bodyEl = document.getElementById(`filter-tab-body-${groupIdx}`);
+    const chevronEl = document.getElementById(`filter-tab-chevron-${groupIdx}`);
+    if (!bodyEl) return;
+
+    const isCurrentlyHidden = bodyEl.classList.contains('hidden');
+    if (isCurrentlyHidden) {
+        bodyEl.classList.remove('hidden');
+        if (chevronEl) chevronEl.textContent = 'expand_more';
+        _openFilterTabs.add(groupIdx);
+    } else {
+        bodyEl.classList.add('hidden');
+        if (chevronEl) chevronEl.textContent = 'chevron_right';
+        _openFilterTabs.delete(groupIdx);
+    }
+};
+
+window.toggleAllFilterTabs = function(openAll) {
+    const accordions = document.querySelectorAll('.filter-tab-accordion');
+    accordions.forEach(acc => {
+        const gIdx = acc.dataset.tabIndex;
+        const bodyEl = document.getElementById(`filter-tab-body-${gIdx}`);
+        const chevronEl = document.getElementById(`filter-tab-chevron-${gIdx}`);
+        if (!bodyEl) return;
+
+        if (openAll) {
+            bodyEl.classList.remove('hidden');
+            if (chevronEl) chevronEl.textContent = 'expand_more';
+            _openFilterTabs.add(Number(gIdx));
+        } else {
+            bodyEl.classList.add('hidden');
+            if (chevronEl) chevronEl.textContent = 'chevron_right';
+            _openFilterTabs.delete(Number(gIdx));
+        }
+    });
+};
+
+window.filterFieldsSearch = function(query) {
+    const term = (query || '').trim().toLowerCase();
+    const accordions = document.querySelectorAll('.filter-tab-accordion');
+
+    accordions.forEach(acc => {
+        const gIdx = acc.dataset.tabIndex;
+        const bodyEl = document.getElementById(`filter-tab-body-${gIdx}`);
+        const chevronEl = document.getElementById(`filter-tab-chevron-${gIdx}`);
+        const items = acc.querySelectorAll('.filter-field-item');
+        let visibleCount = 0;
+
+        items.forEach(item => {
+            const label = item.dataset.label || '';
+            const id = item.dataset.id || '';
+            const matches = !term || label.includes(term) || id.includes(term);
+            item.style.display = matches ? '' : 'none';
+            if (matches) visibleCount++;
+        });
+
+        if (term) {
+            if (visibleCount > 0) {
+                acc.style.display = '';
+                if (bodyEl) bodyEl.classList.remove('hidden');
+                if (chevronEl) chevronEl.textContent = 'expand_more';
+            } else {
+                acc.style.display = 'none';
+            }
+        } else {
+            acc.style.display = '';
+            const isOpen = _openFilterTabs.has(Number(gIdx));
+            if (bodyEl) {
+                if (isOpen) bodyEl.classList.remove('hidden');
+                else bodyEl.classList.add('hidden');
+            }
+            if (chevronEl) chevronEl.textContent = isOpen ? 'expand_more' : 'chevron_right';
+        }
+    });
+};
+
+window.toggleTabFieldsGroup = function(groupIdx, forceState) {
     const inputs = document.querySelectorAll(`input[name="filter_field_item"][data-group="${groupIdx}"]`);
     if (inputs.length === 0) return;
-    const hasUnchecked = Array.from(inputs).some(i => !i.checked);
-    inputs.forEach(i => i.checked = hasUnchecked);
+
+    let targetState;
+    if (typeof forceState === 'boolean') {
+        targetState = forceState;
+    } else {
+        targetState = Array.from(inputs).some(i => !i.checked);
+    }
+
+    inputs.forEach(i => i.checked = targetState);
     window.updateFilterFieldsCounter();
 };
 
@@ -3190,7 +3317,7 @@ window.filterFieldsRestoreDefault = function() {
     window.updateAllFilterSelectsForTheme(_currentFilterThemeId);
     window.closeFilterFieldsModal();
     if (typeof showToast === 'function') {
-        showToast('Personalização limpa. Todos os campos estão visíveis no filtro.', 'info');
+        showToast('Personalização restaurada. Todos os campos estão visíveis no filtro.', 'info');
     }
 };
 
@@ -3200,7 +3327,7 @@ window.saveFilterFieldsCustomSelection = function() {
     const checkedBoxes = Array.from(document.querySelectorAll('input[name="filter_field_item"]:checked'));
 
     if (checkedBoxes.length === 0) {
-        alert('Selecione pelo menos um campo para manter no filtro ou clique em "Restaurar Padrão".');
+        alert('Selecione pelo menos um campo para manter no filtro ou clique em "Padrão".');
         return;
     }
 
@@ -3225,6 +3352,25 @@ window.updateFilterFieldsCounter = function() {
     if (counterEl) {
         counterEl.textContent = `${checkedBoxes.length} de ${allBoxes.length} campos visíveis`;
     }
+
+    // Atualiza badges individuais de cada aba
+    const accordions = document.querySelectorAll('.filter-tab-accordion');
+    accordions.forEach(acc => {
+        const gIdx = acc.dataset.tabIndex;
+        const total = acc.querySelectorAll(`input[name="filter_field_item"][data-group="${gIdx}"]`).length;
+        const checked = acc.querySelectorAll(`input[name="filter_field_item"][data-group="${gIdx}"]:checked`).length;
+        const badgeEl = document.getElementById(`filter-tab-badge-${gIdx}`);
+        if (badgeEl) {
+            badgeEl.textContent = `${checked}/${total}`;
+            if (checked === total) {
+                badgeEl.className = "text-[10px] font-semibold text-cyan-600 dark:text-cyan-400 bg-cyan-100 dark:bg-cyan-950/60 px-2 py-0.5 rounded-full font-mono shrink-0";
+            } else if (checked === 0) {
+                badgeEl.className = "text-[10px] font-semibold text-rose-500 dark:text-rose-400 bg-rose-100 dark:bg-rose-950/60 px-2 py-0.5 rounded-full font-mono shrink-0";
+            } else {
+                badgeEl.className = "text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-200/80 dark:bg-slate-700/80 px-2 py-0.5 rounded-full font-mono shrink-0";
+            }
+        }
+    });
 };
 
 window.updateAllFilterSelectsForTheme = function(themeId) {
@@ -3276,21 +3422,22 @@ function getThemeFieldsOptions(theme) {
                     ? window.canSeeFormTab(theme.formId, tab.id, { tabTitle: tab.title, tab })
                     : true;
                 if (!canSee) return;
+                if (tab.tabType === 'reports' || tab.isReportsTab) return;
 
                 const tabTitle = (tab.title || tab.name || tab.id || 'Geral').trim();
-                if (tab.fields) {
+                if (tab.fields && Array.isArray(tab.fields)) {
                     tab.fields.forEach(f => {
                         const key = f.id || f.name || f.label;
                         if (!key) return;
-                        const keyStr = String(key);
-                        const keyLower = keyStr.toLowerCase();
-                        if (!seen.has(keyLower)) {
-                            seen.add(keyLower);
+                        const keyStr = String(f.id || f.name || key);
+                        const uniqueKey = `${tab.id || tabTitle}_${keyStr}`.toLowerCase();
+                        if (!seen.has(uniqueKey)) {
+                            seen.add(uniqueKey);
                             if (hasCustomFilter && !customFields.includes(keyStr) && !customFields.includes(String(f.id))) {
                                 return;
                             }
                             const fieldLabel = (f.label || f.name || f.id || '').trim();
-                            optionsHtml += `<option value="${f.id}">${fieldLabel} (${tabTitle})</option>`;
+                            optionsHtml += `<option value="${f.id || keyStr}">${fieldLabel} (${tabTitle})</option>`;
                         }
                     });
                 }

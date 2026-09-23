@@ -1050,16 +1050,16 @@
 
 <!-- Modal Personalizar Campos Visíveis no Filtro -->
 <div id="filter-fields-modal" class="fixed inset-0 z-[120] bg-black/60 backdrop-blur-xs hidden flex items-center justify-center p-4">
-  <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800 flex flex-col max-h-[85vh] overflow-hidden animate-in fade-in zoom-in duration-150">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[88vh] overflow-hidden animate-in fade-in zoom-in duration-150">
     <!-- Header -->
     <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/60 shrink-0">
-      <div class="flex items-center gap-2.5">
-        <div class="w-8 h-8 rounded-lg bg-cyan-500/10 text-cyan-400 flex items-center justify-center border border-cyan-500/20 shrink-0">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-9 h-9 rounded-xl bg-cyan-500/10 text-cyan-500 dark:text-cyan-400 flex items-center justify-center border border-cyan-500/20 shrink-0">
           <span class="material-symbols-outlined text-[20px]">tune</span>
         </div>
         <div class="min-w-0">
           <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-tight truncate">Campos Visíveis no Filtro</h3>
-          <p id="filter-fields-modal-subtitle" class="text-[11px] text-slate-500 dark:text-slate-400 truncate">Escolha quais campos deseja exibir no seletor de busca</p>
+          <p id="filter-fields-modal-subtitle" class="text-[11px] text-slate-500 dark:text-slate-400 truncate">Clique nas abas para expandir e escolher quais campos exibir</p>
         </div>
       </div>
       <button onclick="closeFilterFieldsModal()" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors cursor-pointer shrink-0">
@@ -1067,21 +1067,34 @@
       </button>
     </div>
 
-    <!-- Quick Actions Toolbar -->
-    <div class="px-5 py-2.5 bg-slate-100/70 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 shrink-0">
-      <div class="flex items-center gap-2">
-        <button type="button" onclick="filterFieldsSelectAll(true)" class="text-[11px] font-semibold text-cyan-600 dark:text-cyan-400 hover:underline cursor-pointer">Marcar Todos</button>
-        <span class="text-slate-300 dark:text-slate-600">|</span>
-        <button type="button" onclick="filterFieldsSelectAll(false)" class="text-[11px] font-semibold text-slate-600 dark:text-slate-400 hover:underline cursor-pointer">Desmarcar Todos</button>
+    <!-- Quick Actions Toolbar & Search Bar -->
+    <div class="px-5 py-2.5 bg-slate-100/70 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 shrink-0">
+      <!-- Search Input -->
+      <div class="relative flex-1">
+        <span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-[16px] text-slate-400">search</span>
+        <input type="text" id="filter-fields-search-input" oninput="window.filterFieldsSearch(this.value)" placeholder="Buscar campo..." class="w-full pl-8 pr-3 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-cyan-500">
       </div>
-      <button type="button" onclick="filterFieldsRestoreDefault()" class="text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1 cursor-pointer" title="Restaura a exibição de todos os campos da camada">
-        <span class="material-symbols-outlined text-[14px]">history</span>
-        <span>Restaurar Padrão</span>
-      </button>
+
+      <!-- Action buttons -->
+      <div class="flex items-center justify-between sm:justify-end gap-2 shrink-0">
+        <div class="flex items-center gap-1.5">
+          <button type="button" onclick="filterFieldsSelectAll(true)" class="text-[11px] font-semibold text-cyan-600 dark:text-cyan-400 hover:underline cursor-pointer">Marcar Todos</button>
+          <span class="text-slate-300 dark:text-slate-600">|</span>
+          <button type="button" onclick="filterFieldsSelectAll(false)" class="text-[11px] font-semibold text-slate-600 dark:text-slate-400 hover:underline cursor-pointer">Desmarcar Todos</button>
+          <span class="text-slate-300 dark:text-slate-600">|</span>
+          <button type="button" onclick="window.toggleAllFilterTabs(true)" class="text-[11px] font-semibold text-sky-600 dark:text-sky-400 hover:underline cursor-pointer" title="Expandir todas as abas">Expandir Abas</button>
+          <span class="text-slate-300 dark:text-slate-600">|</span>
+          <button type="button" onclick="window.toggleAllFilterTabs(false)" class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:underline cursor-pointer" title="Recolher todas as abas">Recolher</button>
+        </div>
+        <button type="button" onclick="filterFieldsRestoreDefault()" class="text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1 cursor-pointer shrink-0 ml-1" title="Restaura a exibição de todos os campos da camada">
+          <span class="material-symbols-outlined text-[14px]">history</span>
+          <span>Padrão</span>
+        </button>
+      </div>
     </div>
 
     <!-- Scrollable Checklist Body -->
-    <div id="filter-fields-modal-body" class="p-5 overflow-y-auto flex-1 flex flex-col gap-3.5 custom-scrollbar text-xs">
+    <div id="filter-fields-modal-body" class="p-4 overflow-y-auto flex-1 flex flex-col gap-2.5 custom-scrollbar text-xs">
       <!-- Injetado dinamicamente com abas e checkboxes dos campos -->
     </div>
 
@@ -2485,7 +2498,7 @@
 <script src="src/customFields.js?v=20260913_epol_rip"></script>
 <script src="src/tableJoin.js"></script>
 <script src="src/geo-engine-turbo.js"></script>
-<script src="src/main.js?v=20260913_fix_sync"></script>
+<script src="src/main.js?v=20260923_tabs_accordion"></script>
 <script src="src/spatialAnalytics.js?v=20260911b"></script>
 <script src="src/measurement.js"></script>
 <script src="src/cesium-integration.js"></script>
