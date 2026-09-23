@@ -1105,6 +1105,15 @@ async function runScenario(cfg) {
         // com filtro cortando: aviso aparece na 1ª folha (visível mesmo impresso) E o botão flutuante avisa, mesmo com o painel fechado
         ok('com filtro: mostra o aviso "Filtro ativo: mostrando 1 de 3 feições..." na folha (não só dentro do painel)', /Filtro ativo:.*mostrando 1 de 3 feições da camada/.test(rf.registry['a4-document-container']._html.replace(/\s+/g, ' ')));
         eq('com filtro: botão flutuante avisa "filtro ativo (1/3)" mesmo com o painel fechado', rf.sandbox.document.getElementById('pesquisa-tools-toggle').textContent, 'Pesquisa • filtro ativo (1/3)');
+
+        // BUG relatado pelo usuário: clicar em "Limpar filtro" só atualizava o TEXTO do painel, sem redesenhar a
+        // folha — gráfico, tabela, mapa e o aviso "Filtro ativo" continuavam com o resultado antigo até clicar
+        // em "Aplicar filtro" de novo (não óbvio depois de já ter "limpado"). limparFiltroGeral() precisa
+        // atualizar a folha inteira na hora, sozinho.
+        vm.runInContext('limparFiltroGeral()', rf.sandbox);
+        eq('Limpar filtro: a folha inteira atualiza sozinha (sem precisar clicar em Aplicar filtro de novo) — volta a mostrar as 2 feições', rf.captured.charts[rf.captured.charts.length - 1].config.data.labels.sort(), ['Irregular', 'Regular']);
+        ok('Limpar filtro: o aviso "Filtro ativo" some da folha junto', !rf.registry['a4-document-container']._html.includes('Filtro ativo:'));
+        eq('Limpar filtro: o botão flutuante volta a "Pesquisa" (sem indicação de filtro)', rf.sandbox.document.getElementById('pesquisa-tools-toggle').textContent, 'Pesquisa');
     }
 
     // ---- RELATÓRIO GERAL — CAMPO COM FÓRMULA/1:N: gráfico, tabela e filtro devem ler pelo MESMO caminho do Painel
