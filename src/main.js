@@ -3048,7 +3048,21 @@ function setThemeFilterCustomFields(themeId, fieldsList) {
     }
 }
 
-let _openFilterTabs = new Set([0]); // Primeira aba aberta por padrão
+let _openFilterTabs = new Set(); // Todas as abas recolhidas por padrão
+
+function isFilterFieldChecked(activeCustom, tabKey, tabTitle, fieldId, keyStr) {
+    if (!activeCustom) return true;
+    if (!Array.isArray(activeCustom) || activeCustom.length === 0) return true;
+    const fId = String(fieldId || keyStr || '');
+    const kStr = String(keyStr || fieldId || '');
+    const hasComposite = activeCustom.some(k => typeof k === 'string' && k.includes(':::'));
+    if (hasComposite) {
+        return activeCustom.includes(`${tabKey}:::${fId}`) ||
+               activeCustom.includes(`${tabKey}:::${kStr}`) ||
+               (tabTitle && (activeCustom.includes(`${tabTitle}:::${fId}`) || activeCustom.includes(`${tabTitle}:::${kStr}`)));
+    }
+    return activeCustom.includes(fId) || activeCustom.includes(kStr);
+}
 
 window.openFilterFieldsModal = function(themeId) {
     _currentFilterThemeId = themeId;
@@ -3066,6 +3080,7 @@ window.openFilterFieldsModal = function(themeId) {
         subtitleEl.textContent = `Camada: ${theme.name || 'Camada'} • Clique nas abas para expandir e configurar`;
     }
 
+    _openFilterTabs.clear(); // Garante todas as abas recolhidas ao abrir o modal
     const activeCustom = getThemeFilterCustomFields(themeId);
     const tabsList = [];
     const seenInForm = new Set();
@@ -3082,6 +3097,7 @@ window.openFilterFieldsModal = function(themeId) {
                 if (!canSee) return;
                 if (tab.tabType === 'reports' || tab.isReportsTab) return;
 
+                const tabId = tab.id || `tab_${tIdx}`;
                 const tabTitle = (tab.title || tab.name || tab.id || 'Geral').trim();
                 const fields = [];
                 const seenInThisTab = new Set();
@@ -3103,13 +3119,14 @@ window.openFilterFieldsModal = function(themeId) {
                             id: fieldId,
                             label: label,
                             type: f.type || 'text',
+                            tabId: tabId,
                             tabTitle: tabTitle
                         });
                     });
                 }
                 if (fields.length > 0) {
                     tabsList.push({
-                        tabId: tab.id || `tab_${tIdx}`,
+                        tabId: tabId,
                         tabTitle: tabTitle,
                         fields: fields
                     });
@@ -3136,6 +3153,7 @@ window.openFilterFieldsModal = function(themeId) {
                                 id: String(key),
                                 label: label,
                                 type: 'propriedade',
+                                tabId: 'outros_atributos',
                                 tabTitle: 'Outros Atributos da Camada'
                             });
                         }
@@ -3161,17 +3179,18 @@ window.openFilterFieldsModal = function(themeId) {
         `;
     } else {
         bodyEl.innerHTML = tabsList.map((tabGroup, gIdx) => {
-            const isOpen = _openFilterTabs.has(gIdx) || tabsList.length === 1;
+            const isOpen = _openFilterTabs.has(gIdx);
             let checkedInGroup = 0;
 
             const fieldsHtml = tabGroup.fields.map(f => {
-                const isChecked = !activeCustom || activeCustom.includes(f.id);
+                const compositeVal = `${tabGroup.tabId}:::${f.id}`;
+                const isChecked = isFilterFieldChecked(activeCustom, tabGroup.tabId, tabGroup.tabTitle, f.id, f.id);
                 if (isChecked) checkedInGroup++;
                 const typeLabel = (f.type || 'texto').replace(/_/g, ' ');
                 return `
                     <label class="filter-field-item flex items-center justify-between gap-2.5 p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 hover:border-cyan-400 dark:hover:border-cyan-500 hover:shadow-xs transition-all cursor-pointer select-none" data-label="${(f.label || '').toLowerCase()}" data-id="${f.id.toLowerCase()}">
                         <div class="flex items-center gap-2.5 min-w-0 flex-1">
-                            <input type="checkbox" name="filter_field_item" data-group="${gIdx}" value="${f.id}" ${isChecked ? 'checked' : ''} onchange="window.updateFilterFieldsCounter()" class="w-4 h-4 rounded text-cyan-600 focus:ring-cyan-500 border-slate-300 dark:border-slate-600 cursor-pointer accent-cyan-500 shrink-0">
+                            <input type="checkbox" name="filter_field_item" data-group="${gIdx}" value="${compositeVal}" data-field-id="${f.id}" ${isChecked ? 'checked' : ''} onchange="window.updateFilterFieldsCounter()" class="w-4 h-4 rounded text-cyan-600 focus:ring-cyan-500 border-slate-300 dark:border-slate-600 cursor-pointer accent-cyan-500 shrink-0">
                             <span class="text-xs text-slate-800 dark:text-slate-200 truncate font-semibold" title="${f.label}">${f.label}</span>
                         </div>
                         <span class="text-[9.5px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-400 shrink-0 border border-slate-200/60 dark:border-slate-700/60 capitalize">${typeLabel}</span>
@@ -3180,7 +3199,7 @@ window.openFilterFieldsModal = function(themeId) {
             }).join('');
 
             return `
-                <div class="filter-tab-accordion rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/50 overflow-hidden shadow-xs transition-all" data-tab-index="${gIdx}">
+                <div class="filter-tab-accordion shrink-0 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/50 overflow-hidden shadow-xs transition-all" data-tab-index="${gIdx}">
                     <!-- Cabeçalho Acordeão da Aba -->
                     <div class="px-3.5 py-2.5 bg-slate-100/90 dark:bg-slate-800 hover:bg-slate-200/80 dark:hover:bg-slate-700/80 border-b border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between cursor-pointer select-none transition-colors" onclick="window.toggleFilterTabAccordion(${gIdx})">
                         <div class="flex items-center gap-2 min-w-0 flex-1">
@@ -3214,27 +3233,38 @@ window.closeFilterFieldsModal = function() {
     _currentFilterThemeId = null;
 };
 
+// Acordeão exclusivo: ao expandir uma aba, recolhe automaticamente as outras
 window.toggleFilterTabAccordion = function(groupIdx) {
-    const bodyEl = document.getElementById(`filter-tab-body-${groupIdx}`);
-    const chevronEl = document.getElementById(`filter-tab-chevron-${groupIdx}`);
-    if (!bodyEl) return;
+    const targetIdx = parseInt(groupIdx, 10);
+    const accordions = document.querySelectorAll('.filter-tab-accordion');
+    accordions.forEach(acc => {
+        const gIdx = parseInt(acc.dataset.tabIndex, 10);
+        const bodyEl = document.getElementById(`filter-tab-body-${gIdx}`);
+        const chevronEl = document.getElementById(`filter-tab-chevron-${gIdx}`);
+        if (!bodyEl) return;
 
-    const isCurrentlyHidden = bodyEl.classList.contains('hidden');
-    if (isCurrentlyHidden) {
-        bodyEl.classList.remove('hidden');
-        if (chevronEl) chevronEl.textContent = 'expand_more';
-        _openFilterTabs.add(groupIdx);
-    } else {
-        bodyEl.classList.add('hidden');
-        if (chevronEl) chevronEl.textContent = 'chevron_right';
-        _openFilterTabs.delete(groupIdx);
-    }
+        if (gIdx === targetIdx) {
+            const isHidden = bodyEl.classList.contains('hidden');
+            if (isHidden) {
+                bodyEl.classList.remove('hidden');
+                if (chevronEl) chevronEl.textContent = 'expand_more';
+                _openFilterTabs = new Set([targetIdx]);
+            } else {
+                bodyEl.classList.add('hidden');
+                if (chevronEl) chevronEl.textContent = 'chevron_right';
+                _openFilterTabs.clear();
+            }
+        } else {
+            bodyEl.classList.add('hidden');
+            if (chevronEl) chevronEl.textContent = 'chevron_right';
+        }
+    });
 };
 
 window.toggleAllFilterTabs = function(openAll) {
     const accordions = document.querySelectorAll('.filter-tab-accordion');
     accordions.forEach(acc => {
-        const gIdx = acc.dataset.tabIndex;
+        const gIdx = parseInt(acc.dataset.tabIndex, 10);
         const bodyEl = document.getElementById(`filter-tab-body-${gIdx}`);
         const chevronEl = document.getElementById(`filter-tab-chevron-${gIdx}`);
         if (!bodyEl) return;
@@ -3242,11 +3272,11 @@ window.toggleAllFilterTabs = function(openAll) {
         if (openAll) {
             bodyEl.classList.remove('hidden');
             if (chevronEl) chevronEl.textContent = 'expand_more';
-            _openFilterTabs.add(Number(gIdx));
+            _openFilterTabs.add(gIdx);
         } else {
             bodyEl.classList.add('hidden');
             if (chevronEl) chevronEl.textContent = 'chevron_right';
-            _openFilterTabs.delete(Number(gIdx));
+            _openFilterTabs.delete(gIdx);
         }
     });
 };
