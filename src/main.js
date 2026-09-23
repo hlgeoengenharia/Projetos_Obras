@@ -481,6 +481,9 @@ async function loadThemes() {
                   themes.push(theme);
               });
 
+              // Aplica a ordem persistida salva pelo usuário
+              applySavedThemesOrder();
+
               // Inicializa lista de IDs de camadas compartilhadas ativas salvas
               try {
                   window.activeSharedLayers = JSON.parse(localStorage.getItem('shared_layers_' + activeMunicipioId) || '[]');
@@ -501,6 +504,7 @@ async function loadThemes() {
       const saved = localStorage.getItem('constructive_themes');
       if (saved) {
         themes = JSON.parse(saved);
+        applySavedThemesOrder();
       } else {
         themes = [
           { id: 'obras', name: 'Projetos / Obras', color: '#051125', features: [] }
@@ -599,11 +603,68 @@ function saveThemes() {
   try {
       localStorage.setItem('constructive_themes_meta', JSON.stringify(meta));
       localStorage.setItem('constructive_themes', JSON.stringify(themeMeta));
+      saveThemesCustomOrder();
   } catch(e) {
       // Mesmo sem feicões pode falhar se houver muitos temas — silencia
       console.warn('[saveThemes] Não foi possível salvar metadados:', e.message);
   }
 }
+
+function saveThemesCustomOrder() {
+  const munId = (typeof getActiveMunId === 'function' ? getActiveMunId() : null) 
+      || (typeof activeMunicipioId !== 'undefined' && activeMunicipioId) 
+      || sessionStorage.getItem('municipio_ativo') 
+      || 'default';
+  
+  if (Array.isArray(themes)) {
+    const allThemeIds = themes.map(t => String(t.id));
+    try {
+      localStorage.setItem(`constructive_themes_order_${munId}`, JSON.stringify(allThemeIds));
+    } catch(e) {
+      console.warn('[saveThemesCustomOrder] Erro ao salvar ordem das camadas:', e);
+    }
+  }
+}
+window.saveThemesCustomOrder = saveThemesCustomOrder;
+
+function applySavedThemesOrder() {
+  if (!Array.isArray(themes) || themes.length <= 1) return;
+
+  const munId = (typeof getActiveMunId === 'function' ? getActiveMunId() : null) 
+      || (typeof activeMunicipioId !== 'undefined' && activeMunicipioId) 
+      || sessionStorage.getItem('municipio_ativo') 
+      || 'default';
+
+  // 1. Ordem salva no projeto ativo ou workspace (se houver)
+  let workspaceOrder = [];
+  if (Array.isArray(window.activeWorkspaceThemes) && window.activeWorkspaceThemes.length > 0) {
+      workspaceOrder = window.activeWorkspaceThemes.map(id => String(id));
+  }
+
+  // 2. Ordem personalizada geral das camadas do município
+  let customOrder = [];
+  try {
+      const savedOrder = localStorage.getItem(`constructive_themes_order_${munId}`);
+      if (savedOrder) customOrder = JSON.parse(savedOrder).map(id => String(id));
+  } catch(e) {}
+
+  // Ordem combinada: camadas do workspace primeiro na sua ordem, depois as restantes na ordem persistida
+  const fullOrder = [...new Set([...workspaceOrder, ...customOrder])];
+  if (fullOrder.length === 0) return;
+
+  themes.sort((a, b) => {
+      const idA = String(a.id);
+      const idB = String(b.id);
+      const idxA = fullOrder.indexOf(idA);
+      const idxB = fullOrder.indexOf(idB);
+
+      if (idxA === -1 && idxB === -1) return 0;
+      if (idxA === -1) return 1;
+      if (idxB === -1) return -1;
+      return idxA - idxB;
+  });
+}
+window.applySavedThemesOrder = applySavedThemesOrder;
 
 function showWarningToast(message) {
     const existing = document.getElementById('warning-toast');
@@ -1364,6 +1425,8 @@ window.loadUserProjects = async function() {
             window.activeWorkspaceRasters = savedRasters ? JSON.parse(savedRasters) : [];
         } catch(e) { window.activeWorkspaceRasters = []; }
 
+        applySavedThemesOrder();
+
         window.updateProjectSelectDropdown();
         window.updateProjectActiveUI();
     }
@@ -1592,6 +1655,8 @@ window.onSelectUserProject = async function(val) {
             const savedRasters = localStorage.getItem('workspace_livre_rasters_' + munId);
             window.activeWorkspaceRasters = savedRasters ? JSON.parse(savedRasters) : [];
         } catch(e) { window.activeWorkspaceRasters = []; }
+
+        applySavedThemesOrder();
     } else {
         const proj = (window.userProjects || []).find(p => p.id === val);
         if (proj) {
@@ -1610,6 +1675,7 @@ window.onSelectUserProject = async function(val) {
                     t.visible = false;
                 }
             });
+            applySavedThemesOrder();
             saveThemes();
         }
     }
@@ -2283,6 +2349,7 @@ function getEntitySigla(name) {
 window.getEntitySigla = getEntitySigla;
 
 function renderThemes() {
+  applySavedThemesOrder();
   const container = document.getElementById('themes-container');
   container.innerHTML = '';
 
@@ -2331,45 +2398,94 @@ function renderThemes() {
     card.dataset.index = index;
     card.dataset.id = theme.id;
     
-    // Drag & Drop Events
+    // Drag & Drop Events com persistência automática de ordem
     card.addEventListener('dragstart', (e) => {
-      draggedThemeIndex = index;
+      window._draggedThemeId = String(theme.id);
       e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', index);
-      setTimeout(() => card.classList.add('opacity-40'), 0);
-    });
-    
-    card.addEventListener('dragenter', (e) => {
-      e.preventDefault();
-      if (index !== draggedThemeIndex) card.classList.add('border-t-2', 'border-t-primary');
-    });
-    
-    card.addEventListener('dragleave', (e) => {
-      card.classList.remove('border-t-2', 'border-t-primary');
+      e.dataTransfer.setData('text/plain', String(theme.id));
+      setTimeout(() => card.classList.add('opacity-40', 'scale-[0.99]'), 0);
     });
     
     card.addEventListener('dragover', (e) => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
+      if (!window._draggedThemeId || window._draggedThemeId === String(theme.id)) return;
+
+      const rect = card.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      if (e.clientY < midY) {
+        card.classList.add('border-t-2', 'border-t-primary');
+        card.classList.remove('border-b-2', 'border-b-primary');
+      } else {
+        card.classList.add('border-b-2', 'border-b-primary');
+        card.classList.remove('border-t-2', 'border-t-primary');
+      }
+    });
+
+    card.addEventListener('dragleave', (e) => {
+      card.classList.remove('border-t-2', 'border-t-primary', 'border-b-2', 'border-b-primary');
     });
     
-    card.addEventListener('drop', (e) => {
+    card.addEventListener('drop', async (e) => {
       e.preventDefault();
-      card.classList.remove('border-t-2', 'border-t-primary');
-      const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
-      if (fromIndex !== index) {
-        // Reorder array
-        const draggedItem = themes.splice(fromIndex, 1)[0];
-        themes.splice(index, 0, draggedItem);
+      card.classList.remove('border-t-2', 'border-t-primary', 'border-b-2', 'border-b-primary');
+      const draggedId = e.dataTransfer.getData('text/plain') || window._draggedThemeId;
+      const targetId = String(theme.id);
+
+      if (draggedId && targetId && String(draggedId) !== targetId) {
+        const rect = card.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        const insertAfter = (e.clientY >= midY);
+
+        // 1. Reordena no array themes principal
+        const fromIdx = themes.findIndex(t => String(t.id) === String(draggedId));
+        if (fromIdx !== -1) {
+          const [draggedItem] = themes.splice(fromIdx, 1);
+          const currentToIdx = themes.findIndex(t => String(t.id) === targetId);
+          if (currentToIdx !== -1) {
+            themes.splice(insertAfter ? currentToIdx + 1 : currentToIdx, 0, draggedItem);
+          } else {
+            themes.push(draggedItem);
+          }
+        }
+
+        // 2. Reordena no activeWorkspaceThemes (mantendo o projeto / mesa perfeitamente ordenado)
+        if (Array.isArray(window.activeWorkspaceThemes)) {
+          const wsFrom = window.activeWorkspaceThemes.findIndex(id => String(id) === String(draggedId));
+          if (wsFrom !== -1) {
+            const [movedWsId] = window.activeWorkspaceThemes.splice(wsFrom, 1);
+            const currentWsTo = window.activeWorkspaceThemes.findIndex(id => String(id) === targetId);
+            if (currentWsTo !== -1) {
+              window.activeWorkspaceThemes.splice(insertAfter ? currentWsTo + 1 : currentWsTo, 0, movedWsId);
+            } else {
+              window.activeWorkspaceThemes.push(movedWsId);
+            }
+          }
+        }
+
+        // 3. Salva a nova ordem global e local das camadas
+        saveThemesCustomOrder();
         saveThemes();
+
+        // 4. Salva o estado do projeto ativo (ou modo livre) no Supabase e no localStorage
+        if (typeof window.saveCurrentWorkspaceState === 'function') {
+          try {
+            await window.saveCurrentWorkspaceState();
+          } catch(errWs) {
+            console.warn('[DragThemes] Erro ao sincronizar workspace:', errWs);
+          }
+        }
+
+        // 5. Re-renderiza a lista e sincroniza Z-Index visual no mapa
         renderThemes();
-        loadAllFeaturesToMap(); // Sincroniza o Z-Index
+        loadAllFeaturesToMap();
       }
     });
     
     card.addEventListener('dragend', (e) => {
-      card.classList.remove('opacity-40');
-      document.querySelectorAll('#themes-container > div').forEach(el => el.classList.remove('border-t-2', 'border-t-primary'));
+      window._draggedThemeId = null;
+      card.classList.remove('opacity-40', 'scale-[0.99]');
+      document.querySelectorAll('#themes-container > div').forEach(el => el.classList.remove('border-t-2', 'border-t-primary', 'border-b-2', 'border-b-primary'));
     });
     
     if (isActiveSelection) {
