@@ -16,23 +16,23 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260922p"></script>
-    <script src="src/mapTools.js?v=20260922p"></script>
-    <script src="src/reportMap.js?v=20260922p"></script>
-    <script src="src/reportTemporal.js?v=20260922p"></script>
-    <script src="src/reportExport.js?v=20260922p"></script>
-    <script src="src/reportBlocks.js?v=20260922p"></script>
-    <script src="src/reportEditor.js?v=20260922p"></script>
-    <script src="src/reportFreeText.js?v=20260922p"></script>
-    <script src="src/reportWord.js?v=20260922p"></script>
-    <script src="src/reportDocx.js?v=20260922p"></script>
-    <script src="src/mapSnapshot.js?v=20260922p"></script>
-    <script src="src/verificarEmissao.js?v=20260922p"></script>
+    <script src="src/pageSize.js?v=20260922q"></script>
+    <script src="src/mapTools.js?v=20260922q"></script>
+    <script src="src/reportMap.js?v=20260922q"></script>
+    <script src="src/reportTemporal.js?v=20260922q"></script>
+    <script src="src/reportExport.js?v=20260922q"></script>
+    <script src="src/reportBlocks.js?v=20260922q"></script>
+    <script src="src/reportEditor.js?v=20260922q"></script>
+    <script src="src/reportFreeText.js?v=20260922q"></script>
+    <script src="src/reportWord.js?v=20260922q"></script>
+    <script src="src/reportDocx.js?v=20260922q"></script>
+    <script src="src/mapSnapshot.js?v=20260922q"></script>
+    <script src="src/verificarEmissao.js?v=20260922q"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260922p"></script>
-    <script src="src/reportData.js?v=20260922p"></script>
-    <script src="src/layerFilter.js?v=20260922p"></script>
+    <script src="src/fieldFormatter.js?v=20260922q"></script>
+    <script src="src/reportData.js?v=20260922q"></script>
+    <script src="src/layerFilter.js?v=20260922q"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
@@ -143,6 +143,8 @@
         /* seta do norte de cada mini-mapa do "Mapa das Feições" */
         .mapa-feicoes-norte { position: absolute; top: 6px; right: 6px; z-index: 650; width: 24px; height: 24px; background: #fff; border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; color: #0f172a; }
         .mapa-feicoes-norte .material-symbols-outlined { font-size: 16px; }
+        /* rótulo de até 2 campos (ex.: "QD A - LT 10") centralizado sobre cada feição do "Mapa das Feições" */
+        .mapa-feicoes-rotulo { display: inline-block; transform: translate(-50%, -50%); white-space: nowrap; font: 700 8px/1.1 sans-serif; color: #0f172a; background: rgba(255,255,255,.82); padding: 1px 3px; border-radius: 3px; pointer-events: none; }
         /* divisória ajustável das colunas Distância e Confrontantes (só na tela) */
         .col-resize { position: absolute; top: 0; right: -4px; width: 9px; height: 100%; cursor: col-resize; z-index: 5; touch-action: none; }
         .col-resize:hover, .col-resize.ativo { background: rgba(5,150,105,.35); }
@@ -251,8 +253,11 @@
         .campo-resize .campo-resize-rotulo { display: none; position: absolute; bottom: 100%; right: 0; margin-bottom: 2px; background: #0f172a; color: #fff; font: 700 10px/1 ui-monospace, monospace; padding: 3px 5px; border-radius: 5px; white-space: nowrap; }
         .campo-resize.arrastando .campo-resize-rotulo { display: block; }
         /* mesma ideia, para as colunas da "Tabela das Feições" (Relatório Geral) */
-        .tf-col-resize { display: none; position: absolute; top: 0; bottom: 0; right: -5px; width: 9px; cursor: ew-resize; z-index: 20; border-radius: 5px; background: rgba(14,165,233,.35); touch-action: none; }
+        .tf-col-resize { display: none; position: absolute; top: 0; bottom: 0; right: -5px; width: 9px; cursor: ew-resize; z-index: 20; border-radius: 5px; background: rgba(14,165,233,.35); touch-action: none; user-select: none; -webkit-user-select: none; }
         th:hover > .tf-col-resize { display: block; }
+        /* sem isso, arrastar a alça também arrasta uma seleção de texto nativa do navegador, que "pula" para o
+           título da coluna vizinha conforme o mouse se move durante o arraste */
+        table[data-tf-bloco-id] thead th { user-select: none; -webkit-user-select: none; }
         .edit-bloco-barra button { background: none; border: 0; color: inherit; cursor: pointer; padding: 2px; border-radius: 4px; display: inline-flex; }
         .edit-bloco-barra button:hover { background: rgba(255,255,255,.18); }
         .edit-bloco-barra .material-symbols-outlined { font-size: 14px; }
@@ -1431,6 +1436,25 @@
             aplicarPesquisaGeral();
         }
 
+        /** Campo escolhido pra rotular a feição no mapa (posição 0 ou 1, até 2 campos no total). */
+        function updateRotuloCampoMapaFeicoes(posicao, fieldId, origemGraficoId) {
+            const bloco = mapaBlocoGeral(origemGraficoId);
+            if (!bloco) return;
+            const lista = Array.isArray(bloco.rotuloCampos) ? bloco.rotuloCampos.slice() : [];
+            lista[posicao] = fieldId || undefined;
+            bloco.rotuloCampos = lista.filter((v, i, arr) => v && arr.indexOf(v) === i); // sem vazios nem repetido
+            aplicarPesquisaGeral();
+        }
+
+        /** Abreviação de um campo no rótulo da feição (ex.: "Quadra" -> "QD"); vazio volta a usar o nome do campo. */
+        function updateRotuloAbrevMapaFeicoes(fieldId, abrev, origemGraficoId) {
+            const bloco = mapaBlocoGeral(origemGraficoId);
+            if (!bloco) return;
+            if (!bloco.rotuloAbrev) bloco.rotuloAbrev = {};
+            if (abrev) bloco.rotuloAbrev[fieldId] = abrev; else delete bloco.rotuloAbrev[fieldId];
+            aplicarPesquisaGeral();
+        }
+
         /** Valores já existentes na camada para um campo (prévia: lista de exemplo bruta; emissão real: camada de verdade, sem o filtro atual — mostra tudo que existe). */
         function valoresCampoFiltroGeral(fieldId) {
             const campo = ((reportPayload && reportPayload.formFields) || []).find(f => f.id === fieldId);
@@ -1504,8 +1528,23 @@
             return (reportPayload && Array.isArray(reportPayload.ortofotos)) ? reportPayload.ortofotos : [];
         }
 
-        function mapaConfigCamposHtml(blocoMapa, chave, origemArg) {
+        function mapaConfigCamposHtml(blocoMapa, chave, origemArg, camposList) {
             const esc = escapeHtml;
+            const campos = camposList || (reportPayload && reportPayload.formFields) || [];
+            const optsCampos = (selecionado) => campos.map(f => `<option value="${esc(f.id)}" ${selecionado === f.id ? 'selected' : ''}>${esc(f.label || f.name || f.id)}</option>`).join('');
+            const rotuloCampos = Array.isArray(blocoMapa.rotuloCampos) ? blocoMapa.rotuloCampos : [];
+            const rotuloAbrev = blocoMapa.rotuloAbrev || {};
+            const linhaRotulo = (posicao) => {
+                const fid = rotuloCampos[posicao] || '';
+                return `
+                    <div class="row" style="gap:4px">
+                        <select onchange="updateRotuloCampoMapaFeicoes(${posicao}, this.value${origemArg})" style="flex:1;min-width:0">
+                            <option value="">Nenhum</option>
+                            ${optsCampos(fid)}
+                        </select>
+                        ${fid ? `<input type="text" value="${esc(rotuloAbrev[fid] || '')}" placeholder="abreviação" title="Como esse campo aparece no rótulo (ex.: 'QD' em vez de 'Quadra'); vazio usa o nome do campo" oninput="updateRotuloAbrevMapaFeicoes('${esc(fid)}', this.value${origemArg})" style="width:76px">` : ''}
+                    </div>`;
+            };
             return `
                 <div style="margin-top:5px">
                     <label class="row">Título<input type="text" value="${esc(blocoMapa.titulo || '')}" onchange="updateMapaFeicoesConfigGeral('titulo', this.value${origemArg})" style="flex:1;min-width:0"></label>
@@ -1519,11 +1558,21 @@
                     ${/^ortofoto:/.test(blocoMapa.baseMap || '') ? '<div style="color:#64748b;line-height:1.35;margin-bottom:3px">A ortofoto fica sobre o satélite, que preenche o que ela não cobre.</div>' : ''}
                     ${chkRowPesquisa('pp-mapa-grade-' + esc(chave), 'Quadriculado UTM', !!blocoMapa.quadriculado, `updateMapaFeicoesConfigGeral('quadriculado', this.checked${origemArg})`)}
                     ${chkRowPesquisa('pp-mapa-contagem-' + esc(chave), 'Mostrar contagem de feições em cada grupo', blocoMapa.exibirContagem !== false, `updateMapaFeicoesConfigGeral('exibirContagem', this.checked${origemArg})`)}
+                    <div style="font-weight:700;margin:6px 0 2px">Agrupar mapas por campo</div>
+                    <select onchange="updateMapaFeicoesConfigGeral('agruparPorCampo', this.value || undefined${origemArg})" style="width:100%;margin-bottom:3px">
+                        <option value="">Nenhum (agrupar por proximidade)</option>
+                        ${optsCampos(blocoMapa.agruparPorCampo || '')}
+                    </select>
+                    <div style="color:#64748b;line-height:1.35;margin-bottom:3px">Ex.: escolhendo "Loteamento", cada mapa reúne só as feições de UM loteamento (um mapa por valor); acima de ${LIMITE_GRUPOS_CAMPO} valores distintos, escolha outro campo.</div>
+                    <div style="font-weight:700;margin:6px 0 2px">Rótulo de cada feição no mapa (até 2 campos)</div>
+                    ${linhaRotulo(0)}
+                    ${linhaRotulo(1)}
+                    <div style="color:#64748b;line-height:1.35;margin-bottom:3px">Ex.: "Quadra" e "Lote" abreviados para "QD"/"LT" mostram "QD A - LT 10" dentro de cada feição.</div>
                     <div style="font-weight:700;margin:6px 0 2px">Zoom dos mapas</div>
                     ${blocoMapa.zoomManual
                         ? `<div style="color:#334155">Zoom fixo: <b>${esc(String(blocoMapa.zoomManual))}</b> — os mapas adicionais cobrem o resto das feições nesse mesmo zoom. <button type="button" class="act" onclick="updateMapaFeicoesConfigGeral('zoomManual', undefined${origemArg})">Voltar ao automático</button></div>`
                         : `<div style="color:#64748b">Automático (cada mapa se ajusta ao seu grupo). Para escolher, dê zoom no 1º mapa da folha e clique em "Usar este zoom nos demais mapas".</div>`}
-                    <div style="color:#64748b;line-height:1.35;margin-top:3px">Agrupa por proximidade; acima de ${LIMITE_FEICOES_MAPA} feições filtradas, pede para refinar o filtro. A altura ajusta arrastando a borda de baixo do mapa, na folha.</div>
+                    <div style="color:#64748b;line-height:1.35;margin-top:3px">Sem agrupar por campo: agrupa por proximidade; acima de ${LIMITE_FEICOES_MAPA} feições filtradas, pede para refinar o filtro. A altura ajusta arrastando a borda de baixo do mapa, na folha.</div>
                 </div>`;
         }
 
@@ -1543,7 +1592,7 @@
                 </div>
                 <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #cbd5e1">
                     <button type="button" class="act" onclick="toggleMapaFeicoesGeral(${blocoMapa ? 'false' : 'true'}${origemArg})">${blocoMapa ? 'Remover mapa' : 'Gerar mapa'}</button>
-                    ${blocoMapa ? mapaConfigCamposHtml(blocoMapa, chave, origemArg) : ''}
+                    ${blocoMapa ? mapaConfigCamposHtml(blocoMapa, chave, origemArg, camposList) : ''}
                 </div>`;
         }
 
@@ -1562,12 +1611,12 @@
                 ${revelado ? `<div style="max-height:160px;overflow-y:auto;margin-top:5px">${colunasChecklistHtml(camposList, colunas, chartId)}</div>` : ''}`;
         }
 
-        function passoMapaGraficoHtml(chartId) {
+        function passoMapaGraficoHtml(chartId, camposList) {
             const esc = escapeHtml;
             const blocoMapa = mapaBlocoGeral(chartId);
             return `
                 <button type="button" class="act" onclick="toggleMapaFeicoesGeral(${blocoMapa ? 'false' : 'true'}, '${esc(chartId)}')">${blocoMapa ? 'Remover mapa' : 'Gerar mapa deste gráfico'}</button>
-                ${blocoMapa ? mapaConfigCamposHtml(blocoMapa, chartId, `, '${esc(chartId)}'`) : ''}`;
+                ${blocoMapa ? mapaConfigCamposHtml(blocoMapa, chartId, `, '${esc(chartId)}'`, camposList) : ''}`;
         }
 
         /** Conteúdo (sanfona) do painel "Configurações da Pesquisa": filtro (com tabela/mapa geral) e gráficos (cada um com sua própria tabela/mapa). */
@@ -1607,7 +1656,7 @@
                         <label class="row" style="font-weight:700"><input type="checkbox" checked onchange="toggleGraficoEscolhidoGeral('${esc(g.id)}', this.checked)"> ${esc(g.title || g.fieldLabel || 'Gráfico')}</label>
                         <div style="margin:5px 0 0 20px;padding-left:8px;border-left:2px solid #fecdd3">
                             <div style="margin-bottom:6px">${passoTabelaGraficoHtml(camposList, g.id)}</div>
-                            <div>${passoMapaGraficoHtml(g.id)}</div>
+                            <div>${passoMapaGraficoHtml(g.id, camposList)}</div>
                         </div>
                     </div>`;
             }).join('') : '<div style="color:#64748b;font-style:italic">Nenhum gráfico configurado nas Estatísticas desta camada.</div>';
@@ -1841,7 +1890,28 @@
         const LIMITE_FEICOES_MAPA = 200; // acima disso, pede para refinar o filtro em vez de montar os mini-mapas
         const ALVO_POR_MAPA = 40;        // quantas feições cabem, em média, num mini-mapa antes de abrir outro (legibilidade)
         const LIMITE_MAPAS_ZOOM_FIXO = 60; // com zoom manual, o sistema "ladrilha" a área — acima disso, pede pra diminuir o zoom
+        const LIMITE_GRUPOS_CAMPO = 60;  // agrupando por campo (ex.: Loteamento), acima disso pede pra escolher outro campo
         let mapaFeicoesInstances = {};
+
+        /**
+         * Agrupa registros (índices) pelo VALOR de um campo — um grupo por valor distinto (ex.: um mapa por
+         * Loteamento), em vez de por proximidade geográfica. Vazio/"não informado" sempre por último.
+         * @param {Array<string|undefined>} valores um valor por registro, na mesma ordem/índice dos registros
+         * @returns {Array<{valor:string, idxs:number[]}>}
+         */
+        function agruparPorValorCampoMapaFeicoes(valores) {
+            const grupos = new Map();
+            (valores || []).forEach((v, i) => {
+                const chave = (v === undefined || v === null || String(v).trim() === '') ? '' : String(v);
+                if (!grupos.has(chave)) grupos.set(chave, []);
+                grupos.get(chave).push(i);
+            });
+            const chaves = Array.from(grupos.keys()).sort((a, b) => {
+                if (a === '' || b === '') return a === b ? 0 : (a === '' ? 1 : -1); // vazio por último
+                return a.localeCompare(b, 'pt-BR', { sensitivity: 'base', numeric: true });
+            });
+            return chaves.map(chave => ({ valor: chave === '' ? 'Não informado' : chave, idxs: grupos.get(chave) }));
+        }
 
         function renderMapaFeicoesBlock(bloco, idx) {
             const tituloBase = (escapeHtml(bloco.titulo || 'Mapa das Feições')).replace(/\r?\n/g, '<br>');
@@ -1858,7 +1928,10 @@
             if (!registros.length) {
                 return avisoHtml({ aviso: false, texto: reportPayload.preview ? 'A prévia com dados de exemplo não tem coordenadas para desenhar o mapa; ele aparece na emissão real, com a camada de verdade.' : 'Nenhuma das feições filtradas tem geometria para desenhar no mapa.' });
             }
-            if (registros.length > LIMITE_FEICOES_MAPA) {
+            const campoAgrupador = bloco.agruparPorCampo ? ((reportPayload.formFields || []).find(f => f.id === bloco.agruparPorCampo) || { id: bloco.agruparPorCampo, label: bloco.agruparPorCampo }) : null;
+            // sem agrupar por campo, o TOTAL de feições é o que decide se vale a pena montar os mini-mapas; agrupando
+            // por campo, o que importa é quantos MAPAS (valores distintos) vão sair, não o total (checado mais abaixo)
+            if (!campoAgrupador && registros.length > LIMITE_FEICOES_MAPA) {
                 return avisoHtml({ aviso: true, texto: `${registros.length} feições passaram pelo filtro — acima do limite de ${LIMITE_FEICOES_MAPA} para o mapa. Refine o filtro para gerar os mini-mapas (a tabela e os gráficos continuam mostrando todas).` });
             }
             const cor = bloco.cor || '#0ea5e9';
@@ -1867,10 +1940,30 @@
             const alturaPx = Math.max(120, Math.min(800, Number(bloco.alturaPx) || 260));
             const centros = registros.map(r => MapTools.bboxCenter(MapTools.geometryBBox(r.geometry)) || [0, 0]);
 
-            // zoom automático (cada mapa se ajusta ao seu grupo) ou zoom FIXO definido pelo usuário (o sistema
-            // "ladrilha" a área inteira em mapas do mesmo tamanho/zoom, criando quantos forem precisos)
-            let grupos, centrosFixos = null;
-            if (bloco.zoomManual) {
+            // agrupar por campo (ex.: um mapa por Loteamento) tem prioridade; dentro de cada valor, ainda pode
+            // precisar de mais de um mapa (muitas feições no mesmo valor) — sub-divide por proximidade nesse caso.
+            // sem agrupar por campo: zoom automático (cada mapa se ajusta ao seu grupo) ou zoom FIXO definido pelo
+            // usuário (o sistema "ladrilha" a área inteira no mesmo zoom, criando quantos mapas forem precisos)
+            let grupos, centrosFixos = null, legendas = null;
+            if (campoAgrupador) {
+                const valores = registros.map(r => r.properties ? r.properties[campoAgrupador.id] : undefined);
+                const porValor = agruparPorValorCampoMapaFeicoes(valores);
+                const gruposFinais = [];
+                const legendasFinais = [];
+                porValor.forEach(g => {
+                    const subCentros = g.idxs.map(i => centros[i]);
+                    const subGrupos = g.idxs.length > ALVO_POR_MAPA ? MapTools.agruparPorProximidade(subCentros, ALVO_POR_MAPA) : [subCentros.map((_, k) => k)];
+                    subGrupos.forEach((idxsLocais, parte) => {
+                        gruposFinais.push(idxsLocais.map(k => g.idxs[k]));
+                        legendasFinais.push(`${campoAgrupador.label || campoAgrupador.id} = ${g.valor}` + (subGrupos.length > 1 ? ` (parte ${parte + 1} de ${subGrupos.length})` : ''));
+                    });
+                });
+                if (gruposFinais.length > LIMITE_GRUPOS_CAMPO) {
+                    return avisoHtml({ aviso: true, texto: `Agrupar por "${escapeHtml(campoAgrupador.label || campoAgrupador.id)}" geraria ${gruposFinais.length} mapas — acima do limite de ${LIMITE_GRUPOS_CAMPO}. Escolha um campo com menos valores distintos.` });
+                }
+                grupos = gruposFinais;
+                legendas = legendasFinais;
+            } else if (bloco.zoomManual) {
                 const pd = PageSize.dims(tplAtual && tplAtual.config_pagina);
                 const mm = (tplAtual && tplAtual.config_pagina && tplAtual.config_pagina.margens_mm) || { left: 15, right: 15 };
                 const larguraMapaPx = Math.max(200, pd.widthPx - Math.round((mm.left + mm.right) * 3.78));
@@ -1886,10 +1979,15 @@
             const rowsHtml = grupos.map((idxs, gi) => {
                 const mapId = 'rpt-mapafeicoes-' + idx + '-' + gi;
                 const zoomAttrs = bloco.zoomManual ? `data-mapa-zoom="${bloco.zoomManual}" data-mapa-centro="${centrosFixos[gi][0]},${centrosFixos[gi][1]}"` : '';
-                // o botão "usar este zoom" só faz sentido no 1º mapa do bloco, e só enquanto não há zoom fixo definido
-                const botaoZoom = (gi === 0 && !bloco.zoomManual) ? `<button type="button" class="no-print" data-usar-zoom-mapa data-bloco-id="${escapeHtml(bloco.id)}" data-map-id="${mapId}" style="position:absolute;z-index:401;top:6px;right:6px;background:#0f172a;color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.3)" title="Dê zoom neste mapa até o nível de detalhe que quiser; ao clicar, os demais mapas usam o mesmo zoom">Usar este zoom nos demais mapas</button>` : '';
+                // o botão "usar este zoom" só faz sentido no 1º mapa do bloco, sem zoom fixo já definido nem
+                // agrupamento por campo (nesse caso os grupos vêm do CAMPO, não da proximidade/zoom)
+                const botaoZoom = (gi === 0 && !bloco.zoomManual && !campoAgrupador) ? `<button type="button" class="no-print" data-usar-zoom-mapa data-bloco-id="${escapeHtml(bloco.id)}" data-map-id="${mapId}" style="position:absolute;z-index:401;top:6px;right:6px;background:#0f172a;color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.3)" title="Dê zoom neste mapa até o nível de detalhe que quiser; ao clicar, os demais mapas usam o mesmo zoom">Usar este zoom nos demais mapas</button>` : '';
+                // legenda do agrupamento por campo: informa QUAL valor está representado neste mapa específico
+                // (ex.: "Loteamento = Areia Dourada"), pra não parecer que todos os mapas mostram a mesma coisa
+                const legendaCampoHtml = legendas ? `<div class="text-[10.5px] font-bold text-slate-700 mb-1">${escapeHtml(legendas[gi])}</div>` : '';
                 return `
                     <div data-split-row class="mb-3 page-break-avoid">
+                        ${legendaCampoHtml}
                         ${exibirContagem ? `<div class="text-[10px] font-mono text-slate-500 mb-1">Grupo ${gi + 1} de ${grupos.length} • ${idxs.length} feiç${idxs.length === 1 ? 'ão' : 'ões'}</div>` : ''}
                         <div class="relative" data-mapa-feicoes-wrap data-bloco-id="${escapeHtml(bloco.id)}">
                             <div id="${mapId}" data-mapa-feicoes data-mapa-indices="${idxs.join(',')}" data-mapa-cor="${escapeHtml(cor)}" data-mapa-basemap="${escapeHtml(baseMap)}" data-mapa-grade="${bloco.quadriculado ? '1' : '0'}" data-bloco-id="${escapeHtml(bloco.id)}" ${zoomAttrs} class="w-full rounded-lg border border-slate-300 overflow-hidden bg-slate-100" style="height: ${alturaPx}px;"></div>
@@ -1910,7 +2008,7 @@
             // altura de cada mini-mapa já é CONHECIDA (é a altura definida no bloco, não algo pra medir no DOM) —
             // um Leaflet dentro de uma área escondida pra medição não tem tamanho real ainda, e medir dava um valor
             // errado (o mapa "esticava" na folha de verdade sem a paginação prever isso e quebrar a página).
-            const alturaLinha = alturaPx + (exibirContagem ? 20 : 0) + 14;
+            const alturaLinha = alturaPx + (exibirContagem ? 20 : 0) + (legendas ? 18 : 0) + 14;
             return { split: { rowsHtml, chunkHtml, rowHeightsFixas: grupos.map(() => alturaLinha), overheadFixo: 40 } };
         }
 
@@ -1961,6 +2059,24 @@
             } catch (e) { return null; }
         }
 
+        /**
+         * Texto do rótulo de uma feição no mapa (até 2 campos escolhidos em bloco.rotuloCampos, ex.: "QD A - LT 10")
+         * — abrevia pelo bloco.rotuloAbrev quando definido, senão usa o nome do campo. Campo vazio na feição não entra.
+         */
+        function textoRotuloFeicaoMapaFeicoes(bloco, registro) {
+            const camposIds = (bloco && Array.isArray(bloco.rotuloCampos)) ? bloco.rotuloCampos.filter(Boolean) : [];
+            if (!camposIds.length || !registro || !registro.properties) return '';
+            const abrevs = bloco.rotuloAbrev || {};
+            const partes = camposIds.map(fid => {
+                const valor = registro.properties[fid];
+                if (valor === undefined || valor === null || String(valor).trim() === '') return null;
+                const campo = (reportPayload.formFields || []).find(f => f.id === fid);
+                const rotuloCampo = abrevs[fid] || (campo && (campo.label || campo.name)) || fid;
+                return `${rotuloCampo} ${valor}`;
+            }).filter(Boolean);
+            return partes.join(' - ');
+        }
+
         /** Seta do norte (fixa) e escala — mesmos elementos do Mini-Mapa do Relatório Individual, num mini-mapa de feições. */
         function adicionarNorteEscala(mapa, container) {
             const norte = document.createElement('div');
@@ -2004,6 +2120,17 @@
                     style: (f) => ({ color: f.properties._cor, weight: 2, fillColor: f.properties._cor, fillOpacity: 0.25 }),
                     pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 5, color: f.properties._cor, weight: 2, fillColor: f.properties._cor, fillOpacity: 0.85 })
                 }).addTo(mapa);
+                // rótulo de até 2 campos escolhidos, centralizado em cada feição (ex.: "QD A - LT 10")
+                if (bloco && Array.isArray(bloco.rotuloCampos) && bloco.rotuloCampos.filter(Boolean).length) {
+                    feats.forEach(f => {
+                        const texto = textoRotuloFeicaoMapaFeicoes(bloco, f);
+                        if (!texto || !f.geometry) return;
+                        const centro = MapTools.bboxCenter(MapTools.geometryBBox(f.geometry));
+                        if (!centro) return;
+                        const icon = L.divIcon({ className: '', html: `<span class="mapa-feicoes-rotulo">${escapeHtml(texto)}</span>`, iconSize: [0, 0] });
+                        L.marker([centro[1], centro[0]], { icon, interactive: false, keyboard: false }).addTo(mapa);
+                    });
+                }
                 // zoom automático (ajusta ao grupo) ou o zoom FIXO que o usuário escolheu (mesmo enquadramento em todos)
                 const zoomFixo = Number(div.getAttribute('data-mapa-zoom')) || null;
                 const centroStr = div.getAttribute('data-mapa-centro');

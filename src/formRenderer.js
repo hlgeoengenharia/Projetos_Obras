@@ -41,7 +41,7 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
 
     const visibleTabs = (options.isPreview || typeof window.canSeeFormTab !== 'function')
         ? formConfig
-        : formConfig.filter(tab => window.canSeeFormTab(formId, tab.id, options));
+        : formConfig.filter(tab => window.canSeeFormTab(formId, tab.id, { ...options, tabTitle: tab.title, tab }));
 
     if (visibleTabs.length === 0) {
         container.innerHTML = '<div class="p-4 text-xs text-slate-400 italic text-center">Você não tem permissão para ver nenhuma aba deste formulário.</div>';
@@ -85,7 +85,7 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
                 <div id="acc-content-${tab.id}" class="accordion-content transition-all duration-300 ${isPrimary ? 'block p-4 sm:p-5 border-t border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-950' : 'hidden'}">
         `;
         
-        const canEditThisTab = (options.isPreview || typeof window.canEditFormTab !== 'function') || window.canEditFormTab(formId, tab.id, options);
+        const canEditThisTab = (options.isPreview || typeof window.canEditFormTab !== 'function') || window.canEditFormTab(formId, tab.id, { ...options, tabTitle: tab.title, tab });
 
         let isTabEditMode = false;
         if (isEditMode) {

@@ -4446,7 +4446,7 @@
         if (window.ReportData && Array.isArray(formTabs) && formTabs.length > 0) {
             const tabOptions = window.currentFormOptions || {};
             const canSeeTab = (tab) => (typeof window.canSeeFormTab === 'function')
-                ? window.canSeeFormTab(resolvedFormId, tab.id, tabOptions)
+                ? window.canSeeFormTab(resolvedFormId, tab.id, { ...tabOptions, tabTitle: tab.title, tab })
                 : true;
             const shownTabs = window.ReportData.visibleTabs(formTabs, featureData || {}, { canSeeTab });
             featureData = window.ReportData.filterData(featureData || {}, formTabs, shownTabs);

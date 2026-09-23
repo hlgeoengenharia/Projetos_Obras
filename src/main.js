@@ -5595,7 +5595,7 @@ function renderFeatureInfo() {
           window.renderDynamicForm(dynamicFormSchema, properties, isFeatureEditMode, 'feature-info-content', { 
               activeTabId: window.currentActiveTabId, 
               editTabId: window.activeFeatureEditTabId || null, 
-              formId: (theme && theme.formId) || (isOrcamentoObra ? 'orcamento_obra' : null),
+              formId: (theme && (theme.formId || theme.tipo_cadastro)) || (isOrcamentoObra ? 'orcamento_obra' : null),
               themeId: theme ? theme.id : null,
               theme: theme 
           });
@@ -6901,7 +6901,14 @@ function canSeeFormTab(formId, tabId, options = {}) {
     const userSigla = typeof getEntitySigla === 'function' ? getEntitySigla(userEntidade) : userEntidade;
     const isOutroEnte = themeEntidade && userEntidade && (themeSigla !== userSigla) && (themeEntidade.toLowerCase() !== 'geral');
 
-    const perm = window.currentUserAbaPermissions ? (window.currentUserAbaPermissions[key] || window.currentUserAbaPermissions[`${formId}:${tabId}`]) : null;
+    // Resolução resiliente da permissão explícita (por ID ou por Título da aba)
+    const tabTitle = options.tabTitle || (options.tab && options.tab.title);
+    const keyTitle = tabTitle ? `${fId}:${String(tabTitle).toLowerCase().trim()}` : null;
+    const perm = window.currentUserAbaPermissions ? (
+        window.currentUserAbaPermissions[key] || 
+        window.currentUserAbaPermissions[`${formId}:${tabId}`] ||
+        (keyTitle ? window.currentUserAbaPermissions[keyTitle] : null)
+    ) : null;
 
     // REGRA DE OURO INTERINSTITUCIONAL:
     // Camada compartilhada de OUTRO ente:
@@ -6918,17 +6925,18 @@ function canSeeFormTab(formId, tabId, options = {}) {
         return perm.pode_ver === true || perm.pode_ver === 'true';
     }
 
-    // Se existem outras regras de abas configuradas para este formulário, as não listadas ficam ocultas
+    // Administrador da própria entidade (sem restrição explícita cadastrada na aba) tem acesso pleno padrão
+    const isUserAdmin = (currentMunicipioPapel === 'admin') || !!(currentUserProfile && (currentUserProfile.entidade_admin || currentUserProfile.unidade_admin || currentUserProfile.super_admin || currentUserProfile.papel === 'admin'));
+    if (isUserAdmin) {
+        return true;
+    }
+
+    // Se existem outras regras de abas configuradas para este formulário, as não listadas ficam ocultas para usuários comuns
     const totalRulesForThisForm = window.currentUserAbaPermissions 
         ? Object.keys(window.currentUserAbaPermissions).filter(k => k.startsWith(fId + ':')).length 
         : 0;
     if (totalRulesForThisForm > 0) {
         return false;
-    }
-
-    // Administrador da própria entidade sem restrições pontuais cadastradas vê tudo de sua própria entidade
-    if (currentMunicipioPapel === 'admin') {
-        return true;
     }
 
     return false;
@@ -6965,7 +6973,14 @@ function canEditFormTab(formId, tabId, options = {}) {
     const userSigla = typeof getEntitySigla === 'function' ? getEntitySigla(userEntidade) : userEntidade;
     const isOutroEnte = themeEntidade && userEntidade && (themeSigla !== userSigla) && (themeEntidade.toLowerCase() !== 'geral');
 
-    const perm = window.currentUserAbaPermissions ? (window.currentUserAbaPermissions[key] || window.currentUserAbaPermissions[`${formId}:${tabId}`]) : null;
+    // Resolução resiliente da permissão explícita (por ID ou por Título da aba)
+    const tabTitle = options.tabTitle || (options.tab && options.tab.title);
+    const keyTitle = tabTitle ? `${fId}:${String(tabTitle).toLowerCase().trim()}` : null;
+    const perm = window.currentUserAbaPermissions ? (
+        window.currentUserAbaPermissions[key] || 
+        window.currentUserAbaPermissions[`${formId}:${tabId}`] ||
+        (keyTitle ? window.currentUserAbaPermissions[keyTitle] : null)
+    ) : null;
 
     // Se a camada for de outro ente: NUNCA herda admin! Exige pode_editar explícito para esta aba!
     if (isOutroEnte) {
@@ -6978,15 +6993,17 @@ function canEditFormTab(formId, tabId, options = {}) {
         return perm.pode_editar === true || perm.pode_editar === 'true';
     }
 
+    // Administrador da própria entidade sem restrições pontuais cadastradas pode editar abas de sua própria entidade
+    const isUserAdmin = (currentMunicipioPapel === 'admin') || !!(currentUserProfile && (currentUserProfile.entidade_admin || currentUserProfile.unidade_admin || currentUserProfile.super_admin || currentUserProfile.papel === 'admin'));
+    if (isUserAdmin) {
+        return true;
+    }
+
     const totalRulesForThisForm = window.currentUserAbaPermissions 
         ? Object.keys(window.currentUserAbaPermissions).filter(k => k.startsWith(fId + ':')).length 
         : 0;
     if (totalRulesForThisForm > 0) {
         return false;
-    }
-
-    if (currentMunicipioPapel === 'admin') {
-        return true;
     }
 
     return false;

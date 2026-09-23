@@ -2714,6 +2714,25 @@
                 abaRows.forEach(row => {
                     _allAbaPerms[`${row.user_id}:${row.form_id}:${row.tab_id}`] = row;
                 });
+
+                // Auto-limpeza de abas obsoletas/fantasmas que foram deletadas do formulário
+                try {
+                    const activeFormIds = [...new Set(abaRows.map(r => r.form_id))];
+                    for (const fId of activeFormIds) {
+                        const formVinculado = _allForms[fId];
+                        if (formVinculado && Array.isArray(formVinculado.tabs)) {
+                            const validTabIds = new Set(formVinculado.tabs.map(t => t.id));
+                            const staleTabKeys = Object.keys(_allAbaPerms).filter(k => k.startsWith(`${userId}:${fId}:`) && !validTabIds.has(k.split(':')[2]));
+                            const staleTabIds = staleTabKeys.map(k => k.split(':')[2]);
+                            if (staleTabIds.length > 0) {
+                                await supabaseClient.from('permissoes_aba').delete().eq('user_id', userId).eq('form_id', fId).in('tab_id', staleTabIds);
+                                staleTabKeys.forEach(k => delete _allAbaPerms[k]);
+                            }
+                        }
+                    }
+                } catch(eClean) {
+                    console.warn('Aviso: auto-limpeza de abas obsoletas ignorada:', eClean);
+                }
             }
 
             // 4.1 Salva ponto_focal, entidade, cargo, unidade, setor e delegações em profiles e municipio_membros APENAS se for usuário local

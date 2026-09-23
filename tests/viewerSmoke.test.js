@@ -1061,6 +1061,69 @@ async function runScenario(cfg) {
         ok('zoom fixo demais: mostra aviso pedindo para diminuir o zoom (não tenta criar dezenas de mapas)', /diminua o zoom|acima do limite/i.test(html));
     }
 
+    // ---- MAPA DAS FEIÇÕES: agrupar por CAMPO (ex.: um mapa por Loteamento) em vez de por proximidade
+    {
+        const ponto = (lng, lat) => ({ type: 'Point', coordinates: [lng, lat] });
+        const tpl = {
+            id: 'rpt_grupocampo', nome: 'Relatório Geral', tipo: 'geral', form_id: 'f1',
+            config_pagina: { tamanho: 'A4', orientacao: 'portrait', margens_mm: { top: 15, bottom: 15, left: 15, right: 15 } },
+            blocos: [
+                { id: 'h', tipo: 'cabecalho' },
+                { id: 'm', tipo: 'mapa_feicoes', agruparPorCampo: 'loteamento', rotuloCampos: ['quadra', 'lote'], rotuloAbrev: { quadra: 'QD', lote: 'LT' }, cor: '#0ea5e9' },
+                { id: 'f', tipo: 'rodape' }
+            ]
+        };
+        const formFields = [{ id: 'loteamento', label: 'Loteamento' }, { id: 'quadra', label: 'Quadra' }, { id: 'lote', label: 'Lote' }];
+        const tema = {
+            id: 'tema-grupocampo', features: [
+                { properties: { loteamento: 'Areia Dourada', quadra: 'A', lote: '10' }, geometry: ponto(-34.90, -7.00) },
+                { properties: { loteamento: 'Areia Dourada', quadra: 'A', lote: '11' }, geometry: ponto(-34.901, -7.001) },
+                { properties: { loteamento: 'Jardim Camboinha', quadra: 'B', lote: '03' }, geometry: ponto(-34.70, -7.00) }
+            ]
+        };
+        const payload = { templateId: 'rpt_grupocampo', template: tpl, formId: 'f1', themeId: 'tema-grupocampo', formFields, formTabs: [], charts: [], featureData: {}, featureGeometry: null, featureList: null, preview: false };
+        const r = await runScenario({ opener: true, themes: [tema], payload });
+        eq('agrupar por campo: nenhum erro de execução', r.errors, []);
+
+        // função pura de agrupamento por valor: vazio/"não informado" sempre por último, ordem alfabética nos demais
+        eq('agrupar por valor: sem registros, nenhum grupo', r.sandbox.agruparPorValorCampoMapaFeicoes([]), []);
+        eq('agrupar por valor: um grupo por valor distinto, vazio por último', r.sandbox.agruparPorValorCampoMapaFeicoes(['B', 'A', '', 'B', undefined, 'A']), [
+            { valor: 'A', idxs: [1, 5] }, { valor: 'B', idxs: [0, 3] }, { valor: 'Não informado', idxs: [2, 4] }
+        ]);
+
+        const mapas = r.mapsCreated.filter(m => m.container && String(m.container.id || '').startsWith('rpt-mapafeicoes-'));
+        eq('agrupar por campo: 1 mapa por loteamento (2 valores distintos = 2 mapas), não por proximidade', mapas.length, 2);
+        const html = r.registry['a4-document-container']._html;
+        ok('agrupar por campo: legenda de cada mapa informa o valor representado ("Loteamento = Areia Dourada" e "= Jardim Camboinha")', html.includes('Loteamento = Areia Dourada') && html.includes('Loteamento = Jardim Camboinha'));
+        ok('rótulo da feição: marcador criado pra cada feição com texto (campos abreviados: "QD A - LT 10")', r.mapsCreated.some(m => (m.layers || []).some(l => l.kind === 'marker')));
+
+        // sem escolher agrupar por campo nem rótulo: nada disso aparece (comportamento de sempre)
+        const tplSemAgrupar = JSON.parse(JSON.stringify(tpl));
+        delete tplSemAgrupar.blocos[1].agruparPorCampo;
+        delete tplSemAgrupar.blocos[1].rotuloCampos;
+        const r2 = await runScenario({ opener: true, themes: [tema], payload: Object.assign({}, payload, { template: tplSemAgrupar }) });
+        eq('sem agrupar por campo: nenhum erro', r2.errors, []);
+        ok('sem agrupar por campo: não mostra legenda de valor nenhum', !r2.registry['a4-document-container']._html.includes('Loteamento ='));
+    }
+
+    // ---- MAPA DAS FEIÇÕES: agrupar por campo com MUITOS valores distintos — pede pra escolher outro campo
+    {
+        const ponto = (lng, lat) => ({ type: 'Point', coordinates: [lng, lat] });
+        const tpl = {
+            id: 'rpt_grupocampodemais', nome: 'Relatório Geral', tipo: 'geral', form_id: 'f1',
+            config_pagina: { tamanho: 'A4', orientacao: 'portrait', margens_mm: { top: 15, bottom: 15, left: 15, right: 15 } },
+            blocos: [{ id: 'h', tipo: 'cabecalho' }, { id: 'm', tipo: 'mapa_feicoes', agruparPorCampo: 'lote' }, { id: 'f', tipo: 'rodape' }]
+        };
+        const formFields = [{ id: 'lote', label: 'Lote' }];
+        // 70 valores distintos de "lote" (um por feição) — acima do limite de 60 mapas
+        const feats = Array.from({ length: 70 }, (_, i) => ({ properties: { lote: 'L' + i }, geometry: ponto(-35 + i * 0.01, -7) }));
+        const tema = { id: 'tema-grupocampodemais', features: feats };
+        const payload = { templateId: 'rpt_grupocampodemais', template: tpl, formId: 'f1', themeId: 'tema-grupocampodemais', formFields, formTabs: [], charts: [], featureData: {}, featureGeometry: null, featureList: null, preview: false };
+        const r = await runScenario({ opener: true, themes: [tema], payload });
+        eq('agrupar por campo com muitos valores: nenhum erro de execução', r.errors, []);
+        ok('agrupar por campo com muitos valores: mostra aviso pedindo outro campo (não tenta criar 70 mapas)', /acima do limite|escolha um campo/i.test(r.registry['a4-document-container']._html));
+    }
+
     // ---- RELATÓRIO GERAL — EMISSÃO DE VERDADE: sem featureList no payload; os dados vêm da camada, na janela de origem (por themeId)
     {
         const tplGeral = {
@@ -1317,6 +1380,11 @@ async function runScenario(cfg) {
         // o cabeçalho (com as alças) se repete a cada folha; com poucas linhas pode entrar em 1 ou mais folhas — o que
         // importa é que toda vez que a tabela aparece, vem com colgroup e uma alça por coluna escolhida
         ok('folha: a tabela tem colgroup com largura por coluna e alça de arrastar em cada cabeçalho', doc1.includes('<colgroup>') && (doc1.match(/class="tf-col-resize no-print"/g) || []).length >= 2 && (doc1.match(/class="tf-col-resize no-print"/g) || []).length % 2 === 0 && doc1.includes('data-field-id="proprietario"') && doc1.includes('data-field-id="cpf"'));
+
+        // BUG relatado: arrastar a alça de uma coluna "pulava" a seleção de texto nativa pro cabeçalho vizinho —
+        // sem user-select:none, o navegador seleciona texto conforme o mouse se move durante o arraste
+        const css = html.slice(html.indexOf('<style'), html.indexOf('</style>'));
+        ok('cabeçalho da tabela de feições: sem seleção de texto nativa (a alça não "pula" pro vizinho ao arrastar)', /\.tf-col-resize \{[^}]*user-select: none/.test(css) && /table\[data-tf-bloco-id\] thead th \{[^}]*user-select: none/.test(css));
         eq('largura da coluna por arrasto: mesma conta do arrasto de campos (px -> %, com mínimo e máximo)', [
             r.sandbox.larguraColunaPorArrasto(100, 50, 750), // (100+50)/750 = 20%
             r.sandbox.larguraColunaPorArrasto(100, -1000, 750), // não deixa passar de 4% mínimo

@@ -1,88 +1,119 @@
-# 🚀 Manual de Deploy - Projetos Obras
+# 🚀 Manual de Deploy e Sincronização - Projetos Obras
 
-Este guia contém o passo a passo padrão para subir suas atualizações com segurança utilizando o GitHub, que se comunica automaticamente com a Vercel.
+Este guia contém o passo a passo completo e atualizado para publicar alterações com segurança na **Vercel** (via GitHub) e sincronizar permissões e tabelas no **Supabase**.
 
-> **Como o projeto é publicado:** é um site estático (HTML + JavaScript, sem etapa de build; ver `vercel.json`). A Vercel publica **o que estiver na branch `main` do GitHub**. Enquanto algo não estiver na `main` **e enviado** (`git push`), o site publicado não muda.
-> O banco de dados (Supabase) é o mesmo para o computador local e para o site publicado. Por isso, mudanças de banco (SQL) precisam ser feitas à parte (passo 3).
-
-## 1. Verificação Pré-vôo (Local)
-Sempre teste as alterações no seu servidor local antes de subir.
-*   Dê dois cliques em `start-server.bat` (ou rode `python dev_server.py 8080` no terminal). Ele abre `http://localhost:8080`.
-*   Dica: Use o Inspetor do Navegador (F12) para testar o layout em modo celular.
-*   Rode a bateria de testes: `node test_sistema_qa.js`. Tudo deve terminar em "TODAS AS VERIFICAÇÕES PASSARAM". (O `git commit` também roda isso sozinho e **cancela o commit se algum teste falhar**.)
-
-### Os 3 arquivos de verificação (todos continuam valendo)
-| Arquivo | Para que serve |
-|---|---|
-| `test_sistema_qa.js` | A auditoria em si: sintaxe dos arquivos, permissões por perfil, regressões conhecidas e todos os testes da pasta `tests/`. É o que decide se está tudo certo. |
-| `verificar_sistema.bat` | Atalho: dois cliques roda a auditoria e mostra SUCESSO ou ERRO. Use quando quiser conferir sem commitar. |
-| `pre-commit` | Cópia do "guarda" do git: roda a auditoria em cada `git commit` e cancela o commit se algo falhar. O git só usa a cópia que está em `.git/hooks/pre-commit` (essa pasta não vai para o GitHub). Se clonar o projeto em outro computador, copie este arquivo para lá: `copy pre-commit .git\hooks\pre-commit`. |
-
-## 2. Preparando o Envio (Git)
-Abra o terminal na pasta raiz do projeto (`Projetos_Obras`).
-
-### 2.1 Confira o que vai subir
-```bash
-git status          # veja se há arquivos que não deveriam subir (rascunhos, senhas, backups)
-git branch          # veja em qual branch você está
-```
-Nunca suba arquivos `.env` (já são ignorados pelo `.gitignore`).
-
-### 2.2 Commit (na branch em que você trabalhou)
-```bash
-# Passo 1: Capturar todas as alterações
-git add .
-
-# Passo 2: Carimbar a versão com uma mensagem do que foi feito
-# Altere o texto entre aspas para descrever sua atualização
-git commit -m "feat: descrição das melhorias realizadas"
-```
-
-### 2.3 Levar para a `main` e enviar
-Se você trabalhou direto na `main`, pule para o Passo 5. Se trabalhou em outra branch (ex.: `relatorios-fase1`):
-```bash
-# Passo 3: Guardar um ponto de retorno (para desfazer se algo der errado)
-git branch backup-antes-do-deploy main
-
-# Passo 4: Trazer o trabalho da branch para a main
-git checkout main
-git merge relatorios-fase1     # troque pelo nome da sua branch
-
-# Passo 5: Enviar para o GitHub (a Vercel publica a partir daqui)
-git push origin main
-```
-> Se o `git push` falhar por "conflito", há arquivos no GitHub que você não tem localmente. Use `git pull origin main` antes de tentar o push novamente.
-
-## 3. Banco de dados (Supabase) — quando houver arquivos `.sql` novos
-Os arquivos `supabase_*.sql` da raiz **não rodam sozinhos**: abra o **SQL Editor** do Supabase, cole o conteúdo e execute. Rode **antes** de publicar (ou logo depois), senão a função nova aparece no site sem o banco que ela precisa.
-
-Módulo de Relatórios A4 (rodar nesta ordem; todos podem ser repetidos sem problema):
-
-| Arquivo | Para que serve |
-|---|---|
-| `supabase_relatorios_templates.sql` | Tabela dos modelos de relatório |
-| `supabase_relatorios_templates_seguranca.sql` | Fecha o acesso anônimo aos modelos |
-| `supabase_relatorios_ajustes.sql` | Guarda os ajustes que cada usuário faz no mapa do relatório |
-| `supabase_relatorios_emissoes.sql` | Registro de emissões (protocolo + SHA-256) e a função da página pública `verificar.html` |
-
-Depois de rodar, teste no site publicado: gerar um relatório, salvar os ajustes do mapa e abrir `verificar.html?p=PROTOCOLO`.
-
-## 4. Finalização (Vercel)
-Após o `git push`, o GitHub avisa a Vercel, que publica o site automaticamente (não há build, então costuma levar poucos segundos).
-1.  Acesse seu painel na [Vercel](https://vercel.com/) e clique no projeto **Projetos_Obras**.
-2.  Acompanhe o status na aba **"Deployments"**.
-3.  Quando a bolinha ficar verde (**Ready**), o site está atualizado e no ar!
-4.  Abra o site em uma aba anônima (Ctrl+Shift+N) e confira a mudança que você fez.
-
-## 5. Se algo der errado (voltar atrás)
-*   **Rápido, pelo painel:** na Vercel, aba **Deployments**, escolha o último deploy que funcionava e use **Promote to Production** (ou "Instant Rollback").
-*   **Pelo git:** `git revert <código-do-commit>` e depois `git push origin main`. Evite `git push --force`.
-*   Mudanças de SQL **não voltam** com o git nem com a Vercel; só rode SQL que você revisou.
-
-## 6. Dicas de Ouro do Camisa 10
-*   **Cache:** Se o site abrir a versão antiga no celular ou no computador, use uma aba anônima (Ctrl+Shift+N) ou limpe o cache do navegador.
-*   **Mensagens de Commit:** Tente ser específico (ex: "ajuste no formulário de configurações" em vez de "ajuste"). Isso ajuda muito a organizar o histórico do seu projeto.
-*   **Site diferente do local:** quase sempre é porque a mudança ainda não está na `main` enviada ao GitHub, ou porque falta rodar um `.sql` no Supabase.
+> **Como o projeto é publicado:** 
+> O frontend é estático (HTML, CSS e JavaScript puros; ver `vercel.json`). A Vercel monitora a branch `main` do repositório no GitHub. Assim que você executa `git push origin main`, a Vercel detecta a atualização e coloca a nova versão no ar automaticamente em poucos segundos.
+> O banco de dados (Supabase) é compartilhado entre o ambiente local e a produção. Mudanças estruturais de banco e correções de permissões (arquivos `.sql`) são aplicadas diretamente no painel do Supabase.
 
 ---
-*Manual criado por seu assistente Antigravity - 2026. Atualizado em 21/09/2026 (servidor local, fluxo por branch, SQL do Supabase e volta atrás).*
+
+## 1. Verificação Pré-vôo (Local Obrigatório)
+
+Sempre teste as alterações localmente antes de enviar para produção:
+
+1. **Inicie o servidor de testes local:**
+   * Dê dois cliques em `start-server.bat` (ou execute `python dev_server.py 8080` no terminal).
+   * O sistema abrirá em `http://localhost:8080`.
+2. **Execute a bateria de testes automatizados (Auditoria QA):**
+   * No terminal do projeto, execute:
+     ```bash
+     node test_sistema_qa.js
+     ```
+   * **Critério de segurança:** O comando DEVE terminar com `TODAS AS VERIFICAÇÕES PASSARAM COM SUCESSO! CÓDIGO SEGURO PARA COMMIT.` (208+ testes aprovados, 0 falhas).
+   * *Nota:* O git possui um hook de `pre-commit` configurado que impede commits caso qualquer verificação quebre.
+
+---
+
+## 2. Passo a Passo do Deploy (Git -> Vercel)
+
+Abra o terminal (PowerShell ou Prompt de Comando) na pasta raiz do projeto (`Projetos_Obras`).
+
+### Passo 2.1: Verifique os arquivos alterados
+```bash
+git status
+```
+> Certifique-se de que está na branch `main` e de que nenhum arquivo indesejado (como senhas, pastas temporárias ou rascunhos pessoais) esteja sendo incluído.
+
+### Passo 2.2: Adicione os arquivos ao commit
+```bash
+git add .
+```
+
+### Passo 2.3: Registre o commit com uma mensagem descritiva
+```bash
+git commit -m "feat: correcao de permissoes de abas e sincronizacao de entes"
+```
+*(Substitua a mensagem entre aspas pelo resumo das alterações que você realizou)*
+
+### Passo 2.4: Envie para o GitHub (Disparo automático do Deploy na Vercel)
+```bash
+git push origin main
+```
+
+---
+
+## 3. Banco de Dados (Supabase) — Execução de Scripts SQL
+
+Como o Supabase não roda scripts SQL automaticamente via git, arquivos `.sql` novos ou de correção devem ser executados no painel web:
+
+1. Acesse o painel do seu projeto no [Supabase](https://supabase.com/dashboard).
+2. No menu lateral esquerdo, clique no ícone **SQL Editor** (ícone `>_`).
+3. Clique em **"+ New query"**.
+4. Abra o arquivo `.sql` correspondente no seu computador, copie todo o seu conteúdo, cole no editor do Supabase e clique no botão verde **"Run"** (ou aperte `Ctrl + Enter`).
+
+### Principais Scripts e quando executá-los:
+
+| Arquivo SQL | Para que serve | Quando rodar |
+|---|---|---|
+| `supabase_permissoes_sincronizacao_geral.sql` | **Sincronização definitiva de abas e entes:** remove a aba obsoleta `tab_4ar8n42x7`, insere as abas `CORRELATOS` e `Relatórios` para o Klebson/MPF e entes externos, e ajusta as políticas RLS para evitar erro 42501. | **Execute sempre que houver divergência de abas ou ao cadastrar novos entes.** |
+| `supabase_relatorios_templates.sql` | Cria a tabela de modelos de relatórios A4 | Na configuração inicial de relatórios |
+| `supabase_relatorios_templates_seguranca.sql` | Restringe acesso anônimo aos modelos | Após criar modelos de relatórios |
+| `supabase_relatorios_ajustes.sql` | Salva ajustes manuais de mini-mapa por usuário | Na configuração de mini-mapa |
+| `supabase_relatorios_emissoes.sql` | Registro oficial de emissões (protocolo e SHA-256) | Para validação pública em `verificar.html` |
+
+---
+
+## 4. Gestão e Resolução de Permissões de Usuários e Abas
+
+Se um usuário relatar que não consegue ver abas de formulários:
+
+1. **Entenda a regra de precedência:**
+   * Usuários **Administradores do Município/Ente** (como o Klebson no MPF de Cabedelo) têm visão plena padrão de todas as abas criadas para a sua própria entidade, a menos que tenham sido bloqueados explicitamente.
+   * **Entes externos compartilhados** (ex: Prefeitura acessando camada do MPF) só enxergam as abas que foram explicitamente marcadas com `Ver` na tela de Gestão de Usuários.
+2. **Para atualizar permissões em lote:**
+   * Execute o script `supabase_permissoes_sincronizacao_geral.sql` no SQL Editor do Supabase.
+3. **Pela interface administrativa (`home.html` ou `settings.html`):**
+   * Vá em **Gerenciar Usuários**.
+   * Localize o usuário, ative a edição da camada e marque/desmarque as abas desejadas.
+   * Clique em **Salvar Usuário**. O sistema agora realiza uma limpeza automática de abas fantasmas e grava as permissões instantaneamente no Supabase.
+
+---
+
+## 5. Acompanhando a Publicação na Vercel
+
+1. Acesse o dashboard na [Vercel](https://vercel.com/) e clique no projeto **Projetos_Obras**.
+2. Na aba **"Deployments"**, você verá o novo deploy gerado pelo `git push origin main`.
+3. Quando o status mudar para **Ready** (círculo verde), o site estará 100% atualizado.
+4. **Dica contra cache:** Ao testar no navegador (computador ou celular), abra em uma **Aba Anônima** (`Ctrl + Shift + N`) ou faça recarregamento forçado com `Ctrl + F5` para garantir que o navegador não use arquivos antigos em cache.
+
+---
+
+## 6. Procedimento de Emergência (Rollback / Voltar Atrás)
+
+Se você publicou algo e precisar reverter imediatamente:
+
+* **Pelo Painel da Vercel (Mais Rápido):**
+  1. Vá na aba **Deployments** do projeto.
+  2. Localize a versão anterior que estava funcionando.
+  3. Clique nos três pontinhos (`...`) à direita e escolha **"Promote to Production"** (ou "Instant Rollback").
+  4. A versão estável volta ao ar em menos de 5 segundos.
+* **Pelo Git:**
+  ```bash
+  git revert HEAD
+  git push origin main
+  ```
+  *(Desfaz o último commit criando um novo commit seguro de reversão).*
+
+---
+*Manual atualizado em 23/09/2026 com instruções de deploy na Vercel, auditoria QA e sincronização interinstitucional de permissões no Supabase.*
