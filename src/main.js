@@ -1,4 +1,14 @@
 
+function escapeHtml(str) {
+    return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+window.escapeHtml = escapeHtml;
+
 window.updateCompartilhadaDesc = function(inputEl, descId) {
     const descEl = document.getElementById(descId);
     if (!descEl) return;
@@ -976,12 +986,17 @@ function initMap() {
         const showDisp1 = theme.disp1Active !== false && disp1Val;
         const showDisp2 = theme.disp2Active !== false && disp2Val;
         
+        const safeDisp1Label = escapeHtml(disp1Label);
+        const safeDisp2Label = escapeHtml(disp2Label);
+        const safeDisp1Val = escapeHtml(disp1Val);
+        const safeDisp2Val = escapeHtml(disp2Val);
+
         if (showDisp1 && showDisp2) {
-          tooltipContent = `<div style="${rotationStyle}" class="text-[11px] font-bold whitespace-nowrap">${disp1Label}: ${disp1Val} - ${disp2Label}: ${disp2Val}</div>`;
+          tooltipContent = `<div style="${rotationStyle}" class="text-[11px] font-bold whitespace-nowrap">${safeDisp1Label}: ${safeDisp1Val} - ${safeDisp2Label}: ${safeDisp2Val}</div>`;
         } else if (showDisp1) {
-          tooltipContent = `<div style="${rotationStyle}" class="text-[11px] font-bold whitespace-nowrap">${disp1Label}: ${disp1Val}</div>`;
+          tooltipContent = `<div style="${rotationStyle}" class="text-[11px] font-bold whitespace-nowrap">${safeDisp1Label}: ${safeDisp1Val}</div>`;
         } else if (showDisp2) {
-          tooltipContent = `<div style="${rotationStyle}" class="text-[11px] font-bold whitespace-nowrap">${disp2Label}: ${disp2Val}</div>`;
+          tooltipContent = `<div style="${rotationStyle}" class="text-[11px] font-bold whitespace-nowrap">${safeDisp2Label}: ${safeDisp2Val}</div>`;
         }
         
         if (tooltipContent) {
@@ -1219,23 +1234,11 @@ function initMap() {
         try {
             const jumpData = JSON.parse(pendingJumpRaw);
             if (jumpData && (jumpData.featureId || jumpData.id_banco)) {
-                const targetId = jumpData.featureId || jumpData.id_banco;
-                const themeId = jumpData.themeId;
-                setTimeout(async () => {
-                    if (themeId && Array.isArray(themes)) {
-                        const targetTheme = themes.find(t => String(t.id) === String(themeId));
-                        if (targetTheme) {
-                            targetTheme.visible = true;
-                            if (Array.isArray(window.activeWorkspaceThemes) && !window.activeWorkspaceThemes.some(x => String(x) === String(themeId))) {
-                                window.activeWorkspaceThemes.push(targetTheme.id);
-                            }
-                            if (typeof renderThemes === 'function') renderThemes();
-                        }
+                setTimeout(() => {
+                    if (typeof window.executeFeatureJump === 'function') {
+                        window.executeFeatureJump(jumpData);
                     }
-                    if (typeof zoomToFeature === 'function') {
-                        await zoomToFeature(targetId);
-                    }
-                }, 500);
+                }, 300);
             }
         } catch(eJump) {
             console.warn('Erro ao processar pulo de feição interinstitucional:', eJump);
@@ -3784,15 +3787,221 @@ function highlightFeature(fid, dontPan = false) {
   }
 }
 
+window.executeFeatureJump = async function(jumpData) {
+  if (!jumpData || (!jumpData.featureId && !jumpData.id_banco)) return;
+  const targetId = jumpData.featureId || jumpData.id_banco;
+  const themeId = jumpData.themeId;
+
+  console.log('[JumpToFeature] Executando foco na feição:', { targetId, themeId, jumpData });
+
+  // 1. Abre o menu lateral das camadas (side-drawer)
+  if (typeof window.openSideDrawer === 'function') {
+    window.openSideDrawer();
+  }
+
+  // 2. Aguarda os temas estarem disponíveis se ainda estiverem carregando
+  let attempts = 0;
+  while ((!Array.isArray(themes) || themes.length === 0) && attempts < 35) {
+    await new Promise(r => setTimeout(r, 100));
+    attempts++;
+  }
+
+  let targetTheme = null;
+  if (themeId && Array.isArray(themes)) {
+    targetTheme = themes.find(t => String(t.id) === String(themeId));
+  }
+
+  // 3. Localiza a feição em memória ou busca no banco
+  let targetFeature = null;
+  if (targetTheme && Array.isArray(targetTheme.features)) {
+    targetFeature = targetTheme.features.find(f => 
+      f.properties && (
+        f.properties.id_banco === targetId || 
+        f.properties._tempId === targetId || 
+        f.id === targetId || 
+        f.properties.id === targetId
+      )
+    );
+  }
+
+  if (!targetFeature && Array.isArray(themes)) {
+    for (const t of themes) {
+      const found = (t.features || []).find(f => 
+        f.properties && (
+          f.properties.id_banco === targetId || 
+          f.properties._tempId === targetId || 
+          f.id === targetId || 
+          f.properties.id === targetId
+        )
+      );
+      if (found) {
+        targetFeature = found;
+        if (!targetTheme) targetTheme = t;
+        break;
+      }
+    }
+  }
+
+  // Se ainda não achou em memória ou não tem geometria, busca diretamente no Supabase
+  if ((!targetFeature || !targetFeature.geometry) && supabaseClient) {
+    try {
+      const { data: dbFeat } = await supabaseClient
+        .from('feicoes')
+        .select('id, theme_id, geometria, propriedades')
+        .eq('id', targetId)
+        .single();
+      if (dbFeat) {
+        if (!targetTheme && dbFeat.theme_id && Array.isArray(themes)) {
+          targetTheme = themes.find(t => String(t.id) === String(dbFeat.theme_id));
+        }
+        if (!targetFeature) {
+          targetFeature = {
+            type: 'Feature',
+            id: dbFeat.id,
+            geometry: dbFeat.geometria,
+            properties: {
+              ...(dbFeat.propriedades || {}),
+              themeId: dbFeat.theme_id,
+              id_banco: dbFeat.id,
+              _tempId: 'feicao_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+              _propertiesLoaded: true
+            }
+          };
+          if (targetTheme) {
+            if (!Array.isArray(targetTheme.features)) targetTheme.features = [];
+            targetTheme.features.push(targetFeature);
+          }
+        } else if (!targetFeature.geometry && dbFeat.geometria) {
+          targetFeature.geometry = dbFeat.geometria;
+          if (dbFeat.propriedades) {
+            Object.assign(targetFeature.properties, dbFeat.propriedades, { _propertiesLoaded: true });
+          }
+        }
+      }
+    } catch(eDb) {
+      console.warn('[JumpToFeature] Erro ao buscar feição diretamente no Supabase:', eDb);
+    }
+  }
+
+  if (!targetTheme && targetFeature && targetFeature.properties && targetFeature.properties.themeId) {
+    targetTheme = themes.find(t => String(t.id) === String(targetFeature.properties.themeId));
+  }
+
+  // 4. Ativa e torna visível a camada no menu lateral
+  if (targetTheme) {
+    targetTheme.visible = true;
+    if (typeof saveThemes === 'function') saveThemes();
+
+    if (Array.isArray(window.activeWorkspaceThemes) && !window.activeWorkspaceThemes.some(x => String(x) === String(targetTheme.id))) {
+      window.activeWorkspaceThemes.push(targetTheme.id);
+    }
+
+    // Seleciona a camada no menu lateral (destaque visual e interatividade exclusiva)
+    if (typeof toggleSelectionTheme === 'function') {
+      toggleSelectionTheme(targetTheme.id, true);
+    }
+
+    // Abre o accordion do tema na lista lateral
+    const listEl = document.getElementById('list-' + targetTheme.id);
+    if (listEl) {
+      listEl.classList.remove('hidden');
+    }
+
+    const featureListEl = document.getElementById('feature-list-' + targetTheme.id);
+    if (featureListEl && typeof renderFeatureListItems === 'function') {
+      if (featureListEl.innerHTML.includes('Nenhuma feição adicionada') || !featureListEl.innerHTML.trim()) {
+        featureListEl.innerHTML = renderFeatureListItems(targetTheme);
+      }
+    }
+  }
+
+  if (!targetFeature || !targetFeature.geometry) {
+    console.warn('[JumpToFeature] Feição ou geometria não encontrada para exibição:', targetId);
+    return;
+  }
+
+  // 5. Centraliza o mapa na feição
+  if (map) {
+    try {
+      const targetBounds = L.geoJSON(targetFeature).getBounds();
+      if (targetBounds.isValid()) {
+        map.fitBounds(targetBounds, { padding: [80, 80], maxZoom: 19 });
+      } else if (typeof targetBounds.getCenter === 'function') {
+        map.setView(targetBounds.getCenter(), 18);
+      }
+    } catch(eBounds) {
+      console.warn('[JumpToFeature] Erro ao centralizar bounds:', eBounds);
+    }
+  }
+
+  // 6. Garante que as feições sejam recarregadas no mapa com o novo enquadramento
+  if (typeof loadAllFeaturesToMap === 'function') {
+    loadAllFeaturesToMap();
+  }
+
+  // 7. Localiza a camada Leaflet correspondente para aplicar destaque e abrir o modal de informações
+  const tempId = targetFeature.properties && targetFeature.properties._tempId;
+  let retries = 0;
+  const highlightAndOpenModal = async () => {
+    let targetLayer = null;
+    if (geojsonLayer) {
+      geojsonLayer.eachLayer(layer => {
+        const p = layer.feature && layer.feature.properties;
+        if (p && (
+          p.id_banco === targetId || 
+          (tempId && p._tempId === tempId) || 
+          layer.feature.id === targetId ||
+          p.id === targetId
+        )) {
+          targetLayer = layer;
+        }
+      });
+    }
+
+    if (targetLayer) {
+      // Se as propriedades completas ainda não foram carregadas, busca agora
+      if (targetLayer.feature && targetLayer.feature.properties && !targetLayer.feature.properties._propertiesLoaded && typeof fetchFeaturePropertiesIfNeeded === 'function') {
+        await fetchFeaturePropertiesIfNeeded(targetLayer);
+      }
+
+      // Destaque visual na feição
+      const effectiveTempId = (targetLayer.feature && targetLayer.feature.properties && targetLayer.feature.properties._tempId) || tempId;
+      if (typeof highlightFeature === 'function' && effectiveTempId) {
+        highlightFeature(effectiveTempId, true);
+      }
+
+      // Abre o card/modal com as informações da feição ativo
+      if (typeof showFeatureInfoModal === 'function') {
+        showFeatureInfoModal(targetLayer);
+      }
+    } else if (retries < 15) {
+      retries++;
+      setTimeout(highlightAndOpenModal, 250);
+    } else {
+      const fallbackLayer = L.geoJSON(targetFeature).getLayers()[0];
+      if (fallbackLayer && typeof showFeatureInfoModal === 'function') {
+        showFeatureInfoModal(fallbackLayer);
+      }
+    }
+  };
+
+  setTimeout(highlightAndOpenModal, 350);
+};
+
 async function zoomToFeature(fid) {
   if (!geojsonLayer) return;
 
-  // Acha a feição em memória, não a camada Leaflet — ela pode não estar
-  // desenhada no momento (tema desligado, ou área "capada" por densidade
-  // por estar zoom afastado). O zoom não depende de já estar renderizada.
+  // Acha a feição em memória por _tempId, id_banco ou id
   let ownerTheme = null, targetFeature = null;
   for (const theme of themes) {
-    const found = (theme.features || []).find(f => f.properties && f.properties._tempId === fid);
+    const found = (theme.features || []).find(f => 
+      f.properties && (
+        f.properties._tempId === fid || 
+        f.properties.id_banco === fid || 
+        f.id === fid || 
+        f.properties.id === fid
+      )
+    );
     if (found) { ownerTheme = theme; targetFeature = found; break; }
   }
   if (!targetFeature || !ownerTheme) return;
@@ -3808,26 +4017,43 @@ async function zoomToFeature(fid) {
   }
   if (!targetFeature.geometry) return;
 
-  // Liga o tema se estiver desligado (padrão do sistema) — sem
-  // renderThemes(), que fecharia o painel/lista de onde partiu o clique.
+  // Liga o tema se estiver desligado (padrão do sistema)
   if (ownerTheme.visible === false) {
     ownerTheme.visible = true;
     saveThemes();
   }
 
-  // Calcula os limites direto da geometria (GeoJSON), sem precisar que ela
-  // já exista como camada Leaflet desenhada.
-  const targetBounds = L.geoJSON(targetFeature).getBounds();
-  if (targetBounds.isValid()) {
-    map.fitBounds(targetBounds, { padding: [50, 50], maxZoom: 21 });
+  // Ativa a seleção do tema no menu lateral
+  if (typeof toggleSelectionTheme === 'function') {
+    toggleSelectionTheme(ownerTheme.id, true);
   }
 
-  // Dá um instante pro mapa assentar no novo zoom/posição (bem mais próximo
-  // = bem menos feições na área = sai do limite de densidade sozinho) antes
-  // de redesenhar e aplicar o destaque visual na camada de verdade.
-  setTimeout(() => {
+  // Calcula os limites direto da geometria (GeoJSON)
+  const targetBounds = L.geoJSON(targetFeature).getBounds();
+  if (targetBounds.isValid()) {
+    map.fitBounds(targetBounds, { padding: [80, 80], maxZoom: 19 });
+  }
+
+  // Aplica destaque e abre o modal de informações da feição
+  setTimeout(async () => {
     loadAllFeaturesToMap();
-    highlightFeature(fid, true);
+    const effectiveTempId = (targetFeature.properties && targetFeature.properties._tempId) || fid;
+    highlightFeature(effectiveTempId, true);
+
+    let targetLayer = null;
+    geojsonLayer.eachLayer(layer => {
+      const p = layer.feature && layer.feature.properties;
+      if (p && (p._tempId === effectiveTempId || p.id_banco === fid || layer.feature.id === fid)) {
+        targetLayer = layer;
+      }
+    });
+
+    if (targetLayer && typeof showFeatureInfoModal === 'function') {
+      if (!targetLayer.feature.properties._propertiesLoaded && typeof fetchFeaturePropertiesIfNeeded === 'function') {
+        await fetchFeaturePropertiesIfNeeded(targetLayer);
+      }
+      showFeatureInfoModal(targetLayer);
+    }
   }, 300);
 }
 
@@ -6975,7 +7201,10 @@ let currentUserProfile = null;
 let activeMunicipioId = null;
 
 async function ensureAuthenticated() {
-    if (!supabaseClient) return true; // sem Supabase configurado, segue o fluxo antigo (dev local)
+    if (!supabaseClient) {
+        window.location.href = 'login.html';
+        return false;
+    }
 
     const { data } = await supabaseClient.auth.getSession();
     if (!data || !data.session) {

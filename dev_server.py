@@ -43,11 +43,31 @@ class CustomHandler(SimpleHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
         self.send_header('Pragma', 'no-cache')
         self.send_header('Expires', '0')
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('X-Frame-Options', 'SAMEORIGIN')
+        self.send_header('Referrer-Policy', 'strict-origin-when-cross-origin')
         super().end_headers()
 
     def do_OPTIONS(self):
         self.send_response(200)
         self.end_headers()
+
+    def do_GET(self):
+        clean_path = self.path.split('?')[0].split('#')[0]
+        parts = [p for p in clean_path.split('/') if p]
+        # Bloqueia qualquer arquivo/pasta oculta (.env, .git, etc.) ou fontes sensiveis de backend
+        if any(part.startswith('.') for part in parts) or clean_path.endswith(('.env', '.env.local', '.sql', '.py')):
+            self.send_error(403, "Acesso Negado: Recurso protegido por políticas de segurança.")
+            return
+        return super().do_GET()
+
+    def do_HEAD(self):
+        clean_path = self.path.split('?')[0].split('#')[0]
+        parts = [p for p in clean_path.split('/') if p]
+        if any(part.startswith('.') for part in parts) or clean_path.endswith(('.env', '.env.local', '.sql', '.py')):
+            self.send_error(403, "Acesso Negado: Recurso protegido por políticas de segurança.")
+            return
+        return super().do_HEAD()
 
     def do_POST(self):
         if self.path == '/api/send-login-alert':
@@ -159,12 +179,10 @@ class CustomHandler(SimpleHTTPRequestHandler):
 
 if __name__ == '__main__':
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
-    try:
-        httpd = ThreadingHTTPServer(('0.0.0.0', port), CustomHandler)
-    except Exception:
-        httpd = ThreadingHTTPServer(('', port), CustomHandler)
+    bind_addr = '127.0.0.1'
+    httpd = ThreadingHTTPServer((bind_addr, port), CustomHandler)
     httpd.daemon_threads = True
-    print(f"Servidor Web GeoGestor multithread ativo em http://localhost:{port} (http://127.0.0.1:{port})")
+    print(f"Servidor Web GeoGestor multithread protegido ativo em http://localhost:{port} (http://127.0.0.1:{port})")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

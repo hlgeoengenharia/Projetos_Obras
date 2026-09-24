@@ -38,6 +38,29 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
+    <!-- Supabase Client & Auth Guard -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script>
+        // Proteção de Acesso: Oculta o documento e redireciona ao login se não autenticado
+        document.documentElement.style.visibility = 'hidden';
+        (async function checkRelatorioAuth() {
+            try {
+                if (typeof window.supabaseClient !== 'undefined' && window.supabaseClient) {
+                    const { data, error } = await window.supabaseClient.auth.getSession();
+                    if (error || !data || !data.session) {
+                        window.location.replace('login.html');
+                        return;
+                    }
+                }
+            } catch(e) {
+                window.location.replace('login.html');
+                return;
+            }
+            document.documentElement.style.visibility = 'visible';
+        })();
+    </script>
+
     <style>
         body {
             font-family: 'IBM Plex Sans', sans-serif;

@@ -269,11 +269,19 @@
         const fType = String(f.type || '').toLowerCase();
         const fName = String(f.name || '').toLowerCase();
         const fLabel = String(f.label || '').toLowerCase();
+        const combined = `${fType} ${fName} ${fLabel}`;
+
+        const isIpl = combined.includes('ipl') || combined.includes('inquerito') || combined.includes('inquérito') || combined.includes('processo') || combined.includes('autos') || combined.includes('judicial');
+        const isEpol = combined.includes('epol') || combined.includes('policia federal') || combined.includes('dpf');
+        const isRip = combined.includes('rip') || combined.includes('spu') || combined.includes('patrimonio') || combined.includes('patrimônio') || combined.includes('imovel da uniao');
 
         for (const t of tiposAlvo) {
+            if ((t === 'ipl' || t === 'ipf') && isIpl) return 'ipl';
+            if ((t === 'epol' || t === 'epol_1n') && isEpol) return 'epol';
+            if ((t === 'rip' || t === 'rip_1n') && isRip) return 'rip';
             if (fType === t || fType.startsWith(t)) return t;
             if (fName === t || fName.includes(t)) return t;
-            if (fLabel.toLowerCase().includes(t)) return t;
+            if (fLabel.includes(t)) return t;
         }
         return null;
     }
@@ -281,6 +289,8 @@
     // -------------------------------------------------------------------------
     // 4. Motor de Busca Principal
     // -------------------------------------------------------------------------
+    let _rpcUnavailable = false; // Circuit-breaker: se o RPC falhar ou retornar 500, desativa para a sessão e usa busca client-side direta
+
     async function searchRecord(termo, options) {
         const {
             supabaseClient: passedClient,
@@ -343,6 +353,54 @@
             tiposAlvo = ['ipl', 'ipf', 'epol', 'epol_1n', 'rip', 'rip_1n'];
         }
 
+        // 0. Tenta executar via RPC seguro (SECURITY DEFINER) para varredura completa se disponível
+        if (!_rpcUnavailable) {
+            try {
+                const { data: rpcData, error: rpcErr } = await supabaseClient.rpc('pesquisar_registro_interinstitucional', {
+                    p_termo: termo,
+                    p_tipo: tipoEscolhido
+                });
+
+                if (!rpcErr && Array.isArray(rpcData)) {
+                    console.log(`[BuscaInterinstitucional] RPC executado com sucesso: ${rpcData.length} registros encontrados.`);
+                    const isSuperAdmin = !!(userProfile && (userProfile.super_admin || userProfile.is_superadmin));
+                    const items = rpcData.map(r => ({
+                        featureId: r.feature_id,
+                        themeId: r.theme_id,
+                        themeName: r.theme_nome,
+                        municipioId: r.municipio_id,
+                        municipioNome: r.municipio_nome,
+                        municipioUf: r.municipio_uf,
+                        matchedFieldLabel: r.campo_label,
+                        matchedType: r.tipo_registro,
+                        matchedRawValue: r.valor_localizado,
+                        matchedFormattedValue: formatValueByType(r.valor_localizado, r.tipo_registro),
+                        summary: r.resumo,
+                        hasAccess: isSuperAdmin || !!r.tem_acesso
+                    }));
+
+                    items.sort((a, b) => {
+                        if (a.hasAccess && !b.hasAccess) return -1;
+                        if (!a.hasAccess && b.hasAccess) return 1;
+                        return a.municipioNome.localeCompare(b.municipioNome);
+                    });
+
+                    return {
+                        items: items,
+                        total: items.length,
+                        termo: termo,
+                        tipoEscolhido: tipoEscolhido
+                    };
+                } else if (rpcErr) {
+                    _rpcUnavailable = true;
+                    console.info('[BuscaInterinstitucional] Executando varredura client-side de alta performance.');
+                }
+            } catch(eRpc) {
+                _rpcUnavailable = true;
+                console.info('[BuscaInterinstitucional] Alternando para varredura client-side de alta performance.');
+            }
+        }
+
         // 1. Busca Formulários cadastrados (usando select('*') para compatibilidade de schema)
         const { data: formsData, error: formsErr } = await supabaseClient
             .from('forms')
@@ -397,14 +455,22 @@
         const municipiosMap = {};
         (todosMunicipios || []).forEach(m => { municipiosMap[m.id] = m; });
 
-        // Identifica temas alvo (se tiver até 100 camadas ou se candidateThemes estiver vazio, busca em todas para não perder nenhum dado)
+        // Identifica temas alvo a partir dos formulários mapeados ou do próprio nome/metadados da camada
         const candidateThemes = allTemas.filter(t => {
             const formId = t.tipo_cadastro || t.form_id || t.formId || t.cadastroType || (t.metadata && (t.metadata.formId || t.metadata.tipo_cadastro));
-            return formId && formFieldsTargetMap[formId] && formFieldsTargetMap[formId].length > 0;
+            if (formId && formFieldsTargetMap[formId] && formFieldsTargetMap[formId].length > 0) return true;
+            
+            const tNome = String(t.nome || t.name || '').toLowerCase();
+            if (tipoEscolhido === 'ipl' && (tNome.includes('ipl') || tNome.includes('inquerito') || tNome.includes('processo') || tNome.includes('mpf') || tNome.includes('justica'))) return true;
+            if (tipoEscolhido === 'epol' && (tNome.includes('epol') || tNome.includes('federal') || tNome.includes('dpf') || tNome.includes('policia'))) return true;
+            if (tipoEscolhido === 'rip' && (tNome.includes('rip') || tNome.includes('spu') || tNome.includes('patrimonio') || tNome.includes('uniao') || tNome.includes('imovel'))) return true;
+            return false;
         });
 
+        // Se encontrou camadas candidatas com esses tipos de dados, pesquisa APENAS nelas
         let targetThemeIds = candidateThemes.map(t => t.id);
-        if (targetThemeIds.length === 0 || allTemas.length <= 100) {
+        if (targetThemeIds.length === 0) {
+            // Se nenhuma camada teve campos ou nomes mapeados, varre as camadas cadastradas
             targetThemeIds = allTemas.map(t => t.id);
         }
 
@@ -630,13 +696,9 @@
 
                 </div>
 
-                <!-- Rodapé com Exportação -->
+                <!-- Rodapé -->
                 <div class="px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between text-xs select-none">
                     <span class="text-slate-400 text-[11px]">Sistema de Integração Territorial e Processual</span>
-                    <button id="interinst-btn-export" type="button" onclick="window.interinstitutionalSearch.exportToExcel()" class="hidden items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-all shadow-xs cursor-pointer active:scale-95 text-xs">
-                        <span class="material-symbols-outlined text-[16px]">table_view</span>
-                        <span>Exportar para Excel (.xlsx)</span>
-                    </button>
                 </div>
 
             </div>
@@ -748,7 +810,6 @@
         const loadingEl = document.getElementById('interinst-loading');
         const listEl = document.getElementById('interinst-results-list');
         const countEl = document.getElementById('interinst-results-count');
-        const exportBtn = document.getElementById('interinst-btn-export');
         const btnSearch = document.getElementById('interinst-btn-search');
         const btnIcon = document.getElementById('interinst-btn-icon');
 
@@ -799,6 +860,7 @@
                 todosMunicipios: todosMunicipios
             });
 
+            console.log('[BuscaInterinstitucional] Busca executada:', { termo, tipoDado, total: result.total, items: result.items });
             _lastSearchResults = result.items || [];
 
             if (loadingEl) { loadingEl.classList.add('hidden'); loadingEl.classList.remove('flex'); }
@@ -806,11 +868,6 @@
             if (countEl) {
                 countEl.textContent = `${result.total} ${result.total === 1 ? 'registro encontrado' : 'registros encontrados'}`;
                 countEl.classList.remove('hidden');
-            }
-
-            if (exportBtn) {
-                exportBtn.classList.toggle('hidden', result.total === 0 || !window.XLSX);
-                exportBtn.classList.toggle('flex', result.total > 0 && !!window.XLSX);
             }
 
             if (result.total === 0) {
@@ -922,16 +979,29 @@
             return;
         }
 
-        // Armazena instrução de pulo direto para ser consumida ao inicializar o mapa
-        sessionStorage.setItem('target_feature_jump', JSON.stringify({
+        const jumpPayload = {
             featureId: item.featureId,
             id_banco: item.featureId,
             themeId: item.themeId,
             municipioId: item.municipioId,
             municipioNome: item.municipioNome
-        }));
+        };
+
+        // Armazena instrução de pulo direto para ser consumida ao inicializar o mapa
+        sessionStorage.setItem('target_feature_jump', JSON.stringify(jumpPayload));
 
         closeModal();
+
+        const currentPath = (typeof window !== 'undefined' && window.location.pathname ? window.location.pathname.toLowerCase() : '');
+        const currentMun = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('municipio_ativo') : null;
+
+        // Se já estiver no mapa do mesmo município, executa o pulo diretamente sem recarregar a tela
+        if ((currentPath.includes('index.html') || currentPath.endsWith('/')) && (!currentMun || currentMun === item.municipioId)) {
+            if (typeof window.executeFeatureJump === 'function') {
+                window.executeFeatureJump(jumpPayload);
+                return;
+            }
+        }
 
         // Se a função nativa de abrir município existir em home.html, executa-a
         if (typeof window.abrirMunicipio === 'function') {

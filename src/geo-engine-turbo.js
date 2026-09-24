@@ -444,31 +444,56 @@
 
         // Constrói índice espacial R-Tree para um tema em alta velocidade
         indexThemeFeatures(themeId, features) {
+            // Retorna a árvore imediatamente para não quebrar referências, mas a preenche em background
             const tree = new QuickRBush(16);
-            const items = [];
-            for (let i = 0; i < features.length; i++) {
-                const f = features[i];
-                if (!f || !f.geometry) continue;
+            themeTrees.set(themeId, tree);
+            
+            if (!features || !features.length) return tree;
 
-                let bbox = f.properties && f.properties._bbox;
-                if (!bbox) {
-                    bbox = computeBBoxFromGeometry(f.geometry);
-                    if (f.properties) f.properties._bbox = bbox;
+            const items = [];
+            let i = 0;
+            const CHUNK_SIZE = 1000; // Processa 1000 feições por ciclo para manter a UI fluida (60fps)
+
+            function processChunk() {
+                const end = Math.min(i + CHUNK_SIZE, features.length);
+                for (; i < end; i++) {
+                    const f = features[i];
+                    if (!f || !f.geometry) continue;
+
+                    let bbox = f.properties && f.properties._bbox;
+                    if (!bbox) {
+                        bbox = computeBBoxFromGeometry(f.geometry);
+                        if (f.properties) f.properties._bbox = bbox;
+                    }
+
+                    if (bbox) {
+                        items.push({
+                            minX: bbox[0], // west
+                            minY: bbox[1], // south
+                            maxX: bbox[2], // east
+                            maxY: bbox[3], // north
+                            feature: f
+                        });
+                    }
                 }
 
-                if (bbox) {
-                    items.push({
-                        minX: bbox[0], // west
-                        minY: bbox[1], // south
-                        maxX: bbox[2], // east
-                        maxY: bbox[3], // north
-                        feature: f
-                    });
+                if (i < features.length) {
+                    // Libera a thread principal e agenda o próximo lote
+                    setTimeout(processChunk, 0);
+                } else {
+                    // Todos os BBoxes calculados, agora faz o bulk-load super rápido da R-Tree
+                    tree.load(items);
+                    console.log(`[GeoEngineTurbo] R-Tree indexado em background para "${themeId}": ${items.length} feições indexadas sem travar a UI.`);
+                    
+                    // Dispara um evento global caso o mapa precise se atualizar (útil para lazy loading)
+                    if (window.dispatchEvent) {
+                        window.dispatchEvent(new CustomEvent('geoengine_index_ready', { detail: { themeId } }));
+                    }
                 }
             }
-            tree.load(items);
-            themeTrees.set(themeId, tree);
-            console.log(`[GeoEngineTurbo] R-Tree indexado para "${themeId}": ${items.length} feições indexadas`);
+
+            // Inicia o processamento em background
+            setTimeout(processChunk, 0);
             return tree;
         },
 
