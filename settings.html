@@ -585,9 +585,12 @@
     function getConditionValueInputHtml(ruleIdx, condIdx, cond) {
        let fieldType = 'text';
        let fieldOptions = [];
-       const pureFieldId = cond.fieldId ? (cond.fieldId.includes('::') ? cond.fieldId.split('::')[1] : cond.fieldId) : '';
+       const hasTabPrefix = cond.fieldId && cond.fieldId.includes('::');
+       const targetTabId = hasTabPrefix ? cond.fieldId.split('::')[0] : null;
+       const pureFieldId = hasTabPrefix ? cond.fieldId.split('::')[1] : cond.fieldId;
        
        builderTabs.forEach(tab => {
+          if (targetTabId && tab.id !== targetTabId) return;
           (tab.fields || []).forEach(f => {
              if (f.id === pureFieldId) {
                  fieldType = f.type;
@@ -658,9 +661,12 @@
     function updateConditionField(ruleIdx, condIdx, fieldId) {
        currentFormulaConfig.rules[ruleIdx].conditions[condIdx].fieldId = fieldId;
        
-       const pureFieldId = fieldId ? (fieldId.includes('::') ? fieldId.split('::')[1] : fieldId) : '';
+       const hasTabPrefix = fieldId && fieldId.includes('::');
+       const targetTabId = hasTabPrefix ? fieldId.split('::')[0] : null;
+       const pureFieldId = hasTabPrefix ? fieldId.split('::')[1] : (fieldId || '');
        let isSelect = false;
        builderTabs.forEach(tab => {
+          if (targetTabId && tab.id !== targetTabId) return;
           (tab.fields || []).forEach(f => {
              if (f.id === pureFieldId && ['select', 'radio', 'checkbox'].includes(f.type)) {
                  isSelect = true;
