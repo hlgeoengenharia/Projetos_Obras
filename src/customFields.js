@@ -1497,7 +1497,8 @@ function evaluateAction(action, valuesMap) {
     
     let valB = 0;
     if (action.valueType === 'field') {
-        valB = action.value ? getNumericValue(valuesMap[action.value]) : 0;
+        const pureActionValue = (action.value && action.value.includes('::')) ? action.value.split('::')[1] : action.value;
+        valB = action.value ? getNumericValue(valuesMap[pureActionValue]) : 0;
     } else {
         valB = parseFloat(action.value) || 0;
     }
@@ -1524,8 +1525,10 @@ function evaluateAction(action, valuesMap) {
 }
 
 function checkCondition(cond, valuesMap) {
-    const fieldId = cond.fieldId;
+    let fieldId = cond.fieldId;
     if (!fieldId) return false;
+    
+    if (fieldId.includes('::')) fieldId = fieldId.split('::')[1];
     
     const rawVal = valuesMap[fieldId] !== undefined ? valuesMap[fieldId] : '';
     const condVal = cond.value || '';

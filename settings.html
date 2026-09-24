@@ -568,7 +568,14 @@
           (tab.fields || []).forEach(f => {
              if (f.id !== currentFormulaFieldId && f.label && f.label.trim() !== '') {
                  const fullName = `[${tab.title}] ${f.label}`;
-                 optionsHtml += `<option value="${f.id}" title="${fullName}" ${f.id === selectedValue ? 'selected' : ''}>${fullName}</option>`;
+                 const optionValue = `${tab.id}::${f.id}`;
+                 let isSelected = false;
+                 if (selectedValue === optionValue) {
+                     isSelected = true;
+                 } else if (selectedValue && !selectedValue.includes('::') && selectedValue === f.id) {
+                     isSelected = true;
+                 }
+                 optionsHtml += `<option value="${optionValue}" title="${fullName}" ${isSelected ? 'selected' : ''}>${fullName}</option>`;
              }
           });
        });
@@ -578,10 +585,11 @@
     function getConditionValueInputHtml(ruleIdx, condIdx, cond) {
        let fieldType = 'text';
        let fieldOptions = [];
+       const pureFieldId = cond.fieldId ? (cond.fieldId.includes('::') ? cond.fieldId.split('::')[1] : cond.fieldId) : '';
        
        builderTabs.forEach(tab => {
           (tab.fields || []).forEach(f => {
-             if (f.id === cond.fieldId) {
+             if (f.id === pureFieldId) {
                  fieldType = f.type;
                  if (['select', 'radio', 'checkbox'].includes(f.type) && f.options) {
                      fieldOptions = f.options.split(',').map(o => o.trim()).filter(o => o);
@@ -649,7 +657,20 @@
 
     function updateConditionField(ruleIdx, condIdx, fieldId) {
        currentFormulaConfig.rules[ruleIdx].conditions[condIdx].fieldId = fieldId;
-       currentFormulaConfig.rules[ruleIdx].conditions[condIdx].value = '';
+       
+       const pureFieldId = fieldId ? (fieldId.includes('::') ? fieldId.split('::')[1] : fieldId) : '';
+       let isSelect = false;
+       builderTabs.forEach(tab => {
+          (tab.fields || []).forEach(f => {
+             if (f.id === pureFieldId && ['select', 'radio', 'checkbox'].includes(f.type)) {
+                 isSelect = true;
+             }
+          });
+       });
+       
+       if (isSelect) {
+           currentFormulaConfig.rules[ruleIdx].conditions[condIdx].value = '';
+       }
        renderFormulaRules();
     }
 
