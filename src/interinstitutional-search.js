@@ -160,7 +160,9 @@
 
             const d = digitsOf(val);
             if (rawDigits && d) {
-                if (d === rawDigits || d.includes(rawDigits) || rawDigits.includes(d)) {
+                // Match exato de dígitos ou prefixo/subsequência significativa (mínimo 3 dígitos)
+                // NUNCA fazer rawDigits.includes(d) pois dígitos isolados na base trariam falsos positivos massivos
+                if (d === rawDigits || (rawDigits.length >= 3 && d.includes(rawDigits))) {
                     return true;
                 }
             }
@@ -262,6 +264,20 @@
         return details.length > 0 ? details.slice(0, 2).join(' • ') : 'Feição Cartográfica Cadastrada';
     }
 
+    function isFieldMatchingType(f, tiposAlvo) {
+        if (!f) return null;
+        const fType = String(f.type || '').toLowerCase();
+        const fName = String(f.name || '').toLowerCase();
+        const fLabel = String(f.label || '').toLowerCase();
+
+        for (const t of tiposAlvo) {
+            if (fType === t || fType.startsWith(t)) return t;
+            if (fName === t || fName.includes(t)) return t;
+            if (fLabel.toLowerCase().includes(t)) return t;
+        }
+        return null;
+    }
+
     // -------------------------------------------------------------------------
     // 4. Motor de Busca Principal
     // -------------------------------------------------------------------------
@@ -301,11 +317,11 @@
             || null;
 
         let todosMunicipios = passedTodosMunicipios 
-            || (typeof window !== 'undefined' && window.municipiosParaMostrarCache)
+            || (typeof window !== 'undefined' && (window.todosMunicipiosCache || window.municipiosParaMostrarCache))
             || [];
 
         let municipiosAprovados = passedMunicipiosAprovados
-            || (typeof window !== 'undefined' && (window.municipiosAprovadosCache || todosMunicipios))
+            || (typeof window !== 'undefined' && (window.municipiosAprovadosCache || window.municipiosParaMostrarCache || todosMunicipios))
             || todosMunicipios;
 
         const cleanTerm = String(termo || '').trim().toLowerCase();
@@ -345,13 +361,13 @@
             schema.forEach(tab => {
                 if (!tab.fields || !Array.isArray(tab.fields)) return;
                 tab.fields.forEach(f => {
-                    const fType = String(f.type || '').toLowerCase();
-                    if (tiposAlvo.includes(fType)) {
+                    const matchedTarget = isFieldMatchingType(f, tiposAlvo);
+                    if (matchedTarget) {
                         if (!formFieldsTargetMap[form.id]) formFieldsTargetMap[form.id] = [];
                         formFieldsTargetMap[form.id].push({
                             fieldId: String(f.id || f.name),
                             fieldLabel: f.label || f.name || f.id,
-                            fieldType: fType,
+                            fieldType: matchedTarget,
                             tabTitle: tab.title || tab.name || 'Geral'
                         });
                     }
@@ -371,7 +387,7 @@
 
         if ((!todosMunicipios || todosMunicipios.length === 0) && supabaseClient) {
             try {
-                const { data: mData } = await supabaseClient.from('municipios').select('id, nome, uf, brasao_url');
+                const { data: mData } = await supabaseClient.from('municipios').select('id, nome, uf, logo_url');
                 if (mData && mData.length > 0) {
                     todosMunicipios = mData;
                     if (typeof window !== 'undefined') window.municipiosParaMostrarCache = mData;
@@ -401,7 +417,7 @@
         const isSuperAdmin = !!(userProfile && (userProfile.super_admin || userProfile.is_superadmin));
         const approvedMunIds = new Set((municipiosAprovados || []).map(m => m.id));
 
-        const batchSize = 20;
+        const batchSize = 25;
         for (let i = 0; i < targetThemeIds.length; i += batchSize) {
             const batchThemes = targetThemeIds.slice(i, i + batchSize);
 
@@ -448,31 +464,29 @@
                         if (propKey.startsWith('_') || propKey === 'themeId' || propKey === 'id_banco') continue;
                         const val = props[propKey];
                         if (propertyMatchesTerm(val, cleanTerm, rawDigits)) {
-                            matchEncontrado = true;
-                            matchedFieldLabel = propKey;
-                            
                             const keyLower = propKey.toLowerCase();
                             const extractedVal = extractMatchedValue(val, cleanTerm, rawDigits);
                             const valDigits = digitsOf(extractedVal);
 
-                            if (keyLower.includes('epol') || (valDigits.length === 11 && String(extractedVal).includes('-'))) {
-                                matchedType = 'epol';
-                            } else if (keyLower.includes('rip') || (valDigits.length >= 8 && (keyLower.includes('imovel') || keyLower.includes('patrimonio')))) {
-                                matchedType = 'rip';
-                            } else if (keyLower.includes('ipl') || keyLower.includes('inquerito') || keyLower.includes('processo') || valDigits.length === 20) {
-                                matchedType = 'ipl';
-                            } else {
-                                matchedType = tipoEscolhido !== 'todos' ? tipoEscolhido : 'geral';
+                            let inferredType = 'geral';
+                            if (valDigits.length === 20 || keyLower.includes('ipl') || keyLower.includes('inquerito') || keyLower.includes('processo')) {
+                                inferredType = 'ipl';
+                            } else if (keyLower.includes('epol') || (valDigits.length === 11 && String(extractedVal).includes('.'))) {
+                                inferredType = 'epol';
+                            } else if (keyLower.includes('rip') || ((valDigits.length >= 8 && valDigits.length <= 13) && (keyLower.includes('imovel') || keyLower.includes('patrimonio') || keyLower.includes('spu')))) {
+                                inferredType = 'rip';
                             }
 
-                            // Se o usuário selecionou um filtro específico (ex: IPL), só ignora se tiver certeza que é outro tipo incompatível
-                            if (tipoEscolhido !== 'todos' && tipoEscolhido === 'ipl') {
-                                if (valDigits.length !== 20 && !keyLower.includes('ipl') && !keyLower.includes('inquerito') && !keyLower.includes('processo') && matchedType !== 'ipl') {
-                                    matchEncontrado = false;
-                                    continue;
-                                }
+                            // Se o usuário filtrou por um tipo específico, descarta outros tipos incompatíveis
+                            if (tipoEscolhido !== 'todos') {
+                                if (tipoEscolhido === 'ipl' && inferredType !== 'ipl') continue;
+                                if (tipoEscolhido === 'epol' && inferredType !== 'epol') continue;
+                                if (tipoEscolhido === 'rip' && inferredType !== 'rip') continue;
                             }
 
+                            matchEncontrado = true;
+                            matchedFieldLabel = propKey;
+                            matchedType = inferredType;
                             matchedRawValue = extractedVal;
                             break;
                         }
@@ -772,8 +786,10 @@
             }
 
             const userProfile = window.currentUserProfile || window.homeUserProfile || null;
-            const todosMunicipios = window.municipiosParaMostrarCache || [];
-            const municipiosAprovados = (window.municipiosAprovadosCache || todosMunicipios);
+            const todosMunicipios = (window.todosMunicipiosCache && window.todosMunicipiosCache.length > 0)
+                ? window.todosMunicipiosCache
+                : (window.municipiosParaMostrarCache || []);
+            const municipiosAprovados = (window.municipiosAprovadosCache || window.municipiosParaMostrarCache || todosMunicipios);
 
             const result = await searchRecord(termo, {
                 supabaseClient: client,
