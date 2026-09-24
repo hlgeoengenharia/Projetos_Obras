@@ -567,7 +567,8 @@
        builderTabs.forEach(tab => {
           (tab.fields || []).forEach(f => {
              if (f.id !== currentFormulaFieldId && f.label && f.label.trim() !== '') {
-                 optionsHtml += `<option value="${f.id}" ${f.id === selectedValue ? 'selected' : ''}>[${tab.title}] ${f.label}</option>`;
+                 const fullName = `[${tab.title}] ${f.label}`;
+                 optionsHtml += `<option value="${f.id}" title="${fullName}" ${f.id === selectedValue ? 'selected' : ''}>${fullName}</option>`;
              }
           });
        });
@@ -589,11 +590,14 @@
           });
        });
        
-       if (fieldType === 'select' && fieldOptions.length > 0) {
+       if (['select', 'radio', 'checkbox'].includes(fieldType) && fieldOptions.length > 0) {
           const optionsHtml = fieldOptions.map(opt => `<option value="${opt}" ${cond.value === opt ? 'selected' : ''}>${opt}</option>`).join('');
+          const hasMatch = fieldOptions.includes(cond.value);
+          const extraOption = (cond.value && !hasMatch) ? `<option value="${cond.value}" selected>${cond.value} (Legado/Invalido)</option>` : '';
           return `
-             <select onchange="updateConditionValue(${ruleIdx}, ${condIdx}, this.value)" class="w-full md:flex-1 px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-md focus:outline-none text-slate-800 dark:text-white">
+             <select title="Valor da condição" onchange="updateConditionValue(${ruleIdx}, ${condIdx}, this.value)" class="w-full md:flex-1 px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-md focus:outline-none text-slate-800 dark:text-white">
                  <option value="">Escolha uma opção...</option>
+                 ${extraOption}
                  ${optionsHtml}
              </select>
           `;
