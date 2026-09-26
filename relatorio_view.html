@@ -1165,20 +1165,25 @@
             if (!measureBox) {
                 measureBox = document.createElement('div');
                 measureBox.id = 'a4-measure-stage';
-                measureBox.style.cssText = 'position:absolute; left:-9999px; top:-9999px; visibility:hidden; width:' + (pageWidthPx - Math.round((mm.left + mm.right) * 3.78)) + 'px;';
+                measureBox.style.cssText = 'position:absolute; left:-9999px; top:-9999px; visibility:hidden; width:' + (pageWidthPx - Math.round((mm.left + mm.right) * 3.78)) + 'px; font-family:"IBM Plex Sans",sans-serif;';
                 document.body.appendChild(measureBox);
             }
             measureBox.style.width = (pageWidthPx - Math.round((mm.left + mm.right) * 3.78)) + 'px';
 
             const headerHeightPx = hdrBloco ? 135 : 0;
             const footerHeightPx = ftrBloco ? 42 : 0;
-            const marginHeightPx = Math.round((mm.top + mm.bottom) * 3.78);
+            
+            // Margens superior e inferior reais configuradas no documento
+            const padTopP1Px = Math.round((hdrBloco ? Math.max(2, mm.top - 8) : mm.top) * 3.78);
+            const padBotP1Px = Math.round((ftrBloco ? Math.max(2, mm.bottom - 8) : mm.bottom) * 3.78);
+            const padTopP2Px = Math.round(((hdrBloco && hdrBloco.repetir_todas_folhas) ? Math.max(2, mm.top - 8) : mm.top) * 3.78);
+            const padBotP2Px = padBotP1Px;
 
-            const maxBodyHeightP1 = pageHeightPx - headerHeightPx - footerHeightPx - marginHeightPx;
-            const maxBodyHeightP2 = pageHeightPx - (hdrBloco && hdrBloco.repetir_todas_folhas ? headerHeightPx : 15) - footerHeightPx - marginHeightPx;
+            const maxBodyHeightP1 = pageHeightPx - (hdrBloco ? headerHeightPx : 0) - (ftrBloco ? footerHeightPx : 0) - padTopP1Px - padBotP1Px;
+            const maxBodyHeightP2 = pageHeightPx - ((hdrBloco && hdrBloco.repetir_todas_folhas) ? headerHeightPx : 0) - (ftrBloco ? footerHeightPx : 0) - padTopP2Px - padBotP2Px;
 
             // Bloco comum: altura total. Bloco divisível: altura fixa (título + cabeçalho da tabela) e de cada linha.
-            const BLOCK_GAP = 20;
+            const BLOCK_GAP = 14;
             renderedBodyBlocks.forEach(rb => {
                 if (rb.split) {
                     if (Array.isArray(rb.split.rowHeightsFixas)) {
@@ -1189,9 +1194,7 @@
                         rb.overheadH = rb.split.overheadFixo || 0;
                     } else {
                         // overhead (título + cabeçalho da tabela) medido À PARTE, sem nenhuma linha — mais confiável
-                        // que subtrair de uma tabela com centenas de linhas de uma vez só (uma tabela invisível
-                        // gigante, medida inteira de uma vez, deixava sobrar espaço em branco na folha: a subtração
-                        // ficava sensível a qualquer diferença de arredondamento entre o total e a soma das linhas).
+                        // que subtrair de uma tabela com centenas de linhas de uma vez só.
                         measureBox.innerHTML = rb.split.chunkHtml([], true);
                         rb.overheadH = measureBox.firstElementChild ? measureBox.firstElementChild.offsetHeight : measureBox.offsetHeight;
                         // linhas medidas em LOTES (não todas de uma vez): tabelas com centenas/milhares de linhas
@@ -1231,24 +1234,21 @@
                 let heights = rb.rowHeights.slice();
                 let isFirstChunk = true;
                 while (rows.length > 0) {
-                    let room = pageLimit - pageAcc - rb.overheadH - BLOCK_GAP;
+                    const gapBefore = (pageAcc > 0 ? BLOCK_GAP : 0);
+                    let room = pageLimit - pageAcc - gapBefore - rb.overheadH;
                     if (room < heights[0] && currentPage().length > 0) {
                         startNewPage();
-                        room = pageLimit - rb.overheadH - BLOCK_GAP;
+                        room = pageLimit - rb.overheadH;
                     }
                     let take = 0;
                     let used = 0;
-                    while (take < rows.length && used + heights[take] <= room) { used += heights[take]; take++; }
-                    if (take === 0) take = 1; // linha maior que a folha: entra sozinha
-                    // diagnóstico: uma folha nova (pageAcc==0) que aproveita menos da metade do espaço disponível,
-                    // com mais linhas ainda por vir, é exatamente o sintoma de "espaço em branco enorme antes do
-                    // rodapé" — fica no console (não na folha) pra confirmar se a medição bateu ou não, sem precisar
-                    // adivinhar de novo a partir de um print
-                    if (pageAcc === 0 && used < room * 0.5 && rows.length > take) {
-                        console.warn('[Paginação] folha nova aproveitou pouco espaço:', { bloco: rb.bloco && rb.bloco.tipo, room, used, overheadH: rb.overheadH, linhasNestaFolha: take, linhasRestantes: rows.length - take, alturasLinhas: heights.slice(0, take) });
+                    while (take < rows.length && (used + heights[take]) <= room) {
+                        used += heights[take];
+                        take++;
                     }
+                    if (take === 0) take = 1; // linha maior que a folha: entra sozinha
                     currentPage().push({ bloco: rb.bloco, html: rb.split.chunkHtml(rows.slice(0, take), isFirstChunk), primeiroChunk: isFirstChunk });
-                    pageAcc += rb.overheadH + used + BLOCK_GAP;
+                    pageAcc += gapBefore + rb.overheadH + used;
                     isFirstChunk = false;
                     rows = rows.slice(take);
                     heights = heights.slice(take);
@@ -1736,6 +1736,24 @@
             aplicarPesquisaGeral();
         }
 
+        function updateTabelaFeicoesConfigGeral(prop, value, origemGraficoId) {
+            const bloco = tabelaBlocoGeral(origemGraficoId);
+            if (!bloco) return;
+            bloco[prop] = value;
+            aplicarPesquisaGeral();
+        }
+
+        function updateMargensGeral(tipo) {
+            if (!tplAtual) return;
+            if (!tplAtual.config_pagina) tplAtual.config_pagina = { tamanho: 'A4', orientacao: 'portrait' };
+            let mm = { top: 15, bottom: 15, left: 15, right: 15 };
+            if (tipo === 'moderada') mm = { top: 10, bottom: 10, left: 10, right: 10 };
+            else if (tipo === 'estreita') mm = { top: 8, bottom: 8, left: 8, right: 8 };
+            tplAtual.config_pagina.margens_mm = mm;
+            tplAtual.config_pagina.margens_tipo = tipo;
+            aplicarPesquisaGeral();
+        }
+
         function updateMapaFeicoesConfigGeral(prop, value, origemGraficoId) {
             const bloco = mapaBlocoGeral(origemGraficoId);
             if (!bloco) return;
@@ -1865,6 +1883,14 @@
                     ${/^ortofoto:/.test(blocoMapa.baseMap || '') ? '<div style="color:#64748b;line-height:1.35;margin-bottom:3px">A ortofoto fica sobre o satélite, que preenche o que ela não cobre.</div>' : ''}
                     ${chkRowPesquisa('pp-mapa-grade-' + esc(chave), 'Quadriculado UTM', !!blocoMapa.quadriculado, `updateMapaFeicoesConfigGeral('quadriculado', this.checked${origemArg})`)}
                     ${chkRowPesquisa('pp-mapa-contagem-' + esc(chave), 'Mostrar contagem de feições em cada grupo', blocoMapa.exibirContagem !== false, `updateMapaFeicoesConfigGeral('exibirContagem', this.checked${origemArg})`)}
+                    <div style="font-weight:700;margin:6px 0 2px">Aproveitamento na Folha A4</div>
+                    <select onchange="updateMapaFeicoesConfigGeral('layoutPreenchimento', this.value${origemArg})" style="width:100%;margin-bottom:3px">
+                        <option value="auto2" ${(blocoMapa.layoutPreenchimento || 'auto2') === 'auto2' ? 'selected' : ''}>2 mapas por folha (Preenchimento Completo)</option>
+                        <option value="auto3" ${blocoMapa.layoutPreenchimento === 'auto3' ? 'selected' : ''}>3 mapas por folha (Compacto)</option>
+                        <option value="auto1" ${blocoMapa.layoutPreenchimento === 'auto1' ? 'selected' : ''}>1 mapa por folha (Expandido)</option>
+                        <option value="manual" ${blocoMapa.layoutPreenchimento === 'manual' ? 'selected' : ''}>Manual (${blocoMapa.alturaPx || 260}px)</option>
+                    </select>
+                    <div style="color:#64748b;line-height:1.35;margin-bottom:3px">Em 2 ou 3 mapas por folha, o sistema calcula a altura exata para preencher a página sem deixar vazios.</div>
                     <div style="font-weight:700;margin:6px 0 2px">Agrupar mapas por campo</div>
                     <select onchange="updateMapaFeicoesConfigGeral('agruparPorCampo', this.value || undefined${origemArg})" style="width:100%;margin-bottom:3px">
                         <option value="">Nenhum (agrupar por proximidade)</option>
@@ -1879,7 +1905,7 @@
                     ${blocoMapa.zoomManual
                         ? `<div style="color:#334155">Zoom fixo: <b>${esc(String(blocoMapa.zoomManual))}</b> — os mapas adicionais cobrem o resto das feições nesse mesmo zoom. <button type="button" class="act" onclick="updateMapaFeicoesConfigGeral('zoomManual', undefined${origemArg})">Voltar ao automático</button></div>`
                         : `<div style="color:#64748b">Automático (cada mapa se ajusta ao seu grupo). Para escolher, dê zoom no 1º mapa da folha e clique em "Usar este zoom nos demais mapas".</div>`}
-                    <div style="color:#64748b;line-height:1.35;margin-top:3px">Sem agrupar por campo: agrupa por proximidade; acima de ${LIMITE_FEICOES_MAPA} feições filtradas, pede para refinar o filtro. A altura ajusta arrastando a borda de baixo do mapa, na folha.</div>
+                    <div style="color:#64748b;line-height:1.35;margin-top:3px">A altura também pode ser ajustada arrastando a borda inferior de qualquer mapa na folha.</div>
                 </div>`;
         }
 
@@ -1894,7 +1920,13 @@
             const origemArg = origemGraficoId ? `, '${esc(origemGraficoId)}'` : '';
             return `
                 <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #cbd5e1">
-                    <button type="button" class="act" onclick="toggleColunasPesquisaGeral(${origemGraficoId ? `'${esc(origemGraficoId)}'` : ''})">${revelado ? 'Ocultar campos da tabela ▴' : 'Incluir campos na tabela ▾'}</button>
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;gap:6px">
+                        <button type="button" class="act" style="flex:1" onclick="toggleColunasPesquisaGeral(${origemGraficoId ? `'${esc(origemGraficoId)}'` : ''})">${revelado ? 'Ocultar campos da tabela ▴' : 'Incluir campos na tabela ▾'}</button>
+                        <select title="Densidade das linhas da tabela" onchange="updateTabelaFeicoesConfigGeral('densidade', this.value${origemArg})" style="font-size:11px;padding:3px 5px;width:auto;flex:none">
+                            <option value="compacta" ${(blocoTabela.densidade || 'compacta') === 'compacta' ? 'selected' : ''}>Compacta (~36 lin/folha)</option>
+                            <option value="padrao" ${blocoTabela.densidade === 'padrao' ? 'selected' : ''}>Padrão (~20 lin/folha)</option>
+                        </select>
+                    </div>
                     ${revelado ? `<div style="max-height:160px;overflow-y:auto;margin-top:5px">${colunasChecklistHtml(camposList, colunas, origemGraficoId)}</div>` : ''}
                 </div>
                 <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #cbd5e1">
@@ -1914,7 +1946,13 @@
             const revelado = colunasReveladasPesquisa.has(chartId);
             const colunas = Array.isArray(bloco.colunas) ? bloco.colunas : [];
             return `
-                <button type="button" class="act" onclick="toggleColunasPesquisaGeral('${esc(chartId)}')">${revelado ? 'Ocultar campos da tabela ▴' : 'Incluir campos na tabela ▾'}</button>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px">
+                    <button type="button" class="act" style="flex:1" onclick="toggleColunasPesquisaGeral('${esc(chartId)}')">${revelado ? 'Ocultar campos da tabela ▴' : 'Incluir campos na tabela ▾'}</button>
+                    <select title="Densidade das linhas da tabela" onchange="updateTabelaFeicoesConfigGeral('densidade', this.value, '${esc(chartId)}')" style="font-size:11px;padding:3px 5px;width:auto;flex:none">
+                        <option value="compacta" ${(bloco.densidade || 'compacta') === 'compacta' ? 'selected' : ''}>Compacta</option>
+                        <option value="padrao" ${bloco.densidade === 'padrao' ? 'selected' : ''}>Padrão</option>
+                    </select>
+                </div>
                 ${revelado ? `<div style="max-height:160px;overflow-y:auto;margin-top:5px">${colunasChecklistHtml(camposList, colunas, chartId)}</div>` : ''}`;
         }
 
@@ -1969,6 +2007,7 @@
             }).join('') : '<div style="color:#64748b;font-style:italic">Nenhum gráfico configurado nas Estatísticas desta camada.</div>';
 
             const temKpis = !!kpisBlocoGeral();
+            const margemTipoAtual = (tplAtual && tplAtual.config_pagina && tplAtual.config_pagina.margens_tipo) || 'padrao';
 
             return `
                 <h4 data-sec-h="filtro" class="${secH('filtro')}" onclick="pesquisaPanelSecao('filtro')">Filtro de feições<span class="chev">&#9662;</span></h4>
@@ -1990,6 +2029,16 @@
                 <div data-sec="graficos" class="sec-body" style="display:${secD('graficos')}">
                     <div style="color:#64748b;line-height:1.35;margin-bottom:5px">Cada gráfico marcado vira um card à parte na folha (pode ser arrastado sozinho). Dentro dele: tabela e mapa próprios, com colunas à sua escolha.</div>
                     ${graficosHtml}
+                </div>
+                <h4 data-sec-h="layout" class="${secH('layout')}" onclick="pesquisaPanelSecao('layout')">Diagramação e Folha A4<span class="chev">&#9662;</span></h4>
+                <div data-sec="layout" class="sec-body" style="display:${secD('layout')}">
+                    <div style="font-weight:700;margin-bottom:3px">Margens da folha</div>
+                    <select onchange="updateMargensGeral(this.value)" style="width:100%;margin-bottom:4px">
+                        <option value="padrao" ${margemTipoAtual === 'padrao' ? 'selected' : ''}>Padrão (15 mm em todas as bordas)</option>
+                        <option value="moderada" ${margemTipoAtual === 'moderada' ? 'selected' : ''}>Moderada (10 mm - mais espaço)</option>
+                        <option value="estreita" ${margemTipoAtual === 'estreita' ? 'selected' : ''}>Estreita (8 mm - aproveitamento total)</option>
+                    </select>
+                    <div style="color:#64748b;font-size:11px;line-height:1.35;margin-bottom:4px">Margens menores liberam altura vertical e largura para mais feições e mapas por página.</div>
                 </div>
                 <div style="padding:10px 0 2px">
                     <div style="display:flex;gap:6px">
@@ -2062,6 +2111,7 @@
             if (!tplSalvoSnapshot) return;
             tplAtual.filtro = JSON.parse(JSON.stringify(tplSalvoSnapshot.filtro || { grupos: [] }));
             tplAtual.blocos = JSON.parse(JSON.stringify(tplSalvoSnapshot.blocos || []));
+            if (tplSalvoSnapshot.config_pagina) tplAtual.config_pagina = JSON.parse(JSON.stringify(tplSalvoSnapshot.config_pagina));
             statusPesquisaGeral = 'Ajustes restaurados (não salvos ainda eram descartados).';
             desenharRelatorio();
         }
@@ -2327,21 +2377,27 @@
             const fieldIndex = {};
             (reportPayload.formFields || []).forEach(f => { if (f && f.id) fieldIndex[f.id] = f; });
             const cols = colunas.map(id => ({ id: id, campo: fieldIndex[id], label: (fieldIndex[id] && (fieldIndex[id].label || fieldIndex[id].name)) || id }));
+            const densidade = bloco.densidade || 'compacta';
+            const isCompacta = densidade === 'compacta';
+            const pyTd = isCompacta ? 'py-1 px-1.5' : 'py-1.5 px-2';
+            const textTd = isCompacta ? 'text-[9px] leading-snug' : 'text-[10px] leading-normal';
+            const pyTh = isCompacta ? 'py-1 px-1.5' : 'py-1.5 px-2';
+            const textTh = isCompacta ? 'text-[9px] leading-snug' : 'text-[9.5px] leading-normal';
             const larguras = bloco.larguras || {};
             const larguraPadrao = cols.length ? (94 / cols.length) : 94; // 94%: reserva ~6% pra coluna "#"
             const colgroupHtml = `<colgroup><col style="width:34px">${cols.map(c => `<col data-field-id="${escapeHtml(c.id)}" style="width:${(larguras[c.id] || larguraPadrao).toFixed(2)}%">`).join('')}</colgroup>`;
             const rowsHtml = registros.map((props, i) => `
                 <tr data-split-row class="${i % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}" style="page-break-inside: avoid;">
-                    <td class="py-1.5 px-2 text-[10px] border-r border-slate-200 text-center font-mono text-slate-400">${i + 1}</td>
-                    ${cols.map(c => `<td class="py-1.5 px-2 text-[10px] border-r last:border-r-0 border-slate-200 whitespace-normal break-words text-slate-700">${escapeHtml(FieldFormatter.toText(props[c.id], c.campo))}</td>`).join('')}
+                    <td class="${pyTd} ${textTd} border-r border-slate-200 text-center font-mono text-slate-400">${i + 1}</td>
+                    ${cols.map(c => `<td class="${pyTd} ${textTd} border-r last:border-r-0 border-slate-200 whitespace-normal break-words text-slate-700">${escapeHtml(FieldFormatter.toText(props[c.id], c.campo))}</td>`).join('')}
                 </tr>`);
             const theadHtml = `<thead><tr class="bg-slate-100 border-b-2 border-slate-300 text-slate-700">
-                <th class="py-1.5 px-2 text-[9.5px] font-bold uppercase border-r border-slate-200 text-center">#</th>
-                ${cols.map(c => `<th class="relative py-1.5 px-2 text-[9.5px] font-bold uppercase border-r last:border-r-0 border-slate-200 whitespace-normal break-words">${escapeHtml(c.label)}<div class="tf-col-resize no-print" data-bloco-id="${escapeHtml(bloco.id)}" data-field-id="${escapeHtml(c.id)}" title="Arraste para ajustar a largura da coluna"></div></th>`).join('')}
+                <th class="${pyTh} ${textTh} font-bold uppercase border-r border-slate-200 text-center">#</th>
+                ${cols.map(c => `<th class="relative ${pyTh} ${textTh} font-bold uppercase border-r last:border-r-0 border-slate-200 whitespace-normal break-words">${escapeHtml(c.label)}<div class="tf-col-resize no-print" data-bloco-id="${escapeHtml(bloco.id)}" data-field-id="${escapeHtml(c.id)}" title="Arraste para ajustar a largura da coluna"></div></th>`).join('')}
             </tr></thead>`;
             const meta = `${registros.length} feiç${registros.length === 1 ? 'ão' : 'ões'}${featureListTruncada ? ' (mostrando as primeiras)' : ''}`;
             const chunkHtml = (rows, isFirst) => `
-                <div class="mb-4">
+                <div class="mb-3">
                     <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
                         <span class="whitespace-pre-line">${tituloBase}${isFirst ? '' : ' (continuação)'}</span>
                         <span class="text-[10px] font-mono text-slate-500 normal-case">${escapeHtml(meta)}</span>
@@ -2452,7 +2508,39 @@
             const cor = bloco.cor || '#0ea5e9';
             const exibirContagem = bloco.exibirContagem !== false;
             const baseMap = /^ortofoto:/.test(bloco.baseMap || '') ? bloco.baseMap : (bloco.baseMap === 'satelite' ? 'satelite' : 'osm');
-            const alturaPx = Math.max(120, Math.min(800, Number(bloco.alturaPx) || 260));
+            const layoutPreenchimento = bloco.layoutPreenchimento || 'auto2';
+            let alturaPx = Number(bloco.alturaPx) || 260;
+
+            // Preenchimento dinâmico inteligente da folha A4 para eliminar vazios
+            if (layoutPreenchimento === 'auto2' || layoutPreenchimento === 'auto3' || layoutPreenchimento === 'auto1') {
+                const pd = PageSize.dims(tplAtual && tplAtual.config_pagina);
+                const mm = (tplAtual && tplAtual.config_pagina && tplAtual.config_pagina.margens_mm) || { top: 15, bottom: 15, left: 15, right: 15 };
+                const hdrBloco = (tplAtual.blocos || []).find(b => b.tipo === 'cabecalho');
+                const ftrBloco = (tplAtual.blocos || []).find(b => b.tipo === 'rodape');
+                const hdrH = (hdrBloco && hdrBloco.repetir_todas_folhas) ? 135 : 0;
+                const ftrH = ftrBloco ? 42 : 0;
+                const padTopPx = Math.round(((hdrBloco && hdrBloco.repetir_todas_folhas) ? Math.max(2, mm.top - 8) : mm.top) * 3.78);
+                const padBotPx = Math.round((ftrBloco ? Math.max(2, mm.bottom - 8) : mm.bottom) * 3.78);
+                const utilH = pd.heightPx - hdrH - ftrH - padTopPx - padBotPx; // ~950px - 1000px
+
+                const overheadTitulo = 42; // título do bloco de mapa + divisor
+                const extraPorMapa = (exibirContagem ? 20 : 0) + (campoAgrupador ? 20 : 0) + 16; // legenda + contagem + margin-bottom
+
+                if (layoutPreenchimento === 'auto2') {
+                    // 2 mapas por folha: preenche ~96% da folha A4
+                    const espacoDisponivel = utilH - overheadTitulo - 16;
+                    alturaPx = Math.max(180, Math.floor((espacoDisponivel - (2 * extraPorMapa)) / 2));
+                } else if (layoutPreenchimento === 'auto3') {
+                    // 3 mapas por folha
+                    const espacoDisponivel = utilH - overheadTitulo - 24;
+                    alturaPx = Math.max(140, Math.floor((espacoDisponivel - (3 * extraPorMapa)) / 3));
+                } else if (layoutPreenchimento === 'auto1') {
+                    // 1 mapa grande por folha
+                    const espacoDisponivel = utilH - overheadTitulo - 12;
+                    alturaPx = Math.max(300, Math.floor(espacoDisponivel - extraPorMapa));
+                }
+            }
+            alturaPx = Math.max(120, Math.min(850, Math.round(alturaPx)));
             const centros = registros.map(r => MapTools.bboxCenter(MapTools.geometryBBox(r.geometry)) || [0, 0]);
 
             // agrupar por campo (ex.: um mapa por Loteamento) tem prioridade; dentro de cada valor, ainda pode
@@ -2523,8 +2611,8 @@
             // altura de cada mini-mapa já é CONHECIDA (é a altura definida no bloco, não algo pra medir no DOM) —
             // um Leaflet dentro de uma área escondida pra medição não tem tamanho real ainda, e medir dava um valor
             // errado (o mapa "esticava" na folha de verdade sem a paginação prever isso e quebrar a página).
-            const alturaLinha = alturaPx + (exibirContagem ? 20 : 0) + (legendas ? 18 : 0) + 14;
-            return { split: { rowsHtml, chunkHtml, rowHeightsFixas: grupos.map(() => alturaLinha), overheadFixo: 40 } };
+            const alturaLinha = alturaPx + (exibirContagem ? 20 : 0) + (legendas ? 20 : 0) + 16;
+            return { split: { rowsHtml, chunkHtml, rowHeightsFixas: grupos.map(() => alturaLinha), overheadFixo: 42 } };
         }
 
         const TILES_MAPA_FEICOES = {
@@ -2726,9 +2814,13 @@
                         const alturaFinal = primeiro ? primeiro.getBoundingClientRect().height : null;
                         if (alturaFinal && tplAtual) {
                             const bloco = (tplAtual.blocos || []).find(b => b.id === blocoId);
-                            if (bloco) bloco.alturaPx = Math.round(alturaFinal);
+                            if (bloco) {
+                                bloco.alturaPx = Math.round(alturaFinal);
+                                bloco.layoutPreenchimento = 'manual';
+                            }
                         }
                         mapasDoBloco().forEach(div => { const m = mapaFeicoesInstances[div.id]; if (m) m.invalidateSize(); });
+                        renderPainelPesquisaGeral();
                     };
                     document.addEventListener('mousemove', mover);
                     document.addEventListener('mouseup', soltar);

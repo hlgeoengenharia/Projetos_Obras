@@ -1456,6 +1456,43 @@ async function runScenario(cfg) {
         eq('reordenar + salvar: a nova ordem foi persistida no modelo (blocos: cabeçalho, texto, gráfico, rodapé)', tplSalvo.blocos.map(b => b.id), ['h', 't1', 'g1', 'f']);
     }
 
+    // ---- OTIMIZAÇÃO DE ESPAÇOS: Densidade da tabela, auto-fit dos mapas e margens da folha
+    {
+        const ponto = (lng, lat) => ({ type: 'Point', coordinates: [lng, lat] });
+        const tplOtim = {
+            id: 'rpt_otim', nome: 'Relatório Geral Otimizado', tipo: 'geral', form_id: 'f1',
+            config_pagina: { tamanho: 'A4', orientacao: 'portrait', margens_mm: { top: 15, bottom: 15, left: 15, right: 15 } },
+            blocos: [
+                { id: 'h', tipo: 'cabecalho' },
+                { id: 't1', tipo: 'tabela_feicoes', colunas: ['sit'], densidade: 'compacta' },
+                { id: 'm1', tipo: 'mapa_feicoes', layoutPreenchimento: 'auto2' },
+                { id: 'f', tipo: 'rodape' }
+            ]
+        };
+        const feats = [
+            { properties: { sit: 'Regular' }, geometry: ponto(-34.90, -7.00) },
+            { properties: { sit: 'Irregular' }, geometry: ponto(-34.70, -7.00) }
+        ];
+        const payload = { templateId: 'rpt_otim', template: tplOtim, formId: 'f1', themeId: 'tema-otim', formFields: [{ id: 'sit', label: 'Situação' }], formTabs: [], charts: [], featureData: {}, featureGeometry: null, featureList: feats, featureListAll: feats, preview: true };
+        const r = await runScenario({ payload, opener: true });
+        eq('otimização de espaços: nenhum erro ao abrir', r.errors, []);
+        const doc = () => r.registry['a4-document-container']._html;
+        const painel = () => r.registry['pesquisa-tools-panel'].innerHTML;
+        ok('tabela compacta: aplica classes de densidade compacta (py-1 e text-[9px])', doc().includes('py-1 px-1.5') && doc().includes('text-[9px] leading-snug'));
+        ok('painel: controles de densidade e aproveitamento do mapa presentes', painel().includes('Densidade das linhas da tabela') && painel().includes('Aproveitamento na Folha A4'));
+        
+        // Altera margens para moderada (10 mm) e densidade para padrão
+        r.sandbox.updateMargensGeral('moderada');
+        r.sandbox.updateTabelaFeicoesConfigGeral('densidade', 'padrao');
+        await r.sandbox.salvarPesquisaGeral();
+        await r.settle(6);
+        const salvos = JSON.parse(r.storage.getItem('constructive_report_templates') || '[]');
+        const tplSalvo = salvos.find(t => t.id === 'rpt_otim');
+        eq('margens moderadas salvas: atualizou top e bottom para 10mm', tplSalvo.config_pagina.margens_mm.top, 10);
+        eq('densidade da tabela salva: atualizou para padrão', tplSalvo.blocos.find(b => b.id === 't1').densidade, 'padrao');
+        ok('folha: renderizou tabela com padding padrão py-1.5', doc().includes('py-1.5 px-2'));
+    }
+
     console.log(`viewerSmoke: ${total - failed}/${total} verificações passaram`);
     if (failed > 0) {
         console.error(`${failed} falha(s)`);
