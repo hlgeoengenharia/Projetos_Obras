@@ -178,7 +178,7 @@
         #map-legend i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; border: 1px solid rgba(0,0,0,.35); }
         .leaflet-container { font-family: inherit; }
         .report-measure { background: transparent; border: 0; }
-        .report-measure-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: #065f46; font: 10px/14px monospace; text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; cursor: move; }
+        .report-measure-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: #065f46; font: 10px/14px monospace; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff; cursor: move; }
         .report-measure-label.edited { color: #92400e; }
         /* ícone de girar: a área de clique é maior que o desenho e encosta no texto, para o mouse chegar até ele sem perdê-lo */
         .report-rot { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); box-sizing: content-box; width: 18px; height: 18px; padding: 6px 6px 6px 10px; background: radial-gradient(circle closest-side, #0f172a 96%, transparent 100%); background-origin: content-box; background-clip: content-box; background-repeat: no-repeat; color: #fff; font: 13px/18px sans-serif; text-align: center; text-shadow: none; cursor: grab; display: none; }
@@ -191,7 +191,7 @@
         .report-locator-north .material-symbols-outlined { font-size: 13px; }
         .report-nlabel, .report-glabel { background: transparent; border: 0; }
         .report-glabel { pointer-events: none; }
-        .report-nlabel-l { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; font: 8px/10px monospace; color: #0f172a; text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; cursor: move; }
+        .report-nlabel-l { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; font: 8px/10px monospace; color: #0f172a; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff; cursor: move; }
         .report-glabel span { position: absolute; white-space: nowrap; font: 8px/10px monospace; color: #1e293b; background: rgba(255,255,255,.85); padding: 0 2px; }
         .report-glabel span.e { transform: translate(-50%, -110%); }
         .report-glabel span.n { transform: translate(2px, -50%); }
@@ -201,15 +201,50 @@
         @media print { .report-vertex-handle { display: none !important; } }
         .report-point { background: transparent; border: 0; }
         .report-point-dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #dc2626; border: 2px solid #fff; box-shadow: 0 0 0 1px #7f1d1d; }
-        .report-point-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: #7f1d1d; font: 10px/14px monospace; text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; cursor: move; }
+        .report-point-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: #7f1d1d; font: 10px/14px monospace; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff; cursor: move; }
         .report-measure-input { width: 120px; font: 700 9px monospace; border: 1px solid #059669; border-radius: 3px; padding: 0 3px; outline: none; }
         @media print {
-            .leaflet-control-zoom, #map-tools-panel, #map-tools-toggle, #pesquisa-tools-panel, #pesquisa-tools-toggle { display: none !important; }
+            .leaflet-control-zoom, #map-tools-panel, #map-tools-toggle, #pesquisa-tools-panel, #pesquisa-tools-toggle, .sidebar-column, #dica-viewer, header { display: none !important; }
+            .layout-wrapper { display: block !important; min-height: auto !important; width: 100% !important; background: white !important; }
+            .page-column { display: block !important; padding: 0 !important; background: white !important; overflow: visible !important; width: 100% !important; }
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
+
+        /* Estrutura visual idêntica ao relatorio.html: página e barra lateral lado a lado, sem sobreposição */
+        .layout-wrapper {
+            display: flex;
+            flex-direction: row;
+            align-items: stretch;
+            min-height: calc(100vh - 56px);
+            width: 100%;
+            background: #0b1120;
+        }
+        .page-column {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 24px 16px 48px 16px;
+            overflow-y: auto;
+            min-width: 0;
+            order: 1;
+            background: #0b1120;
+        }
+        .sidebar-column {
+            width: 320px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 56px;
+            height: calc(100vh - 56px);
+            overflow-y: auto;
+            background: #0a0f1e;
+            border-left: 1px solid rgba(255,255,255,0.08);
+            order: 2;
+        }
+
         #map-tools-panel, #pesquisa-tools-panel { position: fixed; top: 84px; right: 12px; width: 268px; max-height: calc(100vh - 100px); overflow-y: auto; z-index: 1200; background: #fff; border: 1px solid #cbd5e1; border-radius: 14px; box-shadow: 0 10px 30px rgba(15,23,42,.18); font-size: 12px; color: #0f172a; }
         #pesquisa-tools-panel { width: 360px; font-size: 12.5px; } /* mais largo que o do mapa: listas de campos/gráficos precisam de mais espaço */
-                #map-tools-panel h4, #pesquisa-tools-panel h4 { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #334155; font-weight: 800; margin: 8px 0 0; padding: 8px 10px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; background: #e2e8f0; border: 1px solid #cbd5e1; border-radius: 8px; user-select: none; }
+        #map-tools-panel h4, #pesquisa-tools-panel h4 { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #334155; font-weight: 800; margin: 8px 0 0; padding: 8px 10px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; background: #e2e8f0; border: 1px solid #cbd5e1; border-radius: 8px; user-select: none; }
         #map-tools-panel h4:hover, #pesquisa-tools-panel h4:hover { color: #0f172a; background: #dbe3ee; }
         #map-tools-panel h4.open, #pesquisa-tools-panel h4.open { border-radius: 8px 8px 0 0; background: #cbd5e1; color: #0f172a; }
         #map-tools-panel h4 .chev, #pesquisa-tools-panel h4 .chev { font-size: 12px; transition: transform .15s; }
@@ -228,6 +263,125 @@
         #pesquisa-tools-toggle { background: #ea580c; }
         #pesquisa-tools-panel .pesquisa-status { font-size: 10px; color: #64748b; min-height: 14px; margin-top: 4px; }
         #pesquisa-tools-panel select, #pesquisa-tools-panel input[type="text"] { border: 1px solid #cbd5e1; border-radius: 6px; padding: 3px 5px; font-size: 11px; width: 100%; box-sizing: border-box; }
+
+        /* Estilização moderna e refinada para o painel ancorado na barra lateral (Padrão Dark relatorio.html) */
+        .sidebar-column #map-tools-panel {
+            position: relative !important;
+            top: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
+            max-height: none !important;
+            border: none !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            background: #0a0f1e !important;
+            color: #cbd5e1 !important;
+            padding-bottom: 24px;
+        }
+        .sidebar-column #map-tools-panel .panel-header-title {
+            color: #f8fafc !important;
+            font-size: 13px !important;
+            font-weight: 700 !important;
+        }
+        .sidebar-column #map-tools-panel h4 {
+            background: #111a2e !important;
+            border: 1px solid rgba(255,255,255,0.08) !important;
+            color: #94a3b8 !important;
+            font-size: 10.5px !important;
+            font-weight: 700 !important;
+            letter-spacing: .05em !important;
+            border-radius: 8px !important;
+            padding: 9px 12px !important;
+            transition: all 0.2s ease !important;
+        }
+        .sidebar-column #map-tools-panel h4:hover {
+            background: #1e293b !important;
+            color: #f8fafc !important;
+        }
+        .sidebar-column #map-tools-panel h4.open {
+            background: #1e293b !important;
+            color: #34d399 !important;
+            border-bottom-left-radius: 0 !important;
+            border-bottom-right-radius: 0 !important;
+            border-color: rgba(52,211,153,0.3) !important;
+        }
+        .sidebar-column #map-tools-panel .sec-body {
+            background: #0f172a !important;
+            border: 1px solid rgba(255,255,255,0.08) !important;
+            border-top: 0 !important;
+            color: #cbd5e1 !important;
+            padding: 10px 12px 12px !important;
+            border-bottom-left-radius: 8px !important;
+            border-bottom-right-radius: 8px !important;
+        }
+        .sidebar-column #map-tools-panel label.row {
+            color: #cbd5e1 !important;
+            font-size: 11px !important;
+        }
+        .sidebar-column #map-tools-panel select,
+        .sidebar-column #map-tools-panel input[type="text"],
+        .sidebar-column #map-tools-panel input[type="number"] {
+            background: #1e293b !important;
+            border: 1px solid rgba(255,255,255,0.14) !important;
+            color: #f8fafc !important;
+            border-radius: 6px !important;
+        }
+        .sidebar-column #map-tools-panel button.act {
+            background: #1e293b !important;
+            border: 1px solid rgba(255,255,255,0.14) !important;
+            color: #e2e8f0 !important;
+            border-radius: 8px !important;
+            transition: all 0.15s ease !important;
+        }
+        .sidebar-column #map-tools-panel button.act:hover {
+            background: #334155 !important;
+            color: #fff !important;
+        }
+        .sidebar-column #map-tools-panel button.act.primary {
+            background: #059669 !important;
+            border-color: #059669 !important;
+            color: #fff !important;
+        }
+        .sidebar-column #map-tools-panel .nis button {
+            background: #1e293b !important;
+            border: 1px solid rgba(255,255,255,0.14) !important;
+            color: #94a3b8 !important;
+        }
+        .sidebar-column #map-tools-panel .nis button.on {
+            background: #059669 !important;
+            border-color: #059669 !important;
+            color: #fff !important;
+        }
+        .sidebar-column #map-tools-panel .mp-inner-card,
+        #map-tools-panel .mp-inner-card,
+        .sidebar-column #map-tools-panel div[style*="background:#fff"],
+        .sidebar-column #map-tools-panel div[style*="background: #fff"],
+        .sidebar-column #map-tools-panel div[style*="background:white"] {
+            background: #1e293b !important;
+            border: 1px solid rgba(255,255,255,0.14) !important;
+            border-radius: 8px !important;
+            color: #f1f5f9 !important;
+        }
+        .sidebar-column #map-tools-panel .mp-inner-card label.row,
+        #map-tools-panel .mp-inner-card label.row {
+            color: #f1f5f9 !important;
+        }
+        .sidebar-column #map-tools-panel .mp-inner-card input[type="text"],
+        .sidebar-column #map-tools-panel .mp-inner-card input[type="number"],
+        .sidebar-column #map-tools-panel .mp-inner-card select,
+        #map-tools-panel .mp-inner-card input[type="text"],
+        #map-tools-panel .mp-inner-card input[type="number"],
+        #map-tools-panel .mp-inner-card select {
+            background: #0f172a !important;
+            border: 1px solid rgba(255,255,255,0.18) !important;
+            color: #f8fafc !important;
+        }
+        .sidebar-column #map-tools-panel span[style*="color:#64748b"],
+        .sidebar-column #map-tools-panel div[style*="color:#64748b"],
+        #map-tools-panel span[style*="color:#64748b"],
+        #map-tools-panel div[style*="color:#64748b"] {
+            color: #94a3b8 !important;
+        }
         /* Blocos móveis do Relatório Geral (arrastar para reordenar direto na folha) */
         .geral-bloco-arrastavel { position: relative; }
         .bloco-drag-handle { display: flex; align-items: center; gap: 3px; font-size: 9px; color: #94a3b8; cursor: grab; user-select: none; padding: 0 0 3px; opacity: .7; }
@@ -328,13 +482,18 @@
     <!-- PAINEL "CONFIGURAÇÕES DA PESQUISA" (só no Relatório Geral): criado dinamicamente por renderPainelPesquisaGeral(),
          no mesmo estilo do painel "Configurações do Mapa" do Relatório Individual (ver #pesquisa-tools-panel). -->
 
-    <!-- CONTAINER DA FOLHA A4 -->
-    <main class="flex-1 flex justify-center p-3 sm:p-6 overflow-y-auto">
-        <div id="a4-document-container" class="w-full flex flex-col items-center gap-6">
-            <!-- Conteúdo montado dinamicamente via JS com suporte a multi-páginas e folha única sem vazamento -->
-            <div id="report-blocks-render" class="a4-page w-full text-slate-900"></div>
-        </div>
-    </main>
+    <!-- CONTAINER DA FOLHA A4 E BARRA LATERAL (SEM SOBREPOSIÇÃO) -->
+    <div class="layout-wrapper">
+        <main class="page-column" id="main-page-column">
+            <div id="a4-document-container" class="w-full flex flex-col items-center gap-6">
+                <!-- Conteúdo montado dinamicamente via JS com suporte a multi-páginas e folha única sem vazamento -->
+                <div id="report-blocks-render" class="a4-page w-full text-slate-900"></div>
+            </div>
+        </main>
+        <aside class="sidebar-column no-print" id="map-sidebar-column">
+            <!-- Painel #map-tools-panel ancorado aqui -->
+        </aside>
+    </div>
 
     <script>
         let reportPayload = null;
@@ -2134,7 +2293,20 @@
                 L.tileLayer(tile.url, { maxZoom: 19, crossOrigin: true, attribution: tile.attribution }).addTo(mapa);
                 if (orto) {
                     if (orto.tipo === 'xyz_tiles' || String(orto.url).indexOf('{z}') >= 0) {
-                        L.tileLayer(orto.url, { minZoom: 1, minNativeZoom: orto.zoomMin, maxNativeZoom: orto.zoomMax, maxZoom: 24, opacity: orto.opacidade, crossOrigin: true, attribution: 'Ortofoto: ' + orto.nome }).addTo(mapa);
+                        const isSupabase = String(orto.url || '').includes('supabase.co');
+                        const safeMax = isSupabase ? Math.min(Number(orto.zoomMax || 19), 19) : (Number(orto.zoomMax) || 20);
+                        const ortoLyr = L.tileLayer(orto.url, {
+                            minZoom: 1,
+                            minNativeZoom: orto.zoomMin || 1,
+                            maxNativeZoom: safeMax,
+                            maxZoom: 24,
+                            opacity: orto.opacidade,
+                            crossOrigin: true,
+                            attribution: 'Ortofoto: ' + orto.nome,
+                            errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+                        });
+                        if (ortoLyr.on) ortoLyr.on('tileerror', function(err) { if (err && err.tile) err.tile.style.display = 'none'; });
+                        ortoLyr.addTo(mapa);
                     } else if (orto.bbox) {
                         L.imageOverlay(orto.url, orto.bbox, { opacity: orto.opacidade, crossOrigin: true, attribution: 'Ortofoto: ' + orto.nome }).addTo(mapa);
                     }
@@ -2396,6 +2568,7 @@
         }
 
         async function initReportMiniMap(geometry) {
+            window.currentReportGeometry = geometry;
             const mapContainer = document.getElementById('interactive-report-map');
             if (!mapContainer || typeof L === 'undefined' || !mapBloco) return;
 
@@ -2439,6 +2612,7 @@
             const bb = MapTools.geometryBBox(geometry);
             const c = bb ? MapTools.bboxCenter(bb) : null;
             return (o) => new Promise(resolve => {
+                if (o && o.coberturaConhecida) { resolve(true); return; }
                 if (!c) { resolve(null); return; }
                 const z = MapTools.probeZoom(o);
                 const t = MapTools.tileXY(c[1], c[0], z);
@@ -2691,15 +2865,93 @@
         }
 
         // ---------------- painel "Mapa" (só na tela; não sai na impressão)
+        let mapPanelRotulosDropdownAberto = false;
+        let mapPanelRotulosCamadaAberta = null;
+
+        function getFieldTabName(c, f) {
+            if (f && f.tabTitle) return f.tabTitle;
+            if (f && f.aba) return f.aba;
+            const fId = String(f && (f.k || f.id) || '');
+            const fLabel = String(f && (f.l || f.label) || '');
+            if (reportPayload && Array.isArray(reportPayload.formFields) && Array.isArray(reportPayload.formTabs)) {
+                const match = reportPayload.formFields.find(x => String(x.id || x.name) === fId || (fLabel && (x.label === fLabel || x.name === fLabel)));
+                if (match && match.tabId) {
+                    const t = reportPayload.formTabs.find(tab => tab.id === match.tabId);
+                    if (t && (t.title || t.name)) return t.title || t.name;
+                }
+            }
+            try {
+                const forms = (typeof allForms !== 'undefined' && Array.isArray(allForms)) ? allForms :
+                              ((window.opener && Array.isArray(window.opener.allForms)) ? window.opener.allForms :
+                              (Array.isArray(window.allForms) ? window.allForms : []));
+                const formId = c && c.formId;
+                const formList = formId ? forms.filter(x => x.id === formId) : forms;
+                for (const form of formList) {
+                    const tabs = form.schema || form.tabs || [];
+                    for (const t of tabs) {
+                        if ((t.fields || []).some(fl => String(fl.id || fl.name) === fId || (fLabel && (fl.label === fLabel || fl.name === fLabel)))) {
+                            return t.title || t.name || '';
+                        }
+                    }
+                }
+            } catch (e) {}
+            return '';
+        }
+
+        function mapPanelToggleRotulosDropdown(e) {
+            if (e) {
+                if (typeof e.stopPropagation === 'function') e.stopPropagation();
+                if (typeof e.preventDefault === 'function') e.preventDefault();
+            }
+            mapPanelRotulosDropdownAberto = !mapPanelRotulosDropdownAberto;
+            renderMapToolsPanel();
+        }
+
+        function mapPanelToggleRotulosCamada(camId, e) {
+            if (e) {
+                if (typeof e.stopPropagation === 'function') e.stopPropagation();
+                if (typeof e.preventDefault === 'function') e.preventDefault();
+            }
+            mapPanelRotulosCamadaAberta = (String(mapPanelRotulosCamadaAberta) === String(camId)) ? null : String(camId);
+            renderMapToolsPanel();
+        }
+
+        function mapPanelSelectRotuloCampo(val, e) {
+            if (e) {
+                if (typeof e.stopPropagation === 'function') e.stopPropagation();
+                if (typeof e.preventDefault === 'function') e.preventDefault();
+            }
+            if (mapController) {
+                mapPanelExtra('rotulos', 'campo', val);
+            }
+            const sel = document.getElementById('mp-rotulo-campo-sel');
+            if (sel) sel.value = val;
+            mapPanelRotulosDropdownAberto = false;
+            renderMapToolsPanel();
+        }
+
+        document.addEventListener('click', function(e) {
+            if (mapPanelRotulosDropdownAberto) {
+                const btn = document.getElementById('mp-rotulo-campo-btn');
+                const menu = document.getElementById('mp-rotulo-dropdown-menu');
+                if (btn && (btn === e.target || btn.contains(e.target))) return;
+                if (menu && (menu === e.target || menu.contains(e.target))) return;
+                mapPanelRotulosDropdownAberto = false;
+                renderMapToolsPanel();
+            }
+        });
+
         function renderMapToolsPanel() {
             if (!mapController) return;
             let panel = document.getElementById('map-tools-panel');
             let toggle = document.getElementById('map-tools-toggle');
             if (!panel) {
+                const sidebar = document.getElementById('map-sidebar-column');
                 panel = document.createElement('div');
                 panel.id = 'map-tools-panel';
                 panel.className = 'no-print';
-                document.body.appendChild(panel);
+                if (sidebar) sidebar.appendChild(panel);
+                else document.body.appendChild(panel);
                 toggle = document.createElement('button');
                 toggle.id = 'map-tools-toggle';
                 toggle.type = 'button';
@@ -2736,76 +2988,171 @@
                 const s = cc.camadas.find(x => x.id === String(c.id));
                 const campos = c.campos || [];
                 const detalhe = s ? `
-                    <label class="row" title="Ruas: vale a feição mais próxima, do lado de fora do trecho, mesmo sem tocar nele"><input type="checkbox" ${s.logradouro ? 'checked' : ''} onchange="mapPanelColConfLog('${esc(c.id)}', this.checked)"> Camada de logradouros (rua à frente)</label>
-                    ${campos.length ? `<div style="max-height:96px;overflow:auto;border-top:1px solid #e2e8f0;margin-top:2px;padding-top:2px">${campos.map((fl, j) => `<label class="row"><input type="checkbox" ${s.campos.indexOf(fl.k) >= 0 ? 'checked' : ''} onchange="mapPanelColConfCampo('${esc(c.id)}', ${j}, this.checked)"> ${esc(fl.l)}</label>`).join('')}</div>` : '<div style="color:#64748b;margin-top:2px">Sem campos disponíveis (sem permissão de ver os dados desta camada): vale o rótulo.</div>'}` : '';
-                return `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:4px;margin:3px 0;background:#fff"><label class="row"><input type="checkbox" ${s ? 'checked' : ''} onchange="mapPanelColConfCamada('${esc(c.id)}', this.checked)"><i style="display:inline-block;width:12px;height:8px;border-radius:2px;background:${esc(c.color)}"></i><span style="flex:1">${esc(c.name)}</span></label>${detalhe}</div>`;
+                    <label class="row" style="color:#f1f5f9;margin-top:4px" title="Ruas: vale a feição mais próxima, do lado de fora do trecho, mesmo sem tocar nele"><input type="checkbox" ${s.logradouro ? 'checked' : ''} onchange="mapPanelColConfLog('${esc(c.id)}', this.checked)"> Camada de logradouros (rua à frente)</label>
+                    ${campos.length ? `<div style="max-height:110px;overflow:auto;border-top:1px solid rgba(255,255,255,0.1);margin-top:4px;padding-top:4px">${campos.map((fl, j) => {
+                        const tabNome = fl.tabTitle || abaDoCampo(fl) || getFieldTabName(c, fl) || '';
+                        return `<label class="row" style="color:#cbd5e1;font-size:11px"><input type="checkbox" ${s.campos.indexOf(fl.k) >= 0 ? 'checked' : ''} onchange="mapPanelColConfCampo('${esc(c.id)}', ${j}, this.checked)"> <span style="flex:1">${esc(fl.l)}</span>${tabNome ? `<span style="font-size:9.5px;color:#94a3b8;padding:1px 5px;background:rgba(255,255,255,0.08);border-radius:3px;flex:none">Aba: ${esc(tabNome)}</span>` : ''}</label>`;
+                    }).join('')}</div>` : '<div style="color:#94a3b8;margin-top:3px;font-size:10.5px">Sem campos disponíveis: vale o rótulo.</div>'}` : '';
+                return `<div class="mp-inner-card" style="border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:6px 8px;margin:4px 0;background:#1e293b;color:#f1f5f9"><label class="row"><input type="checkbox" ${s ? 'checked' : ''} onchange="mapPanelColConfCamada('${esc(c.id)}', this.checked)"><i style="display:inline-block;width:12px;height:8px;border-radius:2px;background:${esc(c.color)}"></i><span style="flex:1;font-weight:600;color:#f8fafc">${esc(c.name)}</span></label>${detalhe}</div>`;
             }).join('');
             const colConfHtml = `
                 ${chk('mp-pts-cc', 'Coluna "Confrontantes" na tabela de pontos', cc.ativo, "mapPanelColConf('ativo', this.checked)", !cfg.pontos.memorial || !cams.length || kind !== 'polygon')}
-                ${!cfg.pontos.memorial ? '<div style="color:#64748b;line-height:1.35;margin-bottom:3px">Ligue o memorial para usar esta coluna.</div>' : ''}
-                ${cc.ativo && cfg.pontos.memorial ? `<div style="color:#64748b;line-height:1.35;margin:2px 0 3px">Escolha as camadas e, em cada uma, os campos. Cada confrontante é ligado ao trecho entre os dois pontos (com os vértices do meio); um trecho pode ter vários. Sem ninguém, a célula fica em branco para você preencher (dois cliques).</div>
+                ${!cfg.pontos.memorial ? '<div style="color:#94a3b8;line-height:1.35;margin-bottom:3px">Ligue o memorial para usar esta coluna.</div>' : ''}
+                ${cc.ativo && cfg.pontos.memorial ? `<div style="color:#94a3b8;line-height:1.35;margin:2px 0 3px">Escolha as camadas e, em cada uma, os campos. Cada confrontante é ligado ao trecho entre os dois pontos (com os vértices do meio); um trecho pode ter vários. Sem ninguém, a célula fica em branco para você preencher (dois cliques).</div>
                     ${colConfCams}
                     <div style="display:flex;gap:6px;margin-top:3px">
-                        <label style="flex:1;font-size:10px;color:#475569">Divisa até (m)<input type="number" min="0.5" max="20" step="0.5" value="${cc.tolM}" onchange="mapPanelColConf('tolM', Number(this.value))" style="width:100%;padding:3px;border:1px solid #cbd5e1;border-radius:6px"></label>
-                        <label style="flex:1;font-size:10px;color:#475569">Rua até (m)<input type="number" min="5" max="100" step="5" value="${cc.distLogM}" onchange="mapPanelColConf('distLogM', Number(this.value))" style="width:100%;padding:3px;border:1px solid #cbd5e1;border-radius:6px"></label>
+                        <label style="flex:1;font-size:10px;color:#94a3b8">Divisa até (m)<input type="number" min="0.5" max="20" step="0.5" value="${cc.tolM}" onchange="mapPanelColConf('tolM', Number(this.value))" style="width:100%;padding:3px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;background:#0f172a;color:#f8fafc"></label>
+                        <label style="flex:1;font-size:10px;color:#94a3b8">Rua até (m)<input type="number" min="5" max="100" step="5" value="${cc.distLogM}" onchange="mapPanelColConf('distLogM', Number(this.value))" style="width:100%;padding:3px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;background:#0f172a;color:#f8fafc"></label>
                     </div>` : ''}`;
             const confRows = cfg.confrontantes.ativo ? mapController.confrontanteRows() : [];
-            const confHtml = confRows.length ? `<div style="color:#64748b;line-height:1.35;margin:2px 0 3px">Dois cliques em LADO ou CONFRONTANTE(S), na tabela, para escrever o texto que preferir (vazio restaura). Ordem das linhas:</div>
-                <div style="border:1px solid #e2e8f0;border-radius:8px;padding:4px">${confRows.map((r, i) => `
-                    <div style="display:flex;align-items:center;gap:3px;padding:2px 0">
-                        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.lado)}</span>
-                        <button type="button" title="Subir" onclick="mapPanelConfMover('${esc(r.id)}', -1)" ${i === 0 ? 'disabled' : ''} style="border:0;background:none;cursor:pointer">▲</button>
-                        <button type="button" title="Descer" onclick="mapPanelConfMover('${esc(r.id)}', 1)" ${i === confRows.length - 1 ? 'disabled' : ''} style="border:0;background:none;cursor:pointer">▼</button>
+            const confHtml = confRows.length ? `<div style="color:#94a3b8;line-height:1.35;margin:3px 0 4px">Dois cliques em LADO ou CONFRONTANTE(S), na tabela, para escrever o texto que preferir (vazio restaura). Ordem das linhas:</div>
+                <div class="mp-inner-card" style="border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:6px;background:#1e293b;color:#f1f5f9">${confRows.map((r, i) => `
+                    <div style="display:flex;align-items:center;gap:3px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.06)">
+                        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#f1f5f9">${esc(r.lado)}</span>
+                        <button type="button" title="Subir" onclick="mapPanelConfMover('${esc(r.id)}', -1)" ${i === 0 ? 'disabled' : ''} style="border:0;background:rgba(255,255,255,0.08);color:#cbd5e1;border-radius:4px;padding:1px 5px;cursor:pointer">▲</button>
+                        <button type="button" title="Descer" onclick="mapPanelConfMover('${esc(r.id)}', 1)" ${i === confRows.length - 1 ? 'disabled' : ''} style="border:0;background:rgba(255,255,255,0.08);color:#cbd5e1;border-radius:4px;padding:1px 5px;cursor:pointer">▼</button>
                     </div>`).join('')}</div>
                 ${(cfg.confrontantes.ordem.length || Object.keys(cfg.confrontantes.textos).length) ? '<button type="button" class="act" style="margin-top:4px" onclick="mapPanelConfReset()">Restaurar nomes e ordem</button>' : ''}` : '';
-            const corRow = (grupo, rotulo, valor) => '<label class="row" title="A cor do texto ganha um contorno que contrasta, para ler sobre o satélite">' + rotulo + ' <input type="color" value="' + esc(valor) + '" onchange="mapPanelCor(\'' + grupo + '\', this.value)" style="width:34px;height:22px;padding:0;border:1px solid #cbd5e1;margin-left:auto"></label>';
+            const corRow = (grupo, rotulo, valor) => '<label class="row" title="A cor do texto ganha um contorno que contrasta, para ler sobre o satélite">' + rotulo + ' <input type="color" value="' + esc(valor) + '" onchange="mapPanelCor(\'' + grupo + '\', this.value)" style="width:34px;height:22px;padding:0;border:1px solid rgba(255,255,255,0.18);margin-left:auto"></label>';
             const legItens = mapController.legendItems();
             const ds = mapController.drawState();
             const medRows = mapController.medicaoRows();
             const tituloMed = { ponto: 'Coordenadas do ponto', linha: 'Distância', area: 'Área' };
             const btnFerr = (tipo, rotulo) => '<button type="button" class="act" style="' + (ds && ds.tipo === tipo ? 'background:#d1fae5;border-color:#10b981;' : '') + '" onclick="mapPanelFerramenta(\'' + tipo + '\')">' + rotulo + '</button>';
-            const campoC = (k, ph, w) => '<input type="text" value="' + esc(consultaCampos[k] || '') + '" placeholder="' + ph + '" oninput="mapPanelConsultaCampo(\'' + k + '\', this.value)" style="width:' + (w || '100%') + ';min-width:0;padding:3px 5px;border:1px solid #cbd5e1;border-radius:6px;font:11px monospace">';
-            const dirC = (k, opcoes) => '<select onchange="mapPanelConsultaCampo(\'' + k + '\', this.value)" style="padding:3px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px">' + opcoes.map(x => '<option value="' + x[0] + '"' + ((consultaCampos[k] || opcoes[0][0]) === x[0] ? ' selected' : '') + '>' + x[1] + '</option>').join('') + '</select>';
-            const abaC = (a, r) => '<button type="button" class="act" style="padding:4px;' + (consultaAba === a ? 'background:#0f172a;color:#fff;border-color:#0f172a;' : '') + '" onclick="mapPanelConsultaAba(\'' + a + '\')">' + r + '</button>';
+            const campoC = (k, ph, w) => '<input type="text" value="' + esc(consultaCampos[k] || '') + '" placeholder="' + ph + '" oninput="mapPanelConsultaCampo(\'' + k + '\', this.value)" style="width:' + (w || '100%') + ';min-width:0;padding:3px 5px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;background:#0f172a;color:#f8fafc;font:11px monospace">';
+            const dirC = (k, opcoes) => '<select onchange="mapPanelConsultaCampo(\'' + k + '\', this.value)" style="padding:3px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;background:#0f172a;color:#f8fafc;font-size:11px">' + opcoes.map(x => '<option value="' + x[0] + '"' + ((consultaCampos[k] || opcoes[0][0]) === x[0] ? ' selected' : '') + '>' + x[1] + '</option>').join('') + '</select>';
+            const abaC = (a, r) => '<button type="button" class="act" style="padding:4px;' + (consultaAba === a ? 'background:#059669;color:#fff;border-color:#059669;' : '') + '" onclick="mapPanelConsultaAba(\'' + a + '\')">' + r + '</button>';
             let consultaForm = '';
-            if (consultaAba === 'dec') consultaForm = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">' + campoC('lat', 'Latitude: -7.019674') + campoC('lng', 'Longitude: -34.832625') + '</div><div style="color:#64748b;margin-top:2px">Pode colar "lat, lng" num dos campos.</div>';
+            if (consultaAba === 'dec') consultaForm = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">' + campoC('lat', 'Latitude: -7.019674') + campoC('lng', 'Longitude: -34.832625') + '</div><div style="color:#94a3b8;margin-top:2px">Pode colar "lat, lng" num dos campos.</div>';
             else if (consultaAba === 'gms') consultaForm = campoC('colar', 'Colar GMS: 7° 1\' 10" S, 34° 49\' 57" W') +
                 '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1.2fr;gap:4px;margin-top:4px">' + campoC('latDeg', 'Lat °') + campoC('latMin', "Min '") + campoC('latSec', 'Seg "') + dirC('latDir', [['S', 'S (Sul)'], ['N', 'N (Norte)']]) + '</div>' +
                 '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1.2fr;gap:4px;margin-top:4px">' + campoC('lngDeg', 'Lng °') + campoC('lngMin', "Min '") + campoC('lngSec', 'Seg "') + dirC('lngDir', [['W', 'W (Oeste)'], ['E', 'E (Leste)']]) + '</div>';
-            else consultaForm = '<div style="display:grid;grid-template-columns:1fr 1fr 60px;gap:5px">' + campoC('x', 'X (Este)') + campoC('y', 'Y (Norte)') + campoC('zone', 'Zona') + '</div><div style="color:#64748b;margin-top:2px">SIRGAS 2000; a zona e o hemisfério vêm da feição se você não informar.</div>';
-            const consultaHtml = consultaAberta ? '<div style="border:1px solid #cbd5e1;border-radius:8px;padding:6px;margin:6px 0;background:#fff"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:5px">' + abaC('dec', 'DEC') + abaC('gms', 'GMS') + abaC('utm', 'UTM') + '</div>' + consultaForm + (consultaErro ? '<div style="color:#b91c1c;margin-top:4px">' + esc(consultaErro) + '</div>' : '') + '<div style="display:flex;gap:5px;margin-top:6px"><button type="button" class="act primary" onclick="mapPanelConsultaMarcar()">Marcar no mapa</button><button type="button" class="act" onclick="mapPanelConsulta()">Fechar</button></div></div>' : '';
-            const dicaDesenho = !ds ? '' : '<div style="color:#b45309;margin:4px 0">' + (ds.tipo === 'ponto' ? 'Clique no mapa para marcar o ponto.' : (ds.tipo === 'linha' ? 'Clique para adicionar pontos (' + ds.pontos + ' até agora); duplo clique ou Enter conclui, Esc cancela.' : 'Clique para desenhar o polígono (' + ds.pontos + ' pontos até agora); duplo clique ou Enter conclui, Esc cancela.')) + '</div>' + (ds.tipo !== 'ponto' ? '<div style="display:flex;gap:5px"><button type="button" class="act primary" onclick="mapPanelConcluirMedicao()">Concluir</button><button type="button" class="act" onclick="mapPanelFerramenta(\'' + ds.tipo + '\')">Cancelar</button></div>' : '');
+            else consultaForm = '<div style="display:grid;grid-template-columns:1fr 1fr 60px;gap:5px">' + campoC('x', 'X (Este)') + campoC('y', 'Y (Norte)') + campoC('zone', 'Zona') + '</div><div style="color:#94a3b8;margin-top:2px">SIRGAS 2000; a zona e o hemisfério vêm da feição se você não informar.</div>';
+            const consultaHtml = consultaAberta ? '<div class="mp-inner-card" style="border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:8px;margin:6px 0;background:#1e293b;color:#f1f5f9"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px">' + abaC('dec', 'DEC') + abaC('gms', 'GMS') + abaC('utm', 'UTM') + '</div>' + consultaForm + (consultaErro ? '<div style="color:#f87171;margin-top:4px;font-size:11px">' + esc(consultaErro) + '</div>' : '') + '<div style="display:flex;gap:5px;margin-top:8px"><button type="button" class="act primary" onclick="mapPanelConsultaMarcar()">Marcar no mapa</button><button type="button" class="act" onclick="mapPanelConsulta()">Fechar</button></div></div>' : '';
+            const dicaDesenho = !ds ? '' : '<div style="color:#f59e0b;margin:4px 0">' + (ds.tipo === 'ponto' ? 'Clique no mapa para marcar o ponto.' : (ds.tipo === 'linha' ? 'Clique para adicionar pontos (' + ds.pontos + ' até agora); duplo clique ou Enter conclui, Esc cancela.' : 'Clique para desenhar o polígono (' + ds.pontos + ' pontos até agora); duplo clique ou Enter conclui, Esc cancela.')) + '</div>' + (ds.tipo !== 'ponto' ? '<div style="display:flex;gap:5px"><button type="button" class="act primary" onclick="mapPanelConcluirMedicao()">Concluir</button><button type="button" class="act" onclick="mapPanelFerramenta(\'' + ds.tipo + '\')">Cancelar</button></div>' : '');
             const linhaMed = (r) => {
                 const partes = [];
                 if (r.tipo === 'ponto') partes.push('Nome no mapa: <b>' + esc(r.texto || '') + '</b> (dois cliques nele, no mapa, para trocar)');
                 if (r.tipo === 'linha') {
                     partes.push('Comprimento total: <b>' + esc(MapTools.fmtNumber(r.info.comprimento, 2)) + ' m</b>');
-                    if (r.info.trechos.length > 1) partes.push(r.info.trechos.map((d, k) => 'Vértice ' + (k + 1) + ' → ' + (k + 2) + ': ' + esc(MapTools.fmtNumber(d, 2)) + ' m').join('<br>'));
+                    if (r.info.trechos.length > 1) partes.push(r.info.trechos.map((d, k) => 'Vértice ' + (k + 1) + ' → ' + (k + 2) + ': <b>' + esc(MapTools.fmtNumber(d, 2)) + ' m</b>').join('<br>'));
                 }
-                if (r.tipo === 'area') partes.push('<input type="text" value="' + esc(r.nome) + '" maxlength="60" placeholder="Tipo da área (construção, galpão...)" onchange="mapPanelMedNome(\'' + esc(r.id) + '\', this.value)" style="width:100%;margin:2px 0;padding:2px 5px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px">');
+                if (r.tipo === 'area') partes.push('<input type="text" value="' + esc(r.nome) + '" maxlength="60" placeholder="Tipo da área (construção, galpão...)" onchange="mapPanelMedNome(\'' + esc(r.id) + '\', this.value)" style="width:100%;margin:3px 0;padding:3px 6px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;background:#0f172a;color:#f8fafc;font-size:11px">');
                 if (r.tipo === 'area') partes.push('Área: <b>' + esc(MapTools.fmtNumber(r.info.area, 2)) + ' m²</b> (' + esc(MapTools.fmtNumber(r.info.area / 10000, 4)) + ' ha) • Perímetro: <b>' + esc(MapTools.fmtNumber(r.info.perimetro, 2)) + ' m</b>');
                 const rot = r.tipo === 'ponto' ? 'Coordenadas exatas' : (r.tipo === 'linha' ? 'Coordenadas do centro' : 'Coordenadas do centroide');
-                partes.push('<span style="color:#64748b">' + rot + '</span><br>DEC ' + esc(r.coords.dec) + '<br>GMS ' + esc(r.coords.gms) + '<br>UTM ' + esc(r.coords.utm));
-                return '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:5px;margin-top:4px;background:#fff;font-size:10.5px;line-height:1.4"><div style="display:flex;align-items:center;gap:4px"><b style="flex:1">' + tituloMed[r.tipo] + ' ' + r.numero + '</b><button type="button" title="Copiar coordenadas" onclick="mapPanelMedCopiar(\'' + esc(r.id) + '\')" style="border:0;background:none;cursor:pointer">copiar</button><button type="button" title="Remover" onclick="mapPanelMedRemover(\'' + esc(r.id) + '\')" style="border:0;background:none;cursor:pointer;color:#b91c1c">×</button></div>' + partes.join('<br>') + '</div>';
+                partes.push('<span style="color:#94a3b8;font-weight:600">' + rot + '</span><br><span style="color:#cbd5e1">DEC ' + esc(r.coords.dec) + '<br>GMS ' + esc(r.coords.gms) + '<br>UTM ' + esc(r.coords.utm) + '</span>');
+                return '<div class="mp-inner-card" style="border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:7px 9px;margin-top:6px;background:#1e293b;color:#f1f5f9;font-size:11px;line-height:1.45"><div style="display:flex;align-items:center;gap:4px;margin-bottom:4px"><b style="flex:1">' + tituloMed[r.tipo] + ' ' + r.numero + '</b><button type="button" title="Copiar coordenadas" onclick="mapPanelMedCopiar(\'' + esc(r.id) + '\')" style="border:0;background:rgba(255,255,255,0.08);color:#cbd5e1;border-radius:4px;padding:2px 6px;font-size:10px;cursor:pointer">copiar</button><button type="button" title="Remover" onclick="mapPanelMedRemover(\'' + esc(r.id) + '\')" style="border:0;background:none;cursor:pointer;color:#f87171;font-size:14px;line-height:1">×</button></div>' + partes.join('<br>') + '</div>';
             };
             // cards de "Análises da Feição" na folha: quantos por linha (a largura de cada um também se ajusta arrastando a borda dele)
             const idsCards = (cfg.comparacaoArea.ativo && cfg.comparacaoArea.campo ? ['comp'] : []).concat(medRows.map(r => r.id));
             const porLinha = (n) => '<button type="button" class="act" style="padding:5px" onclick="mapPanelAnalisesPorLinha(' + n + ')">' + n + '</button>';
-            const cardsAnalisesHtml = idsCards.length > 1 ? '<div style="font-weight:700;margin-bottom:2px">Cards das análises na folha</div><div style="display:flex;align-items:center;gap:5px"><span style="flex:1;color:#475569">Por linha:</span>' + porLinha(1) + porLinha(2) + porLinha(3) + '</div><div style="color:#64748b;line-height:1.35;margin:3px 0 6px">Ou arraste a borda direita de um card, na folha, para ajustar a largura dele (dois cliques voltam à largura total).</div>' : '';
+            const cardsAnalisesHtml = idsCards.length > 1 ? '<div style="font-weight:700;margin-bottom:2px">Cards das análises na folha</div><div style="display:flex;align-items:center;gap:5px"><span style="flex:1;color:#94a3b8">Por linha:</span>' + porLinha(1) + porLinha(2) + porLinha(3) + '</div><div style="color:#94a3b8;line-height:1.35;margin:3px 0 6px">Ou arraste a borda direita de um card, na folha, para ajustar a largura dele (dois cliques voltam à largura total).</div>' : '';
             const ferramentasHtml = '<div style="font-weight:700;margin-bottom:3px">Ferramentas de medição</div>' +
-                '<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">' + btnFerr('ponto', 'Coordenadas do Ponto') + btnFerr('linha', 'Distância (m)') + btnFerr('area', 'Área (m²)') + '<button type="button" class="act" style="' + (consultaAberta ? 'background:#d1fae5;border-color:#10b981;' : '') + '" onclick="mapPanelConsulta()">Consultar Coordenadas</button></div>' +
+                '<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">' + btnFerr('ponto', 'Coordenadas do Ponto') + btnFerr('linha', 'Distância (m)') + btnFerr('area', 'Área (m²)') + '<button type="button" class="act" style="' + (consultaAberta ? 'background:#059669;color:#fff;border-color:#059669;' : '') + '" onclick="mapPanelConsulta()">Consultar Coordenadas</button></div>' +
                 chk('mp-med-adr', 'Aderência (gruda nos contornos)', cfg.medicoes.aderencia, "mapPanelMedicoes('aderencia', this.checked)") +
                 corRow('medicoes', 'Cor das medições (linhas, áreas, pontos e textos)', cfg.medicoes.cor) +
                 dicaDesenho + consultaHtml + medRows.map(linhaMed).join('') +
                 (medRows.length ? '<button type="button" class="act" style="margin-top:5px" onclick="mapPanelMedLimpar()">Limpar medições</button>' : '') +
-                '<div style="color:#64748b;line-height:1.35;margin:4px 0">Dois cliques no valor, no mapa, editam o texto; arraste para mover; ↻ para girar.</div>' +
-                '<div style="border-top:1px solid #e2e8f0;margin:6px 0 4px"></div>' + cardsAnalisesHtml + '<div style="font-weight:700;margin-bottom:2px">Análises com o cadastro</div>';
+                '<div style="color:#94a3b8;line-height:1.35;margin:4px 0">Dois cliques no valor, no mapa, editam o texto; arraste para mover; ↻ para girar.</div>' +
+                '<div style="border-top:1px solid rgba(255,255,255,0.1);margin:6px 0 4px"></div>' + cardsAnalisesHtml + '<div style="font-weight:700;margin-bottom:2px">Análises com o cadastro</div>';
+            const camposDisponiveis = [];
+            cams.forEach(c => {
+                (c.campos || []).forEach(f => {
+                    camposDisponiveis.push({ id: 'f:' + (f.k || f.id), label: (f.l || f.label || f.k) + ' (' + c.name + ')' });
+                });
+            });
+
+            let rotuloCampoSelecionadoNome = 'Rótulo padrão (Quadra / Lote)';
+            if (cfg.rotulos.campo === 'titulo') {
+                rotuloCampoSelecionadoNome = 'Nome / Título principal';
+            } else if (String(cfg.rotulos.campo || '').startsWith('f:')) {
+                const fk = cfg.rotulos.campo.slice(2);
+                let achou = false;
+                for (const c of cams) {
+                    const fl = (c.campos || []).find(f => (f.k || f.id) === fk);
+                    if (fl) {
+                        const tab = fl.tabTitle || abaDoCampo(fl) || getFieldTabName(c, fl) || '';
+                        rotuloCampoSelecionadoNome = `${fl.l || fl.label || fl.k} (${c.name})${tab ? ' — ' + tab : ''}`;
+                        achou = true;
+                        break;
+                    }
+                }
+                if (!achou) rotuloCampoSelecionadoNome = cfg.rotulos.campo;
+            }
+
             const rotulosHtml = `
-                ${chkN('mp-x-rot', 'Rótulos nas feições vizinhas', cfg.rotulos.ativo, "mapPanelExtra('rotulos', 'ativo', this.checked)", !temRotulo, nis('rotulos', '', cfg.rotulos.estilo))}
-                ${(cfg.rotulos.ativo && temNome) ? sel("mapPanelExtra('rotulos', 'campo', this.value)", `<option value="rotulo" ${cfg.rotulos.campo === 'rotulo' ? 'selected' : ''}>Mostrar Quadra/Lote</option><option value="titulo" ${cfg.rotulos.campo === 'titulo' ? 'selected' : ''}>Mostrar o nome principal</option>`) : ''}
-                ${!temRotulo ? '<div style="color:#64748b;margin-bottom:3px">Sem rótulos nas camadas ativas (ou sem permissão de ver os dados delas).</div>' : ''}
-                ${cfg.rotulos.ativo && temRotulo ? corRow('rotulos', 'Cor dos rótulos', cfg.rotulos.cor) : ''}
-                ${cfg.rotulos.ativo && temRotulo ? `<div style="color:#64748b;line-height:1.35;margin:2px 0 3px">Arraste um rótulo para mover e use o ícone ↻ (ao passar o mouse) para girar.</div>${Object.keys(cfg.rotulos.itens).length ? '<button type="button" class="act" onclick="mapPanelRotulosReset()">Restaurar posição dos rótulos</button>' : ''}` : ''}
+                <div style="font-weight:700;margin:8px 0 2px">Rótulos nas feições vizinhas</div>
+                ${chkN('mp-x-rot', 'Exibir rótulos no mapa', cfg.rotulos.ativo, "mapPanelExtra('rotulos', 'ativo', this.checked)", !temRotulo && !camposDisponiveis.length, nis('rotulos', '', cfg.rotulos.estilo))}
+                ${cfg.rotulos.ativo ? `
+                    <div style="margin:4px 0 2px;font-size:11px;color:#94a3b8">Campo do rótulo:</div>
+                    <div style="position:relative;margin:3px 0 6px">
+                        <button type="button" id="mp-rotulo-campo-btn" onclick="mapPanelToggleRotulosDropdown(event)" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:#1e293b;border:1px solid rgba(255,255,255,0.18);border-radius:8px;color:#f8fafc;font-size:11px;font-weight:500;cursor:pointer;text-align:left">
+                            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(rotuloCampoSelecionadoNome)}</span>
+                            <span style="font-size:10px;color:#94a3b8;margin-left:6px;transition:transform .15s;${mapPanelRotulosDropdownAberto ? 'transform:rotate(180deg)' : ''}">&#9662;</span>
+                        </button>
+                        <select id="mp-rotulo-campo-sel" style="display:none" onchange="mapPanelExtra('rotulos', 'campo', this.value)">
+                            <option value="rotulo" ${cfg.rotulos.campo === 'rotulo' ? 'selected' : ''}>Rótulo padrão (Quadra / Lote)</option>
+                            <option value="titulo" ${cfg.rotulos.campo === 'titulo' ? 'selected' : ''}>Nome / Título principal</option>
+                            ${camposDisponiveis.map(cp => `<option value="${esc(cp.id)}" ${cfg.rotulos.campo === cp.id ? 'selected' : ''}>${esc(cp.label)}</option>`).join('')}
+                        </select>
+                        ${mapPanelRotulosDropdownAberto ? `
+                        <div id="mp-rotulo-dropdown-menu" onclick="event.stopPropagation()" class="mp-inner-card" style="position:relative;margin-top:4px;background:#1e293b;border:1px solid rgba(255,255,255,0.18);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.5);max-height:280px;overflow-y:auto;z-index:30;padding:4px">
+                            <div onclick="mapPanelSelectRotuloCampo('rotulo', event)" style="display:flex;align-items:center;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;color:#f8fafc;background:${cfg.rotulos.campo === 'rotulo' ? '#047857' : 'transparent'};margin-bottom:2px">
+                                <span style="flex:1">Rótulo padrão (Quadra / Lote)</span>
+                                ${cfg.rotulos.campo === 'rotulo' ? '<span style="font-weight:bold;margin-left:6px">✓</span>' : ''}
+                            </div>
+                            <div onclick="mapPanelSelectRotuloCampo('titulo', event)" style="display:flex;align-items:center;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;color:#f8fafc;background:${cfg.rotulos.campo === 'titulo' ? '#047857' : 'transparent'};margin-bottom:4px">
+                                <span style="flex:1">Nome / Título principal</span>
+                                ${cfg.rotulos.campo === 'titulo' ? '<span style="font-weight:bold;margin-left:6px">✓</span>' : ''}
+                            </div>
+                            <div style="border-top:1px solid rgba(255,255,255,0.1);margin:4px 0"></div>
+                            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;padding:4px 6px 2px;letter-spacing:0.04em">Camadas</div>
+                            ${!cams.length ? '<div style="padding:6px 8px;font-size:11px;color:#64748b">Nenhuma camada disponível</div>' : cams.map(c => {
+                                const aberta = String(mapPanelRotulosCamadaAberta) === String(c.id);
+                                const campos = c.campos || [];
+                                return `
+                                <div style="margin-bottom:3px;border-radius:6px;overflow:hidden;border:1px solid ${aberta ? 'rgba(52,211,153,0.35)' : 'rgba(255,255,255,0.08)'}">
+                                    <div onclick="mapPanelToggleRotulosCamada('${esc(c.id)}', event)" style="display:flex;align-items:center;gap:6px;padding:6px 8px;cursor:pointer;background:${aberta ? '#0f172a' : 'rgba(255,255,255,0.03)'};user-select:none">
+                                        <i style="display:inline-block;width:10px;height:7px;border-radius:2px;background:${esc(c.color)};flex:none"></i>
+                                        <span style="flex:1;font-size:11px;font-weight:600;color:#f1f5f9;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span>
+                                        <span style="font-size:10px;color:#94a3b8;flex:none">${campos.length}</span>
+                                        <span style="font-size:9px;color:#94a3b8;flex:none;transition:transform .15s;${aberta ? 'transform:rotate(90deg)' : ''}">&#9656;</span>
+                                    </div>
+                                    ${aberta ? `
+                                    <div style="background:#0b1120;padding:3px;border-top:1px solid rgba(255,255,255,0.08);max-height:140px;overflow-y:auto">
+                                        ${!campos.length ? '<div style="padding:6px 8px;font-size:10.5px;color:#64748b;font-style:italic">Sem campos com dados nesta camada</div>' : campos.map(fl => {
+                                            const cid = 'f:' + (fl.k || fl.id);
+                                            const isSel = cfg.rotulos.campo === cid;
+                                            const tabNome = fl.tabTitle || abaDoCampo(fl) || getFieldTabName(c, fl) || '';
+                                            return `
+                                            <div onclick="mapPanelSelectRotuloCampo('${esc(cid)}', event)" style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:4px;cursor:pointer;margin-bottom:1px;background:${isSel ? '#047857' : 'transparent'};color:${isSel ? '#fff' : '#cbd5e1'};font-size:11px">
+                                                <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(fl.l || fl.label || fl.k)}</span>
+                                                ${tabNome ? `<span style="font-size:9.5px;padding:1px 5px;border-radius:3px;background:rgba(255,255,255,0.1);color:#94a3b8;flex:none">Aba: ${esc(tabNome)}</span>` : ''}
+                                                ${isSel ? '<span style="font-weight:bold;margin-left:4px">✓</span>' : ''}
+                                            </div>`;
+                                        }).join('')}
+                                    </div>` : ''}
+                                </div>`;
+                            }).join('')}
+                        </div>` : ''}
+                    </div>
+                    ${corRow('rotulos', 'Cor dos rótulos', cfg.rotulos.cor)}
+                    <div style="color:#94a3b8;line-height:1.35;margin:2px 0 3px">Arraste um rótulo para mover e use o ícone ↻ (ao passar o mouse) para girar.</div>
+                    ${Object.keys(cfg.rotulos.itens).length ? '<button type="button" class="act" onclick="mapPanelRotulosReset()">Restaurar posição dos rótulos</button>' : ''}
+                ` : ''}
+            `;
+            const legendaHtml = `
+                <div style="font-weight:700;margin:8px 0 3px">Legenda no Mapa</div>
+                <div class="mp-inner-card" style="border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:6px 8px;margin:4px 0;background:#1e293b;color:#f1f5f9">
+                ${legItens.length ? legItens.map(i => `
+                    <div style="display:flex;align-items:center;gap:6px;padding:3px 0">
+                        <input type="checkbox" ${i.oculto ? '' : 'checked'} title="Mostrar na legenda" onchange="mapPanelLegendaVer('${esc(i.key)}', this.checked)">
+                        <i style="display:inline-block;width:12px;height:8px;border-radius:2px;background:${esc(i.cor)};flex:none"></i>
+                        <input type="text" value="${esc(i.nome)}" maxlength="60" oninput="if(mapController)mapController.renameLegend('${esc(i.key)}', this.value)" onchange="mapPanelLegendaNome('${esc(i.key)}', this.value)" style="flex:1;min-width:0;padding:3px 6px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;font-size:11px;background:#0f172a;color:#f8fafc">
+                    </div>`).join('') : '<div style="color:#94a3b8;font-size:11px">Sem itens: ligue o destaque da feição ou uma camada ativa.</div>'}
+                </div>
+                <div style="color:#94a3b8;line-height:1.35;margin:3px 0;font-size:10.5px">Dois cliques num item da legenda, no mapa, também renomeiam (vazio restaura o nome original).</div>
+                ${(Object.keys(cfg.legenda.nomes).length || cfg.legenda.ocultos.length) ? '<button type="button" class="act" onclick="mapPanelLegendaReset()">Restaurar legenda</button>' : ''}
             `;
             const confTabelaHtml = `
                 ${chk('mp-x-conf', 'Tabela de confrontantes', cfg.confrontantes.ativo, "mapPanelExtra('confrontantes', 'ativo', this.checked)", kind !== 'polygon' || !cams.length)}
@@ -2824,61 +3171,77 @@
             const localizacaoHtml = `
                 ${chk('mp-loc-ativo', 'Mostrar o mapa de localização', cfg.situacao.ativo, "mapPanelExtra('situacao', 'ativo', this.checked)")}
                 ${cfg.situacao.ativo ? `
-                    <select onchange="mapPanelExtra('situacao', 'baseMap', this.value)" style="width:100%;padding:5px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:3px">
+                    <select onchange="mapPanelExtra('situacao', 'baseMap', this.value)" style="width:100%;padding:5px;border:1px solid rgba(255,255,255,0.18);border-radius:8px;background:#1e293b;color:#f8fafc;margin-bottom:3px">
                         <option value="osm" ${cfg.situacao.baseMap === 'osm' ? 'selected' : ''}>Ruas (OpenStreetMap)</option>
                         <option value="satelite" ${cfg.situacao.baseMap === 'satelite' ? 'selected' : ''}>Satélite</option>
                         <option value="nenhum" ${cfg.situacao.baseMap === 'nenhum' ? 'selected' : ''}>Sem mapa base</option>
                     </select>
                     <div style="font-weight:700;margin:4px 0 2px">Camadas na caixa</div>
-                    ${!camadas.length ? '<div style="color:#64748b">Nenhuma outra camada estava ativa no mapa ao abrir este relatório.</div>' : camadas.map(c => `<label class="row"><input type="checkbox" ${locCamadasOn.has(String(c.id)) ? 'checked' : ''} onchange="mapPanelLocatorLayer('${esc(c.id)}', this.checked)"><i style="display:inline-block;width:12px;height:8px;border-radius:2px;background:${esc(c.color)}"></i><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span></label>`).join('')}
+                    ${!camadas.length ? '<div style="color:#94a3b8">Nenhuma outra camada estava ativa no mapa ao abrir este relatório.</div>' : camadas.map(c => `<label class="row"><input type="checkbox" ${locCamadasOn.has(String(c.id)) ? 'checked' : ''} onchange="mapPanelLocatorLayer('${esc(c.id)}', this.checked)"><i style="display:inline-block;width:12px;height:8px;border-radius:2px;background:${esc(c.color)}"></i><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span></label>`).join('')}
                     ${chk('mp-loc-norte', 'Seta do norte', cfg.situacao.norte, "mapPanelExtra('situacao', 'norte', this.checked)")}
-                    <div style="color:#64748b;line-height:1.35;margin-top:3px">Arraste a caixa, no mapa, para mudar de lugar.</div>
+                    <div style="color:#94a3b8;line-height:1.35;margin-top:3px">Arraste a caixa, no mapa, para mudar de lugar.</div>
                 ` : ''}
             `;
             const notasHtml = `
                 <button type="button" class="act" style="margin-top:5px" onclick="mapPanelNotaAdd()">+ Anotação de texto no centro do mapa</button>
-                ${notas.length ? `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:4px;margin-top:4px">${notas.map(n => `
-                    <div style="display:flex;align-items:center;gap:3px;padding:2px 0">
-                        <input type="text" value="${esc(n.texto)}" maxlength="80" onchange="mapPanelNotaRenomear('${esc(n.id)}', this.value)" style="flex:1;min-width:0;padding:2px 5px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px">
+                ${notas.length ? `<div class="mp-inner-card" style="border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:6px 8px;margin-top:5px;background:#1e293b;color:#f1f5f9">${notas.map(n => `
+                    <div style="display:flex;align-items:center;gap:4px;padding:3px 0">
+                        <input type="text" value="${esc(n.texto)}" maxlength="80" onchange="mapPanelNotaRenomear('${esc(n.id)}', this.value)" style="flex:1;min-width:0;padding:3px 6px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;font-size:11px;background:#0f172a;color:#f8fafc">
                         ${nisNota(n)}
-                        <button type="button" title="Remover" onclick="mapPanelNotaRemover('${esc(n.id)}')" style="border:0;background:none;cursor:pointer;color:#b91c1c">×</button>
+                        <button type="button" title="Remover" onclick="mapPanelNotaRemover('${esc(n.id)}')" style="border:0;background:none;cursor:pointer;color:#f87171;font-size:14px;line-height:1">×</button>
                     </div>`).join('')}</div>` : ''}
             `;
             const tc = temporalController;
             const tcfg = tc ? tc.getConfig() : null;
             const statusTxt = { 'verificando': 'verificando…', 'sem-cobertura': 'sem imagem no local' };
+            const satHistoricoHtml = `
+                <div style="margin-top:6px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.1)">
+                    <div style="font-weight:700;margin-bottom:3px;font-size:11px">Satélite / Datas Históricas</div>
+                    <div style="display:flex;gap:4px">
+                        <select id="mp-sat-temporal-sel" style="flex:1;padding:4px;border:1px solid rgba(255,255,255,0.18);border-radius:8px;background:#1e293b;color:#f8fafc;font-size:11px">
+                            <option value="sat-google-2026">Google Satélite (2026)</option>
+                            <option value="sat-wayback-2024">Esri Wayback (2024)</option>
+                            <option value="sat-wayback-2020">Esri Wayback (2020)</option>
+                            <option value="sat-wayback-2016">Esri Wayback (2016)</option>
+                            <option value="sat-wayback-2014">Esri Wayback (2014)</option>
+                        </select>
+                        <button type="button" class="act" style="width:auto;padding:4px 8px;font-size:11px" onclick="mapPanelAddSatHistorico()">+ Incluir</button>
+                    </div>
+                </div>
+            `;
             const temporalHtml = !tc
-                ? '<div style="color:#64748b">Nenhuma ortofoto disponível para esta feição.</div>'
+                ? '<div style="color:#94a3b8">Nenhuma ortofoto disponível para esta feição.</div>' + satHistoricoHtml
                 : `${chk('mp-temp', 'Análise temporal (uma imagem por data)', tcfg.ativo, "mapPanelTemporal('ativo', this.checked)")}
                     <div style="display:flex;gap:4px;margin:3px 0">
-                        <select onchange="mapPanelTemporal('ordem', this.value)" style="flex:1;padding:4px;border:1px solid #cbd5e1;border-radius:8px">
+                        <select onchange="mapPanelTemporal('ordem', this.value)" style="flex:1;padding:4px;border:1px solid rgba(255,255,255,0.18);border-radius:8px;background:#1e293b;color:#f8fafc">
                             <option value="asc" ${tcfg.ordem === 'asc' ? 'selected' : ''}>Antiga → recente</option>
                             <option value="desc" ${tcfg.ordem === 'desc' ? 'selected' : ''}>Recente → antiga</option>
                         </select>
-                        <select onchange="mapPanelTemporal('colunas', this.value)" style="width:96px;padding:4px;border:1px solid #cbd5e1;border-radius:8px">
+                        <select onchange="mapPanelTemporal('colunas', this.value)" style="width:96px;padding:4px;border:1px solid rgba(255,255,255,0.18);border-radius:8px;background:#1e293b;color:#f8fafc">
                             ${[1, 2, 3, 4].map(v => `<option value="${v}" ${tcfg.colunas === v ? 'selected' : ''}>${v} coluna${v > 1 ? 's' : ''}</option>`).join('')}
                         </select>
                     </div>
                     ${chk('mp-temp-cont', 'Contorno da feição', tcfg.contorno, "mapPanelTemporal('contorno', this.checked)")}
                     ${chk('mp-temp-sync', 'Mover um quadro move todos', tcfg.sincronizar, "mapPanelTemporal('sincronizar', this.checked)")}
-                    <div style="border:1px solid #e2e8f0;border-radius:8px;padding:4px;margin-top:3px">${tc.list().map(x => `
-                        <label class="row ${x.status === 'sem-cobertura' ? 'off' : ''}" title="${esc(x.nome)}">
+                    <div class="mp-inner-card" style="border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:6px 8px;margin-top:4px;background:#1e293b;color:#f1f5f9">${tc.list().map(x => `
+                        <label class="row ${x.status === 'sem-cobertura' ? 'off' : ''}" title="${esc(x.nome)}" style="padding:2px 0">
                             <input type="checkbox" ${x.incluida ? 'checked' : ''} ${x.status === 'sem-cobertura' ? 'disabled' : ''} onchange="mapPanelOrtofoto('${esc(x.id)}', this.checked)">
-                            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.nome)}</span>
-                            <span style="color:#64748b;font-size:10px">${esc(x.dataTxt)}</span>
-                            ${statusTxt[x.status] ? `<span style="color:#b45309;font-size:10px">${statusTxt[x.status]}</span>` : ''}
-                        </label>`).join('')}</div>`;
+                            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#f1f5f9">${esc(x.nome)}</span>
+                            <span style="color:#94a3b8;font-size:10px">${esc(x.dataTxt)}</span>
+                            ${statusTxt[x.status] ? `<span style="color:#f59e0b;font-size:10px">${statusTxt[x.status]}</span>` : ''}
+                        </label>`).join('')}</div>
+                    ${satHistoricoHtml}`;
             const ortofotosBase = (reportPayload && Array.isArray(reportPayload.ortofotos)) ? reportPayload.ortofotos : [];
             const camadasHtml = !cfg.camadasVizinhas
-                ? '<div style="color:#64748b">O modelo não permite camadas neste mapa.</div>'
+                ? '<div style="color:#94a3b8">O modelo não permite camadas neste mapa.</div>'
                 : (camadas.length
                     ? camadas.map(c => `<label class="row"><input type="checkbox" ${on.has(String(c.id)) ? 'checked' : ''} onchange="mapPanelLayer('${esc(c.id)}', this.checked)"><i style="display:inline-block;width:12px;height:8px;border-radius:2px;background:${esc(c.color)}"></i><span style="flex:1">${esc(c.name)}</span>${c.truncated ? '<span title="Parte das feições ficou de fora (limite de envio)" style="color:#b45309">*</span>' : ''}</label>`).join('')
-                    : '<div style="color:#64748b">Nenhuma outra camada estava ativa no mapa ao abrir este relatório.</div>');
+                    : '<div style="color:#94a3b8">Nenhuma outra camada estava ativa no mapa ao abrir este relatório.</div>');
 
             panel.innerHTML = `
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #e2e8f0">
-                    <strong style="font-size:13px">Configurações do Mapa</strong>
-                    <button type="button" onclick="mapPanelHide()" style="border:0;background:none;cursor:pointer;font-size:16px;line-height:1" title="Recolher">×</button>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #e2e8f0" class="panel-header">
+                    <strong style="font-size:13px" class="panel-header-title">Configurações do Mapa</strong>
+                    <button type="button" onclick="mapPanelHide()" style="border:0;background:none;cursor:pointer;font-size:16px;line-height:1;color:inherit" title="Recolher">×</button>
                 </div>
                 <div style="padding:0 12px 12px">
                     <h4 data-sec-h="destaque" class="${secH('destaque')}" onclick="mapPanelSecao('destaque')">Feição em destaque<span class="chev">&#9662;</span></h4><div data-sec="destaque" class="sec-body" style="display:${secD('destaque')}">
@@ -2890,60 +3253,53 @@
                     </div>
                     <h4 data-sec-h="camadas" class="${secH('camadas')}" onclick="mapPanelSecao('camadas')">Camadas ativas no mapa<span class="chev">&#9662;</span></h4><div data-sec="camadas" class="sec-body" style="display:${secD('camadas')}">
                     ${camadasHtml}
-                    ${rotulosHtml}
+                    ${legendaHtml}
                     </div>
 <h4 data-sec-h="elementos" class="${secH('elementos')}" onclick="mapPanelSecao('elementos')">Elementos do mapa<span class="chev">&#9662;</span></h4><div data-sec="elementos" class="sec-body" style="display:${secD('elementos')}">
                     <div style="margin-bottom:6px">
                         <div style="font-weight:700;margin-bottom:2px">Altura do mapa na folha</div>
                         <div style="display:flex;align-items:center;gap:6px">
-                            <input type="number" id="mp-altura" min="40" max="${mapaAlturaMaxMm()}" step="5" value="${mapAlturaMm !== null ? mapAlturaMm : cfg.alturaMm}" onchange="mapPanelAltura(this.value)" style="width:70px;padding:3px;border:1px solid #cbd5e1;border-radius:6px"> mm
+                            <input type="number" id="mp-altura" min="40" max="${mapaAlturaMaxMm()}" step="5" value="${mapAlturaMm !== null ? mapAlturaMm : cfg.alturaMm}" onchange="mapPanelAltura(this.value)" style="width:70px;padding:3px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;background:#0f172a;color:#f8fafc"> mm
                             <button type="button" class="act" style="flex:1" onclick="mapPanelPreencher()" title="Soma à altura o espaço que sobra no fim da folha">Preencher a folha</button>
                         </div>
-                        <div style="color:#64748b;line-height:1.35;margin-top:3px">Ou arraste a borda de baixo do mapa, na folha. A largura acompanha a folha (máx. ${mapaAlturaMaxMm()} mm).</div>
+                        <div style="color:#94a3b8;line-height:1.35;margin-top:3px">Ou arraste a borda de baixo do mapa, na folha. A largura acompanha a folha (máx. ${mapaAlturaMaxMm()} mm).</div>
                     </div>
                     ${chk('mp-norte', 'Norte', cfg.norte, "mapPanelSet('norte', this.checked)")}
                     ${chk('mp-escala', 'Escala', cfg.escala, "mapPanelSet('escala', this.checked)")}
                     ${chk('mp-proj', 'Sistema de projeção', cfg.projecao, "mapPanelSet('projecao', this.checked)")}
-                    <div style="color:#64748b;line-height:1.35;margin:3px 0">Arraste, no mapa, o norte, a escala (barra e texto), a projeção e a legenda para mudar de lugar.</div>
+                    <div style="color:#94a3b8;line-height:1.35;margin:3px 0">Arraste, no mapa, o norte, a escala (barra e texto), a projeção e a legenda para mudar de lugar.</div>
                     ${Object.keys(cfg.elementos).length ? '<button type="button" class="act" style="margin-bottom:6px" onclick="mapPanelElementosReset()">Restaurar posições</button>' : ''}
-                    <div style="font-weight:700;margin:6px 0 2px">Legenda</div>
-                    ${legItens.length ? legItens.map(i => `
-                        <div style="display:flex;align-items:center;gap:5px;padding:2px 0">
-                            <input type="checkbox" ${i.oculto ? '' : 'checked'} title="Mostrar na legenda" onchange="mapPanelLegendaVer('${esc(i.key)}', this.checked)">
-                            <i style="display:inline-block;width:12px;height:8px;border-radius:2px;background:${esc(i.cor)};flex:none"></i>
-                            <input type="text" value="${esc(i.nome)}" maxlength="60" onchange="mapPanelLegendaNome('${esc(i.key)}', this.value)" style="flex:1;min-width:0;padding:2px 5px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px">
-                        </div>`).join('') : '<div style="color:#64748b">Sem itens: ligue o destaque da feição ou uma camada ativa.</div>'}
-                    <div style="color:#64748b;line-height:1.35;margin:3px 0">Dois cliques num item da legenda, no mapa, também renomeiam (vazio restaura o nome original).</div>
-                    ${(Object.keys(cfg.legenda.nomes).length || cfg.legenda.ocultos.length) ? '<button type="button" class="act" onclick="mapPanelLegendaReset()">Restaurar legenda</button>' : ''}
+                    ${rotulosHtml}
                     ${notasHtml}
                     </div>
 <h4 data-sec-h="base" class="${secH('base')}" onclick="mapPanelSecao('base')">Mapa base<span class="chev">&#9662;</span></h4><div data-sec="base" class="sec-body" style="display:${secD('base')}">
-                    <select onchange="mapPanelSet('baseMap', this.value)" style="width:100%;padding:5px;border:1px solid #cbd5e1;border-radius:8px">
+                    <select onchange="mapPanelSet('baseMap', this.value)" style="width:100%;padding:5px;border:1px solid rgba(255,255,255,0.18);border-radius:8px;background:#1e293b;color:#f8fafc">
                         <option value="osm" ${cfg.baseMap === 'osm' ? 'selected' : ''}>Ruas (OpenStreetMap)</option>
                         <option value="satelite" ${cfg.baseMap === 'satelite' ? 'selected' : ''}>Satélite</option>
                         <option value="nenhum" ${cfg.baseMap === 'nenhum' ? 'selected' : ''}>Sem mapa base</option>
                         ${ortofotosBase.length ? `<optgroup label="Ortofotos ativas no projeto">${ortofotosBase.map(x => `<option value="ortofoto:${esc(x.id)}" ${cfg.baseMap === 'ortofoto:' + x.id ? 'selected' : ''}>${esc(x.nome)}${x.dataTxt ? ' — ' + esc(x.dataTxt) : ''}</option>`).join('')}</optgroup>` : ''}
                     </select>
-                    ${/^ortofoto:/.test(cfg.baseMap) ? '<div style="color:#64748b;line-height:1.35;margin-top:3px">A ortofoto fica sobre o satélite, que preenche o que ela não cobre.</div>' : ''}
+                    ${/^ortofoto:/.test(cfg.baseMap) ? '<div style="color:#94a3b8;line-height:1.35;margin-top:3px">A ortofoto fica sobre o satélite, que preenche o que ela não cobre.</div>' : ''}
                     ${situacaoGradeHtml}
                     </div>
 <h4 data-sec-h="localizacao" class="${secH('localizacao')}" onclick="mapPanelSecao('localizacao')">Mapa de localização<span class="chev">&#9662;</span></h4><div data-sec="localizacao" class="sec-body" style="display:${secD('localizacao')}">
                     ${localizacaoHtml}
                     </div>
-<h4 data-sec-h="medidas" class="${secH('medidas')}" onclick="mapPanelSecao('medidas')">Medição da feição<span class="chev">&#9662;</span></h4><div data-sec="medidas" class="sec-body" style="display:${secD('medidas')}">
-                    ${chkN('mp-med', 'Mostrar medidas no mapa', cfg.medidas.ativo, "mapPanelMedidas('ativo', this.checked)", false, nis('medidas', 'todos', estTodos))}
+<h4 data-sec-h="medidas" class="${secH('medidas')}" onclick="mapPanelSecao('medidas')">Medições na feição<span class="chev">&#9662;</span></h4><div data-sec="medidas" class="sec-body" style="display:${secD('medidas')}">
+                    ${chk('mp-med', 'Mostrar medidas no mapa', cfg.medidas.ativo, "mapPanelMedidas('ativo', this.checked)")}
+                    <span style="display:none">${nis('medidas', 'todos', estTodos)}</span>
                     ${corRow('medidas', 'Cor dos textos das medidas', cfg.medidas.cor)}
                     ${chkN('mp-med-lados', kind === 'line' ? 'Trechos' : 'Lados', cfg.medidas.lados, "mapPanelMedidas('lados', this.checked)", kind === 'point' || mapController.ladosOmitidos, nis('medidas', 'lados', estM.lados))}
                     ${chkN('mp-med-total', kind === 'polygon' ? 'Área' : (kind === 'line' ? 'Comprimento total' : 'Coordenada'), cfg.medidas.total, "mapPanelMedidas('total', this.checked)", false, nis('medidas', 'total', estM.total))}
                     ${chkN('mp-med-perim', 'Perímetro', cfg.medidas.perimetro, "mapPanelMedidas('perimetro', this.checked)", kind !== 'polygon', nis('medidas', 'perimetro', estM.perimetro))}
-                    <div style="color:#64748b;line-height:1.35;margin:3px 0 4px">Os textos já saem alinhados às arestas. Dê <b>dois cliques</b> numa medida para editar o texto (vazio restaura o calculado); arraste para mudar de lugar; use o ícone ↻ (ao passar o mouse) para girar, e dois cliques nele voltam ao alinhamento automático.${mapController.ladosOmitidos ? ' <span style="color:#b45309">Mais de 80 lados: rótulos dos lados omitidos.</span>' : ''}</div>
+                    <div style="color:#94a3b8;line-height:1.35;margin:3px 0 4px">Os textos já saem alinhados às arestas. Dê <b>dois cliques</b> numa medida para editar o texto (vazio restaura o calculado); arraste para mudar de lugar; use o ícone ↻ (ao passar o mouse) para girar, e dois cliques nele voltam ao alinhamento automático.${mapController.ladosOmitidos ? ' <span style="color:#b45309">Mais de 80 lados: rótulos dos lados omitidos.</span>' : ''}</div>
                     <button type="button" class="act" onclick="mapPanelResetMedidas()">Restaurar medidas calculadas</button>
                     </div>
                     <h4 data-sec-h="pontos" class="${secH('pontos')}" onclick="mapPanelSecao('pontos')">Pontos nos vértices<span class="chev">&#9662;</span></h4><div data-sec="pontos" class="sec-body" style="display:${secD('pontos')}">
                     ${corRow('pontos', 'Cor dos pontos e dos nomes', cfg.pontos.cor)}
                     ${chkN('mp-pts', 'Marcar pontos nos vértices', cfg.pontos.ativo, "mapPanelPontos('ativo', this.checked)", mapController.vertexCount === 0, nis('pontos', '', cfg.pontos.estilo))}
-                    <div style="color:#64748b;line-height:1.35;margin:2px 0 4px">Clique num vértice (círculo branco) para marcar. O nome do ponto pode ser arrastado, girado (ícone ↻) e renomeado com dois cliques. A tabela sai logo abaixo do mapa; dois cliques em qualquer texto dela para editar.${mapController.verticesOmitidos ? ' <span style="color:#b45309">Mais de 400 vértices: marcadores omitidos.</span>' : ''}</div>
-                    <select onchange="mapPanelPontos('sistema', this.value)" style="width:100%;padding:5px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:3px">
+                    <div style="color:#94a3b8;line-height:1.35;margin:2px 0 4px">Clique num vértice (círculo branco) para marcar. O nome do ponto pode ser arrastado, girado (ícone ↻) e renomeado com dois cliques. A tabela sai logo abaixo do mapa; dois cliques em qualquer texto dela para editar.${mapController.verticesOmitidos ? ' <span style="color:#b45309">Mais de 400 vértices: marcadores omitidos.</span>' : ''}</div>
+                    <select onchange="mapPanelPontos('sistema', this.value)" style="width:100%;padding:5px;border:1px solid rgba(255,255,255,0.18);border-radius:8px;background:#1e293b;color:#f8fafc;margin-bottom:3px">
                         ${MapTools.COORD_SYSTEMS.map(s => `<option value="${s.id}" ${cfg.pontos.sistema === s.id ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}
                     </select>
                     ${chk('mp-pts-tab', 'Tabela de pontos', cfg.pontos.tabela, "mapPanelPontos('tabela', this.checked)")}
@@ -2954,12 +3310,12 @@
                         <button type="button" class="act" onclick="mapPanelMarcarTodos()" ${(mapController.verticesOmitidos || !cfg.pontos.ativo) ? 'disabled style="opacity:.5"' : ''}>Marcar todos</button>
                         <button type="button" class="act" onclick="mapPanelLimparPontos()">Limpar pontos</button>
                     </div>
-                    ${pontosRows.length ? `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:4px">${pontosRows.map((r, i) => `
-                        <div style="display:flex;align-items:center;gap:3px;padding:2px 0">
-                            <input type="text" value="${esc(r.titulo)}" maxlength="40" onchange="mapPanelRenomear('${esc(r.vid)}', this.value)" style="flex:1;min-width:0;padding:2px 5px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px">
-                            <button type="button" title="Subir" onclick="mapPanelMover('${esc(r.vid)}', -1)" ${i === 0 ? 'disabled' : ''} style="border:0;background:none;cursor:pointer">▲</button>
-                            <button type="button" title="Descer" onclick="mapPanelMover('${esc(r.vid)}', 1)" ${i === pontosRows.length - 1 ? 'disabled' : ''} style="border:0;background:none;cursor:pointer">▼</button>
-                            <button type="button" title="Remover" onclick="mapPanelRemover('${esc(r.vid)}')" style="border:0;background:none;cursor:pointer;color:#b91c1c">×</button>
+                    ${pontosRows.length ? `<div class="mp-inner-card" style="border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:6px 8px;margin-top:4px;background:#1e293b;color:#f1f5f9">${pontosRows.map((r, i) => `
+                        <div style="display:flex;align-items:center;gap:4px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.06)">
+                            <input type="text" value="${esc(r.titulo)}" maxlength="40" onchange="mapPanelRenomear('${esc(r.vid)}', this.value)" style="flex:1;min-width:0;padding:3px 6px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;font-size:11px;background:#0f172a;color:#f8fafc">
+                            <button type="button" title="Subir" onclick="mapPanelMover('${esc(r.vid)}', -1)" ${i === 0 ? 'disabled' : ''} style="border:0;background:rgba(255,255,255,0.08);color:#cbd5e1;border-radius:4px;padding:1px 5px;cursor:pointer">▲</button>
+                            <button type="button" title="Descer" onclick="mapPanelMover('${esc(r.vid)}', 1)" ${i === pontosRows.length - 1 ? 'disabled' : ''} style="border:0;background:rgba(255,255,255,0.08);color:#cbd5e1;border-radius:4px;padding:1px 5px;cursor:pointer">▼</button>
+                            <button type="button" title="Remover" onclick="mapPanelRemover('${esc(r.vid)}')" style="border:0;background:none;cursor:pointer;color:#f87171;font-size:14px;line-height:1">×</button>
                         </div>`).join('')}</div>` : ''}
                     </div>
                     <h4 data-sec-h="extras" class="${secH('extras')}" onclick="mapPanelSecao('extras')">Medições no mapa<span class="chev">&#9662;</span></h4><div data-sec="extras" class="sec-body" style="display:${secD('extras')}">
@@ -2976,7 +3332,7 @@
                         <button type="button" class="act primary" onclick="mapPanelSave()">Salvar ajustes</button>
                         <button type="button" class="act" onclick="mapPanelReset()">Restaurar</button>
                     </div>
-                    <div id="map-panel-status" style="margin-top:6px;color:#475569;min-height:16px"></div>
+                    <div id="map-panel-status" style="margin-top:6px;color:#94a3b8;min-height:16px"></div>
                 </div>`;
             panel.scrollTop = scrollTop;
             // só na primeira vez a largura da tela decide; depois vale o que o usuário abriu ou recolheu
@@ -2989,9 +3345,11 @@
         function applyMapPanelVisibility() {
             const panel = document.getElementById('map-tools-panel');
             const toggle = document.getElementById('map-tools-toggle');
+            const sidebar = document.getElementById('map-sidebar-column');
             // valores explícitos: '' devolveria o controle ao CSS, que esconde o botão por padrão
             if (panel) panel.style.display = mapPanelOpen ? 'block' : 'none';
             if (toggle) toggle.style.display = mapPanelOpen ? 'none' : 'block';
+            if (sidebar) sidebar.style.display = mapPanelOpen ? '' : 'none';
         }
 
         // sanfona: só uma seção aberta; clicar na aberta recolhe. Vale entre redesenhos do painel.
@@ -3254,24 +3612,165 @@
             }
             renderMapToolsPanel();
         }
-        function mapPanelDestaque(key, value) { if (mapController) mapController.setConfig({ destaque: { [key]: value } }); }
-        function mapPanelPontos(key, value) { if (mapController) mapController.setConfig({ pontos: { [key]: value } }); }
+        function mapPanelDestaque(key, value) {
+            if (mapController) {
+                mapController.setConfig({ destaque: { [key]: value } });
+                if (key === 'ativo' || key === 'cor') renderMapToolsPanel();
+            }
+        }
+        function mapPanelPontos(key, value) {
+            if (mapController) {
+                mapController.setConfig({ pontos: { [key]: value } });
+                if (key === 'ativo' || key === 'memorial' || key === 'tabela') renderMapToolsPanel();
+            }
+        }
         function mapPanelMarcarTodos() { if (mapController) mapController.markAllPoints(); }
         function mapPanelLimparPontos() { if (mapController) mapController.clearPoints(); }
         function mapPanelRenomear(vid, txt) { if (mapController) mapController.renamePoint(vid, txt); }
         function mapPanelMover(vid, dir) { if (mapController) mapController.movePoint(vid, dir); }
         function mapPanelRemover(vid) { if (mapController) mapController.removePoint(vid); }
-        function mapPanelExtra(grupo, prop, value) { if (mapController) mapController.setConfig({ [grupo]: { [prop]: value } }); }
+        function mapPanelExtra(grupo, prop, value) {
+            if (mapController) {
+                mapController.setConfig({ [grupo]: { [prop]: value } });
+                if (prop === 'ativo' || prop === 'camada' || prop === 'campo') renderMapToolsPanel();
+            }
+        }
         function mapPanelNotaEstilo(id, k) { if (mapController) { mapController.styleNote(id, k); renderMapToolsPanel(); } }
         function mapPanelNotaAdd() { if (mapController) { mapController.addNote(''); renderMapToolsPanel(); } }
         function mapPanelNotaRenomear(id, txt) { if (mapController) { mapController.renameNote(id, txt); renderMapToolsPanel(); } }
         function mapPanelNotaRemover(id) { if (mapController) { mapController.removeNote(id); renderMapToolsPanel(); } }
         function mapPanelTemporal(key, value) { if (temporalController) temporalController.setConfig({ [key]: key === 'colunas' ? Number(value) : value }); }
         function mapPanelOrtofoto(id, on) { if (temporalController) temporalController.toggle(id, on); }
+
+        const SATELLITE_CATALOG = {
+            'sat-google-2026': {
+                id: 'sat-google-2026',
+                nome: 'Google Satélite (2026)',
+                dataISO: '2026-01-01',
+                precisao: 'ano',
+                dataTxt: '2026',
+                url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+                tipo: 'xyz_tiles',
+                zoomMin: 1,
+                zoomMax: 20,
+                bbox: null,
+                opacidade: 1,
+                coberturaConhecida: true
+            },
+            'sat-wayback-2024': {
+                id: 'sat-wayback-2024',
+                nome: 'Esri Wayback (2024)',
+                dataISO: '2024-05-15',
+                precisao: 'ano',
+                dataTxt: '2024',
+                url: 'https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/WMTS/1.0.0/default028mm/MapServer/tile/16453/{z}/{y}/{x}',
+                tipo: 'xyz_tiles',
+                zoomMin: 1,
+                zoomMax: 19,
+                bbox: null,
+                opacidade: 1,
+                coberturaConhecida: true
+            },
+            'sat-wayback-2020': {
+                id: 'sat-wayback-2020',
+                nome: 'Esri Wayback (2020)',
+                dataISO: '2020-05-27',
+                precisao: 'ano',
+                dataTxt: '2020',
+                url: 'https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/WMTS/1.0.0/default028mm/MapServer/tile/29260/{z}/{y}/{x}',
+                tipo: 'xyz_tiles',
+                zoomMin: 1,
+                zoomMax: 19,
+                bbox: null,
+                opacidade: 1,
+                coberturaConhecida: true
+            },
+            'sat-wayback-2016': {
+                id: 'sat-wayback-2016',
+                nome: 'Esri Wayback (2016)',
+                dataISO: '2016-02-18',
+                precisao: 'ano',
+                dataTxt: '2016',
+                url: 'https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/WMTS/1.0.0/default028mm/MapServer/tile/18966/{z}/{y}/{x}',
+                tipo: 'xyz_tiles',
+                zoomMin: 1,
+                zoomMax: 17,
+                bbox: null,
+                opacidade: 1,
+                coberturaConhecida: true
+            },
+            'sat-wayback-2014': {
+                id: 'sat-wayback-2014',
+                nome: 'Esri Wayback (2014)',
+                dataISO: '2014-02-20',
+                precisao: 'ano',
+                dataTxt: '2014',
+                url: 'https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/WMTS/1.0.0/default028mm/MapServer/tile/5844/{z}/{y}/{x}',
+                tipo: 'xyz_tiles',
+                zoomMin: 1,
+                zoomMax: 17,
+                bbox: null,
+                opacidade: 1,
+                coberturaConhecida: true
+            }
+        };
+
+        function mapPanelAddSatHistorico() {
+            const sel = document.getElementById('mp-sat-temporal-sel');
+            if (!sel || !sel.value) return;
+            const key = sel.value;
+            const satDef = SATELLITE_CATALOG[key];
+            if (!satDef) return;
+
+            if (!reportPayload) reportPayload = {};
+            if (!Array.isArray(reportPayload.ortofotos)) reportPayload.ortofotos = [];
+
+            const idx = reportPayload.ortofotos.findIndex(x => x.id === satDef.id);
+            if (idx >= 0) {
+                if (temporalController) {
+                    temporalController.toggle(satDef.id, true);
+                }
+            } else {
+                reportPayload.ortofotos.push(JSON.parse(JSON.stringify(satDef)));
+            }
+
+            const geom = (renderArgs && renderArgs.featureGeometry) || (reportPayload && reportPayload.featureGeometry) || window.currentReportGeometry || null;
+            let cfgTemp = temporalController ? temporalController.getConfig() : ((mapController && mapController.getConfig().temporal) || { ativo: true, ordem: 'desc', colunas: 2, alturaMm: 45, contorno: true, sincronizar: true, excluidas: [] });
+            cfgTemp = Object.assign({}, cfgTemp, { ativo: true });
+            cfgTemp.excluidas = (cfgTemp.excluidas || []).filter(id => id !== satDef.id);
+
+            if (temporalController) {
+                try { temporalController.destroy(); } catch (e) {}
+            }
+            temporalController = ReportTemporal.create({
+                L, MapTools, geometry: geom, ortofotos: reportPayload.ortofotos,
+                config: cfgTemp, corContorno: (mapController ? mapController.getConfig().destaque.cor : '#10b981'),
+                probe: makeOrtofotoProbe(geom),
+                onStructureChange: () => { renderMapToolsPanel(); scheduleRepaginate(); scheduleEmissao(); },
+                onChange: () => { renderMapToolsPanel(); scheduleEmissao(); }
+            });
+            if (mapController) {
+                mapController.setConfig({ temporal: cfgTemp });
+            }
+            temporalController.start();
+            renderMapToolsPanel();
+            scheduleRepaginate();
+            scheduleEmissao();
+        }
         function mapPanelMedidas(key, value) { if (mapController) mapController.setConfig({ medidas: { [key]: value } }); }
         function mapPanelResetMedidas() { if (mapController) mapController.resetMeasures(); }
-        function mapPanelLayer(id, on) { if (mapController) mapController.toggleLayer(id, on); }
-        function mapPanelLocatorLayer(id, on) { if (mapController) mapController.toggleLocatorLayer(id, on); }
+        function mapPanelLayer(id, on) {
+            if (mapController) {
+                mapController.toggleLayer(id, on);
+                renderMapToolsPanel();
+            }
+        }
+        function mapPanelLocatorLayer(id, on) {
+            if (mapController) {
+                mapController.toggleLocatorLayer(id, on);
+                renderMapToolsPanel();
+            }
+        }
 
         async function mapPanelSave() {
             const status = document.getElementById('map-panel-status');

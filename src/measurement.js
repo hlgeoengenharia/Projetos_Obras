@@ -1,5 +1,6 @@
 let measurementLayerGroup = null;
 let currentMeasurementMode = null;
+let pointCounter = 1;
 window.isMeasurementActive = false;
 window.isMeasurementSnappingEnabled = true;
 
@@ -35,6 +36,7 @@ window.toggleMeasurementMenu = function(e) {
 };
 
 window.selectMeasurementOption = function(type) {
+    if (!type || typeof type !== 'string') return;
     const menu = document.getElementById('measurement-menu-dropdown');
     if (menu) menu.classList.add('hidden');
 
@@ -84,6 +86,20 @@ function toggleMeasurementPanel() {
         }
         window.isMeasurementActive = true;
         
+        // Re-enable editing on existing measurement layers
+        measurementLayerGroup.eachLayer(l => {
+            if (l.pm && typeof l.pm.enable === 'function') {
+                l.pm.enable({
+                    allowSelfIntersection: true,
+                    preventMarkerRemoval: false,
+                    snappable: window.isMeasurementSnappingEnabled
+                });
+            }
+            if (l.dragging && typeof l.dragging.enable === 'function') {
+                l.dragging.enable();
+            }
+        });
+        
         // Initialize drag if not done yet
         if (!window.isMeasurementDragInitialized) {
             initMeasurementPanelDrag();
@@ -98,47 +114,102 @@ function toggleMeasurementPanel() {
 window.togglePrintViewfinder = function() {
     const viewfinder = document.getElementById('print-viewfinder');
     const btn = document.getElementById('btn-toggle-viewfinder');
-    if (!viewfinder || !btn) return;
+    if (!viewfinder) return;
     
     if (viewfinder.classList.contains('hidden')) {
         viewfinder.classList.remove('hidden');
         viewfinder.classList.add('flex');
         setTimeout(() => viewfinder.classList.remove('opacity-0'), 10);
-        btn.classList.add('bg-primary/20', 'text-primary');
-        btn.classList.remove('text-slate-600', 'dark:text-slate-300');
+        if (btn) {
+            btn.classList.add('bg-primary/20', 'text-primary');
+            btn.classList.remove('text-slate-600', 'dark:text-slate-300');
+        }
     } else {
         viewfinder.classList.add('opacity-0');
         setTimeout(() => {
             viewfinder.classList.add('hidden');
             viewfinder.classList.remove('flex');
         }, 300);
-        btn.classList.remove('bg-primary/20', 'text-primary');
-        btn.classList.add('text-slate-600', 'dark:text-slate-300');
+        if (btn) {
+            btn.classList.remove('bg-primary/20', 'text-primary');
+            btn.classList.add('text-slate-600', 'dark:text-slate-300');
+        }
     }
 }
 
 function closeMeasurementPanel() {
-    document.getElementById('measurement-panel').classList.add('hidden');
+    const panel = document.getElementById('measurement-panel');
+    if (panel) panel.classList.add('hidden');
     stopMeasurementDraw();
-    if (measurementLayerGroup) {
-        measurementLayerGroup.clearLayers();
-    }
-    resetMeasurementResults();
     window.isMeasurementActive = false;
+    currentMeasurementMode = null;
+
+    // Disable pm vertex editing on existing layers while panel is closed
+    if (measurementLayerGroup) {
+        measurementLayerGroup.eachLayer(l => {
+            if (l.pm && typeof l.pm.disable === 'function') {
+                l.pm.disable();
+            }
+            if (l.dragging && typeof l.dragging.disable === 'function') {
+                l.dragging.disable();
+            }
+        });
+    }
+
+    // Hide drawers and reset button states
+    const geoTab = document.getElementById('meas-tab-geometry');
+    const coordTab = document.getElementById('meas-tab-coord-query');
+    if (geoTab) { geoTab.classList.add('hidden'); geoTab.classList.remove('flex'); }
+    if (coordTab) { coordTab.classList.add('hidden'); coordTab.classList.remove('flex'); }
+    ['Marker', 'Line', 'Polygon', 'CoordinateQuery'].forEach(m => {
+        const btn = document.getElementById('meas-btn-' + m);
+        if (btn) {
+            btn.classList.remove(
+                'bg-emerald-50', 'dark:bg-emerald-900/30', 'text-emerald-600', 'dark:text-emerald-400', 'border-emerald-300/60', 'dark:border-emerald-600/40',
+                'bg-blue-50', 'dark:bg-blue-900/30', 'text-blue-600', 'dark:text-blue-400', 'border-blue-300/60', 'dark:border-blue-600/40'
+            );
+            btn.classList.add('border-transparent');
+        }
+    });
     
     // Hide Print Viewfinder overlay safely
     const viewfinder = document.getElementById('print-viewfinder');
-    if (viewfinder && !viewfinder.classList.contains('hidden')) {
+    if (viewfinder && !viewfinder.classList.contains('hidden') && typeof window.togglePrintViewfinder === 'function') {
         window.togglePrintViewfinder();
     }
 }
 
 function resetMeasurementResults() {
-    document.getElementById('measurement-results').innerHTML = 'Selecione uma ferramenta acima para iniciar a medição no mapa.';
-    document.getElementById('btn-save-measurement').disabled = true;
-    document.getElementById('btn-save-measurement').classList.add('opacity-50', 'cursor-not-allowed');
-    document.getElementById('btn-save-measurement').classList.remove('hover:bg-emerald-600');
+    let btn = document.getElementById('btn-save-measurement');
+    if (btn) {
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
+        btn.classList.remove('hover:bg-emerald-600');
+    }
 }
+
+window.clearAllMeasurements = function() {
+    pointCounter = 1; // Reset counter
+    if (measurementLayerGroup) {
+        measurementLayerGroup.eachLayer(l => {
+            if (l.pm && typeof l.pm.disable === 'function') {
+                l.pm.disable();
+            }
+            if (l.dragging && typeof l.dragging.disable === 'function') {
+                l.dragging.disable();
+            }
+        });
+        measurementLayerGroup.clearLayers();
+    }
+    const list = document.getElementById('meas-features-list');
+    if (list) list.innerHTML = '';
+    const inst = document.getElementById('meas-instruction');
+    if (inst) {
+        inst.innerHTML = 'Selecione uma ferramenta para iniciar a medição.';
+        inst.classList.remove('hidden');
+    }
+    resetMeasurementResults();
+};
 
 function stopMeasurementDraw() {
     if (map && map.pm) {
@@ -171,7 +242,7 @@ function initMeasurementPanelDrag() {
         const rect = panel.getBoundingClientRect();
         
         // Remove Tailwind centering classes
-        panel.classList.remove('bottom-6', 'left-1/2', '-translate-x-1/2');
+        panel.classList.remove('bottom-6', 'bottom-8', 'right-4', 'right-6', 'sm:right-6', 'left-1/2', '-translate-x-1/2');
         
         // Apply exact pixel coordinates
         panel.style.bottom = 'auto';
@@ -211,18 +282,31 @@ function formatArea(sqMeters) {
 }
 
 function startMeasurementDraw(shape) {
-    if (!map) return;
+    if (!map || !map.pm) return;
     
-    stopMeasurementDraw();
-    
-    if (measurementLayerGroup) {
-        measurementLayerGroup.clearLayers();
+    const validShapes = ['Marker', 'CircleMarker', 'Line', 'Polygon', 'Rectangle', 'Circle', 'Cut', 'Text'];
+    if (!shape || typeof shape !== 'string' || !validShapes.includes(shape)) {
+        stopMeasurementDraw();
+        currentMeasurementMode = null;
+        return;
     }
     
-    resetMeasurementResults();
+    stopMeasurementDraw();
     currentMeasurementMode = shape;
     
-    document.getElementById('measurement-results').innerHTML = '<span class="text-emerald-500 font-bold animate-pulse mt-2">Desenhe no mapa...</span>';
+    let inst = document.getElementById('meas-instruction');
+    if(inst) {
+        if (shape === 'Marker') {
+            inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no mapa para inserir pontos consecutivos.<br><span class="text-[9px] text-slate-400">Arraste para mover | Botão direito para excluir.</span></span>';
+        } else if (shape === 'Line') {
+            inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no mapa para traçar a linha.<br><span class="text-[9px] text-slate-400">Arraste vértices para ajustar | Botão direito no vértice para excluir.</span></span>';
+        } else if (shape === 'Polygon') {
+            inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no mapa para traçar a área.<br><span class="text-[9px] text-slate-400">Arraste vértices para ajustar | Botão direito no vértice para excluir.</span></span>';
+        } else {
+            inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no mapa para medir...</span>';
+        }
+        inst.classList.remove('hidden');
+    }
     
     map.pm.enableDraw(shape, {
         snappable: window.isMeasurementSnappingEnabled,
@@ -249,321 +333,398 @@ if (typeof map !== 'undefined' && map && typeof map.on === 'function') {
 
 function setupMeasurementEvents() {
     if (typeof map === 'undefined' || !map || typeof map.on !== 'function') {
-        // map might be a DOM element (window.map) or not yet initialized by Leaflet
         setTimeout(setupMeasurementEvents, 500);
         return;
     }
     
     map.on('pm:create', (e) => {
-        // Check if we are in measurement mode
         if (!currentMeasurementMode) return;
         
         const layer = e.layer;
+        const currentShape = e.shape || currentMeasurementMode;
         
-        // Add layer to our temporary measurement group
         if (!measurementLayerGroup) {
             measurementLayerGroup = L.featureGroup().addTo(map);
         }
         measurementLayerGroup.addLayer(layer);
         
-        // Convert to GeoJSON to use Turf.js
-        const geojson = layer.toGeoJSON();
-        let resultHTML = '';
-        
-        try {
-            if (e.shape === 'Polygon') {
-                const area = turf.area(geojson);
-                const perimeter = turf.length(geojson, {units: 'meters'});
-                const centroid = turf.centroid(geojson);
-                const lat = centroid.geometry.coordinates[1];
-                const lng = centroid.geometry.coordinates[0];
-                const decStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-                const dmsStr = typeof formatDMS === 'function' ? formatDMS(lat, lng) : 'N/A';
-                const utmStr = typeof formatUTM === 'function' ? formatUTM(lat, lng) : 'N/A';
-                
-                resultHTML = `
-                    <div class="grid grid-cols-2 gap-x-4 gap-y-3 w-full text-left mt-1">
-                        <div class="flex flex-col"><span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Área</span><span class="font-mono text-slate-700 dark:text-slate-200 text-sm">${area.toFixed(2)} m²</span></div>
-                        <div class="flex flex-col"><span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Perímetro</span><span class="font-mono text-slate-700 dark:text-slate-200 text-sm">${perimeter.toFixed(2)} m</span></div>
-                        
-                        <div class="col-span-2 flex flex-col border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
-                            <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Coordenadas do Centroide</span>
-                            <div class="flex flex-col gap-1">
-                                <div class="flex items-center gap-2"><span class="text-[9px] font-bold text-slate-400 w-8">DEC</span> <span class="font-mono text-slate-700 dark:text-slate-200 text-xs">${decStr}</span></div>
-                                <div class="flex items-center gap-2"><span class="text-[9px] font-bold text-slate-400 w-8">GMS</span> <span class="font-mono text-slate-700 dark:text-slate-200 text-xs">${dmsStr}</span></div>
-                                <div class="flex items-center gap-2"><span class="text-[9px] font-bold text-slate-400 w-8">UTM</span> <span class="font-mono text-slate-700 dark:text-slate-200 text-xs">${utmStr}</span></div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            } else if (e.shape === 'Line') {
-                const length = turf.length(geojson, {units: 'meters'});
-                const centroid = turf.centroid(geojson);
-                const lat = centroid.geometry.coordinates[1];
-                const lng = centroid.geometry.coordinates[0];
-                const decStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-                const dmsStr = typeof formatDMS === 'function' ? formatDMS(lat, lng) : 'N/A';
-                const utmStr = typeof formatUTM === 'function' ? formatUTM(lat, lng) : 'N/A';
-                
-                resultHTML = `
-                    <div class="grid grid-cols-1 gap-y-3 w-full text-left mt-1">
-                        <div class="flex flex-col"><span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Comprimento da Linha</span><span class="font-mono text-slate-700 dark:text-slate-200 text-lg">${length.toFixed(2)} m</span></div>
-                        
-                        <div class="flex flex-col border-t border-slate-100 dark:border-slate-800 pt-2 mt-1">
-                            <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Coordenadas do Centroide</span>
-                            <div class="flex flex-col gap-1">
-                                <div class="flex items-center gap-2"><span class="text-[9px] font-bold text-slate-400 w-8">DEC</span> <span class="font-mono text-slate-700 dark:text-slate-200 text-xs">${decStr}</span></div>
-                                <div class="flex items-center gap-2"><span class="text-[9px] font-bold text-slate-400 w-8">GMS</span> <span class="font-mono text-slate-700 dark:text-slate-200 text-xs">${dmsStr}</span></div>
-                                <div class="flex items-center gap-2"><span class="text-[9px] font-bold text-slate-400 w-8">UTM</span> <span class="font-mono text-slate-700 dark:text-slate-200 text-xs">${utmStr}</span></div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            } else if (e.shape === 'Marker') {
-                const lat = geojson.geometry.coordinates[1];
-                const lng = geojson.geometry.coordinates[0];
-                const decStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-                const dmsStr = typeof formatDMS === 'function' ? formatDMS(lat, lng) : 'N/A';
-                const utmStr = typeof formatUTM === 'function' ? formatUTM(lat, lng) : 'N/A';
-                
-                resultHTML = `
-                    <div class="flex flex-col w-full text-left mt-1">
-                        <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Coordenadas Exatas</span>
-                        <div class="flex flex-col gap-1">
-                            <div class="flex items-center gap-2"><span class="text-[9px] font-bold text-slate-400 w-8">DEC</span> <span class="font-mono text-slate-700 dark:text-slate-200 text-xs">${decStr}</span></div>
-                            <div class="flex items-center gap-2"><span class="text-[9px] font-bold text-slate-400 w-8">GMS</span> <span class="font-mono text-slate-700 dark:text-slate-200 text-xs">${dmsStr}</span></div>
-                            <div class="flex items-center gap-2"><span class="text-[9px] font-bold text-slate-400 w-8">UTM</span> <span class="font-mono text-slate-700 dark:text-slate-200 text-xs">${utmStr}</span></div>
-                        </div>
-                    </div>
-                `;
+        const list = document.getElementById('meas-features-list');
+        const item = document.createElement('div');
+        item.className = 'bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm relative group text-left';
+
+        // Function to delete this specific layer and its card
+        const deleteFeature = () => {
+            if (layer.pm && typeof layer.pm.disable === 'function') {
+                layer.pm.disable();
             }
-            
-            document.getElementById('measurement-results').innerHTML = resultHTML;
-            
-            // Enable save button
-            document.getElementById('btn-save-measurement').disabled = false;
-            document.getElementById('btn-save-measurement').classList.remove('opacity-50', 'cursor-not-allowed');
-            document.getElementById('btn-save-measurement').classList.add('hover:bg-emerald-600');
-            
-        } catch(err) {
+            if (measurementLayerGroup) {
+                measurementLayerGroup.removeLayer(layer);
+            }
+            item.remove();
+            if (list && list.children.length === 0) {
+                resetMeasurementResults();
+                const inst = document.getElementById('meas-instruction');
+                if (inst) inst.classList.remove('hidden');
+            }
+        };
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'absolute top-1.5 right-1.5 text-slate-400 hover:text-rose-500 opacity-60 group-hover:opacity-100 transition-opacity p-0.5 rounded cursor-pointer';
+        delBtn.innerHTML = '<span class="material-symbols-outlined text-[15px]">close</span>';
+        delBtn.title = 'Excluir medição';
+        delBtn.onclick = deleteFeature;
+
+        const contentBox = document.createElement('div');
+        item.appendChild(contentBox);
+        item.appendChild(delBtn);
+
+        try {
+            if (currentShape === 'Polygon') {
+                // Enable Geoman vertex editing & vertex deletion
+                if (layer.pm) {
+                    layer.pm.enable({
+                        allowSelfIntersection: true,
+                        preventMarkerRemoval: false,
+                        snappable: window.isMeasurementSnappingEnabled
+                    });
+                }
+
+                layer.bindTooltip('Polígono <span style="font-size:9px;opacity:0.75;">(Arraste vértices / Botão direito no vértice p/ excluir)</span>', { sticky: true });
+
+                const renderPolygon = () => {
+                    const geojson = layer.toGeoJSON();
+                    const coords = geojson.geometry && geojson.geometry.coordinates && geojson.geometry.coordinates[0];
+                    if (!coords || coords.length < 4) {
+                        deleteFeature();
+                        return;
+                    }
+                    const area = turf.area(geojson);
+                    const perimeter = turf.length(geojson, { units: 'meters' });
+                    const centroid = turf.centroid(geojson);
+                    const lat = centroid.geometry.coordinates[1];
+                    const lng = centroid.geometry.coordinates[0];
+                    const decStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                    const dmsStr = typeof formatDMS === 'function' ? formatDMS(lat, lng) : 'N/A';
+                    const utmStr = typeof formatUTM === 'function' ? formatUTM(lat, lng) : 'N/A';
+
+                    contentBox.innerHTML = `
+                        <div class="grid grid-cols-2 gap-x-3 gap-y-2 w-full text-left mt-0.5">
+                            <div class="flex flex-col"><span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Área</span><span class="font-mono text-slate-700 dark:text-slate-200 text-xs font-semibold">${area.toFixed(2)} m²</span></div>
+                            <div class="flex flex-col"><span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Perímetro</span><span class="font-mono text-slate-700 dark:text-slate-200 text-xs font-semibold">${perimeter.toFixed(2)} m</span></div>
+                            <div class="col-span-2 flex flex-col border-t border-slate-100 dark:border-slate-800 pt-1.5 mt-0.5">
+                                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Centroide</span>
+                                <div class="flex flex-col gap-0.5 text-[10px] font-mono text-slate-600 dark:text-slate-300">
+                                    <div class="flex items-center gap-1.5"><span class="text-[8px] font-bold text-slate-400 w-6">DEC</span><span>${decStr}</span></div>
+                                    <div class="flex items-center gap-1.5"><span class="text-[8px] font-bold text-slate-400 w-6">GMS</span><span>${dmsStr}</span></div>
+                                    <div class="flex items-center gap-1.5"><span class="text-[8px] font-bold text-slate-400 w-6">UTM</span><span>${utmStr}</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                };
+
+                renderPolygon();
+                layer.on('pm:edit', renderPolygon);
+                layer.on('pm:vertexremoved', renderPolygon);
+                layer.on('pm:markerdragend', renderPolygon);
+
+            } else if (currentShape === 'Line') {
+                // Enable Geoman vertex editing & vertex deletion
+                if (layer.pm) {
+                    layer.pm.enable({
+                        allowSelfIntersection: true,
+                        preventMarkerRemoval: false,
+                        snappable: window.isMeasurementSnappingEnabled
+                    });
+                }
+
+                layer.bindTooltip('Linha <span style="font-size:9px;opacity:0.75;">(Arraste vértices / Botão direito no vértice p/ excluir)</span>', { sticky: true });
+
+                const renderLine = () => {
+                    const geojson = layer.toGeoJSON();
+                    const coords = geojson.geometry && geojson.geometry.coordinates;
+                    if (!coords || coords.length < 2) {
+                        deleteFeature();
+                        return;
+                    }
+                    const length = turf.length(geojson, { units: 'meters' });
+                    const centroid = turf.centroid(geojson);
+                    const lat = centroid.geometry.coordinates[1];
+                    const lng = centroid.geometry.coordinates[0];
+                    const decStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                    const dmsStr = typeof formatDMS === 'function' ? formatDMS(lat, lng) : 'N/A';
+                    const utmStr = typeof formatUTM === 'function' ? formatUTM(lat, lng) : 'N/A';
+
+                    contentBox.innerHTML = `
+                        <div class="grid grid-cols-1 gap-y-2 w-full text-left mt-0.5">
+                            <div class="flex flex-col"><span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Comprimento</span><span class="font-mono text-slate-700 dark:text-slate-200 text-sm font-semibold">${length.toFixed(2)} m</span></div>
+                            <div class="flex flex-col border-t border-slate-100 dark:border-slate-800 pt-1.5 mt-0.5">
+                                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Centroide</span>
+                                <div class="flex flex-col gap-0.5 text-[10px] font-mono text-slate-600 dark:text-slate-300">
+                                    <div class="flex items-center gap-1.5"><span class="text-[8px] font-bold text-slate-400 w-6">DEC</span><span>${decStr}</span></div>
+                                    <div class="flex items-center gap-1.5"><span class="text-[8px] font-bold text-slate-400 w-6">GMS</span><span>${dmsStr}</span></div>
+                                    <div class="flex items-center gap-1.5"><span class="text-[8px] font-bold text-slate-400 w-6">UTM</span><span>${utmStr}</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                };
+
+                renderLine();
+                layer.on('pm:edit', renderLine);
+                layer.on('pm:vertexremoved', renderLine);
+                layer.on('pm:markerdragend', renderLine);
+
+            } else if (currentShape === 'Marker') {
+                const pointLabel = String(pointCounter).padStart(2, '0');
+                pointCounter++;
+
+                const techIcon = L.divIcon({
+                    className: 'custom-tech-point',
+                    html: `<div style="width: 14px; height: 14px; border: 2px solid black; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: transparent; position: relative;">
+                               <div style="width: 4px; height: 4px; background: black; border-radius: 50%;"></div>
+                               <span style="position: absolute; top: -16px; left: 10px; font-weight: 900; font-family: monospace; font-size: 13px; color: black; text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff;">P${pointLabel}</span>
+                           </div>`,
+                    iconSize: [14, 14],
+                    iconAnchor: [7, 7]
+                });
+                layer.setIcon(techIcon);
+
+                // Enable dragging for Point adjustment
+                if (layer.dragging) {
+                    layer.dragging.enable();
+                }
+                if (layer.pm) {
+                    layer.pm.enable({
+                        snappable: window.isMeasurementSnappingEnabled
+                    });
+                }
+
+                // Prevent click propagation on mousedown so dragging existing marker doesn't spawn new marker
+                layer.on('mousedown', (ev) => {
+                    if (ev) L.DomEvent.stopPropagation(ev);
+                });
+
+                // Right-click on marker deletes it directly
+                layer.on('contextmenu', (ev) => {
+                    if (ev) L.DomEvent.stop(ev);
+                    deleteFeature();
+                });
+
+                layer.bindTooltip(`P${pointLabel} <span style="font-size:9px;opacity:0.75;">(Arraste p/ mover | Botão direito p/ excluir)</span>`, {
+                    direction: 'top',
+                    offset: [0, -10]
+                });
+
+                const renderMarker = () => {
+                    const pos = layer.getLatLng();
+                    const lat = pos.lat;
+                    const lng = pos.lng;
+                    const decStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                    const dmsStr = typeof formatDMS === 'function' ? formatDMS(lat, lng) : 'N/A';
+                    const utmStr = typeof formatUTM === 'function' ? formatUTM(lat, lng) : 'N/A';
+
+                    contentBox.innerHTML = `
+                        <div class="flex flex-col w-full text-left mt-0.5">
+                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Ponto Técnico (P${pointLabel})</span>
+                            <div class="flex flex-col gap-0.5 text-[10px] font-mono text-slate-600 dark:text-slate-300">
+                                <div class="flex items-center gap-1.5"><span class="text-[8px] font-bold text-slate-400 w-6">DEC</span><span>${decStr}</span></div>
+                                <div class="flex items-center gap-1.5"><span class="text-[8px] font-bold text-slate-400 w-6">GMS</span><span>${dmsStr}</span></div>
+                                <div class="flex items-center gap-1.5"><span class="text-[8px] font-bold text-slate-400 w-6">UTM</span><span>${utmStr}</span></div>
+                            </div>
+                        </div>
+                    `;
+                };
+
+                renderMarker();
+                layer.on('drag', renderMarker);
+                layer.on('dragend', renderMarker);
+                layer.on('pm:dragend', renderMarker);
+            }
+
+            if (list) {
+                list.appendChild(item);
+                list.scrollTop = list.scrollHeight;
+            }
+
+            const saveBtn = document.getElementById('btn-save-measurement');
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                saveBtn.classList.add('hover:bg-emerald-600');
+            }
+
+        } catch (err) {
             console.error("Erro ao calcular medição", err);
-            document.getElementById('measurement-results').innerHTML = '<span class="text-red-500">Erro ao realizar cálculo.</span>';
         }
-        
-        // Disable draw mode so user can see result without continuing to draw
-        stopMeasurementDraw();
+
+        // CONTINUOUS DRAWING FOR MARKER VS STOP FOR LINE/POLYGON
+        if (currentMeasurementMode === 'Marker') {
+            setTimeout(() => {
+                if (currentMeasurementMode === 'Marker' && map && map.pm) {
+                    map.pm.enableDraw('Marker', {
+                        snappable: window.isMeasurementSnappingEnabled,
+                        snapDistance: 20
+                    });
+                }
+            }, 60);
+        } else {
+            // For Line and Polygon, stop draw mode after completing so user can immediately adjust vertices
+            stopMeasurementDraw();
+        }
     });
 }
 
+let reportMapInstance = null;
+
 function saveMeasurementPDF() {
-    const coordPanel = document.getElementById('coordinate-query-panel');
-    const isCoordActive = coordPanel && !coordPanel.classList.contains('hidden');
-    const btn = isCoordActive ? document.getElementById('btn-save-coord-pdf') : document.getElementById('btn-save-measurement');
-    const originalText = btn ? btn.innerHTML : 'Salvar';
+    if (!measurementLayerGroup || measurementLayerGroup.getLayers().length === 0) {
+        alert("Nenhuma medição para gerar relatório.");
+        return;
+    }
+
+    const btn = document.getElementById('btn-save-measurement');
+    const originalText = btn ? btn.innerHTML : 'Relatório';
     if (btn) btn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span> Gerando...';
     
-    setTimeout(() => {
-        // Step 1: Capture Map Container
-        const mapElement = document.getElementById('map');
-        html2canvas(mapElement, {
-            useCORS: true,
-            allowTaint: true
-        }).then(mapCanvas => {
-            const mapImgData = mapCanvas.toDataURL('image/jpeg', 1.0);
-            
-            // Step 2: Build Virtual A4 Paper (2480x3508)
-            const a4 = document.createElement('div');
-            a4.style.position = 'absolute';
-            a4.style.left = '-9999px';
-            a4.style.top = '0';
-            a4.style.width = '2480px';
-            a4.style.height = '3508px';
-            a4.style.backgroundColor = '#ffffff';
-            a4.style.overflow = 'hidden';
-            a4.style.zIndex = '-1000';
-            document.body.appendChild(a4);
+    // Obter usuário e foto
+    let userName = 'Usuário Logado';
+    let userPhoto = 'assets/logo.png';
+    const profileNameEl = document.getElementById('header-user-display-name');
+    if (profileNameEl && profileNameEl.innerText.trim() !== '') {
+        userName = profileNameEl.innerText;
+    }
+    
+    const profileImgEl = document.querySelector('.profile-avatar-img');
+    if (profileImgEl && profileImgEl.src) {
+        userPhoto = profileImgEl.src;
+    }
 
-            let settings = {
-                marginTop: 20,
-                marginBottom: 20,
-                marginLeft: 20,
-                marginRight: 20,
-                headerImg: null,
-                footerImg: null,
-                texts: []
-            };
+    // Processar geometrias e Tabela
+    let totalArea = 0;
+    let totalPerim = 0;
+    let totalDist = 0;
+    let pointCount = 1;
+    let features = [];
 
-            const savedSettings = localStorage.getItem('measurement_print_settings');
-            if (savedSettings) {
-                try { settings = JSON.parse(savedSettings); } catch(e) {}
-            }
-            
-            // Background Header
-            if (settings.headerImg && settings.headerImg.startsWith('data:image')) {
-                const hImg = document.createElement('img');
-                hImg.src = settings.headerImg;
-                hImg.style.position = 'absolute';
-                hImg.style.top = '0';
-                hImg.style.left = '0';
-                hImg.style.width = '100%';
-                a4.appendChild(hImg);
-            }
+    // Obter nome da entidade
+    let entidadeName = 'Entidade Engenharia';
+    const municipioEl = document.getElementById('header-municipio-display-name');
+    if (municipioEl && municipioEl.innerText.trim() !== '') {
+        entidadeName = municipioEl.innerText.trim() + ' Engenharia';
+    }
 
-            // Background Footer
-            if (settings.footerImg && settings.footerImg.startsWith('data:image')) {
-                const fImg = document.createElement('img');
-                fImg.src = settings.footerImg;
-                fImg.style.position = 'absolute';
-                fImg.style.bottom = '0';
-                fImg.style.left = '0';
-                fImg.style.width = '100%';
-                a4.appendChild(fImg);
-            }
-            
-            // Dynamic Map Canvas Container respecting margins
-            const mt = (settings.marginTop || 20) * 11.81;
-            const mb = (settings.marginBottom || 20) * 11.81;
-            const ml = (settings.marginLeft || 20) * 11.81;
-            const mr = (settings.marginRight || 20) * 11.81;
+    measurementLayerGroup.eachLayer(layer => {
+        const geojson = layer.toGeoJSON();
+        features.push(geojson);
+    });
 
-            const mapArea = document.createElement('div');
-            mapArea.style.position = 'absolute';
-            mapArea.style.left = ml + 'px';
-            mapArea.style.top = mt + 'px';
-            mapArea.style.width = (2480 - ml - mr) + 'px';
-            mapArea.style.height = (3508 - mt - mb) + 'px';
-            mapArea.style.boxSizing = 'border-box';
-            mapArea.style.overflow = 'hidden';
-            
-            // Use manual cropping to avoid html2canvas background-size/object-fit distortion bugs
-            const cropCanvas = document.createElement('canvas');
-            const mapAreaWidth = 2480 - ml - mr;
-            const mapAreaHeight = 3508 - mt - mb;
-            cropCanvas.width = mapAreaWidth;
-            cropCanvas.height = mapAreaHeight;
-            const ctx = cropCanvas.getContext('2d');
-            
-            let srcAspect = mapCanvas.width / mapCanvas.height;
-            let dstAspect = mapAreaWidth / mapAreaHeight;
-
-            let sWidth = mapCanvas.width;
-            let sHeight = mapCanvas.height;
-            let sx = 0;
-            let sy = 0;
-
-            if (srcAspect > dstAspect) {
-                sWidth = mapCanvas.height * dstAspect;
-                sx = (mapCanvas.width - sWidth) / 2;
-            } else {
-                sHeight = mapCanvas.width / dstAspect;
-                sy = (mapCanvas.height - sHeight) / 2;
-            }
-
-            ctx.drawImage(mapCanvas, sx, sy, sWidth, sHeight, 0, 0, mapAreaWidth, mapAreaHeight);
-
-            const croppedImgData = cropCanvas.toDataURL('image/jpeg', 1.0);
-            
-            const finalMapImg = document.createElement('img');
-            finalMapImg.src = croppedImgData;
-            finalMapImg.style.width = '100%';
-            finalMapImg.style.height = '100%';
-            finalMapImg.style.objectFit = 'fill';
-            mapArea.appendChild(finalMapImg);
-            
-            a4.appendChild(mapArea);
-
-            // Overlay at bottom right of the Map Area
-            const sourcePanel = isCoordActive ? coordPanel : document.getElementById('measurement-panel');
-            const panelHtml = sourcePanel.outerHTML;
-            const panelContainer = document.createElement('div');
-            panelContainer.innerHTML = panelHtml;
-            const clonedPanel = panelContainer.firstElementChild;
-            
-            clonedPanel.style.position = 'absolute';
-            clonedPanel.style.left = '';
-            clonedPanel.style.top = '';
-            clonedPanel.style.bottom = '20px';
-            clonedPanel.style.right = '20px';
-            clonedPanel.style.transform = isCoordActive ? 'scale(2.2)' : 'scale(3)';
-            clonedPanel.style.transformOrigin = 'bottom right';
-            clonedPanel.classList.remove('hidden', 'md:block', 'top-20', 'right-4');
-            
-            // Oculta botões de ação e ferramentas de cabeçalho no clone
-            const buttonsArea1 = clonedPanel.querySelector('.flex.gap-2.mt-4');
-            if (buttonsArea1) buttonsArea1.style.display = 'none';
-            const buttonsArea2 = clonedPanel.querySelector('.flex.gap-2.pt-2');
-            if (buttonsArea2) buttonsArea2.style.display = 'none';
-            const buttonsArea3 = clonedPanel.querySelector('.flex.gap-2.pt-3');
-            if (buttonsArea3) buttonsArea3.style.display = 'none';
-            const headerTools = clonedPanel.querySelector('.flex.items-center.gap-1, .flex.items-center.gap-1\\.5');
-            if (headerTools) headerTools.style.display = 'none';
-
-            if (isCoordActive) {
-                const origInputs = coordPanel.querySelectorAll('input, select');
-                const cloneInputs = clonedPanel.querySelectorAll('input, select');
-                origInputs.forEach((inp, idx) => {
-                    if (cloneInputs[idx]) {
-                        cloneInputs[idx].setAttribute('value', inp.value);
-                    }
-                });
-            }
-
-            mapArea.appendChild(clonedPanel);
-
-            // Add Custom Texts
-            if (settings.texts && Array.isArray(settings.texts)) {
-                settings.texts.forEach(item => {
-                    const txt = document.createElement('div');
-                    txt.style.position = 'absolute';
-                    txt.style.left = item.x + 'px';
-                    txt.style.top = item.y + 'px';
-                    txt.style.fontSize = item.fontSize + 'px';
-                    txt.style.color = item.color || '#1e293b';
-                    txt.style.fontWeight = 'bold';
-                    txt.style.transform = 'translate(-50%, -50%)';
-                    txt.style.whiteSpace = 'nowrap';
-                    txt.style.zIndex = '50';
-                    txt.innerText = item.text;
-                    a4.appendChild(txt);
-                });
-            }
-
-            // Step 3: Capture the Final A4 Layout
-            html2canvas(a4, {
-                useCORS: true,
-                allowTaint: true,
-                scale: 1,
-                windowWidth: 2480,
-                windowHeight: 3508
-            }).then(finalCanvas => {
-                const finalImgData = finalCanvas.toDataURL('image/jpeg', 0.9);
-                const { jsPDF } = window.jspdf;
-                const pdf = new jsPDF('p', 'mm', 'a4');
-                pdf.addImage(finalImgData, 'JPEG', 0, 0, 210, 297);
-                
-                const dateStr = new Date().toISOString().slice(0, 10);
-                const fileName = isCoordActive ? `Consulta_Coordenadas_${dateStr}.pdf` : `Medicao_${dateStr}.pdf`;
-                pdf.save(fileName);
-                
-                // Cleanup
-                document.body.removeChild(a4);
-                if (btn) btn.innerHTML = originalText;
-                
-            }).catch(err => {
-                console.error("Erro ao gerar PDF final", err);
-                document.body.removeChild(a4);
-                if (btn) {
-                    btn.innerHTML = '<span class="material-symbols-outlined text-[16px]">error</span> Erro';
-                    setTimeout(() => { btn.innerHTML = originalText; }, 2000);
-                }
+    // Coleta camadas vetoriais EXCLUSIVAMENTE do PROJETO ATIVO exibidas no menu lateral
+    let activeThemes = [];
+    const themesContainer = document.getElementById('themes-container');
+    if (themesContainer) {
+        const renderedCards = themesContainer.querySelectorAll('.theme-card');
+        if (renderedCards && renderedCards.length > 0) {
+            const renderedIds = Array.from(renderedCards).map(c => String(c.dataset.id || c.id.replace('theme-card-', '')));
+            activeThemes = (window.themes || []).filter(t => renderedIds.includes(String(t.id)));
+        }
+    }
+    if (activeThemes.length === 0) {
+        if (typeof window.isThemeInWorkspace === 'function' || (Array.isArray(window.activeWorkspaceThemes) && window.activeWorkspaceThemes.length > 0)) {
+            activeThemes = (window.themes || []).filter(t => {
+                if (typeof userCanOnTheme === 'function' && !userCanOnTheme(t.id, 'ver')) return false;
+                return typeof window.isThemeInWorkspace === 'function' 
+                    ? window.isThemeInWorkspace(t.id) 
+                    : (window.activeWorkspaceThemes || []).some(x => String(x) === String(t.id));
             });
+        }
+    }
+    if (activeThemes.length === 0) {
+        activeThemes = window.themes || [];
+    }
 
-        }).catch(err => {
-            console.error("Erro ao capturar mapa", err);
-            btn.innerHTML = '<span class="material-symbols-outlined text-[16px]">error</span> Erro';
-            setTimeout(() => { btn.innerHTML = originalText; }, 2000);
-        });
-    }, 500);
+    const camadasVetoriais = activeThemes.map(t => {
+        let featList = [];
+        if (Array.isArray(t.features) && t.features.length > 0) {
+            featList = t.features;
+        } else if (t.layer && typeof t.layer.toGeoJSON === 'function') {
+            try {
+                const gj = t.layer.toGeoJSON();
+                featList = gj.features || (gj.type === 'Feature' ? [gj] : []);
+            } catch (e) {}
+        }
+        return {
+            id: t.id,
+            nome: t.name || t.nome || 'Camada Vetorial',
+            cor: t.color || t.cor || '#3b82f6',
+            visivel: t.visible !== false,
+            features: featList
+        };
+    });
+
+    const reportData = {
+        userName: userName,
+        userPhoto: userPhoto,
+        entidadeName: entidadeName,
+        features: features,
+        camadasVetoriais: camadasVetoriais,
+        ortofotos: (window.rasterLayers || []).map(r => ({ 
+            id: r.id, 
+            nome: r.nome, 
+            url: r.url_imagem,
+            tipo: r.tipo,
+            bbox: r.bbox,
+            zoom_min: r.zoom_min,
+            zoom_max: r.zoom_max,
+            visivel: !!r.visivel
+        }))
+    };
+
+    // Compartilha objeto completo diretamente na memória (sem limite de 5MB do localStorage)
+    window._measurementReportData = reportData;
+
+    // Salva versão leve no localStorage com tratamento seguro contra QuotaExceededError
+    try {
+        const lightweightData = {
+            ...reportData,
+            camadasVetoriais: reportData.camadasVetoriais.map(cv => ({
+                id: cv.id,
+                nome: cv.nome,
+                cor: cv.cor,
+                visivel: cv.visivel,
+                // Mantém apenas uma amostra segura de feições no localStorage para não estourar a cota
+                features: (cv.features || []).slice(0, 100)
+            }))
+        };
+        localStorage.setItem('measurement_report_data', JSON.stringify(lightweightData));
+    } catch(eQuota) {
+        console.warn('[saveMeasurementPDF] localStorage com cota cheia. Salvando apenas metadados:', eQuota);
+        try {
+            const metaOnlyData = {
+                ...reportData,
+                camadasVetoriais: reportData.camadasVetoriais.map(cv => ({
+                    id: cv.id,
+                    nome: cv.nome,
+                    cor: cv.cor,
+                    visivel: cv.visivel,
+                    features: []
+                }))
+            };
+            localStorage.setItem('measurement_report_data', JSON.stringify(metaOnlyData));
+        } catch(eFatal) {
+            console.warn('[saveMeasurementPDF] Não foi possível persistir no localStorage; relatório usará window.opener:', eFatal);
+        }
+    }
+    
+    if (btn) btn.innerHTML = originalText;
+    
+    // Fechar o modal de visualização (se existir)
+    const modal = document.getElementById('measurement-report-modal');
+    if (modal) modal.classList.add('hidden');
+    
+    // Abrir a nova página independente
+    window.open('relatorio.html', '_blank');
 }
 
 // =========================================================================
@@ -1010,3 +1171,116 @@ function initCoordinateQueryPanelDrag() {
     });
 }
 
+
+
+
+window.collapseMeasurementDrawer = function() {
+    const geoTab = document.getElementById('meas-tab-geometry');
+    const coordTab = document.getElementById('meas-tab-coord-query');
+    if (geoTab) {
+        geoTab.classList.add('hidden');
+        geoTab.classList.remove('flex');
+    }
+    if (coordTab) {
+        coordTab.classList.add('hidden');
+        coordTab.classList.remove('flex');
+    }
+    ['Marker', 'Line', 'Polygon', 'CoordinateQuery'].forEach(m => {
+        const btn = document.getElementById('meas-btn-' + m);
+        if (btn) {
+            btn.classList.remove(
+                'bg-emerald-50', 'dark:bg-emerald-900/30', 'text-emerald-600', 'dark:text-emerald-400', 'border-emerald-300/60', 'dark:border-emerald-600/40',
+                'bg-blue-50', 'dark:bg-blue-900/30', 'text-blue-600', 'dark:text-blue-400', 'border-blue-300/60', 'dark:border-blue-600/40',
+                'bg-emerald-100', 'dark:bg-emerald-900/50', 'text-emerald-700', 'bg-blue-100', 'text-blue-700'
+            );
+            btn.classList.add('border-transparent');
+        }
+    });
+    if (typeof stopMeasurementDraw === 'function') {
+        stopMeasurementDraw();
+    }
+    currentMeasurementMode = null;
+};
+
+window.switchMeasurementMode = function(mode) {
+    if (!mode || mode === 'null' || mode === 'undefined') {
+        window.collapseMeasurementDrawer();
+        return;
+    }
+
+    const geoTab = document.getElementById('meas-tab-geometry');
+    const coordTab = document.getElementById('meas-tab-coord-query');
+    
+    // Check if the clicked button is already active -> toggle collapse
+    const clickedBtn = document.getElementById('meas-btn-' + mode);
+    const wasActive = clickedBtn && (
+        clickedBtn.classList.contains('bg-emerald-50') || 
+        clickedBtn.classList.contains('bg-blue-50') ||
+        clickedBtn.classList.contains('dark:bg-emerald-900/30') ||
+        clickedBtn.classList.contains('dark:bg-blue-900/30')
+    );
+
+    // Hide both drawers
+    if (geoTab) {
+        geoTab.classList.add('hidden');
+        geoTab.classList.remove('flex');
+    }
+    if (coordTab) {
+        coordTab.classList.add('hidden');
+        coordTab.classList.remove('flex');
+    }
+
+    // Reset all toolbar buttons to inactive state
+    ['Marker', 'Line', 'Polygon', 'CoordinateQuery'].forEach(m => {
+        const btn = document.getElementById('meas-btn-' + m);
+        if (btn) {
+            btn.classList.remove(
+                'bg-emerald-50', 'dark:bg-emerald-900/30', 'text-emerald-600', 'dark:text-emerald-400', 'border-emerald-300/60', 'dark:border-emerald-600/40',
+                'bg-blue-50', 'dark:bg-blue-900/30', 'text-blue-600', 'dark:text-blue-400', 'border-blue-300/60', 'dark:border-blue-600/40',
+                'bg-emerald-100', 'dark:bg-emerald-900/50', 'text-emerald-700', 'bg-blue-100', 'text-blue-700'
+            );
+            btn.classList.add('border-transparent');
+        }
+    });
+
+    if (wasActive) {
+        if (typeof stopMeasurementDraw === 'function') {
+            stopMeasurementDraw();
+        }
+        currentMeasurementMode = null;
+        return;
+    }
+
+    currentMeasurementMode = mode;
+
+    if (mode === 'CoordinateQuery') {
+        if (typeof stopMeasurementDraw === 'function') {
+            stopMeasurementDraw();
+        }
+        // Show search drawer
+        if (coordTab) {
+            coordTab.classList.remove('hidden');
+            coordTab.classList.add('flex');
+        }
+        const btn = document.getElementById('meas-btn-CoordinateQuery');
+        if (btn) {
+            btn.classList.remove('border-transparent');
+            btn.classList.add('bg-blue-50', 'dark:bg-blue-900/30', 'text-blue-600', 'dark:text-blue-400', 'border-blue-300/60', 'dark:border-blue-600/40');
+        }
+    } else {
+        // Show geometry results drawer
+        if (geoTab) {
+            geoTab.classList.remove('hidden');
+            geoTab.classList.add('flex');
+        }
+        const btn = document.getElementById('meas-btn-' + mode);
+        if (btn) {
+            btn.classList.remove('border-transparent');
+            btn.classList.add('bg-emerald-50', 'dark:bg-emerald-900/30', 'text-emerald-600', 'dark:text-emerald-400', 'border-emerald-300/60', 'dark:border-emerald-600/40');
+        }
+        // Trigger the drawing engine
+        if (typeof window.selectMeasurementOption === 'function') {
+            window.selectMeasurementOption(mode);
+        }
+    }
+};

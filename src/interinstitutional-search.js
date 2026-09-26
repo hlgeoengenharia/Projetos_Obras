@@ -28,7 +28,7 @@
             tiposPermitidos: ['ipl'],
             label: 'Inquérito Policial Federal (IPL)',
             badgeText: 'MPF • IPL',
-            placeholder: 'Pesquisar número do IPL (ex: 0000000-00.0000.0.00.0000)...',
+            placeholder: 'Pesquisar IPL em todas as bases',
             tiposValidos: ['ipl', 'ipf']
         },
         'PF': {
@@ -41,7 +41,7 @@
             tiposPermitidos: ['epol'],
             label: 'Processo / Inquérito Eletrônico (EPOL)',
             badgeText: 'PF • EPOL',
-            placeholder: 'Pesquisar número do EPOL (ex: 2023.1234567)...',
+            placeholder: 'Pesquisar EPOL em todas as bases',
             tiposValidos: ['epol', 'epol_1n']
         },
         'SPU': {
@@ -54,7 +54,7 @@
             tiposPermitidos: ['rip'],
             label: 'Registro Imobiliário Patrimonial (RIP)',
             badgeText: 'SPU • RIP',
-            placeholder: 'Pesquisar número do RIP (ex: 19650001155-06)...',
+            placeholder: 'Pesquisar RIP em todas as bases',
             tiposValidos: ['rip', 'rip_1n']
         },
         'SUPER': {
@@ -362,7 +362,7 @@
                 });
 
                 if (!rpcErr && Array.isArray(rpcData)) {
-                    console.log(`[BuscaInterinstitucional] RPC executado com sucesso: ${rpcData.length} registros encontrados.`);
+                    // console.log(`[BuscaInterinstitucional] RPC executado com sucesso: ${rpcData.length} registros encontrados.`);
                     const isSuperAdmin = !!(userProfile && (userProfile.super_admin || userProfile.is_superadmin));
                     const items = rpcData.map(r => ({
                         featureId: r.feature_id,
@@ -636,35 +636,6 @@
 
                 <!-- Barra de Pesquisa e Filtros -->
                 <div class="p-4 sm:p-5 bg-slate-50/80 dark:bg-slate-800/40 border-b border-slate-200/80 dark:border-slate-800/80 flex flex-col gap-3">
-                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                        
-                        <!-- Seletor de Tipo de Dado (Para SuperAdmin ou Geral) -->
-                        <div id="interinst-type-selector-container" class="shrink-0 flex items-center">
-                            <select id="interinst-type-select" class="h-11 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-cyan-500 outline-none cursor-pointer shadow-xs">
-                                <option value="todos">Todos os Registros</option>
-                                <option value="ipl">MPF • IPL (Inquérito Policial)</option>
-                                <option value="epol">PF • EPOL (Processo Eletrônico)</option>
-                                <option value="rip">SPU • RIP (Imóvel Patrimonial)</option>
-                            </select>
-                        </div>
-
-                        <!-- Campo de Busca -->
-                        <div class="relative flex-1">
-                            <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">search</span>
-                            <input id="interinst-search-input" type="text" placeholder="Digite o número para pesquisar..." class="w-full h-11 pl-11 pr-10 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all shadow-xs" autocomplete="off">
-                            <button id="interinst-search-clear" type="button" onclick="document.getElementById('interinst-search-input').value=''; this.classList.add('hidden');" class="hidden absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                                <span class="material-symbols-outlined text-[16px]">close</span>
-                            </button>
-                        </div>
-
-                        <!-- Botão Pesquisar -->
-                        <button id="interinst-btn-search" type="button" onclick="window.interinstitutionalSearch.executeSearch()" class="h-11 px-5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-cyan-500/25 transition-all cursor-pointer active:scale-95 shrink-0">
-                            <span id="interinst-btn-icon" class="material-symbols-outlined text-[18px]">travel_explore</span>
-                            <span>Pesquisar</span>
-                        </button>
-
-                    </div>
-
                     <!-- Dica dinâmica de formato -->
                     <div class="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 px-1">
                         <span id="interinst-format-hint">Digite o número com ou sem pontuação. O sistema reconhecerá os dígitos automaticamente.</span>
@@ -706,20 +677,7 @@
 
         document.body.appendChild(modal);
 
-        // Eventos de teclado (Enter para buscar, Esc para fechar)
-        const input = document.getElementById('interinst-search-input');
-        if (input) {
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    executeSearch();
-                }
-            });
-            input.addEventListener('input', () => {
-                const clearBtn = document.getElementById('interinst-search-clear');
-                if (clearBtn) clearBtn.classList.toggle('hidden', !input.value);
-            });
-        }
+
 
         modal.addEventListener('click', (e) => {
             if (e.target === modal) closeModal();
@@ -747,26 +705,27 @@
         }
 
         // Configura o Seletor de Tipo
-        const typeContainer = document.getElementById('interinst-type-selector-container');
-        const typeSelect = document.getElementById('interinst-type-select');
         const hintEl = document.getElementById('interinst-format-hint');
-        const input = document.getElementById('interinst-search-input');
 
-        if (typeSelect) {
-            if (enteConfig.sigla === 'SUPER' || enteConfig.sigla === 'GERAL') {
-                if (typeContainer) typeContainer.classList.remove('hidden');
-                typeSelect.value = enteConfig.defaultType;
-            } else {
-                // Usuário de ente específico (MPF, PF, SPU): trava no seu tipo
-                if (typeContainer) typeContainer.classList.add('hidden');
-                typeSelect.value = enteConfig.defaultType;
+        ['portal', 'mun'].forEach(view => {
+            const typeContainer = document.getElementById(`interinst-type-selector-container-${view}`);
+            const typeSelect = document.getElementById(`interinst-type-select-${view}`);
+            const input = document.getElementById(`interinst-search-input-${view}`);
+            
+            if (typeSelect) {
+                if (enteConfig.sigla === 'SUPER' || enteConfig.sigla === 'GERAL') {
+                    if (typeContainer) typeContainer.classList.remove('hidden');
+                    typeSelect.value = enteConfig.defaultType;
+                } else {
+                    if (typeContainer) typeContainer.classList.add('hidden');
+                    typeSelect.value = enteConfig.defaultType;
+                }
             }
-        }
-
-        if (input) {
-            input.placeholder = enteConfig.placeholder;
-            if (defaultTerm) input.value = defaultTerm;
-        }
+            if (input) {
+                input.placeholder = enteConfig.placeholder;
+                if (defaultTerm) input.value = defaultTerm;
+            }
+        });
 
         if (hintEl) {
             if (enteConfig.sigla === 'MPF') {
@@ -787,9 +746,7 @@
             card.classList.add('scale-100');
         }
 
-        setTimeout(() => {
-            if (input) input.focus();
-        }, 150);
+
     }
 
     function closeModal() {
@@ -803,30 +760,56 @@
         modal.classList.add('opacity-0', 'pointer-events-none');
     }
 
-    async function executeSearch() {
-        const input = document.getElementById('interinst-search-input');
-        const typeSelect = document.getElementById('interinst-type-select');
-        const initialEl = document.getElementById('interinst-empty-initial');
-        const loadingEl = document.getElementById('interinst-loading');
-        const listEl = document.getElementById('interinst-results-list');
-        const countEl = document.getElementById('interinst-results-count');
-        const btnSearch = document.getElementById('interinst-btn-search');
-        const btnIcon = document.getElementById('interinst-btn-icon');
+    function initHeaderSearch(userProfile) {
+        const enteConfig = detectUserEnteConfig(userProfile);
+        ['portal', 'mun'].forEach(view => {
+            const typeContainer = document.getElementById(`interinst-type-selector-container-${view}`);
+            const typeSelect = document.getElementById(`interinst-type-select-${view}`);
+            const input = document.getElementById(`interinst-search-input-${view}`);
+            
+            if (typeSelect) {
+                if (enteConfig.sigla === 'SUPER' || enteConfig.sigla === 'GERAL') {
+                    if (typeContainer) typeContainer.classList.remove('hidden');
+                    typeSelect.value = enteConfig.defaultType;
+                } else {
+                    if (typeContainer) typeContainer.classList.add('hidden');
+                    typeSelect.value = enteConfig.defaultType;
+                }
+            }
+            if (input) {
+                input.placeholder = enteConfig.placeholder;
+            }
+        });
+    }
 
+    async function searchFromHeader(viewType) {
+        const input = document.getElementById(`interinst-search-input-${viewType}`);
+        const typeSelect = document.getElementById(`interinst-type-select-${viewType}`);
+        
         const termo = input ? input.value.trim() : '';
         if (!termo) {
             if (input) input.focus();
             return;
         }
-
+        
         const tipoDado = typeSelect ? typeSelect.value : 'todos';
+        
+        openModal(termo);
+        await executeSearch(termo, tipoDado);
+    }
+
+    async function executeSearch(termo, tipoDado) {
+        const initialEl = document.getElementById('interinst-empty-initial');
+        const loadingEl = document.getElementById('interinst-loading');
+        const listEl = document.getElementById('interinst-results-list');
+        const countEl = document.getElementById('interinst-results-count');
+        
+        if (!termo) return;
 
         // Mostra estado de carregamento
         if (initialEl) initialEl.classList.add('hidden');
         if (listEl) { listEl.classList.add('hidden'); listEl.innerHTML = ''; }
         if (loadingEl) { loadingEl.classList.remove('hidden'); loadingEl.classList.add('flex'); }
-        if (btnSearch) btnSearch.disabled = true;
-        if (btnIcon) { btnIcon.textContent = 'progress_activity'; btnIcon.classList.add('animate-spin'); }
 
         try {
             let client = window.supabaseClient || (typeof globalThis !== 'undefined' && globalThis.supabaseClient) || null;
@@ -860,7 +843,7 @@
                 todosMunicipios: todosMunicipios
             });
 
-            console.log('[BuscaInterinstitucional] Busca executada:', { termo, tipoDado, total: result.total, items: result.items });
+            // console.log('[BuscaInterinstitucional] Busca executada:', { termo, tipoDado, total: result.total, items: result.items });
             _lastSearchResults = result.items || [];
 
             if (loadingEl) { loadingEl.classList.add('hidden'); loadingEl.classList.remove('flex'); }
@@ -897,8 +880,7 @@
                 `;
             }
         } finally {
-            if (btnSearch) btnSearch.disabled = false;
-            if (btnIcon) { btnIcon.textContent = 'travel_explore'; btnIcon.classList.remove('animate-spin'); }
+
         }
     }
 
@@ -1074,8 +1056,11 @@
         openModal,
         closeModal,
         executeSearch,
+        searchFromHeader,
+        initHeaderSearch,
         jumpToFeature,
         showAccessDeniedMessage,
         exportToExcel
     };
 });
+

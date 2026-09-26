@@ -4490,11 +4490,11 @@
                                 if (typeof window.canUserSeeThemeData === 'function' && !window.canUserSeeThemeData(theme)) return [];
                                 const vistos = new Set();
                                 const lista = [];
-                                const add = (k, l) => { const s = String(k || ''); if (!s || vistos.has(s.toLowerCase())) return; vistos.add(s.toLowerCase()); lista.push({ k: s, l: String(l || s).slice(0, 60) }); };
+                                const add = (k, l, tabTitle) => { const s = String(k || ''); if (!s || vistos.has(s.toLowerCase())) return; vistos.add(s.toLowerCase()); lista.push({ k: s, l: String(l || s).slice(0, 60), tabTitle: tabTitle || '' }); };
                                 const forms = (typeof allForms !== 'undefined' && Array.isArray(allForms)) ? allForms : (Array.isArray(window.allForms) ? window.allForms : []);
                                 const form = theme.formId ? forms.find(f => f.id === theme.formId) : null;
-                                ((form && (form.schema || form.tabs)) || []).forEach(tab => (tab.fields || []).forEach(fl => add(fl.id || fl.name || fl.label, fl.label || fl.name || fl.id)));
-                                (theme.features || []).slice(0, 30).forEach(ft => Object.keys((ft && ft.properties) || {}).forEach(k => { if (k.charAt(0) !== '_' && k !== 'themeId' && k !== 'id_banco') add(k, typeof window.getThemeFieldLabel === 'function' ? window.getThemeFieldLabel(theme, k) : k); }));
+                                ((form && (form.schema || form.tabs)) || []).forEach(tab => (tab.fields || []).forEach(fl => add(fl.id || fl.name || fl.label, fl.label || fl.name || fl.id, tab.title || tab.name)));
+                                (theme.features || []).slice(0, 30).forEach(ft => Object.keys((ft && ft.properties) || {}).forEach(k => { if (k.charAt(0) !== '_' && k !== 'themeId' && k !== 'id_banco') add(k, typeof window.getThemeFieldLabel === 'function' ? window.getThemeFieldLabel(theme, k) : k, ''); }));
                                 return lista;
                             } catch (e) { return []; }
                         },

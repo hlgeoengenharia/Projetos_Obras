@@ -16,8 +16,8 @@
     'use strict';
 
     const TILES = {
-        osm: { url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© OpenStreetMap contributors', maxZoom: 19 },
-        satelite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Imagens © Esri, Maxar, Earthstar Geographics', maxZoom: 19 }
+        osm: { url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© OpenStreetMap contributors', maxZoom: 24, maxNativeZoom: 19 },
+        satelite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Imagens © Esri, Maxar, Earthstar Geographics', maxZoom: 24, maxNativeZoom: 19 }
     };
 
     /** CSS do estilo do texto (negrito, itálico, sublinhado) — em linha, para a captura do mapa ler o estilo real. */
@@ -25,12 +25,12 @@
         e = e || {};
         return 'font-weight:' + (e.n ? 700 : 400) + ';font-style:' + (e.i ? 'italic' : 'normal') + ';text-decoration:' + (e.s ? 'underline' : 'none') + ';';
     }
-    /** Contorno do texto que contrasta com a cor escolhida: cor clara ganha contorno escuro e vice-versa (para ler sobre satélite). */
+    /** Contorno técnico nítido tipo CAD (sem borrão radial/brilho difuso) que contrasta com a cor escolhida */
     function haloDe(cor) {
         const h = String(cor || '').replace('#', '');
         const lum = h.length === 6 ? (0.299 * parseInt(h.slice(0, 2), 16) + 0.587 * parseInt(h.slice(2, 4), 16) + 0.114 * parseInt(h.slice(4, 6), 16)) / 255 : 0;
         const c = lum > 0.62 ? '#000' : '#fff';
-        return '0 0 2px ' + c + ', 0 0 2px ' + c + ', 0 0 3px ' + c;
+        return '0 0 2px ' + c + ', -1px -1px 0 ' + c + ', 1px -1px 0 ' + c + ', -1px 1px 0 ' + c + ', 1px 1px 0 ' + c;
     }
     /** CSS da cor do texto (e do contorno). Com padrao, a cor padrão não escreve nada (vale o CSS da folha). */
     function corTexto(cor, padrao) {
@@ -60,7 +60,7 @@
         let cfg = JSON.parse(JSON.stringify(opts.config));
 
         // preferCanvas: os vetores vão para um canvas, que a captura da imagem (Word/PNG) copia sem deslocamento
-        const map = L.map(opts.container, { zoomControl: true, attributionControl: true, zoomSnap: 0.25, preferCanvas: true });
+        const map = L.map(opts.container, { zoomControl: true, attributionControl: true, zoomSnap: 0.25, preferCanvas: true, maxZoom: 24, minZoom: 1 });
         if (map.attributionControl && map.attributionControl.setPrefix) map.attributionControl.setPrefix(false);
 
         const state = { draw: null, mlayers: [], measure: null, dlines: [], base: null, orto: null, feature: null, mask: null, neighbors: {}, scaleControl: null, markers: {}, pts: {}, nlabels: {}, grid: [], notes: {}, locator: null, exporting: false };
@@ -89,7 +89,11 @@
         function ortoLayer(o) {
             if (!ortoLayers[o.id]) {
                 if (o.tipo === 'xyz_tiles' || String(o.url).indexOf('{z}') >= 0) {
-                    ortoLayers[o.id] = L.tileLayer(o.url, { minZoom: 1, minNativeZoom: o.zoomMin, maxNativeZoom: o.zoomMax, maxZoom: 24, opacity: o.opacidade, attribution: 'Ortofoto: ' + o.nome, crossOrigin: true });
+                    const isSupabase = String(o.url || '').includes('supabase.co');
+                    const safeMax = isSupabase ? Math.min(Number(o.zoomMax || 19), 19) : o.zoomMax;
+                    const lyr = L.tileLayer(o.url, { minZoom: 1, minNativeZoom: o.zoomMin, maxNativeZoom: safeMax, maxZoom: 24, opacity: o.opacidade, attribution: 'Ortofoto: ' + o.nome, crossOrigin: true, errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' });
+                    if (lyr.on) lyr.on('tileerror', function(err) { if (err && err.tile) err.tile.style.display = 'none'; });
+                    ortoLayers[o.id] = lyr;
                 } else if (o.bbox) {
                     ortoLayers[o.id] = L.imageOverlay(o.url, o.bbox, { opacity: o.opacidade, crossOrigin: true, attribution: 'Ortofoto: ' + o.nome });
                 }
@@ -129,19 +133,35 @@
 
         function addNeighborLabels(c) {
             if (!cfg.rotulos.ativo) return;
-            const key = cfg.rotulos.campo === 'titulo' ? 't' : 'r';
+            function labelVal(props) {
+                if (!props) return '';
+                const campo = cfg.rotulos.campo || 'rotulo';
+                if (campo === 'titulo') return props.t || props.titulo || props.nome || props.name || props.r || '';
+                if (campo === 'rotulo') return props.r || props.rotulo || props.t || props.nome || '';
+                if (campo.indexOf('f:') === 0) {
+                    const fk = campo.slice(2);
+                    if (props.f && props.f[fk] !== undefined && props.f[fk] !== null) return String(props.f[fk]);
+                    if (props[fk] !== undefined && props[fk] !== null) return String(props[fk]);
+                }
+                if (props[campo] !== undefined && props[campo] !== null) return String(props[campo]);
+                if (props.f && props.f[campo] !== undefined && props.f[campo] !== null) return String(props.f[campo]);
+                return props.r || props.t || '';
+            }
             const itens = [];
-            c.features.forEach((x, i) => { if (x.properties && x.properties[key]) itens.push({ x: x, i: i }); });
+            c.features.forEach((x, i) => {
+                const val = labelVal(x.properties);
+                if (val) itens.push({ x: x, i: i, val: val });
+            });
             if (!itens.length || itens.length > MAX_ROTULOS) return;
             const list = [];
-            itens.forEach(({ x, i }) => {
+            itens.forEach(({ x, i, val }) => {
                 const bb = MT.geometryBBox(x.geometry);
                 if (!bb) return;
                 const id = nlKey(c, i);
                 const aj = cfg.rotulos.itens[id] || {};
                 const ct = aj.lat !== undefined ? [aj.lng, aj.lat] : MT.bboxCenter(bb);
                 const rot = aj.rot !== undefined ? aj.rot : 0;
-                const html = '<span class="report-nlabel-l" style="transform:' + labelTransform(rot) + ';' + estiloCss(cfg.rotulos.estilo) + corTexto(cfg.rotulos.cor, MT.MAP_DEFAULTS.rotulos.cor) + '" title="Arraste para mover">' + escapeHtml(x.properties[key]) + ROT_HANDLE + '</span>';
+                const html = '<span class="report-nlabel-l" style="transform:' + labelTransform(rot) + ';' + estiloCss(cfg.rotulos.estilo) + corTexto(cfg.rotulos.cor, MT.MAP_DEFAULTS.rotulos.cor) + '" title="Arraste para mover">' + escapeHtml(val) + ROT_HANDLE + '</span>';
                 const icon = L.divIcon({ className: 'report-nlabel', html: html, iconSize: [0, 0] });
                 const mk = L.marker([ct[1], ct[0]], { icon: icon, draggable: true, keyboard: false, zIndexOffset: 900 });
                 mk.addTo(map);

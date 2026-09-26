@@ -177,10 +177,35 @@ class CustomHandler(SimpleHTTPRequestHandler):
 
         return super().do_POST()
 
+def free_port(port):
+    import subprocess
+    import time
+    my_pid = os.getpid()
+    try:
+        out = subprocess.check_output('netstat -ano -p tcp', shell=True, text=True)
+        killed_any = False
+        for line in out.splitlines():
+            line = line.strip()
+            if f':{port}' in line and 'LISTENING' in line:
+                parts = line.split()
+                if len(parts) >= 5:
+                    pid = int(parts[-1])
+                    if pid > 0 and pid != my_pid:
+                        subprocess.run(f'taskkill /F /PID {pid}', shell=True, capture_output=True)
+                        killed_any = True
+        if killed_any:
+            time.sleep(0.5)
+    except Exception:
+        pass
+
 if __name__ == '__main__':
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
-    bind_addr = '127.0.0.1'
-    httpd = ThreadingHTTPServer((bind_addr, port), CustomHandler)
+    free_port(port)
+    try:
+        httpd = DualStackServer(('', port), CustomHandler)
+    except Exception:
+        # Fallback para IPv4 caso o sistema não tenha suporte a IPv6
+        httpd = ThreadingHTTPServer(('127.0.0.1', port), CustomHandler)
     httpd.daemon_threads = True
     print(f"Servidor Web GeoGestor multithread protegido ativo em http://localhost:{port} (http://127.0.0.1:{port})")
     try:

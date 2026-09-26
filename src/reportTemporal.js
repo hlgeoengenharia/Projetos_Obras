@@ -105,11 +105,14 @@
         function createMap(o) {
             const container = el('tmap-' + o.id);
             if (!container) return null;
-            const map = L.map(container, { zoomControl: false, attributionControl: true, zoomSnap: 0.25, preferCanvas: true });
+            const map = L.map(container, { zoomControl: false, attributionControl: true, zoomSnap: 0.25, preferCanvas: true, maxZoom: 24, minZoom: 1 });
             if (map.attributionControl && map.attributionControl.setPrefix) map.attributionControl.setPrefix(false);
             let layer;
             if (o.tipo === 'xyz_tiles' || String(o.url).indexOf('{z}') >= 0) {
-                layer = L.tileLayer(o.url, { minZoom: 1, minNativeZoom: o.zoomMin, maxNativeZoom: o.zoomMax, maxZoom: 24, opacity: o.opacidade, attribution: 'Ortofoto: ' + o.nome, crossOrigin: true });
+                const isSupabase = String(o.url || '').includes('supabase.co');
+                const safeMax = isSupabase ? Math.min(Number(o.zoomMax || 19), 19) : o.zoomMax;
+                layer = L.tileLayer(o.url, { minZoom: 1, minNativeZoom: o.zoomMin, maxNativeZoom: safeMax, maxZoom: 24, opacity: o.opacidade, attribution: 'Ortofoto: ' + o.nome, crossOrigin: true, errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' });
+                if (layer.on) layer.on('tileerror', function(err) { if (err && err.tile) err.tile.style.display = 'none'; });
             } else if (o.bbox) {
                 layer = L.imageOverlay(o.url, o.bbox, { opacity: o.opacidade, crossOrigin: true, attribution: 'Ortofoto: ' + o.nome });
             }
