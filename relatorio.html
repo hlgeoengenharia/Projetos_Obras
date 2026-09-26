@@ -1,0 +1,1436 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Relatório Técnico de Medição Georreferenciada - GeoGestor</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    // Buffer Leaflet GridLayers: pre-carrega +1 tile em todas as direções (buffer de 256px)
+    // Elimina qualquer faixa branca ou deslocamento ao redimensionar ou imprimir em PDF
+    if (window.L && L.GridLayer) {
+        L.GridLayer.include({
+            _pxBoundsToTileRange: function (bounds) {
+                var tileSize = this.getTileSize();
+                return new L.Bounds(
+                    bounds.min.unscaleBy(tileSize).floor().subtract([1, 1]),
+                    bounds.max.unscaleBy(tileSize).ceil().add([1, 1])
+                );
+            }
+        });
+    }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+<style>
+        body { 
+            background: #0f172a; 
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            color: #1e293b;
+            margin: 0;
+            padding: 0;
+        }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        .layout-wrapper {
+            display: flex;
+            flex-direction: row;
+            align-items: stretch;
+            min-height: calc(100vh - 56px);
+            width: 100%;
+            background: #0b1120;
+        }
+        .page-column {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 24px 16px 48px 16px;
+            overflow-y: auto;
+            min-width: 0;
+            order: 1;
+            background: #0b1120;
+        }
+        .sidebar-column {
+            width: 320px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 56px;
+            height: calc(100vh - 56px);
+            overflow-y: auto;
+            background: #0a0f1e;
+            border-left: 1px solid rgba(255,255,255,0.08);
+            order: 2;
+        }
+
+        .a4-page {
+            width: 210mm !important;
+            min-width: 210mm !important;
+            max-width: 210mm !important;
+            height: 297mm !important;
+            min-height: 297mm !important;
+            max-height: 297mm !important;
+            margin: 0 auto;
+            background: #ffffff;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05);
+            padding: 7mm !important;
+            display: flex;
+            flex-direction: column;
+            border-radius: 4px;
+            box-sizing: border-box;
+            position: relative;
+            overflow: hidden !important;
+        }
+
+        #map-wrapper {
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+        #map {
+            width: 100% !important;
+            height: 100% !important;
+        }
+        .leaflet-container {
+            width: 100% !important;
+            height: 100% !important;
+            background-color: #f1f5f9;
+        }
+
+        .report-table { border-collapse: separate; border-spacing: 0; width: 100%; }
+        .report-table th {
+            background: #f8fafc; color: #0f172a; font-weight: 700; font-size: 8px;
+            text-transform: uppercase; padding: 3.5px 4px;
+            border-top: 1px solid #e2e8f0; border-bottom: 1.5px solid #cbd5e1; border-right: 1px solid #f1f5f9;
+        }
+        .report-table th:last-child { border-right: none; }
+        .report-table td {
+            font-size: 8px; padding: 3.5px 4px; color: #334155;
+            border-bottom: 1px solid #f1f5f9; border-right: 1px solid #f8fafc;
+            white-space: nowrap;
+        }
+        .report-table td:last-child { border-right: none; }
+        .report-table tbody tr:nth-child(even) { background-color: #fafbfd; }
+        .report-table tbody tr:hover { background-color: #f1f5f9; }
+
+        .coord-badge {
+            font-size: 7.5px; font-weight: 700; color: #475569;
+            font-family: 'JetBrains Mono', monospace; background: transparent;
+        }
+
+        .custom-point-marker { display: flex; align-items: center; justify-content: center; }
+        .custom-point-tag {
+            background: transparent; color: #000; border: none;
+            padding: 0; border-radius: 0; font-size: 11px; font-weight: 900;
+            font-family: 'JetBrains Mono', monospace; white-space: nowrap;
+            text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff;
+        }
+
+        /* Free Text Soft White Halo (Borda branca suave cartográfica) */
+        .free-text-item {
+            paint-order: stroke fill !important;
+            -webkit-text-stroke: 1.4px #ffffff !important;
+            text-shadow: 
+                0 0 2px #ffffff,
+                0 0 4px #ffffff,
+                0 0 8px rgba(255, 255, 255, 0.95),
+                -1px -1px 0 #ffffff,
+                 1px -1px 0 #ffffff,
+                -1px  1px 0 #ffffff,
+                 1px  1px 0 #ffffff !important;
+            letter-spacing: 0.025em;
+        }
+
+        @media print {
+            .no-print, .sidebar-column, header { display: none !important; }
+            @page { 
+                size: A4 portrait; 
+                margin: 0 !important; 
+            }
+            body { 
+                background: white !important; 
+                margin: 0 !important; 
+                padding: 0 !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            .layout-wrapper { display: block !important; margin: 0 !important; padding: 0 !important; background: transparent !important; }
+            .page-column { display: block !important; margin: 0 !important; padding: 0 !important; background: transparent !important; }
+            .a4-page { 
+                box-shadow: none !important; 
+                margin: 0 !important; 
+                width: 210mm !important; 
+                min-width: 210mm !important;
+                max-width: 210mm !important;
+                height: 297mm !important;
+                min-height: 297mm !important;
+                max-height: 297mm !important;
+                padding: 7mm !important;
+                page-break-after: avoid !important; 
+                page-break-inside: avoid !important;
+                border-radius: 0 !important;
+                overflow: hidden !important;
+            }
+            /* Remove rigorosamente qualquer borda vermelha tracejada ou outline de seleção na impressão */
+            #free-text-overlay *,
+            .free-text-item,
+            [id^="ft_"],
+            .custom-point-tag,
+            .measure-label div,
+            .measure-label-area div,
+            .leaflet-marker-icon,
+            .leaflet-marker-icon * {
+                outline: none !important;
+                border: none !important;
+                box-shadow: none !important;
+            }
+            /* Preservar espaçamento de texto, kerning e respiração das tabelas e títulos */
+            * {
+                letter-spacing: 0.015em !important;
+                word-spacing: normal !important;
+                font-variant-ligatures: none !important;
+            }
+            .tracking-tight, .tracking-tighter {
+                letter-spacing: 0.02em !important;
+            }
+            .report-table {
+                width: 100% !important;
+            }
+            .report-table th {
+                font-size: 8px !important;
+                padding: 4px 5.5px !important;
+                letter-spacing: 0.025em !important;
+                word-spacing: 0.04em !important;
+            }
+            .report-table td {
+                font-size: 8px !important;
+                padding: 4px 5.5px !important;
+                letter-spacing: 0.025em !important;
+                word-spacing: 0.04em !important;
+            }
+            .coord-badge {
+                font-size: 8px !important;
+                letter-spacing: 0.025em !important;
+            }
+        }
+</style>
+</head>
+<body class="min-h-screen flex flex-col">
+<header class="no-print w-full bg-slate-900/95 backdrop-blur border-b border-slate-800 text-white px-6 py-2 flex justify-between items-center sticky top-0 z-50 shadow-lg">
+    <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center"><span class="material-symbols-outlined text-white text-xl">layers</span></div>
+        <div>
+            <div class="flex items-center gap-2">
+                <span class="font-bold text-sm">GeoGestor</span>
+                <span class="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full uppercase">Topografia</span>
+            </div>
+            <p class="text-[10px] text-slate-400">Arraste o mapa para enquadrar antes de imprimir.</p>
+        </div>
+    </div>
+    <button class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase py-2 px-4 rounded-lg flex items-center gap-2 cursor-pointer" onclick="prepareAndPrint()">
+        <span class="material-symbols-outlined text-base">print</span> Imprimir / PDF
+    </button>
+</header>
+
+<div class="layout-wrapper">
+
+<!-- Controls Panel (Screen Only) -->
+<aside class="sidebar-column no-print flex flex-col overflow-hidden text-slate-300 font-sans">
+    <div class="px-4 py-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center flex-shrink-0">
+        <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-emerald-400 text-lg">tune</span>
+            <span class="font-bold text-xs uppercase tracking-wider text-slate-100">Ajustes de Impressão</span>
+        </div>
+    </div>
+    
+    <div class="flex-1 overflow-y-auto" id="accordion-container">
+        
+        <!-- Mapa Base -->
+        <div class="border-b border-slate-800 accordion-item">
+            <button class="w-full px-4 py-3 flex items-center justify-between text-slate-400 hover:bg-slate-800/50 transition-colors accordion-header" onclick="toggleAccordion(this)">
+                <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider">
+                    <span class="material-symbols-outlined text-sm">map</span>
+                    Mapa Base
+                </div>
+                <span class="material-symbols-outlined text-sm transition-transform duration-200 chevron">expand_more</span>
+            </button>
+            <div class="px-4 pb-4 accordion-content hidden">
+                <select id="ctrl-basemap" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-2 outline-none focus:border-emerald-500 transition-colors">
+                    <option value="satellite">Satélite (Google)</option>
+                    <option value="osm">Ruas (OpenStreetMap)</option>
+                    <option value="none">Sem mapa base (Fundo Branco)</option>
+                    <optgroup label="Ortofotos ativas no projeto">
+                        <option value="orto1">Ortofoto_01-09-2026 — 01/09/2026</option>
+                        <option value="orto2">Ortofoto_10-02-2026 — 10/02/2026</option>
+                        <option value="orto3">Orla 18-06-2025 — 18/06/2025</option>
+                        <option value="orto4">Base Cabedelo 2021 — 01/10/2021</option>
+                    </optgroup>
+                </select>
+                <p class="text-[9px] text-slate-500 leading-tight mt-2">Selecione uma base fictícia para teste. (A Ortofoto usará o satélite ESRI temporariamente para diferenciar do Google).</p>
+            </div>
+        </div>
+
+        <!-- Camadas Ativas -->
+        <div class="border-b border-slate-800 accordion-item">
+            <button class="w-full px-4 py-3 flex items-center justify-between text-slate-400 hover:bg-slate-800/50 transition-colors accordion-header" onclick="toggleAccordion(this)">
+                <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider">
+                    <span class="material-symbols-outlined text-sm text-emerald-400">layers</span>
+                    Camadas Ativas
+                </div>
+                <span class="material-symbols-outlined text-sm transition-transform duration-200 chevron">expand_more</span>
+            </button>
+            <div class="px-4 pb-4 accordion-content hidden">
+                <div id="active-layers-list" class="flex flex-col gap-1.5 max-h-56 overflow-y-auto pr-1">
+                    <div class="text-[10px] text-slate-500 italic py-2">Carregando camadas...</div>
+                </div>
+                <p class="text-[9px] text-slate-500 leading-tight mt-2">Ative ou desative as camadas vetoriais (GeoJSON) do menu lateral no mapa do relatório.</p>
+            </div>
+        </div>
+
+        <!-- Preenchimento (Polígono) -->
+        <div class="border-b border-slate-800 accordion-item">
+            <button class="w-full px-4 py-3 flex items-center justify-between text-slate-400 hover:bg-slate-800/50 transition-colors accordion-header" onclick="toggleAccordion(this)">
+                <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider">
+                    <span class="material-symbols-outlined text-sm">format_color_fill</span>
+                    Preenchimento (Polígono)
+                </div>
+                <span class="material-symbols-outlined text-sm transition-transform duration-200 chevron">expand_more</span>
+            </button>
+            <div class="px-4 pb-4 accordion-content hidden flex flex-col gap-3">
+                <!-- Cor do Preenchimento do Polígono -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-[10px] text-slate-300 font-semibold">Cor do Polígono</span>
+                        <input type="color" id="ctrl-poly-fill-color" value="#10b981" class="w-6 h-6 rounded cursor-pointer border border-slate-600 bg-transparent p-0" title="Cor do Preenchimento">
+                    </div>
+                    <div class="flex items-center gap-1.5 pt-0.5">
+                        <button type="button" class="w-4 h-4 rounded-full bg-emerald-500 hover:scale-110 transition-transform cursor-pointer" onclick="setPolygonColor('#10b981', null)" title="Verde Esmeralda"></button>
+                        <button type="button" class="w-4 h-4 rounded-full bg-blue-500 hover:scale-110 transition-transform cursor-pointer" onclick="setPolygonColor('#3b82f6', null)" title="Azul"></button>
+                        <button type="button" class="w-4 h-4 rounded-full bg-amber-500 hover:scale-110 transition-transform cursor-pointer" onclick="setPolygonColor('#f59e0b', null)" title="Amarelo / Dourado"></button>
+                        <button type="button" class="w-4 h-4 rounded-full bg-red-500 hover:scale-110 transition-transform cursor-pointer" onclick="setPolygonColor('#ef4444', null)" title="Vermelho"></button>
+                        <button type="button" class="w-4 h-4 rounded-full bg-cyan-400 hover:scale-110 transition-transform cursor-pointer" onclick="setPolygonColor('#22d3ee', null)" title="Ciano"></button>
+                        <button type="button" class="w-4 h-4 rounded-full bg-purple-500 hover:scale-110 transition-transform cursor-pointer" onclick="setPolygonColor('#a855f7', null)" title="Roxo"></button>
+                        <button type="button" class="w-4 h-4 rounded-full bg-orange-500 hover:scale-110 transition-transform cursor-pointer" onclick="setPolygonColor('#f97316', null)" title="Laranja"></button>
+                    </div>
+                </div>
+
+                <!-- Opacidade do Preenchimento -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-[10px] text-slate-300 font-semibold">Opacidade</span>
+                        <span id="ctrl-opacity-val" class="text-[10px] font-mono text-emerald-400 font-bold">20%</span>
+                    </div>
+                    <div class="flex items-center gap-3 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5">
+                        <input type="range" id="ctrl-opacity" min="0" max="1" step="0.05" value="0.2" class="w-full accent-emerald-500">
+                    </div>
+                </div>
+
+                <!-- Cor da Linha (Contorno e Medição) -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-[10px] text-slate-300 font-semibold">Cor da Linha</span>
+                        <input type="color" id="ctrl-poly-stroke-color" value="#10b981" class="w-6 h-6 rounded cursor-pointer border border-slate-600 bg-transparent p-0" title="Cor da Linha">
+                    </div>
+                    <div class="flex items-center gap-1.5 pt-0.5">
+                        <button type="button" class="w-4 h-4 rounded-full bg-emerald-500 hover:scale-110 transition-transform cursor-pointer" onclick="setPolygonColor(null, '#10b981')" title="Verde Esmeralda"></button>
+                        <button type="button" class="w-4 h-4 rounded-full bg-blue-500 hover:scale-110 transition-transform cursor-pointer" onclick="setPolygonColor(null, '#3b82f6')" title="Azul"></button>
+                        <button type="button" class="w-4 h-4 rounded-full bg-amber-400 hover:scale-110 transition-transform cursor-pointer" onclick="setPolygonColor(null, '#facc15')" title="Amarelo"></button>
+                        <button type="button" class="w-4 h-4 rounded-full bg-red-500 hover:scale-110 transition-transform cursor-pointer" onclick="setPolygonColor(null, '#ef4444')" title="Vermelho"></button>
+                        <button type="button" class="w-4 h-4 rounded-full bg-white hover:scale-110 transition-transform cursor-pointer border border-slate-400" onclick="setPolygonColor(null, '#ffffff')" title="Branco"></button>
+                        <button type="button" class="w-4 h-4 rounded-full bg-black hover:scale-110 transition-transform cursor-pointer border border-slate-600" onclick="setPolygonColor(null, '#000000')" title="Preto"></button>
+                    </div>
+                </div>
+
+                <!-- Espessura da Linha -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-[10px] text-slate-300 font-semibold">Espessura da Linha</span>
+                        <span id="ctrl-weight-val" class="text-[10px] font-mono text-emerald-400 font-bold">2 px</span>
+                    </div>
+                    <div class="flex items-center gap-3 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5">
+                        <input type="range" id="ctrl-poly-weight" min="1" max="8" step="1" value="2" class="w-full accent-emerald-500">
+                    </div>
+                </div>
+
+                <p class="text-[9px] text-slate-500 leading-tight">Altere as cores e espessura do polígono e das linhas de medição em tempo real.</p>
+            </div>
+        </div>
+
+        <!-- Medições no Mapa -->
+        <div class="border-b border-slate-800 accordion-item">
+            <button class="w-full px-4 py-3 flex items-center justify-between text-slate-400 hover:bg-slate-800/50 transition-colors accordion-header" onclick="toggleAccordion(this)">
+                <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider">
+                    <span class="material-symbols-outlined text-sm">straighten</span>
+                    Medições Geométricas
+                </div>
+                <span class="material-symbols-outlined text-sm transition-transform duration-200 chevron">expand_more</span>
+            </button>
+            <div class="px-4 pb-4 accordion-content hidden">
+                <label class="flex items-center gap-3 cursor-pointer bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 hover:bg-slate-700/50 transition-colors">
+                    <div class="relative">
+                        <input type="checkbox" id="ctrl-measures" class="sr-only peer">
+                        <div class="w-8 h-4 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+                    </div>
+                    <span class="text-xs font-semibold text-slate-200">Exibir Cotas no Mapa</span>
+                </label>
+                
+                <div class="flex items-center gap-1.5 mt-2 bg-slate-800/50 p-1.5 rounded-lg border border-slate-700/50">
+                    <button id="ctrl-measure-bold" class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors font-serif font-bold text-sm" title="Negrito">B</button>
+                    <button id="ctrl-measure-italic" class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors font-serif italic text-sm" title="Itálico">I</button>
+                    <button id="ctrl-measure-underline" class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors font-serif underline text-sm" title="Sublinhado">U</button>
+                    <div class="w-px h-4 bg-slate-700 mx-1"></div>
+                    <button id="ctrl-measure-size-down" class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors text-xs" title="Diminuir Fonte">A-</button>
+                    <span id="ctrl-measure-size-val" class="text-[10px] font-mono text-emerald-400 w-4 text-center">9</span>
+                    <button id="ctrl-measure-size-up" class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors text-sm" title="Aumentar Fonte">A+</button>
+                </div>
+                <p class="text-[9px] text-slate-500 leading-tight mt-1">Cotas alinhadas com as arestas. O texto rotacionado não se altera.</p>
+            </div>
+        </div>
+
+        <!-- Texto Livre -->
+        <div class="accordion-item">
+            <button class="w-full px-4 py-3 flex items-center justify-between text-slate-400 hover:bg-slate-800/50 transition-colors accordion-header" onclick="toggleAccordion(this)">
+                <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider">
+                    <span class="material-symbols-outlined text-sm">text_fields</span>
+                    Texto Livre
+                </div>
+                <span class="material-symbols-outlined text-sm transition-transform duration-200 chevron">expand_more</span>
+            </button>
+            <div class="px-4 pb-4 accordion-content hidden">
+                <div class="flex items-center gap-2 mb-2">
+                    <input type="text" id="ctrl-freetext-input" placeholder="Digite aqui..." class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1.5 outline-none focus:border-emerald-500">
+                    <button id="btn-add-freetext" class="bg-emerald-600 hover:bg-emerald-500 text-white p-1.5 rounded flex items-center justify-center transition-colors" title="Adicionar ao Mapa">
+                        <span class="material-symbols-outlined text-sm">add</span>
+                    </button>
+                </div>
+                
+                <!-- Real Font Controls for Free Text -->
+                <div class="flex items-center gap-1.5 mb-2 bg-slate-800/50 p-1.5 rounded-lg border border-slate-700/50">
+                    <button id="ft-measure-bold" class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors font-serif font-bold text-sm bg-slate-700 text-white" title="Negrito">B</button>
+                    <button id="ft-measure-italic" class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors font-serif italic text-sm" title="Itálico">I</button>
+                    <button id="ft-measure-underline" class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors font-serif underline text-sm" title="Sublinhado">U</button>
+                    <div class="w-px h-4 bg-slate-700 mx-1"></div>
+                    <button id="ft-measure-size-down" class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors text-xs" title="Diminuir Fonte">A-</button>
+                    <span id="ft-measure-size-val" class="text-[10px] font-mono text-emerald-400 w-4 text-center">9</span>
+                    <button id="ft-measure-size-up" class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors text-sm" title="Aumentar Fonte">A+</button>
+                    <div class="w-px h-4 bg-slate-700 mx-1"></div>
+                    <input type="color" id="ft-measure-color" value="#0f172a" class="w-6 h-6 rounded cursor-pointer border border-slate-600 bg-transparent p-0" title="Cor do Texto">
+                </div>
+                
+                <div class="flex items-center justify-between bg-slate-800/50 p-1.5 rounded-lg border border-slate-700/50">
+                    <span class="text-[9px] text-slate-400 font-semibold">Rotação</span>
+                    <input type="range" id="ctrl-rotation" min="-180" max="180" step="1" value="0" class="w-24 accent-emerald-500">
+                    <button id="btn-remove-selected" class="text-red-400 hover:text-red-300 flex items-center justify-center" title="Remover selecionado">
+                        <span class="material-symbols-outlined text-sm">delete</span>
+                    </button>
+                </div>
+                <p class="text-[9px] text-slate-500 leading-tight mt-2">O texto novo vai puxar o Negrito/Itálico/Tamanho das Medições Geométricas acima. Arraste no mapa para mover. Selecione para girar/excluir.</p>
+            </div>
+        </div>
+        
+    </div>
+</aside>
+
+<script>
+    function toggleAccordion(btn) {
+        const item = btn.parentElement;
+        const content = item.querySelector('.accordion-content');
+        const chevron = item.querySelector('.chevron');
+        
+        // Close all others
+        const allContents = document.querySelectorAll('.accordion-content');
+        const allChevrons = document.querySelectorAll('.chevron');
+        
+        const isClosed = content.classList.contains('hidden');
+        
+        allContents.forEach(c => c.classList.add('hidden'));
+        allChevrons.forEach(c => c.style.transform = 'rotate(0deg)');
+        
+        if (isClosed) {
+            content.classList.remove('hidden');
+            chevron.style.transform = 'rotate(180deg)';
+        }
+    }
+    // Open the first one by default
+    document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => {
+            const firstHeader = document.querySelector('.accordion-header');
+            if(firstHeader) toggleAccordion(firstHeader);
+        }, 100);
+    });
+</script>
+
+<div class="page-column">
+<main class="a4-page text-xs justify-between gap-1 relative" id="a4-page-root">
+    <!-- Free Text Overlay covering the ENTIRE A4 sheet -->
+    <div id="free-text-overlay" class="absolute inset-0 w-full h-full pointer-events-none z-[450] overflow-visible"></div>
+    <div class="w-full flex-1 flex flex-col border-[1.5px] border-slate-800 rounded p-2 relative bg-white">
+        
+        <!-- Header Section -->
+        <div class="w-full border-b-[2px] border-slate-800 pb-1.5 mb-1.5">
+            <div class="flex items-stretch justify-between gap-2">
+                <div class="flex items-center gap-2">
+                    <div class="w-14 h-14 rounded-lg border border-slate-200 bg-slate-50 p-1 flex items-center justify-center shadow-sm">
+                        <img id="report-logo" src="assets/logo.png" class="max-w-full max-h-full object-contain rounded-md" alt="Logo"/>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-1.5">
+                            <span id="report-entidade-name" class="text-[12px] font-black tracking-tight text-slate-900 uppercase">Entidade Engenharia</span>
+                            <span class="text-[7.5px] bg-slate-100 text-slate-700 px-1 py-0.5 rounded font-bold border border-slate-200">RT-2025</span>
+                        </div>
+                        <h1 class="text-[15px] font-extrabold text-slate-900 uppercase tracking-tight leading-tight flex items-center whitespace-nowrap">MAPA DE LOCALIZAÇÃO</h1>
+                        <p class="text-[8.5px] font-medium text-slate-500">Levantamento Planimétrico Cadastral Georreferenciado</p>
+                    </div>
+                </div>
+                <div class="min-w-[190px] rounded p-1 flex flex-col justify-center gap-0.5 text-[8.5px] border border-slate-200 bg-slate-50/50">
+                    <div class="flex items-center justify-between border-b border-slate-200/70 pb-0.5">
+                        <span class="text-slate-400 font-semibold uppercase text-[7.5px]">Responsável:</span>
+                        <span class="font-bold text-slate-800 truncate max-w-[110px] text-right" id="report-user-name">Usuário</span>
+                    </div>
+                    <div class="flex items-center justify-between border-b border-slate-200/70 pb-0.5">
+                        <span class="text-slate-400 font-semibold uppercase text-[7.5px]">Data Emissão:</span>
+                        <span class="font-bold text-slate-800 mono text-right" id="report-date">--/--/----</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-400 font-semibold uppercase text-[7.5px]">Datum:</span>
+                        <span class="font-bold text-emerald-700 mono text-right">SIRGAS 2000</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coordinates Container wrapper for borders -->
+        <div class="w-full flex-1 flex relative mb-1.5 px-3 py-3">
+            <div id="grid-top" class="absolute top-0 w-full left-0 flex justify-around pointer-events-none px-6"></div>
+            <div id="grid-bottom" class="absolute bottom-0 w-full left-0 flex justify-around pointer-events-none px-6"></div>
+            <div id="grid-left" class="absolute left-0 h-full top-0 flex flex-col justify-around items-center pointer-events-none py-6"></div>
+            <div id="grid-right" class="absolute right-0 h-full top-0 flex flex-col justify-around items-center pointer-events-none py-6"></div>
+
+            <!-- Map Frame (flex-1 to take all vertical space) -->
+            <div class="w-full flex-1 flex flex-col border border-slate-700 relative overflow-hidden bg-slate-100 z-10" id="map-wrapper" style="min-height: 100px;">
+                <div id="map" class="w-full h-full relative z-10 flex-1" style="background-color: #f1f5f9;"></div>
+                <div class="absolute top-2 right-2 z-[400] flex flex-col items-center pointer-events-none">
+                    <span class="font-black text-[10px] text-slate-900 leading-none">N</span>
+                    <svg class="w-4 h-4 text-slate-800 mt-0.5" fill="currentColor" viewbox="0 0 24 24"><polygon fill="#0f172a" points="12,2 17,21 12,17 7,21"></polygon><polygon fill="#ef4444" points="12,2 17,21 12,17"></polygon></svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coordinates Table -->
+        <div class="w-full border border-slate-300 rounded overflow-hidden mb-1.5 bg-white shadow-xs">
+            <div class="bg-slate-900 text-white px-2 py-1 flex justify-between items-center">
+                <div class="flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[12px] text-emerald-400">format_list_bulleted</span>
+                    <h2 class="font-extrabold text-[8.5px] uppercase">Coordenadas dos Vértices</h2>
+                </div>
+            </div>
+            <div>
+                <table class="report-table">
+                    <thead>
+                        <tr>
+                            <th class="text-center w-12" rowspan="2">Vértice</th>
+                            <th class="text-center bg-slate-100/70" colspan="2">Decimais</th>
+                            <th class="text-center bg-slate-50" colspan="2">GMS</th>
+                            <th class="text-center bg-emerald-50/50 text-emerald-950" colspan="3">UTM (SIRGAS 2000)</th>
+                        </tr>
+                        <tr class="bg-slate-50 text-[7px]">
+                            <th class="text-center font-bold">Lat (°)</th>
+                            <th class="text-center font-bold">Long (°)</th>
+                            <th class="text-center font-bold">Lat (DMS)</th>
+                            <th class="text-center font-bold">Long (DMS)</th>
+                            <th class="text-center font-bold">Zona</th>
+                            <th class="text-center font-bold">E (m)</th>
+                            <th class="text-center font-bold">N (m)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-center font-mono" id="report-coords-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Bottom Cards -->
+        <div class="grid grid-cols-12 gap-2 w-full mb-1">
+            <div class="col-span-6 border border-slate-200 rounded p-2 bg-slate-50/50">
+                <div class="flex items-center gap-1 border-b border-slate-200 pb-1 mb-1.5">
+                    <span class="font-extrabold text-[8px] uppercase text-slate-800">Sumário da Geometria</span>
+                </div>
+                <div class="grid grid-cols-2 gap-1">
+                    <div class="bg-white p-1 rounded border border-slate-200">
+                        <span class="text-[7px] uppercase font-bold text-slate-500">Área Calculada</span>
+                        <div class="flex items-baseline gap-1">
+                            <span class="text-[11px] font-black text-slate-900 mono" id="report-info-area">--</span><span class="text-[7.5px] font-bold text-slate-500">m²</span>
+                        </div>
+                        <span class="text-[7px] text-emerald-600 font-semibold mono" id="report-info-area-ha">0 ha</span>
+                    </div>
+                    <div class="bg-white p-1 rounded border border-slate-200">
+                        <span class="text-[7px] uppercase font-bold text-slate-500">Perímetro Total</span>
+                        <div class="flex items-baseline gap-1">
+                            <span class="text-[11px] font-black text-slate-900 mono" id="report-info-perim">--</span><span class="text-[7.5px] font-bold text-slate-500">m</span>
+                        </div>
+                        <span class="text-[7px] text-slate-400 font-semibold">Extensão</span>
+                    </div>
+                </div>
+                <div class="mt-1 pt-1 border-t border-slate-200/80 flex justify-between text-[7.5px]">
+                    <span class="text-slate-500">Distância Linear acumulada:</span><span class="font-bold text-slate-800 mono"><span id="report-info-dist">--</span> m</span>
+                </div>
+            </div>
+
+            <div class="col-span-6 border border-slate-200 rounded p-2 bg-slate-50/50">
+                <div class="flex items-center gap-1 border-b border-slate-200 pb-1 mb-1.5">
+                    <span class="font-extrabold text-[8px] uppercase text-slate-800">Convenções Cartográficas</span>
+                </div>
+                <div class="space-y-1 text-[7.5px] text-slate-700 font-semibold">
+                    <div class="flex items-center gap-2 bg-white px-2 py-0.5 rounded border border-slate-200">
+                        <div class="w-3 h-3 rounded-full bg-white border-2 border-black flex items-center justify-center"><div class="w-1 h-1 bg-black rounded-full"></div></div>
+                        <span>Vértices no Mapa</span>
+                    </div>
+                    <div class="flex items-center gap-2 bg-white px-2 py-0.5 rounded border border-slate-200">
+                        <div id="legend-poly-box" class="w-3 h-2 bg-emerald-500/25 border border-emerald-600 transition-colors"></div>
+                        <span>Polígono no Mapa</span>
+                    </div>
+                    <div class="flex items-center gap-2 bg-white px-2 py-0.5 rounded border border-slate-200">
+                        <div id="legend-line-box" class="w-4 border-t-2 border-emerald-500 transition-colors"></div>
+                        <span>Distância no Mapa</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer class="w-full pt-1 border-t border-slate-200 flex items-center justify-between text-[7px] text-slate-400 mt-auto">
+            <div class="flex items-center gap-1"><span class="font-bold text-slate-600">DOCUMENTO TÉCNICO GERADO AUTOMATICAMENTE</span><span>• Válido para fins de conferência</span></div>
+            <div class="mono">Página 01 / 01</div>
+        </footer>
+    </div>
+</main>
+</div><!-- /page-column -->
+<script>
+    function updateGrids(mapInstance) {
+        const bounds = mapInstance.getBounds();
+        const w = bounds.getWest(), e = bounds.getEast(), n = bounds.getNorth(), s = bounds.getSouth();
+        
+        // Convert to UTM using approximate formulation for Zone 25S
+        const getUtmX = (lng) => (500000 + (lng - (-35)) * 111319).toFixed(0);
+        const getUtmY = (lat) => (10000000 + (lat) * 110574).toFixed(0);
+
+        const xStep = (e - w) / 4;
+        const topHTML = [], bottomHTML = [];
+        for(let i=1; i<=3; i++) {
+            const utmX = getUtmX(w + xStep*i);
+            topHTML.push(`<span class="coord-badge">${utmX}</span>`);
+            bottomHTML.push(`<span class="coord-badge">${utmX}</span>`);
+        }
+        document.getElementById('grid-top').innerHTML = topHTML.join('');
+        document.getElementById('grid-bottom').innerHTML = bottomHTML.join('');
+        
+        const yStep = (n - s) / 4;
+        const leftHTML = [], rightHTML = [];
+        for(let i=3; i>=1; i--) {
+            const utmY = getUtmY(s + yStep*i);
+            leftHTML.push(`<span class="coord-badge" style="writing-mode: vertical-rl; transform: rotate(180deg);">${utmY}</span>`);
+            rightHTML.push(`<span class="coord-badge" style="writing-mode: vertical-rl;">${utmY}</span>`);
+        }
+        document.getElementById('grid-left').innerHTML = leftHTML.join('');
+        document.getElementById('grid-right').innerHTML = rightHTML.join('');
+    }
+
+    function toDMS(val, isLat) {
+        const absVal = Math.abs(val), deg = Math.floor(absVal);
+        const minFloat = (absVal - deg) * 60, min = Math.floor(minFloat), sec = ((minFloat - min) * 60).toFixed(2);
+        return `${deg}° ${min}' ${sec}" ${val >= 0 ? (isLat ? 'N' : 'E') : (isLat ? 'S' : 'W')}`;
+    }
+
+    
+    
+    // --- UI Controls Logic ---
+    
+    let selectedMarker = null;
+    let freeTextMarkers = [];
+
+    
+    function selectMarker(marker) {
+        // Deselect previous
+        if (selectedMarker) {
+            if (selectedMarker.getElement) {
+                const el = selectedMarker.getElement();
+                if (el && el.firstChild) {
+                    el.firstChild.style.outline = 'none';
+                    el.firstChild.style.border = 'none';
+                }
+            } else {
+                selectedMarker.style.outline = 'none';
+                selectedMarker.style.border = 'none';
+                selectedMarker.style.boxShadow = 'none';
+            }
+        }
+        
+        selectedMarker = marker;
+        
+        // Select new
+        if (selectedMarker) {
+            if (selectedMarker.getElement) {
+                const el = selectedMarker.getElement();
+                if (el && el.firstChild) {
+                    el.firstChild.style.outline = '2px dashed #ef4444';
+                    el.firstChild.style.outlineOffset = '2px';
+                }
+                document.getElementById('ctrl-rotation').value = selectedMarker.options.customRotation || 0;
+            } else {
+                selectedMarker.style.outline = '2px dashed #ef4444';
+                selectedMarker.style.outlineOffset = '3px';
+                selectedMarker.style.borderRadius = '3px';
+                document.getElementById('ctrl-rotation').value = selectedMarker.dataset.rotation || 0;
+            }
+        }
+    }
+
+    function prepareAndPrint() {
+        selectMarker(null);
+        if (window.mapInstance) {
+            window.mapInstance.invalidateSize({ pan: false });
+            updateGrids(window.mapInstance);
+        }
+        setTimeout(() => {
+            window.print();
+        }, 300);
+    }
+
+    window.addEventListener('beforeprint', () => {
+        selectMarker(null);
+    });
+
+    window.addEventListener('afterprint', () => {
+        if (window.mapInstance) {
+            window.mapInstance.invalidateSize({ pan: false });
+            updateGrids(window.mapInstance);
+        }
+    });
+    
+    let layerSatellite, layerOSM, layerOrto;
+    let mapLayers = []; // Keep references to update opacities or labels
+    let measureLabels = [];
+    
+    // Text Styling State
+    let measureStyles = {
+        bold: true,
+        italic: false,
+        underline: false,
+        fontSize: 9
+    };
+
+    
+    let freeTextStyles = { bold: true, italic: false, underline: false, fontSize: 9, color: '#0f172a' };
+    
+    // Estilos do Polígono e Linhas de Medição
+    let currentPolyFillColor = '#10b981';
+    let currentPolyStrokeColor = '#10b981';
+    let currentPolyFillOpacity = 0.2;
+    let currentPolyWeight = 2;
+
+    function applyPolygonAndLineStyles(polys, lines) {
+        if (Array.isArray(polys)) {
+            polys.forEach(p => {
+                p.setStyle({
+                    fillColor: currentPolyFillColor,
+                    fillOpacity: currentPolyFillOpacity,
+                    color: currentPolyStrokeColor,
+                    weight: currentPolyWeight
+                });
+            });
+        }
+        if (Array.isArray(lines)) {
+            lines.forEach(l => {
+                l.setStyle({
+                    color: currentPolyStrokeColor,
+                    weight: Math.max(2, currentPolyWeight + 1)
+                });
+            });
+        }
+        
+        // Atualiza a legenda cartográfica no rodapé
+        const legendPoly = document.getElementById('legend-poly-box');
+        if (legendPoly) {
+            legendPoly.style.backgroundColor = currentPolyFillColor;
+            legendPoly.style.opacity = Math.max(0.3, currentPolyFillOpacity);
+            legendPoly.style.borderColor = currentPolyStrokeColor;
+            legendPoly.style.borderWidth = `${Math.min(3, Math.max(1, currentPolyWeight - 1))}px`;
+        }
+        const legendLine = document.getElementById('legend-line-box');
+        if (legendLine) {
+            legendLine.style.borderColor = currentPolyStrokeColor;
+            legendLine.style.borderTopWidth = `${Math.min(3, currentPolyWeight)}px`;
+        }
+    }
+
+    window.setPolygonColor = function(fillColor, strokeColor) {
+        if (fillColor) {
+            currentPolyFillColor = fillColor;
+            const input = document.getElementById('ctrl-poly-fill-color');
+            if (input) input.value = fillColor;
+        }
+        if (strokeColor) {
+            currentPolyStrokeColor = strokeColor;
+            const input = document.getElementById('ctrl-poly-stroke-color');
+            if (input) input.value = strokeColor;
+        }
+        applyPolygonAndLineStyles(window._reportPolys, window._reportLines);
+    };
+
+    function initActiveLayers(map, camadasVetoriais) {
+        const container = document.getElementById('active-layers-list');
+        if (!container) return;
+        container.innerHTML = '';
+
+        // Prioridade absoluta: camadasVetoriais do PROJETO ATIVO passadas para o relatório
+        let vectorLayers = Array.isArray(camadasVetoriais) && camadasVetoriais.length > 0 ? [...camadasVetoriais] : [];
+        
+        // 1. SE vier vazio, tenta recuperar estritamente as camadas do PROJETO ATIVO do window.opener
+        if (vectorLayers.length === 0 && window.opener) {
+            try {
+                let openerThemes = [];
+                if (window.opener.document) {
+                    const domContainer = window.opener.document.getElementById('themes-container');
+                    if (domContainer) {
+                        const cards = domContainer.querySelectorAll('.theme-card');
+                        if (cards && cards.length > 0) {
+                            const ids = Array.from(cards).map(c => String(c.dataset.id || c.id.replace('theme-card-', '')));
+                            openerThemes = (window.opener.themes || []).filter(t => ids.includes(String(t.id)));
+                        }
+                    }
+                }
+                if (openerThemes.length === 0 && window.opener.themes) {
+                    openerThemes = (window.opener.themes || []).filter(t => {
+                        return typeof window.opener.isThemeInWorkspace === 'function' 
+                            ? window.opener.isThemeInWorkspace(t.id) 
+                            : (Array.isArray(window.opener.activeWorkspaceThemes) && window.opener.activeWorkspaceThemes.some(x => String(x) === String(t.id)));
+                    });
+                }
+                if (openerThemes.length > 0) {
+                    vectorLayers = openerThemes.map(t => {
+                        let featList = [];
+                        if (Array.isArray(t.features) && t.features.length > 0) {
+                            featList = t.features;
+                        } else if (t.layer && typeof t.layer.toGeoJSON === 'function') {
+                            try {
+                                const gj = t.layer.toGeoJSON();
+                                featList = gj.features || (gj.type === 'Feature' ? [gj] : []);
+                            } catch(e) {}
+                        }
+                        return {
+                            id: t.id,
+                            nome: t.name || t.nome || 'Camada Vetorial',
+                            cor: t.color || t.cor || '#3b82f6',
+                            visivel: t.visible !== false,
+                            features: featList
+                        };
+                    });
+                }
+            } catch(e) {}
+        }
+
+        // 2. Se e apenas se ainda vazio, tenta recuperar do localStorage dos temas salvos filtrados por workspace
+        if (vectorLayers.length === 0) {
+            try {
+                const saved = localStorage.getItem('constructive_themes');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        vectorLayers = parsed.map(t => ({
+                            id: t.id,
+                            nome: t.name || t.nome || 'Camada Vetorial',
+                            cor: t.color || t.cor || '#3b82f6',
+                            visivel: !!t.visible,
+                            features: t.features || []
+                        }));
+                    }
+                }
+            } catch(e) {}
+        }
+
+        // 3. Se ainda não houver temas, inclui as camadas padrão do sistema para visualização
+        if (vectorLayers.length === 0) {
+            vectorLayers = [
+                { id: 'obras', nome: 'Projetos / Obras', cor: '#051125', visivel: false, features: [] },
+                { id: 'lotes', nome: 'Lotes e Quadras', cor: '#0284c7', visivel: false, features: [] },
+                { id: 'zoneamento', nome: 'Zoneamento Urbano', cor: '#8b5cf6', visivel: false, features: [] },
+                { id: 'lpm', nome: 'Linha Preamar Média (LPM)', cor: '#ef4444', visivel: false, features: [] },
+                { id: 'ltn', nome: 'Linha de Terreno de Marinha (LTN)', cor: '#f59e0b', visivel: false, features: [] }
+            ];
+        }
+
+        const createLeafletLayer = (cor, features) => {
+            if (!features || features.length === 0) return null;
+            return L.geoJSON(features, {
+                style: {
+                    color: cor,
+                    weight: 2,
+                    fillColor: cor,
+                    fillOpacity: 0.25
+                },
+                pointToLayer: (feat, latlng) => {
+                    return L.circleMarker(latlng, {
+                        radius: 5,
+                        fillColor: cor,
+                        color: '#ffffff',
+                        weight: 1.5,
+                        fillOpacity: 0.95
+                    });
+                }
+            });
+        };
+
+        vectorLayers.forEach(l => {
+            const item = document.createElement('div');
+            item.className = 'flex items-center justify-between bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5 hover:border-slate-700 transition-colors';
+
+            const cor = l.cor || l.color || '#3b82f6';
+            const nome = l.nome || l.name || 'Camada Vetorial';
+            const isVisible = !!l.visivel;
+            let leafletLayer = createLeafletLayer(cor, l.features);
+
+            const inputId = `toggle_layer_vec_${l.id}`;
+            const isChecked = (isVisible && leafletLayer) ? 'checked' : '';
+            if (isVisible && leafletLayer) {
+                leafletLayer.addTo(map);
+            }
+
+            item.innerHTML = `
+                <div class="flex items-center gap-2 min-w-0 flex-1 pr-2">
+                    <span class="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm" style="background-color: ${cor}"></span>
+                    <span class="material-symbols-outlined text-[13px] text-slate-400 shrink-0">polyline</span>
+                    <span class="text-[10px] text-slate-200 font-medium truncate" title="${nome}">${nome}</span>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input type="checkbox" class="sr-only peer" ${isChecked} id="${inputId}">
+                    <div class="w-7 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+                </label>
+            `;
+
+            const checkbox = item.querySelector('input');
+            checkbox.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    if (!leafletLayer && window.opener && window.opener.themes) {
+                        try {
+                            const openerT = window.opener.themes.find(t => String(t.id) === String(l.id));
+                            if (openerT && openerT.features && openerT.features.length > 0) {
+                                l.features = openerT.features;
+                                leafletLayer = createLeafletLayer(cor, l.features);
+                            }
+                        } catch(err) {}
+                    }
+                    if (leafletLayer) {
+                        leafletLayer.addTo(map);
+                    }
+                } else {
+                    if (leafletLayer) map.removeLayer(leafletLayer);
+                }
+            });
+
+            container.appendChild(item);
+        });
+    }
+
+    function initControls(map, polys, lines, availableOrtofotos, camadasVetoriais) {
+        window._reportPolys = polys;
+        window._reportLines = lines;
+
+        layerSatellite = L.tileLayer('https://mt1.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', { 
+            maxZoom: 21, 
+            subdomains: ['mt0','mt1','mt2','mt3'],
+            keepBuffer: 8,
+            updateWhenIdle: false
+        });
+        layerOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+            maxZoom: 19,
+            keepBuffer: 8,
+            updateWhenIdle: false
+        });
+                
+        layerSatellite.addTo(map);
+
+        let activeOrtoLayer = null;
+        document.getElementById('ctrl-basemap').addEventListener('change', (e) => {
+            const v = e.target.value;
+            map.removeLayer(layerSatellite);
+            map.removeLayer(layerOSM);
+            if (activeOrtoLayer) map.removeLayer(activeOrtoLayer);
+            
+            document.getElementById('map').style.backgroundColor = v === 'none' ? '#ffffff' : '#f1f5f9';
+            if (v === 'satellite') layerSatellite.addTo(map);
+            else if (v === 'osm') layerOSM.addTo(map);
+            else if (v.startsWith('orto_')) {
+                const ortoId = v.replace('orto_', '');
+                const ortoData = availableOrtofotos.find(o => String(o.id) === String(ortoId));
+                if (ortoData) {
+                    const isXYZ = (ortoData.tipo === 'xyz_tiles') || (ortoData.url && ortoData.url.includes('{z}'));
+                    if (isXYZ) {
+                        activeOrtoLayer = L.tileLayer(ortoData.url, { 
+                            maxZoom: 24, 
+                            maxNativeZoom: ortoData.zoom_max || 22,
+                            crossOrigin: true,
+                            keepBuffer: 8,
+                            updateWhenIdle: false
+                        });
+                    } else if (ortoData.bbox && Array.isArray(ortoData.bbox)) {
+                        activeOrtoLayer = L.imageOverlay(ortoData.url, ortoData.bbox);
+                    }
+                    if (activeOrtoLayer) activeOrtoLayer.addTo(map);
+                }
+            }
+        });
+
+        // Inicializa o controle de Camadas Ativas (Apenas Camadas Vetoriais GeoJSON do menu lateral)
+        initActiveLayers(map, camadasVetoriais || []);
+
+        // Listeners de Preenchimento & Linhas
+        const polyFillInput = document.getElementById('ctrl-poly-fill-color');
+        if (polyFillInput) {
+            polyFillInput.addEventListener('input', (e) => {
+                currentPolyFillColor = e.target.value;
+                applyPolygonAndLineStyles(polys, lines);
+            });
+        }
+
+        const polyStrokeInput = document.getElementById('ctrl-poly-stroke-color');
+        if (polyStrokeInput) {
+            polyStrokeInput.addEventListener('input', (e) => {
+                currentPolyStrokeColor = e.target.value;
+                applyPolygonAndLineStyles(polys, lines);
+            });
+        }
+
+        const opacityInput = document.getElementById('ctrl-opacity');
+        if (opacityInput) {
+            opacityInput.addEventListener('input', (e) => {
+                currentPolyFillOpacity = parseFloat(e.target.value);
+                const valDisplay = document.getElementById('ctrl-opacity-val');
+                if (valDisplay) valDisplay.innerText = `${Math.round(currentPolyFillOpacity * 100)}%`;
+                applyPolygonAndLineStyles(polys, lines);
+            });
+        }
+
+        const weightInput = document.getElementById('ctrl-poly-weight');
+        if (weightInput) {
+            weightInput.addEventListener('input', (e) => {
+                currentPolyWeight = parseInt(e.target.value) || 2;
+                const valDisplay = document.getElementById('ctrl-weight-val');
+                if (valDisplay) valDisplay.innerText = `${currentPolyWeight} px`;
+                applyPolygonAndLineStyles(polys, lines);
+            });
+        }
+
+        // Toggle Measurements
+        document.getElementById('ctrl-measures').addEventListener('change', (e) => {
+            refreshMeasures(map, polys, lines);
+        });
+        
+        // Font Controls
+        const btnB = document.getElementById('ctrl-measure-bold');
+        const btnI = document.getElementById('ctrl-measure-italic');
+        const btnU = document.getElementById('ctrl-measure-underline');
+        const sizeVal = document.getElementById('ctrl-measure-size-val');
+        
+        const updateBtnStyle = (btn, state) => {
+            if(state) { btn.classList.add('bg-slate-700', 'text-white'); btn.classList.remove('text-slate-300'); }
+            else { btn.classList.remove('bg-slate-700', 'text-white'); btn.classList.add('text-slate-300'); }
+                    };
+        
+        // Initial setup
+        updateBtnStyle(btnB, measureStyles.bold);
+        updateBtnStyle(btnI, measureStyles.italic);
+        updateBtnStyle(btnU, measureStyles.underline);
+        
+        btnB.addEventListener('click', () => { measureStyles.bold = !measureStyles.bold; updateBtnStyle(btnB, measureStyles.bold); refreshMeasures(map, polys, lines); });
+        btnI.addEventListener('click', () => { measureStyles.italic = !measureStyles.italic; updateBtnStyle(btnI, measureStyles.italic); refreshMeasures(map, polys, lines); });
+        btnU.addEventListener('click', () => { measureStyles.underline = !measureStyles.underline; updateBtnStyle(btnU, measureStyles.underline); refreshMeasures(map, polys, lines); });
+        
+        document.getElementById('ctrl-measure-size-up').addEventListener('click', () => { 
+            measureStyles.fontSize = Math.min(24, measureStyles.fontSize + 1); 
+            sizeVal.innerText = measureStyles.fontSize;
+            refreshMeasures(map, polys, lines); 
+        });
+        document.getElementById('ctrl-measure-size-down').addEventListener('click', () => { 
+            measureStyles.fontSize = Math.max(6, measureStyles.fontSize - 1); 
+            sizeVal.innerText = measureStyles.fontSize;
+            refreshMeasures(map, polys, lines); 
+        });
+    
+        
+        document.getElementById('ctrl-rotation').addEventListener('input', (e) => {
+            if (selectedMarker) {
+                const rot = e.target.value;
+                if (selectedMarker.getElement) {
+                    selectedMarker.options.customRotation = rot;
+                    const el = selectedMarker.getElement();
+                    if (el && el.firstChild) {
+                        const inner = el.firstChild;
+                        let currentTransform = inner.style.transform || '';
+                        if (currentTransform.includes('rotate')) {
+                            inner.style.transform = currentTransform.replace(/rotate\([^)]+\)/, `rotate(${rot}deg)`);
+                        } else {
+                            inner.style.transform = currentTransform + ` rotate(${rot}deg)`;
+                        }
+                    }
+                } else {
+                    selectedMarker.dataset.rotation = rot;
+                    // Our div has translate(-50%, -50%) applied. We need to preserve it.
+                    selectedMarker.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+                }
+            }
+        });
+
+
+        
+        document.getElementById('btn-remove-selected').addEventListener('click', () => {
+            if (selectedMarker) {
+                if (selectedMarker.getElement) {
+                    map.removeLayer(selectedMarker);
+                } else {
+                    selectedMarker.remove();
+                }
+                selectedMarker = null;
+            }
+        });
+
+
+        
+        // Free Text Font Controls
+        const ftBtnB = document.getElementById('ft-measure-bold');
+        const ftBtnI = document.getElementById('ft-measure-italic');
+        const ftBtnU = document.getElementById('ft-measure-underline');
+        const ftSizeVal = document.getElementById('ft-measure-size-val');
+        
+        function updateSelectedFreeText() {
+            if (selectedMarker && !selectedMarker.getElement) {
+                selectedMarker.style.fontWeight = freeTextStyles.bold ? '900' : '500';
+                selectedMarker.style.fontStyle = freeTextStyles.italic ? 'italic' : 'normal';
+                selectedMarker.style.textDecoration = freeTextStyles.underline ? 'underline' : 'none';
+                selectedMarker.style.fontSize = `${freeTextStyles.fontSize}px`;
+                selectedMarker.style.color = freeTextStyles.color || '#0f172a';
+            }
+        }
+
+        ftBtnB.addEventListener('click', () => { freeTextStyles.bold = !freeTextStyles.bold; updateBtnStyle(ftBtnB, freeTextStyles.bold); updateSelectedFreeText(); });
+        ftBtnI.addEventListener('click', () => { freeTextStyles.italic = !freeTextStyles.italic; updateBtnStyle(ftBtnI, freeTextStyles.italic); updateSelectedFreeText(); });
+        ftBtnU.addEventListener('click', () => { freeTextStyles.underline = !freeTextStyles.underline; updateBtnStyle(ftBtnU, freeTextStyles.underline); updateSelectedFreeText(); });
+        
+        document.getElementById('ft-measure-size-up').addEventListener('click', () => { 
+            freeTextStyles.fontSize = Math.min(48, freeTextStyles.fontSize + 1); 
+            ftSizeVal.innerText = freeTextStyles.fontSize;
+            updateSelectedFreeText();
+        });
+        document.getElementById('ft-measure-size-down').addEventListener('click', () => { 
+            freeTextStyles.fontSize = Math.max(6, freeTextStyles.fontSize - 1); 
+            ftSizeVal.innerText = freeTextStyles.fontSize;
+            updateSelectedFreeText();
+        });
+
+        const ftColorInput = document.getElementById('ft-measure-color');
+        if (ftColorInput) {
+            ftColorInput.addEventListener('input', (e) => {
+                freeTextStyles.color = e.target.value;
+                updateSelectedFreeText();
+            });
+        }
+
+        document.getElementById('btn-add-freetext').addEventListener('click', () => {
+            const txt = document.getElementById('ctrl-freetext-input').value.trim();
+            if (!txt) return;
+            
+            const fontWeight = freeTextStyles.bold ? '900' : '500';
+            const fontStyle = freeTextStyles.italic ? 'italic' : 'normal';
+            const textDecoration = freeTextStyles.underline ? 'underline' : 'none';
+            const fontSize = `${freeTextStyles.fontSize}px`;
+            
+            
+            const overlay = document.getElementById('free-text-overlay') || document.body;
+            const id = 'ft_' + Date.now();
+            
+            const div = document.createElement('div');
+            div.id = id;
+            div.className = 'absolute pointer-events-auto cursor-move text-center select-none free-text-item';
+            div.style.left = '50%';
+            div.style.top = '35%';
+            div.style.transform = 'translate(-50%, -50%)';
+            div.style.zIndex = '500';
+            div.style.color = freeTextStyles.color || '#0f172a';
+            div.style.background = 'transparent';
+            div.style.border = 'none';
+            div.style.padding = '1px 6px';
+            div.style.fontSize = fontSize;
+            div.style.fontWeight = fontWeight;
+            div.style.fontStyle = fontStyle;
+            div.style.textDecoration = textDecoration;
+            div.style.whiteSpace = 'nowrap';
+            div.style.width = 'max-content';
+            div.style.fontFamily = "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif";
+            div.style.textTransform = "uppercase";
+            div.style.letterSpacing = "0.02em";
+            div.style.lineHeight = "1.2";
+            // Borda branca suave (soft white halo outline)
+            div.style.paintOrder = 'stroke fill';
+            div.style.webkitTextStroke = '1.4px #ffffff';
+            div.style.textShadow = '0 0 2px #ffffff, 0 0 4px #ffffff, 0 0 8px rgba(255,255,255,0.95), -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff, 1px 1px 0 #ffffff';
+            div.innerHTML = txt;
+            
+            // Allow storing rotation on the element dataset
+            div.dataset.rotation = 0;
+            
+            overlay.appendChild(div);
+            
+            // Make it draggable
+            let isDragging = false;
+            let startX, startY, startLeft, startTop;
+            
+            div.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                // get computed left/top
+                const rect = div.getBoundingClientRect();
+                const overlayRect = overlay.getBoundingClientRect();
+                startLeft = rect.left - overlayRect.left + (rect.width/2);
+                startTop = rect.top - overlayRect.top + (rect.height/2);
+                
+                selectMarker(div); // Our unified selection logic works with divs too
+                e.preventDefault();
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                div.style.left = (startLeft + dx) + 'px';
+                div.style.top = (startTop + dy) + 'px';
+            });
+            
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+            
+            freeTextMarkers.push(div);
+            selectMarker(div);
+
+            
+            document.getElementById('ctrl-freetext-input').value = '';
+        });
+    }
+
+    
+    function refreshMeasures(map, polys, lines) {
+        // Instead of removing, we update styles directly to preserve user dragged positions
+        measureLabels.forEach(marker => {
+            const el = marker.getElement();
+            if (el && el.firstChild) {
+                const div = el.firstChild;
+                div.style.fontWeight = measureStyles.bold ? '900' : '500';
+                div.style.fontStyle = measureStyles.italic ? 'italic' : 'normal';
+                div.style.textDecoration = measureStyles.underline ? 'underline' : 'none';
+                div.style.fontSize = `${measureStyles.fontSize}px`;
+            }
+        });
+        
+        // Handle hide/show toggle
+        const show = document.getElementById('ctrl-measures').checked;
+        measureLabels.forEach(marker => {
+            const el = marker.getElement();
+            if (el) el.style.display = show ? 'block' : 'none';
+        });
+        
+        // If they don't exist yet, create them (only on first show toggle if empty)
+        if (show && measureLabels.length === 0) {
+            lines.forEach(obj => addMeasureLabels(map, obj, measureLabels));
+            polys.forEach(obj => addMeasureLabels(map, obj, measureLabels, true));
+        }
+    }
+function addMeasureLabels(map, geomObj, labelArray, isPolygon=false) {
+        const coords = geomObj.feature.geometry.coordinates;
+        let pts = isPolygon ? coords[0] : coords;
+        
+        // Apply text styling
+        const fontWeight = measureStyles.bold ? '900' : '500';
+        const fontStyle = measureStyles.italic ? 'italic' : 'normal';
+        const textDecoration = measureStyles.underline ? 'underline' : 'none';
+        const fontSize = `${measureStyles.fontSize}px`;
+        
+        for (let i = 0; i < pts.length - 1; i++) {
+            const p1 = pts[i]; // [lng, lat]
+            const p2 = pts[i+1];
+            const dist = turf.distance(turf.point(p1), turf.point(p2), {units: 'meters'});
+            
+            // Midpoint
+            const midLng = (p1[0] + p2[0]) / 2;
+            const midLat = (p1[1] + p2[1]) / 2;
+            
+            // Calculate angle for alignment
+            // turf bearing is from true north. To rotate text in CSS, we need angle in screen coords.
+            // A simple way using map projection:
+            const pt1Map = map.project([p1[1], p1[0]]);
+            const pt2Map = map.project([p2[1], p2[0]]);
+            const dy = pt2Map.y - pt1Map.y;
+            const dx = pt2Map.x - pt1Map.x;
+            let angle = Math.atan2(dy, dx) * (180 / Math.PI);
+            
+            // Keep text upright
+            if (angle > 90 || angle < -90) {
+                angle += 180;
+            }
+
+            const icon = L.divIcon({
+                className: 'measure-label',
+                html: `<div style="
+                    color: #fff; 
+                    font-size: ${fontSize}; 
+                    font-weight: ${fontWeight}; 
+                    font-style: ${fontStyle};
+                    text-decoration: ${textDecoration};
+                    text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0px 1px 2px rgba(0,0,0,0.5); 
+                    white-space: nowrap; width: max-content; 
+                    font-family: 'JetBrains Mono', monospace;
+                    transform: rotate(${angle}deg) translateY(-8px);
+                    transform-origin: center center;
+                ">${dist.toFixed(2)} m</div>`,
+                iconSize: null, iconAnchor: [30, 10]
+            });
+            const marker = L.marker([midLat, midLng], {icon: icon, draggable: true}).addTo(map); marker.on("dragstart", () => selectMarker(marker));
+            labelArray.push(marker);
+        }
+
+        // For polygon, add Area in the center (no rotation, slightly different styling)
+        if (isPolygon) {
+            const center = turf.centerOfMass(geomObj.feature).geometry.coordinates;
+            const area = turf.area(geomObj.feature);
+            const iconArea = L.divIcon({
+                className: 'measure-label-area',
+                html: `<div style="
+                    color: #fff; 
+                    font-size: ${fontSize}; 
+                    font-weight: ${fontWeight};
+                    font-style: ${fontStyle};
+                    text-decoration: ${textDecoration};
+                    text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0px 2px 4px rgba(0,0,0,0.5); 
+                    text-align: center; 
+                    white-space: nowrap;
+                    width: max-content;
+                    font-family: 'JetBrains Mono', monospace;
+                ">${area.toLocaleString('pt-BR', {maximumFractionDigits:2})}&nbsp;m²</div>`,
+                iconSize: null, iconAnchor: [40, 20]
+            });
+            const markerArea = L.marker([center[1], center[0]], {icon: iconArea, draggable: true}).addTo(map); markerArea.on("dragstart", () => selectMarker(markerArea));
+            labelArray.push(markerArea);
+        }
+    }
+
+
+    document.addEventListener('DOMContentLoaded', () => {
+        let data = null;
+        if (window.opener && window.opener._measurementReportData) {
+            data = window.opener._measurementReportData;
+        } else {
+            const saved = localStorage.getItem('measurement_report_data');
+            if (saved) {
+                try { data = JSON.parse(saved); } catch(e) {}
+            }
+        }
+        if (!data) { alert("Sem dados."); return; }
+        
+        document.getElementById('report-user-name').innerText = data.userName || 'Usuário';
+        if (data.entidadeName) document.getElementById('report-entidade-name').innerText = data.entidadeName;
+        if (data.userPhoto) document.getElementById('report-logo').src = data.userPhoto;
+        document.getElementById('report-date').innerText = new Date().toLocaleDateString('pt-BR');
+        
+        const map = L.map('map', { zoomControl: false, attributionControl: false });
+        window.mapInstance = map;
+    let polys = [];
+    let lines = [];
+        
+        let bounds = L.latLngBounds(), totalArea = 0, totalPerim = 0, totalDist = 0, pointCount = 1, pointsList = [];
+
+        if (data.features) {
+            data.features.forEach(feat => {
+                const type = feat.geometry.type, coords = feat.geometry.coordinates;
+                if (type === 'Point') {
+                    // Outer circle (white inside, black border)
+                    L.circleMarker([coords[1], coords[0]], {radius: 6, color: '#000', weight: 2, fillColor: '#fff', fillOpacity: 1}).addTo(map);
+                    // Inner dot (black)
+                    const mk = L.circleMarker([coords[1], coords[0]], {radius: 2, color: '#000', weight: 1, fillColor: '#000', fillOpacity: 1}).addTo(map);
+                    bounds.extend(mk.getLatLng());
+                    pointsList.push({ id: `P${String(pointCount++).padStart(2, '0')}`, lat: coords[1], lng: coords[0] });
+                } else if (type === 'LineString') {
+                    const line = L.polyline(coords.map(c => [c[1], c[0]]), { color: currentPolyStrokeColor, weight: currentPolyWeight }).addTo(map);
+                    line.feature = feat;
+                    lines.push(line);
+                    bounds.extend(line.getBounds());
+                    totalDist += turf.length(feat, {units: 'meters'});
+                } else if (type === 'Polygon') {
+                    const poly = L.polygon(coords[0].map(c => [c[1], c[0]]), { color: currentPolyStrokeColor, weight: currentPolyWeight, fillColor: currentPolyFillColor, fillOpacity: currentPolyFillOpacity }).addTo(map);
+                    poly.feature = feat;
+                    polys.push(poly);
+                    bounds.extend(poly.getBounds());
+                    totalArea += turf.area(feat);
+                    totalPerim += turf.length(feat, {units: 'meters'});
+                }
+            });
+
+            pointsList.forEach(pt => {
+                const labelIcon = L.divIcon({ className: 'custom-point-marker', html: `<span class="custom-point-tag">${pt.id}</span>`, iconAnchor: [-12, 12] });
+                L.marker([pt.lat, pt.lng], {icon: labelIcon, interactive: false}).addTo(map);
+            });
+        }
+
+        document.getElementById('report-info-area').innerText = totalArea > 0 ? totalArea.toLocaleString('pt-BR', {maximumFractionDigits: 2}) : '--';
+        document.getElementById('report-info-area-ha').innerText = totalArea > 0 ? (totalArea/10000).toLocaleString('pt-BR', {maximumFractionDigits: 4}) + ' ha' : '-- ha';
+        document.getElementById('report-info-perim').innerText = totalPerim > 0 ? totalPerim.toLocaleString('pt-BR', {maximumFractionDigits: 2}) : '--';
+        document.getElementById('report-info-dist').innerText = totalDist > 0 ? totalDist.toLocaleString('pt-BR', {maximumFractionDigits: 2}) : '--';
+
+        const tbody = document.getElementById('report-coords-tbody');
+        let rows = '';
+        pointsList.forEach(pt => {
+            const utmX = (500000 + (pt.lng - (-35)) * 111319).toFixed(2);
+            const utmY = (10000000 + (pt.lat) * 110574).toFixed(2);
+            rows += `<tr class="hover:bg-slate-50 transition-colors"><td class="font-bold text-slate-900 bg-slate-50/60">${pt.id}</td><td class="text-slate-700">${pt.lat.toFixed(6)}</td><td class="text-slate-700">${pt.lng.toFixed(6)}</td><td class="text-slate-500">${toDMS(pt.lat, true)}</td><td class="text-slate-500">${toDMS(pt.lng, false)}</td><td class="font-semibold text-emerald-800">25 S</td><td class="text-slate-800">${utmX}</td><td class="text-slate-800">${utmY}</td></tr>`;
+        });
+        tbody.innerHTML = rows;
+
+        map.on('moveend', () => updateGrids(map));
+        map.on('click', () => selectMarker(null));
+        setTimeout(() => {
+            map.invalidateSize();
+            if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
+            else map.setView([-7.11532, -34.86105], 16);
+            updateGrids(map);
+        }, 400);
+
+        
+        // Populate Ortofotos
+        const basemapSelect = document.getElementById('ctrl-basemap');
+        const optgroup = basemapSelect.querySelector('optgroup');
+        optgroup.innerHTML = '';
+        
+        let availableOrtofotos = [];
+        if (data.ortofotos && data.ortofotos.length > 0) {
+            availableOrtofotos = data.ortofotos;
+            data.ortofotos.forEach(orto => {
+                const opt = document.createElement('option');
+                opt.value = 'orto_' + orto.id;
+                opt.textContent = orto.nome;
+                optgroup.appendChild(opt);
+            });
+        } else {
+            const opt = document.createElement('option');
+            opt.disabled = true;
+            opt.textContent = 'Nenhuma ortofoto no projeto';
+            optgroup.appendChild(opt);
+        }
+
+        initControls(map, polys, lines, availableOrtofotos, data.camadasVetoriais || []);
+
+    });
+</script>
+</div><!-- /layout-wrapper -->
+</body>
+</html>
