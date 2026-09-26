@@ -264,8 +264,9 @@
         #pesquisa-tools-panel .pesquisa-status { font-size: 10px; color: #64748b; min-height: 14px; margin-top: 4px; }
         #pesquisa-tools-panel select, #pesquisa-tools-panel input[type="text"] { border: 1px solid #cbd5e1; border-radius: 6px; padding: 3px 5px; font-size: 11px; width: 100%; box-sizing: border-box; }
 
-        /* Estilização moderna e refinada para o painel ancorado na barra lateral (Padrão Dark relatorio.html) */
-        .sidebar-column #map-tools-panel {
+        /* Estilização moderna e refinada para os painéis ancorados na barra lateral (Padrão Dark) */
+        .sidebar-column #map-tools-panel,
+        .sidebar-column #pesquisa-tools-panel {
             position: relative !important;
             top: 0 !important;
             right: 0 !important;
@@ -278,12 +279,19 @@
             color: #cbd5e1 !important;
             padding-bottom: 24px;
         }
-        .sidebar-column #map-tools-panel .panel-header-title {
+        .sidebar-column #map-tools-panel .panel-header-title,
+        .sidebar-column #pesquisa-tools-panel .panel-header-title {
             color: #f8fafc !important;
             font-size: 13px !important;
             font-weight: 700 !important;
         }
-        .sidebar-column #map-tools-panel h4 {
+        .sidebar-column #map-tools-panel .panel-header,
+        .sidebar-column #pesquisa-tools-panel .panel-header {
+            border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+            color: #f8fafc !important;
+        }
+        .sidebar-column #map-tools-panel h4,
+        .sidebar-column #pesquisa-tools-panel h4 {
             background: #111a2e !important;
             border: 1px solid rgba(255,255,255,0.08) !important;
             color: #94a3b8 !important;
@@ -294,7 +302,8 @@
             padding: 9px 12px !important;
             transition: all 0.2s ease !important;
         }
-        .sidebar-column #map-tools-panel h4:hover {
+        .sidebar-column #map-tools-panel h4:hover,
+        .sidebar-column #pesquisa-tools-panel h4:hover {
             background: #1e293b !important;
             color: #f8fafc !important;
         }
@@ -305,7 +314,15 @@
             border-bottom-right-radius: 0 !important;
             border-color: rgba(52,211,153,0.3) !important;
         }
-        .sidebar-column #map-tools-panel .sec-body {
+        .sidebar-column #pesquisa-tools-panel h4.open {
+            background: #1e293b !important;
+            color: #fb923c !important;
+            border-bottom-left-radius: 0 !important;
+            border-bottom-right-radius: 0 !important;
+            border-color: rgba(251,146,60,0.3) !important;
+        }
+        .sidebar-column #map-tools-panel .sec-body,
+        .sidebar-column #pesquisa-tools-panel .sec-body {
             background: #0f172a !important;
             border: 1px solid rgba(255,255,255,0.08) !important;
             border-top: 0 !important;
@@ -314,26 +331,45 @@
             border-bottom-left-radius: 8px !important;
             border-bottom-right-radius: 8px !important;
         }
-        .sidebar-column #map-tools-panel label.row {
+        .sidebar-column #map-tools-panel label.row,
+        .sidebar-column #pesquisa-tools-panel label.row {
             color: #cbd5e1 !important;
             font-size: 11px !important;
         }
         .sidebar-column #map-tools-panel select,
         .sidebar-column #map-tools-panel input[type="text"],
-        .sidebar-column #map-tools-panel input[type="number"] {
+        .sidebar-column #map-tools-panel input[type="number"],
+        .sidebar-column #pesquisa-tools-panel select,
+        .sidebar-column #pesquisa-tools-panel input[type="text"],
+        .sidebar-column #pesquisa-tools-panel input[type="number"] {
             background: #1e293b !important;
             border: 1px solid rgba(255,255,255,0.14) !important;
             color: #f8fafc !important;
             border-radius: 6px !important;
         }
-        .sidebar-column #map-tools-panel button.act {
+        .sidebar-column #map-tools-panel select:focus,
+        .sidebar-column #map-tools-panel input[type="text"]:focus,
+        .sidebar-column #map-tools-panel input[type="number"]:focus,
+        .sidebar-column #pesquisa-tools-panel select:focus,
+        .sidebar-column #pesquisa-tools-panel input[type="text"]:focus,
+        .sidebar-column #pesquisa-tools-panel input[type="number"]:focus {
+            outline: none !important;
+            border-color: #38bdf8 !important;
+        }
+        .sidebar-column #pesquisa-tools-panel select:focus,
+        .sidebar-column #pesquisa-tools-panel input[type="text"]:focus {
+            border-color: #fb923c !important;
+        }
+        .sidebar-column #map-tools-panel button.act,
+        .sidebar-column #pesquisa-tools-panel button.act {
             background: #1e293b !important;
             border: 1px solid rgba(255,255,255,0.14) !important;
             color: #e2e8f0 !important;
             border-radius: 8px !important;
             transition: all 0.15s ease !important;
         }
-        .sidebar-column #map-tools-panel button.act:hover {
+        .sidebar-column #map-tools-panel button.act:hover,
+        .sidebar-column #pesquisa-tools-panel button.act:hover {
             background: #334155 !important;
             color: #fff !important;
         }
@@ -342,28 +378,57 @@
             border-color: #059669 !important;
             color: #fff !important;
         }
-        .sidebar-column #map-tools-panel .nis button {
+        .sidebar-column #pesquisa-tools-panel button.act.primary {
+            background: #ea580c !important;
+            border-color: #ea580c !important;
+            color: #fff !important;
+        }
+        .sidebar-column #pesquisa-tools-panel button.act.primary:hover {
+            background: #c2410c !important;
+        }
+        .sidebar-column #map-tools-panel .nis button,
+        .sidebar-column #pesquisa-tools-panel .nis button {
             background: #1e293b !important;
             border: 1px solid rgba(255,255,255,0.14) !important;
             color: #94a3b8 !important;
         }
-        .sidebar-column #map-tools-panel .nis button.on {
+        .sidebar-column #map-tools-panel .nis button.on,
+        .sidebar-column #pesquisa-tools-panel .nis button.on {
             background: #059669 !important;
             border-color: #059669 !important;
             color: #fff !important;
         }
         .sidebar-column #map-tools-panel .mp-inner-card,
         #map-tools-panel .mp-inner-card,
+        .sidebar-column #pesquisa-tools-panel .mp-inner-card,
+        #pesquisa-tools-panel .mp-inner-card,
         .sidebar-column #map-tools-panel div[style*="background:#fff"],
         .sidebar-column #map-tools-panel div[style*="background: #fff"],
-        .sidebar-column #map-tools-panel div[style*="background:white"] {
+        .sidebar-column #map-tools-panel div[style*="background:white"],
+        .sidebar-column #pesquisa-tools-panel div[style*="background:#fff"],
+        .sidebar-column #pesquisa-tools-panel div[style*="background: #fff"],
+        .sidebar-column #pesquisa-tools-panel div[style*="background:white"] {
             background: #1e293b !important;
             border: 1px solid rgba(255,255,255,0.14) !important;
             border-radius: 8px !important;
             color: #f1f5f9 !important;
         }
+        .sidebar-column #pesquisa-tools-panel .filtro-grupo-card {
+            background: rgba(234,88,12,0.08) !important;
+            border: 1px solid rgba(234,88,12,0.28) !important;
+            border-radius: 8px !important;
+            color: #f1f5f9 !important;
+        }
+        .sidebar-column #pesquisa-tools-panel .grafico-card {
+            background: rgba(244,63,94,0.08) !important;
+            border: 1px solid rgba(244,63,94,0.28) !important;
+            border-radius: 8px !important;
+            color: #f1f5f9 !important;
+        }
         .sidebar-column #map-tools-panel .mp-inner-card label.row,
-        #map-tools-panel .mp-inner-card label.row {
+        #map-tools-panel .mp-inner-card label.row,
+        .sidebar-column #pesquisa-tools-panel .mp-inner-card label.row,
+        #pesquisa-tools-panel .mp-inner-card label.row {
             color: #f1f5f9 !important;
         }
         .sidebar-column #map-tools-panel .mp-inner-card input[type="text"],
@@ -371,7 +436,13 @@
         .sidebar-column #map-tools-panel .mp-inner-card select,
         #map-tools-panel .mp-inner-card input[type="text"],
         #map-tools-panel .mp-inner-card input[type="number"],
-        #map-tools-panel .mp-inner-card select {
+        #map-tools-panel .mp-inner-card select,
+        .sidebar-column #pesquisa-tools-panel .mp-inner-card input[type="text"],
+        .sidebar-column #pesquisa-tools-panel .mp-inner-card input[type="number"],
+        .sidebar-column #pesquisa-tools-panel .mp-inner-card select,
+        #pesquisa-tools-panel .mp-inner-card input[type="text"],
+        #pesquisa-tools-panel .mp-inner-card input[type="number"],
+        #pesquisa-tools-panel .mp-inner-card select {
             background: #0f172a !important;
             border: 1px solid rgba(255,255,255,0.18) !important;
             color: #f8fafc !important;
@@ -379,15 +450,45 @@
         .sidebar-column #map-tools-panel span[style*="color:#64748b"],
         .sidebar-column #map-tools-panel div[style*="color:#64748b"],
         #map-tools-panel span[style*="color:#64748b"],
-        #map-tools-panel div[style*="color:#64748b"] {
+        #map-tools-panel div[style*="color:#64748b"],
+        .sidebar-column #pesquisa-tools-panel span[style*="color:#64748b"],
+        .sidebar-column #pesquisa-tools-panel div[style*="color:#64748b"],
+        #pesquisa-tools-panel span[style*="color:#64748b"],
+        #pesquisa-tools-panel div[style*="color:#64748b"] {
+            color: #94a3b8 !important;
+        }
+        .sidebar-column #pesquisa-tools-panel .pesquisa-status {
             color: #94a3b8 !important;
         }
         /* Blocos móveis do Relatório Geral (arrastar para reordenar direto na folha) */
         .geral-bloco-arrastavel { position: relative; }
-        .bloco-drag-handle { display: flex; align-items: center; gap: 3px; font-size: 9px; color: #94a3b8; cursor: grab; user-select: none; padding: 0 0 3px; opacity: .7; }
-        .bloco-drag-handle:hover { opacity: 1; color: #475569; }
-        .bloco-drag-handle .material-symbols-outlined { font-size: 13px; }
-        .geral-bloco-arrastavel.sortable-chosen { outline: 2px dashed #ea580c; outline-offset: 2px; border-radius: 6px; }
+        .bloco-drag-handle {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            color: #64748b;
+            cursor: grab;
+            user-select: none;
+            padding: 2px 8px;
+            margin-bottom: 4px;
+            background: rgba(241, 245, 249, 0.7);
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            opacity: 0.35;
+            transition: all 0.2s ease;
+        }
+        .geral-bloco-arrastavel:hover .bloco-drag-handle,
+        .bloco-drag-handle:hover {
+            opacity: 1;
+            background: #eff6ff;
+            border-color: #bfdbfe;
+            color: #2563eb;
+        }
+        .bloco-drag-handle .material-symbols-outlined { font-size: 14px; }
+        .geral-bloco-arrastavel.sortable-chosen { outline: 2px dashed #ea580c; outline-offset: 4px; border-radius: 8px; }
         @media print { .bloco-drag-handle { display: none !important; } }
         .mention-rendered {
             font-weight: 600;
@@ -667,7 +768,7 @@
          * REORDENAR BLOCOS DO RELATÓRIO GERAL: arrastar direto na folha (não no construtor — esses blocos só
          * existem/se configuram aqui). Cabeçalho e rodapé não entram (são slots fixos, fora do corpo).
          */
-        const MOVABLE_BLOCK_TYPES = new Set(['caixa_texto_livre', 'texto_livre', 'tabela_feicoes', 'mapa_feicoes', 'grafico_existente']);
+        const MOVABLE_BLOCK_TYPES = new Set(['caixa_texto_livre', 'texto_livre', 'tabela_feicoes', 'mapa_feicoes', 'grafico_existente', 'kpis']);
 
         function envolverArrastoBloco(html, blocoId) {
             return `<div class="geral-bloco-arrastavel" data-bloco-id="${escapeHtml(blocoId)}">
@@ -1385,7 +1486,7 @@
             }
             const agg = aggregateChart(g); // também marca featureListTruncada, usada logo abaixo
             const total = agg.total;
-            const metaHtml = `<span class="text-[10px] font-mono text-slate-500 normal-case">${total} feiç${total === 1 ? 'ão' : 'ões'}${featureListTruncada ? ` • mostrando as ${LIMITE_FEICOES_GRAFICO} primeiras` : ''}</span>`;
+            const metaHtml = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide bg-slate-100 text-slate-700 border border-slate-200 uppercase">${total} feiç${total === 1 ? 'ão' : 'ões'}${featureListTruncada ? ` • mostrando as ${LIMITE_FEICOES_GRAFICO} primeiras` : ''}</span>`;
             const canvasId = 'rpt-chart-' + idx;
             const campoDef = (reportPayload.formFields || []).find(f => f.id === g.fieldId);
             const ehNumerico = ['area_m2', 'number', 'currency', 'moeda'].includes(String((campoDef && campoDef.type) || '').toLowerCase());
@@ -1393,21 +1494,21 @@
             const linhasResumo = agg.labels.map((l, i) => {
                 const pct = total ? (agg.data[i] / total * 100) : 0;
                 return `<tr>
-                    <td style="padding:2px 6px;border-bottom:1px solid #e2e8f0"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${corDe(l, i)};margin-right:4px"></span>${escapeHtml(l)}</td>
-                    <td style="padding:2px 6px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace">${agg.data[i]}</td>
-                    <td style="padding:2px 6px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace">${pct.toFixed(1)}%</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #f1f5f9;color:#334155"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${corDe(l, i)};margin-right:6px;vertical-align:middle"></span>${escapeHtml(l)}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #f1f5f9;text-align:right;font-family:monospace;font-weight:600;color:#0f172a">${agg.data[i]}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #f1f5f9;text-align:right;font-family:monospace;color:#64748b">${pct.toFixed(1)}%</td>
                 </tr>`;
             }).join('');
             const numAgg = ehNumerico ? agregacaoNumericaCampo(g.fieldId) : null;
-            const numHtml = (numAgg && numAgg.n) ? `<div style="font-size:10px;color:#475569;margin-top:4px">Soma: <b>${MapTools.fmtNumber(numAgg.soma, 2)}</b> • Média: <b>${MapTools.fmtNumber(numAgg.media, 2)}</b></div>` : '';
+            const numHtml = (numAgg && numAgg.n) ? `<div style="font-size:10px;color:#475569;margin-top:6px;padding:4px 8px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;display:inline-block">Soma: <b>${MapTools.fmtNumber(numAgg.soma, 2)}</b> • Média: <b>${MapTools.fmtNumber(numAgg.media, 2)}</b></div>` : '';
             return `
                 <div class="mb-4 page-break-avoid">
                     <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">${tituloHtml}${metaHtml}</div>
-                    <div class="h-52 border border-slate-200 rounded-lg p-2 bg-white"><canvas id="${canvasId}" data-chart-canvas data-chart-id="${escapeHtml(g.id || '')}" data-chart-field="${escapeHtml(g.fieldId || '')}" data-chart-type="${escapeHtml(g.type || 'pie')}"></canvas></div>
-                    <table style="width:100%;border-collapse:collapse;font-size:10px;margin-top:6px">
-                        <thead><tr style="background:#f1f5f9"><th style="padding:2px 6px;text-align:left">Categoria</th><th style="padding:2px 6px;text-align:right">Qtde</th><th style="padding:2px 6px;text-align:right">%</th></tr></thead>
+                    <div class="h-52 border border-slate-200 rounded-lg p-2.5 bg-white shadow-2xs"><canvas id="${canvasId}" data-chart-canvas data-chart-id="${escapeHtml(g.id || '')}" data-chart-field="${escapeHtml(g.fieldId || '')}" data-chart-type="${escapeHtml(g.type || 'pie')}"></canvas></div>
+                    <table style="width:100%;border-collapse:collapse;font-size:10px;margin-top:8px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden">
+                        <thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;color:#475569"><th style="padding:4px 8px;text-align:left;font-weight:700;text-transform:uppercase;font-size:9.5px;letter-spacing:0.04em">Categoria</th><th style="padding:4px 8px;text-align:right;font-weight:700;text-transform:uppercase;font-size:9.5px;letter-spacing:0.04em">Qtde</th><th style="padding:4px 8px;text-align:right;font-weight:700;text-transform:uppercase;font-size:9.5px;letter-spacing:0.04em">%</th></tr></thead>
                         <tbody>${linhasResumo}
-                            <tr style="font-weight:700"><td style="padding:2px 6px">Total</td><td style="padding:2px 6px;text-align:right;font-family:monospace">${total}</td><td style="padding:2px 6px;text-align:right;font-family:monospace">100%</td></tr>
+                            <tr style="font-weight:700;background:#f8fafc;border-top:1px solid #cbd5e1"><td style="padding:4px 8px;color:#0f172a">Total</td><td style="padding:4px 8px;text-align:right;font-family:monospace;color:#0f172a">${total}</td><td style="padding:4px 8px;text-align:right;font-family:monospace;color:#0f172a">100%</td></tr>
                         </tbody>
                     </table>
                     ${numHtml}
@@ -1607,6 +1708,30 @@
                 });
             } else {
                 tplAtual.blocos = (tplAtual.blocos || []).filter(b => !(b.tipo === 'mapa_feicoes' && (b.origemGraficoId || null) === (origemGraficoId || null)));
+            }
+            aplicarPesquisaGeral();
+        }
+
+        function kpisBlocoGeral() {
+            return (tplAtual && Array.isArray(tplAtual.blocos)) ? tplAtual.blocos.find(b => b && b.tipo === 'kpis') : null;
+        }
+
+        function toggleKpisGeral(checked) {
+            if (!tplAtual) return;
+            if (checked) {
+                if (kpisBlocoGeral()) { aplicarPesquisaGeral(); return; }
+                if (!Array.isArray(tplAtual.blocos)) tplAtual.blocos = [];
+                // Insere logo no início do corpo (após o cabeçalho se houver)
+                const insertIdx = tplAtual.blocos.findIndex(b => b.tipo !== 'cabecalho');
+                const novoBloco = {
+                    id: 'b_kpis_' + Date.now(),
+                    tipo: 'kpis',
+                    titulo: 'Indicadores Territoriais & Cadastrais'
+                };
+                if (insertIdx >= 0) tplAtual.blocos.splice(insertIdx, 0, novoBloco);
+                else tplAtual.blocos.push(novoBloco);
+            } else {
+                tplAtual.blocos = (tplAtual.blocos || []).filter(b => b && b.tipo !== 'kpis');
             }
             aplicarPesquisaGeral();
         }
@@ -1812,13 +1937,13 @@
             const blocoTabela = tabelaBlocoGeral();
 
             const gruposHtml = filtro.grupos.length ? filtro.grupos.map((g, gIdx) => `
-                <div style="border:1px solid #fed7aa;border-radius:8px;padding:5px;margin-bottom:5px;background:#fff7ed">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
-                        <span style="font-weight:700;color:#c2410c;font-size:10px;text-transform:uppercase">Grupo ${gIdx + 1}${gIdx > 0 ? ' <span style="font-weight:400;text-transform:none;color:#64748b">(ou)</span>' : ''}</span>
-                        <button type="button" onclick="removeFiltroGrupoGeral(${gIdx}, event)" title="Remover grupo" style="border:0;background:none;cursor:pointer;color:#94a3b8">×</button>
+                <div class="mp-inner-card filtro-grupo-card" style="border:1px solid #fed7aa;border-radius:8px;padding:6px;margin-bottom:6px;background:#fff7ed">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+                        <span style="font-weight:700;color:#ea580c;font-size:10.5px;text-transform:uppercase">Grupo ${gIdx + 1}${gIdx > 0 ? ' <span style="font-weight:400;text-transform:none;color:#94a3b8">(ou)</span>' : ''}</span>
+                        <button type="button" onclick="removeFiltroGrupoGeral(${gIdx}, event)" title="Remover grupo" style="border:0;background:none;cursor:pointer;color:#94a3b8;font-size:14px;line-height:1">×</button>
                     </div>
                     ${(g.condicoes || []).map((c, cIdx) => renderCondicaoGeralHtml(gIdx, cIdx, c, camposList)).join('')}
-                    <button type="button" class="act" onclick="addFiltroCondicaoGeral(${gIdx})" style="padding:3px;font-size:10px">+ condição (e)</button>
+                    <button type="button" class="act" onclick="addFiltroCondicaoGeral(${gIdx})" style="padding:4px;font-size:10px;margin-top:2px">+ condição (e)</button>
                 </div>`).join('') : '<div style="color:#64748b;font-style:italic;margin-bottom:5px">Sem filtro: considera todas as feições da camada.</div>';
 
             // contagem AO VIVO (sem precisar redesenhar a folha) do rascunho atual do filtro, para decidir se já aplica
@@ -1831,17 +1956,19 @@
             const graficosHtml = catalogo.length ? catalogo.map(g => {
                 const marcado = !!graficoBlocoPara(g.id);
                 if (!marcado) {
-                    return `<label class="row"><input type="checkbox" onchange="toggleGraficoEscolhidoGeral('${esc(g.id)}', this.checked)"> ${esc(g.title || g.fieldLabel || 'Gráfico')}</label>`;
+                    return `<label class="row"><input type="checkbox" onchange="toggleGraficoEscolhidoGeral('${esc(g.id)}', this.checked)"> <span>${esc(g.title || g.fieldLabel || 'Gráfico')}</span></label>`;
                 }
                 return `
-                    <div style="border:1px solid #fecdd3;border-radius:8px;padding:6px;margin-bottom:6px;background:#fff1f2">
-                        <label class="row" style="font-weight:700"><input type="checkbox" checked onchange="toggleGraficoEscolhidoGeral('${esc(g.id)}', this.checked)"> ${esc(g.title || g.fieldLabel || 'Gráfico')}</label>
-                        <div style="margin:5px 0 0 20px;padding-left:8px;border-left:2px solid #fecdd3">
+                    <div class="mp-inner-card grafico-card" style="border:1px solid #fecdd3;border-radius:8px;padding:6px;margin-bottom:6px;background:#fff1f2">
+                        <label class="row" style="font-weight:700"><input type="checkbox" checked onchange="toggleGraficoEscolhidoGeral('${esc(g.id)}', this.checked)"> <span>${esc(g.title || g.fieldLabel || 'Gráfico')}</span></label>
+                        <div style="margin:5px 0 0 16px;padding-left:8px;border-left:2px solid rgba(244,63,94,0.4)">
                             <div style="margin-bottom:6px">${passoTabelaGraficoHtml(camposList, g.id)}</div>
                             <div>${passoMapaGraficoHtml(g.id, camposList)}</div>
                         </div>
                     </div>`;
             }).join('') : '<div style="color:#64748b;font-style:italic">Nenhum gráfico configurado nas Estatísticas desta camada.</div>';
+
+            const temKpis = !!kpisBlocoGeral();
 
             return `
                 <h4 data-sec-h="filtro" class="${secH('filtro')}" onclick="pesquisaPanelSecao('filtro')">Filtro de feições<span class="chev">&#9662;</span></h4>
@@ -1851,6 +1978,12 @@
                     ${contagemHtml}
                     <button type="button" class="act primary" onclick="aplicarFiltroGeral()">${blocoTabela ? 'Aplicar filtro (atualizar tabela)' : 'Aplicar filtro'}</button>
                     ${passosTabelaMapaHtml(camposList, undefined)}
+                    <div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.12)">
+                        <label class="row" style="cursor:pointer">
+                            <input type="checkbox" ${temKpis ? 'checked' : ''} onchange="toggleKpisGeral(this.checked)">
+                            <span>Indicadores consolidados (KPIs)</span>
+                        </label>
+                    </div>
                     ${filtro.grupos.length ? `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #cbd5e1"><button type="button" class="act" onclick="limparFiltroGeral()">Limpar filtro</button></div>` : ''}
                 </div>
                 <h4 data-sec-h="graficos" class="${secH('graficos')}" onclick="pesquisaPanelSecao('graficos')">Gráficos do dashboard<span class="chev">&#9662;</span></h4>
@@ -1868,7 +2001,7 @@
                 </div>`;
         }
 
-        /** Cria (ou atualiza) o painel flutuante "Configurações da Pesquisa" — some fora do Relatório Geral. */
+        /** Cria (ou atualiza) o painel "Configurações da Pesquisa" — ancorado na coluna lateral dark, some fora do Relatório Geral. */
         function renderPainelPesquisaGeral(fields) {
             if (!tplAtual || tplAtual.tipo !== 'geral') {
                 const p = document.getElementById('pesquisa-tools-panel');
@@ -1880,10 +2013,12 @@
             let panel = document.getElementById('pesquisa-tools-panel');
             let toggle = document.getElementById('pesquisa-tools-toggle');
             if (!panel) {
+                const sidebar = document.getElementById('map-sidebar-column');
                 panel = document.createElement('div');
                 panel.id = 'pesquisa-tools-panel';
                 panel.className = 'no-print';
-                document.body.appendChild(panel);
+                if (sidebar) sidebar.appendChild(panel);
+                else document.body.appendChild(panel);
                 toggle = document.createElement('button');
                 toggle.id = 'pesquisa-tools-toggle';
                 toggle.type = 'button';
@@ -1893,9 +2028,9 @@
                 document.body.appendChild(toggle);
             }
             panel.innerHTML = `
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #e2e8f0">
-                    <strong style="font-size:13px">Configurações da Pesquisa</strong>
-                    <button type="button" onclick="pesquisaPanelHide()" style="border:0;background:none;cursor:pointer;font-size:16px;line-height:1" title="Recolher">×</button>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #e2e8f0" class="panel-header">
+                    <strong style="font-size:13px" class="panel-header-title">Configurações da Pesquisa</strong>
+                    <button type="button" onclick="pesquisaPanelHide()" style="border:0;background:none;cursor:pointer;font-size:16px;line-height:1;color:inherit" title="Recolher">×</button>
                 </div>
                 <div style="padding:0 12px 12px">${pesquisaPanelConteudoHtml(fields)}</div>`;
             // botão flutuante avisa "filtro ativo" mesmo com o painel fechado, pra não passar despercebido
@@ -1909,8 +2044,10 @@
         function applyPesquisaPanelVisibility() {
             const panel = document.getElementById('pesquisa-tools-panel');
             const toggle = document.getElementById('pesquisa-tools-toggle');
+            const sidebar = document.getElementById('map-sidebar-column');
             if (panel) panel.style.display = pesquisaPanelOpen ? 'block' : 'none';
             if (toggle) toggle.style.display = pesquisaPanelOpen ? 'none' : 'block';
+            if (sidebar) sidebar.style.display = pesquisaPanelOpen ? '' : 'none';
         }
 
         function pesquisaPanelHide() { pesquisaPanelOpen = false; applyPesquisaPanelVisibility(); }
@@ -1967,6 +2104,202 @@
             const chave = origemGraficoId || 'geral';
             if (colunasReveladasPesquisa.has(chave)) colunasReveladasPesquisa.delete(chave); else colunasReveladasPesquisa.add(chave);
             renderPainelPesquisaGeral();
+        }
+
+        /**
+         * Bloco "Painel de Indicadores" (KPIs do Relatório Geral):
+         * Calcula métricas 100% reais sobre o conjunto de feições ativas (resolveFeatureListFull()):
+         * - Total de feições (e proporção do filtro em relação ao total da camada)
+         * - Área somada real e área média real (a partir da geometria poligonal via Turf ou atributo cadastral)
+         * - Extensão linear real (para feições lineares)
+         * - Totais numéricos reais (se a camada contiver campos como orçamento, valor, área)
+         * - Categoria predominante real (do catálogo de gráficos da camada)
+         */
+        function renderKpisBlock(bloco, idx) {
+            const esc = escapeHtml;
+            const tituloBase = (esc(bloco.titulo || 'Indicadores Territoriais & Cadastrais')).replace(/\r?\n/g, '<br>');
+            const features = resolveFeatureListFull();
+            const totalFiltrado = features.length;
+            const totalCamada = typeof ultimoTotalSemFiltroGeral === 'number' ? ultimoTotalSemFiltroGeral : totalFiltrado;
+            const comFiltro = totalCamada > 0 && totalFiltrado !== totalCamada;
+            const pctFiltrado = totalCamada > 0 ? (totalFiltrado / totalCamada * 100) : 100;
+
+            if (totalFiltrado === 0) {
+                return `
+                    <div class="mb-4 page-break-avoid">
+                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5">
+                            <span class="whitespace-pre-line">${tituloBase}</span>
+                        </div>
+                        <div class="p-4 text-center text-slate-400 italic text-xs border border-dashed border-slate-300 rounded-lg bg-slate-50/60">Nenhuma feição encontrada para calcular indicadores.</div>
+                    </div>`;
+            }
+
+            // 1. Cálculo real de Áreas (polígonos) e Extensões (linhas)
+            let areaTotalM2 = 0;
+            let feicoesComArea = 0;
+            let compTotalKm = 0;
+            let feicoesComLinha = 0;
+
+            features.forEach(f => {
+                let a = 0;
+                if (f && f.geometry) {
+                    const gType = f.geometry.type;
+                    if (gType === 'Polygon' || gType === 'MultiPolygon') {
+                        try {
+                            if (typeof turf !== 'undefined' && turf.area) {
+                                a = turf.area(f.geometry);
+                            }
+                        } catch (e) {}
+                    } else if (gType === 'LineString' || gType === 'MultiLineString') {
+                        try {
+                            if (typeof turf !== 'undefined' && turf.length) {
+                                const km = turf.length(f.geometry, { units: 'kilometers' });
+                                if (km > 0) {
+                                    compTotalKm += km;
+                                    feicoesComLinha++;
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                }
+                // Se a geometria não deu área, checa atributos cadastrais de área
+                if (!a && f && f.properties) {
+                    const p = f.properties;
+                    const valArea = p['area_m2'] || p['area'] || p['area_lote'] || p['area_terreno'] || p['area_construida'];
+                    if (valArea != null) {
+                        const num = typeof valArea === 'number' ? valArea : parseFloat(String(valArea).replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, ''));
+                        if (!isNaN(num) && num > 0) a = num;
+                    }
+                }
+                if (a > 0) {
+                    areaTotalM2 += a;
+                    feicoesComArea++;
+                }
+            });
+
+            // 2. Busca campos numéricos financeiros/quantitativos adicionais no schema
+            const campos = (reportPayload && reportPayload.formFields) || [];
+            let campoExtraNumerico = null;
+            let aggExtraNumerico = null;
+            const camposNum = campos.filter(c => ['currency', 'moeda', 'number', 'volume_m3'].includes(String(c.type || '').toLowerCase()));
+            for (const c of camposNum) {
+                const a = agregacaoNumericaCampo(c.id);
+                if (a && a.soma > 0) {
+                    campoExtraNumerico = c;
+                    aggExtraNumerico = a;
+                    break;
+                }
+            }
+
+            // 3. Monta a lista de cards reais
+            const cards = [];
+
+            // Card 1: Quantidade de Feições
+            cards.push(`
+                <div class="p-3 border border-slate-200 rounded-lg bg-white shadow-2xs flex flex-col justify-between">
+                    <div>
+                        <div class="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Total de Feições</div>
+                        <div class="text-xl font-black text-slate-900 mt-1">${MapTools.fmtNumber(totalFiltrado, 0)}</div>
+                    </div>
+                    <div class="text-[10px] mt-2 font-medium">
+                        ${comFiltro
+                            ? `<span class="text-amber-600 font-semibold">${pctFiltrado.toFixed(1)}% da camada</span> <span class="text-slate-400">(${totalCamada} total)</span>`
+                            : `<span class="text-emerald-600 font-semibold">100% da camada ativa</span>`}
+                    </div>
+                </div>`);
+
+            // Card 2 & 3: Área Total e Média (se houver polígonos/área real)
+            if (feicoesComArea > 0 && areaTotalM2 > 0) {
+                const areaMediaM2 = areaTotalM2 / feicoesComArea;
+                const areaHa = areaTotalM2 / 10000;
+                cards.push(`
+                    <div class="p-3 border border-slate-200 rounded-lg bg-white shadow-2xs flex flex-col justify-between">
+                        <div>
+                            <div class="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Área Total Delimitada</div>
+                            <div class="text-xl font-black text-slate-900 mt-1">${areaTotalM2 >= 10000 ? `${MapTools.fmtNumber(areaHa, 2)} ha` : `${MapTools.fmtNumber(areaTotalM2, 2)} m²`}</div>
+                        </div>
+                        <div class="text-[10px] text-slate-500 mt-2 font-medium">
+                            ${areaTotalM2 >= 10000 ? `${MapTools.fmtNumber(areaTotalM2, 2)} m² somados` : `Em ${feicoesComArea} polígono${feicoesComArea > 1 ? 's' : ''}`}
+                        </div>
+                    </div>`);
+
+                cards.push(`
+                    <div class="p-3 border border-slate-200 rounded-lg bg-white shadow-2xs flex flex-col justify-between">
+                        <div>
+                            <div class="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Área Média</div>
+                            <div class="text-xl font-black text-slate-900 mt-1">${MapTools.fmtNumber(areaMediaM2, 2)} m²</div>
+                        </div>
+                        <div class="text-[10px] text-slate-500 mt-2 font-medium">
+                            Por feição analisada
+                        </div>
+                    </div>`);
+            } else if (feicoesComLinha > 0 && compTotalKm > 0) {
+                // Se for linear: Extensão Total
+                cards.push(`
+                    <div class="p-3 border border-slate-200 rounded-lg bg-white shadow-2xs flex flex-col justify-between">
+                        <div>
+                            <div class="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Extensão Total</div>
+                            <div class="text-xl font-black text-slate-900 mt-1">${MapTools.fmtNumber(compTotalKm, 2)} km</div>
+                        </div>
+                        <div class="text-[10px] text-slate-500 mt-2 font-medium">
+                            ${MapTools.fmtNumber(compTotalKm * 1000, 0)} metros lineares
+                        </div>
+                    </div>`);
+            }
+
+            // Card 4: Agregação Financeira/Numérica real ou Primeiro Gráfico do Catálogo
+            if (campoExtraNumerico && aggExtraNumerico) {
+                const ehMoeda = ['currency', 'moeda'].includes(String(campoExtraNumerico.type || '').toLowerCase());
+                const prefix = ehMoeda ? 'R$ ' : '';
+                cards.push(`
+                    <div class="p-3 border border-slate-200 rounded-lg bg-white shadow-2xs flex flex-col justify-between">
+                        <div>
+                            <div class="text-[9px] uppercase font-bold text-slate-500 tracking-wider truncate" title="${esc(campoExtraNumerico.label || campoExtraNumerico.name)}">${esc(campoExtraNumerico.label || campoExtraNumerico.name)}</div>
+                            <div class="text-xl font-black text-slate-900 mt-1">${prefix}${MapTools.fmtNumber(aggExtraNumerico.soma, 2)}</div>
+                        </div>
+                        <div class="text-[10px] text-slate-500 mt-2 font-medium">
+                            Média: ${prefix}${MapTools.fmtNumber(aggExtraNumerico.media, 2)}
+                        </div>
+                    </div>`);
+            } else {
+                // Se não houver campo financeiro, verifica o primeiro gráfico do catálogo para mostrar a categoria líder
+                const catalogo = (reportPayload && Array.isArray(reportPayload.charts)) ? reportPayload.charts : [];
+                if (catalogo.length > 0) {
+                    const g = catalogo[0];
+                    const agg = aggregateChart(g);
+                    if (agg.labels.length > 0 && agg.total > 0) {
+                        const topLabel = agg.labels[0];
+                        const topCount = agg.data[0];
+                        const topPct = (topCount / agg.total * 100).toFixed(1);
+                        cards.push(`
+                            <div class="p-3 border border-slate-200 rounded-lg bg-white shadow-2xs flex flex-col justify-between">
+                                <div>
+                                    <div class="text-[9px] uppercase font-bold text-slate-500 tracking-wider truncate" title="${esc(g.title || g.fieldLabel || 'Predominância')}">${esc(g.title || g.fieldLabel || 'Categoria Líder')}</div>
+                                    <div class="text-base font-black text-slate-900 mt-1 truncate" title="${esc(topLabel)}">${esc(topLabel)}</div>
+                                </div>
+                                <div class="text-[10px] text-slate-500 mt-2 font-medium">
+                                    <span class="font-bold text-slate-800">${topCount} feições</span> (${topPct}%)
+                                </div>
+                            </div>`);
+                    }
+                }
+            }
+
+            const colCount = Math.min(4, Math.max(1, cards.length));
+            const gridColsClass = colCount === 4 ? 'grid-cols-2 sm:grid-cols-4' : (colCount === 3 ? 'grid-cols-3' : (colCount === 2 ? 'grid-cols-2' : 'grid-cols-1'));
+
+            return `
+                <div class="mb-4 page-break-avoid">
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">
+                        <span class="whitespace-pre-line">${tituloBase}</span>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide bg-slate-100 text-slate-700 border border-slate-200 uppercase">
+                            INDICADORES CONSOLIDADOS
+                        </span>
+                    </div>
+                    <div class="grid ${gridColsClass} gap-3">
+                        ${cards.join('')}
+                    </div>
+                </div>`;
         }
 
         /**
@@ -2475,6 +2808,9 @@
 
                 case 'grafico_existente':
                     return renderChartsBlock(bloco, idx);
+
+                case 'kpis':
+                    return renderKpisBlock(bloco, idx);
 
                 case 'tabela_feicoes':
                     return renderTabelaFeicoesBlock(bloco);

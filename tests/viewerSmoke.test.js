@@ -1305,6 +1305,11 @@ async function runScenario(cfg) {
         r.sandbox.updateMapaFeicoesConfigGeral('cor', '#dc2626');
         ok('mudar a cor do mapa também aplica na hora', painel().includes("value=\"#dc2626\""));
 
+        // "Indicadores consolidados (KPIs)": liga e calcula valores 100% reais (soma de área, média, contagem)
+        r.sandbox.toggleKpisGeral(true);
+        ok('painel: checkbox de KPIs marcado', painel().includes('checked onchange="toggleKpisGeral(this.checked)"'));
+        ok('folha: renderiza bloco de KPIs com valores reais (3 feições e 450,00 m²)', r.registry['a4-document-container']._html.includes('Total de Feições') && r.registry['a4-document-container']._html.includes('450,00 m²'));
+
         // liga o 2º gráfico: reflete na hora, sem precisar salvar
         r.sandbox.toggleGraficoEscolhidoGeral('c2', true);
         ok('painel: 2º gráfico marcado', painel().includes('checked onchange="toggleGraficoEscolhidoGeral(\'c2\''));
