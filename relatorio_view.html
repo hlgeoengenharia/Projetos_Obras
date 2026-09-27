@@ -536,6 +536,15 @@
         /* sem isso, arrastar a alça também arrasta uma seleção de texto nativa do navegador, que "pula" para o
            título da coluna vizinha conforme o mouse se move durante o arraste */
         table[data-tf-bloco-id] thead th { user-select: none; -webkit-user-select: none; }
+        /* Medição e renderização síncrona fiel para tabelas no relatório A4 */
+        #a4-measure-stage { position: absolute; left: -9999px; top: -9999px; visibility: hidden; box-sizing: border-box; font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        #a4-measure-stage * { box-sizing: border-box; }
+        .tf-compact-td, table[data-tf-bloco-id] td.py-1, table[data-tf-bloco-id] td.text-\[9px\] { font-size: 9px !important; line-height: 1.35 !important; padding: 3.5px 6px !important; }
+        .tf-compact-th, table[data-tf-bloco-id] thead th.py-1, table[data-tf-bloco-id] thead th.text-\[9px\] { font-size: 9px !important; line-height: 1.35 !important; padding: 3.5px 6px !important; }
+        .tf-padrao-td, table[data-tf-bloco-id] td.py-1\.5, table[data-tf-bloco-id] td.text-\[10px\] { font-size: 10px !important; line-height: 1.4 !important; padding: 5.5px 8px !important; }
+        .tf-padrao-th, table[data-tf-bloco-id] thead th.py-1\.5, table[data-tf-bloco-id] thead th.text-\[9\.5px\] { font-size: 9.5px !important; line-height: 1.4 !important; padding: 5.5px 8px !important; }
+        [data-split-row] td.text-\[10px\], [data-split-row] td.text-\[9\.5px\] { font-size: 10px !important; line-height: 1.35 !important; }
+        [data-split-row] th.text-\[9\.5px\] { font-size: 9.5px !important; line-height: 1.35 !important; }
         .edit-bloco-barra button { background: none; border: 0; color: inherit; cursor: pointer; padding: 2px; border-radius: 4px; display: inline-flex; }
         .edit-bloco-barra button:hover { background: rgba(255,255,255,.18); }
         .edit-bloco-barra .material-symbols-outlined { font-size: 14px; }
@@ -1165,7 +1174,7 @@
             if (!measureBox) {
                 measureBox = document.createElement('div');
                 measureBox.id = 'a4-measure-stage';
-                measureBox.style.cssText = 'position:absolute; left:-9999px; top:-9999px; visibility:hidden; width:' + (pageWidthPx - Math.round((mm.left + mm.right) * 3.78)) + 'px; font-family:"IBM Plex Sans",sans-serif;';
+                measureBox.style.cssText = 'position:absolute; left:-9999px; top:-9999px; visibility:hidden; width:' + (pageWidthPx - Math.round((mm.left + mm.right) * 3.78)) + 'px; box-sizing:border-box; font-family:"IBM Plex Sans",sans-serif;';
                 document.body.appendChild(measureBox);
             }
             measureBox.style.width = (pageWidthPx - Math.round((mm.left + mm.right) * 3.78)) + 'px';
@@ -1300,7 +1309,7 @@
                         ${showHeader ? envolverEdicao(EDICAO ? Editor.cabecalho(hdrBloco, blocos.indexOf(hdrBloco), tpl, { padLeftMm: mm.left, padRightMm: mm.right }) : renderHeaderSlotHtml(hdrBloco, tpl, mm.left, mm.right), blocos.indexOf(hdrBloco), hdrBloco, { fixo: true }) : ''}
 
                         <!-- Corpo da Folha: Delimitado entre as margens superior e inferior -->
-                        <div ${pageIdAttr} class="a4-page-body-slot flex flex-col gap-5 w-full flex-1" style="padding: ${padTopMm}mm ${mm.right}mm ${padBotMm}mm ${mm.left}mm; box-sizing: border-box;">
+                        <div ${pageIdAttr} class="a4-page-body-slot flex flex-col gap-3.5 w-full flex-1" style="padding: ${padTopMm}mm ${mm.right}mm ${padBotMm}mm ${mm.left}mm; box-sizing: border-box;">
                             ${bodyHtml}
                         </div>
 
@@ -2352,6 +2361,34 @@
                 </div>`;
         }
 
+        /** Proporções inteligentes por tipo de campo caso o usuário não tenha arrastado larguras manuais */
+        function calcularLargurasColunasPadrao(columns) {
+            if (!columns || !columns.length) return {};
+            const pesos = columns.map(c => {
+                const id = (c.id || '').toLowerCase();
+                const lbl = (c.label || '').toLowerCase();
+                if (/(^|[_ ])(quadra|lote|faces?|setor|distrito|uf|num|n°|nº|seq|fid)($|[_ ])/i.test(id) ||
+                    /(^|[_ ])(quadra|lote|faces?|setor|distrito|uf|n°|nº|número)($|[_ ])/i.test(lbl)) {
+                    return 0.55;
+                }
+                if (/(cpf|cnpj|bairro|cep|data|valor|area|área|zoneamento|telefone|situacao|sit)/i.test(id) ||
+                    /(cpf|cnpj|bairro|cep|data|valor|área|zoneamento|telefone|situação)/i.test(lbl)) {
+                    return 1.1;
+                }
+                if (/(propriet|nome|titular|enderec|lograd|observ|parecer|descri)/i.test(id) ||
+                    /(propriet|nome|titular|endereç|lograd|observ|parecer|descri)/i.test(lbl)) {
+                    return 2.0;
+                }
+                return 1.0;
+            });
+            const pesoTotal = pesos.reduce((a, b) => a + b, 0);
+            const lgs = {};
+            columns.forEach((c, i) => {
+                lgs[c.id] = Number(((pesos[i] / pesoTotal) * 94).toFixed(2));
+            });
+            return lgs;
+        }
+
         /**
          * Bloco "Tabela de Feições" (Relatório Geral): uma linha por feição que passou pelo filtro, com as colunas
          * escolhidas no construtor. Divisível entre folhas, como o Quadro Sintético do relatório individual.
@@ -2379,13 +2416,14 @@
             const cols = colunas.map(id => ({ id: id, campo: fieldIndex[id], label: (fieldIndex[id] && (fieldIndex[id].label || fieldIndex[id].name)) || id }));
             const densidade = bloco.densidade || 'compacta';
             const isCompacta = densidade === 'compacta';
-            const pyTd = isCompacta ? 'py-1 px-1.5' : 'py-1.5 px-2';
+            const pyTd = isCompacta ? 'py-1 px-1.5 tf-compact-td' : 'py-1.5 px-2 tf-padrao-td';
             const textTd = isCompacta ? 'text-[9px] leading-snug' : 'text-[10px] leading-normal';
-            const pyTh = isCompacta ? 'py-1 px-1.5' : 'py-1.5 px-2';
+            const pyTh = isCompacta ? 'py-1 px-1.5 tf-compact-th' : 'py-1.5 px-2 tf-padrao-th';
             const textTh = isCompacta ? 'text-[9px] leading-snug' : 'text-[9.5px] leading-normal';
             const larguras = bloco.larguras || {};
-            const larguraPadrao = cols.length ? (94 / cols.length) : 94; // 94%: reserva ~6% pra coluna "#"
-            const colgroupHtml = `<colgroup><col style="width:34px">${cols.map(c => `<col data-field-id="${escapeHtml(c.id)}" style="width:${(larguras[c.id] || larguraPadrao).toFixed(2)}%">`).join('')}</colgroup>`;
+            const largurasPadrao = calcularLargurasColunasPadrao(cols);
+            const larguraPadrao = cols.length ? (94 / cols.length) : 94; // fallback uniforme
+            const colgroupHtml = `<colgroup><col style="width:34px">${cols.map(c => `<col data-field-id="${escapeHtml(c.id)}" style="width:${(larguras[c.id] || largurasPadrao[c.id] || larguraPadrao).toFixed(2)}%">`).join('')}</colgroup>`;
             const rowsHtml = registros.map((props, i) => `
                 <tr data-split-row class="${i % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}" style="page-break-inside: avoid;">
                     <td class="${pyTd} ${textTd} border-r border-slate-200 text-center font-mono text-slate-400">${i + 1}</td>
