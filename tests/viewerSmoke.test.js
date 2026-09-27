@@ -386,8 +386,8 @@ async function runScenario(cfg) {
         ok('painel: cada medição com seus números e as coordenadas DEC, GMS e UTM (com copiar e remover)', /Distância 1/.test(secExtras()) && /Comprimento total: <b>/.test(secExtras()) && /Área 2/.test(secExtras()) && /Perímetro: <b>/.test(secExtras()) && /Coordenadas do ponto 3/.test(secExtras()) && /DEC -7\./.test(secExtras()) && /GMS 7° /.test(secExtras()) && /UTM E /.test(secExtras()) && /mapPanelMedCopiar\('med:1'\)/.test(secExtras()) && /mapPanelMedRemover\('med:3'\)/.test(secExtras()) && /mapPanelMedLimpar\(\)/.test(secExtras()));
         ok('painel: ponto mostra o nome no mapa (P03); área tem campo para o tipo; linha de 2 vértices sem lista de trechos', /Nome no mapa: <b>P03<\/b>/.test(secExtras()) && /placeholder="Tipo da área/.test(secExtras()) && !/Vértice 1 → 2/.test(secExtras()));
         const folha = r.registry['a4-document-container']._html;
-        ok('folha: as medições entram nas "Análises da Feição" (comprimento, área, perímetro; ponto pelo nome)', /Distância medida \(1\)/.test(folha) && /Área medida \(2\)/.test(folha) && /Coordenadas do ponto \(P03\)/.test(folha));
-        ok('folha: coordenadas DEC, GMS e UTM cada uma na sua linha (uma abaixo da outra)', /<div>DEC -7\.[^<]*<\/div><div>GMS 7° [^<]*<\/div><div>UTM E [^<]*<\/div>/.test(folha) && !/DEC [^<]* • GMS/.test(folha));
+        ok('folha: as medições entram nas "Análises da Feição" (comprimento, área, perímetro; tabela de coordenadas dos vértices com ponto pelo nome)', /Distância medida \(1\)/.test(folha) && /Área medida \(2\)/.test(folha) && /Coordenadas dos Vértices/.test(folha) && /P03/.test(folha));
+        ok('folha: tabela de coordenadas dos vértices com Decimais, GMS e UTM', /Decimais/.test(folha) && /GMS/.test(folha) && /UTM \(SIRGAS 2000\)/.test(folha) && /-7\./.test(folha) && /7°/.test(folha));
         // linha com vários vértices: medida de cada trecho na análise; tipo da área pelo pop-up
         vm.runInContext("mapController.addMedicao('linha', [[-7.0195, -34.8395], [-7.0195, -34.8390], [-7.0190, -34.8390]]);", r.sandbox);
         let janela = null;
@@ -490,19 +490,19 @@ async function runScenario(cfg) {
         vm.runInContext("mapController.addMedicao('ponto', [[-7.019, -34.839]]); mapController.addMedicao('area', [[-7.0195, -34.8395], [-7.0195, -34.8385], [-7.0185, -34.8385]]);", r.sandbox);
         r.sandbox.renderMapToolsPanel();
         await r.settle(8);
-        ok('folha: cada card das análises tem id e uma borda para arrastar; largura padrão 100%', /data-analise-id="comp"/.test(folha()) && /data-analise-id="med:1"/.test(folha()) && /data-analise-id="med:2"/.test(folha()) && /data-card-resize="med:2"/.test(folha()) && /class="col-resize no-print" data-card-resize/.test(folha()) && ['comp', 'med:1', 'med:2'].every(id => new RegExp('data-analise-id="' + id + '"[^>]*style="width: 100%').test(folha())));
+        ok('folha: cada card das análises tem id e uma borda para arrastar; largura padrão 100%', /data-analise-id="comp"/.test(folha()) && /data-analise-id="med:2"/.test(folha()) && /data-card-resize="med:2"/.test(folha()) && /class="col-resize no-print" data-card-resize/.test(folha()) && ['comp', 'med:2'].every(id => new RegExp('data-analise-id="' + id + '"[^>]*style="width: 100%').test(folha())));
         ok('cards em linha que quebra (flex-wrap), com o mesmo espaçamento', /class="flex flex-wrap items-stretch" style="gap: 4px 6px;"/.test(folha()));
         ok('painel: "Por linha" 1, 2 e 3 (só aparece com mais de um card)', /Cards das análises na folha/.test(painel()) && /mapPanelAnalisesPorLinha\(2\)/.test(painel()) && /Ou arraste a borda direita de um card/.test(painel()));
         r.sandbox.mapPanelAnalisesPorLinha(2);
         await r.settle(8);
-        eq('2 por linha: cada card com 50%', cfg().largura, { comp: 50, 'med:1': 50, 'med:2': 50 });
+        eq('2 por linha: cada card com 50%', { comp: cfg().largura['comp'], 'med:2': cfg().largura['med:2'] }, { comp: 50, 'med:2': 50 });
         ok('a folha refaz os cards com a nova largura (50% menos a parte do espaçamento)', /data-analise-id="comp"[^>]*style="width: calc\(50% - 3\.0px\)/.test(folha()) && /data-analise-id="med:2"[^>]*style="width: calc\(50% - 3\.0px\)/.test(folha()));
         r.sandbox.mapPanelAnalisesPorLinha(3);
-        eq('3 por linha: 33,3%', cfg().largura['med:1'], 33.3);
-        vm.runInContext("mapController.setAnaliseLargura('med:1', 71.26)", r.sandbox);
-        eq('largura de um card só (arrastando a borda)', [cfg().largura['med:1'], cfg().largura['comp']], [71.3, 33.3]);
-        vm.runInContext("mapController.setAnaliseLargura('med:1', undefined)", r.sandbox);
-        eq('largura total de novo (dois cliques na borda)', cfg().largura['med:1'], undefined);
+        eq('3 por linha: 33,3%', cfg().largura['med:2'], 33.3);
+        vm.runInContext("mapController.setAnaliseLargura('med:2', 71.26)", r.sandbox);
+        eq('largura de um card só (arrastando a borda)', [cfg().largura['med:2'], cfg().largura['comp']], [71.3, 33.3]);
+        vm.runInContext("mapController.setAnaliseLargura('med:2', undefined)", r.sandbox);
+        eq('largura total de novo (dois cliques na borda)', cfg().largura['med:2'], undefined);
         r.sandbox.mapPanelAnalisesPorLinha(1);
         eq('1 por linha: tudo volta a 100% (nada guardado)', cfg().largura, {});
         vm.runInContext("mapController.setAnalisesLargura({ comp: 5, 'med:2': 500, x: 40 })", r.sandbox);

@@ -156,7 +156,7 @@
                         </div>
                         <button type="button" onclick="ReportBuilder.previewReal()" class="flex items-center gap-1.5 px-4 py-2.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="${isGeral ? 'Abre o relatório de verdade com uma lista de exemplo (várias feições) e o modelo como está agora, sem precisar salvar' : 'Abre o relatório de verdade (o mesmo da impressão, do PDF e do Word) com uma feição de teste e o modelo como está agora, sem precisar salvar'}">
                             <span class="material-symbols-outlined text-[18px]">visibility</span>
-                            <span>Ver como sairá</span>
+                            <span>Preview</span>
                         </button>
                         <button type="button" ${podeSalvar ? 'onclick="ReportBuilder.saveCurrentTemplate()"' : 'disabled'} class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${podeSalvar ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer' : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed'}" title="${podeSalvar ? 'Salvar Modelo' : `Preencha ${isGeral ? 'o nome do documento' : 'o nome do documento e o atalho no popup da feição'} para salvar`}">
                             <span class="material-symbols-outlined text-[18px]">save</span>
@@ -691,6 +691,18 @@
                                 </div>
                             ` : ''}
 
+                            <!-- Personalização de Título e Subtítulo da Grade -->
+                            <div class="p-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2">
+                                <div>
+                                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Título da Grade de Atributos:</label>
+                                    <input type="text" id="cfg-grid-title-input" value="${escapeHtml(hasExistingGrid ? (existingGrids[0].titulo || 'Dados Cadastrais do Imóvel') : 'Dados Cadastrais do Imóvel')}" onchange="ReportBuilder.updateExistingGridTitle(this.value)" placeholder="Ex: Dados Cadastrais do Imóvel" class="w-full px-2.5 py-1 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg font-medium text-slate-800 dark:text-white focus:ring-1 focus:ring-primary focus:outline-none" />
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Subtítulo / Observação da Seção:</label>
+                                    <input type="text" id="cfg-grid-subtitle-input" value="${escapeHtml(hasExistingGrid ? (existingGrids[0].subtitulo || '') : '')}" onchange="ReportBuilder.updateExistingGridSubtitle(this.value)" placeholder="Ex: Observação sobre titularidade..." class="w-full px-2.5 py-1 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg font-medium text-slate-800 dark:text-white focus:ring-1 focus:ring-primary focus:outline-none" />
+                                </div>
+                            </div>
+
                             <!-- Busca Rápida de Campo ou Aba -->
                             <div class="relative">
                                 <span class="material-symbols-outlined absolute left-2.5 top-2.5 text-[16px] text-slate-400">search</span>
@@ -866,6 +878,18 @@
                             </div>
                             <div id="sec-tabela-sintetica" class="space-y-3 ${secaoAberta('sec-tabela-sintetica', true) ? '' : 'hidden'}">
 
+                            <!-- Título e Subtítulo da Tabela Sintética -->
+                            <div class="space-y-2 p-2.5 bg-white dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700">
+                                <div>
+                                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Título do Quadro Sintético:</label>
+                                    <input type="text" id="cfg-syn-title-input" value="${escapeHtml(existingSynthetic1nBlock?.titulo || 'Quadro Sintético de Vistorias (Histórico 1:N)')}" onchange="ReportBuilder.updateSynthetic1nTitle(this.value)" placeholder="Ex: Quadro Sintético de Vistorias" class="w-full px-2.5 py-1 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg font-medium text-slate-800 dark:text-white focus:ring-1 focus:ring-sky-500 focus:outline-none" />
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Subtítulo / Observação:</label>
+                                    <input type="text" id="cfg-syn-subtitle-input" value="${escapeHtml(existingSynthetic1nBlock?.subtitulo || '')}" onchange="ReportBuilder.updateSynthetic1nSubtitle(this.value)" placeholder="Subtítulo ou observação (opcional)" class="w-full px-2.5 py-1 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg font-medium text-slate-800 dark:text-white focus:ring-1 focus:ring-sky-500 focus:outline-none" />
+                                </div>
+                            </div>
+
                             <!-- DENSIDADE DA TABELA -->
                             <div class="space-y-1">
                                 <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Densidade & Espaçamento da Tabela:</label>
@@ -1014,6 +1038,18 @@
                                 <span class="flex items-center gap-1.5"><span class="text-[9px] font-mono bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 px-1.5 py-0.5 rounded font-bold">1:N Detalhado</span><span id="sec-laudo-analitico-icon" class="material-symbols-outlined text-[18px] text-slate-500">${iconeSecao(secaoAberta('sec-laudo-analitico', true))}</span></span>
                             </div>
                             <div id="sec-laudo-analitico" class="space-y-3 ${secaoAberta('sec-laudo-analitico', true) ? '' : 'hidden'}">
+
+                            <!-- Título e Subtítulo do Laudo Analítico -->
+                            <div class="space-y-2 p-2.5 bg-white dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700">
+                                <div>
+                                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Título do Laudo Analítico:</label>
+                                    <input type="text" id="cfg-laudo-title-input" value="${escapeHtml(existingAnalytical1nBlock?.titulo || 'Laudo Analítico e Caderno Fotográfico')}" onchange="ReportBuilder.updateAnalytical1nTitle(this.value)" placeholder="Ex: Laudo Analítico e Caderno Fotográfico" class="w-full px-2.5 py-1 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg font-medium text-slate-800 dark:text-white focus:ring-1 focus:ring-amber-500 focus:outline-none" />
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Subtítulo / Observação:</label>
+                                    <input type="text" id="cfg-laudo-subtitle-input" value="${escapeHtml(existingAnalytical1nBlock?.subtitulo || '')}" onchange="ReportBuilder.updateAnalytical1nSubtitle(this.value)" placeholder="Subtítulo ou observação (opcional)" class="w-full px-2.5 py-1 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg font-medium text-slate-800 dark:text-white focus:ring-1 focus:ring-amber-500 focus:outline-none" />
+                                </div>
+                            </div>
 
                             <!-- Filtro de Vistorias (Todas vs Última) -->
                             <div>
@@ -1505,14 +1541,21 @@
         if (!shown.length) {
             return '<div class="text-[10px] italic text-slate-400 px-1">Marque abaixo as abas do laudo para definir a sequência delas.</div>';
         }
-        return shown.map((t, i) => `
+        return shown.map((t, i) => {
+            const customTitle = (block && block['custom_tab_title_' + t.id]) || '';
+            const displayTitle = customTitle || t.title;
+            return `
             <div class="flex items-center justify-between p-1.5 bg-white rounded border border-slate-200 text-xs">
                 <div class="flex items-center gap-1.5 min-w-0">
                     <span class="w-4 h-4 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center shrink-0">${i + 1}</span>
-                    <span class="font-semibold text-slate-800 truncate">${escapeHtml(t.title)}</span>
+                    <span class="font-semibold text-slate-800 truncate" title="${escapeHtml(displayTitle)}">${escapeHtml(displayTitle)}</span>
+                    ${customTitle ? '<span class="text-[8.5px] font-bold text-amber-600 bg-amber-50 px-1 rounded">Editado</span>' : ''}
                     <span class="text-[8.5px] font-mono text-slate-400">${t.isMultiple ? '1:N' : '1:1'}</span>
                 </div>
                 <div class="flex items-center gap-0.5 shrink-0">
+                    <button type="button" onclick="ReportBuilder.promptCustomTabTitle('${escapeHtml(String(t.id))}')" class="p-0.5 text-slate-400 hover:text-amber-600 cursor-pointer" title="Personalizar título desta aba no laudo">
+                        <span class="material-symbols-outlined text-[14px]">edit</span>
+                    </button>
                     <button type="button" onclick="ReportBuilder.move1nLaudoTabSequence('${escapeHtml(String(t.id))}', -1)" ${i === 0 ? 'disabled' : ''} class="p-0.5 text-slate-500 hover:text-primary disabled:opacity-30 cursor-pointer" title="Mover para cima">
                         <span class="material-symbols-outlined text-[14px]">arrow_upward</span>
                     </button>
@@ -1520,7 +1563,8 @@
                         <span class="material-symbols-outlined text-[14px]">arrow_downward</span>
                     </button>
                 </div>
-            </div>`).join('');
+            </div>`;
+        }).join('');
     }
 
     function refreshLaudoTabSequenceList() {
@@ -2513,10 +2557,16 @@
             return;
         }
 
+        const titleInput = document.getElementById('cfg-grid-title-input');
+        const subtitleInput = document.getElementById('cfg-grid-subtitle-input');
+        const customTitle = titleInput ? titleInput.value.trim() : 'Dados Cadastrais do Imóvel';
+        const customSub = subtitleInput ? subtitleInput.value.trim() : '';
+
         currentTemplate.blocos.push({
             id: 'blk_grid_' + Date.now(),
             tipo: 'grade_campos',
-            titulo: 'Dados Cadastrais do Imóvel',
+            titulo: customTitle || 'Dados Cadastrais do Imóvel',
+            subtitulo: customSub,
             campos_selecionados: checked,
             campos_spans: {},
             campos_larguras: {},
@@ -2531,6 +2581,94 @@
         const formId = currentTemplate?.form_id;
         const panel = document.getElementById('accordion-blocks-panel');
         if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+    }
+
+    function updateExistingGridTitle(newTitle) {
+        if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
+        const block = currentTemplate.blocos.find(b => b.tipo === 'grade_campos');
+        if (block) {
+            block.titulo = newTitle;
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+        }
+    }
+
+    function updateExistingGridSubtitle(newSub) {
+        if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
+        const block = currentTemplate.blocos.find(b => b.tipo === 'grade_campos');
+        if (block) {
+            block.subtitulo = newSub;
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+        }
+    }
+
+    function updateSynthetic1nTitle(newTitle) {
+        if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
+        const block = currentTemplate.blocos.find(b => b.tipo === 'tabela_sintetica_1n');
+        if (block) {
+            block.titulo = newTitle;
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+        }
+    }
+
+    function updateSynthetic1nSubtitle(newSub) {
+        if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
+        const block = currentTemplate.blocos.find(b => b.tipo === 'tabela_sintetica_1n');
+        if (block) {
+            block.subtitulo = newSub;
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+        }
+    }
+
+    function updateAnalytical1nTitle(newTitle) {
+        if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
+        const block = currentTemplate.blocos.find(b => b.tipo === 'laudo_vistoria_fotos' || b.tipo === 'galeria_fotos');
+        if (block) {
+            block.titulo = newTitle;
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+        }
+    }
+
+    function updateAnalytical1nSubtitle(newSub) {
+        if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
+        const block = currentTemplate.blocos.find(b => b.tipo === 'laudo_vistoria_fotos' || b.tipo === 'galeria_fotos');
+        if (block) {
+            block.subtitulo = newSub;
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+        }
+    }
+
+    function promptCustomTabTitle(tabId) {
+        if (!currentTemplate || !Array.isArray(currentTemplate.blocos) || !tabId) return;
+        const block = currentTemplate.blocos.find(b => b.tipo === 'laudo_vistoria_fotos' || b.tipo === 'galeria_fotos');
+        if (!block) return;
+        const atual = block['custom_tab_title_' + tabId] || '';
+        const novo = prompt('Personalizar título/rótulo desta aba no laudo:', atual);
+        if (novo !== null) {
+            block['custom_tab_title_' + tabId] = novo.trim();
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+            refreshLaudoTabSequenceList();
+        }
     }
 
     function addSelectedFieldsToExistingGrid(targetBlockIndex) {
@@ -4694,7 +4832,14 @@
         previewReal,
         alternarFolhaReal,
         reordenarCampos,
-        atualizarPropriedade
+        atualizarPropriedade,
+        updateExistingGridTitle,
+        updateExistingGridSubtitle,
+        updateSynthetic1nTitle,
+        updateSynthetic1nSubtitle,
+        updateAnalytical1nTitle,
+        updateAnalytical1nSubtitle,
+        promptCustomTabTitle
     };
 
 })();

@@ -548,7 +548,34 @@
         .edit-bloco-barra button { background: none; border: 0; color: inherit; cursor: pointer; padding: 2px; border-radius: 4px; display: inline-flex; }
         .edit-bloco-barra button:hover { background: rgba(255,255,255,.18); }
         .edit-bloco-barra .material-symbols-outlined { font-size: 14px; }
-        @media print { .edit-bloco-barra { display: none !important; } .edit-bloco { outline: none !important; } }
+        .quadro-v-resize { position: relative; margin-top: 6px; margin-bottom: 4px; padding: 3px 0; user-select: none; -webkit-user-select: none; }
+        .quadro-v-resize-bar { height: 9px; cursor: ns-resize; background: linear-gradient(to bottom, transparent, rgba(14, 165, 233, 0.12), transparent); border-top: 1px dashed #cbd5e1; border-bottom: 1px dashed #cbd5e1; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: background 0.15s, border-color 0.15s; }
+        .quadro-v-resize-bar:hover, .quadro-v-resize.arrastando .quadro-v-resize-bar { background: rgba(14, 165, 233, 0.22); border-color: #0284c7; }
+        .quadro-v-resize-bar::after { content: ''; width: 44px; height: 3px; border-radius: 2px; background: #94a3b8; transition: background 0.15s; }
+        .quadro-v-resize-bar:hover::after, .quadro-v-resize.arrastando .quadro-v-resize-bar::after { background: #0284c7; }
+        .quadro-v-density-pills { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 3px; font-size: 10px; opacity: 0.9; transition: opacity 0.15s; }
+        .quadro-v-resize:hover .quadro-v-density-pills { opacity: 1; }
+        .quadro-v-density-label { font-size: 9.5px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-right: 2px; }
+        .quadro-pill-btn { border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; padding: 2px 7px; border-radius: 9999px; font-size: 9.5px; font-weight: 600; cursor: pointer; transition: all 0.12s; }
+        .quadro-pill-btn:hover { background: #e0f2fe; border-color: #7dd3fc; color: #0369a1; }
+        .quadro-pill-btn.active { background: #0284c7; border-color: #0284c7; color: #ffffff; box-shadow: 0 1px 2px rgba(2, 132, 199, 0.25); }
+        .report-table { border-collapse: separate; border-spacing: 0; width: 100%; }
+        .report-table th {
+            background: #f8fafc; color: #0f172a; font-weight: 700; font-size: 8px;
+            text-transform: uppercase; padding: 3px 4px;
+            border-top: 1px solid #e2e8f0; border-bottom: 1.5px solid #cbd5e1; border-right: 1px solid #f1f5f9;
+        }
+        .report-table th:last-child { border-right: none; }
+        .report-table td {
+            font-size: 8px; padding: 3px 4px; color: #334155;
+            border-bottom: 1px solid #f1f5f9; border-right: 1px solid #f8fafc;
+            white-space: nowrap;
+        }
+        .report-table td:last-child { border-right: none; }
+        .report-table tbody tr:nth-child(even) { background-color: #fafbfd; }
+        .report-table tbody tr:hover { background-color: #f1f5f9; }
+        @media print { .report-table th, .report-table td { font-size: 7.5px !important; padding: 2px 3px !important; } }
+        @media print { .edit-bloco-barra { display: none !important; } .edit-bloco { outline: none !important; } .quadro-v-resize { display: none !important; } }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
@@ -1142,6 +1169,16 @@
             const isGeral = tpl.tipo === 'geral';
 
             const blocos = tpl.blocos || [];
+            const tplId = tpl.id || (reportPayload && reportPayload.templateId) || 'default';
+            blocos.forEach((b, idx) => {
+                if (b.tipo === 'tabela_sintetica_1n' || b.tipo === 'laudo_vistoria_fotos' || b.tipo === 'galeria_fotos') {
+                    const bId = b.id || ('quadro_' + idx);
+                    try {
+                        const savedDens = localStorage.getItem('constructive_block_density_' + tplId + '_' + bId);
+                        if (savedDens) b.densidade = savedDens;
+                    } catch (e) {}
+                }
+            });
             const hdrBloco = blocos.find(b => b.tipo === 'cabecalho');
             const ftrBloco = blocos.find(b => b.tipo === 'rodape');
             renderArgs = { tpl: tpl, featureData: featureData, featureGeometry: featureGeometry };
@@ -1322,6 +1359,7 @@
             docContainer.innerHTML = pagesHtml;
             renderPendingCharts();
             renderPendingMapasFeicoes();
+            ligarRedimensionarQuadros1N();
             if (isGeral && !EDICAO) { ligarArrastoBlocosGerais(); ligarRedimensionarTabelaFeicoes(); }
 
             if (mapController && keptMapWrap) {
@@ -2752,19 +2790,18 @@
                 L.tileLayer(tile.url, { maxZoom: 19, crossOrigin: true, attribution: tile.attribution }).addTo(mapa);
                 if (orto) {
                     if (orto.tipo === 'xyz_tiles' || String(orto.url).indexOf('{z}') >= 0) {
-                        const isSupabase = String(orto.url || '').includes('supabase.co');
-                        const safeMax = isSupabase ? Math.min(Number(orto.zoomMax || 19), 19) : (Number(orto.zoomMax) || 20);
+                        const zMin = Math.min(Number(orto.zoomMin || 12), Number(orto.zoomMax || 22));
+                        const zMax = Math.max(Number(orto.zoomMin || 12), Number(orto.zoomMax || 22));
                         const ortoLyr = L.tileLayer(orto.url, {
                             minZoom: 1,
-                            minNativeZoom: orto.zoomMin || 1,
-                            maxNativeZoom: safeMax,
+                            minNativeZoom: zMin,
+                            maxNativeZoom: zMax,
                             maxZoom: 24,
-                            opacity: orto.opacidade,
+                            keepBuffer: 16,
+                            opacity: orto.opacidade !== undefined ? orto.opacidade : 1,
                             crossOrigin: true,
-                            attribution: 'Ortofoto: ' + orto.nome,
-                            errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+                            attribution: 'Ortofoto: ' + orto.nome
                         });
-                        if (ortoLyr.on) ortoLyr.on('tileerror', function(err) { if (err && err.tile) err.tile.style.display = 'none'; });
                         ortoLyr.addTo(mapa);
                     } else if (orto.bbox) {
                         L.imageOverlay(orto.url, orto.bbox, { opacity: orto.opacidade, crossOrigin: true, attribution: 'Ortofoto: ' + orto.nome }).addTo(mapa);
@@ -2866,6 +2903,162 @@
             });
         }
 
+        /**
+         * Anexa alça interativa para esticar/comprimir a altura vertical de quadros 1:N (Sintético e Analítico)
+         * e botões rápidos de densidade.
+         */
+        function anexarAlcaRedimensionarQuadro(res, bloco, idx) {
+            if (!res) return res;
+            const blocoId = bloco.id || ('quadro_' + idx);
+            const densidadeAtual = bloco.densidade || 'compact';
+            const isCompacta = densidadeAtual === 'compacta' || densidadeAtual === 'tight';
+            const alcaHtml = `
+                <div class="quadro-v-resize no-print" data-bloco-id="${blocoId}">
+                    <div class="quadro-v-resize-bar" data-bloco-id="${blocoId}" title="Arraste para cima para comprimir ou para baixo para esticar as linhas deste quadro"></div>
+                    <div class="quadro-v-density-pills" data-bloco-id="${blocoId}">
+                        <span class="quadro-v-density-label">Densidade:</span>
+                        <button type="button" class="quadro-pill-btn ${densidadeAtual === 'comfortable' ? 'active' : ''}" data-bloco-id="${blocoId}" data-dens="comfortable" title="Confortável: linhas arejadas">Confortável</button>
+                        <button type="button" class="quadro-pill-btn ${densidadeAtual === 'compact' ? 'active' : ''}" data-bloco-id="${blocoId}" data-dens="compact" title="Padrão: espaçamento original">Padrão</button>
+                        <button type="button" class="quadro-pill-btn ${isCompacta ? 'active' : ''}" data-bloco-id="${blocoId}" data-dens="compacta" title="Compacta: economiza altura e evita quebra indesejada de folha">Compacta</button>
+                        <button type="button" class="quadro-pill-btn ${densidadeAtual === 'ultracompact' ? 'active' : ''}" data-bloco-id="${blocoId}" data-dens="ultracompact" title="Ultracompacta: máxima densidade na folha">Ultracompacta</button>
+                    </div>
+                </div>
+            `;
+
+            if (typeof res === 'object' && res.split) {
+                const origChunkHtml = res.split.chunkHtml;
+                return {
+                    split: Object.assign({}, res.split, {
+                        chunkHtml: function(rows, isFirst, semTabela) {
+                            const chunk = origChunkHtml(rows, isFirst, semTabela);
+                            return isFirst ? (chunk + alcaHtml) : chunk;
+                        }
+                    })
+                };
+            }
+            if (typeof res === 'string') {
+                return res + alcaHtml;
+            }
+            return res;
+        }
+
+        function ajustarDensidadeQuadro(blocoId, novaDensidade) {
+            if (!tplAtual || !novaDensidade) return;
+            const bloco = (tplAtual.blocos || []).find((b, idx) => (b.id === blocoId) || (('quadro_' + idx) === blocoId) || (('laudo_' + idx) === blocoId));
+            if (bloco) {
+                bloco.densidade = novaDensidade;
+                try {
+                    const tplId = tplAtual.id || (reportPayload && reportPayload.templateId) || 'default';
+                    localStorage.setItem('constructive_block_density_' + tplId + '_' + blocoId, novaDensidade);
+                } catch (e) {}
+                desenharRelatorio();
+            }
+        }
+
+        const DENSIDADES_ORDEM = ['comfortable', 'compact', 'compacta', 'ultracompact'];
+        const DENSIDADES_NOMES = {
+            comfortable: 'Confortável (arejada)',
+            compact: 'Padrão',
+            compacta: 'Compacta (economiza ~20% de altura)',
+            ultracompact: 'Ultracompacta (máximo aproveitamento)'
+        };
+
+        function ligarRedimensionarQuadros1N() {
+            // Cliques nos botões de pílula
+            document.querySelectorAll('.quadro-pill-btn').forEach(btn => {
+                if (btn._ligado) return;
+                btn._ligado = true;
+                btn.addEventListener('click', (ev) => {
+                    ev.preventDefault(); ev.stopPropagation();
+                    const blocoId = btn.getAttribute('data-bloco-id');
+                    const dens = btn.getAttribute('data-dens');
+                    ajustarDensidadeQuadro(blocoId, dens);
+                });
+            });
+
+            // Arraste vertical com o mouse na barra
+            document.querySelectorAll('.quadro-v-resize-bar').forEach(alca => {
+                if (alca._ligada) return;
+                alca._ligada = true;
+                alca.addEventListener('mousedown', (ev) => {
+                    ev.preventDefault(); ev.stopPropagation();
+                    const blocoId = alca.getAttribute('data-bloco-id');
+                    const wrap = alca.closest('.quadro-v-resize');
+                    if (wrap) wrap.classList.add('arrastando');
+
+                    const bloco = (tplAtual && tplAtual.blocos || []).find((b, idx) => (b.id === blocoId) || (('quadro_' + idx) === blocoId) || (('laudo_' + idx) === blocoId));
+                    const densAtual = (bloco && bloco.densidade) || 'compact';
+                    let idxBase = DENSIDADES_ORDEM.indexOf(densAtual === 'tight' ? 'compacta' : densAtual);
+                    if (idxBase === -1) idxBase = 1;
+
+                    let tooltip = document.createElement('div');
+                    tooltip.className = 'quadro-resize-tooltip';
+                    tooltip.innerHTML = `↕ Densidade: <b>${DENSIDADES_NOMES[DENSIDADES_ORDEM[idxBase]]}</b>`;
+                    tooltip.style.left = (ev.clientX + 14) + 'px';
+                    tooltip.style.top = (ev.clientY - 24) + 'px';
+                    document.body.appendChild(tooltip);
+
+                    const y0 = ev.clientY;
+                    let targetIdx = idxBase;
+
+                    const mover = (e) => {
+                        const dy = e.clientY - y0;
+                        tooltip.style.left = (e.clientX + 14) + 'px';
+                        tooltip.style.top = (e.clientY - 24) + 'px';
+
+                        // Arrastar para CIMA (-dy) = comprimir (índices maiores: compacta, ultracompact)
+                        // Arrastar para BAIXO (+dy) = esticar (índices menores: compact, comfortable)
+                        const stepDelta = Math.round(-dy / 28);
+                        targetIdx = Math.max(0, Math.min(DENSIDADES_ORDEM.length - 1, idxBase + stepDelta));
+                        const nomeDens = DENSIDADES_ORDEM[targetIdx];
+                        tooltip.innerHTML = `↕ Densidade: <b>${DENSIDADES_NOMES[nomeDens]}</b> (solte para aplicar)`;
+                    };
+
+                    const soltar = () => {
+                        document.removeEventListener('mousemove', mover);
+                        document.removeEventListener('mouseup', soltar);
+                        if (tooltip && tooltip.parentNode) tooltip.parentNode.removeChild(tooltip);
+                        if (wrap) wrap.classList.remove('arrastando');
+                        const novaDens = DENSIDADES_ORDEM[targetIdx];
+                        if (novaDens && novaDens !== densAtual) {
+                            ajustarDensidadeQuadro(blocoId, novaDens);
+                        }
+                    };
+
+                    document.addEventListener('mousemove', mover);
+                    document.addEventListener('mouseup', soltar);
+                });
+            });
+        }
+
+        function getHiddenFieldsKey() {
+            const tid = (renderArgs && renderArgs.templateId) || (reportPayload && reportPayload.templateId) || 'default';
+            const fid = (renderArgs && renderArgs.featureId) || (reportPayload && reportPayload.featureId) || 'default';
+            return 'rpt_hidden_fields_' + tid + '_' + fid;
+        }
+
+        function getHiddenFields() {
+            try {
+                const raw = localStorage.getItem(getHiddenFieldsKey());
+                return raw ? JSON.parse(raw) : [];
+            } catch (e) { return []; }
+        }
+
+        window.toggleHideField = function(fieldId) {
+            if (!fieldId) return;
+            const list = getHiddenFields();
+            const idx = list.indexOf(String(fieldId));
+            if (idx >= 0) list.splice(idx, 1);
+            else list.push(String(fieldId));
+            try { localStorage.setItem(getHiddenFieldsKey(), JSON.stringify(list)); } catch (e) {}
+            scheduleRepaginate();
+        };
+
+        window.restoreHiddenFields = function() {
+            try { localStorage.removeItem(getHiddenFieldsKey()); } catch (e) {}
+            scheduleRepaginate();
+        };
+
         function renderSingleBlock(bloco, idx, featureData, featureGeometry, fields, tpl) {
             switch(bloco.tipo) {
                 case 'cabecalho':
@@ -2873,7 +3066,7 @@
 
                 case 'grade_campos': {
                     if (EDICAO) return Editor.grade(bloco, idx, fields, featureData, bloco.colunasLayout || 2);
-                    return renderAttributeGrid(bloco, featureData, fields);
+                    return renderAttributeGrid(bloco, featureData, fields, { hiddenFields: getHiddenFields(), interactiveHide: true });
                 }
 
                 case 'mapa_estatico': {
@@ -2927,13 +3120,13 @@
 
                 case 'tabela_sintetica_1n': {
                     if (EDICAO) return Editor.sintetica(bloco, idx, featureData, { recolhivel: true, recolhido: quadrosRecolhidos.has('sint:' + idx) });
-                    return renderSyntheticTable(bloco, featureData);
+                    return anexarAlcaRedimensionarQuadro(renderSyntheticTable(bloco, featureData), bloco, idx);
                 }
 
                 case 'laudo_vistoria_fotos':
                 case 'galeria_fotos': {
                     if (EDICAO) return Editor.laudo(bloco, idx, featureData, { recolhivel: true, recolhidos: Array.from(quadrosRecolhidos).filter(k => k.startsWith('laudo:' + idx + ':')).map(k => k.split(':').slice(2).join(':')) });
-                    return renderAnalyticalLaudo(bloco, featureData);
+                    return anexarAlcaRedimensionarQuadro(renderAnalyticalLaudo(bloco, featureData), bloco, idx);
                 }
 
                 case 'grafico_existente':
@@ -3060,6 +3253,8 @@
             if (ortofotos.length) {
                 temporalController = ReportTemporal.create({
                     L, MapTools, geometry, ortofotos, config: config.temporal, corContorno: config.destaque.cor,
+                    camadas: camadas,
+                    getActiveLayerIds: () => (mapController ? mapController.getConfig().camadasLigadas : (config.camadasLigadas || [])),
                     probe: makeOrtofotoProbe(geometry),
                     onStructureChange: () => { renderMapToolsPanel(); scheduleRepaginate(); scheduleEmissao(); },
                     onChange: () => { renderMapToolsPanel(); scheduleEmissao(); }
@@ -3176,9 +3371,9 @@
             window.scrollTo(0, y);
         }
 
-        /** O que muda a paginação: pontos, confrontantes, referência e comparação de área. */
+        /** O que muda a paginação: pontos, confrontantes, referência, medições, análises e edições. */
         function blocosKey(cfg) {
-            return JSON.stringify([cfg.pontos, cfg.confrontantes, cfg.referencia, cfg.comparacaoArea, cfg.medicoes.itens, cfg.analises]);
+            return JSON.stringify([cfg.pontos, cfg.confrontantes, cfg.referencia, cfg.comparacaoArea, cfg.medicoes, cfg.analises, cfg.edicoes]);
         }
 
         function camadasDoPayload() {
@@ -3263,27 +3458,84 @@
                 const cam = camadasDoPayload().find(x => String(x.id) === cfg.referencia.camada);
                 mapController.distanceRows().forEach(r => linhas.push({ aviso: false, html: `<b>Distância medida no mapa${r.id ? ' (' + escapeHtml(r.id.slice(5)) + ')' : ''}</b> — da feição até a camada <b>${escapeHtml(cam ? cam.name : 'de referência')}</b>: <b>${escapeHtml(r.texto)}</b>.` }));
             }
+            const pontosMedidos = (mapController.medicaoRows ? mapController.medicaoRows() : []).filter(r => r.tipo === 'ponto');
             if (mapController.medicaoRows) {
                 mapController.medicaoRows().forEach(r => {
-                    const c = r.coords;
-                    // DEC, GMS e UTM, um abaixo do outro
-                    const coord = (rotulo) => '<div class="font-mono text-[10px] mt-1">' + (rotulo ? '<div class="font-sans text-slate-500">' + rotulo + '</div>' : '') + '<div>DEC ' + escapeHtml(c.dec) + '</div><div>GMS ' + escapeHtml(c.gms) + '</div><div>UTM ' + escapeHtml(c.utm) + '</div></div>';
-                    if (r.tipo === 'ponto') linhas.push({ id: r.id, aviso: false, html: '<b>Coordenadas do ponto (' + escapeHtml(r.texto || '') + ')</b>' + coord('') });
-                    else if (r.tipo === 'linha') {
+                    if (r.tipo === 'linha') {
                         const trechos = r.info.trechos.length > 1 ? '<div class="font-mono text-[10px] mt-1">' + r.info.trechos.map((d, k) => '<div>Vértice ' + (k + 1) + ' → ' + (k + 2) + ': <b>' + fmt(d, 2) + ' m</b></div>').join('') + '</div>' : '';
-                        linhas.push({ id: r.id, aviso: false, html: '<b>Distância medida (' + r.numero + ')</b>: comprimento total <b>' + fmt(r.info.comprimento, 2) + ' m</b>' + trechos + coord('Centro da linha') });
-                    } else linhas.push({ id: r.id, aviso: false, html: '<b>Área medida (' + r.numero + ')' + (r.nome ? ' — ' + escapeHtml(r.nome) : '') + '</b>: <b>' + fmt(r.info.area, 2) + ' m²</b> (' + fmt(r.info.area / 10000, 4) + ' ha) • perímetro <b>' + fmt(r.info.perimetro, 2) + ' m</b>' + coord('Centroide') });
+                        linhas.push({ id: r.id, aviso: false, html: '<b>Distância medida (' + r.numero + ')</b>: comprimento total <b>' + fmt(r.info.comprimento, 2) + ' m</b>' + trechos });
+                    } else if (r.tipo === 'area') {
+                        const nomeArea = r.nome || '';
+                        linhas.push({ id: r.id, aviso: false, html: '<b>Área medida (' + r.numero + ')' + (nomeArea ? ' — ' + escapeHtml(nomeArea) : '') + '</b>: <b>' + fmt(r.info.area, 2) + ' m²</b> (' + fmt(r.info.area / 10000, 4) + ' ha) • perímetro <b>' + fmt(r.info.perimetro, 2) + ' m</b>' });
+                    }
                 });
             }
-            if (!linhas.length) return '';
-            // cada card tem largura própria (% da folha): arrastar a borda direita ajusta; vários cards cabem lado a lado
+
+            let tabelaVerticesHtml = '';
+            if (pontosMedidos.length > 0) {
+                const esc = escapeHtml;
+                const rowsHtml = pontosMedidos.map((r, i) => {
+                    const lat = r.info.lat;
+                    const lng = r.info.lng;
+                    const u = MapTools.latLngToUtm(lat, lng);
+                    const p = MapTools.projectionInfo(lat, lng);
+                    const rotulo = r.nome || r.texto || ('P' + String(r.numero).padStart(2, '0'));
+                    return `<tr class="hover:bg-slate-50 transition-colors ${i % 2 === 1 ? 'bg-[#fafbfd]' : 'bg-white'}">
+                        <td class="font-bold text-slate-900 bg-slate-50/60 px-2 py-1 border-r border-slate-200 border-b">${esc(rotulo)}</td>
+                        <td class="text-slate-700 px-2 py-1 border-r border-slate-200 border-b">${lat.toFixed(6)}</td>
+                        <td class="text-slate-700 px-2 py-1 border-r border-slate-200 border-b">${lng.toFixed(6)}</td>
+                        <td class="text-slate-600 px-2 py-1 border-r border-slate-200 border-b">${esc(MapTools.fmtGms(lat, 'N', 'S'))}</td>
+                        <td class="text-slate-600 px-2 py-1 border-r border-slate-200 border-b">${esc(MapTools.fmtGms(lng, 'E', 'W'))}</td>
+                        <td class="font-semibold text-emerald-800 px-2 py-1 border-r border-slate-200 border-b">${p.zone} ${p.hemisphere}</td>
+                        <td class="text-slate-800 px-2 py-1 border-r border-slate-200 border-b">${MapTools.fmtNumber(u.e, 2)}</td>
+                        <td class="text-slate-800 px-2 py-1 border-b">${MapTools.fmtNumber(u.n, 2)}</td>
+                    </tr>`;
+                }).join('');
+
+                tabelaVerticesHtml = `
+                    <div class="w-full border border-slate-300 rounded overflow-hidden mb-2 bg-white shadow-2xs mt-2 page-break-avoid">
+                        <div class="bg-[#0b1a30] text-white px-2.5 py-1.5 flex justify-between items-center">
+                            <div class="flex items-center gap-1.5">
+                                <span class="material-symbols-outlined text-[13px] text-emerald-400">format_list_bulleted</span>
+                                <h2 class="font-bold text-[9px] uppercase tracking-wider text-white">Coordenadas dos Vértices</h2>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="report-table w-full text-center font-mono text-[8px] border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 text-[8px] uppercase font-bold text-slate-700">
+                                        <th class="text-center px-2 py-1 border-r border-b border-slate-200" rowspan="2">Vértice</th>
+                                        <th class="text-center px-2 py-1 border-r border-b border-slate-200 bg-slate-100/70" colspan="2">Decimais</th>
+                                        <th class="text-center px-2 py-1 border-r border-b border-slate-200 bg-slate-50" colspan="2">GMS</th>
+                                        <th class="text-center px-2 py-1 border-b border-slate-200 bg-emerald-50/50 text-emerald-950" colspan="3">UTM (SIRGAS 2000)</th>
+                                    </tr>
+                                    <tr class="bg-slate-50 text-[7px] font-bold text-slate-600 uppercase border-b border-slate-200">
+                                        <th class="text-center px-1.5 py-1 border-r border-slate-200">Lat (°)</th>
+                                        <th class="text-center px-1.5 py-1 border-r border-slate-200">Long (°)</th>
+                                        <th class="text-center px-1.5 py-1 border-r border-slate-200">Lat (DMS)</th>
+                                        <th class="text-center px-1.5 py-1 border-r border-slate-200">Long (DMS)</th>
+                                        <th class="text-center px-1.5 py-1 border-r border-slate-200">Zona</th>
+                                        <th class="text-center px-1.5 py-1 border-r border-slate-200">E (m)</th>
+                                        <th class="text-center px-1.5 py-1">N (m)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${rowsHtml}</tbody>
+                            </table>
+                        </div>
+                    </div>`;
+            }
+
+            if (!linhas.length && !tabelaVerticesHtml) return '';
             const largura = cfg.analises.largura || {};
             const GAP = 6;
             const larguraCss = (id) => { const p = id && largura[id] ? largura[id] : 100; return p >= 100 ? '100%' : 'calc(' + p + '% - ' + (GAP * (1 - p / 100)).toFixed(1) + 'px)'; };
             const cardHtml = (l) => `<div class="relative text-[10.5px] p-2 rounded-lg border ${l.aviso ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-white border-slate-200 text-slate-800'}" ${l.id ? 'data-analise-id="' + l.id + '"' : ''} style="width: ${larguraCss(l.id)}; box-sizing: border-box;">${l.html}${l.id ? '<span class="col-resize no-print" data-card-resize="' + l.id + '" title="Arraste para ajustar a largura do card (dois cliques: largura total)"></span>' : ''}</div>`;
+            const cardsGridHtml = linhas.length ? `<div class="flex flex-wrap items-stretch" style="gap: 4px ${GAP}px;">${linhas.map(cardHtml).join('')}</div>` : '';
+
             return `<div class="mb-4 page-break-avoid">
                 <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2">Análises da Feição</div>
-                <div class="flex flex-wrap items-stretch" style="gap: 4px ${GAP}px;">${linhas.map(cardHtml).join('')}</div>
+                ${cardsGridHtml}
+                ${tabelaVerticesHtml}
             </div>`;
         }
 
@@ -4211,6 +4463,8 @@
             temporalController = ReportTemporal.create({
                 L, MapTools, geometry: geom, ortofotos: reportPayload.ortofotos,
                 config: cfgTemp, corContorno: (mapController ? mapController.getConfig().destaque.cor : '#10b981'),
+                camadas: camadasDoPayload(),
+                getActiveLayerIds: () => (mapController ? mapController.getConfig().camadasLigadas : []),
                 probe: makeOrtofotoProbe(geom),
                 onStructureChange: () => { renderMapToolsPanel(); scheduleRepaginate(); scheduleEmissao(); },
                 onChange: () => { renderMapToolsPanel(); scheduleEmissao(); }
@@ -4228,6 +4482,7 @@
         function mapPanelLayer(id, on) {
             if (mapController) {
                 mapController.toggleLayer(id, on);
+                if (temporalController && temporalController.refreshLayers) temporalController.refreshLayers();
                 renderMapToolsPanel();
             }
         }

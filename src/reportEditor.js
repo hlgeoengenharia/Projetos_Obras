@@ -52,7 +52,9 @@
             : '<span class="text-[9px] text-sky-600 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded font-medium print:hidden">Arraste ⠿ para reordenar • Use [-] [+] ou clique no % para a largura</span>';
         const edit = {
             titleClass: 'cursor-text hover:bg-sky-50 px-1 rounded',
-            titleAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')"`,
+            titleAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')" title="Duplo clique para editar o título"`,
+            subtituloClass: 'cursor-text hover:bg-sky-50 px-1 rounded',
+            subtituloAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'subtitulo')" title="Duplo clique para editar o subtítulo / observação"`,
             headerExtra: `<div class="flex items-center gap-2"><span class="text-[10px] font-mono text-slate-400 font-normal">${colCount === 1 ? 'Lista Corrida' : colCount + ' Colunas'}</span>${dica}</div>`,
             containerAttrs: `data-block-index="${index}"`,
             fieldAttrs: (f) => `data-field-id="${f.id}" data-block-index="${index}"`,
@@ -101,7 +103,9 @@
             recolhido: recolhivel && !!opts.recolhido,
             chevron: recolhivel ? seta('sint:' + index, !!opts.recolhido) : '',
             titleClass: 'cursor-text hover:bg-sky-50 px-1 rounded',
-            titleAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')"`,
+            titleAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')" title="Duplo clique para editar o título"`,
+            subtituloClass: 'cursor-text hover:bg-sky-50 px-1 rounded',
+            subtituloAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'subtitulo')" title="Duplo clique para editar o subtítulo / observação"`,
             metaExtra: ` • ${b.colunas && b.colunas.length ? b.colunas.length : 3} coluna(s) • ${b.densidade}`,
             th: (c, cIdx, cols, rotuloHtml) => `<div class="flex items-center justify-between gap-1"><div class="flex items-center gap-0.5 min-w-0">${cIdx > 0 ? btn(-1, cIdx, 'chevron_left', 'Mover coluna para a esquerda') : ''}<span class="cursor-pointer hover:bg-sky-100 px-1 py-0.5 rounded transition-colors whitespace-normal break-words leading-tight" title="Duplo clique para renomear ou abreviar título" ondblclick="ReportBuilder.editSynthetic1nColTitle(${index}, ${cIdx}, event)">${rotuloHtml}</span>${cIdx < cols.length - 1 ? btn(1, cIdx, 'chevron_right', 'Mover coluna para a direita') : ''}</div><button type="button" onclick="ReportBuilder.removeColumnFromSynthetic1n(${index}, '${esc(c.id)}', event)" class="field-remove-btn opacity-0 group-hover/th:opacity-100 p-0.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-all cursor-pointer print:hidden shrink-0" title="Remover esta coluna da tabela"><span class="material-symbols-outlined text-[13px] leading-none">close</span></button></div>`
         };
@@ -118,7 +122,9 @@
             recolhidos: recolhivel ? (opts.recolhidos || []).map(String) : [],
             groupChevron: recolhivel ? (tabId, recolhido) => seta('laudo:' + index + ':' + tabId, recolhido) : null,
             titleClass: 'cursor-text hover:bg-sky-50 px-1 rounded',
-            titleAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')"`,
+            titleAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')" title="Duplo clique para editar o título"`,
+            subtituloClass: 'cursor-text hover:bg-sky-50 px-1 rounded',
+            subtituloAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'subtitulo')" title="Duplo clique para editar o subtítulo / observação"`,
             metaExtra: ' • <span class="text-[9px] text-sky-600 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded font-medium print:hidden font-sans">Arraste ⠿ para reordenar campos (vale para todos os registros da aba)</span>',
             groupAttrs: (tabId) => `class="cursor-text hover:bg-sky-50 px-1 rounded transition-colors" title="Duplo clique para editar o texto da aba" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'custom_tab_title_${esc(String(tabId))}')"`,
             containerAttrs: `data-block-index="${index}"`,

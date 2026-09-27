@@ -1051,8 +1051,21 @@
                 if (next) {
                     const nextTitulo = (pontos.titulos && pontos.titulos[nextId]) || defaultPointTitle(ordem.indexOf(nextId));
                     const trecho = caminho(v, next);
+                    const edicoes = opts.edicoes || (pontos && pontos.edicoes) || {};
                     const partes = [];
-                    for (let k = 0; k < trecho.length - 1; k++) partes.push(distanceM([trecho[k].lng, trecho[k].lat], [trecho[k + 1].lng, trecho[k + 1].lat]));
+                    for (let k = 0; k < trecho.length - 1; k++) {
+                        let d = distanceM([trecho[k].lng, trecho[k].lat], [trecho[k + 1].lng, trecho[k + 1].lat]);
+                        const pos = trecho[k].pos;
+                        const edVal = edicoes['lado:' + pos] || edicoes['trecho:' + pos];
+                        if (edVal) {
+                            const m = String(edVal).match(/([\d\s]+(?:[.,]\d+)?)/);
+                            if (m) {
+                                const parsed = Number(m[1].replace(/\s/g, '').replace(',', '.'));
+                                if (isFinite(parsed) && parsed > 0) d = parsed;
+                            }
+                        }
+                        partes.push(d);
+                    }
                     const total = partes.reduce((s, x) => s + x, 0);
                     row.orientacao = titulo + ' até ' + nextTitulo;
                     row.azimute = fmtAzimuth(azimuthDeg([v.lng, v.lat], [next.lng, next.lat]));

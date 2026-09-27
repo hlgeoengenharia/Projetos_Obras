@@ -48,8 +48,13 @@ window.selectMeasurementOption = function(type) {
     }
 
     if (type === 'CoordinateQuery') {
-        closeMeasurementPanel();
-        openCoordinateQueryPanel();
+        const panel = document.getElementById('measurement-panel');
+        if (panel && panel.classList.contains('hidden')) {
+            panel.classList.remove('hidden');
+        }
+        if (typeof openCoordinateQueryPanel === 'function') {
+            openCoordinateQueryPanel();
+        }
         return;
     }
 
@@ -137,7 +142,193 @@ window.togglePrintViewfinder = function() {
     }
 }
 
+// CAD Exact Measure Input State
+let lastDrawnVertex = null;
+let currentMouseLatLng = null;
+let cadActiveShape = null;
+
+function getDestinationLatLng(fromLatLng, toLatLng, distanceMeters) {
+    if (!fromLatLng || !toLatLng || !distanceMeters || distanceMeters <= 0) return null;
+
+    if (typeof turf !== 'undefined' && turf.bearing && turf.destination && turf.point) {
+        try {
+            const p1 = turf.point([fromLatLng.lng, fromLatLng.lat]);
+            const p2 = turf.point([toLatLng.lng, toLatLng.lat]);
+            const bearing = turf.bearing(p1, p2);
+            const dest = turf.destination(p1, distanceMeters / 1000, bearing, { units: 'kilometers' });
+            return L.latLng(dest.geometry.coordinates[1], dest.geometry.coordinates[0]);
+        } catch (e) {
+            console.warn('[CAD Measure] Turf destination fallback to geodesic:', e);
+        }
+    }
+
+    const toRad = Math.PI / 180;
+    const toDeg = 180 / Math.PI;
+    const phi1 = fromLatLng.lat * toRad;
+    const lambda1 = fromLatLng.lng * toRad;
+    const phi2 = toLatLng.lat * toRad;
+    const lambda2 = toLatLng.lng * toRad;
+
+    const y = Math.sin(lambda2 - lambda1) * Math.cos(phi2);
+    const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(lambda2 - lambda1);
+    const bearing = Math.atan2(y, x);
+
+    const R = 6378137; // Earth radius in meters
+    const delta = distanceMeters / R;
+
+    const phi3 = Math.asin(
+        Math.sin(phi1) * Math.cos(delta) +
+        Math.cos(phi1) * Math.sin(delta) * Math.cos(bearing)
+    );
+    const lambda3 = lambda1 + Math.atan2(
+        Math.sin(bearing) * Math.sin(delta) * Math.cos(phi1),
+        Math.cos(delta) - Math.sin(phi1) * Math.sin(phi3)
+    );
+
+    return L.latLng(phi3 * toDeg, lambda3 * toDeg);
+}
+
+function updateCadMeasureHudLive(mouseLatLng) {
+    if (!lastDrawnVertex || !mouseLatLng) return;
+    const dist = lastDrawnVertex.distanceTo(mouseLatLng);
+    const hintEl = document.getElementById('cad-hud-hint');
+    if (hintEl) {
+        hintEl.innerHTML = `Direcione com o mouse <span class="font-mono text-emerald-600 dark:text-emerald-400 font-bold">(cursor: ${dist.toFixed(2)} m)</span>`;
+    }
+    const instLive = document.getElementById('meas-cad-dist-live');
+    if (instLive) {
+        instLive.innerText = `${dist.toFixed(2)} m`;
+    }
+}
+
+function showCadMeasureHud(mode) {
+    const hud = document.getElementById('cad-measure-hud');
+    if (hud) {
+        hud.classList.remove('hidden');
+        hud.classList.add('flex');
+    }
+    const modeTag = document.getElementById('cad-hud-mode-tag');
+    if (modeTag) {
+        modeTag.innerText = mode === 'Polygon' ? 'Área' : 'Linha';
+    }
+    const inp = document.getElementById('cad-measure-input');
+    if (inp) {
+        inp.value = '';
+        setTimeout(() => inp.focus(), 60);
+    }
+    const inst = document.getElementById('meas-instruction');
+    if (inst && (mode === 'Line' || mode === 'Polygon')) {
+        inst.innerHTML = `
+            <div class="flex flex-col gap-1.5">
+                <span class="text-slate-600 dark:text-slate-300 font-medium">Aponte o cursor na direção desejada:</span>
+                <div class="flex items-center gap-1.5">
+                    <div class="relative flex-1">
+                        <input type="text" id="meas-drawer-cad-input" placeholder="Ex: 35.00" class="w-full px-2 py-1 text-xs font-mono font-bold rounded bg-white dark:bg-slate-900 border border-emerald-400 text-slate-800 dark:text-slate-100 pr-5" onkeydown="if(event.key==='Enter') applyCadMeasureInput(this.value)">
+                        <span class="absolute right-1.5 top-1 text-[10px] font-bold text-slate-400 pointer-events-none">m</span>
+                    </div>
+                    <button type="button" onclick="applyCadMeasureInput(document.getElementById('meas-drawer-cad-input').value)" class="px-2 py-1 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded cursor-pointer">Inserir</button>
+                </div>
+                <span class="text-[9px] text-slate-400">Cursor: <span id="meas-cad-dist-live" class="font-mono text-emerald-500">0.00 m</span> | Ou clique no mapa.</span>
+            </div>
+        `;
+    }
+}
+
+function hideCadMeasureHud() {
+    const hud = document.getElementById('cad-measure-hud');
+    if (hud) {
+        hud.classList.add('hidden');
+        hud.classList.remove('flex');
+    }
+    const inp = document.getElementById('cad-measure-input');
+    if (inp) inp.value = '';
+}
+
+window.applyCadMeasureInput = function(customVal) {
+    if (!lastDrawnVertex) {
+        alert("Clique no mapa para marcar o primeiro ponto antes de inserir a medida.");
+        return;
+    }
+    if (!currentMouseLatLng) {
+        alert("Mova o cursor do mouse na direção desejada para aplicar a medida.");
+        return;
+    }
+
+    const input = document.getElementById('cad-measure-input');
+    const rawVal = customVal !== undefined ? customVal : (input ? input.value : '');
+    const cleanStr = String(rawVal).trim().replace(',', '.');
+    const distMeters = parseFloat(cleanStr);
+
+    if (isNaN(distMeters) || distMeters <= 0) {
+        if (input) {
+            input.classList.add('ring-2', 'ring-rose-500');
+            setTimeout(() => input.classList.remove('ring-2', 'ring-rose-500'), 1000);
+            input.focus();
+        }
+        return;
+    }
+
+    const targetLatLng = getDestinationLatLng(lastDrawnVertex, currentMouseLatLng, distMeters);
+    if (!targetLatLng) return;
+
+    const drawMode = currentMeasurementMode || cadActiveShape || 'Line';
+    const drawInstance = map && map.pm && map.pm.Draw && map.pm.Draw[drawMode];
+
+    const fakeEvent = {
+        latlng: targetLatLng,
+        layerPoint: map.latLngToLayerPoint(targetLatLng),
+        containerPoint: map.latLngToContainerPoint(targetLatLng),
+        originalEvent: {}
+    };
+
+    if (drawInstance && typeof drawInstance._createVertex === 'function') {
+        drawInstance._createVertex(fakeEvent);
+    } else if (map) {
+        map.fire('click', fakeEvent);
+    }
+
+    lastDrawnVertex = targetLatLng;
+
+    if (input) {
+        input.value = '';
+        setTimeout(() => input.focus(), 50);
+    }
+    const drawerInp = document.getElementById('meas-drawer-cad-input');
+    if (drawerInp) {
+        drawerInp.value = '';
+    }
+};
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        const inp = document.getElementById('cad-measure-input');
+        if (inp && (document.activeElement === inp || inp.value.trim() !== '')) {
+            e.preventDefault();
+            window.applyCadMeasureInput();
+            return;
+        }
+    }
+    if (window.isMeasurementActive && (currentMeasurementMode === 'Line' || currentMeasurementMode === 'Polygon') && lastDrawnVertex) {
+        const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+        const isInputFocused = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select';
+        if (!isInputFocused && ((e.key >= '0' && e.key <= '9') || e.key === '.' || e.key === ',')) {
+            const inp = document.getElementById('cad-measure-input');
+            if (inp) {
+                inp.focus();
+            }
+        }
+    }
+});
+
 function closeMeasurementPanel() {
+    // Ao clicar no ícone "x", limpa todas as medições e encerra a ferramenta
+    if (typeof window.clearAllMeasurements === 'function') {
+        window.clearAllMeasurements();
+    }
+    hideCadMeasureHud();
+    lastDrawnVertex = null;
+    currentMouseLatLng = null;
+
     const panel = document.getElementById('measurement-panel');
     if (panel) panel.classList.add('hidden');
     stopMeasurementDraw();
@@ -215,10 +406,13 @@ function stopMeasurementDraw() {
     if (map && map.pm) {
         map.pm.disableDraw();
     }
+    hideCadMeasureHud();
+    lastDrawnVertex = null;
     currentMeasurementMode = null;
     
     // Enable other map interactions
-    document.getElementById('map').style.cursor = '';
+    const mapEl = document.getElementById('map');
+    if (mapEl) mapEl.style.cursor = '';
 }
 
 // --- DRAG LOGIC FOR MEASUREMENT PANEL ---
@@ -293,15 +487,19 @@ function startMeasurementDraw(shape) {
     
     stopMeasurementDraw();
     currentMeasurementMode = shape;
+    cadActiveShape = shape;
+    lastDrawnVertex = null;
+    currentMouseLatLng = null;
+    hideCadMeasureHud();
     
     let inst = document.getElementById('meas-instruction');
     if(inst) {
         if (shape === 'Marker') {
             inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no mapa para inserir pontos consecutivos.<br><span class="text-[9px] text-slate-400">Arraste para mover | Botão direito para excluir.</span></span>';
         } else if (shape === 'Line') {
-            inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no mapa para traçar a linha.<br><span class="text-[9px] text-slate-400">Arraste vértices para ajustar | Botão direito no vértice para excluir.</span></span>';
+            inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no 1º ponto para iniciar a linha.<br><span class="text-[9px] text-slate-400">Aponte o cursor na direção e digite a medida exata (Enter para inserir).</span></span>';
         } else if (shape === 'Polygon') {
-            inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no mapa para traçar a área.<br><span class="text-[9px] text-slate-400">Arraste vértices para ajustar | Botão direito no vértice para excluir.</span></span>';
+            inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no 1º ponto para iniciar a área.<br><span class="text-[9px] text-slate-400">Aponte o cursor na direção e digite a medida exata (Enter para inserir).</span></span>';
         } else {
             inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no mapa para medir...</span>';
         }
@@ -336,8 +534,58 @@ function setupMeasurementEvents() {
         setTimeout(setupMeasurementEvents, 500);
         return;
     }
+
+    map.on('pm:drawstart', (e) => {
+        if (currentMeasurementMode === 'Line' || currentMeasurementMode === 'Polygon') {
+            lastDrawnVertex = null;
+            currentMouseLatLng = null;
+            cadActiveShape = currentMeasurementMode;
+            hideCadMeasureHud();
+        }
+    });
+
+    map.on('pm:drawend', () => {
+        hideCadMeasureHud();
+        lastDrawnVertex = null;
+    });
+
+    map.on('pm:vertexadded', (e) => {
+        if (currentMeasurementMode === 'Line' || currentMeasurementMode === 'Polygon') {
+            lastDrawnVertex = e.latlng;
+            cadActiveShape = currentMeasurementMode;
+            showCadMeasureHud(currentMeasurementMode);
+        }
+    });
+
+    map.on('mousemove', (e) => {
+        currentMouseLatLng = e.latlng;
+        if (lastDrawnVertex && (currentMeasurementMode === 'Line' || currentMeasurementMode === 'Polygon')) {
+            updateCadMeasureHudLive(e.latlng);
+        }
+    });
+
+    map.on('click', (e) => {
+        if (currentMeasurementMode === 'Line' || currentMeasurementMode === 'Polygon') {
+            setTimeout(() => {
+                const drawInstance = map && map.pm && map.pm.Draw && map.pm.Draw[currentMeasurementMode];
+                if (drawInstance && drawInstance._layer) {
+                    const latlngs = drawInstance._layer.getLatLngs();
+                    const pts = Array.isArray(latlngs[0]) ? latlngs[0] : latlngs;
+                    if (pts && pts.length > 0) {
+                        lastDrawnVertex = pts[pts.length - 1];
+                        showCadMeasureHud(currentMeasurementMode);
+                    }
+                } else if (!lastDrawnVertex && e.latlng) {
+                    lastDrawnVertex = e.latlng;
+                    showCadMeasureHud(currentMeasurementMode);
+                }
+            }, 60);
+        }
+    });
     
     map.on('pm:create', (e) => {
+        hideCadMeasureHud();
+        lastDrawnVertex = null;
         if (!currentMeasurementMode) return;
         
         const layer = e.layer;
@@ -736,10 +984,26 @@ let coordinateQueryActiveTab = 'DEC';
 let isCoordQueryDragInitialized = false;
 
 window.openCoordinateQueryPanel = function() {
+    const measPanel = document.getElementById('measurement-panel');
+    if (measPanel && measPanel.classList.contains('hidden')) {
+        measPanel.classList.remove('hidden');
+    }
+
+    if (typeof window.switchMeasurementMode === 'function') {
+        const coordTab = document.getElementById('meas-tab-coord-query');
+        if (!coordTab || coordTab.classList.contains('hidden')) {
+            window.switchMeasurementMode('CoordinateQuery');
+        }
+    } else {
+        const coordTab = document.getElementById('meas-tab-coord-query');
+        if (coordTab) {
+            coordTab.classList.remove('hidden');
+            coordTab.classList.add('flex');
+        }
+    }
+
     const panel = document.getElementById('coordinate-query-panel');
-    if (!panel) return;
-    
-    panel.classList.remove('hidden');
+    if (panel) panel.classList.remove('hidden');
     
     if (!isCoordQueryDragInitialized) {
         initCoordinateQueryPanelDrag();
@@ -773,9 +1037,22 @@ window.closeCoordinateQueryPanel = function() {
         }
     }
 
-    // 4. Oculta o painel
+    // 4. Oculta o painel e a aba de busca
     const panel = document.getElementById('coordinate-query-panel');
     if (panel) panel.classList.add('hidden');
+    const coordTab = document.getElementById('meas-tab-coord-query');
+    if (coordTab) {
+        coordTab.classList.add('hidden');
+        coordTab.classList.remove('flex');
+    }
+    const btn = document.getElementById('meas-btn-CoordinateQuery');
+    if (btn) {
+        btn.classList.remove(
+            'bg-blue-50', 'dark:bg-blue-900/30', 'text-blue-600', 'dark:text-blue-400', 'border-blue-300/60', 'dark:border-blue-600/40',
+            'bg-blue-100', 'text-blue-700'
+        );
+        btn.classList.add('border-transparent');
+    }
 };
 
 window.switchCoordinateQueryTab = function(tab) {
@@ -1174,6 +1451,17 @@ function initCoordinateQueryPanelDrag() {
 
 
 
+window.toggleGeometryDrawer = function() {
+    const geoTab = document.getElementById('meas-tab-geometry');
+    if (!geoTab) return;
+    if (geoTab.classList.contains('hidden')) {
+        geoTab.classList.remove('hidden');
+        geoTab.classList.add('flex');
+    } else {
+        window.collapseMeasurementDrawer();
+    }
+};
+
 window.collapseMeasurementDrawer = function() {
     const geoTab = document.getElementById('meas-tab-geometry');
     const coordTab = document.getElementById('meas-tab-coord-query');
@@ -1267,6 +1555,10 @@ window.switchMeasurementMode = function(mode) {
             btn.classList.remove('border-transparent');
             btn.classList.add('bg-blue-50', 'dark:bg-blue-900/30', 'text-blue-600', 'dark:text-blue-400', 'border-blue-300/60', 'dark:border-blue-600/40');
         }
+        setTimeout(() => {
+            const firstInput = document.getElementById('input-coord-dec-lat');
+            if (firstInput) firstInput.focus();
+        }, 100);
     } else {
         // Show geometry results drawer
         if (geoTab) {

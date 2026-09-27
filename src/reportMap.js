@@ -89,10 +89,9 @@
         function ortoLayer(o) {
             if (!ortoLayers[o.id]) {
                 if (o.tipo === 'xyz_tiles' || String(o.url).indexOf('{z}') >= 0) {
-                    const isSupabase = String(o.url || '').includes('supabase.co');
-                    const safeMax = isSupabase ? Math.min(Number(o.zoomMax || 19), 19) : o.zoomMax;
-                    const lyr = L.tileLayer(o.url, { minZoom: 1, minNativeZoom: o.zoomMin, maxNativeZoom: safeMax, maxZoom: 24, opacity: o.opacidade, attribution: 'Ortofoto: ' + o.nome, crossOrigin: true, errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' });
-                    if (lyr.on) lyr.on('tileerror', function(err) { if (err && err.tile) err.tile.style.display = 'none'; });
+                    const zMin = Math.min(Number(o.zoomMin || 12), Number(o.zoomMax || 22));
+                    const zMax = Math.max(Number(o.zoomMin || 12), Number(o.zoomMax || 22));
+                    const lyr = L.tileLayer(o.url, { minZoom: 1, minNativeZoom: zMin, maxNativeZoom: zMax, maxZoom: 24, keepBuffer: 16, opacity: o.opacidade, attribution: 'Ortofoto: ' + o.nome, crossOrigin: true });
                     ortoLayers[o.id] = lyr;
                 } else if (o.bbox) {
                     ortoLayers[o.id] = L.imageOverlay(o.url, o.bbox, { opacity: o.opacidade, crossOrigin: true, attribution: 'Ortofoto: ' + o.nome });
@@ -291,6 +290,20 @@
             const edicoes = Object.assign({}, cfg.edicoes);
             if (!limpo || limpo === padrao) delete edicoes[id]; else edicoes[id] = limpo;
             cfg.edicoes = edicoes;
+            delete state.prCache;
+
+            // Se for medição (ponto ou área), mantém sincronizado com m.nome
+            if (String(id).startsWith('med:')) {
+                const medItem = cfg.medicoes.itens.find(m => m.id === id);
+                if (medItem) {
+                    if (medItem.tipo === 'ponto') {
+                        medItem.nome = limpo || '';
+                    } else if (medItem.tipo === 'area') {
+                        const cleaned = limpo ? limpo.replace(/\s*—\s*.*$/, '').replace(/\s*\d+([.,]\d+)?\s*m².*$/, '').trim() : '';
+                        if (cleaned) medItem.nome = cleaned;
+                    }
+                }
+            }
             apply();
         }
 
@@ -655,10 +668,10 @@
             Object.keys(state.pts).forEach(k => { map.removeLayer(state.pts[k]); delete state.pts[k]; });
         }
 
-        // as linhas da tabela dependem só dos pontos e das camadas: guardadas até a configuração dos pontos mudar
+        // as linhas da tabela dependem dos pontos, das camadas e das edições das arestas
         function pointRowsNow() {
-            const chave = JSON.stringify(cfg.pontos);
-            if (!state.prCache || state.prCache.chave !== chave) state.prCache = { chave: chave, valor: MT.pointRows(geometry, cfg.pontos, { camadas: camadas }) };
+            const chave = JSON.stringify(cfg.pontos) + ':' + JSON.stringify(cfg.edicoes);
+            if (!state.prCache || state.prCache.chave !== chave) state.prCache = { chave: chave, valor: MT.pointRows(geometry, cfg.pontos, { camadas: camadas, edicoes: cfg.edicoes }) };
             return state.prCache.valor;
         }
 
@@ -1096,6 +1109,12 @@
             setMedicaoNome(id, nome) {
                 const itens = cfg.medicoes.itens.map(m => m.id === id ? Object.assign({}, m, { nome: nome }) : m);
                 cfg.medicoes = MT.normalizeMedicoes(Object.assign({}, cfg.medicoes, { itens: itens }));
+                if (cfg.edicoes[id]) {
+                    const ed = Object.assign({}, cfg.edicoes);
+                    delete ed[id];
+                    cfg.edicoes = ed;
+                }
+                delete state.prCache;
                 apply();
             },
             /** Marca um ponto pelas coordenadas digitadas; se ficar fora do enquadramento, o mapa passa a mostrar a feição e o ponto. */
@@ -1115,6 +1134,7 @@
                 cfg.medicoes = MT.normalizeMedicoes(Object.assign({}, cfg.medicoes, { itens: cfg.medicoes.itens.filter(m => m.id !== id) }));
                 const sem = (m) => { const out = {}; Object.keys(m).forEach(k => { if (ids.indexOf(k) < 0) out[k] = m[k]; }); return out; };
                 cfg.edicoes = sem(cfg.edicoes); cfg.posicoes = sem(cfg.posicoes); cfg.rotacoes = sem(cfg.rotacoes);
+                delete state.prCache;
                 apply();
             },
             clearMedicoes() {
@@ -1122,13 +1142,25 @@
                 cfg.medicoes = MT.normalizeMedicoes(Object.assign({}, cfg.medicoes, { itens: [] }));
                 const sem = (m) => { const out = {}; Object.keys(m).forEach(k => { if (ids.indexOf(k) < 0) out[k] = m[k]; }); return out; };
                 cfg.edicoes = sem(cfg.edicoes); cfg.posicoes = sem(cfg.posicoes); cfg.rotacoes = sem(cfg.rotacoes);
+                delete state.prCache;
                 apply();
             },
             /** Medições com os números e as coordenadas nos três formatos, para o painel e para o texto da folha. */
             medicaoRows() {
                 return cfg.medicoes.itens.map(m => {
                     const info = MT.medicaoInfo(m);
-                    return { id: m.id, tipo: m.tipo, numero: Number(m.id.slice(4)), nome: m.nome || '', info: info, coords: MT.coordTriple(info.centro.lat, info.centro.lng), texto: (medItems().find(x => x.id === m.id) || {}).texto, npts: m.pts.length };
+                    const it = medItems().find(x => x.id === m.id) || {};
+                    let nomeFinal = m.nome || '';
+                    if (cfg.edicoes[m.id]) {
+                        if (m.tipo === 'area') {
+                            const cleaned = cfg.edicoes[m.id].replace(/\s*—\s*.*$/, '').replace(/\s*\d+([.,]\d+)?\s*m².*$/, '').trim();
+                            if (cleaned) nomeFinal = cleaned;
+                        } else if (m.tipo === 'ponto') {
+                            nomeFinal = cfg.edicoes[m.id];
+                        }
+                    }
+                    const textoFinal = (cfg.edicoes[m.id] && m.tipo === 'ponto') ? cfg.edicoes[m.id] : (it.texto || (m.tipo === 'ponto' ? (nomeFinal || MT.medicaoTexto(m, cfg.medicoes.sistema)) : MT.medicaoTexto(m, cfg.medicoes.sistema)));
+                    return { id: m.id, tipo: m.tipo, numero: Number(m.id.slice(4)), nome: nomeFinal, info: info, coords: MT.coordTriple(info.centro.lat, info.centro.lng), texto: textoFinal, npts: m.pts.length };
                 });
             },
             // ---- distância feição → camada de referência, medida pelo usuário com dois cliques

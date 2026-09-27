@@ -152,10 +152,23 @@
             }
             if (fldsToRender.length === 0) fldsToRender = fields.slice(0, 8);
 
+            const hiddenSet = new Set(Array.isArray(opts && opts.hiddenFields) ? opts.hiddenFields : Array.from((opts && opts.hiddenFields) || []));
+            const totalAntesDeOcultar = fldsToRender.length;
+            if (hiddenSet.size > 0 && !edit) {
+                fldsToRender = fldsToRender.filter(f => !hiddenSet.has(f.id) && !hiddenSet.has(f.name));
+            }
+            const hiddenCount = totalAntesDeOcultar - fldsToRender.length;
+
             const tituloHtml = `<span class="whitespace-pre-line${edit && edit.titleClass ? ' ' + edit.titleClass : ''}"${edit && edit.titleAttrs ? ' ' + edit.titleAttrs : ''}>${(esc(bloco.titulo || 'Dados Cadastrais')).replace(/\r?\n/g, '<br>')}</span>`;
+            const restoreBadge = (!edit && hiddenCount > 0) ? `<button type="button" class="no-print text-[10px] text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded px-2 py-0.5 ml-2 flex items-center gap-1 cursor-pointer font-medium normal-case transition-colors" onclick="restoreHiddenFields()" title="Clique para restaurar todos os campos ocultos"><span class="material-symbols-outlined text-[13px]">visibility</span>${hiddenCount} oculto(s) • Restaurar</button>` : '';
+            const subtituloHtml = (bloco.subtitulo || (edit && edit.subtituloAttrs)) ? `
+                <div class="text-[10.5px] text-slate-500 font-normal normal-case mt-0.5 whitespace-pre-line${edit && edit.subtituloClass ? ' ' + edit.subtituloClass : ''}"${edit && edit.subtituloAttrs ? ' ' + edit.subtituloAttrs : ''}>${(esc(bloco.subtitulo || (edit ? 'Duplo clique para adicionar subtítulo / observação...' : ''))).replace(/\r?\n/g, '<br>')}</div>` : '';
             const cabecalho = `
-                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between${edit ? ' flex-wrap gap-1' : ''}">
-                            ${tituloHtml}${edit && edit.headerExtra ? edit.headerExtra : ''}
+                        <div class="border-b border-slate-300 pb-1 mb-2">
+                            <div class="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center justify-between${edit ? ' flex-wrap gap-1' : ''}">
+                                <div class="flex items-center gap-1 min-w-0">${tituloHtml}${restoreBadge}</div>${edit && edit.headerExtra ? edit.headerExtra : ''}
+                            </div>
+                            ${subtituloHtml}
                         </div>`;
             const topoEdicao = (f, pct, modo, rotuloHtml) => `
                                         <div class="flex items-center justify-between gap-1 mb-1">
@@ -188,17 +201,24 @@
                                         <div class="flex items-center gap-2 min-w-0"><span class="font-semibold text-slate-900 truncate font-mono text-[11px]">${esc(val)}</span>${edit.tail ? edit.tail(f, 100, 'linha') : ''}</div>
                                     </div>`;
                                 }
+                                const hoverFieldCls = (opts && opts.interactiveHide) ? 'group/field ' : '';
                                 if (isRichField(f)) {
                                     return `
-                                    <div class="px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50">
-                                        <div class="font-bold text-slate-600">${esc(f.label)}:</div>
+                                    <div class="${hoverFieldCls}relative px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50">
+                                        <div class="flex items-center justify-between">
+                                            <div class="font-bold text-slate-600">${esc(f.label)}:</div>
+                                            ${opts && opts.interactiveHide ? `<button type="button" class="no-print opacity-0 group-hover/field:opacity-100 hover:text-red-600 text-slate-400 p-0.5 transition-opacity cursor-pointer" onclick="toggleHideField('${esc(f.id)}')" title="Ocultar este campo do relatório"><span class="material-symbols-outlined" style="font-size:13px;display:block">visibility_off</span></button>` : ''}
+                                        </div>
                                         <div class="font-semibold text-slate-900 text-[11px] break-words whitespace-normal">${resolveFieldHtml(f, featureData, fileModes[f.id])}</div>
                                     </div>`;
                                 }
                                 return `
-                                    <div class="flex items-center justify-between px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50">
+                                    <div class="${hoverFieldCls}relative flex items-center justify-between px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50">
                                         <span class="font-bold text-slate-600 truncate">${esc(f.label)}:</span>
-                                        <span class="font-semibold text-slate-900 truncate font-mono text-[11px]">${esc(val)}</span>
+                                        <div class="flex items-center gap-1.5 min-w-0">
+                                            <span class="font-semibold text-slate-900 truncate font-mono text-[11px]">${esc(val)}</span>
+                                            ${opts && opts.interactiveHide ? `<button type="button" class="no-print opacity-0 group-hover/field:opacity-100 hover:text-red-600 text-slate-400 p-0.5 transition-opacity cursor-pointer" onclick="toggleHideField('${esc(f.id)}')" title="Ocultar este campo do relatório"><span class="material-symbols-outlined" style="font-size:13px;display:block">visibility_off</span></button>` : ''}
+                                        </div>
                                     </div>
                                 `;
                             }).join('')}
@@ -232,10 +252,14 @@
                                 </div>
                             `;
                             }
+                            const hoverFieldCls = (opts && opts.interactiveHide) ? 'group/field ' : '';
                             return `
-                                <div class="p-2 border border-slate-200 rounded-lg bg-slate-50/50"
+                                <div class="${hoverFieldCls}relative p-2 border border-slate-200 rounded-lg bg-slate-50/50"
                                      style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">
-                                    <div class="text-[9.5px] uppercase font-bold text-slate-500 truncate">${esc(f.label)}</div>
+                                    <div class="flex items-center justify-between">
+                                        <div class="text-[9.5px] uppercase font-bold text-slate-500 truncate">${esc(f.label)}</div>
+                                        ${opts && opts.interactiveHide ? `<button type="button" class="no-print opacity-0 group-hover/field:opacity-100 hover:text-red-600 text-slate-400 p-0.5 transition-opacity cursor-pointer" onclick="toggleHideField('${esc(f.id)}')" title="Ocultar este campo do relatório"><span class="material-symbols-outlined" style="font-size:13px;display:block">visibility_off</span></button>` : ''}
+                                    </div>
                                     <div class="text-xs font-bold text-slate-800 mt-0.5 ${valorCls}">${valorHtml}</div>
                                 </div>
                             `;
@@ -544,7 +568,51 @@
             if (density === 'ultracompact') {
                 return { th: 'py-0.5 px-1 text-[8.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300', td: 'py-0.5 px-1 text-[9px] font-medium border-b border-slate-200' };
             }
+            if (density === 'compacta' || density === 'tight') {
+                return { th: 'py-1 px-1.5 text-[9px] font-bold text-slate-700 uppercase border-b-2 border-slate-300', td: 'py-1 px-1.5 text-[9.5px] border-b border-slate-200' };
+            }
             return { th: 'py-1.5 px-2 text-[9.5px] font-bold text-slate-700 uppercase border-b-2 border-slate-300', td: 'py-1.5 px-2 text-[10px] border-b border-slate-200' };
+        }
+
+        function getLaudoDensityStyles(density) {
+            if (density === 'comfortable') {
+                return {
+                    card: 'p-3.5 space-y-3',
+                    cell: 'p-2.5',
+                    gap: 'gap-2.5',
+                    label: 'text-[9.5px] mb-1',
+                    value: 'text-[11px]',
+                    groupHeader: 'px-3 py-2 text-xs mb-2.5'
+                };
+            }
+            if (density === 'ultracompact') {
+                return {
+                    card: 'py-1.5 px-2 space-y-1',
+                    cell: 'py-0.5 px-1.5',
+                    gap: 'gap-1',
+                    label: 'text-[8px] mb-0',
+                    value: 'text-[9.5px] leading-tight',
+                    groupHeader: 'px-2 py-0.5 text-[10px] mb-1'
+                };
+            }
+            if (density === 'compacta' || density === 'tight') {
+                return {
+                    card: 'py-2 px-2.5 space-y-1.5',
+                    cell: 'py-1 px-1.5',
+                    gap: 'gap-1.5',
+                    label: 'text-[8.5px] mb-0',
+                    value: 'text-[10px] leading-tight',
+                    groupHeader: 'px-2 py-1 text-[11px] mb-1.5'
+                };
+            }
+            return {
+                card: 'p-2.5 space-y-2',
+                cell: 'p-2',
+                gap: 'gap-2',
+                label: 'text-[9px] mb-0.5',
+                value: 'text-[10.5px]',
+                groupHeader: 'px-2.5 py-1.5 text-xs mb-2'
+            };
         }
 
         function reportBlockNotice(bloco, defaultTitle, message) {
@@ -629,11 +697,16 @@
             const meta = `${records.length} registro(s) • ${sortOrder === 'asc' ? 'Antigo → Recente' : 'Recente → Antigo'}${groupByTab ? ' • Por Aba' : ''}`;
             const chunkHtml = (rows, isFirst, semTabela) => {
                 const titulo = `<span class="whitespace-pre-line${edit && edit.titleClass ? ' ' + edit.titleClass : ''}"${edit && edit.titleAttrs ? ' ' + edit.titleAttrs : ''}>${esc(bloco.titulo || TITLE)}${isFirst ? '' : ' (continuação)'}</span>`;
+                const subtituloHtml = (bloco.subtitulo || (edit && edit.subtituloAttrs)) ? `
+                    <div class="text-[10.5px] text-slate-500 font-normal normal-case mt-0.5 whitespace-pre-line${edit && edit.subtituloClass ? ' ' + edit.subtituloClass : ''}"${edit && edit.subtituloAttrs ? ' ' + edit.subtituloAttrs : ''}>${(esc(bloco.subtitulo || (edit ? 'Duplo clique para adicionar subtítulo / observação...' : ''))).replace(/\r?\n/g, '<br>')}</div>` : '';
                 return `
                 <div class="mb-4">
-                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
-                        ${edit && edit.chevron ? `<span class="flex items-center gap-1 min-w-0">${edit.chevron}${titulo}</span>` : titulo}
-                        <span class="text-[10px] font-mono text-slate-500 normal-case">${esc(meta)}${edit && edit.metaExtra ? edit.metaExtra : ''}</span>
+                    <div class="border-b border-slate-300 pb-1 mb-2">
+                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center justify-between">
+                            ${edit && edit.chevron ? `<span class="flex items-center gap-1 min-w-0">${edit.chevron}${titulo}</span>` : titulo}
+                            <span class="text-[10px] font-mono text-slate-500 normal-case">${esc(meta)}${edit && edit.metaExtra ? edit.metaExtra : ''}</span>
+                        </div>
+                        ${subtituloHtml}
                     </div>
                     ${semTabela ? '' : `<div class="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
                         <table class="w-full text-left border-collapse">${theadHtml}<tbody>${rows.join('')}</tbody></table>
@@ -724,6 +797,8 @@
                 }).join('')}</div>` + listHtml;
             };
 
+            const dens = getLaudoDensityStyles(bloco.densidade || 'compact');
+
             const cardHtml = (r, idx, primeiro) => {
                 const editando = !!(edit && primeiro);
                 let cardBg = idx % 2 === 1 ? 'bg-slate-100/70 border-slate-300' : 'bg-white border-slate-200';
@@ -737,16 +812,16 @@
                     const pct = larguras[f.id] || (WIDE.includes(type) ? 100 : 50);
                     const w = widthOf(pct);
                     const rotulo = editando
-                        ? `<div class="flex items-center justify-between gap-1 mb-0.5"><div class="flex items-center gap-1 min-w-0 flex-1">${edit.lead ? edit.lead(f, pct) : ''}<span class="font-bold text-slate-500 uppercase text-[9px] truncate">${esc(f.label || f.name || f.id)}:</span></div><div class="flex items-center gap-1 shrink-0">${edit.tail ? edit.tail(f, pct) : ''}</div></div>`
-                        : `<span class="font-bold text-slate-500 uppercase text-[9px] block truncate mb-0.5">${esc(f.label || f.name || f.id)}:</span>`;
-                    return `<div class="${editando ? 'relative group/field select-none ' : ''}p-2 bg-white rounded-lg border border-slate-200 text-xs"${editando && edit.fieldAttrs ? ' ' + edit.fieldAttrs(f, pct) : ''} style="flex: 0 0 ${w}; max-width: ${w}; width: ${w}; box-sizing: border-box;">
+                        ? `<div class="flex items-center justify-between gap-1 mb-0.5"><div class="flex items-center gap-1 min-w-0 flex-1">${edit.lead ? edit.lead(f, pct) : ''}<span class="font-bold text-slate-500 uppercase ${dens.label} truncate">${esc(f.label || f.name || f.id)}:</span></div><div class="flex items-center gap-1 shrink-0">${edit.tail ? edit.tail(f, pct) : ''}</div></div>`
+                        : `<span class="font-bold text-slate-500 uppercase ${dens.label} block truncate mb-0.5">${esc(f.label || f.name || f.id)}:</span>`;
+                    return `<div class="${editando ? 'relative group/field select-none ' : ''}${dens.cell} bg-white rounded-lg border border-slate-200 text-xs"${editando && edit.fieldAttrs ? ' ' + edit.fieldAttrs(f, pct) : ''} style="flex: 0 0 ${w}; max-width: ${w}; width: ${w}; box-sizing: border-box;">
                         ${rotulo}
-                        <div class="text-[10.5px] text-slate-800 font-semibold break-words whitespace-normal ${type === 'textarea' ? 'font-normal text-justify' : ''}">${FieldFormatter.toHtml(r.values[f.id], f, { geometryCenter, fileMode: modes[f.id], fileMeta })}</div>
+                        <div class="${dens.value} text-slate-800 font-semibold break-words whitespace-normal ${type === 'textarea' ? 'font-normal text-justify' : ''}">${FieldFormatter.toHtml(r.values[f.id], f, { geometryCenter, fileMode: modes[f.id], fileMeta })}</div>
                     </div>`;
                 }).join('');
 
-                return `<div class="border rounded-xl p-3 ${cardBg} space-y-2.5 shadow-2xs">
-                    ${cells ? `<div class="flex flex-wrap gap-2${editando ? ' a4-grid-fields-container' : ''}"${editando && edit.containerAttrs ? ' ' + edit.containerAttrs : ''}>${cells}</div>` : '<div class="text-[10px] italic text-slate-400">Nenhum campo desta aba foi selecionado para o laudo.</div>'}
+                return `<div class="border rounded-xl ${dens.card} ${cardBg} shadow-2xs page-break-avoid" style="page-break-inside: avoid; break-inside: avoid;">
+                    ${cells ? `<div class="flex flex-wrap ${dens.gap}${editando ? ' a4-grid-fields-container' : ''}"${editando && edit.containerAttrs ? ' ' + edit.containerAttrs : ''}>${cells}</div>` : '<div class="text-[10px] italic text-slate-400">Nenhum campo desta aba foi selecionado para o laudo.</div>'}
                     ${photosHtml(r, editando)}
                 </div>`;
             };
@@ -762,30 +837,37 @@
                 if (recolhida(r.tabId) && !primeiro) return null; // aba recolhida: só o cabeçalho dela (o primeiro registro carrega o cabeçalho)
                 if (primeiro) {
                     seenTab[r.tabId] = true;
-                    groupHeader = `<div class="flex items-center justify-between px-2.5 py-1.5 bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold text-slate-800 uppercase tracking-wide mb-2">
+                    groupHeader = `<div class="flex items-center justify-between ${dens.groupHeader} bg-slate-100 rounded-lg border border-slate-200 font-bold text-slate-800 uppercase tracking-wide">
                         <div class="flex items-center gap-1.5">${edit && edit.groupChevron ? edit.groupChevron(r.tabId, recolhida(r.tabId)) : ''}<span${edit && edit.groupAttrs ? ' ' + edit.groupAttrs(r.tabId) : ''}>${esc(bloco['custom_tab_title_' + r.tabId] || ('Aba / Ente: ' + r.tabTitle))}</span></div>
                         <span class="text-[9.5px] font-mono font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">${perTabCount[r.tabId]} registro(s)</span>
                     </div>`;
                 }
-                return `<div data-split-row>${groupHeader}${recolhida(r.tabId) ? '' : cardHtml(r, i, primeiro)}</div>`;
+                return `<div data-split-row style="page-break-inside: avoid; break-inside: avoid;">${groupHeader}${recolhida(r.tabId) ? '' : cardHtml(r, i, primeiro)}</div>`;
             }).filter(Boolean);
 
             const meta = `${records.length} registro(s) • ${sortOrder === 'asc' ? 'Antigo → Recente' : 'Recente → Antigo'}`;
-            const chunkHtml = (rows, isFirst) => `
+            const chunkHtml = (rows, isFirst) => {
+                const subtituloHtml = (bloco.subtitulo || (edit && edit.subtituloAttrs)) ? `
+                    <div class="text-[10.5px] text-slate-500 font-normal normal-case mt-0.5 whitespace-pre-line${edit && edit.subtituloClass ? ' ' + edit.subtituloClass : ''}"${edit && edit.subtituloAttrs ? ' ' + edit.subtituloAttrs : ''}>${(esc(bloco.subtitulo || (edit ? 'Duplo clique para adicionar subtítulo / observação...' : ''))).replace(/\r?\n/g, '<br>')}</div>` : '';
+                return `
                 <div class="mb-4">
-                    <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5 flex items-center justify-between">
-                        <span class="whitespace-pre-line${edit && edit.titleClass ? ' ' + edit.titleClass : ''}"${edit && edit.titleAttrs ? ' ' + edit.titleAttrs : ''}>${esc(bloco.titulo || TITLE)}${isFirst ? '' : ' (continuação)'}</span>
-                        <span class="text-[10px] font-mono text-slate-500 normal-case">${esc(meta)}${edit && edit.metaExtra ? edit.metaExtra : ''}</span>
+                    <div class="border-b border-slate-300 pb-1 mb-2.5">
+                        <div class="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center justify-between">
+                            <span class="whitespace-pre-line${edit && edit.titleClass ? ' ' + edit.titleClass : ''}"${edit && edit.titleAttrs ? ' ' + edit.titleAttrs : ''}>${esc(bloco.titulo || TITLE)}${isFirst ? '' : ' (continuação)'}</span>
+                            <span class="text-[10px] font-mono text-slate-500 normal-case">${esc(meta)}${edit && edit.metaExtra ? edit.metaExtra : ''}</span>
+                        </div>
+                        ${subtituloHtml}
                     </div>
                     <div class="space-y-3">${rows.join('')}</div>
                 </div>`;
+            };
 
             if (opts && opts.full) return chunkHtml(rowsHtml, true);
             return { split: { rowsHtml, chunkHtml } };
         }
 
         return {
-            resolveTabIds, getReportSchema, getTableDensityClasses, reportBlockNotice, renderSyntheticTable, renderAnalyticalLaudo,
+            resolveTabIds, getReportSchema, getTableDensityClasses, getLaudoDensityStyles, reportBlockNotice, renderSyntheticTable, renderAnalyticalLaudo,
             getOrgBadgeHtml, getStatusBadgeHtml, getRecuoBadgeHtml,
             getGeometryCenter, formatFieldValueForDisplay, readFieldRaw, isRichField, resolveFieldHtml, resolveFieldValue,
             getFieldWidthStyle, renderAttributeGrid, replaceMentionsWithData,

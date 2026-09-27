@@ -29,6 +29,8 @@
         const doc = opts.doc || (typeof document !== 'undefined' ? document : null);
         const geometry = opts.geometry || null;
         const todas = Array.isArray(opts.ortofotos) ? opts.ortofotos : [];
+        const camadas = Array.isArray(opts.camadas) ? opts.camadas : [];
+        const getActiveLayerIds = typeof opts.getActiveLayerIds === 'function' ? opts.getActiveLayerIds : (() => (opts.camadasLigadas || []));
         let cfg = JSON.parse(JSON.stringify(opts.config));
         const corContorno = opts.corContorno || '#10b981';
         const bbox = MT.geometryBBox(geometry);
@@ -109,16 +111,16 @@
             if (map.attributionControl && map.attributionControl.setPrefix) map.attributionControl.setPrefix(false);
             let layer;
             if (o.tipo === 'xyz_tiles' || String(o.url).indexOf('{z}') >= 0) {
-                const isSupabase = String(o.url || '').includes('supabase.co');
-                const safeMax = isSupabase ? Math.min(Number(o.zoomMax || 19), 19) : o.zoomMax;
-                layer = L.tileLayer(o.url, { minZoom: 1, minNativeZoom: o.zoomMin, maxNativeZoom: safeMax, maxZoom: 24, opacity: o.opacidade, attribution: 'Ortofoto: ' + o.nome, crossOrigin: true, errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' });
-                if (layer.on) layer.on('tileerror', function(err) { if (err && err.tile) err.tile.style.display = 'none'; });
+                const zMin = Math.min(Number(o.zoomMin || 12), Number(o.zoomMax || 22));
+                const zMax = Math.max(Number(o.zoomMin || 12), Number(o.zoomMax || 22));
+                layer = L.tileLayer(o.url, { minZoom: 1, minNativeZoom: zMin, maxNativeZoom: zMax, maxZoom: 24, keepBuffer: 16, opacity: o.opacidade, attribution: 'Ortofoto: ' + o.nome, crossOrigin: true });
             } else if (o.bbox) {
                 layer = L.imageOverlay(o.url, o.bbox, { opacity: o.opacidade, crossOrigin: true, attribution: 'Ortofoto: ' + o.nome });
             }
             if (layer) layer.addTo(map);
-            const w = { map: map, wrap: el('tmap-wrap-' + o.id), contorno: null, scale: null, o: o };
-            if (bbox) map.fitBounds([[bbox[1], bbox[0]], [bbox[3], bbox[2]]], { padding: [30, 30], maxZoom: 20 });
+            const w = { map: map, wrap: el('tmap-wrap-' + o.id), contorno: null, scale: null, camadaLayers: {}, o: o };
+            if (bbox) map.fitBounds([[bbox[1], bbox[0]], [bbox[3], bbox[2]]], { padding: [30, 30], maxZoom: 22 });
+            setTimeout(() => { if (map && map.invalidateSize) map.invalidateSize(); }, 60);
             map.on('moveend', () => {
                 if (!cfg.sincronizar || syncing) return;
                 syncing = true;
@@ -130,8 +132,32 @@
         }
 
         function styleFrame(w) {
+            if (w.camadaLayers) {
+                Object.keys(w.camadaLayers).forEach(id => {
+                    try { if (w.camadaLayers[id]) w.map.removeLayer(w.camadaLayers[id]); } catch (e) {}
+                });
+            }
+            w.camadaLayers = {};
+
+            if (camadas && camadas.length && L.geoJSON) {
+                const activeIds = new Set(getActiveLayerIds().map(String));
+                camadas.forEach(c => {
+                    if (!activeIds.has(String(c.id))) return;
+                    try {
+                        const st = { color: c.color || '#3b82f6', weight: 1.5, fillColor: c.color || '#3b82f6', fillOpacity: 0.08, opacity: 0.9 };
+                        const layer = L.geoJSON({ type: 'FeatureCollection', features: c.features || [] }, {
+                            style: () => st,
+                            pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 4, color: c.color || '#3b82f6', weight: 1, fillColor: c.color || '#3b82f6', fillOpacity: 0.8 }),
+                            interactive: false
+                        });
+                        layer.addTo(w.map);
+                        w.camadaLayers[String(c.id)] = layer;
+                    } catch (e) {}
+                });
+            }
+
             if (w.contorno) { w.map.removeLayer(w.contorno); w.contorno = null; }
-            if (cfg.contorno && geometry) {
+            if (cfg.contorno && geometry && L.geoJSON) {
                 w.contorno = L.geoJSON(geometry, {
                     style: () => ({ color: corContorno, weight: 2.5, fill: false, opacity: 1 }),
                     pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 6, color: corContorno, weight: 2.5, fill: false })
@@ -195,6 +221,7 @@
                 cfg = MT.normalizeMapConfig({ mapa: { temporal: Object.assign({}, cfg, { excluidas: Array.from(set) }) } }).temporal;
                 structure();
             },
+            refreshLayers: refreshFrames,
             invalidate() { Object.keys(inst).forEach(id => { if (inst[id].map.invalidateSize) inst[id].map.invalidateSize(); }); },
             destroy() { Object.keys(inst).forEach(id => { inst[id].map.remove(); delete inst[id]; }); },
             escapeHtml,

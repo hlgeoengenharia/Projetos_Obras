@@ -250,9 +250,38 @@
     
     <div class="flex-1 overflow-y-auto" id="accordion-container">
         
-        <!-- Mapa Base -->
+        <!-- Cabeçalho -->
         <div class="border-b border-slate-800 accordion-item">
             <button class="w-full px-4 py-3 flex items-center justify-between text-slate-400 hover:bg-slate-800/50 transition-colors accordion-header" onclick="toggleAccordion(this)">
+                <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider">
+                    <span class="material-symbols-outlined text-sm text-emerald-400">badge</span>
+                    Cabeçalho
+                </div>
+                <span class="material-symbols-outlined text-sm transition-transform duration-200 chevron">expand_more</span>
+            </button>
+            <div class="px-4 pb-4 accordion-content hidden flex flex-col gap-2">
+                <label class="flex items-center gap-3 cursor-pointer bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 hover:bg-slate-700/50 transition-colors">
+                    <div class="relative">
+                        <input type="checkbox" id="ctrl-header-responsavel" checked class="sr-only peer" onchange="toggleHeaderField('responsavel', this.checked)">
+                        <div class="w-8 h-4 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+                    </div>
+                    <span class="text-xs font-semibold text-slate-200">Exibir Responsável</span>
+                </label>
+
+                <label class="flex items-center gap-3 cursor-pointer bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 hover:bg-slate-700/50 transition-colors">
+                    <div class="relative">
+                        <input type="checkbox" id="ctrl-header-data" checked class="sr-only peer" onchange="toggleHeaderField('data', this.checked)">
+                        <div class="w-8 h-4 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+                    </div>
+                    <span class="text-xs font-semibold text-slate-200">Exibir Data de Emissão</span>
+                </label>
+                <p class="text-[9px] text-slate-500 leading-tight mt-1">Marque ou desmarque para exibir ou ocultar o Responsável Técnico e a Data de Emissão no cabeçalho do relatório.</p>
+            </div>
+        </div>
+
+        <!-- Mapa Base -->
+        <div class="border-b border-slate-800 accordion-item">
+            <button class="w-full px-4 py-3 flex items-center justify-between text-slate-400 hover:bg-slate-800/50 transition-colors accordion-header accordion-default-open" onclick="toggleAccordion(this)">
                 <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider">
                     <span class="material-symbols-outlined text-sm">map</span>
                     Mapa Base
@@ -371,13 +400,23 @@
                 <span class="material-symbols-outlined text-sm transition-transform duration-200 chevron">expand_more</span>
             </button>
             <div class="px-4 pb-4 accordion-content hidden">
-                <label class="flex items-center gap-3 cursor-pointer bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 hover:bg-slate-700/50 transition-colors">
-                    <div class="relative">
-                        <input type="checkbox" id="ctrl-measures" class="sr-only peer">
-                        <div class="w-8 h-4 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
-                    </div>
-                    <span class="text-xs font-semibold text-slate-200">Exibir Cotas no Mapa</span>
-                </label>
+                <div class="flex flex-col gap-2">
+                    <label class="flex items-center gap-3 cursor-pointer bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 hover:bg-slate-700/50 transition-colors">
+                        <div class="relative">
+                            <input type="checkbox" id="ctrl-measures-area" class="sr-only peer">
+                            <div class="w-8 h-4 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+                        </div>
+                        <span class="text-xs font-semibold text-slate-200">Ativar Cota de Áreas</span>
+                    </label>
+
+                    <label class="flex items-center gap-3 cursor-pointer bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 hover:bg-slate-700/50 transition-colors">
+                        <div class="relative">
+                            <input type="checkbox" id="ctrl-measures-edges" class="sr-only peer">
+                            <div class="w-8 h-4 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+                        </div>
+                        <span class="text-xs font-semibold text-slate-200">Ativar Cotas de Arestas e Medidas</span>
+                    </label>
+                </div>
                 
                 <div class="flex items-center gap-1.5 mt-2 bg-slate-800/50 p-1.5 rounded-lg border border-slate-700/50">
                     <button id="ctrl-measure-bold" class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors font-serif font-bold text-sm" title="Negrito">B</button>
@@ -456,11 +495,11 @@
             chevron.style.transform = 'rotate(180deg)';
         }
     }
-    // Open the first one by default
+    // Open the default one (Mapa Base)
     document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => {
-            const firstHeader = document.querySelector('.accordion-header');
-            if(firstHeader) toggleAccordion(firstHeader);
+            const defaultHeader = document.querySelector('.accordion-default-open') || document.querySelector('.accordion-header');
+            if(defaultHeader) toggleAccordion(defaultHeader);
         }, 100);
     });
 </script>
@@ -487,16 +526,26 @@
                         <p class="text-[8.5px] font-medium text-slate-500">Levantamento Planimétrico Cadastral Georreferenciado</p>
                     </div>
                 </div>
-                <div class="min-w-[190px] rounded p-1 flex flex-col justify-center gap-0.5 text-[8.5px] border border-slate-200 bg-slate-50/50">
-                    <div class="flex items-center justify-between border-b border-slate-200/70 pb-0.5">
-                        <span class="text-slate-400 font-semibold uppercase text-[7.5px]">Responsável:</span>
+                <div id="report-header-meta-box" class="min-w-[190px] rounded p-1 flex flex-col justify-center gap-0.5 text-[8.5px] border border-slate-200 bg-slate-50/50 transition-all">
+                    <div id="report-row-responsavel" class="group flex items-center justify-between border-b border-slate-200/70 pb-0.5 transition-all">
+                        <div class="flex items-center gap-1">
+                            <span class="text-slate-400 font-semibold uppercase text-[7.5px]">Responsável:</span>
+                            <button type="button" onclick="toggleHeaderField('responsavel', false)" class="no-print opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 transition-opacity p-0 leading-none cursor-pointer" title="Ocultar Responsável">
+                                <span class="material-symbols-outlined text-[11px] leading-none">visibility_off</span>
+                            </button>
+                        </div>
                         <span class="font-bold text-slate-800 truncate max-w-[110px] text-right" id="report-user-name">Usuário</span>
                     </div>
-                    <div class="flex items-center justify-between border-b border-slate-200/70 pb-0.5">
-                        <span class="text-slate-400 font-semibold uppercase text-[7.5px]">Data Emissão:</span>
+                    <div id="report-row-data" class="group flex items-center justify-between border-b border-slate-200/70 pb-0.5 transition-all">
+                        <div class="flex items-center gap-1">
+                            <span class="text-slate-400 font-semibold uppercase text-[7.5px]">Data Emissão:</span>
+                            <button type="button" onclick="toggleHeaderField('data', false)" class="no-print opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 transition-opacity p-0 leading-none cursor-pointer" title="Ocultar Data">
+                                <span class="material-symbols-outlined text-[11px] leading-none">visibility_off</span>
+                            </button>
+                        </div>
                         <span class="font-bold text-slate-800 mono text-right" id="report-date">--/--/----</span>
                     </div>
-                    <div class="flex items-center justify-between">
+                    <div id="report-row-datum" class="flex items-center justify-between">
                         <span class="text-slate-400 font-semibold uppercase text-[7.5px]">Datum:</span>
                         <span class="font-bold text-emerald-700 mono text-right">SIRGAS 2000</span>
                     </div>
@@ -555,47 +604,63 @@
 
         <!-- Bottom Cards -->
         <div class="grid grid-cols-12 gap-2 w-full mb-1">
-            <div class="col-span-6 border border-slate-200 rounded p-2 bg-slate-50/50">
-                <div class="flex items-center gap-1 border-b border-slate-200 pb-1 mb-1.5">
-                    <span class="font-extrabold text-[8px] uppercase text-slate-800">Sumário da Geometria</span>
-                </div>
-                <div class="grid grid-cols-2 gap-1">
-                    <div class="bg-white p-1 rounded border border-slate-200">
-                        <span class="text-[7px] uppercase font-bold text-slate-500">Área Calculada</span>
-                        <div class="flex items-baseline gap-1">
-                            <span class="text-[11px] font-black text-slate-900 mono" id="report-info-area">--</span><span class="text-[7.5px] font-bold text-slate-500">m²</span>
-                        </div>
-                        <span class="text-[7px] text-emerald-600 font-semibold mono" id="report-info-area-ha">0 ha</span>
+            <!-- Card 1: Sumário da Geometria (Área e Perímetro) -->
+            <div class="col-span-4 border border-slate-200 rounded p-2 bg-slate-50/50 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center gap-1 border-b border-slate-200 pb-1 mb-1.5">
+                        <span class="font-extrabold text-[8px] uppercase text-slate-800">Sumário da Geometria</span>
                     </div>
-                    <div class="bg-white p-1 rounded border border-slate-200">
-                        <span class="text-[7px] uppercase font-bold text-slate-500">Perímetro Total</span>
-                        <div class="flex items-baseline gap-1">
-                            <span class="text-[11px] font-black text-slate-900 mono" id="report-info-perim">--</span><span class="text-[7.5px] font-bold text-slate-500">m</span>
+                    <div class="grid grid-cols-2 gap-1">
+                        <div class="bg-white p-1 rounded border border-slate-200">
+                            <span class="text-[7px] uppercase font-bold text-slate-500">Área Calculada</span>
+                            <div class="flex items-baseline gap-1">
+                                <span class="text-[11px] font-black text-slate-900 mono" id="report-info-area">--</span><span class="text-[7.5px] font-bold text-slate-500">m²</span>
+                            </div>
+                            <span class="text-[7px] text-emerald-600 font-semibold mono" id="report-info-area-ha">0 ha</span>
                         </div>
-                        <span class="text-[7px] text-slate-400 font-semibold">Extensão</span>
+                        <div class="bg-white p-1 rounded border border-slate-200">
+                            <span class="text-[7px] uppercase font-bold text-slate-500">Perímetro Total</span>
+                            <div class="flex items-baseline gap-1">
+                                <span class="text-[11px] font-black text-slate-900 mono" id="report-info-perim">--</span><span class="text-[7.5px] font-bold text-slate-500">m</span>
+                            </div>
+                            <span class="text-[7px] text-slate-400 font-semibold">Extensão</span>
+                        </div>
                     </div>
-                </div>
-                <div class="mt-1 pt-1 border-t border-slate-200/80 flex justify-between text-[7.5px]">
-                    <span class="text-slate-500">Distância Linear acumulada:</span><span class="font-bold text-slate-800 mono"><span id="report-info-dist">--</span> m</span>
                 </div>
             </div>
 
-            <div class="col-span-6 border border-slate-200 rounded p-2 bg-slate-50/50">
-                <div class="flex items-center gap-1 border-b border-slate-200 pb-1 mb-1.5">
-                    <span class="font-extrabold text-[8px] uppercase text-slate-800">Convenções Cartográficas</span>
+            <!-- Card 2: Distância Linear Acumulada -->
+            <div class="col-span-4 border border-slate-200 rounded p-2 bg-slate-50/50 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between border-b border-slate-200 pb-1 mb-1.5">
+                        <span class="font-extrabold text-[8px] uppercase text-slate-800" id="report-dist-header-title">Distância Linear acumulada</span>
+                        <span class="font-bold text-slate-900 mono text-xs"><span id="report-info-dist">--</span> m</span>
+                    </div>
+                    <div id="report-dist-container" class="flex flex-col gap-1">
+                        <div id="report-individual-lines" class="hidden flex flex-col gap-0.5 max-h-20 overflow-y-auto"></div>
+                    </div>
                 </div>
-                <div class="space-y-1 text-[7.5px] text-slate-700 font-semibold">
-                    <div class="flex items-center gap-2 bg-white px-2 py-0.5 rounded border border-slate-200">
-                        <div class="w-3 h-3 rounded-full bg-white border-2 border-black flex items-center justify-center"><div class="w-1 h-1 bg-black rounded-full"></div></div>
-                        <span>Vértices no Mapa</span>
+            </div>
+
+            <!-- Card 3: Convenções Cartográficas -->
+            <div class="col-span-4 border border-slate-200 rounded p-2 bg-slate-50/50 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center gap-1 border-b border-slate-200 pb-1 mb-1.5">
+                        <span class="font-extrabold text-[8px] uppercase text-slate-800">Convenções Cartográficas</span>
                     </div>
-                    <div class="flex items-center gap-2 bg-white px-2 py-0.5 rounded border border-slate-200">
-                        <div id="legend-poly-box" class="w-3 h-2 bg-emerald-500/25 border border-emerald-600 transition-colors"></div>
-                        <span>Polígono no Mapa</span>
-                    </div>
-                    <div class="flex items-center gap-2 bg-white px-2 py-0.5 rounded border border-slate-200">
-                        <div id="legend-line-box" class="w-4 border-t-2 border-emerald-500 transition-colors"></div>
-                        <span>Distância no Mapa</span>
+                    <div class="space-y-1 text-[7.5px] text-slate-700 font-semibold">
+                        <div class="flex items-center gap-2 bg-white px-2 py-0.5 rounded border border-slate-200">
+                            <div class="w-3 h-3 rounded-full bg-white border-2 border-black flex items-center justify-center"><div class="w-1 h-1 bg-black rounded-full"></div></div>
+                            <span>Vértices no Mapa</span>
+                        </div>
+                        <div class="flex items-center gap-2 bg-white px-2 py-0.5 rounded border border-slate-200">
+                            <div id="legend-poly-box" class="w-3 h-2 bg-emerald-500/25 border border-emerald-600 transition-colors"></div>
+                            <span>Polígono no Mapa</span>
+                        </div>
+                        <div class="flex items-center gap-2 bg-white px-2 py-0.5 rounded border border-slate-200">
+                            <div id="legend-line-box" class="w-4 border-t-2 border-emerald-500 transition-colors"></div>
+                            <span>Distância no Mapa</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -709,6 +774,40 @@
             updateGrids(window.mapInstance);
         }
     });
+
+    window.toggleHeaderField = function(field, isVisible) {
+        const rowResp = document.getElementById('report-row-responsavel');
+        const rowDate = document.getElementById('report-row-data');
+        const rowDatum = document.getElementById('report-row-datum');
+        const chkResp = document.getElementById('ctrl-header-responsavel');
+        const chkDate = document.getElementById('ctrl-header-data');
+
+        if (field === 'responsavel') {
+            if (chkResp) chkResp.checked = isVisible;
+            if (rowResp) rowResp.classList.toggle('hidden', !isVisible);
+            localStorage.setItem('report_show_responsavel', isVisible ? '1' : '0');
+        }
+        if (field === 'data') {
+            if (chkDate) chkDate.checked = isVisible;
+            if (rowDate) rowDate.classList.toggle('hidden', !isVisible);
+            localStorage.setItem('report_show_data', isVisible ? '1' : '0');
+        }
+
+        // Ajusta as bordas inferiores para manter o visual limpo e uniforme
+        const visibleRows = [rowResp, rowDate, rowDatum].filter(r => r && !r.classList.contains('hidden'));
+        visibleRows.forEach((r, idx) => {
+            if (idx === visibleRows.length - 1) {
+                r.classList.remove('border-b', 'border-slate-200/70', 'pb-0.5');
+            } else {
+                r.classList.add('border-b', 'border-slate-200/70', 'pb-0.5');
+            }
+        });
+
+        const box = document.getElementById('report-header-meta-box');
+        if (box) {
+            box.classList.toggle('hidden', visibleRows.length === 0);
+        }
+    };
     
     let layerSatellite, layerOSM, layerOrto;
     let mapLayers = []; // Keep references to update opacities or labels
@@ -1024,9 +1123,10 @@
         }
 
         // Toggle Measurements
-        document.getElementById('ctrl-measures').addEventListener('change', (e) => {
-            refreshMeasures(map, polys, lines);
-        });
+        const ctrlArea = document.getElementById('ctrl-measures-area');
+        const ctrlEdges = document.getElementById('ctrl-measures-edges');
+        if (ctrlArea) ctrlArea.addEventListener('change', () => refreshMeasures(map, polys, lines));
+        if (ctrlEdges) ctrlEdges.addEventListener('change', () => refreshMeasures(map, polys, lines));
         
         // Font Controls
         const btnB = document.getElementById('ctrl-measure-bold');
@@ -1235,17 +1335,25 @@
         });
         
         // Handle hide/show toggle
-        const show = document.getElementById('ctrl-measures').checked;
-        measureLabels.forEach(marker => {
-            const el = marker.getElement();
-            if (el) el.style.display = show ? 'block' : 'none';
-        });
+        const ctrlArea = document.getElementById('ctrl-measures-area');
+        const ctrlEdges = document.getElementById('ctrl-measures-edges');
+        const showArea = ctrlArea ? ctrlArea.checked : false;
+        const showEdges = ctrlEdges ? ctrlEdges.checked : false;
         
         // If they don't exist yet, create them (only on first show toggle if empty)
-        if (show && measureLabels.length === 0) {
+        if ((showArea || showEdges) && measureLabels.length === 0) {
             lines.forEach(obj => addMeasureLabels(map, obj, measureLabels));
             polys.forEach(obj => addMeasureLabels(map, obj, measureLabels, true));
         }
+
+        measureLabels.forEach(marker => {
+            const el = marker.getElement();
+            if (el) {
+                const isArea = marker._measureType === 'area' || (marker.options && marker.options.icon && marker.options.icon.options.className === 'measure-label-area');
+                const isVisible = isArea ? showArea : showEdges;
+                el.style.display = isVisible ? 'block' : 'none';
+            }
+        });
     }
 function addMeasureLabels(map, geomObj, labelArray, isPolygon=false) {
         const coords = geomObj.feature.geometry.coordinates;
@@ -1297,6 +1405,7 @@ function addMeasureLabels(map, geomObj, labelArray, isPolygon=false) {
                 iconSize: null, iconAnchor: [30, 10]
             });
             const marker = L.marker([midLat, midLng], {icon: icon, draggable: true}).addTo(map); marker.on("dragstart", () => selectMarker(marker));
+            marker._measureType = 'edge';
             labelArray.push(marker);
         }
 
@@ -1321,6 +1430,7 @@ function addMeasureLabels(map, geomObj, labelArray, isPolygon=false) {
                 iconSize: null, iconAnchor: [40, 20]
             });
             const markerArea = L.marker([center[1], center[0]], {icon: iconArea, draggable: true}).addTo(map); markerArea.on("dragstart", () => selectMarker(markerArea));
+            markerArea._measureType = 'area';
             labelArray.push(markerArea);
         }
     }
@@ -1342,6 +1452,16 @@ function addMeasureLabels(map, geomObj, labelArray, isPolygon=false) {
         if (data.entidadeName) document.getElementById('report-entidade-name').innerText = data.entidadeName;
         if (data.userPhoto) document.getElementById('report-logo').src = data.userPhoto;
         document.getElementById('report-date').innerText = new Date().toLocaleDateString('pt-BR');
+
+        // Restaura preferências de visibilidade do cabeçalho
+        const savedShowResp = localStorage.getItem('report_show_responsavel');
+        if (savedShowResp !== null) {
+            toggleHeaderField('responsavel', savedShowResp === '1');
+        }
+        const savedShowData = localStorage.getItem('report_show_data');
+        if (savedShowData !== null) {
+            toggleHeaderField('data', savedShowData === '1');
+        }
         
         const map = L.map('map', { zoomControl: false, attributionControl: false });
         window.mapInstance = map;
@@ -1349,6 +1469,7 @@ function addMeasureLabels(map, geomObj, labelArray, isPolygon=false) {
     let lines = [];
         
         let bounds = L.latLngBounds(), totalArea = 0, totalPerim = 0, totalDist = 0, pointCount = 1, pointsList = [];
+        let lineDistances = [];
 
         if (data.features) {
             data.features.forEach(feat => {
@@ -1365,7 +1486,9 @@ function addMeasureLabels(map, geomObj, labelArray, isPolygon=false) {
                     line.feature = feat;
                     lines.push(line);
                     bounds.extend(line.getBounds());
-                    totalDist += turf.length(feat, {units: 'meters'});
+                    const len = turf.length(feat, {units: 'meters'});
+                    totalDist += len;
+                    lineDistances.push(len);
                 } else if (type === 'Polygon') {
                     const poly = L.polygon(coords[0].map(c => [c[1], c[0]]), { color: currentPolyStrokeColor, weight: currentPolyWeight, fillColor: currentPolyFillColor, fillOpacity: currentPolyFillOpacity }).addTo(map);
                     poly.feature = feat;
@@ -1386,6 +1509,27 @@ function addMeasureLabels(map, geomObj, labelArray, isPolygon=false) {
         document.getElementById('report-info-area-ha').innerText = totalArea > 0 ? (totalArea/10000).toLocaleString('pt-BR', {maximumFractionDigits: 4}) + ' ha' : '-- ha';
         document.getElementById('report-info-perim').innerText = totalPerim > 0 ? totalPerim.toLocaleString('pt-BR', {maximumFractionDigits: 2}) : '--';
         document.getElementById('report-info-dist').innerText = totalDist > 0 ? totalDist.toLocaleString('pt-BR', {maximumFractionDigits: 2}) : '--';
+
+        const indLinesContainer = document.getElementById('report-individual-lines');
+        const distHeaderTitle = document.getElementById('report-dist-header-title');
+        if (indLinesContainer) {
+            if (lineDistances.length > 1) {
+                indLinesContainer.classList.remove('hidden');
+                indLinesContainer.innerHTML = lineDistances.map((d, idx) => `
+                    <div class="flex justify-between items-center text-[9px] px-2 py-0.5 rounded bg-white border border-slate-200/60">
+                        <span class="font-semibold text-slate-500">Linha ${String(idx + 1).padStart(2, '0')}:</span>
+                        <span class="font-bold text-slate-800 mono">${d.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} m</span>
+                    </div>
+                `).join('');
+                if (distHeaderTitle) distHeaderTitle.innerText = 'Distância Linear acumulada';
+            } else {
+                indLinesContainer.classList.add('hidden');
+                indLinesContainer.innerHTML = '';
+                if (distHeaderTitle) {
+                    distHeaderTitle.innerText = lineDistances.length === 1 ? 'Distância Linear' : 'Distância Linear acumulada';
+                }
+            }
+        }
 
         const tbody = document.getElementById('report-coords-tbody');
         let rows = '';
