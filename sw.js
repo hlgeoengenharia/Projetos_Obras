@@ -91,9 +91,18 @@ self.addEventListener('fetch', (event) => {
                 }
                 return networkResponse;
             }).catch((err) => {
-                // Se offline e não tem no cache, retorna resposta vazia amigável para imagens/tiles
-                if (request.destination === 'image') {
-                    return new Response('', { status: 408, headers: { 'Content-Type': 'text/plain' } });
+                // Se offline e não tem no cache, retorna tile transparente amigável (200) para evitar erros vermelhos no console
+                if (request.destination === 'image' || url.pathname.endsWith('.png') || url.pathname.endsWith('.jpg')) {
+                    const TRANSPARENT_1PX_GIF = new Uint8Array([
+                        0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00,
+                        0x00, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x21, 0xf9, 0x04, 0x01, 0x00,
+                        0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+                        0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b
+                    ]);
+                    return new Response(TRANSPARENT_1PX_GIF, {
+                        status: 200,
+                        headers: { 'Content-Type': 'image/gif' }
+                    });
                 }
                 throw err;
             });
