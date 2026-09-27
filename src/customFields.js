@@ -708,7 +708,9 @@ async function handleSupabaseUpload(event, fieldId, isPhoto) {
     let publicUrl = '';
     let filePath = '';
 
-    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+    const isOffline = (typeof navigator !== 'undefined' && !navigator.onLine) || (typeof localStorage !== 'undefined' && localStorage.getItem('geogestor_modo_campo') === 'true');
+
+    if (!isOffline && typeof supabaseClient !== 'undefined' && supabaseClient) {
         try {
             const fileExt = file.name.split('.').pop() || 'bin';
             const folderPrefix = (typeof activeMunicipioId !== 'undefined' && activeMunicipioId) ? `anexos_${activeMunicipioId}` : 'anexos';
@@ -721,22 +723,36 @@ async function handleSupabaseUpload(event, fieldId, isPhoto) {
             });
 
             if (error) {
-                console.error('Upload Error:', error);
-                alert('Erro ao enviar! Detalhes: ' + error.message);
-                btnText.innerText = originalText;
-                return;
+                console.warn('[CustomFields] Falha de upload online, armazenando foto localmente no aparelho:', error);
+                publicUrl = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = e => resolve(e.target.result);
+                    reader.onerror = e => reject(e);
+                    reader.readAsDataURL(file);
+                });
+                filePath = `offline_${Date.now()}_${file.name}`;
+                if (typeof showToast === 'function') {
+                    showToast('Foto salva localmente no aparelho (Modo Offline).', 'cloud_off');
+                }
+            } else {
+                const { data: { publicUrl: url } } = supabaseClient.storage.from('obras_arquivos').getPublicUrl(filePath);
+                publicUrl = url;
             }
-
-            const { data: { publicUrl: url } } = supabaseClient.storage.from('obras_arquivos').getPublicUrl(filePath);
-            publicUrl = url;
         } catch (err) {
-            console.error(err);
-            alert('Erro de comunicação com o banco.');
-            btnText.innerText = originalText;
-            return;
+            console.warn('[CustomFields] Erro de rede durante upload, armazenando foto localmente:', err);
+            publicUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = e => reject(e);
+                reader.readAsDataURL(file);
+            });
+            filePath = `offline_${Date.now()}_${file.name}`;
+            if (typeof showToast === 'function') {
+                showToast('Foto salva localmente no aparelho (Modo Offline).', 'cloud_off');
+            }
         }
     } else {
-        // Fallback Local (Base64)
+        // Fallback Local (Base64) direto em Modo Offline
         try {
             publicUrl = await new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -744,7 +760,10 @@ async function handleSupabaseUpload(event, fieldId, isPhoto) {
                 reader.onerror = e => reject(e);
                 reader.readAsDataURL(file);
             });
-            filePath = `local_${Date.now()}_${file.name}`;
+            filePath = `offline_${Date.now()}_${file.name}`;
+            if (typeof showToast === 'function') {
+                showToast('Foto salva localmente no aparelho (Modo Offline).', 'cloud_off');
+            }
         } catch (e) {
             alert('Erro ao processar arquivo localmente.');
             btnText.innerText = originalText;

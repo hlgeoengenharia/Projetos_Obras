@@ -193,6 +193,63 @@
         });
     }
 
+    // Converte DataURL em Blob para envio ao Supabase Storage
+    function dataURLtoBlob(dataurl) {
+        try {
+            const arr = dataurl.split(',');
+            const mime = arr[0].match(/:(.*?);/)[1];
+            const bstr = atob(arr[1]);
+            let n = bstr.length;
+            const u8arr = new Uint8Array(n);
+            while (n--) {
+                u8arr[n] = bstr.charCodeAt(n);
+            }
+            return new Blob([u8arr], { type: mime });
+        } catch (e) {
+            console.error('[OfflineSync] Erro ao converter dataURL em Blob:', e);
+            return null;
+        }
+    }
+
+    // Faz upload de fotos/documentos coletados offline para o Supabase Storage
+    async function uploadPendingOfflineFiles(props) {
+        if (!props || !window.supabaseClient) return props;
+        const mId = (typeof activeMunicipioId !== 'undefined' && activeMunicipioId) ? activeMunicipioId : 'geral';
+        for (const key of Object.keys(props)) {
+            const val = props[key];
+            if (Array.isArray(val)) {
+                for (const fileObj of val) {
+                    if (fileObj && fileObj.url && fileObj.url.startsWith('data:') && (fileObj.offlinePending || (fileObj.path && fileObj.path.startsWith('offline_')))) {
+                        try {
+                            const fileExt = fileObj.name ? (fileObj.name.split('.').pop() || 'jpg') : 'jpg';
+                            const folderPrefix = `anexos_${mId}`;
+                            const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+                            const targetPath = `${folderPrefix}/${fileName}`;
+                            
+                            const blob = dataURLtoBlob(fileObj.url);
+                            if (blob) {
+                                const { error: upErr } = await window.supabaseClient.storage.from('obras_arquivos').upload(targetPath, blob, {
+                                    cacheControl: '3600',
+                                    upsert: true
+                                });
+                                if (!upErr) {
+                                    const { data: { publicUrl } } = window.supabaseClient.storage.from('obras_arquivos').getPublicUrl(targetPath);
+                                    fileObj.url = publicUrl;
+                                    fileObj.path = targetPath;
+                                    delete fileObj.offlinePending;
+                                    console.log(`[OfflineSync] Foto offline "${fileObj.name}" enviada ao Storage com sucesso: ${publicUrl}`);
+                                }
+                            }
+                        } catch (eUpload) {
+                            console.warn('[OfflineSync] Falha ao enviar foto offline para Storage:', eUpload);
+                        }
+                    }
+                }
+            }
+        }
+        return props;
+    }
+
     // Executa a sincronização completa de todos os itens com o Supabase
     async function syncAll(isAuto = false) {
         if (isSyncing) {
@@ -231,8 +288,9 @@
             try {
                 if (item.action === 'CREATE') {
                     // Limpa marcadores internos temporários antes de enviar
-                    const cleanProps = { ...item.properties };
+                    let cleanProps = { ...item.properties };
                     delete cleanProps._offlinePending;
+                    cleanProps = await uploadPendingOfflineFiles(cleanProps);
 
                     const { data: insData, error: insErr } = await window.supabaseClient
                         .from('feicoes')
@@ -251,7 +309,7 @@
                             if (th && th.features) {
                                 const f = th.features.find(x => x.properties?._tempId === item.tempId);
                                 if (f) {
-                                    f.properties.id_banco = newIdBanco;
+                                    f.properties = { ...f.properties, ...cleanProps, id_banco: newIdBanco };
                                     delete f.properties._offlinePending;
                                 }
                                 if (window.GeoTurboDB && typeof window.GeoTurboDB.saveThemeData === 'function') {
@@ -267,8 +325,9 @@
                     }
                 } else if (item.action === 'UPDATE') {
                     if (item.idBanco) {
-                        const cleanProps = { ...item.properties };
+                        let cleanProps = { ...item.properties };
                         delete cleanProps._offlinePending;
+                        cleanProps = await uploadPendingOfflineFiles(cleanProps);
 
                         const { error: updErr } = await window.supabaseClient
                             .from('feicoes')
@@ -279,6 +338,19 @@
                             .eq('id', item.idBanco);
 
                         if (!updErr) {
+                            if (typeof themes !== 'undefined') {
+                                const th = themes.find(t => String(t.id) === String(item.themeId));
+                                if (th && th.features) {
+                                    const f = th.features.find(x => x.properties?.id_banco === item.idBanco);
+                                    if (f) {
+                                        f.properties = { ...f.properties, ...cleanProps };
+                                        delete f.properties._offlinePending;
+                                    }
+                                    if (window.GeoTurboDB && typeof window.GeoTurboDB.saveThemeData === 'function') {
+                                        window.GeoTurboDB.saveThemeData(th.id, th.features, th.features.length);
+                                    }
+                                }
+                            }
                             await removeQueueItem(item.id);
                             successCount++;
                         } else {

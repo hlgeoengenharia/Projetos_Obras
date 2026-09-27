@@ -7077,8 +7077,9 @@ function showFeatureInfoModal(layer) {
       geomEditToolbar.classList.remove('flex');
   }
   // Sincronização em tempo real com o banco (se outro usuário editou a feição)
+  const isDeviceOffline = (typeof navigator !== 'undefined' && !navigator.onLine) || (typeof localStorage !== 'undefined' && localStorage.getItem('geogestor_modo_campo') === 'true');
   const bankId = layer.feature && layer.feature.properties && layer.feature.properties.id_banco;
-  if (bankId && typeof supabaseClient !== 'undefined' && supabaseClient) {
+  if (!isDeviceOffline && bankId && typeof supabaseClient !== 'undefined' && supabaseClient) {
       supabaseClient
           .from('feicoes')
           .select('propriedades, geometria')
