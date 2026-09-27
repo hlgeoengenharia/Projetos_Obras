@@ -125,47 +125,57 @@
             </div>
 
             <!-- Dock Inferior: Carrossel com exatamente 2 Datas e Setas -->
-            <div class="absolute bottom-4 md:bottom-5 left-0 right-0 pointer-events-auto z-20 flex flex-col justify-center items-center px-2 md:px-4">
+            <div class="absolute bottom-3 sm:bottom-4 md:bottom-5 left-0 right-0 pointer-events-auto z-20 flex flex-col justify-center items-center px-1 sm:px-2 md:px-4">
                 
                 <!-- Card Principal do Carrossel (Apenas 2 datas + setas) -->
                 <div id="swipe-main-carousel"
-                     class="flex items-center gap-2 px-2.5 py-1.5 rounded-2xl bg-slate-950/90 backdrop-blur-xl border border-white/15 shadow-[0_12px_35px_rgba(0,0,0,0.7)] select-none relative">
+                     class="flex items-center gap-1 sm:gap-2 px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-2xl bg-slate-950/90 backdrop-blur-xl border border-white/15 shadow-[0_12px_35px_rgba(0,0,0,0.7)] select-none relative max-w-[95vw] sm:max-w-none">
                     
                     <!-- Seta Esquerda -->
                     <button id="swipe-arrow-prev" title="Comparação anterior (Scroll ou Seta)"
-                            class="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 active:bg-white/30 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shrink-0 cursor-pointer disabled:opacity-25 disabled:pointer-events-none">
-                        <span class="material-symbols-outlined text-[20px]">chevron_left</span>
+                            class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-white/10 hover:bg-white/20 active:bg-white/30 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shrink-0 cursor-pointer disabled:opacity-25 disabled:pointer-events-none">
+                        <span class="material-symbols-outlined text-[18px] sm:text-[20px]">chevron_left</span>
                     </button>
 
                     <!-- Card da Esquerda (Mais antiga) -->
                     <div id="swipe-card-left"
                          onclick="window.SwipeComparator.openDateDropdown(event, 'left')"
                          title="Clique para escolher a imagem da Esquerda"
-                         class="swipe-card-compact shrink-0 h-9 px-3 rounded-xl border border-emerald-500/80 bg-gradient-to-r from-emerald-950/95 to-emerald-900/70 shadow-[0_0_15px_rgba(16,185,129,0.45)] flex items-center justify-center gap-1.5 cursor-pointer hover:border-emerald-400 active:scale-[0.98] transition-all relative">
-                        <span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-400 text-slate-950 tracking-tighter">ESQ</span>
-                        <span class="material-symbols-outlined text-[14px] text-emerald-300">calendar_today</span>
-                        <span id="swipe-date-label-left" class="text-xs font-bold text-emerald-100 font-mono whitespace-nowrap">--/--/----</span>
-                        <span class="material-symbols-outlined text-[16px] text-emerald-400/80 -mr-1">arrow_drop_down</span>
+                         class="swipe-card-compact shrink-0 h-8 sm:h-9 px-2 sm:px-3 rounded-xl border border-emerald-500/80 bg-gradient-to-r from-emerald-950/95 to-emerald-900/70 shadow-[0_0_15px_rgba(16,185,129,0.45)] flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer hover:border-emerald-400 active:scale-[0.98] transition-all relative">
+                        <span class="px-1 sm:px-1.5 py-0.5 rounded text-[8.5px] sm:text-[9px] font-black bg-emerald-400 text-slate-950 tracking-tighter">ESQ</span>
+                        <span class="hidden xs:inline material-symbols-outlined text-[13px] sm:text-[14px] text-emerald-300">calendar_today</span>
+                        <span id="swipe-date-label-left" class="text-[11px] sm:text-xs font-bold text-emerald-100 font-mono whitespace-nowrap">--/--/----</span>
+                        <span class="material-symbols-outlined text-[15px] sm:text-[16px] text-emerald-400/80 -mr-1">arrow_drop_down</span>
                     </div>
 
-                    <!-- Divisor sutil entre os dois cards -->
-                    <div class="w-[1px] h-5 bg-white/20"></div>
+                    <!-- Divisor sutil e Botão Inverter entre os dois cards -->
+                    <button type="button" onclick="window.SwipeComparator.swapSides()" title="Inverter lados (Esquerda ⇄ Direita)" class="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/25 active:bg-white/40 text-white/70 hover:text-white flex items-center justify-center transition-all hover:scale-110 active:scale-95 cursor-pointer shrink-0">
+                        <span class="material-symbols-outlined text-[14px] sm:text-[15px]">swap_horiz</span>
+                    </button>
 
                     <!-- Card da Direita (Mais recente) -->
                     <div id="swipe-card-right"
                          onclick="window.SwipeComparator.openDateDropdown(event, 'right')"
                          title="Clique para escolher a imagem da Direita"
-                         class="swipe-card-compact shrink-0 h-9 px-3 rounded-xl border border-cyan-500/80 bg-gradient-to-r from-cyan-900/70 to-cyan-950/95 shadow-[0_0_15px_rgba(6,182,212,0.45)] flex items-center justify-center gap-1.5 cursor-pointer hover:border-cyan-400 active:scale-[0.98] transition-all relative">
-                        <span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-cyan-400 text-slate-950 tracking-tighter">DIR</span>
-                        <span class="material-symbols-outlined text-[14px] text-cyan-300">calendar_today</span>
-                        <span id="swipe-date-label-right" class="text-xs font-bold text-cyan-100 font-mono whitespace-nowrap">--/--/----</span>
-                        <span class="material-symbols-outlined text-[16px] text-cyan-400/80 -mr-1">arrow_drop_down</span>
+                         class="swipe-card-compact shrink-0 h-8 sm:h-9 px-2 sm:px-3 rounded-xl border border-cyan-500/80 bg-gradient-to-r from-cyan-900/70 to-cyan-950/95 shadow-[0_0_15px_rgba(6,182,212,0.45)] flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer hover:border-cyan-400 active:scale-[0.98] transition-all relative">
+                        <span class="px-1 sm:px-1.5 py-0.5 rounded text-[8.5px] sm:text-[9px] font-black bg-cyan-400 text-slate-950 tracking-tighter">DIR</span>
+                        <span class="hidden xs:inline material-symbols-outlined text-[13px] sm:text-[14px] text-cyan-300">calendar_today</span>
+                        <span id="swipe-date-label-right" class="text-[11px] sm:text-xs font-bold text-cyan-100 font-mono whitespace-nowrap">--/--/----</span>
+                        <span class="material-symbols-outlined text-[15px] sm:text-[16px] text-cyan-400/80 -mr-1">arrow_drop_down</span>
                     </div>
 
                     <!-- Seta Direita -->
                     <button id="swipe-arrow-next" title="Próxima comparação (Scroll ou Seta)"
-                            class="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 active:bg-white/30 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shrink-0 cursor-pointer disabled:opacity-25 disabled:pointer-events-none">
-                        <span class="material-symbols-outlined text-[20px]">chevron_right</span>
+                            class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-white/10 hover:bg-white/20 active:bg-white/30 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shrink-0 cursor-pointer disabled:opacity-25 disabled:pointer-events-none">
+                        <span class="material-symbols-outlined text-[18px] sm:text-[20px]">chevron_right</span>
+                    </button>
+
+                    <!-- Divisor e Botão Fechar (Encerrar Swipe) -->
+                    <div class="w-[1px] h-5 bg-white/20 ml-0.5"></div>
+                    <button id="swipe-btn-close" type="button" onclick="window.SwipeComparator.stop()" title="Encerrar Comparador de Ortofotos"
+                            class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-white/10 hover:bg-rose-600 text-white/80 hover:text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shrink-0 cursor-pointer"
+                            aria-label="Encerrar">
+                        <span class="material-symbols-outlined text-[17px] sm:text-[18px]">close</span>
                     </button>
 
                     <!-- Dropdown flutuante para seleção de data (Abre acima do card principal) -->
@@ -173,23 +183,6 @@
                          class="hidden absolute bottom-12 left-1/2 -translate-x-1/2 bg-slate-950/95 backdrop-blur-xl border border-white/20 py-2 px-1.5 rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.8)] z-40 max-h-56 overflow-y-auto min-w-[230px]">
                         <!-- Lista de datas renderizada dinamicamente -->
                     </div>
-                </div>
-
-                <!-- Card Menor Abaixo do Carrossel (Mantido conforme solicitado) -->
-                <div class="mt-1.5 flex items-center gap-2.5 text-[11px] font-medium text-slate-300/90 bg-slate-950/75 backdrop-blur-md px-3.5 py-1 rounded-full border border-white/10 shadow-lg select-none">
-                    <span class="flex items-center gap-1.5 text-emerald-400 font-semibold">
-                        <span class="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></span>
-                        ESQ: <strong class="text-white font-mono" id="swipe-status-left">-</strong>
-                    </span>
-                    <span class="text-white/30">|</span>
-                    <span class="flex items-center gap-1.5 text-cyan-400 font-semibold">
-                        <span class="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.8)]"></span>
-                        DIR: <strong class="text-white font-mono" id="swipe-status-right">-</strong>
-                    </span>
-                    <button onclick="window.SwipeComparator.swapSides()" title="Inverter lados (Esquerda ⇄ Direita)" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-all hover:scale-105 active:scale-95 flex items-center gap-1 text-[10px] cursor-pointer">
-                        <span class="material-symbols-outlined text-[13px]">swap_horiz</span>
-                        <span>Inverter</span>
-                    </button>
                 </div>
             </div>
         `;

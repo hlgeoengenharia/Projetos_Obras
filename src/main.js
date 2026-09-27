@@ -702,6 +702,676 @@ function showWarningToast(message) {
     }, 3500);
 }
 
+function showSuccessToast(message) {
+    const existing = document.getElementById('success-toast');
+    if (existing) existing.remove();
+    
+    const toast = document.createElement('div');
+    toast.id = 'success-toast';
+    toast.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white px-6 py-4 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.6)] border border-emerald-500/40 z-[9999] flex items-center gap-3 transition-all duration-300 transform translate-y-10 opacity-0 pointer-events-none select-none';
+    toast.innerHTML = `
+        <span class="material-symbols-outlined text-emerald-400 text-2xl">check_circle</span>
+        <span class="font-medium text-sm tracking-wide text-slate-100">${message}</span>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.classList.remove('translate-y-10', 'opacity-0');
+    }, 10);
+    
+    setTimeout(() => {
+        toast.classList.add('translate-y-10', 'opacity-0');
+        setTimeout(() => toast.remove(), 300);
+    }, 3500);
+}
+
+// =========================================================================
+// === MULTI-SELEÇÃO DE FEIÇÕES (CTRL + CLIQUE) E TRANSFERÊNCIA DE CAMADAS ==
+// =========================================================================
+
+window.selectedMultiFeatures = [];
+window.selectedMultiThemeId = null;
+window._pendingTransferFromSelection = null;
+
+function userCanEditTheme(themeId) {
+    if (!themeId) return false;
+    const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
+    if (isSuperAdmin) return true;
+    if (window.currentUserPermissions) {
+        const perm = window.currentUserPermissions[themeId] || window.currentUserPermissions[String(themeId).toLowerCase()];
+        if (perm && typeof perm.pode_editar !== 'undefined') {
+            return !!perm.pode_editar;
+        }
+    }
+    return true;
+}
+
+function getThemeGeomNormalized(geomType) {
+    if (!geomType) return 'Polygon';
+    const g = String(geomType).toLowerCase();
+    if (g.includes('point') || g.includes('ponto')) return 'Point';
+    if (g.includes('line') || g.includes('linha')) return 'LineString';
+    return 'Polygon';
+}
+
+function handleFeatureCtrlSelection(layer, feature) {
+    if (!feature || !feature.properties) return;
+    const themeIdStr = String(feature.properties.themeId);
+    
+    // 1. Permissão de edição
+    if (!userCanEditTheme(themeIdStr)) {
+        showWarningToast("Você não possui permissão de edição para selecionar feições desta camada.");
+        return;
+    }
+
+    // 2. Camada consistente (todas da mesma camada)
+    if (window.selectedMultiThemeId && window.selectedMultiThemeId !== themeIdStr) {
+        const currentTheme = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes.find(t => String(t.id) === String(window.selectedMultiThemeId)) : null;
+        const themeName = currentTheme ? currentTheme.name : "camada anterior";
+        showWarningToast(`Todas as feições selecionadas devem pertencer à mesma camada: "${themeName}".`);
+        return;
+    }
+
+    const fid = feature.properties._tempId || ('feat_' + (feature.properties.id_banco || Math.random().toString(36).substr(2, 9)));
+    feature.properties._tempId = fid;
+
+    const existingIdx = window.selectedMultiFeatures.findIndex(item => item.fid === fid);
+
+    if (existingIdx >= 0) {
+        // Desmarcar feição
+        const item = window.selectedMultiFeatures[existingIdx];
+        if (item.layer) {
+            if (item.originalStyle && item.layer.setStyle) {
+                item.layer.setStyle(item.originalStyle);
+            } else if (typeof resetHighlightFeature === 'function') {
+                resetHighlightFeature(fid);
+            } else if (item.layer.getElement && item.layer.getElement()) {
+                item.layer.getElement().style.filter = '';
+            }
+        }
+        window.selectedMultiFeatures.splice(existingIdx, 1);
+        if (window.selectedMultiFeatures.length === 0) {
+            window.selectedMultiThemeId = null;
+            updateMultiFeatureHud(false);
+        } else {
+            updateMultiFeatureHud(true);
+        }
+    } else {
+        // Marcar feição
+        let origStyle = null;
+        if (layer.options) {
+            origStyle = {
+                color: layer.options.color,
+                weight: layer.options.weight,
+                fillColor: layer.options.fillColor,
+                fillOpacity: layer.options.fillOpacity,
+                dashArray: layer.options.dashArray
+            };
+        }
+
+        // Estilo de seleção vibrante ciano neon
+        if (layer.setStyle) {
+            layer.setStyle({
+                color: '#06b6d4',
+                weight: 4,
+                fillColor: '#06b6d4',
+                fillOpacity: 0.45,
+                dashArray: '5, 5'
+            });
+            if (layer.bringToFront) layer.bringToFront();
+        } else if (layer.getElement && layer.getElement()) {
+            layer.getElement().style.filter = 'drop-shadow(0 0 10px #06b6d4)';
+        }
+
+        window.selectedMultiFeatures.push({
+            fid: fid,
+            layer: layer,
+            feature: feature,
+            originalStyle: origStyle
+        });
+        window.selectedMultiThemeId = themeIdStr;
+        updateMultiFeatureHud(true);
+    }
+}
+
+function updateMultiFeatureHud(show) {
+    const hud = document.getElementById('multi-feature-hud');
+    if (!hud) return;
+    if (!show || !window.selectedMultiFeatures || window.selectedMultiFeatures.length === 0) {
+        hud.classList.add('hidden');
+        hud.classList.remove('flex');
+        return;
+    }
+    const countEl = document.getElementById('multi-feature-count');
+    const themeEl = document.getElementById('multi-feature-theme-name');
+    const currentTheme = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes.find(t => String(t.id) === String(window.selectedMultiThemeId)) : null;
+    const themeName = currentTheme ? currentTheme.name : 'Camada';
+
+    if (countEl) countEl.innerText = String(window.selectedMultiFeatures.length);
+    if (themeEl) themeEl.innerText = `Camada: ${themeName}`;
+
+    hud.classList.remove('hidden');
+    hud.classList.add('flex');
+}
+
+window.clearMultiFeatureSelection = function() {
+    if (window.selectedMultiFeatures) {
+        window.selectedMultiFeatures.forEach(item => {
+            if (item.layer) {
+                if (item.originalStyle && item.layer.setStyle) {
+                    item.layer.setStyle(item.originalStyle);
+                } else if (typeof resetHighlightFeature === 'function') {
+                    resetHighlightFeature(item.fid);
+                } else if (item.layer.getElement && item.layer.getElement()) {
+                    item.layer.getElement().style.filter = '';
+                }
+            }
+        });
+    }
+    window.selectedMultiFeatures = [];
+    window.selectedMultiThemeId = null;
+    updateMultiFeatureHud(false);
+    const ctxMenu = document.getElementById('multi-feature-context-menu');
+    if (ctxMenu) {
+        ctxMenu.classList.add('hidden');
+        ctxMenu.classList.remove('flex');
+    }
+};
+
+window.handleMultiFeatureContextMenu = function(e) {
+    if (!window.selectedMultiFeatures || window.selectedMultiFeatures.length === 0) return;
+    
+    const ctxMenu = document.getElementById('multi-feature-context-menu');
+    if (!ctxMenu) return;
+
+    const countEl = document.getElementById('ctx-menu-feature-count');
+    const themeEl = document.getElementById('ctx-menu-theme-name');
+    const theme = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes.find(t => String(t.id) === String(window.selectedMultiThemeId)) : null;
+    const themeName = theme ? theme.name : 'Camada';
+
+    if (countEl) countEl.innerText = `${window.selectedMultiFeatures.length} feição(ões) selecionada(s)`;
+    if (themeEl) themeEl.innerText = themeName;
+
+    let clientX = e.originalEvent ? e.originalEvent.clientX : (window.innerWidth / 2);
+    let clientY = e.originalEvent ? e.originalEvent.clientY : (window.innerHeight / 2);
+    
+    // Boundary collision detection
+    const menuWidth = 265;
+    const menuHeight = 185;
+    if (clientX + menuWidth > window.innerWidth) clientX = window.innerWidth - menuWidth - 16;
+    if (clientY + menuHeight > window.innerHeight) clientY = window.innerHeight - menuHeight - 16;
+
+    ctxMenu.style.left = `${clientX}px`;
+    ctxMenu.style.top = `${clientY}px`;
+    ctxMenu.classList.remove('hidden');
+    ctxMenu.classList.add('flex');
+};
+
+window.openMultiFeatureContextMenuFromHud = function() {
+    const hud = document.getElementById('multi-feature-hud');
+    if (!hud) return;
+    const rect = hud.getBoundingClientRect();
+    window.handleMultiFeatureContextMenu({
+        originalEvent: {
+            clientX: Math.max(16, rect.left),
+            clientY: Math.max(16, rect.top - 190),
+            preventDefault: () => {},
+            stopPropagation: () => {}
+        }
+    });
+};
+
+// Fechar menu de contexto ao clicar fora ou ao pressionar ESC
+document.addEventListener('click', (e) => {
+    const ctxMenu = document.getElementById('multi-feature-context-menu');
+    if (ctxMenu && !ctxMenu.classList.contains('hidden') && !ctxMenu.contains(e.target)) {
+        ctxMenu.classList.add('hidden');
+        ctxMenu.classList.remove('flex');
+    }
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        if (window.selectedMultiFeatures && window.selectedMultiFeatures.length > 0) {
+            window.clearMultiFeatureSelection();
+        }
+    }
+});
+
+function getFieldsForTheme(theme) {
+    if (!theme) return [];
+    let fields = [];
+    const formId = theme.formId || theme.cadastroType || theme.tipo_cadastro;
+    if (formId && typeof allForms !== 'undefined' && Array.isArray(allForms)) {
+        const form = allForms.find(f => String(f.id) === String(formId));
+        if (form) {
+            const tabs = form.schema || form.tabs || [];
+            tabs.forEach(tab => {
+                (tab.fields || []).forEach(fld => {
+                    fields.push({
+                        id: fld.id,
+                        label: fld.label || fld.name || fld.id,
+                        type: fld.type || 'text',
+                        tabTitle: tab.title || tab.name || 'Geral'
+                    });
+                });
+            });
+        }
+    }
+    const existingIds = new Set(fields.map(f => f.id));
+    if (theme.features && theme.features.length > 0) {
+        theme.features.forEach(feat => {
+            const props = feat.properties || {};
+            Object.keys(props).forEach(k => {
+                if (!k.startsWith('_') && k !== 'themeId' && k !== 'id_banco' && !existingIds.has(k)) {
+                    fields.push({ id: k, label: k, type: 'text', tabTitle: 'Atributos' });
+                    existingIds.add(k);
+                }
+            });
+        });
+    }
+    return fields;
+}
+
+function getFieldsForForm(formId) {
+    let fields = [];
+    if (formId && typeof allForms !== 'undefined' && Array.isArray(allForms)) {
+        const form = allForms.find(f => String(f.id) === String(formId));
+        if (form) {
+            const tabs = form.schema || form.tabs || [];
+            tabs.forEach(tab => {
+                (tab.fields || []).forEach(fld => {
+                    fields.push({
+                        id: fld.id,
+                        label: fld.label || fld.name || fld.id,
+                        type: fld.type || 'text',
+                        tabTitle: tab.title || tab.name || 'Geral'
+                    });
+                });
+            });
+        }
+    }
+    return fields;
+}
+
+function getFeatureSampleValue(features, fieldId) {
+    if (!features || features.length === 0) return '';
+    for (const f of features) {
+        const props = f.properties || {};
+        if (props[fieldId] !== undefined && props[fieldId] !== null && String(props[fieldId]).trim() !== '') {
+            return String(props[fieldId]).trim();
+        }
+        const matchK = Object.keys(props).find(k => k.toLowerCase() === String(fieldId).toLowerCase());
+        if (matchK && props[matchK] !== undefined && props[matchK] !== null && String(props[matchK]).trim() !== '') {
+            return String(props[matchK]).trim();
+        }
+    }
+    return '';
+}
+
+window.startCreateNewThemeFromSelection = function() {
+    const ctxMenu = document.getElementById('multi-feature-context-menu');
+    if (ctxMenu) { ctxMenu.classList.add('hidden'); ctxMenu.classList.remove('flex'); }
+
+    if (!window.selectedMultiFeatures || window.selectedMultiFeatures.length === 0) return;
+
+    const sampleFeat = window.selectedMultiFeatures[0].feature;
+    const normGeom = getThemeGeomNormalized(sampleFeat && sampleFeat.geometry ? sampleFeat.geometry.type : 'Polygon');
+
+    window._pendingTransferFromSelection = {
+        action: 'create_theme',
+        sourceThemeId: window.selectedMultiThemeId,
+        features: window.selectedMultiFeatures.map(item => JSON.parse(JSON.stringify(item.feature)))
+    };
+
+    if (typeof openNewThemeModal === 'function') {
+        openNewThemeModal();
+    }
+    const geomSelect = document.getElementById('theme-geometry');
+    if (geomSelect) {
+        geomSelect.value = normGeom;
+        geomSelect.disabled = true;
+    }
+};
+
+window.startSendFeaturesToAnotherTheme = function() {
+    const ctxMenu = document.getElementById('multi-feature-context-menu');
+    if (ctxMenu) { ctxMenu.classList.add('hidden'); ctxMenu.classList.remove('flex'); }
+
+    if (!window.selectedMultiFeatures || window.selectedMultiFeatures.length === 0) return;
+
+    const sampleFeat = window.selectedMultiFeatures[0].feature;
+    const normGeom = getThemeGeomNormalized(sampleFeat && sampleFeat.geometry ? sampleFeat.geometry.type : 'Polygon');
+
+    const compatibleThemes = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes.filter(t => {
+        if (String(t.id) === String(window.selectedMultiThemeId)) return false;
+        const tNorm = getThemeGeomNormalized(t.geomType || t.tipo_geometria || 'Polygon');
+        if (tNorm !== normGeom) return false;
+        if (!userCanEditTheme(t.id)) return false;
+        return true;
+    }) : [];
+
+    if (compatibleThemes.length === 0) {
+        const geomName = normGeom === 'Polygon' ? 'Polígono' : (normGeom === 'LineString' ? 'Linha' : 'Ponto');
+        showWarningToast(`Nenhuma outra camada compatível encontrada para este tipo de geometria (${geomName}).`);
+        return;
+    }
+
+    const dropdown = document.getElementById('target-theme-dropdown');
+    if (dropdown) {
+        dropdown.innerHTML = compatibleThemes.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+    }
+
+    const sourceTheme = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes.find(t => String(t.id) === String(window.selectedMultiThemeId)) : null;
+    const sourceInfo = document.getElementById('target-modal-source-info');
+    if (sourceInfo) {
+        sourceInfo.innerText = `${window.selectedMultiFeatures.length} feições selecionadas da camada "${sourceTheme ? sourceTheme.name : ''}"`;
+    }
+
+    window._pendingTransferFromSelection = {
+        action: 'send_to_existing',
+        sourceThemeId: window.selectedMultiThemeId,
+        features: window.selectedMultiFeatures.map(item => JSON.parse(JSON.stringify(item.feature)))
+    };
+
+    const targetModal = document.getElementById('target-theme-select-modal');
+    if (targetModal) targetModal.classList.remove('hidden');
+};
+
+window.closeTargetThemeModal = function() {
+    const targetModal = document.getElementById('target-theme-select-modal');
+    if (targetModal) targetModal.classList.add('hidden');
+};
+
+window.proceedToFieldMapping = function() {
+    const dropdown = document.getElementById('target-theme-dropdown');
+    const targetThemeId = dropdown ? dropdown.value : null;
+    if (!targetThemeId) {
+        showWarningToast("Selecione a camada de destino.");
+        return;
+    }
+    const targetTheme = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes.find(t => String(t.id) === String(targetThemeId)) : null;
+    if (!targetTheme) return;
+
+    window._pendingTransferFromSelection.targetThemeId = targetThemeId;
+    window.closeTargetThemeModal();
+
+    const sourceTheme = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes.find(t => String(t.id) === String(window._pendingTransferFromSelection.sourceThemeId)) : null;
+    const sourceThemeName = sourceTheme ? sourceTheme.name : 'Camada de Origem';
+
+    const sourceFields = getFieldsForTheme(sourceTheme);
+    const targetFields = getFieldsForTheme(targetTheme);
+
+    renderFieldMappingModal(sourceThemeName, targetTheme.name, sourceFields, targetFields);
+};
+
+function openFieldMappingModalForCreation() {
+    if (!window._pendingTransferFromSelection || !window._pendingTransferFromSelection.themeInputs) return;
+    const sourceTheme = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes.find(t => String(t.id) === String(window._pendingTransferFromSelection.sourceThemeId)) : null;
+    const sourceThemeName = sourceTheme ? sourceTheme.name : 'Camada de Origem';
+    const newThemeName = window._pendingTransferFromSelection.themeInputs.name;
+    const newFormId = window._pendingTransferFromSelection.themeInputs.formId;
+
+    const sourceFields = getFieldsForTheme(sourceTheme);
+    const targetFields = getFieldsForForm(newFormId);
+
+    renderFieldMappingModal(sourceThemeName, `Nova Camada: ${newThemeName}`, sourceFields, targetFields);
+}
+
+function renderFieldMappingModal(sourceTitle, targetTitle, sourceFields, targetFields) {
+    const modal = document.getElementById('field-mapping-modal');
+    const container = document.getElementById('field-mapping-rows-container');
+    const subtitle = document.getElementById('field-mapping-subtitle');
+    if (!modal || !container) return;
+
+    if (subtitle) {
+        subtitle.innerHTML = `Origem: <strong class="text-slate-800 dark:text-white">${escapeHtml(sourceTitle)}</strong> ➜ Destino: <strong class="text-emerald-600 dark:text-emerald-400">${escapeHtml(targetTitle)}</strong> (${window._pendingTransferFromSelection.features.length} feições)`;
+    }
+
+    if (sourceFields.length === 0) {
+        container.innerHTML = `
+            <div class="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl text-xs text-slate-500 text-center">
+                Esta camada de origem não possui campos adicionais além das geometrias.<br>
+                As geometrias serão transferidas e associadas à camada de destino com sucesso.
+            </div>
+        `;
+    } else {
+        let rowsHtml = '';
+        sourceFields.forEach(sf => {
+            const sampleVal = getFeatureSampleValue(window._pendingTransferFromSelection.features, sf.id);
+            const safeSample = sampleVal ? `<span class="text-[10px] text-slate-400 font-mono truncate max-w-[170px] block" title="${escapeHtml(sampleVal)}">Ex: ${escapeHtml(sampleVal)}</span>` : '';
+
+            let optsHtml = '<option value="">(Não copiar / Deixar vazio)</option>';
+            let hasDirectMatch = false;
+
+            if (targetFields.length === 0) {
+                optsHtml += `<option value="__SAME__" selected>[Mesmo Nome] ${escapeHtml(sf.label)}</option>`;
+            } else {
+                targetFields.forEach(tf => {
+                    const isMatch = !hasDirectMatch && (
+                        String(tf.id).toLowerCase() === String(sf.id).toLowerCase() ||
+                        String(tf.label).toLowerCase().trim() === String(sf.label).toLowerCase().trim()
+                    );
+                    if (isMatch) hasDirectMatch = true;
+                    optsHtml += `<option value="${escapeHtml(tf.id)}" ${isMatch ? 'selected' : ''}>${escapeHtml(tf.label)} (${escapeHtml(tf.tabTitle)})</option>`;
+                });
+                if (!hasDirectMatch) {
+                    optsHtml += `<option value="__SAME__">[Mesmo Nome] ${escapeHtml(sf.label)}</option>`;
+                }
+            }
+
+            rowsHtml += `
+                <div class="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200/70 dark:border-slate-700/60 field-mapping-row" data-source-id="${escapeHtml(sf.id)}">
+                    <div class="w-[45%] flex flex-col">
+                        <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate" title="${escapeHtml(sf.label)}">${escapeHtml(sf.label)}</span>
+                        ${safeSample}
+                    </div>
+                    <div class="w-[10%] flex items-center justify-center text-slate-400">
+                        <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+                    </div>
+                    <div class="w-[45%]">
+                        <select class="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 target-field-select cursor-pointer">
+                            ${optsHtml}
+                        </select>
+                    </div>
+                </div>
+            `;
+        });
+        container.innerHTML = rowsHtml;
+    }
+
+    modal.classList.remove('hidden');
+}
+
+window.closeFieldMappingModal = function() {
+    const modal = document.getElementById('field-mapping-modal');
+    if (modal) modal.classList.add('hidden');
+    window._pendingTransferFromSelection = null;
+};
+
+window.executeFeatureTransferWithMapping = async function() {
+    if (!window._pendingTransferFromSelection) return;
+    const btn = document.getElementById('btn-confirm-field-mapping');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="material-symbols-outlined animate-spin text-[16px]">progress_activity</span><span>Copiando feições...</span>`;
+    }
+
+    try {
+        const rows = document.querySelectorAll('.field-mapping-row');
+        const mapping = {};
+        rows.forEach(r => {
+            const srcId = r.getAttribute('data-source-id');
+            const sel = r.querySelector('.target-field-select');
+            if (srcId && sel && sel.value) {
+                mapping[srcId] = sel.value;
+            }
+        });
+
+        let targetThemeId = null;
+        let targetThemeName = '';
+
+        // 1. Se for criação de nova camada:
+        if (window._pendingTransferFromSelection.action === 'create_theme') {
+            const inputs = window._pendingTransferFromSelection.themeInputs;
+            targetThemeName = inputs.name;
+            let id = 'theme_' + Date.now();
+
+            if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+                const insertPayload = {
+                    nome: inputs.name,
+                    cor: inputs.color,
+                    icone: inputs.icon || 'map',
+                    tipo_geometria: inputs.geomType || 'Polygon',
+                    tipo_cadastro: inputs.formId || 'padrao',
+                    municipio_id: activeMunicipioId,
+                    entidade: inputs.selectedEntidade
+                };
+                if (inputs.currentUserId) insertPayload.criado_por = inputs.currentUserId;
+                if (inputs.userUnidade) insertPayload.unidade = inputs.userUnidade;
+                if (inputs.userSetor) insertPayload.setor = inputs.userSetor;
+                if (window.supabaseTemasHasMetadata) {
+                    insertPayload.metadata = inputs.metadataPayload;
+                }
+                const { data, error } = await supabaseClient.from('temas').insert(insertPayload).select();
+                if (error) throw error;
+                if (data && data.length > 0) id = data[0].id;
+
+                if (inputs.currentUserId && id) {
+                    if (!window.currentUserPermissions) window.currentUserPermissions = {};
+                    window.currentUserPermissions[id] = { pode_ver: true, pode_editar: true, pode_excluir: true };
+                    window.currentUserPermissions[String(id).toLowerCase()] = { pode_ver: true, pode_editar: true, pode_excluir: true };
+                    try {
+                        await supabaseClient.from('permissoes_camada').upsert({
+                            user_id: inputs.currentUserId,
+                            theme_id: id,
+                            pode_ver: true,
+                            pode_editar: true,
+                            pode_excluir: true
+                        }, { onConflict: 'user_id,theme_id' });
+                    } catch(ePerm) {}
+                }
+            }
+
+            const newThemeObj = {
+                id: id,
+                name: inputs.name,
+                color: inputs.color,
+                opacity: inputs.opacity,
+                geomType: inputs.geomType,
+                icon: inputs.icon,
+                customIcon: inputs.customIcon,
+                formId: inputs.formId,
+                cadastroType: inputs.formId,
+                disp1Active: false,
+                disp2Active: false,
+                entidade: inputs.selectedEntidade,
+                compartilhada: inputs.isCompartilhada,
+                created_by: inputs.currentUserId,
+                features: []
+            };
+            themes.push(newThemeObj);
+            targetThemeId = id;
+        } else {
+            targetThemeId = window._pendingTransferFromSelection.targetThemeId;
+            const t = themes.find(th => String(th.id) === String(targetThemeId));
+            targetThemeName = t ? t.name : 'Camada de Destino';
+        }
+
+        const targetTheme = themes.find(th => String(th.id) === String(targetThemeId));
+        if (!targetTheme) throw new Error("Camada de destino não encontrada.");
+        if (!targetTheme.features) targetTheme.features = [];
+
+        const featuresToCopy = window._pendingTransferFromSelection.features;
+        const insertPayloads = [];
+        const newFeaturesForMemory = [];
+
+        for (const feat of featuresToCopy) {
+            const newProps = { themeId: targetThemeId };
+            Object.keys(mapping).forEach(srcId => {
+                const targetKey = mapping[srcId];
+                if (targetKey) {
+                    const actualTargetKey = (targetKey === '__SAME__') ? srcId : targetKey;
+                    let val = (feat.properties && feat.properties[srcId] !== undefined) ? feat.properties[srcId] : null;
+                    if (val === null && feat.properties) {
+                        const matchK = Object.keys(feat.properties).find(k => k.toLowerCase() === srcId.toLowerCase());
+                        if (matchK) val = feat.properties[matchK];
+                    }
+                    if (val !== null && val !== undefined) {
+                        newProps[actualTargetKey] = val;
+                    }
+                }
+            });
+
+            newProps._tempId = 'feat_' + Math.random().toString(36).substr(2, 9);
+            const newGeom = JSON.parse(JSON.stringify(feat.geometry));
+
+            insertPayloads.push({
+                theme_id: targetThemeId,
+                propriedades: newProps,
+                geometria: newGeom
+            });
+
+            newFeaturesForMemory.push({
+                type: 'Feature',
+                properties: newProps,
+                geometry: newGeom
+            });
+        }
+
+        // Salvar feições no Supabase em lote
+        if (typeof supabaseClient !== 'undefined' && supabaseClient && insertPayloads.length > 0) {
+            try {
+                const { data: dbData, error: dbErr } = await supabaseClient.from('feicoes').insert(insertPayloads).select();
+                if (dbErr) {
+                    console.error("Erro ao salvar feições no Supabase:", dbErr);
+                } else if (dbData && dbData.length > 0) {
+                    dbData.forEach((row, idx) => {
+                        if (newFeaturesForMemory[idx]) {
+                            newFeaturesForMemory[idx].properties.id_banco = row.id;
+                        }
+                    });
+                }
+            } catch(eDb) {
+                console.error("Erro na chamada de inserção de feições:", eDb);
+            }
+        }
+
+        // Adiciona à memória e ao mapa
+        newFeaturesForMemory.forEach(nf => {
+            targetTheme.features.push(nf);
+            if (typeof geojsonLayer !== 'undefined' && geojsonLayer && geojsonLayer.addData) {
+                geojsonLayer.addData(nf);
+            }
+        });
+
+        // Atualiza indexador turbo
+        if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.indexThemeFeatures === 'function') {
+            window.GeoEngineTurbo.indexThemeFeatures(targetThemeId, targetTheme.features);
+        } else if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.indexTheme === 'function') {
+            window.GeoEngineTurbo.indexTheme(targetThemeId, targetTheme.features);
+        }
+
+        if (typeof renderThemes === 'function') {
+            renderThemes();
+        }
+
+        window.closeFieldMappingModal();
+        window.clearMultiFeatureSelection();
+        showSuccessToast(`${featuresToCopy.length} feição(ões) copiadas com sucesso para a camada "${targetThemeName}"!`);
+
+    } catch(err) {
+        console.error("Erro ao transferir feições:", err);
+        showWarningToast("Erro ao transferir feições: " + (err.message || err));
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<span class="material-symbols-outlined text-[16px]">check</span><span>Confirmar e Copiar Feições</span>`;
+        }
+    }
+};
+
 // --- LEAFLET MAP ---
 function initMap() {
   let initialCenter = cabedeloCenter;
@@ -1022,6 +1692,13 @@ function initMap() {
             return; // bubble para a ferramenta de medição (Leaflet-Geoman PM)
         }
         
+        // Intercepta Ctrl + Clique para Multi-Seleção de feições
+        if (e.originalEvent && (e.originalEvent.ctrlKey || e.originalEvent.metaKey)) {
+            L.DomEvent.stopPropagation(e);
+            handleFeatureCtrlSelection(layer, feature);
+            return;
+        }
+
         const themeIdStr = String(feature.properties.themeId);
         
         // Bloqueia e avisa se nenhuma camada foi selecionada no menu lateral
@@ -1050,11 +1727,32 @@ function initMap() {
         highlightFeature(fid);
         showFeatureInfoModal(layer);
       });
+
+      layer.on('contextmenu', function(e) {
+        if (window.selectedMultiFeatures && window.selectedMultiFeatures.length > 0) {
+            L.DomEvent.stopPropagation(e);
+            if (e.originalEvent) L.DomEvent.preventDefault(e.originalEvent);
+            window.handleMultiFeatureContextMenu(e);
+        }
+      });
     }
   }).addTo(map);
 
+  map.on('contextmenu', function(e) {
+    if (window.selectedMultiFeatures && window.selectedMultiFeatures.length > 0) {
+        L.DomEvent.stopPropagation(e);
+        if (e.originalEvent) L.DomEvent.preventDefault(e.originalEvent);
+        window.handleMultiFeatureContextMenu(e);
+    }
+  });
+
   // Close feature info modal when clicking on the map
   map.on('click', function(e) {
+    if (!e.originalEvent || (!e.originalEvent.ctrlKey && !e.originalEvent.metaKey)) {
+        if (window.selectedMultiFeatures && window.selectedMultiFeatures.length > 0) {
+            window.clearMultiFeatureSelection();
+        }
+    }
     if (window.isSelectingStreetViewCoordinate) {
         return; // ignore modal closing if selecting street view coordinate
     }
@@ -1095,8 +1793,14 @@ function initMap() {
     
     map.removeLayer(e.layer);
 
-    // 1. Salvar no Supabase com ID único
-    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+    // 1. Salvar no Supabase ou enfileirar no OfflineSync se estiver sem rede
+    const isDeviceOffline = (typeof navigator !== 'undefined' && !navigator.onLine) || (typeof localStorage !== 'undefined' && localStorage.getItem('geogestor_modo_campo') === 'true');
+
+    if (isDeviceOffline) {
+        if (window.OfflineSync && typeof window.OfflineSync.enqueueCreate === 'function') {
+            await window.OfflineSync.enqueueCreate(editingThemeId, feature);
+        }
+    } else if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         try {
             const { data: insData, error: insErr } = await supabaseClient.from('feicoes').insert({
                 theme_id: editingThemeId,
@@ -1114,9 +1818,20 @@ function initMap() {
                         tipo_geometria: geomType
                     });
                 }
+            } else {
+                if (window.OfflineSync && typeof window.OfflineSync.enqueueCreate === 'function') {
+                    await window.OfflineSync.enqueueCreate(editingThemeId, feature);
+                }
             }
         } catch(eDb) {
-            console.error("Erro ao salvar nova feição no Supabase:", eDb);
+            console.error("Erro ao salvar nova feição no Supabase, enfileirando offline:", eDb);
+            if (window.OfflineSync && typeof window.OfflineSync.enqueueCreate === 'function') {
+                await window.OfflineSync.enqueueCreate(editingThemeId, feature);
+            }
+        }
+    } else {
+        if (window.OfflineSync && typeof window.OfflineSync.enqueueCreate === 'function') {
+            await window.OfflineSync.enqueueCreate(editingThemeId, feature);
         }
     }
 
@@ -4380,6 +5095,11 @@ function openNewThemeModal() {
 function closeNewThemeModal() {
   const modal = document.getElementById('new-theme-modal');
   if (modal) modal.classList.add('hidden');
+  const geomSelect = document.getElementById('theme-geometry');
+  if (geomSelect) geomSelect.disabled = false;
+  if (window._pendingTransferFromSelection && window._pendingTransferFromSelection.action === 'create_theme' && !window._pendingTransferFromSelection.themeInputs) {
+      window._pendingTransferFromSelection = null;
+  }
 }
 
 function handleCustomIconUpload(input, previewContainerId, dataInputId, labelId) {
@@ -4406,7 +5126,10 @@ async function saveNewTheme() {
   const icon = document.getElementById('theme-icon-input').value;
   const customIcon = document.getElementById('theme-custom-icon-data').value;
   const formId = document.getElementById('theme-cadastro-type') ? document.getElementById('theme-cadastro-type').value : '';
-  if (!name) return;
+  if (!name) {
+      alert("Por favor, digite o nome do tema.");
+      return;
+  }
 
   const isSuperAdmin = !!(typeof currentUserProfile !== 'undefined' && currentUserProfile && (currentUserProfile.super_admin || currentUserProfile.is_superadmin || currentUserProfile.papel === 'superadmin'));
   const userEntidade = (window.currentUserEntidade || '').trim();
@@ -4440,6 +5163,17 @@ async function saveNewTheme() {
       unidade: userUnidade,
       setor: userSetor
   };
+
+  // Intercepta se a criação foi iniciada a partir de feições selecionadas (Ctrl + Clique)
+  if (window._pendingTransferFromSelection && window._pendingTransferFromSelection.action === 'create_theme') {
+      window._pendingTransferFromSelection.themeInputs = {
+          name, color, opacity, geomType, icon, customIcon, formId,
+          selectedEntidade, isCompartilhada, userUnidade, userSetor, currentUserId, metadataPayload
+      };
+      closeNewThemeModal();
+      openFieldMappingModalForCreation();
+      return;
+  }
   
   if (typeof supabaseClient !== 'undefined' && supabaseClient) {
       try {
@@ -6739,19 +7473,39 @@ async function saveFeatureData() {
   const tempId = currentProps._tempId;
   const themeId = currentProps.themeId;
 
-  // 1. Validação de Conexão e Sessão Ativa: Redireciona para o login se a sessão tiver expirado
-  if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+  // 1. Validação de Conexão e Sessão Ativa: Suporte a Modo Offline e Supabase
+  const isDeviceOffline = (typeof navigator !== 'undefined' && !navigator.onLine) || (typeof localStorage !== 'undefined' && localStorage.getItem('geogestor_modo_campo') === 'true');
+
+  if (isDeviceOffline) {
+      if (window.OfflineSync) {
+          if (idBanco) {
+              await window.OfflineSync.enqueueUpdate(themeId, idBanco, currentProps, activeFeatureLayer.feature.geometry);
+          } else {
+              await window.OfflineSync.enqueueCreate(themeId, activeFeatureLayer.feature);
+          }
+      }
+      console.log(`[OfflineSync] Dados da feição salvos localmente em modo offline.`);
+  } else if (typeof supabaseClient !== 'undefined' && supabaseClient) {
       try {
           const { data: sessCheck } = await supabaseClient.auth.getSession();
           if (!sessCheck || !sessCheck.session) {
-              alert('Sua sessão expirou por inatividade ou perda de conexão.\n\nVocê será redirecionado para a tela de login para reconectar com segurança.');
-              sessionStorage.removeItem('municipio_ativo');
-              window.location.href = 'login.html';
-              return;
+              if (window.SessionSecurity && window.SessionSecurity.isSystemOffline && window.SessionSecurity.isSystemOffline()) {
+                  if (window.OfflineSync) {
+                      if (idBanco) await window.OfflineSync.enqueueUpdate(themeId, idBanco, currentProps, activeFeatureLayer.feature.geometry);
+                      else await window.OfflineSync.enqueueCreate(themeId, activeFeatureLayer.feature);
+                  }
+              } else {
+                  alert('Sua sessão expirou por inatividade ou perda de conexão.\n\nVocê será redirecionado para a tela de login para reconectar com segurança.');
+                  sessionStorage.removeItem('municipio_ativo');
+                  window.location.href = 'login.html';
+                  return;
+              }
           }
       } catch(eAuth) {
-          window.location.href = 'login.html';
-          return;
+          if (window.OfflineSync) {
+              if (idBanco) await window.OfflineSync.enqueueUpdate(themeId, idBanco, currentProps, activeFeatureLayer.feature.geometry);
+              else await window.OfflineSync.enqueueCreate(themeId, activeFeatureLayer.feature);
+          }
       }
 
       const currentTheme = themes.find(t => t.id === themeId);
@@ -6773,8 +7527,13 @@ async function saveFeatureData() {
                       alert('Aviso de Permissão: Seu usuário não possui autorização de edição para esta camada.\n\nPeça ao Administrador do município para liberar a permissão de edição na aba: Configurações > Usuários.');
                       return;
                   } else {
-                      alert('Aviso ao salvar no servidor: ' + updErr.message);
-                      return;
+                      if (window.OfflineSync) {
+                          await window.OfflineSync.enqueueUpdate(themeId, idBanco, currentProps, activeFeatureLayer.feature.geometry);
+                          console.log("[OfflineSync] Erro no servidor, dados salvos na fila offline.");
+                      } else {
+                          alert('Aviso ao salvar no servidor: ' + updErr.message);
+                          return;
+                      }
                   }
               } else {
                   console.log(`[Supabase] Feição "${idBanco}" salva com sucesso!`);
@@ -6803,8 +7562,13 @@ async function saveFeatureData() {
 
               if (insErr) {
                   console.error('Erro ao inserir nova feição no Supabase:', insErr);
-                  alert('Aviso ao registrar nova feição no servidor: ' + insErr.message);
-                  return;
+                  if (window.OfflineSync) {
+                      await window.OfflineSync.enqueueCreate(themeId, activeFeatureLayer.feature);
+                      console.log("[OfflineSync] Erro no servidor, nova feição salva na fila offline.");
+                  } else {
+                      alert('Aviso ao registrar nova feição no servidor: ' + insErr.message);
+                      return;
+                  }
               } else if (insData && insData.length > 0) {
                   idBanco = insData[0].id;
                   activeFeatureLayer.feature.properties.id_banco = idBanco;
@@ -6823,7 +7587,11 @@ async function saveFeatureData() {
               }
           }
       } catch (eDb) {
-          console.error('Erro de conexão ao salvar feição:', eDb);
+          console.error('Erro de conexão ao salvar feição, salvando offline:', eDb);
+          if (window.OfflineSync) {
+              if (idBanco) await window.OfflineSync.enqueueUpdate(themeId, idBanco, currentProps, activeFeatureLayer.feature.geometry);
+              else await window.OfflineSync.enqueueCreate(themeId, activeFeatureLayer.feature);
+          }
       }
   }
 
@@ -7068,7 +7836,13 @@ async function deleteActiveFeature() {
 
   if (!confirm("Tem certeza que deseja excluir esta feição permanentemente?")) return;
 
-  if (typeof supabaseClient !== 'undefined' && supabaseClient && idBanco) {
+  const isDeviceOffline = (typeof navigator !== 'undefined' && !navigator.onLine) || (typeof localStorage !== 'undefined' && localStorage.getItem('geogestor_modo_campo') === 'true');
+
+  if (isDeviceOffline) {
+      if (window.OfflineSync && typeof window.OfflineSync.enqueueDelete === 'function') {
+          await window.OfflineSync.enqueueDelete(tId, idBanco, tempId);
+      }
+  } else if (typeof supabaseClient !== 'undefined' && supabaseClient && idBanco) {
       try {
           // Tenta hard delete direto
           let { error: delErr } = await supabaseClient.from('feicoes').delete().eq('id', idBanco);

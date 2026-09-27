@@ -68,6 +68,7 @@ const jsFiles = [
     'src/cesium-integration.js',
     'src/auditLogger.js',
     'src/session-security.js',
+    'src/offline-sync.js',
     'src/swipe-comparator.js',
     'src/formRenderer.js',
     'src/customFields.js',

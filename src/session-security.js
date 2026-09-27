@@ -1,11 +1,12 @@
 // src/session-security.js
 /**
- * Módulo de Segurança de Sessão — Auto-Logout por Inatividade
- * - Monitoramento contínuo de atividade do usuário (mouse, teclado, toques, scroll)
+ * Módulo de Segurança de Sessão — Auto-Logout por Inatividade e Suporte a Modo Offline / Campo
+ * - Monitoramento contínuo de atividade do usuário (mouse, teclado, toques, scroll, GPS em campo)
  * - Sincronização entre múltiplas abas via localStorage e BroadcastChannel
  * - Tempo de Inatividade: 15 minutos (900s)
  * - Aviso Prévio com Contagem Regressiva: 60 segundos antes de encerrar (aos 14 minutos)
- * - Logout seguro com limpeza profunda de tokens e bloqueio de reentrada por favoritos
+ * - Blindagem Offline: quando sem conexão ou em Modo Campo, suspende o logout destrutivo e ativa Bloqueio por PIN Local
+ * - Deslocamento via GPS (> 4m) conta como atividade do usuário durante a coleta em campo
  */
 
 (function() {
@@ -16,13 +17,25 @@
     const STORAGE_KEY = 'geogestor_last_activity_ts';
     const EXPIRED_FLAG_KEY = 'geogestor_session_expired';
     const BROADCAST_CHANNEL_NAME = 'geogestor_session_channel';
+    const OFFLINE_PIN_KEY = 'geogestor_offline_pin';
+    const MODO_CAMPO_KEY = 'geogestor_modo_campo';
 
     let timerInterval = null;
     let warningModalEl = null;
     let countdownNumberEl = null;
     let isWarningOpen = false;
+    let offlineLockModalEl = null;
+    let isOfflineLocked = false;
     let lastThrottledRecord = 0;
     let broadcastChannel = null;
+    let lastGpsCoords = null;
+
+    // Detecta se o sistema está offline ou em modo de coleta de campo
+    function isSystemOffline() {
+        const isOffline = (typeof navigator !== 'undefined' && navigator.onLine === false);
+        const isModoCampo = localStorage.getItem(MODO_CAMPO_KEY) === 'true';
+        return isOffline || isModoCampo;
+    }
 
     // Inicializa BroadcastChannel se disponível no navegador
     try {
@@ -32,13 +45,35 @@
                 if (ev.data && ev.data.type === 'ACTIVITY_RESET') {
                     hideWarningModal();
                 } else if (ev.data && ev.data.type === 'FORCE_LOGOUT') {
-                    performLogout(true);
+                    performLogout(true, true);
+                } else if (ev.data && ev.data.type === 'OFFLINE_UNLOCK') {
+                    hideOfflineLockModal();
                 }
             };
         }
     } catch(e) {}
 
-    // Registra atividade atual
+    // Toast discreto de notificação de segurança e rede
+    function showSessionToast(message, icon = 'info', color = 'sky') {
+        const existing = document.getElementById('session-security-toast');
+        if (existing) existing.remove();
+
+        const toast = document.createElement('div');
+        toast.id = 'session-security-toast';
+        toast.className = 'fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-950/95 backdrop-blur-md text-white px-5 py-3 rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.6)] border border-amber-500/40 z-[999999] flex items-center gap-3 transition-all duration-300 transform translate-y-10 opacity-0 pointer-events-none select-none';
+        toast.innerHTML = `
+            <span class="material-symbols-outlined text-amber-400 text-xl">${icon}</span>
+            <span class="font-medium text-xs tracking-wide text-slate-100">${message}</span>
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.classList.remove('translate-y-10', 'opacity-0'), 10);
+        setTimeout(() => {
+            toast.classList.add('translate-y-10', 'opacity-0');
+            setTimeout(() => toast.remove(), 350);
+        }, 4000);
+    }
+
+    // Registra atividade atual do usuário
     function recordActivity() {
         const now = Date.now();
         // Throttle para não gravar no localStorage a cada milissegundo de movimento do mouse
@@ -67,7 +102,7 @@
         }
     }
 
-    // Cria e injeta o Modal de Aviso na página
+    // Cria e injeta o Modal de Aviso de Inatividade na página (Online)
     function ensureWarningModal() {
         if (document.getElementById('inactivity-warning-modal')) {
             warningModalEl = document.getElementById('inactivity-warning-modal');
@@ -100,10 +135,10 @@
 
                 <!-- Botões de Ação -->
                 <div class="flex items-center gap-2.5 w-full">
-                    <button id="btn-inactivity-logout" class="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-colors border border-white/10">
+                    <button id="btn-inactivity-logout" class="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-colors border border-white/10 cursor-pointer">
                         Sair Agora
                     </button>
-                    <button id="btn-inactivity-keep" class="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs shadow-[0_0_20px_rgba(245,158,11,0.4)] transition-all">
+                    <button id="btn-inactivity-keep" class="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs shadow-[0_0_20px_rgba(245,158,11,0.4)] transition-all cursor-pointer">
                         Continuar Conectado
                     </button>
                 </div>
@@ -124,7 +159,7 @@
         });
 
         document.getElementById('btn-inactivity-logout')?.addEventListener('click', function() {
-            performLogout();
+            performLogout(false, true);
         });
     }
 
@@ -146,8 +181,133 @@
         }
     }
 
-    // Executa Logout Completo e Invalida Todas as Chaves de Sessão
-    async function performLogout(skipBroadcast = false) {
+    // Cria e injeta a Tela de Bloqueio por PIN / Desbloqueio Local (Modo Offline / Campo)
+    function ensureOfflineLockModal() {
+        if (document.getElementById('offline-lock-modal')) {
+            offlineLockModalEl = document.getElementById('offline-lock-modal');
+            return;
+        }
+
+        const configuredPin = localStorage.getItem(OFFLINE_PIN_KEY);
+
+        const modalDiv = document.createElement('div');
+        modalDiv.id = 'offline-lock-modal';
+        modalDiv.style.display = 'none';
+        modalDiv.style.zIndex = '9999999';
+        modalDiv.className = 'fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4 select-none';
+        modalDiv.innerHTML = `
+            <div style="background-color: #0b1329; border: 2px solid #f59e0b;" class="rounded-3xl p-6 md:p-8 max-w-sm w-full shadow-[0_0_60px_rgba(245,158,11,0.35)] flex flex-col items-center text-center text-white animate-bounce-short">
+                
+                <!-- Ícone Animado -->
+                <div class="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center mb-3 text-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.35)]">
+                    <span class="material-symbols-outlined text-[36px]">wifi_off</span>
+                </div>
+
+                <h3 class="text-lg font-black tracking-wide text-white mb-1">Modo Offline / Campo</h3>
+                
+                <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold mb-3">
+                    <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    <span>Sessão Bloqueada por Inatividade</span>
+                </div>
+
+                <p class="text-xs text-slate-300 mb-5 leading-relaxed">
+                    Você esteve inativo por 15 minutos, mas sua sessão e as coletas locais foram <strong>blindadas e salvas no aparelho</strong>. Nenhuma feição ou anexo foi perdido.
+                </p>
+
+                <!-- Área de Desbloqueio -->
+                <div id="offline-lock-pin-container" class="w-full flex flex-col items-center">
+                    ${configuredPin ? `
+                        <div class="w-full mb-4">
+                            <label class="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-2 text-left">Digite seu PIN de 4 dígitos:</label>
+                            <input type="password" id="offline-lock-pin-input" inputmode="numeric" maxlength="4" placeholder="••••" class="w-full text-center tracking-[0.5em] text-2xl font-black py-2.5 rounded-xl bg-slate-900 border border-amber-500/50 text-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400">
+                            <div id="offline-lock-pin-error" class="text-rose-400 text-[11px] font-bold mt-1.5 hidden">PIN incorreto. Tente novamente.</div>
+                        </div>
+                        <button id="btn-offline-unlock-pin" class="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-[0_0_20px_rgba(245,158,11,0.4)] active:scale-95 transition-all cursor-pointer">
+                            Desbloquear Coleta
+                        </button>
+                    ` : `
+                        <button id="btn-offline-unlock-quick" class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-[0_0_25px_rgba(16,185,129,0.4)] active:scale-95 transition-all cursor-pointer mb-2.5 flex items-center justify-center gap-2">
+                            <span class="material-symbols-outlined text-[18px]">lock_open</span>
+                            <span>Desbloquear e Continuar Coleta</span>
+                        </button>
+                        <div class="text-[10.5px] text-slate-400">
+                            Sua sessão permanecerá ativa no aparelho para continuidade da coleta em campo.
+                        </div>
+                    `}
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modalDiv);
+        offlineLockModalEl = modalDiv;
+
+        // Binds de Desbloqueio
+        const quickBtn = document.getElementById('btn-offline-unlock-quick');
+        if (quickBtn) {
+            quickBtn.addEventListener('click', function() {
+                unlockOfflineSession();
+            });
+        }
+
+        const pinBtn = document.getElementById('btn-offline-unlock-pin');
+        const pinInput = document.getElementById('offline-lock-pin-input');
+        const pinError = document.getElementById('offline-lock-pin-error');
+        if (pinBtn && pinInput) {
+            function verifyPin() {
+                const entered = pinInput.value.trim();
+                const expected = localStorage.getItem(OFFLINE_PIN_KEY);
+                if (entered === expected) {
+                    if (pinError) pinError.classList.add('hidden');
+                    unlockOfflineSession();
+                } else {
+                    if (pinError) pinError.classList.remove('hidden');
+                    pinInput.value = '';
+                    pinInput.focus();
+                }
+            }
+            pinBtn.addEventListener('click', verifyPin);
+            pinInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') verifyPin();
+            });
+        }
+    }
+
+    function showOfflineLockModal() {
+        isOfflineLocked = true;
+        ensureOfflineLockModal();
+        if (offlineLockModalEl) {
+            offlineLockModalEl.style.display = 'flex';
+            const pinInput = document.getElementById('offline-lock-pin-input');
+            if (pinInput) setTimeout(() => pinInput.focus(), 100);
+        }
+    }
+
+    function hideOfflineLockModal() {
+        isOfflineLocked = false;
+        if (offlineLockModalEl) {
+            offlineLockModalEl.style.display = 'none';
+        }
+    }
+
+    function unlockOfflineSession() {
+        hideOfflineLockModal();
+        recordActivity();
+        if (broadcastChannel) {
+            try { broadcastChannel.postMessage({ type: 'OFFLINE_UNLOCK' }); } catch(e) {}
+        }
+        showSessionToast("Sessão offline desbloqueada. Coleta pronta!", "check_circle", "emerald");
+    }
+
+    // Executa Logout Completo e Invalida Chaves de Sessão
+    async function performLogout(skipBroadcast = false, force = false) {
+        // Se estiver offline e o logout não for forçado manualmente, protege a sessão com bloqueio local
+        if (!force && isSystemOffline()) {
+            console.warn("🛡️ Dispositivo Offline detectado. Ativando Bloqueio Local em vez de logout para proteger a coleta de campo.");
+            hideWarningModal();
+            showOfflineLockModal();
+            return;
+        }
+
         if (!skipBroadcast && broadcastChannel) {
             try { broadcastChannel.postMessage({ type: 'FORCE_LOGOUT' }); } catch(e) {}
         }
@@ -179,6 +339,8 @@
 
     // Loop de Verificação de Inatividade a cada 1 segundo
     function checkInactivityLoop() {
+        if (isOfflineLocked) return; // Se já está com a tela de bloqueio offline visível, aguarda desbloqueio
+
         const lastAct = getLastActivity();
         if (!lastAct) {
             recordActivity();
@@ -188,8 +350,13 @@
         const elapsed = Date.now() - lastAct;
 
         if (elapsed >= INACTIVITY_LIMIT_MS) {
-            // Tempo esgotado (15 min) -> Logout
-            performLogout();
+            // Tempo esgotado (15 min)
+            if (isSystemOffline()) {
+                hideWarningModal();
+                showOfflineLockModal();
+            } else {
+                performLogout();
+            }
         } else if (elapsed >= WARNING_THRESHOLD_MS) {
             // Entre 14 e 15 minutos -> Exibe aviso com contagem regressiva
             const remainingMs = INACTIVITY_LIMIT_MS - elapsed;
@@ -278,8 +445,13 @@
 
         // Expira APENAS se o tempo limite tiver sido excedido ou se marcado como expirado sem atividade recente (2 min)
         if ((lastAct && (now - lastAct >= INACTIVITY_LIMIT_MS)) || (isExpired && (!lastAct || now - lastAct >= 120000))) {
+            if (isSystemOffline()) {
+                console.log("🛡️ Sistema em Modo Offline / Campo — Bloqueio local ativado em vez de logout.");
+                showOfflineLockModal();
+                return;
+            }
             console.warn("🛡️ Sessão expirada por inatividade detectada. Redirecionando para login...");
-            performLogout(true);
+            performLogout(true, true);
             return;
         }
 
@@ -291,16 +463,80 @@
         ensureWarningModal();
         ensureLgpdModal();
 
-        // Eventos Globais de Monitoramento
+        // Eventos Globais de Monitoramento de Atividade (Mouse, Toque, Teclado, Scroll)
         const activityEvents = ['mousemove', 'mousedown', 'pointerdown', 'keydown', 'touchstart', 'wheel', 'scroll'];
         activityEvents.forEach(evt => {
             window.addEventListener(evt, recordActivity, { passive: true });
         });
 
+        // Monitoramento de Deslocamento por GPS (Caminhar no terreno conta como atividade)
+        if (typeof navigator !== 'undefined' && navigator.geolocation) {
+            try {
+                navigator.geolocation.watchPosition(
+                    function(pos) {
+                        const lat = pos.coords.latitude;
+                        const lng = pos.coords.longitude;
+                        if (lastGpsCoords) {
+                            const dLat = (lat - lastGpsCoords.lat) * 111320;
+                            const dLng = (lng - lastGpsCoords.lng) * (111320 * Math.cos(lat * (Math.PI / 180)));
+                            const dist = Math.sqrt(dLat * dLat + dLng * dLng);
+                            if (dist > 4) { // Deslocou mais de 4 metros no terreno
+                                lastGpsCoords = { lat, lng };
+                                recordActivity();
+                            }
+                        } else {
+                            lastGpsCoords = { lat, lng };
+                        }
+                    },
+                    function() {},
+                    { enableHighAccuracy: true, maximumAge: 10000, timeout: 25000 }
+                );
+            } catch(e) {}
+        }
+
+        // Monitoramento de Rede (Online / Offline)
+        window.addEventListener('offline', function() {
+            showSessionToast("Dispositivo sem internet. Modo Offline ativo — Sessão e coletas preservadas.", "wifi_off", "amber");
+        });
+        window.addEventListener('online', function() {
+            showSessionToast("Conexão com a internet restabelecida.", "wifi", "emerald");
+        });
+
         // Loop de checagem a cada 1000ms
         timerInterval = setInterval(checkInactivityLoop, 1000);
-        console.log("🛡️ Sistema de Segurança de Sessão Ativo: Inatividade de 15 min com aviso em 14 min.");
+        console.log("🛡️ Sistema de Segurança de Sessão Ativo: Inatividade de 15 min com blindagem para Modo Offline / Campo.");
     }
+
+    // Expõe API para controle de Modo Campo e PIN Offline
+    window.SessionSecurity = {
+        recordActivity: recordActivity,
+        isSystemOffline: isSystemOffline,
+        showOfflineLockModal: showOfflineLockModal,
+        hideOfflineLockModal: hideOfflineLockModal,
+        setOfflinePin: function(pin) {
+            if (!pin || String(pin).length !== 4) return false;
+            localStorage.setItem(OFFLINE_PIN_KEY, String(pin));
+            return true;
+        },
+        removeOfflinePin: function() {
+            localStorage.removeItem(OFFLINE_PIN_KEY);
+        },
+        hasOfflinePin: function() {
+            return !!localStorage.getItem(OFFLINE_PIN_KEY);
+        },
+        toggleModoCampo: function(enable) {
+            if (typeof enable === 'boolean') {
+                localStorage.setItem(MODO_CAMPO_KEY, String(enable));
+            } else {
+                const current = localStorage.getItem(MODO_CAMPO_KEY) === 'true';
+                localStorage.setItem(MODO_CAMPO_KEY, String(!current));
+            }
+            return localStorage.getItem(MODO_CAMPO_KEY) === 'true';
+        },
+        isModoCampo: function() {
+            return localStorage.getItem(MODO_CAMPO_KEY) === 'true';
+        }
+    };
 
     // Inicializa quando o DOM estiver pronto
     if (document.readyState === 'loading') {
