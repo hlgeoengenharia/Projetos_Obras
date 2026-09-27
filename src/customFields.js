@@ -1,5 +1,184 @@
 // src/customFields.js
 
+// === REGISTRO E VISUALIZAÇÃO SEGURA DE MÍDIAS / ANEXOS (ONLINE E OFFLINE) ===
+window._mediaAttachmentStore = window._mediaAttachmentStore || new Map();
+
+function registerMediaAttachment(url, name, title) {
+    if (!url) return '';
+    const id = 'med_' + Math.abs(String(url).slice(0, 100).split('').reduce((a,b)=>{a=((a<<5)-a)+b.charCodeAt(0);return a&a},0)).toString(36) + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+    window._mediaAttachmentStore.set(id, { url, name, title });
+    return id;
+}
+window.registerMediaAttachment = registerMediaAttachment;
+
+window.openMediaAttachmentById = function(id) {
+    const item = window._mediaAttachmentStore && window._mediaAttachmentStore.get(id);
+    if (item && item.url) {
+        window.viewMediaAttachment(item.url, item.name, item.title);
+    } else {
+        console.warn('[MediaViewer] Arquivo não localizado no registro local:', id);
+    }
+};
+
+window.viewMediaAttachment = function(url, name = 'Arquivo', title = '') {
+    if (!url) {
+        alert('URL do arquivo não encontrada.');
+        return;
+    }
+    const displayName = title || name || 'Visualização do Arquivo';
+    const isImage = (typeof url === 'string' && (
+        url.startsWith('data:image/') || 
+        /\.(jpe?g|png|webp|gif|svg|bmp)(\?.*)?$/i.test(url) ||
+        /\.(jpe?g|png|webp|gif|svg|bmp)$/i.test(name)
+    ));
+    const isPdf = (typeof url === 'string' && (
+        url.startsWith('data:application/pdf') || 
+        /\.pdf(\?.*)?$/i.test(url) ||
+        /\.pdf$/i.test(name)
+    ));
+
+    // Remove qualquer modal de mídia aberto anteriormente
+    const existing = document.getElementById('media-lightbox-modal');
+    if (existing) existing.remove();
+
+    // Converte data: URL para Blob URL seguro (evita bloqueio 'about:blank' do Chrome e Edge)
+    let safeUrl = url;
+    if (typeof url === 'string' && url.startsWith('data:')) {
+        try {
+            const parts = url.split(',');
+            const mime = parts[0].match(/:(.*?);/)?.[1] || (isImage ? 'image/jpeg' : (isPdf ? 'application/pdf' : 'application/octet-stream'));
+            const binary = atob(parts[1]);
+            const len = binary.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            const blobInstance = new Blob([bytes], { type: mime });
+            safeUrl = URL.createObjectURL(blobInstance);
+        } catch(e) {
+            console.warn('[MediaViewer] Falha ao converter data URL para Blob:', e);
+        }
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'media-lightbox-modal';
+    modal.className = 'fixed inset-0 z-[999999] flex flex-col items-center justify-between bg-slate-950/90 backdrop-blur-md p-3 sm:p-5 transition-all duration-200 select-none';
+
+    let contentHtml = '';
+    if (isImage) {
+        contentHtml = `
+            <div class="relative w-full h-full flex items-center justify-center overflow-auto p-2">
+                <img id="media-lightbox-img" src="${safeUrl}" alt="${displayName}" class="max-w-full max-h-[82vh] object-contain rounded-xl shadow-2xl transition-transform duration-200 cursor-zoom-in border border-slate-700/50" onclick="this.classList.toggle('scale-150'); this.classList.toggle('cursor-zoom-out');" title="Clique na imagem para ampliar/reduzir" />
+            </div>
+        `;
+    } else if (isPdf) {
+        contentHtml = `
+            <div class="w-full max-w-5xl h-[82vh] bg-white rounded-xl shadow-2xl overflow-hidden border border-slate-700">
+                <iframe src="${safeUrl}" class="w-full h-full border-0"></iframe>
+            </div>
+        `;
+    } else {
+        contentHtml = `
+            <div class="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-2xl text-center max-w-md w-full border border-slate-200 dark:border-slate-700 my-auto">
+                <span class="material-symbols-outlined text-[64px] text-blue-500 mb-3">description</span>
+                <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-1 break-words">${displayName}</h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mb-6">Arquivo anexado disponível para download no aparelho.</p>
+                <button type="button" id="btn-lightbox-download-fallback" class="w-full justify-center px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl text-sm shadow-md transition-all flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[18px]">download</span> Baixar Arquivo
+                </button>
+            </div>
+        `;
+    }
+
+    modal.innerHTML = `
+        <div class="w-full max-w-6xl flex items-center justify-between text-white pb-3 px-2 border-b border-slate-800/80 shrink-0">
+            <div class="flex items-center gap-2.5 min-w-0 flex-1 pr-4">
+                <span class="material-symbols-outlined text-sky-400 text-[24px] shrink-0">${isImage ? 'photo_camera' : (isPdf ? 'picture_as_pdf' : 'attach_file')}</span>
+                <div class="truncate">
+                    <div class="text-sm sm:text-base font-bold truncate text-slate-100">${displayName}</div>
+                    ${name && name !== displayName ? `<div class="text-xs text-slate-400 truncate">Arquivo: ${name}</div>` : ''}
+                </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <button type="button" id="btn-lightbox-open-tab" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium border border-slate-700 transition-colors flex items-center gap-1.5 shadow-sm" title="Abrir em Nova Aba">
+                    <span class="material-symbols-outlined text-[16px]">open_in_new</span>
+                    <span class="hidden sm:inline">Nova Aba</span>
+                </button>
+                <button type="button" id="btn-lightbox-download" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 shadow-sm" title="Baixar Arquivo">
+                    <span class="material-symbols-outlined text-[16px]">download</span>
+                    <span class="hidden sm:inline">Baixar</span>
+                </button>
+                <button type="button" id="btn-lightbox-close" class="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors ml-2" title="Fechar (Esc)">
+                    <span class="material-symbols-outlined text-[24px]">close</span>
+                </button>
+            </div>
+        </div>
+        <div id="media-lightbox-content" class="w-full flex items-center justify-center flex-1 overflow-hidden my-2">
+            ${contentHtml}
+        </div>
+        <div class="w-full max-w-6xl text-center text-[11px] text-slate-500 pt-2 shrink-0 border-t border-slate-800/80">
+            Pressione <kbd class="px-1.5 py-0.5 bg-slate-800 text-slate-300 rounded border border-slate-700 text-[10px]">Esc</kbd> ou clique fora para fechar
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const closeModal = () => {
+        modal.classList.add('opacity-0');
+        setTimeout(() => {
+            modal.remove();
+            if (safeUrl !== url && safeUrl.startsWith('blob:')) {
+                try { URL.revokeObjectURL(safeUrl); } catch(e){}
+            }
+        }, 150);
+        document.removeEventListener('keydown', onKeyDown);
+    };
+
+    const onKeyDown = (e) => {
+        if (e.key === 'Escape') closeModal();
+    };
+    document.addEventListener('keydown', onKeyDown);
+
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal || e.target.id === 'media-lightbox-content') {
+            closeModal();
+        }
+    });
+
+    const closeBtn = modal.querySelector('#btn-lightbox-close');
+    if (closeBtn) closeBtn.onclick = closeModal;
+
+    const downloadAction = () => {
+        const a = document.createElement('a');
+        a.href = safeUrl;
+        a.download = name || 'arquivo';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    };
+
+    const downloadBtn = modal.querySelector('#btn-lightbox-download');
+    if (downloadBtn) downloadBtn.onclick = downloadAction;
+
+    const downloadFallbackBtn = modal.querySelector('#btn-lightbox-download-fallback');
+    if (downloadFallbackBtn) downloadFallbackBtn.onclick = downloadAction;
+
+    const openTabBtn = modal.querySelector('#btn-lightbox-open-tab');
+    if (openTabBtn) {
+        openTabBtn.onclick = () => {
+            if (safeUrl.startsWith('blob:') || safeUrl.startsWith('http')) {
+                window.open(safeUrl, '_blank');
+            } else if (safeUrl.startsWith('data:')) {
+                const win = window.open('', '_blank');
+                if (win) {
+                    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${displayName}</title><style>body{margin:0;background:#0f172a;display:flex;align-items:center;justify-content:center;height:100vh;}img{max-width:98vw;max-height:98vh;object-fit:contain;}</style></head><body><img src="${safeUrl}" alt="${displayName}"></body></html>`);
+                    win.document.close();
+                }
+            }
+        };
+    }
+};
+
 // === RENDERIZAÇÃO DE CAMPOS AVANÇADOS ===
 function generateFeatureInputHtml(f, value, isFeatureEditMode) {
     if (!value) value = '';
@@ -34,24 +213,25 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
                 let html = '<div class="flex flex-col gap-2 @container w-full">';
                 files.forEach(file => {
                     const url = typeof file === 'string' ? file : file.url;
-                    const name = typeof file === 'string' ? 'Arquivo' : file.name;
+                    const name = typeof file === 'string' ? 'Arquivo' : (file.name || 'Arquivo');
                     const title = file.title || name;
                     const author = file.uploadedBy || 'Usuário Local';
                     const dateStr = file.uploadedAt ? new Date(file.uploadedAt).toLocaleString('pt-BR') : 'Data desconhecida';
                     const isPhoto = f.type === 'photo';
+                    const regId = registerMediaAttachment(url, name, title);
                     
                     const leftIconActive = isPhoto 
-                        ? `<div class="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-700 shrink-0 overflow-hidden border border-slate-200 dark:border-slate-600 cursor-pointer" onclick="window.open('${url}', '_blank')"><img src="${url}" class="w-full h-full object-cover hover:scale-110 transition-transform duration-300" /></div>`
-                        : `<div class="w-12 h-12 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0 text-blue-600 dark:text-blue-400"><span class="material-symbols-outlined">description</span></div>`;
+                        ? `<div class="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-700 shrink-0 overflow-hidden border border-slate-200 dark:border-slate-600 cursor-pointer" onclick="event.stopPropagation(); window.openMediaAttachmentById('${regId}')"><img src="${url}" class="w-full h-full object-cover hover:scale-110 transition-transform duration-300" /></div>`
+                        : `<div class="w-12 h-12 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0 text-blue-600 dark:text-blue-400 cursor-pointer" onclick="event.stopPropagation(); window.openMediaAttachmentById('${regId}')"><span class="material-symbols-outlined">description</span></div>`;
                     
                     if (!file.deleted) {
                         html += `
-                        <div class="flex flex-col @sm:flex-row items-center justify-between gap-4 text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 w-full shadow-sm mb-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors" onclick="window.open('${url}', '_blank')" title="Clique para abrir ${name}">
+                        <div class="flex flex-col @sm:flex-row items-center justify-between gap-4 text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 w-full shadow-sm mb-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors" onclick="window.openMediaAttachmentById('${regId}')" title="Clique para abrir ${name}">
                             <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-[150px] w-full @sm:w-auto">
                                 ${leftIconActive}
                                 <div class="flex flex-col overflow-hidden w-full">
                                         <div class="font-semibold text-sm break-words" title="${title}">${title || 'Sem título'}</div>
-                                        <div class="text-xs text-slate-500 mt-1 break-words">Arq: ${name}</div>
+                                        <div class="text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 mt-1 break-words">Arq: ${name}</div>
                                     </div>
                                 </div>
                                 <div class="flex flex-col gap-1 min-w-[150px] w-full @sm:w-auto text-slate-500 border-t @sm:border-t-0 @sm:border-l border-slate-200 dark:border-slate-700 pt-2 @sm:pt-0 @sm:pl-4">
@@ -318,8 +498,10 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
                         const author = file.uploadedBy || 'Usuário Local';
                         const dateStr = file.uploadedAt ? new Date(file.uploadedAt).toLocaleString('pt-BR') : 'Data desconhecida';
                         
+                        const regId = registerMediaAttachment(url, name, title);
+                        
                         const leftIconActive = isPhoto 
-                            ? `<div class="w-14 h-14 rounded-xl bg-slate-100 dark:bg-slate-700 shrink-0 overflow-hidden border border-slate-200 dark:border-slate-600 cursor-pointer" onclick="window.open('${url}', '_blank')"><img src="${url}" class="w-full h-full object-cover hover:scale-110 transition-transform duration-300" /></div>`
+                            ? `<div class="w-14 h-14 rounded-xl bg-slate-100 dark:bg-slate-700 shrink-0 overflow-hidden border border-slate-200 dark:border-slate-600 cursor-pointer" onclick="event.stopPropagation(); window.openMediaAttachmentById('${regId}')"><img src="${url}" class="w-full h-full object-cover hover:scale-110 transition-transform duration-300" /></div>`
                             : '';
 
                         const leftIconDeleted = `<div class="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center shrink-0 border border-red-200 dark:border-red-800 text-red-500"><span class="material-symbols-outlined text-[20px]">delete_forever</span></div>`;
@@ -353,7 +535,7 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
     <div class="flex flex-col @sm:flex-row justify-between gap-4 w-full">
         <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
             ${leftIconActive}
-            <div class="flex flex-col overflow-hidden w-full cursor-pointer hover:opacity-80 transition-opacity" onclick="window.open('${url}', '_blank')" title="Clique para abrir ${name}">
+            <div class="flex flex-col overflow-hidden w-full cursor-pointer hover:opacity-80 transition-opacity" onclick="window.openMediaAttachmentById('${regId}')" title="Clique para abrir ${name}">
                 <div class="font-semibold text-sm break-words" title="${title}">${title || 'Sem título'}</div>
                 <div class="text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 mt-1 break-words" title="${name}">Arq: ${name}</div>
             </div>
@@ -791,9 +973,10 @@ async function handleSupabaseUpload(event, fieldId, isPhoto) {
         const dateStr = new Date().toLocaleString('pt-BR');
         const author = 'Usuário (Você)';
         const titleToRender = isPhoto ? inputTitle || file.name : inputTitle;
+        const regId = registerMediaAttachment(publicUrl, file.name, titleToRender);
         
         const leftIconActive = isPhoto 
-                            ? `<div class="w-14 h-14 rounded-xl bg-slate-100 dark:bg-slate-700 shrink-0 overflow-hidden border border-slate-200 dark:border-slate-600 cursor-pointer" onclick="window.open('${publicUrl}', '_blank')"><img src="${publicUrl}" class="w-full h-full object-cover hover:scale-110 transition-transform duration-300" /></div>`
+                            ? `<div class="w-14 h-14 rounded-xl bg-slate-100 dark:bg-slate-700 shrink-0 overflow-hidden border border-slate-200 dark:border-slate-600 cursor-pointer" onclick="event.stopPropagation(); window.openMediaAttachmentById('${regId}')"><img src="${publicUrl}" class="w-full h-full object-cover hover:scale-110 transition-transform duration-300" /></div>`
                             : '';
 
         previewDiv.innerHTML += `
@@ -801,7 +984,7 @@ async function handleSupabaseUpload(event, fieldId, isPhoto) {
     <div class="flex flex-col @sm:flex-row justify-between gap-4 w-full">
         <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
             ${leftIconActive}
-            <div class="flex flex-col overflow-hidden w-full cursor-pointer hover:opacity-80 transition-opacity" onclick="window.open('${publicUrl}', '_blank')" title="Clique para abrir ${file.name}">
+            <div class="flex flex-col overflow-hidden w-full cursor-pointer hover:opacity-80 transition-opacity" onclick="window.openMediaAttachmentById('${regId}')" title="Clique para abrir ${file.name}">
                 <div class="font-semibold text-base truncate" title="${titleToRender}">${titleToRender || 'Sem título'}</div>
                 <div class="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 mt-1 truncate" title="${file.name}">Arq: ${file.name}</div>
             </div>
@@ -910,15 +1093,16 @@ window.restoreFile = function(fieldId, fileUrl) {
     const el = previewDiv.querySelector(`[data-url="${fileUrl}"]`);
     if (el) {
         el.className = "flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 w-full shadow-sm";
+        const regId = registerMediaAttachment(fileUrl, name, title);
         const leftIconActive = isPhoto 
-            ? `<div class="w-14 h-14 rounded-xl bg-slate-100 dark:bg-slate-700 shrink-0 overflow-hidden border border-slate-200 dark:border-slate-600 cursor-pointer" onclick="window.open('${fileUrl}', '_blank')"><img src="${fileUrl}" class="w-full h-full object-cover hover:scale-110 transition-transform duration-300" /></div>`
+            ? `<div class="w-14 h-14 rounded-xl bg-slate-100 dark:bg-slate-700 shrink-0 overflow-hidden border border-slate-200 dark:border-slate-600 cursor-pointer" onclick="event.stopPropagation(); window.openMediaAttachmentById('${regId}')"><img src="${fileUrl}" class="w-full h-full object-cover hover:scale-110 transition-transform duration-300" /></div>`
             : '';
         el.innerHTML = `
 <div class="flex flex-col gap-3 text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 w-full shadow-sm" data-url="${fileUrl}">
     <div class="flex flex-col @sm:flex-row justify-between gap-4 w-full">
         <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
             ${leftIconActive}
-            <div class="flex flex-col overflow-hidden w-full cursor-pointer hover:opacity-80 transition-opacity" onclick="window.open('${fileUrl}', '_blank')" title="Clique para abrir ${name}">
+            <div class="flex flex-col overflow-hidden w-full cursor-pointer hover:opacity-80 transition-opacity" onclick="window.openMediaAttachmentById('${regId}')" title="Clique para abrir ${name}">
                 <div class="font-semibold text-base truncate">${title || 'Sem título'}</div>
                 <div class="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 mt-1 truncate">Arq: ${name}</div>
             </div>

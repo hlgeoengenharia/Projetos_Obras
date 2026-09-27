@@ -2733,7 +2733,7 @@ window.saveCurrentWorkspaceState = async function() {
                 } catch(eAuth) {}
             }
 
-            if (typeof supabaseClient !== 'undefined' && supabaseClient && currentUserId && isValidUUID(proj.id)) {
+            if (typeof navigator !== 'undefined' && navigator.onLine && typeof supabaseClient !== 'undefined' && supabaseClient && currentUserId && isValidUUID(proj.id)) {
                 supabaseClient
                     .from('user_projetos')
                     .update({
