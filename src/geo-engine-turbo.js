@@ -540,7 +540,18 @@
 
                 const end = Math.min(index + CHUNK_SIZE, features.length);
                 const chunk = features.slice(index, end);
-                geojsonLayer.addData(chunk);
+                try {
+                    geojsonLayer.addData(chunk);
+                } catch(eChunk) {
+                    console.warn('[GeoEngineTurbo] Falha no chunk de feições, processando feições individualmente:', eChunk);
+                    for (let f of chunk) {
+                        try {
+                            geojsonLayer.addData(f);
+                        } catch(eFeat) {
+                            console.warn('[GeoEngineTurbo] Feição com geometria inválida descartada:', f, eFeat);
+                        }
+                    }
+                }
                 index = end;
 
                 if (index < features.length) {

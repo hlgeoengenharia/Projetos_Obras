@@ -1407,6 +1407,42 @@ function initMap() {
         shadowUrl: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>'
       });
     }
+    // Patch defensivo para evitar "Error: latlngs not passed" em polígonos com geometria vazia/degenerada
+    if (typeof L !== 'undefined') {
+      if (L.PolyUtil && L.PolyUtil.polygonCenter) {
+        const _origPolygonCenter = L.PolyUtil.polygonCenter;
+        L.PolyUtil.polygonCenter = function(latlngs, crs) {
+          if (!latlngs || !latlngs.length) {
+            return L.latLng(0, 0);
+          }
+          try {
+            return _origPolygonCenter.call(this, latlngs, crs);
+          } catch(e) {
+            return (latlngs[0] && typeof latlngs[0].lat === 'number') ? latlngs[0] : L.latLng(0, 0);
+          }
+        };
+      }
+      if (L.Polygon && L.Polygon.prototype.getCenter) {
+        const _origGetCenter = L.Polygon.prototype.getCenter;
+        L.Polygon.prototype.getCenter = function() {
+          try {
+            const shape = typeof this._defaultShape === 'function' ? this._defaultShape() : this.getLatLngs();
+            if (!shape || !shape.length) {
+              const bounds = typeof this.getBounds === 'function' ? this.getBounds() : null;
+              if (bounds && bounds.isValid && bounds.isValid()) return bounds.getCenter();
+              return L.latLng(0, 0);
+            }
+            return _origGetCenter.call(this);
+          } catch(e) {
+            try {
+              const bounds = typeof this.getBounds === 'function' ? this.getBounds() : null;
+              if (bounds && bounds.isValid && bounds.isValid()) return bounds.getCenter();
+            } catch(e2) {}
+            return L.latLng(0, 0);
+          }
+        };
+      }
+    }
   } catch(eIcon) {}
 
   map = L.map('map', {
@@ -1473,6 +1509,29 @@ function initMap() {
 
   // Layer Group for all GeoJSON features
   geojsonLayer = L.geoJSON(null, {
+    filter: function(feature) {
+      if (!feature || !feature.geometry) return false;
+      const geom = feature.geometry;
+      if (!geom.type || !geom.coordinates) return false;
+      if (geom.type === 'Point') {
+        return Array.isArray(geom.coordinates) && geom.coordinates.length >= 2 && !isNaN(geom.coordinates[0]) && !isNaN(geom.coordinates[1]);
+      }
+      if (geom.type === 'LineString') {
+        return Array.isArray(geom.coordinates) && geom.coordinates.length >= 2;
+      }
+      if (geom.type === 'Polygon') {
+        return Array.isArray(geom.coordinates) && geom.coordinates.length > 0 && Array.isArray(geom.coordinates[0]) && geom.coordinates[0].length >= 3;
+      }
+      if (geom.type === 'MultiPolygon') {
+        return Array.isArray(geom.coordinates) && geom.coordinates.length > 0 && 
+               geom.coordinates.some(poly => Array.isArray(poly) && poly.length > 0 && Array.isArray(poly[0]) && poly[0].length >= 3);
+      }
+      if (geom.type === 'MultiLineString') {
+        return Array.isArray(geom.coordinates) && geom.coordinates.length > 0 &&
+               geom.coordinates.some(line => Array.isArray(line) && line.length >= 2);
+      }
+      return true;
+    },
     style: function(feature) {
       const themeId = feature.properties.themeId;
       const theme = themes.find(t => t.id === themeId);
@@ -1683,11 +1742,29 @@ function initMap() {
         }
         
         if (tooltipContent) {
-          layer.bindTooltip(tooltipContent, {
-            permanent: true,
-            direction: 'center',
-            className: 'leaflet-custom-label'
-          });
+          try {
+            let hasValidCoords = true;
+            if (typeof layer.getLatLngs === 'function') {
+                const shape = typeof layer._defaultShape === 'function' ? layer._defaultShape() : layer.getLatLngs();
+                if (!shape || (Array.isArray(shape) && shape.length === 0)) {
+                    hasValidCoords = false;
+                }
+            } else if (typeof layer.getLatLng === 'function') {
+                const ll = layer.getLatLng();
+                if (!ll || isNaN(ll.lat) || isNaN(ll.lng)) {
+                    hasValidCoords = false;
+                }
+            }
+            if (hasValidCoords) {
+                layer.bindTooltip(tooltipContent, {
+                    permanent: true,
+                    direction: 'center',
+                    className: 'leaflet-custom-label'
+                });
+            }
+          } catch(eTooltip) {
+              console.warn('[bindTooltip] Falha ao vincular rótulo à feição:', eTooltip);
+          }
         }
       }
       
@@ -2867,7 +2944,14 @@ function loadAllFeaturesToMap() {
   } else {
       geojsonLayer.clearLayers();
       if (allFeatures.length > 0) {
-          geojsonLayer.addData(allFeatures);
+          try {
+              geojsonLayer.addData(allFeatures);
+          } catch(e) {
+              console.warn('[loadAllFeaturesToMap] Falha em lote GeoJSON, carregando feições resilientes:', e);
+              for (let f of allFeatures) {
+                  try { geojsonLayer.addData(f); } catch(e2) {}
+              }
+          }
       }
       onRenderFinished();
   }
