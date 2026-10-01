@@ -1,5 +1,5 @@
 // sw.js — Service Worker do GeoGestor (Suporte a PWA e Modo Offline)
-const CACHE_NAME = 'geogestor-app-shell-v1';
+const CACHE_NAME = 'geogestor-app-shell-v2';
 
 const CORE_ASSETS = [
     './',
@@ -47,12 +47,50 @@ self.addEventListener('activate', (event) => {
     );
 });
 
+const TILE_CACHE_NAME = 'geogestor-tiles-v1';
+
+const TRANSPARENT_1PX_GIF = new Uint8Array([
+    0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00,
+    0x00, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x21, 0xf9, 0x04, 0x01, 0x00,
+    0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+    0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b
+]);
+
 // Interceptação de Requisições (Fetch)
 self.addEventListener('fetch', (event) => {
     const request = event.request;
     const url = new URL(request.url);
 
-    // Requisições para APIs do Supabase ou endpoints dinâmicos: Network-first
+    // 1. Intercepta tiles de ortofotos e imagens do Storage: Cache-First resiliente
+    const isTileOrRaster = url.origin.includes('supabase.co') && 
+        (url.pathname.includes('/storage/v1/object/public/') || url.pathname.includes('/tiles/')) &&
+        (url.pathname.endsWith('.webp') || url.pathname.endsWith('.png') || url.pathname.endsWith('.jpg') || url.pathname.endsWith('.jpeg'));
+
+    if (isTileOrRaster && request.method === 'GET') {
+        event.respondWith(
+            caches.open(TILE_CACHE_NAME).then((tileCache) => {
+                return tileCache.match(request).then((cachedTile) => {
+                    if (cachedTile) {
+                        return cachedTile; // Instantâneo: 0ms do cache local sem gastar rede!
+                    }
+                    return fetch(request).then((networkRes) => {
+                        if (networkRes && networkRes.status === 200) {
+                            tileCache.put(request, networkRes.clone());
+                        }
+                        return networkRes;
+                    }).catch(() => {
+                        return new Response(TRANSPARENT_1PX_GIF, {
+                            status: 200,
+                            headers: { 'Content-Type': 'image/gif' }
+                        });
+                    });
+                });
+            })
+        );
+        return;
+    }
+
+    // Requisições para APIs do Supabase (REST/Auth/Realtime): Network-first
     if (url.origin.includes('supabase.co') || request.method !== 'GET') {
         return; // Deixa o navegador resolver normalmente
     }
@@ -93,12 +131,6 @@ self.addEventListener('fetch', (event) => {
             }).catch((err) => {
                 // Se offline e não tem no cache, retorna tile transparente amigável (200) para evitar erros vermelhos no console
                 if (request.destination === 'image' || url.pathname.endsWith('.png') || url.pathname.endsWith('.jpg')) {
-                    const TRANSPARENT_1PX_GIF = new Uint8Array([
-                        0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00,
-                        0x00, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x21, 0xf9, 0x04, 0x01, 0x00,
-                        0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
-                        0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b
-                    ]);
                     return new Response(TRANSPARENT_1PX_GIF, {
                         status: 200,
                         headers: { 'Content-Type': 'image/gif' }

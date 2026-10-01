@@ -473,6 +473,7 @@ async function loadThemes() {
                       opacity: tMeta.opacity !== undefined ? tMeta.opacity : 0.4,
                       weight: tMeta.weight !== undefined ? tMeta.weight : 2,
                       dashed: !!tMeta.dashed,
+                      fill: tMeta.fill !== undefined ? !!tMeta.fill : undefined,
                       disp1: tMeta.disp1 || 'Lote',
                       disp2: tMeta.disp2 || 'Quadra',
                       mainTitle: tMeta.mainTitle || '',
@@ -589,6 +590,7 @@ function saveThemes() {
           opacity: t.opacity,
           weight: t.weight,
           dashed: t.dashed,
+          fill: t.fill,
           disp1: t.disp1,
           disp2: t.disp2,
           mainTitle: t.mainTitle,
@@ -1407,39 +1409,115 @@ function initMap() {
         shadowUrl: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>'
       });
     }
-    // Patch defensivo para evitar "Error: latlngs not passed" em polígonos com geometria vazia/degenerada
+    // Patch defensivo para evitar "Error: latlngs not passed" em polígonos/linhas com geometria vazia/não projetada
     if (typeof L !== 'undefined') {
+      function _extractFlatPoints(arr) {
+        if (!arr) return [];
+        while (Array.isArray(arr) && arr.length > 0 && Array.isArray(arr[0])) {
+          arr = arr[0];
+        }
+        return Array.isArray(arr) ? arr : [];
+      }
+
+      function _findValidRing(arr) {
+        if (!arr || !Array.isArray(arr) || arr.length === 0) return [];
+        if (arr[0] && (typeof arr[0].lat === 'number' || typeof arr[0].x === 'number')) return arr;
+        if (Array.isArray(arr[0])) {
+          if (arr[0].length && (typeof arr[0][0] === 'number' || (arr[0][0] && (typeof arr[0][0].lat === 'number' || typeof arr[0][0].x === 'number')))) {
+            return arr[0];
+          }
+          for (let item of arr) {
+            const ring = _findValidRing(item);
+            if (ring && ring.length >= 2) return ring;
+          }
+        }
+        return [];
+      }
+
       if (L.PolyUtil && L.PolyUtil.polygonCenter) {
         const _origPolygonCenter = L.PolyUtil.polygonCenter;
         L.PolyUtil.polygonCenter = function(latlngs, crs) {
-          if (!latlngs || !latlngs.length) {
+          if (!latlngs || !Array.isArray(latlngs) || latlngs.length === 0) {
             return L.latLng(0, 0);
           }
           try {
             return _origPolygonCenter.call(this, latlngs, crs);
           } catch(e) {
-            return (latlngs[0] && typeof latlngs[0].lat === 'number') ? latlngs[0] : L.latLng(0, 0);
-          }
-        };
-      }
-      if (L.Polygon && L.Polygon.prototype.getCenter) {
-        const _origGetCenter = L.Polygon.prototype.getCenter;
-        L.Polygon.prototype.getCenter = function() {
-          try {
-            const shape = typeof this._defaultShape === 'function' ? this._defaultShape() : this.getLatLngs();
-            if (!shape || !shape.length) {
-              const bounds = typeof this.getBounds === 'function' ? this.getBounds() : null;
-              if (bounds && bounds.isValid && bounds.isValid()) return bounds.getCenter();
-              return L.latLng(0, 0);
-            }
-            return _origGetCenter.call(this);
-          } catch(e) {
             try {
-              const bounds = typeof this.getBounds === 'function' ? this.getBounds() : null;
-              if (bounds && bounds.isValid && bounds.isValid()) return bounds.getCenter();
+              const ring = _findValidRing(latlngs);
+              if (ring && ring.length >= 3) {
+                return _origPolygonCenter.call(this, ring, crs);
+              }
             } catch(e2) {}
             return L.latLng(0, 0);
           }
+        };
+      }
+      if (L.LineUtil && L.LineUtil.polylineCenter) {
+        const _origPolylineCenter = L.LineUtil.polylineCenter;
+        L.LineUtil.polylineCenter = function(latlngs, crs) {
+          if (!latlngs || !Array.isArray(latlngs) || latlngs.length === 0) {
+            return L.latLng(0, 0);
+          }
+          try {
+            return _origPolylineCenter.call(this, latlngs, crs);
+          } catch(e) {
+            try {
+              const ring = _findValidRing(latlngs);
+              if (ring && ring.length >= 2) {
+                return _origPolylineCenter.call(this, ring, crs);
+              }
+            } catch(e2) {}
+            return L.latLng(0, 0);
+          }
+        };
+      }
+      if (L.Polygon && L.Polygon.prototype) {
+        const _origGetCenter = L.Polygon.prototype.getCenter;
+        L.Polygon.prototype.getCenter = function() {
+          try {
+            if (this._rings && this._rings.length > 0 && this._rings[0] && this._rings[0].length >= 3 && this._map && this._map.options && this._map.options.crs) {
+              return _origGetCenter.call(this);
+            }
+          } catch(e) {}
+          try {
+            if (typeof this.getBounds === 'function') {
+              const bounds = this.getBounds();
+              if (bounds && bounds.isValid && bounds.isValid()) return bounds.getCenter();
+            }
+          } catch(e2) {}
+          try {
+            const shape = typeof this._defaultShape === 'function' ? this._defaultShape() : (typeof this.getLatLngs === 'function' ? this.getLatLngs() : null);
+            const flat = _extractFlatPoints(shape);
+            if (flat && flat.length > 0) {
+              const p = flat[0];
+              if (p && typeof p.lat === 'number' && typeof p.lng === 'number') return L.latLng(p.lat, p.lng);
+            }
+          } catch(e3) {}
+          return L.latLng(0, 0);
+        };
+      }
+      if (L.Polyline && L.Polyline.prototype) {
+        const _origPolylineGetCenter = L.Polyline.prototype.getCenter;
+        L.Polyline.prototype.getCenter = function() {
+          try {
+            if (_origPolylineGetCenter && this._rings && this._rings.length > 0 && this._rings[0] && this._rings[0].length >= 2 && this._map && this._map.options && this._map.options.crs) {
+              return _origPolylineGetCenter.call(this);
+            }
+          } catch(e) {}
+          try {
+            if (typeof this.getBounds === 'function') {
+              const bounds = this.getBounds();
+              if (bounds && bounds.isValid && bounds.isValid()) return bounds.getCenter();
+            }
+            const pts = typeof this.getLatLngs === 'function' ? this.getLatLngs() : null;
+            const flat = _extractFlatPoints(pts);
+            if (flat && flat.length > 0) {
+              const mid = flat[Math.floor(flat.length / 2)];
+              if (mid && typeof mid.lat === 'number' && typeof mid.lng === 'number') return L.latLng(mid.lat, mid.lng);
+            }
+          } catch(e2) {}
+          return L.latLng(0, 0);
         };
       }
     }
@@ -1507,8 +1585,12 @@ function initMap() {
     console.warn("Leaflet Geoman não foi carregado corretamente.");
   }
 
+  // Canvas Renderer acelerado por GPU para garantir 60 FPS contínuos e zero sobrecarga de nós DOM
+  const canvasRenderer = (typeof L.canvas === 'function') ? L.canvas({ padding: 0.5, tolerance: 8 }) : null;
+
   // Layer Group for all GeoJSON features
   geojsonLayer = L.geoJSON(null, {
+    ...(canvasRenderer ? { renderer: canvasRenderer } : {}),
     filter: function(feature) {
       if (!feature || !feature.geometry) return false;
       const geom = feature.geometry;
@@ -1539,6 +1621,23 @@ function initMap() {
       let opacity = theme && theme.opacity !== undefined ? theme.opacity : 0.4;
       let weight = theme && theme.weight !== undefined ? theme.weight : 2;
       let dashArray = theme && theme.dashed ? '5, 5' : '';
+
+      // Suporte a preenchimento desligado / temas de linhas e curvas de nível
+      const geomType = feature.geometry ? feature.geometry.type : '';
+      const isLineGeom = geomType === 'LineString' || geomType === 'MultiLineString';
+      const isLineTheme = theme && (
+        theme.geometryType === 'Linha' || 
+        theme.geometryType === 'LineString' || 
+        theme.geometryType === 'MultiLineString' || 
+        (theme.name && /curva.*n[íi]vel|isolin/i.test(theme.name))
+      );
+
+      let shouldFill = true;
+      if (theme && theme.fill !== undefined) {
+        shouldFill = !!theme.fill;
+      } else if (isLineGeom || isLineTheme) {
+        shouldFill = false;
+      }
 
       // Preservar classificação temática ativa se o gráfico/dashboard estiver aberto
       if (theme && theme._activeClassification) {
@@ -1580,9 +1679,11 @@ function initMap() {
       }
 
       return {
-        fillColor: color,
-        fillOpacity: opacity,
+        fill: shouldFill,
+        fillColor: shouldFill ? color : 'transparent',
+        fillOpacity: shouldFill ? opacity : 0,
         color: color,
+        opacity: (shouldFill && opacity < 0.8) ? 0.9 : 1,
         weight: weight,
         dashArray: dashArray,
         className: `theme-feature theme-${themeId}`
@@ -1733,12 +1834,31 @@ function initMap() {
         const safeDisp1Val = escapeHtml(disp1Val);
         const safeDisp2Val = escapeHtml(disp2Val);
 
+        const geomType = feature.geometry ? feature.geometry.type : '';
+        const isLineGeom = geomType === 'LineString' || geomType === 'MultiLineString';
+        const isLineTheme = theme && (
+          theme.geometryType === 'Linha' || 
+          theme.geometryType === 'LineString' || 
+          theme.geometryType === 'MultiLineString' || 
+          (theme.name && /curva.*n[íi]vel|isolin/i.test(theme.name)) ||
+          theme.fill === false
+        );
+        const isContourOrLine = isLineTheme || isLineGeom || (theme && theme.name && /curva.*n[íi]vel|isolin/i.test(theme.name));
+        const badgeClass = isContourOrLine ? 'contour-elevation-label' : '';
+
         if (showDisp1 && showDisp2) {
-          tooltipContent = `<div style="${rotationStyle}" class="text-[11px] font-bold whitespace-nowrap">${safeDisp1Label}: ${safeDisp1Val} - ${safeDisp2Label}: ${safeDisp2Val}</div>`;
+          tooltipContent = `<div style="${rotationStyle}" class="${badgeClass} text-[11px] font-bold whitespace-nowrap">${safeDisp1Label}: ${safeDisp1Val} - ${safeDisp2Label}: ${safeDisp2Val}</div>`;
         } else if (showDisp1) {
-          tooltipContent = `<div style="${rotationStyle}" class="text-[11px] font-bold whitespace-nowrap">${safeDisp1Label}: ${safeDisp1Val}</div>`;
+          const displayTxt = (isContourOrLine && safeDisp1Label.toLowerCase() === 'cota') ? `${safeDisp1Val}` : `${safeDisp1Label}: ${safeDisp1Val}`;
+          tooltipContent = `<div style="${rotationStyle}" class="${badgeClass} text-[11px] font-bold whitespace-nowrap">${displayTxt}</div>`;
         } else if (showDisp2) {
-          tooltipContent = `<div style="${rotationStyle}" class="text-[11px] font-bold whitespace-nowrap">${safeDisp2Label}: ${safeDisp2Val}</div>`;
+          const displayTxt = (isContourOrLine && safeDisp2Label.toLowerCase() === 'cota') ? `${safeDisp2Val}` : `${safeDisp2Label}: ${safeDisp2Val}`;
+          tooltipContent = `<div style="${rotationStyle}" class="${badgeClass} text-[11px] font-bold whitespace-nowrap">${displayTxt}</div>`;
+        } else if (theme.mainTitle) {
+          const mainVal = getFeaturePropertyValue(theme, feature, theme.mainTitle);
+          if (mainVal) {
+            tooltipContent = `<div style="${rotationStyle}" class="${badgeClass} text-[11px] font-bold whitespace-nowrap">${escapeHtml(mainVal)}</div>`;
+          }
         }
         
         if (tooltipContent) {
@@ -2009,14 +2129,28 @@ function initMap() {
     }
     renderThemes(); // mostra os cards já — a contagem preenche conforme carrega
     
-    const totalThemes = themes.length;
+    // Priorização Inteligente de Carregamento (estilo Google Maps / ArcGIS):
+    // Carrega no Splash Screen APENAS as camadas ativas e visíveis no projeto atual,
+    // liberando o mapa e a interface em menos de 1.5s.
+    const activeThemes = themes.filter(t => {
+        if (typeof userCanOnTheme === 'function' && !userCanOnTheme(t.id, 'ver')) return false;
+        const inWorkspace = typeof window.isThemeInWorkspace === 'function' 
+            ? window.isThemeInWorkspace(t.id) 
+            : (Array.isArray(window.activeWorkspaceThemes) && window.activeWorkspaceThemes.some(x => String(x) === String(t.id)));
+        return inWorkspace && t.visible !== false;
+    });
+
+    const themesToLoadFirst = activeThemes.length > 0 
+        ? activeThemes 
+        : themes.filter(t => t.visible !== false && (typeof userCanOnTheme !== 'function' || userCanOnTheme(t.id, 'ver')));
+
+    const totalToLoad = Math.max(1, themesToLoadFirst.length);
     let loadedCount = 0;
     
-    for (const t of themes) {
-        if (typeof userCanOnTheme === 'function' && !userCanOnTheme(t.id, 'ver')) continue;
+    for (const t of themesToLoadFirst) {
         if (typeof updateSplashProgress === 'function') {
-            const pct = 50 + Math.round((loadedCount / Math.max(1, totalThemes)) * 40);
-            updateSplashProgress(`🗺️ Carregando camada "${t.name}"...`, pct);
+            const pct = 50 + Math.round((loadedCount / totalToLoad) * 40);
+            updateSplashProgress(`🗺️ Carregando camada ativa "${t.name}"...`, pct);
         }
         await loadThemeProperties(t.id);
         loadedCount++;
@@ -2053,6 +2187,35 @@ function initMap() {
     if (typeof hideSplashScreen === 'function') {
         hideSplashScreen();
     }
+
+    // Pré-carregamento progressivo em background das camadas inativas (CPU Idle)
+    const remainingThemes = themes.filter(t => !themesToLoadFirst.some(first => first.id === t.id));
+    if (remainingThemes.length > 0) {
+        const scheduleIdleLoad = (idx) => {
+            if (idx >= remainingThemes.length) return;
+            const runNext = async () => {
+                const targetTheme = remainingThemes[idx];
+                if (targetTheme && !targetTheme._propertiesFullyLoaded) {
+                    try {
+                        await loadThemeProperties(targetTheme.id);
+                    } catch (eIdle) {
+                        console.warn('[BackgroundPreload] Falha silenciosa ao pré-carregar tema inativo:', targetTheme.name, eIdle);
+                    }
+                }
+                if (window.requestIdleCallback) {
+                    window.requestIdleCallback(() => scheduleIdleLoad(idx + 1), { timeout: 2000 });
+                } else {
+                    setTimeout(() => scheduleIdleLoad(idx + 1), 500);
+                }
+            };
+            if (window.requestIdleCallback) {
+                window.requestIdleCallback(runNext, { timeout: 2000 });
+            } else {
+                setTimeout(runNext, 500);
+            }
+        };
+        setTimeout(() => scheduleIdleLoad(0), 1500);
+    }
   });
   
   // Call it once after everything is loaded
@@ -2064,40 +2227,72 @@ function updateLabelsVisibility() {
     const currentZoom = map.getZoom();
     
     const tooltipPane = map.getPane('tooltipPane');
-    if (currentZoom <= 16) {
+    if (currentZoom < 14) {
         if (tooltipPane) tooltipPane.style.display = 'none';
         return;
     } else {
         if (tooltipPane) tooltipPane.style.display = '';
     }
 
-    // Esconde o rótulo se ele não couber dentro do polígono na tela — mede o
-    // tamanho real do elemento (DOM), não uma estimativa por caractere, e
-    // compara largura E altura (antes só checava largura).
+    // Esconde o rótulo apenas se for um polígono com área e o rótulo não couber dentro dele.
+    // Para linhas (curvas de nível, eixos, redes) e pontos, o rótulo NUNCA deve ser ocultado
+    // pelo teste de altura de caixa delimitadora (que falha em linhas horizontais/planas).
     geojsonLayer.eachLayer(layer => {
         if (!layer.getTooltip || !layer.getTooltip()) return;
-
-        // Only apply to polygons
-        if (!layer.getBounds) return;
 
         const tooltipEl = layer.getTooltip()._container;
         if (!tooltipEl) return;
 
+        // Se for linha, ponto ou camada do tipo linha/curva, mantém sempre visível
+        const isPolyline = (layer instanceof L.Polyline) && !(layer instanceof L.Polygon);
+        const feat = layer.feature;
+        const geomType = feat && feat.geometry ? feat.geometry.type : '';
+        const isLineGeom = geomType === 'LineString' || geomType === 'MultiLineString';
+        
+        let isContourOrLineTheme = false;
+        if (feat && feat.properties && feat.properties.themeId) {
+            const th = themes.find(t => t.id === feat.properties.themeId);
+            if (th && (th.geometryType === 'Linha' || th.geometryType === 'LineString' || th.geometryType === 'MultiLineString' || (th.name && /curva.*n[íi]vel|isolin/i.test(th.name)) || th.fill === false)) {
+                isContourOrLineTheme = true;
+            }
+        }
+
+        if (isPolyline || isLineGeom || isContourOrLineTheme || (layer instanceof L.Marker)) {
+            tooltipEl.style.opacity = '1';
+            return;
+        }
+
+        if (!layer.getBounds) {
+            tooltipEl.style.opacity = '1';
+            return;
+        }
+
         const bounds = layer.getBounds();
+        if (!bounds || !bounds.isValid || !bounds.isValid()) {
+            tooltipEl.style.opacity = '1';
+            return;
+        }
+
         const nw = map.latLngToLayerPoint(bounds.getNorthWest());
         const se = map.latLngToLayerPoint(bounds.getSouthEast());
 
         const pxWidth = Math.abs(se.x - nw.x);
         const pxHeight = Math.abs(se.y - nw.y);
 
-        // offsetWidth/Height só reflete o tamanho real com o elemento visível
-        tooltipEl.style.opacity = '1';
-        const labelWidth = tooltipEl.offsetWidth;
-        const labelHeight = tooltipEl.offsetHeight;
+        if (!tooltipEl._cachedW) {
+            tooltipEl.style.opacity = '1';
+            tooltipEl._cachedW = tooltipEl.offsetWidth || 50;
+            tooltipEl._cachedH = tooltipEl.offsetHeight || 20;
+        }
+        const labelWidth = tooltipEl._cachedW;
+        const labelHeight = tooltipEl._cachedH;
 
         const margin = 4;
         const fits = (labelWidth + margin) <= pxWidth && (labelHeight + margin) <= pxHeight;
-        tooltipEl.style.opacity = fits ? '1' : '0';
+        const targetOpacity = fits ? '1' : '0';
+        if (tooltipEl.style.opacity !== targetOpacity) {
+            tooltipEl.style.opacity = targetOpacity;
+        }
     });
 }
 
@@ -3014,46 +3209,45 @@ async function syncMapDataToThemes() {
       
       if (dbPayloads.length > 0) {
           try {
-              const chunkSize = 200;
-              let allData = [];
+              const chunkSize = 100;
+              const totalChunks = Math.ceil(dbPayloads.length / chunkSize);
               
-              const newPayloads = dbPayloads.filter(item => !item.payload.id);
-              const existingPayloads = dbPayloads.filter(item => item.payload.id);
-              
-              // Process new features using insert
-              for (let i = 0; i < newPayloads.length; i += chunkSize) {
-                  const dbPayloadsChunk = newPayloads.slice(i, i + chunkSize);
+              for (let i = 0; i < dbPayloads.length; i += chunkSize) {
+                  const dbPayloadsChunk = dbPayloads.slice(i, i + chunkSize);
                   const payloadsChunk = dbPayloadsChunk.map(item => item.payload);
+                  const currentChunk = Math.floor(i / chunkSize) + 1;
                   
-                  const { data, error } = await supabaseClient.from('feicoes').insert(payloadsChunk).select();
-                  if (error) {
-                      console.error(`Erro ao inserir novas feições em lote (chunk ${Math.floor(i/chunkSize) + 1}):`, error);
-                  } else if (data && data.length > 0) {
-                      allData.push(...data);
+                  if (typeof updateImportProgress === 'function') {
+                      updateImportProgress(`Sincronizando feições com o banco (${Math.min(i + chunkSize, dbPayloads.length)} de ${dbPayloads.length})...`);
                   }
-              }
-              
-              // Process existing features using upsert
-              for (let i = 0; i < existingPayloads.length; i += chunkSize) {
-                  const dbPayloadsChunk = existingPayloads.slice(i, i + chunkSize);
-                  const payloadsChunk = dbPayloadsChunk.map(item => item.payload);
                   
-                  const { data, error } = await supabaseClient.from('feicoes').upsert(payloadsChunk).select();
-                  if (error) {
-                      console.error(`Erro ao atualizar feições em lote (chunk ${Math.floor(i/chunkSize) + 1}):`, error);
-                  }
-              }
-              
-              if (allData.length > 0) {
-                  allData.forEach(dbRow => {
-                      const tempId = dbRow.propriedades && dbRow.propriedades._tempId;
-                      if (tempId) {
-                          const match = dbPayloads.find(item => item.layer.feature.properties._tempId === tempId);
-                          if (match) {
-                              match.layer.feature.properties.id_banco = dbRow.id;
+                  // Upsert sem .select() para não sobrecarregar tráfego de rede com geometrias complexas
+                  let chunkSuccess = false;
+                  for (let attempt = 1; attempt <= 3; attempt++) {
+                      try {
+                          const { error } = await supabaseClient.from('feicoes').upsert(payloadsChunk);
+                          if (!error) {
+                              chunkSuccess = true;
+                              break;
+                          } else {
+                              console.warn(`[syncMapDataToThemes] Erro no lote ${currentChunk}/${totalChunks} (tentativa ${attempt}):`, error);
+                              if (attempt < 3) await new Promise(r => setTimeout(r, 600 * attempt));
                           }
+                      } catch(errChunk) {
+                          console.warn(`[syncMapDataToThemes] Falha de rede no lote ${currentChunk}/${totalChunks} (tentativa ${attempt}):`, errChunk);
+                          if (attempt < 3) await new Promise(r => setTimeout(r, 600 * attempt));
                       }
-                  });
+                  }
+                  
+                  if (chunkSuccess) {
+                      dbPayloadsChunk.forEach(item => {
+                          if (item.layer && item.layer.feature && item.layer.feature.properties) {
+                              item.layer.feature.properties.id_banco = item.payload.id;
+                          }
+                      });
+                  } else {
+                      console.error(`[syncMapDataToThemes] Não foi possível sincronizar o lote ${currentChunk}/${totalChunks} após 3 tentativas.`);
+                  }
               }
           } catch(e) {
               console.error("Erro ao sincronizar feições em lote:", e);
@@ -5376,6 +5570,18 @@ function openEditThemeModal(themeId, focusField = null) {
   document.getElementById('edit-theme-weight-val').textContent = theme.weight !== undefined ? theme.weight : 2;
   document.getElementById('edit-theme-dashed-input').checked = !!theme.dashed;
   
+  const isLineTheme = theme && (
+    theme.geometryType === 'Linha' || 
+    theme.geometryType === 'LineString' || 
+    theme.geometryType === 'MultiLineString' || 
+    (theme.name && /curva.*n[íi]vel|isolin/i.test(theme.name))
+  );
+  const defaultFill = isLineTheme ? false : true;
+  const fillInput = document.getElementById('edit-theme-fill-input');
+  if (fillInput) {
+    fillInput.checked = theme.fill !== undefined ? !!theme.fill : defaultFill;
+  }
+  
   document.getElementById('edit-theme-disp1-active').checked = theme.disp1Active !== false;
   document.getElementById('edit-theme-disp2-active').checked = theme.disp2Active !== false;
   
@@ -5505,6 +5711,7 @@ async function saveEditedTheme() {
   const opacity = parseFloat(document.getElementById('edit-theme-opacity-input').value);
   const weight = parseInt(document.getElementById('edit-theme-weight-input').value);
   const dashed = document.getElementById('edit-theme-dashed-input').checked;
+  const fill = document.getElementById('edit-theme-fill-input') ? document.getElementById('edit-theme-fill-input').checked : true;
   const icon = document.getElementById('edit-theme-icon-input').value;
   const customIcon = document.getElementById('edit-theme-custom-icon-data').value;
   const disp1 = document.getElementById('edit-theme-disp1-input').value;
@@ -5524,6 +5731,7 @@ async function saveEditedTheme() {
     theme.opacity = opacity;
     theme.weight = weight;
     theme.dashed = dashed;
+    theme.fill = fill;
     theme.icon = icon;
     theme.customIcon = customIcon;
     theme.disp1 = disp1 || 'Lote';
@@ -5559,6 +5767,7 @@ async function saveEditedTheme() {
                     opacity: opacity,
                     weight: weight,
                     dashed: dashed,
+                    fill: fill,
                     disp1: disp1,
                     disp2: disp2,
                     mainTitle: mainTitle,
@@ -10789,16 +10998,54 @@ function setupSupabaseRealtime() {
                   if (activeMunicipioId) temasQuery = temasQuery.eq('municipio_id', activeMunicipioId);
                   const { data: dbTemas } = await temasQuery;
                   if (dbTemas) {
-                      // Reconstroi somente os temas, preservando features já carregadas
+                      // Reconstroi temas e atualiza propriedades/estilos em memória preservando features já carregadas
                       dbTemas.forEach(t => {
                           const existing = themes.find(th => String(th.id) === String(t.id));
-                          if (!existing) {
-                              themes.push({ id: t.id, name: t.nome, color: t.cor, features: [] });
+                          if (existing) {
+                              existing.name = t.nome || existing.name;
+                              existing.color = t.cor || existing.color;
+                              existing.icon = t.icone || existing.icon;
+                              if (t.metadata) {
+                                  existing.metadata = t.metadata;
+                                  if (t.metadata.opacity !== undefined) existing.opacity = t.metadata.opacity;
+                                  if (t.metadata.weight !== undefined) existing.weight = t.metadata.weight;
+                                  if (t.metadata.dashed !== undefined) existing.dashed = !!t.metadata.dashed;
+                                  if (t.metadata.fill !== undefined) existing.fill = !!t.metadata.fill;
+                                  if (t.metadata.disp1 !== undefined) existing.disp1 = t.metadata.disp1;
+                                  if (t.metadata.disp2 !== undefined) existing.disp2 = t.metadata.disp2;
+                                  if (t.metadata.mainTitle !== undefined) existing.mainTitle = t.metadata.mainTitle;
+                                  if (t.metadata.disp1Active !== undefined) existing.disp1Active = t.metadata.disp1Active;
+                                  if (t.metadata.disp2Active !== undefined) existing.disp2Active = t.metadata.disp2Active;
+                              }
+                          } else {
+                              const tMeta = t.metadata || {};
+                              themes.push({
+                                  id: t.id,
+                                  name: t.nome,
+                                  color: t.cor,
+                                  icon: t.icone,
+                                  geometryType: t.tipo_geometria,
+                                  cadastroType: t.tipo_cadastro,
+                                  opacity: tMeta.opacity !== undefined ? tMeta.opacity : 0.4,
+                                  weight: tMeta.weight !== undefined ? tMeta.weight : 2,
+                                  dashed: !!tMeta.dashed,
+                                  fill: tMeta.fill !== undefined ? !!tMeta.fill : undefined,
+                                  disp1: tMeta.disp1 || 'Lote',
+                                  disp2: tMeta.disp2 || 'Quadra',
+                                  mainTitle: tMeta.mainTitle || '',
+                                  disp1Active: tMeta.disp1Active !== false,
+                                  disp2Active: tMeta.disp2Active !== false,
+                                  visible: false,
+                                  features: []
+                              });
                           }
                       });
                       themes = themes.filter(th => dbTemas.some(t => String(t.id) === String(th.id)));
                   }
                   renderThemes();
+                  if (typeof loadAllFeaturesToMap === 'function') {
+                      loadAllFeaturesToMap();
+                  }
               }
           )
           .subscribe();
@@ -11053,7 +11300,7 @@ async function loadRasterLayers() {
                             minNativeZoom: raster.zoom_min || 14,
                             maxNativeZoom: nativeMax,
                             maxZoom: 24,
-                            keepBuffer: 16,
+                            keepBuffer: 2,
                             zIndex: 300 + (rasterLayers.length - idx),
                             opacity: raster.opacidade !== undefined ? raster.opacidade : 0.9,
                             attribution: raster.nome || 'Ortofoto'

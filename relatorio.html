@@ -41,20 +41,28 @@
             display: flex;
             flex-direction: row;
             align-items: stretch;
-            min-height: calc(100vh - 56px);
+            height: calc(100vh - 56px);
+            max-height: calc(100vh - 56px);
             width: 100%;
             background: #0b1120;
+            overflow: hidden;
         }
         .page-column {
             flex: 1;
             display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            padding: 24px 16px 48px 16px;
+            flex-direction: column !important;
+            align-items: center !important;
+            gap: 32px;
+            padding: 24px 16px 64px 16px;
             overflow-y: auto;
+            overflow-x: auto;
             min-width: 0;
             order: 1;
             background: #0b1120;
+        }
+        .page-column > .a4-page {
+            flex-shrink: 0;
+            margin: 0 auto;
         }
         .sidebar-column {
             width: 320px;
@@ -146,40 +154,137 @@
             letter-spacing: 0.025em;
         }
 
+        @page { 
+            size: A4 portrait; 
+            margin: 0; 
+        }
+
         @media print {
             .no-print, .sidebar-column, header { display: none !important; }
-            @page { 
-                size: A4 portrait; 
-                margin: 0 !important; 
-            }
-            body { 
+            html, body { 
                 background: white !important; 
                 margin: 0 !important; 
                 padding: 0 !important;
+                width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+                max-height: none !important;
+                overflow: visible !important;
+                display: block !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
             }
-            .layout-wrapper { display: block !important; margin: 0 !important; padding: 0 !important; background: transparent !important; }
-            .page-column { display: block !important; margin: 0 !important; padding: 0 !important; background: transparent !important; }
+            .layout-wrapper { 
+                display: block !important; 
+                position: static !important;
+                width: 100% !important;
+                height: auto !important; 
+                min-height: 0 !important;
+                max-height: none !important;
+                margin: 0 !important; 
+                padding: 0 !important; 
+                background: transparent !important; 
+                overflow: visible !important;
+            }
+            .page-column { 
+                display: block !important; 
+                position: static !important;
+                width: 100% !important;
+                height: auto !important; 
+                min-height: 0 !important;
+                max-height: none !important;
+                margin: 0 !important; 
+                padding: 0 !important; 
+                background: transparent !important; 
+                overflow: visible !important;
+                gap: 0 !important;
+            }
             .a4-page { 
                 box-shadow: none !important; 
-                margin: 0 !important; 
+                margin: 0 auto !important; 
                 width: 210mm !important; 
-                min-width: 210mm !important;
-                max-width: 210mm !important;
-                height: 297mm !important;
-                min-height: 297mm !important;
-                max-height: 297mm !important;
-                padding: 7mm !important;
-                page-break-after: avoid !important; 
-                page-break-inside: avoid !important;
-                border-radius: 0 !important;
+                min-width: 0 !important; 
+                max-width: 100% !important; 
+                height: calc(100vh - 2mm) !important; 
+                min-height: 0 !important; 
+                max-height: 294mm !important; 
+                padding: 4mm 5mm !important; 
+                box-sizing: border-box !important; 
+                page-break-inside: avoid !important; 
+                break-inside: avoid !important; 
+                page-break-after: always !important; 
+                break-after: page !important; 
+                border-radius: 0 !important; 
+                overflow: hidden !important; 
+                display: flex !important; 
+                flex-direction: column !important; 
+                justify-content: space-between !important; 
+                position: relative !important;
+                background: #ffffff !important;
+            }
+            .a4-page.hidden {
+                display: none !important;
+            }
+            .a4-page.print-last-page,
+            .a4-page:last-of-type,
+            .a4-page:last-child {
+                page-break-after: avoid !important;
+                break-after: avoid !important;
+            }
+            /* Garante que o retângulo com borda envolva toda a folha até o rodapé */
+            .a4-page > div.flex-1 {
+                height: 100% !important;
+                min-height: 0 !important;
+                max-height: 100% !important;
+                box-sizing: border-box !important;
+                border: 1.5px solid #1e293b !important;
+                border-radius: 4px !important;
+                padding: 6px 8px !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: space-between !important;
                 overflow: hidden !important;
+            }
+            #map-coords-wrapper {
+                flex: 1 1 auto !important;
+                min-height: 0 !important;
+                max-height: none !important;
+                margin-bottom: 2px !important;
+            }
+            #map-wrapper {
+                flex: 1 1 auto !important;
+                height: 100% !important;
+                min-height: 0 !important;
+            }
+            footer {
+                display: flex !important;
+                width: 100% !important;
+                flex-shrink: 0 !important;
+                margin-top: auto !important;
+                padding-top: 4px !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+            }
+            .mono[id$="-footer-page-num"],
+            .page-footer-num {
+                display: block !important;
+                visibility: visible !important;
+                font-family: 'JetBrains Mono', monospace !important;
+                font-size: 7.5px !important;
+                font-weight: 700 !important;
+                color: #475569 !important;
+            }
+            .freetext-placeholder {
+                display: none !important;
             }
             /* Remove rigorosamente qualquer borda vermelha tracejada ou outline de seleção na impressão */
             #free-text-overlay *,
+            #free-text-overlay-page2 *,
             .free-text-item,
+            .free-textbox-item,
+            .textbox-drag-header,
             [id^="ft_"],
+            [id^="tb_"],
             .custom-point-tag,
             .measure-label div,
             .measure-label-area div,
@@ -188,6 +293,14 @@
                 outline: none !important;
                 border: none !important;
                 box-shadow: none !important;
+            }
+            .free-textbox-item {
+                background: transparent !important;
+                box-shadow: none !important;
+                border: none !important;
+            }
+            .textbox-drag-header {
+                display: none !important;
             }
             /* Preservar espaçamento de texto, kerning e respiração das tabelas e títulos */
             * {
@@ -218,7 +331,7 @@
                 letter-spacing: 0.025em !important;
             }
         }
-</style>
+    </style>
 </head>
 <body class="min-h-screen flex flex-col">
 <header class="no-print w-full bg-slate-900/95 backdrop-blur border-b border-slate-800 text-white px-6 py-2 flex justify-between items-center sticky top-0 z-50 shadow-lg">
@@ -232,9 +345,14 @@
             <p class="text-[10px] text-slate-400">Arraste o mapa para enquadrar antes de imprimir.</p>
         </div>
     </div>
-    <button class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase py-2 px-4 rounded-lg flex items-center gap-2 cursor-pointer" onclick="prepareAndPrint()">
-        <span class="material-symbols-outlined text-base">print</span> Imprimir / PDF
-    </button>
+    <div class="flex items-center gap-2">
+        <button class="bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-xs uppercase py-2 px-3.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-md transition-all" onclick="exportMeasurementsKML()" title="Exportar medições para arquivos KML (Google Earth / QGIS)">
+            <span class="material-symbols-outlined text-base">download</span> Exportar KML
+        </button>
+        <button class="bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs uppercase py-2 px-4 rounded-lg flex items-center gap-2 cursor-pointer shadow-md transition-all" onclick="prepareAndPrint()">
+            <span class="material-symbols-outlined text-base">print</span> Imprimir / PDF
+        </button>
+    </div>
 </header>
 
 <div class="layout-wrapper">
@@ -431,44 +549,83 @@
             </div>
         </div>
 
-        <!-- Texto Livre -->
+        <!-- Observações Técnicas -->
         <div class="accordion-item">
             <button class="w-full px-4 py-3 flex items-center justify-between text-slate-400 hover:bg-slate-800/50 transition-colors accordion-header" onclick="toggleAccordion(this)">
                 <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider">
-                    <span class="material-symbols-outlined text-sm">text_fields</span>
-                    Texto Livre
+                    <span class="material-symbols-outlined text-sm text-emerald-400">edit_note</span>
+                    Observações Técnicas
                 </div>
                 <span class="material-symbols-outlined text-sm transition-transform duration-200 chevron">expand_more</span>
             </button>
-            <div class="px-4 pb-4 accordion-content hidden">
-                <div class="flex items-center gap-2 mb-2">
-                    <input type="text" id="ctrl-freetext-input" placeholder="Digite aqui..." class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1.5 outline-none focus:border-emerald-500">
-                    <button id="btn-add-freetext" class="bg-emerald-600 hover:bg-emerald-500 text-white p-1.5 rounded flex items-center justify-center transition-colors" title="Adicionar ao Mapa">
-                        <span class="material-symbols-outlined text-sm">add</span>
-                    </button>
+            <div class="px-4 pb-4 accordion-content hidden flex flex-col gap-2.5">
+                <!-- Botão Rolar / Focar Observações Técnicas -->
+                <button type="button" id="btn-add-textbox" class="w-full bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white font-bold text-xs py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm" title="Ir para Observações Técnicas na Folha">
+                    <span class="material-symbols-outlined text-base">edit_note</span>
+                    Focar / Digitar em Observações Técnicas
+                </button>
+
+                <!-- Barra de Formatação Rica -->
+                <div class="flex flex-col gap-1.5 bg-slate-800/60 p-2 rounded-lg border border-slate-700/60">
+                    <span class="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Formatação de Texto</span>
+                    
+                    <!-- Linha 1: Negrito, Itálico, Sublinhado, Alinhamentos -->
+                    <div class="flex items-center gap-1 flex-wrap">
+                        <button type="button" id="ft-measure-bold" class="w-7 h-7 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors font-serif font-bold text-sm bg-slate-700 text-white cursor-pointer" title="Negrito">B</button>
+                        <button type="button" id="ft-measure-italic" class="w-7 h-7 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors font-serif italic text-sm cursor-pointer" title="Itálico">I</button>
+                        <button type="button" id="ft-measure-underline" class="w-7 h-7 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors font-serif underline text-sm cursor-pointer" title="Sublinhado">U</button>
+                        <div class="w-px h-5 bg-slate-700 mx-0.5"></div>
+                        <button type="button" id="ft-align-left" class="w-7 h-7 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer" title="Alinhar à Esquerda"><span class="material-symbols-outlined text-sm">format_align_left</span></button>
+                        <button type="button" id="ft-align-center" class="w-7 h-7 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer" title="Centralizar"><span class="material-symbols-outlined text-sm">format_align_center</span></button>
+                        <button type="button" id="ft-align-right" class="w-7 h-7 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer" title="Alinhar à Direita"><span class="material-symbols-outlined text-sm">format_align_right</span></button>
+                        <button type="button" id="ft-align-justify" class="w-7 h-7 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer" title="Justificar"><span class="material-symbols-outlined text-sm">format_align_justify</span></button>
+                    </div>
+
+                    <!-- Linha 2: Tamanho da Fonte, Cor e Espaçamento -->
+                    <div class="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-700/40">
+                        <div class="flex items-center gap-1">
+                            <button type="button" id="ft-measure-size-down" class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors text-xs cursor-pointer" title="Diminuir Fonte">A-</button>
+                            <span id="ft-measure-size-val" class="text-[10px] font-mono text-emerald-400 w-5 text-center font-bold">10</span>
+                            <button type="button" id="ft-measure-size-up" class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors text-sm cursor-pointer" title="Aumentar Fonte">A+</button>
+                        </div>
+                        
+                        <div class="flex items-center gap-1">
+                            <span class="text-[9px] text-slate-400">Espaço:</span>
+                            <select id="ft-line-height" class="bg-slate-900 border border-slate-700 text-slate-200 text-[10px] rounded px-1.5 py-0.5 outline-none cursor-pointer">
+                                <option value="1.0">1.0</option>
+                                <option value="1.2" selected>1.2</option>
+                                <option value="1.5">1.5</option>
+                                <option value="2.0">2.0</option>
+                            </select>
+                        </div>
+
+                        <div class="flex items-center gap-1">
+                            <span class="text-[9px] text-slate-400">Cor:</span>
+                            <input type="color" id="ft-measure-color" value="#0f172a" class="w-6 h-6 rounded cursor-pointer border border-slate-600 bg-transparent p-0" title="Cor do Texto">
+                        </div>
+                    </div>
                 </div>
-                
-                <!-- Real Font Controls for Free Text -->
-                <div class="flex items-center gap-1.5 mb-2 bg-slate-800/50 p-1.5 rounded-lg border border-slate-700/50">
-                    <button id="ft-measure-bold" class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors font-serif font-bold text-sm bg-slate-700 text-white" title="Negrito">B</button>
-                    <button id="ft-measure-italic" class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors font-serif italic text-sm" title="Itálico">I</button>
-                    <button id="ft-measure-underline" class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors font-serif underline text-sm" title="Sublinhado">U</button>
-                    <div class="w-px h-4 bg-slate-700 mx-1"></div>
-                    <button id="ft-measure-size-down" class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors text-xs" title="Diminuir Fonte">A-</button>
-                    <span id="ft-measure-size-val" class="text-[10px] font-mono text-emerald-400 w-4 text-center">9</span>
-                    <button id="ft-measure-size-up" class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors text-sm" title="Aumentar Fonte">A+</button>
-                    <div class="w-px h-4 bg-slate-700 mx-1"></div>
-                    <input type="color" id="ft-measure-color" value="#0f172a" class="w-6 h-6 rounded cursor-pointer border border-slate-600 bg-transparent p-0" title="Cor do Texto">
+
+                <!-- Rótulo Rápido de 1 Linha -->
+                <div class="flex flex-col gap-1.5 pt-1 border-t border-slate-800">
+                    <span class="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Rótulo Curto no Mapa</span>
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="ctrl-freetext-input" placeholder="Digite rótulo..." class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1.5 outline-none focus:border-emerald-500">
+                        <button type="button" id="btn-add-freetext" class="bg-slate-700 hover:bg-slate-600 text-white p-1.5 rounded flex items-center justify-center transition-colors cursor-pointer shrink-0" title="Inserir Rótulo">
+                            <span class="material-symbols-outlined text-sm">add</span>
+                        </button>
+                    </div>
                 </div>
-                
+
+                <!-- Rotação e Exclusão -->
                 <div class="flex items-center justify-between bg-slate-800/50 p-1.5 rounded-lg border border-slate-700/50">
-                    <span class="text-[9px] text-slate-400 font-semibold">Rotação</span>
-                    <input type="range" id="ctrl-rotation" min="-180" max="180" step="1" value="0" class="w-24 accent-emerald-500">
-                    <button id="btn-remove-selected" class="text-red-400 hover:text-red-300 flex items-center justify-center" title="Remover selecionado">
-                        <span class="material-symbols-outlined text-sm">delete</span>
+                    <span class="text-[9px] text-slate-400 font-semibold">Girar</span>
+                    <input type="range" id="ctrl-rotation" min="-180" max="180" step="1" value="0" class="w-20 accent-emerald-500">
+                    <button type="button" id="btn-remove-selected" class="text-red-400 hover:text-red-300 flex items-center justify-center p-1 cursor-pointer" title="Remover selecionado">
+                        <span class="material-symbols-outlined text-base">delete</span>
                     </button>
                 </div>
-                <p class="text-[9px] text-slate-500 leading-tight mt-2">O texto novo vai puxar o Negrito/Itálico/Tamanho das Medições Geométricas acima. Arraste no mapa para mover. Selecione para girar/excluir.</p>
+                <p class="text-[9px] text-slate-500 leading-tight">Clique na Caixa de Texto ou Rótulo para editar, mover, rotacionar ou formatar.</p>
             </div>
         </div>
         
@@ -511,7 +668,7 @@
     <div class="w-full flex-1 flex flex-col border-[1.5px] border-slate-800 rounded p-2 relative bg-white">
         
         <!-- Header Section -->
-        <div class="w-full border-b-[2px] border-slate-800 pb-1.5 mb-1.5">
+        <div id="page1-header" class="w-full border-b-[2px] border-slate-800 pb-1.5 mb-1.5">
             <div class="flex items-stretch justify-between gap-2">
                 <div class="flex items-center gap-2">
                     <div class="w-14 h-14 rounded-lg border border-slate-200 bg-slate-50 p-1 flex items-center justify-center shadow-sm">
@@ -519,7 +676,7 @@
                     </div>
                     <div>
                         <div class="flex items-center gap-1.5">
-                            <span id="report-entidade-name" class="text-[12px] font-black tracking-tight text-slate-900 uppercase">Entidade Engenharia</span>
+                            <span id="report-entidade-name" class="text-[12px] font-black tracking-tight text-slate-900 uppercase">Prefeitura Municipal</span>
                             <span class="text-[7.5px] bg-slate-100 text-slate-700 px-1 py-0.5 rounded font-bold border border-slate-200">RT-2025</span>
                         </div>
                         <h1 class="text-[15px] font-extrabold text-slate-900 uppercase tracking-tight leading-tight flex items-center whitespace-nowrap">MAPA DE LOCALIZAÇÃO</h1>
@@ -545,16 +702,20 @@
                         </div>
                         <span class="font-bold text-slate-800 mono text-right" id="report-date">--/--/----</span>
                     </div>
-                    <div id="report-row-datum" class="flex items-center justify-between">
+                    <div id="report-row-datum" class="flex items-center justify-between border-b border-slate-200/70 pb-0.5">
                         <span class="text-slate-400 font-semibold uppercase text-[7.5px]">Datum:</span>
                         <span class="font-bold text-emerald-700 mono text-right">SIRGAS 2000</span>
+                    </div>
+                    <div id="report-row-mapabase" class="flex items-center justify-between pt-0.5">
+                        <span class="text-slate-400 font-semibold uppercase text-[7.5px]">Mapa Base:</span>
+                        <span class="font-bold text-slate-800 mono text-right truncate max-w-[115px]" id="report-mapabase-name">Satélite (Google)</span>
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- Coordinates Container wrapper for borders -->
-        <div class="w-full flex-1 flex relative mb-1.5 px-3 py-3">
+        <div id="map-coords-wrapper" class="w-full flex-1 flex relative mb-1 px-3 py-3 transition-all">
             <div id="grid-top" class="absolute top-0 w-full left-0 flex justify-around pointer-events-none px-6"></div>
             <div id="grid-bottom" class="absolute bottom-0 w-full left-0 flex justify-around pointer-events-none px-6"></div>
             <div id="grid-left" class="absolute left-0 h-full top-0 flex flex-col justify-around items-center pointer-events-none py-6"></div>
@@ -563,112 +724,166 @@
             <!-- Map Frame (flex-1 to take all vertical space) -->
             <div class="w-full flex-1 flex flex-col border border-slate-700 relative overflow-hidden bg-slate-100 z-10" id="map-wrapper" style="min-height: 100px;">
                 <div id="map" class="w-full h-full relative z-10 flex-1" style="background-color: #f1f5f9;"></div>
-                <div class="absolute top-2 right-2 z-[400] flex flex-col items-center pointer-events-none">
-                    <span class="font-black text-[10px] text-slate-900 leading-none">N</span>
-                    <svg class="w-4 h-4 text-slate-800 mt-0.5" fill="currentColor" viewbox="0 0 24 24"><polygon fill="#0f172a" points="12,2 17,21 12,17 7,21"></polygon><polygon fill="#ef4444" points="12,2 17,21 12,17"></polygon></svg>
+                <!-- Botão de Ajustar Medição ao Mapa Flutuante -->
+                <button type="button" onclick="fitReportMapToMeasurements()" class="no-print absolute top-2 right-2 z-[400] bg-white/90 hover:bg-white text-slate-800 px-2 py-1 rounded shadow-md border border-slate-300 hover:border-emerald-500 transition-all cursor-pointer flex items-center gap-1 text-[8px] font-bold" title="Ajustar e enquadrar medições ao mapa">
+                    <span class="material-symbols-outlined text-[13px] text-emerald-600">fit_screen</span>
+                    <span>Ajustar Zoom</span>
+                </button>
+                <!-- Rosa dos Ventos / Norte posicionado na parte inferior direita e com tamanho maior -->
+                <div class="absolute bottom-3 right-3 z-[400] flex flex-col items-center pointer-events-none bg-white/85 backdrop-blur-xs px-2 py-1 rounded-md border border-slate-300 shadow-sm">
+                    <span class="font-black text-[11px] text-slate-900 leading-none tracking-tight">N</span>
+                    <svg class="w-6 h-6 text-slate-800 mt-0.5 drop-shadow-xs" fill="currentColor" viewBox="0 0 24 24"><polygon fill="#0f172a" points="12,2 17,21 12,17 7,21"></polygon><polygon fill="#ef4444" points="12,2 17,21 12,17"></polygon></svg>
                 </div>
             </div>
         </div>
 
-        <!-- Coordinates Table -->
-        <div class="w-full border border-slate-300 rounded overflow-hidden mb-1.5 bg-white shadow-xs">
-            <div class="bg-slate-900 text-white px-2 py-1 flex justify-between items-center">
-                <div class="flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-[12px] text-emerald-400">format_list_bulleted</span>
-                    <h2 class="font-extrabold text-[8.5px] uppercase">Coordenadas dos Vértices</h2>
-                </div>
+        <!-- Barra Interativa de Redimensionamento Vertical do Mapa (Arrastar para Folha 2) -->
+        <div id="map-vertical-resizer" class="no-print w-full flex items-center justify-between px-3 py-1 my-0.5 bg-slate-100 hover:bg-emerald-50 active:bg-emerald-100 border border-dashed border-slate-300 rounded cursor-ns-resize select-none transition-colors group" title="Arraste para baixo para expandir o mapa e passar as tabelas para a Folha 2">
+            <div class="flex items-center gap-1.5 text-slate-500 group-hover:text-emerald-700">
+                <span class="material-symbols-outlined text-[16px]">drag_handle</span>
+                <span class="text-[8px] font-bold uppercase tracking-wider">Arraste para expandir a altura do mapa (Move tabelas para Folha 2)</span>
             </div>
-            <div>
-                <table class="report-table">
-                    <thead>
-                        <tr>
-                            <th class="text-center w-12" rowspan="2">Vértice</th>
-                            <th class="text-center bg-slate-100/70" colspan="2">Decimais</th>
-                            <th class="text-center bg-slate-50" colspan="2">GMS</th>
-                            <th class="text-center bg-emerald-50/50 text-emerald-950" colspan="3">UTM (SIRGAS 2000)</th>
-                        </tr>
-                        <tr class="bg-slate-50 text-[7px]">
-                            <th class="text-center font-bold">Lat (°)</th>
-                            <th class="text-center font-bold">Long (°)</th>
-                            <th class="text-center font-bold">Lat (DMS)</th>
-                            <th class="text-center font-bold">Long (DMS)</th>
-                            <th class="text-center font-bold">Zona</th>
-                            <th class="text-center font-bold">E (m)</th>
-                            <th class="text-center font-bold">N (m)</th>
-                        </tr>
-                    </thead>
-                    <tbody class="text-center font-mono" id="report-coords-tbody"></tbody>
-                </table>
-            </div>
+            <button type="button" id="btn-toggle-pages-quick" onclick="toggleTwoPagesMode()" class="text-[7.5px] font-bold uppercase px-2 py-0.5 rounded bg-white border border-slate-300 shadow-xs hover:border-emerald-500 text-slate-700 hover:text-emerald-600 cursor-pointer">
+                <span id="quick-pages-mode-label">Alternar para 2 Folhas</span>
+            </button>
         </div>
 
-        <!-- Bottom Cards -->
-        <div class="grid grid-cols-12 gap-2 w-full mb-1">
-            <!-- Card 1: Sumário da Geometria (Área e Perímetro) -->
-            <div class="col-span-4 border border-slate-200 rounded p-2 bg-slate-50/50 flex flex-col justify-between">
-                <div>
-                    <div class="flex items-center gap-1 border-b border-slate-200 pb-1 mb-1.5">
-                        <span class="font-extrabold text-[8px] uppercase text-slate-800">Sumário da Geometria</span>
-                    </div>
-                    <div class="grid grid-cols-2 gap-1">
-                        <div class="bg-white p-1 rounded border border-slate-200">
-                            <span class="text-[7px] uppercase font-bold text-slate-500">Área Calculada</span>
-                            <div class="flex items-baseline gap-1">
-                                <span class="text-[11px] font-black text-slate-900 mono" id="report-info-area">--</span><span class="text-[7.5px] font-bold text-slate-500">m²</span>
-                            </div>
-                            <span class="text-[7px] text-emerald-600 font-semibold mono" id="report-info-area-ha">0 ha</span>
+        <!-- Slot de Tabelas da Folha 1 -->
+        <div id="page1-tables-slot" class="w-full flex flex-col">
+            <!-- Container das Tabelas e Cards (se move dinamicamente para a Folha 2 quando o mapa é expandido) -->
+            <div id="tables-and-cards-container" class="w-full flex flex-col gap-1.5">
+                <!-- Coordinates Table -->
+                <div class="w-full border border-slate-300 rounded overflow-hidden bg-white shadow-xs">
+                    <div class="bg-slate-900 text-white px-2 py-1 flex justify-between items-center">
+                        <div class="flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-[12px] text-emerald-400">format_list_bulleted</span>
+                            <h2 class="font-extrabold text-[8.5px] uppercase">Coordenadas dos Vértices</h2>
                         </div>
-                        <div class="bg-white p-1 rounded border border-slate-200">
-                            <span class="text-[7px] uppercase font-bold text-slate-500">Perímetro Total</span>
-                            <div class="flex items-baseline gap-1">
-                                <span class="text-[11px] font-black text-slate-900 mono" id="report-info-perim">--</span><span class="text-[7.5px] font-bold text-slate-500">m</span>
+                    </div>
+                    <div>
+                        <table class="report-table">
+                            <thead>
+                                <tr>
+                                    <th class="text-center w-12" rowspan="2">Vértice</th>
+                                    <th class="text-center bg-slate-100/70" colspan="2">Decimais</th>
+                                    <th class="text-center bg-slate-50" colspan="2">GMS</th>
+                                    <th class="text-center bg-emerald-50/50 text-emerald-950" colspan="3">UTM (SIRGAS 2000)</th>
+                                </tr>
+                                <tr class="bg-slate-50 text-[7px]">
+                                    <th class="text-center font-bold">Lat (°)</th>
+                                    <th class="text-center font-bold">Long (°)</th>
+                                    <th class="text-center font-bold">Lat (DMS)</th>
+                                    <th class="text-center font-bold">Long (DMS)</th>
+                                    <th class="text-center font-bold">Zona</th>
+                                    <th class="text-center font-bold">E (m)</th>
+                                    <th class="text-center font-bold">N (m)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-center font-mono" id="report-coords-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Bottom Cards -->
+                <div class="grid grid-cols-12 gap-2 w-full mb-1">
+                    <!-- Card 1: Sumário da Geometria (Área e Perímetro) -->
+                    <div class="col-span-4 border border-slate-200 rounded p-2 bg-slate-50/50 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center gap-1 border-b border-slate-200 pb-1 mb-1.5">
+                                <span class="font-extrabold text-[8px] uppercase text-slate-800">Sumário da Geometria</span>
                             </div>
-                            <span class="text-[7px] text-slate-400 font-semibold">Extensão</span>
+                            <div class="grid grid-cols-2 gap-1">
+                                <div class="bg-white p-1 rounded border border-slate-200">
+                                    <span class="text-[7px] uppercase font-bold text-slate-500">Área Calculada</span>
+                                    <div class="flex items-baseline gap-1">
+                                        <span class="text-[11px] font-black text-slate-900 mono" id="report-info-area">--</span><span class="text-[7.5px] font-bold text-slate-500">m²</span>
+                                    </div>
+                                    <span class="text-[7px] text-emerald-600 font-semibold mono" id="report-info-area-ha">0 ha</span>
+                                </div>
+                                <div class="bg-white p-1 rounded border border-slate-200">
+                                    <span class="text-[7px] uppercase font-bold text-slate-500">Perímetro Total</span>
+                                    <div class="flex items-baseline gap-1">
+                                        <span class="text-[11px] font-black text-slate-900 mono" id="report-info-perim">--</span><span class="text-[7.5px] font-bold text-slate-500">m</span>
+                                    </div>
+                                    <span class="text-[7px] text-slate-400 font-semibold">Extensão</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 2: Distância Linear Acumulada -->
+                    <div class="col-span-4 border border-slate-200 rounded p-2 bg-slate-50/50 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between border-b border-slate-200 pb-1 mb-1.5">
+                                <span class="font-extrabold text-[8px] uppercase text-slate-800" id="report-dist-header-title">Distância Linear acumulada</span>
+                                <span class="font-bold text-slate-900 mono text-xs"><span id="report-info-dist">--</span> m</span>
+                            </div>
+                            <div id="report-dist-container" class="flex flex-col gap-1">
+                                <div id="report-individual-lines" class="hidden flex flex-col gap-0.5 max-h-20 overflow-y-auto"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 3: Convenções Cartográficas -->
+                    <div class="col-span-4 border border-slate-200 rounded p-2 bg-slate-50/50 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center gap-1 border-b border-slate-200 pb-1 mb-1.5">
+                                <span class="font-extrabold text-[8px] uppercase text-slate-800">Convenções Cartográficas</span>
+                            </div>
+                            <div class="space-y-1 text-[7.5px] text-slate-700 font-semibold">
+                                <div class="flex items-center gap-2 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                    <div class="w-3 h-3 rounded-full bg-white border-2 border-black flex items-center justify-center"><div class="w-1 h-1 bg-black rounded-full"></div></div>
+                                    <span>Vértices no Mapa</span>
+                                </div>
+                                <div class="flex items-center gap-2 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                    <div id="legend-poly-box" class="w-3 h-2 bg-emerald-500/25 border border-emerald-600 transition-colors"></div>
+                                    <span>Polígono no Mapa</span>
+                                </div>
+                                <div class="flex items-center gap-2 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                    <div id="legend-line-box" class="w-4 border-t-2 border-emerald-500 transition-colors"></div>
+                                    <span>Distância no Mapa</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Card 2: Distância Linear Acumulada -->
-            <div class="col-span-4 border border-slate-200 rounded p-2 bg-slate-50/50 flex flex-col justify-between">
-                <div>
-                    <div class="flex items-center justify-between border-b border-slate-200 pb-1 mb-1.5">
-                        <span class="font-extrabold text-[8px] uppercase text-slate-800" id="report-dist-header-title">Distância Linear acumulada</span>
-                        <span class="font-bold text-slate-900 mono text-xs"><span id="report-info-dist">--</span> m</span>
-                    </div>
-                    <div id="report-dist-container" class="flex flex-col gap-1">
-                        <div id="report-individual-lines" class="hidden flex flex-col gap-0.5 max-h-20 overflow-y-auto"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Card 3: Convenções Cartográficas -->
-            <div class="col-span-4 border border-slate-200 rounded p-2 bg-slate-50/50 flex flex-col justify-between">
-                <div>
-                    <div class="flex items-center gap-1 border-b border-slate-200 pb-1 mb-1.5">
-                        <span class="font-extrabold text-[8px] uppercase text-slate-800">Convenções Cartográficas</span>
-                    </div>
-                    <div class="space-y-1 text-[7.5px] text-slate-700 font-semibold">
-                        <div class="flex items-center gap-2 bg-white px-2 py-0.5 rounded border border-slate-200">
-                            <div class="w-3 h-3 rounded-full bg-white border-2 border-black flex items-center justify-center"><div class="w-1 h-1 bg-black rounded-full"></div></div>
-                            <span>Vértices no Mapa</span>
+                <!-- Caixa de Observações Técnicas Acoplada -->
+                <div id="report-freetext-box" class="w-full border border-slate-300 rounded overflow-hidden bg-white shadow-xs transition-all mt-1">
+                    <div class="bg-slate-800 text-white px-2 py-0.5 flex justify-between items-center no-print select-none">
+                        <div class="flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-[12px] text-emerald-400">edit_note</span>
+                            <span class="font-extrabold text-[8px] uppercase tracking-wider">Observações Técnicas</span>
                         </div>
-                        <div class="flex items-center gap-2 bg-white px-2 py-0.5 rounded border border-slate-200">
-                            <div id="legend-poly-box" class="w-3 h-2 bg-emerald-500/25 border border-emerald-600 transition-colors"></div>
-                            <span>Polígono no Mapa</span>
-                        </div>
-                        <div class="flex items-center gap-2 bg-white px-2 py-0.5 rounded border border-slate-200">
-                            <div id="legend-line-box" class="w-4 border-t-2 border-emerald-500 transition-colors"></div>
-                            <span>Distância no Mapa</span>
-                        </div>
+                        <span class="text-[7px] text-slate-400 font-medium">Edite o texto aqui e formate usando as ferramentas na barra lateral</span>
                     </div>
+                    <div id="report-freetext-editable" contenteditable="true" spellcheck="false" class="p-2 outline-none text-slate-800 text-[8.5px] min-h-[48px] bg-white cursor-text select-text focus:ring-1 focus:ring-emerald-500/50" style="line-height: 1.25; font-family: 'Plus Jakarta Sans', system-ui, sans-serif;">Clique aqui para digitar observações técnicas...</div>
                 </div>
             </div>
         </div>
 
         <footer class="w-full pt-1 border-t border-slate-200 flex items-center justify-between text-[7px] text-slate-400 mt-auto">
             <div class="flex items-center gap-1"><span class="font-bold text-slate-600">DOCUMENTO TÉCNICO GERADO AUTOMATICAMENTE</span><span>• Válido para fins de conferência</span></div>
-            <div class="mono">Página 01 / 01</div>
+            <div class="mono" id="page1-footer-page-num">Página 01 / 01</div>
+        </footer>
+    </div>
+</main>
+
+<!-- Folha 2 (Ativada quando o mapa é expandido verticalmente na Folha 1) -->
+<main class="a4-page text-xs justify-between gap-1 relative hidden mt-6" id="a4-page-2">
+    <!-- Free Text Overlay covering Page 2 -->
+    <div id="free-text-overlay-page2" class="absolute inset-0 w-full h-full pointer-events-none z-[450] overflow-visible"></div>
+    <div class="w-full flex-1 flex flex-col border-[1.5px] border-slate-800 rounded p-2 relative bg-white" id="a4-page-2-body">
+        <!-- Cabeçalho idêntico repetido na Folha 2 -->
+        <div id="page2-header-slot" class="w-full border-b-[2px] border-slate-800 pb-1.5 mb-1.5"></div>
+
+        <!-- Slot receptor das tabelas e sumários na Folha 2 -->
+        <div id="page2-tables-slot" class="w-full flex-1 flex flex-col justify-start"></div>
+
+        <!-- Rodapé Folha 2 -->
+        <footer class="w-full pt-1 border-t border-slate-200 flex items-center justify-between text-[7px] text-slate-400 mt-auto">
+            <div class="flex items-center gap-1"><span class="font-bold text-slate-600">DOCUMENTO TÉCNICO GERADO AUTOMATICAMENTE</span><span>• Válido para fins de conferência</span></div>
+            <div class="mono" id="page2-footer-page-num">Página 02 / 02</div>
         </footer>
     </div>
 </main>
@@ -753,19 +968,37 @@
         }
     }
 
+    function syncPrintPageBreaks() {
+        const pageColumn = document.querySelector('.page-column');
+        if (!pageColumn) return;
+        const visiblePages = Array.from(pageColumn.querySelectorAll('.a4-page')).filter(p => {
+            return !p.classList.contains('hidden') && p.style.display !== 'none';
+        });
+        visiblePages.forEach((p, idx) => {
+            if (idx === visiblePages.length - 1) {
+                p.classList.add('print-last-page');
+            } else {
+                p.classList.remove('print-last-page');
+            }
+        });
+        updateAllPageFooters();
+    }
+
     function prepareAndPrint() {
         selectMarker(null);
+        syncPrintPageBreaks();
         if (window.mapInstance) {
             window.mapInstance.invalidateSize({ pan: false });
             updateGrids(window.mapInstance);
         }
         setTimeout(() => {
             window.print();
-        }, 300);
+        }, 200);
     }
 
     window.addEventListener('beforeprint', () => {
         selectMarker(null);
+        syncPrintPageBreaks();
     });
 
     window.addEventListener('afterprint', () => {
@@ -807,6 +1040,584 @@
         if (box) {
             box.classList.toggle('hidden', visibleRows.length === 0);
         }
+        syncPage2Header();
+    };
+
+    function syncPage2Header() {
+        const p1Header = document.getElementById('page1-header');
+        const p2HeaderSlot = document.getElementById('page2-header-slot');
+        if (p1Header && p2HeaderSlot) {
+            p2HeaderSlot.innerHTML = p1Header.innerHTML;
+            const p2Buttons = p2HeaderSlot.querySelectorAll('button');
+            p2Buttons.forEach(b => b.remove());
+        }
+    }
+
+    function updateBasemapDisplay() {
+        const selectEl = document.getElementById('ctrl-basemap');
+        if (!selectEl) return;
+        const opt = selectEl.options[selectEl.selectedIndex];
+        let text = opt ? opt.textContent.trim() : 'Satélite (Google)';
+        if (text.includes('—')) text = text.split('—')[0].trim();
+        const el1 = document.getElementById('report-mapabase-name');
+        if (el1) el1.textContent = text;
+        syncPage2Header();
+    }
+
+    let isTwoPagesMode = false;
+    let paginationDebounceTimer = null;
+
+    function debouncedTextPagination() {
+        clearTimeout(paginationDebounceTimer);
+        paginationDebounceTimer = setTimeout(() => {
+            checkDynamicTextPagination();
+        }, 200);
+    }
+
+    function updateAllPageFooters() {
+        const pageColumn = document.querySelector('.page-column');
+        if (!pageColumn) return;
+        
+        // Coleta todas as páginas A4 ativas e visíveis (Folha 1, Folha 2 se ativa, e Folhas de continuação dinâmica)
+        const allPages = Array.from(pageColumn.querySelectorAll('.a4-page')).filter(p => {
+            return !p.classList.contains('hidden') && p.style.display !== 'none';
+        });
+        
+        const total = allPages.length;
+        allPages.forEach((page, idx) => {
+            const pageNum = idx + 1;
+            const formatted = `Página ${String(pageNum).padStart(2, '0')} / ${String(total).padStart(2, '0')}`;
+            const numEl = page.querySelector('.mono[id$="-footer-page-num"]') || page.querySelector('.page-footer-num');
+            if (numEl) {
+                numEl.textContent = formatted;
+            }
+        });
+    }
+
+    function getOrCreateContinuationPage(pageNumber) {
+        const id = `a4-page-${pageNumber}`;
+        let page = document.getElementById(id);
+        if (!page) {
+            page = document.createElement('main');
+            page.id = id;
+            page.className = 'a4-page text-xs justify-between gap-1 relative dynamic-continuation-page mt-6';
+            page.innerHTML = `
+                <div class="w-full flex-1 flex flex-col border-[1.5px] border-slate-800 rounded p-2 relative bg-white" id="${id}-body">
+                    <!-- Cabeçalho idêntico repetido na Folha de Continuação -->
+                    <div id="page${pageNumber}-header-slot" class="w-full border-b-[2px] border-slate-800 pb-1.5 mb-1.5 dynamic-header-slot"></div>
+
+                    <!-- Corpo da Folha de Continuação com Caixa de Texto Acoplada -->
+                    <div class="w-full flex-1 flex flex-col justify-start">
+                        <div class="w-full border border-slate-300 rounded overflow-hidden bg-white shadow-xs transition-all mt-1 flex-1 flex flex-col">
+                            <div class="bg-slate-800 text-white px-2 py-0.5 flex justify-between items-center no-print select-none">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="material-symbols-outlined text-[12px] text-emerald-400">edit_note</span>
+                                    <span class="font-extrabold text-[8px] uppercase tracking-wider">Observações Técnicas (Folha ${String(pageNumber).padStart(2, '0')})</span>
+                                </div>
+                                <span class="text-[7px] text-slate-400 font-medium">Continuação do texto técnico</span>
+                            </div>
+                            <div id="report-freetext-editable-page${pageNumber}" contenteditable="true" spellcheck="false" class="dynamic-continuation-editable p-2 outline-none text-slate-800 text-[8.5px] flex-1 bg-white cursor-text select-text focus:ring-1 focus:ring-emerald-500/50" style="line-height: ${freeTextStyles.lineHeight || '1.25'}; font-size: ${freeTextStyles.fontSize}px; font-weight: ${freeTextStyles.bold ? '700' : '400'}; font-style: ${freeTextStyles.italic ? 'italic' : 'normal'}; text-decoration: ${freeTextStyles.underline ? 'underline' : 'none'}; text-align: ${freeTextStyles.textAlign || 'left'}; color: ${freeTextStyles.color || '#0f172a'}; font-family: 'Plus Jakarta Sans', system-ui, sans-serif;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Rodapé Folha de Continuação -->
+                    <footer class="w-full pt-1 border-t border-slate-200 flex items-center justify-between text-[7px] text-slate-400 mt-auto">
+                        <div class="flex items-center gap-1"><span class="font-bold text-slate-600">DOCUMENTO TÉCNICO GERADO AUTOMATICAMENTE</span><span>• Válido para fins de conferência</span></div>
+                        <div class="mono page-footer-num">Página ${String(pageNumber).padStart(2, '0')} / --</div>
+                    </footer>
+                </div>
+            `;
+            document.querySelector('.page-column').appendChild(page);
+
+            const contEditable = page.querySelector('.dynamic-continuation-editable');
+            if (contEditable) {
+                contEditable.addEventListener('input', debouncedTextPagination);
+                contEditable.addEventListener('blur', checkDynamicTextPagination);
+            }
+        }
+
+        // Sincroniza cabeçalho oficial
+        const p1Header = document.getElementById('page1-header');
+        const slot = page.querySelector('.dynamic-header-slot');
+        if (p1Header && slot) {
+            slot.innerHTML = p1Header.innerHTML;
+            slot.querySelectorAll('button').forEach(b => b.remove());
+        }
+
+        return page;
+    }
+
+    function removeExcessContinuationPages(neededMaxPage) {
+        const extraPages = Array.from(document.querySelectorAll('.dynamic-continuation-page'));
+        extraPages.forEach(p => {
+            const num = parseInt(p.id.replace('a4-page-', ''), 10);
+            if (num > neededMaxPage) {
+                p.remove();
+            }
+        });
+    }
+
+    function checkDynamicTextPagination() {
+        const mainBox = document.getElementById('report-freetext-box');
+        const mainEditable = document.getElementById('report-freetext-editable');
+        if (!mainEditable || !mainBox) return;
+
+        const baseHostPageNum = isTwoPagesMode ? 2 : 1;
+        const rawText = mainEditable.innerText.trim();
+        if (rawText === 'Clique aqui para digitar observações técnicas...' || !rawText) {
+            removeExcessContinuationPages(baseHostPageNum);
+            updateAllPageFooters();
+            return;
+        }
+
+        // Calcula a altura máxima permitida na folha atual antes do rodapé
+        const hostPage = isTwoPagesMode ? document.getElementById('a4-page-2') : document.getElementById('a4-page-root');
+        const hostBody = hostPage ? hostPage.querySelector('.flex-1') : null;
+        let maxAllowedEditableHeight = isTwoPagesMode ? 580 : 260;
+
+        if (hostBody) {
+            const hostRect = hostBody.getBoundingClientRect();
+            const boxRect = mainBox.getBoundingClientRect();
+            const footer = hostBody.querySelector('footer');
+            const footerH = footer ? footer.offsetHeight : 24;
+            const usedTop = boxRect.top - hostRect.top;
+            const availableForBox = Math.max(70, hostBody.clientHeight - usedTop - footerH - 14);
+            maxAllowedEditableHeight = Math.max(50, availableForBox - 22);
+        }
+
+        // Se cabe na folha atual e não há folhas extras criadas, encerra rapidamente
+        const extraPagesExist = document.querySelectorAll('.dynamic-continuation-page').length > 0;
+        if (mainEditable.scrollHeight <= maxAllowedEditableHeight + 10 && !extraPagesExist) {
+            removeExcessContinuationPages(baseHostPageNum);
+            updateAllPageFooters();
+            return;
+        }
+
+        // Reúne todo o texto atual (folha principal + quaisquer continuações)
+        let fullHtml = mainEditable.innerHTML;
+        const contBoxes = Array.from(document.querySelectorAll('.dynamic-continuation-editable'));
+        contBoxes.forEach(b => {
+            if (b.innerHTML.trim()) fullHtml += '<div>' + b.innerHTML + '</div>';
+        });
+
+        // Div de teste offscreen para aferição milimétrica
+        let testDiv = document.getElementById('_freetext_measurer');
+        if (!testDiv) {
+            testDiv = document.createElement('div');
+            testDiv.id = '_freetext_measurer';
+            testDiv.style.position = 'absolute';
+            testDiv.style.visibility = 'hidden';
+            testDiv.style.pointerEvents = 'none';
+            testDiv.style.left = '-9999px';
+            testDiv.style.top = '0';
+            document.body.appendChild(testDiv);
+        }
+
+        testDiv.style.width = (mainEditable.clientWidth || 740) + 'px';
+        testDiv.style.fontFamily = "'Plus Jakarta Sans', system-ui, sans-serif";
+        testDiv.style.fontSize = `${freeTextStyles.fontSize}px`;
+        testDiv.style.fontWeight = freeTextStyles.bold ? '700' : '400';
+        testDiv.style.fontStyle = freeTextStyles.italic ? 'italic' : 'normal';
+        testDiv.style.textDecoration = freeTextStyles.underline ? 'underline' : 'none';
+        testDiv.style.textAlign = freeTextStyles.textAlign || 'left';
+        testDiv.style.lineHeight = freeTextStyles.lineHeight || '1.25';
+        testDiv.style.padding = '8px';
+        testDiv.style.boxSizing = 'border-box';
+        testDiv.style.wordBreak = 'break-word';
+
+        // Separação em blocos estruturais
+        const tempContainer = document.createElement('div');
+        tempContainer.innerHTML = fullHtml;
+        let blocks = [];
+        if (tempContainer.children.length > 0) {
+            Array.from(tempContainer.childNodes).forEach(node => {
+                if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+                    blocks.push(`<div>${node.textContent}</div>`);
+                } else if (node.nodeType === Node.ELEMENT_NODE) {
+                    blocks.push(node.outerHTML);
+                }
+            });
+        } else {
+            blocks = (tempContainer.innerText || '').split('\n').filter(Boolean).map(t => `<div>${t}</div>`);
+        }
+        if (blocks.length === 0) blocks = [''];
+
+        // Distribuição inteligente por páginas
+        let pageAllocations = [];
+        let currentPageBlocks = [];
+        let currentPageIndex = 0;
+        testDiv.innerHTML = '';
+
+        const getCapacityForIndex = (idx) => {
+            if (idx === 0) return maxAllowedEditableHeight;
+            return 860; // Folhas de continuação (somente cabeçalho + text box + rodapé)
+        };
+
+        let currentLimit = getCapacityForIndex(0);
+
+        for (let i = 0; i < blocks.length; i++) {
+            const blk = blocks[i];
+            testDiv.innerHTML += blk;
+
+            if (testDiv.scrollHeight > currentLimit && currentPageBlocks.length > 0) {
+                pageAllocations.push(currentPageBlocks.join(''));
+                currentPageIndex++;
+                currentLimit = getCapacityForIndex(currentPageIndex);
+                currentPageBlocks = [blk];
+                testDiv.innerHTML = blk;
+            } else {
+                currentPageBlocks.push(blk);
+            }
+        }
+        if (currentPageBlocks.length > 0) {
+            pageAllocations.push(currentPageBlocks.join(''));
+        }
+
+        // Aplica o primeiro bloco na folha principal
+        mainEditable.innerHTML = pageAllocations[0] || '';
+
+        // Cria ou preenche as folhas de continuação subsequentes
+        for (let p = 1; p < pageAllocations.length; p++) {
+            const targetPageNum = baseHostPageNum + p;
+            const contPage = getOrCreateContinuationPage(targetPageNum);
+            const contEditable = contPage.querySelector('.dynamic-continuation-editable');
+            if (contEditable) {
+                contEditable.innerHTML = pageAllocations[p];
+                contEditable.style.fontFamily = "'Plus Jakarta Sans', system-ui, sans-serif";
+                contEditable.style.fontSize = `${freeTextStyles.fontSize}px`;
+                contEditable.style.fontWeight = freeTextStyles.bold ? '700' : '400';
+                contEditable.style.fontStyle = freeTextStyles.italic ? 'italic' : 'normal';
+                contEditable.style.textDecoration = freeTextStyles.underline ? 'underline' : 'none';
+                contEditable.style.textAlign = freeTextStyles.textAlign || 'left';
+                contEditable.style.lineHeight = freeTextStyles.lineHeight || '1.25';
+                contEditable.style.color = freeTextStyles.color || '#0f172a';
+            }
+        }
+
+        // Remove folhas excedentes que deixaram de ser necessárias
+        removeExcessContinuationPages(baseHostPageNum + pageAllocations.length - 1);
+
+        // Atualiza numeração oficial de todos os rodapés (Folha XX / YY)
+        updateAllPageFooters();
+    }
+
+    window.toggleTwoPagesMode = function(forceState) {
+        const newState = forceState !== undefined ? forceState : !isTwoPagesMode;
+        isTwoPagesMode = newState;
+        document.body.classList.toggle('two-pages-mode', isTwoPagesMode);
+
+        const page2 = document.getElementById('a4-page-2');
+        const tablesContainer = document.getElementById('tables-and-cards-container');
+        const page1Slot = document.getElementById('page1-tables-slot');
+        const page2Slot = document.getElementById('page2-tables-slot');
+        const mapCoordsWrapper = document.getElementById('map-coords-wrapper');
+        const footer1Page = document.getElementById('page1-footer-page-num');
+        const quickBtnLabel = document.getElementById('quick-pages-mode-label');
+        const sidebarToggle = document.getElementById('ctrl-two-pages-toggle');
+
+        if (isTwoPagesMode) {
+            if (page2) {
+                page2.classList.remove('hidden');
+                page2.style.display = 'flex';
+            }
+            if (page2Slot && tablesContainer) page2Slot.appendChild(tablesContainer);
+            syncPage2Header();
+            if (footer1Page) footer1Page.textContent = 'Página 01 / 02';
+            if (quickBtnLabel) quickBtnLabel.textContent = 'Retornar para 1 Folha';
+            if (sidebarToggle) sidebarToggle.checked = true;
+            if (mapCoordsWrapper) {
+                mapCoordsWrapper.style.minHeight = '720px';
+            }
+        } else {
+            if (page2) {
+                page2.classList.add('hidden');
+                page2.style.display = 'none';
+            }
+            if (page1Slot && tablesContainer) page1Slot.appendChild(tablesContainer);
+            if (footer1Page) footer1Page.textContent = 'Página 01 / 01';
+            if (quickBtnLabel) quickBtnLabel.textContent = 'Alternar para 2 Folhas';
+            if (sidebarToggle) sidebarToggle.checked = false;
+            if (mapCoordsWrapper) {
+                mapCoordsWrapper.style.minHeight = '';
+            }
+        }
+
+        if (window.mapInstance) {
+            setTimeout(() => {
+                window.mapInstance.invalidateSize({ pan: false });
+                updateGrids(window.mapInstance);
+            }, 150);
+        }
+
+        setTimeout(() => {
+            checkDynamicTextPagination();
+            updateAllPageFooters();
+        }, 120);
+    };
+
+    let isResizingMap = false;
+    let startResizeY = 0;
+    let initialMapHeight = 0;
+
+    function initMapVerticalResizer() {
+        const resizer = document.getElementById('map-vertical-resizer');
+        if (!resizer) return;
+
+        resizer.addEventListener('mousedown', (e) => {
+            if (e.target.tagName.toLowerCase() === 'button' || e.target.closest('button')) return;
+            isResizingMap = true;
+            startResizeY = e.clientY;
+            const wrapper = document.getElementById('map-coords-wrapper');
+            initialMapHeight = wrapper ? wrapper.offsetHeight : 350;
+            document.body.style.cursor = 'ns-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizingMap) return;
+            const dy = e.clientY - startResizeY;
+            
+            if (dy > 60) {
+                if (!isTwoPagesMode) {
+                    window.toggleTwoPagesMode(true);
+                }
+            } else if (dy < -40) {
+                if (isTwoPagesMode) {
+                    window.toggleTwoPagesMode(false);
+                }
+            }
+
+            if (window.mapInstance) {
+                window.mapInstance.invalidateSize({ pan: false });
+                updateGrids(window.mapInstance);
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizingMap) {
+                isResizingMap = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                if (window.mapInstance) {
+                    window.mapInstance.invalidateSize({ pan: false });
+                    updateGrids(window.mapInstance);
+                }
+            }
+        });
+    }
+
+    window.openKmlExportModal = function() {
+        const data = window._reportRawData || {};
+        const features = data.features || [];
+
+        const polys = features.filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
+        const lines = features.filter(f => f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString'));
+        const points = features.filter(f => f.geometry && (f.geometry.type === 'Point' || f.geometry.type === 'MultiPoint'));
+
+        window._kmlExportQueues = { polys, lines, points };
+
+        const polyCountEl = document.getElementById('kml-count-poly');
+        const lineCountEl = document.getElementById('kml-count-line');
+        const pointCountEl = document.getElementById('kml-count-point');
+        if (polyCountEl) polyCountEl.textContent = `${polys.length} polígono(s) medido(s)`;
+        if (lineCountEl) lineCountEl.textContent = `${lines.length} linha(s) medida(s)`;
+        if (pointCountEl) pointCountEl.textContent = `${points.length} vértice(s) medido(s)`;
+
+        const setBadge = (id, count) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (count > 0) {
+                el.textContent = 'Pronto para Exportar';
+                el.className = 'text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+            } else {
+                el.textContent = 'Nenhuma feição';
+                el.className = 'text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-500 border border-slate-700/50';
+            }
+        };
+
+        setBadge('kml-badge-poly', polys.length);
+        setBadge('kml-badge-line', lines.length);
+        setBadge('kml-badge-point', points.length);
+
+        const fb = document.getElementById('kml-export-feedback');
+        if (fb) {
+            fb.classList.add('hidden');
+            fb.innerHTML = '';
+        }
+
+        const btn = document.getElementById('btn-start-kml');
+        const btnLabel = document.getElementById('btn-start-kml-label');
+        if (btn) {
+            btn.disabled = false;
+            btn.className = 'bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-xs uppercase px-4 py-2 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-md transition-all';
+        }
+        if (btnLabel) btnLabel.textContent = 'Exportar KMLs';
+
+        const modal = document.getElementById('modal-kml-export');
+        if (modal) {
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+    };
+
+    window.closeKmlExportModal = function() {
+        const modal = document.getElementById('modal-kml-export');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+    };
+
+    window.startKmlExportSequence = function() {
+        const q = window._kmlExportQueues || {};
+        const polys = q.polys || [];
+        const lines = q.lines || [];
+        const points = q.points || [];
+
+        const totalToExport = (polys.length > 0 ? 1 : 0) + (lines.length > 0 ? 1 : 0) + (points.length > 0 ? 1 : 0);
+        if (totalToExport === 0) {
+            alert("Nenhuma medição encontrada para exportar.");
+            return;
+        }
+
+        const fb = document.getElementById('kml-export-feedback');
+        const btn = document.getElementById('btn-start-kml');
+        const btnLabel = document.getElementById('btn-start-kml-label');
+        if (btn) btn.disabled = true;
+
+        if (fb) {
+            fb.classList.remove('hidden', 'bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/30');
+            fb.classList.add('bg-blue-500/10', 'text-blue-300', 'border-blue-500/30');
+            fb.innerHTML = `<div class="flex items-center gap-2"><span class="material-symbols-outlined text-base animate-spin text-blue-400">sync</span><span>Iniciando exportação dos arquivos KML...</span></div>`;
+        }
+
+        const toKmlColor = (hex, opacityHex = 'ff') => {
+            let clean = (hex || '#10b981').replace('#', '');
+            if (clean.length === 3) clean = clean.split('').map(c => c + c).join('');
+            const r = clean.substring(0, 2);
+            const g = clean.substring(2, 4);
+            const b = clean.substring(4, 6);
+            return `${opacityHex}${b}${g}${r}`;
+        };
+
+        const downloadFile = (filename, content) => {
+            const blob = new Blob([content], { type: 'application/vnd.google-earth.kml+xml;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        };
+
+        const munEl = document.getElementById('report-entidade-name');
+        const mun = (munEl ? munEl.textContent.trim() : 'GeoGestor').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const dataHoje = new Date().toISOString().split('T')[0];
+
+        let tasks = [];
+        if (polys.length > 0) {
+            tasks.push({
+                type: 'poly',
+                name: `medicao_poligonos_${mun}_${dataHoje}.kml`,
+                label: 'Polígonos (Áreas)',
+                badgeId: 'kml-badge-poly',
+                generator: () => {
+                    let kml = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n  <Document>\n    <name>Medição - Polígonos (${mun})</name>\n    <Style id="polyStyle">\n      <LineStyle>\n        <color>${toKmlColor(currentPolyStrokeColor, 'ff')}</color>\n        <width>${currentPolyWeight || 2}</width>\n      </LineStyle>\n      <PolyStyle>\n        <color>${toKmlColor(currentPolyFillColor, Math.round(currentPolyFillOpacity * 255).toString(16).padStart(2, '0'))}</color>\n      </PolyStyle>\n    </Style>`;
+                    polys.forEach((f, idx) => {
+                        const area = turf.area(f);
+                        const perim = turf.length(f, { units: 'meters' });
+                        const coords = (f.geometry.coordinates[0] || []).map(c => `${c[0]},${c[1]},0`).join(' ');
+                        kml += `\n    <Placemark>\n      <name>Polígono ${String(idx + 1).padStart(2, '0')}</name>\n      <description><![CDATA[Área: ${area.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} m² (${(area/10000).toFixed(4)} ha)<br>Perímetro: ${perim.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} m]]></description>\n      <styleUrl>#polyStyle</styleUrl>\n      <Polygon>\n        <extrude>1</extrude>\n        <altitudeMode>clampToGround</altitudeMode>\n        <outerBoundaryIs><LinearRing><coordinates>${coords}</coordinates></LinearRing></outerBoundaryIs>\n      </Polygon>\n    </Placemark>`;
+                    });
+                    kml += `\n  </Document>\n</kml>`;
+                    return kml;
+                }
+            });
+        }
+
+        if (lines.length > 0) {
+            tasks.push({
+                type: 'line',
+                name: `medicao_linhas_${mun}_${dataHoje}.kml`,
+                label: 'Linhas (Distâncias)',
+                badgeId: 'kml-badge-line',
+                generator: () => {
+                    let kml = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n  <Document>\n    <name>Medição - Linhas (${mun})</name>\n    <Style id="lineStyle">\n      <LineStyle>\n        <color>${toKmlColor(currentPolyStrokeColor, 'ff')}</color>\n        <width>${Math.max(2, currentPolyWeight + 1)}</width>\n      </LineStyle>\n    </Style>`;
+                    lines.forEach((f, idx) => {
+                        const len = turf.length(f, { units: 'meters' });
+                        const coords = (f.geometry.coordinates || []).map(c => `${c[0]},${c[1]},0`).join(' ');
+                        kml += `\n    <Placemark>\n      <name>Linha ${String(idx + 1).padStart(2, '0')}</name>\n      <description><![CDATA[Extensão Linear: ${len.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} m]]></description>\n      <styleUrl>#lineStyle</styleUrl>\n      <LineString><extrude>1</extrude><altitudeMode>clampToGround</altitudeMode><coordinates>${coords}</coordinates></LineString>\n    </Placemark>`;
+                    });
+                    kml += `\n  </Document>\n</kml>`;
+                    return kml;
+                }
+            });
+        }
+
+        if (points.length > 0) {
+            tasks.push({
+                type: 'point',
+                name: `medicao_pontos_${mun}_${dataHoje}.kml`,
+                label: 'Pontos / Vértices',
+                badgeId: 'kml-badge-point',
+                generator: () => {
+                    let kml = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n  <Document>\n    <name>Medição - Vértices / Pontos (${mun})</name>\n    <Style id="pointStyle"><IconStyle><color>ff00ff00</color><scale>1.1</scale><Icon><href>https://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle></Style>`;
+                    points.forEach((f, idx) => {
+                        const c = f.geometry.coordinates;
+                        const utmX = (500000 + (c[0] - (-35)) * 111319).toFixed(2);
+                        const utmY = (10000000 + (c[1]) * 110574).toFixed(2);
+                        kml += `\n    <Placemark>\n      <name>P${String(idx + 1).padStart(2, '0')}</name>\n      <description><![CDATA[Latitude: ${c[1].toFixed(6)}°<br>Longitude: ${c[0].toFixed(6)}°<br>UTM (SIRGAS 2000): E ${utmX} m, N ${utmY} m (Zona 25S)]]></description>\n      <styleUrl>#pointStyle</styleUrl>\n      <Point><coordinates>${c[0]},${c[1]},0</coordinates></Point>\n    </Placemark>`;
+                    });
+                    kml += `\n  </Document>\n</kml>`;
+                    return kml;
+                }
+            });
+        }
+
+        let completed = 0;
+        tasks.forEach((t, idx) => {
+            setTimeout(() => {
+                const badge = document.getElementById(t.badgeId);
+                if (badge) {
+                    badge.textContent = 'Exportando...';
+                    badge.className = 'text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30';
+                }
+                if (fb) {
+                    fb.innerHTML = `<div class="flex items-center gap-2"><span class="material-symbols-outlined text-base animate-spin text-blue-400">sync</span><span>Exportando ${t.label} (${idx + 1}/${tasks.length})...</span></div>`;
+                }
+
+                const content = t.generator();
+                downloadFile(t.name, content);
+
+                setTimeout(() => {
+                    if (badge) {
+                        badge.textContent = '✓ Concluído';
+                        badge.className = 'text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+                    }
+                    completed++;
+
+                    if (completed === tasks.length) {
+                        if (fb) {
+                            fb.className = 'p-3 rounded-xl border text-xs font-semibold bg-emerald-500/10 text-emerald-400 border-emerald-500/30 flex items-center gap-2';
+                            fb.innerHTML = `<span class="material-symbols-outlined text-lg text-emerald-400">task_alt</span><span>Todos os arquivos KML foram gerados e salvos com sucesso!</span>`;
+                        }
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.className = 'bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase px-4 py-2 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-md transition-all';
+                        }
+                        if (btnLabel) btnLabel.textContent = 'Concluído ✓';
+                    }
+                }, 300);
+
+            }, idx * 600);
+        });
+    };
+
+    window.exportMeasurementsKML = function() {
+        window.openKmlExportModal();
     };
     
     let layerSatellite, layerOSM, layerOrto;
@@ -821,8 +1632,46 @@
         fontSize: 9
     };
 
-    
-    let freeTextStyles = { bold: true, italic: false, underline: false, fontSize: 9, color: '#0f172a' };
+    let freeTextStyles = { 
+        bold: true, 
+        italic: false, 
+        underline: false, 
+        fontSize: 10, 
+        color: '#0f172a',
+        textAlign: 'left',
+        lineHeight: '1.2'
+    };
+
+    window.fitReportMapToMeasurements = function() {
+        if (!window.mapInstance) return;
+        const polys = window._reportPolys || [];
+        const lines = window._reportLines || [];
+        let bounds = L.latLngBounds();
+
+        polys.forEach(p => {
+            if (p.getBounds) bounds.extend(p.getBounds());
+        });
+        lines.forEach(l => {
+            if (l.getBounds) bounds.extend(l.getBounds());
+        });
+
+        if (window._reportRawData && Array.isArray(window._reportRawData.features)) {
+            window._reportRawData.features.forEach(f => {
+                if (f.geometry && f.geometry.type === 'Point' && Array.isArray(f.geometry.coordinates)) {
+                    const c = f.geometry.coordinates;
+                    bounds.extend([c[1], c[0]]);
+                }
+            });
+        }
+
+        if (bounds.isValid()) {
+            window.mapInstance.fitBounds(bounds, { padding: [40, 40], maxZoom: 19 });
+            updateGrids(window.mapInstance);
+        } else {
+            window.mapInstance.setView([-7.11532, -34.86105], 16);
+            updateGrids(window.mapInstance);
+        }
+    };
     
     // Estilos do Polígono e Linhas de Medição
     let currentPolyFillColor = '#10b981';
@@ -1053,6 +1902,7 @@
 
         let activeOrtoLayer = null;
         document.getElementById('ctrl-basemap').addEventListener('change', (e) => {
+            updateBasemapDisplay();
             const v = e.target.value;
             map.removeLayer(layerSatellite);
             map.removeLayer(layerOSM);
@@ -1198,37 +2048,116 @@
 
 
         
-        // Free Text Font Controls
+        // Free Text Font & Typography Controls
         const ftBtnB = document.getElementById('ft-measure-bold');
         const ftBtnI = document.getElementById('ft-measure-italic');
         const ftBtnU = document.getElementById('ft-measure-underline');
         const ftSizeVal = document.getElementById('ft-measure-size-val');
         
+        function applyFormattingToFreeTextBoxes() {
+            const mainBox = document.getElementById('report-freetext-editable');
+            const contBoxes = Array.from(document.querySelectorAll('.dynamic-continuation-editable'));
+            const all = [mainBox, ...contBoxes].filter(Boolean);
+            all.forEach(box => {
+                box.style.fontWeight = freeTextStyles.bold ? '700' : '400';
+                box.style.fontStyle = freeTextStyles.italic ? 'italic' : 'normal';
+                box.style.textDecoration = freeTextStyles.underline ? 'underline' : 'none';
+                box.style.fontSize = `${freeTextStyles.fontSize}px`;
+                box.style.textAlign = freeTextStyles.textAlign || 'left';
+                box.style.lineHeight = freeTextStyles.lineHeight || '1.25';
+                box.style.color = freeTextStyles.color || '#0f172a';
+            });
+            debouncedTextPagination();
+        }
+
         function updateSelectedFreeText() {
-            if (selectedMarker && !selectedMarker.getElement) {
-                selectedMarker.style.fontWeight = freeTextStyles.bold ? '900' : '500';
-                selectedMarker.style.fontStyle = freeTextStyles.italic ? 'italic' : 'normal';
-                selectedMarker.style.textDecoration = freeTextStyles.underline ? 'underline' : 'none';
-                selectedMarker.style.fontSize = `${freeTextStyles.fontSize}px`;
-                selectedMarker.style.color = freeTextStyles.color || '#0f172a';
+            applyFormattingToFreeTextBoxes();
+            if (!selectedMarker) return;
+            if (selectedMarker.getElement) return; // Marcador Leaflet
+
+            // Suporta Rótulo Rápido (.free-text-item)
+            const editable = selectedMarker.querySelector ? selectedMarker.querySelector('.textbox-editable-content') : null;
+            const target = editable || selectedMarker;
+
+            target.style.fontWeight = freeTextStyles.bold ? '700' : '400';
+            target.style.fontStyle = freeTextStyles.italic ? 'italic' : 'normal';
+            target.style.textDecoration = freeTextStyles.underline ? 'underline' : 'none';
+            target.style.fontSize = `${freeTextStyles.fontSize}px`;
+            target.style.color = freeTextStyles.color || '#0f172a';
+            if (freeTextStyles.textAlign) {
+                target.style.textAlign = freeTextStyles.textAlign;
+            }
+            if (freeTextStyles.lineHeight) {
+                target.style.lineHeight = freeTextStyles.lineHeight;
             }
         }
 
-        ftBtnB.addEventListener('click', () => { freeTextStyles.bold = !freeTextStyles.bold; updateBtnStyle(ftBtnB, freeTextStyles.bold); updateSelectedFreeText(); });
-        ftBtnI.addEventListener('click', () => { freeTextStyles.italic = !freeTextStyles.italic; updateBtnStyle(ftBtnI, freeTextStyles.italic); updateSelectedFreeText(); });
-        ftBtnU.addEventListener('click', () => { freeTextStyles.underline = !freeTextStyles.underline; updateBtnStyle(ftBtnU, freeTextStyles.underline); updateSelectedFreeText(); });
+        // Negrito, Itálico, Sublinhado
+        if (ftBtnB) ftBtnB.addEventListener('click', () => { freeTextStyles.bold = !freeTextStyles.bold; updateBtnStyle(ftBtnB, freeTextStyles.bold); updateSelectedFreeText(); });
+        if (ftBtnI) ftBtnI.addEventListener('click', () => { freeTextStyles.italic = !freeTextStyles.italic; updateBtnStyle(ftBtnI, freeTextStyles.italic); updateSelectedFreeText(); });
+        if (ftBtnU) ftBtnU.addEventListener('click', () => { freeTextStyles.underline = !freeTextStyles.underline; updateBtnStyle(ftBtnU, freeTextStyles.underline); updateSelectedFreeText(); });
         
-        document.getElementById('ft-measure-size-up').addEventListener('click', () => { 
-            freeTextStyles.fontSize = Math.min(48, freeTextStyles.fontSize + 1); 
-            ftSizeVal.innerText = freeTextStyles.fontSize;
-            updateSelectedFreeText();
-        });
-        document.getElementById('ft-measure-size-down').addEventListener('click', () => { 
-            freeTextStyles.fontSize = Math.max(6, freeTextStyles.fontSize - 1); 
-            ftSizeVal.innerText = freeTextStyles.fontSize;
-            updateSelectedFreeText();
+        // Alinhamento de Texto (Esquerda, Centro, Direita, Justificado)
+        const alignBtns = {
+            left: document.getElementById('ft-align-left'),
+            center: document.getElementById('ft-align-center'),
+            right: document.getElementById('ft-align-right'),
+            justify: document.getElementById('ft-align-justify')
+        };
+
+        const updateAlignButtons = (activeAlign) => {
+            Object.keys(alignBtns).forEach(k => {
+                const btn = alignBtns[k];
+                if (!btn) return;
+                if (k === activeAlign) {
+                    btn.classList.add('bg-slate-700', 'text-white');
+                    btn.classList.remove('text-slate-300');
+                } else {
+                    btn.classList.remove('bg-slate-700', 'text-white');
+                    btn.classList.add('text-slate-300');
+                }
+            });
+        };
+
+        Object.keys(alignBtns).forEach(k => {
+            const btn = alignBtns[k];
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    freeTextStyles.textAlign = k;
+                    updateAlignButtons(k);
+                    updateSelectedFreeText();
+                });
+            }
         });
 
+        // Tamanho da Fonte
+        const ftSizeUp = document.getElementById('ft-measure-size-up');
+        if (ftSizeUp) {
+            ftSizeUp.addEventListener('click', () => { 
+                freeTextStyles.fontSize = Math.min(48, freeTextStyles.fontSize + 1); 
+                if (ftSizeVal) ftSizeVal.innerText = freeTextStyles.fontSize;
+                updateSelectedFreeText();
+            });
+        }
+        const ftSizeDown = document.getElementById('ft-measure-size-down');
+        if (ftSizeDown) {
+            ftSizeDown.addEventListener('click', () => { 
+                freeTextStyles.fontSize = Math.max(6, freeTextStyles.fontSize - 1); 
+                if (ftSizeVal) ftSizeVal.innerText = freeTextStyles.fontSize;
+                updateSelectedFreeText();
+            });
+        }
+
+        // Espaçamento entre Linhas
+        const ftLineHeightSelect = document.getElementById('ft-line-height');
+        if (ftLineHeightSelect) {
+            ftLineHeightSelect.addEventListener('change', (e) => {
+                freeTextStyles.lineHeight = e.target.value;
+                updateSelectedFreeText();
+            });
+        }
+
+        // Cor do Texto
         const ftColorInput = document.getElementById('ft-measure-color');
         if (ftColorInput) {
             ftColorInput.addEventListener('input', (e) => {
@@ -1237,87 +2166,107 @@
             });
         }
 
-        document.getElementById('btn-add-freetext').addEventListener('click', () => {
-            const txt = document.getElementById('ctrl-freetext-input').value.trim();
-            if (!txt) return;
-            
-            const fontWeight = freeTextStyles.bold ? '900' : '500';
-            const fontStyle = freeTextStyles.italic ? 'italic' : 'normal';
-            const textDecoration = freeTextStyles.underline ? 'underline' : 'none';
-            const fontSize = `${freeTextStyles.fontSize}px`;
-            
-            
-            const overlay = document.getElementById('free-text-overlay') || document.body;
-            const id = 'ft_' + Date.now();
-            
-            const div = document.createElement('div');
-            div.id = id;
-            div.className = 'absolute pointer-events-auto cursor-move text-center select-none free-text-item';
-            div.style.left = '50%';
-            div.style.top = '35%';
-            div.style.transform = 'translate(-50%, -50%)';
-            div.style.zIndex = '500';
-            div.style.color = freeTextStyles.color || '#0f172a';
-            div.style.background = 'transparent';
-            div.style.border = 'none';
-            div.style.padding = '1px 6px';
-            div.style.fontSize = fontSize;
-            div.style.fontWeight = fontWeight;
-            div.style.fontStyle = fontStyle;
-            div.style.textDecoration = textDecoration;
-            div.style.whiteSpace = 'nowrap';
-            div.style.width = 'max-content';
-            div.style.fontFamily = "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif";
-            div.style.textTransform = "uppercase";
-            div.style.letterSpacing = "0.02em";
-            div.style.lineHeight = "1.2";
-            // Borda branca suave (soft white halo outline)
-            div.style.paintOrder = 'stroke fill';
-            div.style.webkitTextStroke = '1.4px #ffffff';
-            div.style.textShadow = '0 0 2px #ffffff, 0 0 4px #ffffff, 0 0 8px rgba(255,255,255,0.95), -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff, 1px 1px 0 #ffffff';
-            div.innerHTML = txt;
-            
-            // Allow storing rotation on the element dataset
-            div.dataset.rotation = 0;
-            
-            overlay.appendChild(div);
-            
-            // Make it draggable
-            let isDragging = false;
-            let startX, startY, startLeft, startTop;
-            
-            div.addEventListener('mousedown', (e) => {
-                isDragging = true;
-                startX = e.clientX;
-                startY = e.clientY;
-                // get computed left/top
-                const rect = div.getBoundingClientRect();
-                const overlayRect = overlay.getBoundingClientRect();
-                startLeft = rect.left - overlayRect.left + (rect.width/2);
-                startTop = rect.top - overlayRect.top + (rect.height/2);
-                
-                selectMarker(div); // Our unified selection logic works with divs too
-                e.preventDefault();
+        // Focar e rolar para a Caixa de Observações Técnicas Acoplada
+        const btnAddTextbox = document.getElementById('btn-add-textbox');
+        if (btnAddTextbox) {
+            btnAddTextbox.addEventListener('click', () => {
+                const el = document.getElementById('report-freetext-editable');
+                const box = document.getElementById('report-freetext-box');
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.focus();
+                    if (el.innerText.trim() === 'Clique aqui para digitar observações técnicas...') {
+                        el.innerText = '';
+                        el.classList.remove('freetext-placeholder');
+                    }
+                }
+                if (box) {
+                    box.classList.add('ring-2', 'ring-emerald-500', 'shadow-lg');
+                    setTimeout(() => {
+                        box.classList.remove('ring-2', 'ring-emerald-500', 'shadow-lg');
+                    }, 1800);
+                }
             });
-            
-            document.addEventListener('mousemove', (e) => {
-                if (!isDragging) return;
-                const dx = e.clientX - startX;
-                const dy = e.clientY - startY;
-                div.style.left = (startLeft + dx) + 'px';
-                div.style.top = (startTop + dy) + 'px';
-            });
-            
-            document.addEventListener('mouseup', () => {
-                isDragging = false;
-            });
-            
-            freeTextMarkers.push(div);
-            selectMarker(div);
+        }
 
-            
-            document.getElementById('ctrl-freetext-input').value = '';
-        });
+        // Rótulo Rápido de 1 Linha
+        const btnAddFreetext = document.getElementById('btn-add-freetext');
+        if (btnAddFreetext) {
+            btnAddFreetext.addEventListener('click', () => {
+                const txt = (document.getElementById('ctrl-freetext-input').value || '').trim();
+                if (!txt) return;
+                
+                const fontWeight = freeTextStyles.bold ? '900' : '500';
+                const fontStyle = freeTextStyles.italic ? 'italic' : 'normal';
+                const textDecoration = freeTextStyles.underline ? 'underline' : 'none';
+                const fontSize = `${freeTextStyles.fontSize}px`;
+                
+                const overlay = isTwoPagesMode ? (document.getElementById('free-text-overlay-page2') || document.getElementById('free-text-overlay')) : (document.getElementById('free-text-overlay') || document.body);
+                const id = 'ft_' + Date.now();
+                
+                const div = document.createElement('div');
+                div.id = id;
+                div.className = 'absolute pointer-events-auto cursor-move text-center select-none free-text-item';
+                div.style.left = '50%';
+                div.style.top = '35%';
+                div.style.transform = 'translate(-50%, -50%)';
+                div.style.zIndex = '500';
+                div.style.color = freeTextStyles.color || '#0f172a';
+                div.style.background = 'transparent';
+                div.style.border = 'none';
+                div.style.padding = '1px 6px';
+                div.style.fontSize = fontSize;
+                div.style.fontWeight = fontWeight;
+                div.style.fontStyle = fontStyle;
+                div.style.textDecoration = textDecoration;
+                div.style.whiteSpace = 'nowrap';
+                div.style.width = 'max-content';
+                div.style.fontFamily = "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif";
+                div.style.textTransform = "uppercase";
+                div.style.letterSpacing = "0.02em";
+                div.style.lineHeight = freeTextStyles.lineHeight || "1.2";
+                div.style.textAlign = freeTextStyles.textAlign || "left";
+                // Borda branca suave (soft white halo outline)
+                div.style.paintOrder = 'stroke fill';
+                div.style.webkitTextStroke = '1.4px #ffffff';
+                div.style.textShadow = '0 0 2px #ffffff, 0 0 4px #ffffff, 0 0 8px rgba(255,255,255,0.95), -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff, 1px 1px 0 #ffffff';
+                div.innerHTML = txt;
+                div.dataset.rotation = 0;
+                
+                overlay.appendChild(div);
+                
+                let isDragging = false;
+                let startX, startY, startLeft, startTop;
+                
+                div.addEventListener('mousedown', (e) => {
+                    isDragging = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    const rect = div.getBoundingClientRect();
+                    const overlayRect = overlay.getBoundingClientRect();
+                    startLeft = rect.left - overlayRect.left + (rect.width/2);
+                    startTop = rect.top - overlayRect.top + (rect.height/2);
+                    selectMarker(div);
+                    e.preventDefault();
+                });
+                
+                document.addEventListener('mousemove', (e) => {
+                    if (!isDragging) return;
+                    const dx = e.clientX - startX;
+                    const dy = e.clientY - startY;
+                    div.style.left = (startLeft + dx) + 'px';
+                    div.style.top = (startTop + dy) + 'px';
+                });
+                
+                document.addEventListener('mouseup', () => {
+                    isDragging = false;
+                });
+                
+                freeTextMarkers.push(div);
+                selectMarker(div);
+                document.getElementById('ctrl-freetext-input').value = '';
+            });
+        }
     }
 
     
@@ -1447,9 +2396,34 @@ function addMeasureLabels(map, geomObj, labelArray, isPolygon=false) {
             }
         }
         if (!data) { alert("Sem dados."); return; }
+        window._reportRawData = data;
         
         document.getElementById('report-user-name').innerText = data.userName || 'Usuário';
-        if (data.entidadeName) document.getElementById('report-entidade-name').innerText = data.entidadeName;
+
+        // Determina exclusivamente o ente do usuário logado (ex: MPF, Prefeitura Municipal, etc.)
+        let userEntidade = '';
+        if (window.opener) {
+            try {
+                const headerEnt = window.opener.document.getElementById('header-user-display-entidade');
+                if (headerEnt && headerEnt.textContent.trim()) {
+                    userEntidade = headerEnt.textContent.trim();
+                } else if (window.opener.currentUserEntidade) {
+                    userEntidade = window.opener.currentUserEntidade;
+                } else if (window.opener.currentUserProfile && (window.opener.currentUserProfile.entidade || window.opener.currentUserProfile.entidade_nome)) {
+                    userEntidade = window.opener.currentUserProfile.entidade || window.opener.currentUserProfile.entidade_nome;
+                }
+            } catch(e) {}
+        }
+        if (!userEntidade && data.entidadeName) {
+            userEntidade = data.entidadeName;
+        }
+        if (userEntidade) {
+            userEntidade = userEntidade.replace(/\s+Engenharia$/i, '').trim();
+        }
+        if (!userEntidade) userEntidade = 'Prefeitura Municipal';
+        const entidadeEl = document.getElementById('report-entidade-name');
+        if (entidadeEl) entidadeEl.innerText = userEntidade;
+
         if (data.userPhoto) document.getElementById('report-logo').src = data.userPhoto;
         document.getElementById('report-date').innerText = new Date().toLocaleDateString('pt-BR');
 
@@ -1572,9 +2546,125 @@ function addMeasureLabels(map, geomObj, labelArray, isPolygon=false) {
         }
 
         initControls(map, polys, lines, availableOrtofotos, data.camadasVetoriais || []);
-
+        initMapVerticalResizer();
+        updateBasemapDisplay();
+        syncPage2Header();
+        initFreeTextEditableEvents();
+        setTimeout(updateAllPageFooters, 100);
     });
+
+    function initFreeTextEditableEvents() {
+        const el = document.getElementById('report-freetext-editable');
+        if (!el) return;
+
+        if (el.innerText.trim() === 'Clique aqui para digitar observações técnicas...') {
+            el.classList.add('freetext-placeholder');
+        }
+
+        el.addEventListener('focus', function() {
+            if (this.innerText.trim() === 'Clique aqui para digitar observações técnicas...') {
+                this.innerText = '';
+                this.classList.remove('freetext-placeholder');
+            }
+        });
+
+        el.addEventListener('blur', function() {
+            if (!this.innerText.trim()) {
+                this.innerText = 'Clique aqui para digitar observações técnicas...';
+                this.classList.add('freetext-placeholder');
+            }
+            checkDynamicTextPagination();
+        });
+
+        el.addEventListener('input', function() {
+            if (this.classList.contains('freetext-placeholder')) {
+                this.classList.remove('freetext-placeholder');
+            }
+            debouncedTextPagination();
+        });
+
+        el.addEventListener('paste', function() {
+            setTimeout(checkDynamicTextPagination, 50);
+        });
+    }
 </script>
 </div><!-- /layout-wrapper -->
+
+<!-- Modal de Exportação KML com Feedback de Progresso e Avisos -->
+<div id="modal-kml-export" class="fixed inset-0 bg-slate-950/80 backdrop-blur-xs z-[9999] hidden items-center justify-center p-4 select-none no-print">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-md w-full shadow-2xl p-5 flex flex-col gap-4 text-slate-200">
+        
+        <!-- Header -->
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                    <span class="material-symbols-outlined text-xl">download</span>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-white uppercase tracking-tight">Exportação de Arquivos KML</h3>
+                    <p class="text-[10px] text-slate-400">Compatível com Google Earth, QGIS e AutoCAD</p>
+                </div>
+            </div>
+            <button type="button" onclick="closeKmlExportModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer" title="Fechar">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+
+        <!-- Lista de Feições Detectadas -->
+        <div class="flex flex-col gap-2">
+            <span class="text-[9px] uppercase tracking-wider font-bold text-slate-400">Feições Detectadas para Exportação:</span>
+            
+            <!-- Polígonos -->
+            <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50" id="kml-row-poly">
+                <div class="flex items-center gap-2.5">
+                    <span class="material-symbols-outlined text-emerald-400 text-lg">polyline</span>
+                    <div>
+                        <span class="text-xs font-semibold text-slate-100 block">Polígonos (Áreas)</span>
+                        <span class="text-[10px] text-slate-400" id="kml-count-poly">0 feições</span>
+                    </div>
+                </div>
+                <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-300" id="kml-badge-poly">Em espera</span>
+            </div>
+
+            <!-- Linhas -->
+            <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50" id="kml-row-line">
+                <div class="flex items-center gap-2.5">
+                    <span class="material-symbols-outlined text-blue-400 text-lg">timeline</span>
+                    <div>
+                        <span class="text-xs font-semibold text-slate-100 block">Linhas (Distâncias)</span>
+                        <span class="text-[10px] text-slate-400" id="kml-count-line">0 feições</span>
+                    </div>
+                </div>
+                <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-300" id="kml-badge-line">Em espera</span>
+            </div>
+
+            <!-- Pontos -->
+            <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50" id="kml-row-point">
+                <div class="flex items-center gap-2.5">
+                    <span class="material-symbols-outlined text-amber-400 text-lg">pin_drop</span>
+                    <div>
+                        <span class="text-xs font-semibold text-slate-100 block">Pontos (Vértices com UTM)</span>
+                        <span class="text-[10px] text-slate-400" id="kml-count-point">0 vértices</span>
+                    </div>
+                </div>
+                <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-300" id="kml-badge-point">Em espera</span>
+            </div>
+        </div>
+
+        <!-- Banner de Progresso / Feedback -->
+        <div id="kml-export-feedback" class="hidden p-3 rounded-xl border text-xs font-medium transition-all"></div>
+
+        <!-- Rodapé do Modal -->
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+            <button type="button" onclick="closeKmlExportModal()" class="px-3.5 py-2 text-xs font-semibold text-slate-300 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer">
+                Fechar
+            </button>
+            <button type="button" id="btn-start-kml" onclick="startKmlExportSequence()" class="bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-xs uppercase px-4 py-2 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-md transition-all">
+                <span class="material-symbols-outlined text-base">file_download</span>
+                <span id="btn-start-kml-label">Exportar KMLs</span>
+            </button>
+        </div>
+    </div>
+</div>
 </body>
 </html>

@@ -381,17 +381,40 @@ function resetMeasurementResults() {
 
 window.clearAllMeasurements = function() {
     pointCounter = 1; // Reset counter
+
+    // 1. Interrompe e cancela imediatamente qualquer desenho ativo no Geoman / Leaflet
+    if (map && map.pm) {
+        try {
+            map.pm.disableDraw();
+        } catch(e) {}
+    }
+    stopMeasurementDraw();
+
+    // 2. Limpa todas as camadas salvas no grupo de medição
     if (measurementLayerGroup) {
         measurementLayerGroup.eachLayer(l => {
             if (l.pm && typeof l.pm.disable === 'function') {
-                l.pm.disable();
+                try { l.pm.disable(); } catch(e) {}
             }
             if (l.dragging && typeof l.dragging.disable === 'function') {
-                l.dragging.disable();
+                try { l.dragging.disable(); } catch(e) {}
             }
         });
         measurementLayerGroup.clearLayers();
     }
+
+    // 3. Remove marcador de busca de coordenada se existir
+    if (typeof coordinateQueryMarker !== 'undefined' && coordinateQueryMarker && map) {
+        try { map.removeLayer(coordinateQueryMarker); } catch(e) {}
+        coordinateQueryMarker = null;
+    }
+
+    // 4. Limpa estados de vértices, mouse e HUDs
+    lastDrawnVertex = null;
+    currentMouseLatLng = null;
+    hideCadMeasureHud();
+
+    // 5. Limpa a lista de feições no painel e reseta instrução
     const list = document.getElementById('meas-features-list');
     if (list) list.innerHTML = '';
     const inst = document.getElementById('meas-instruction');
@@ -400,6 +423,40 @@ window.clearAllMeasurements = function() {
         inst.classList.remove('hidden');
     }
     resetMeasurementResults();
+
+    // 6. Desmarca os botões da barra vertical para indicar que o desenho parou
+    ['Marker', 'Line', 'Polygon', 'CoordinateQuery'].forEach(m => {
+        const btn = document.getElementById('meas-btn-' + m);
+        if (btn) {
+            btn.classList.remove(
+                'bg-emerald-50', 'dark:bg-emerald-900/30', 'text-emerald-600', 'dark:text-emerald-400', 'border-emerald-300/60', 'dark:border-emerald-600/40',
+                'bg-blue-50', 'dark:bg-blue-900/30', 'text-blue-600', 'dark:text-blue-400', 'border-blue-300/60', 'dark:border-blue-600/40',
+                'bg-emerald-100', 'dark:bg-emerald-900/50', 'text-emerald-700', 'bg-blue-100', 'text-blue-700'
+            );
+            btn.classList.add('border-transparent');
+        }
+    });
+};
+
+window.fitMapToMeasurements = function() {
+    if (!measurementLayerGroup || measurementLayerGroup.getLayers().length === 0) {
+        if (lastDrawnVertex && map) {
+            map.setView(lastDrawnVertex, Math.max(map.getZoom(), 17));
+            return;
+        }
+        if (typeof showToast === 'function') {
+            showToast('Nenhuma medição realizada para enquadrar no mapa.', 'info');
+        }
+        return;
+    }
+    try {
+        const bounds = measurementLayerGroup.getBounds();
+        if (bounds && bounds.isValid() && map) {
+            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 19 });
+        }
+    } catch(e) {
+        console.warn('Erro ao ajustar mapa às medições:', e);
+    }
 };
 
 function stopMeasurementDraw() {
@@ -856,12 +913,22 @@ function saveMeasurementPDF() {
     let pointCount = 1;
     let features = [];
 
-    // Obter nome da entidade
-    let entidadeName = 'Entidade Engenharia';
-    const municipioEl = document.getElementById('header-municipio-display-name');
-    if (municipioEl && municipioEl.innerText.trim() !== '') {
-        entidadeName = municipioEl.innerText.trim() + ' Engenharia';
+    // Obter nome da entidade do usuário logado (ex: MPF, Prefeitura Municipal, etc.)
+    let userEnte = '';
+    const headerEntEl = document.getElementById('header-user-display-entidade');
+    if (headerEntEl && headerEntEl.textContent.trim()) {
+        userEnte = headerEntEl.textContent.trim();
+    } else if (window.currentUserEntidade) {
+        userEnte = window.currentUserEntidade;
+    } else if (window.currentUserProfile && (window.currentUserProfile.entidade || window.currentUserProfile.entidade_nome)) {
+        userEnte = window.currentUserProfile.entidade || window.currentUserProfile.entidade_nome;
+    } else {
+        const entEl = document.getElementById('profile-user-entidade');
+        if (entEl && entEl.textContent.trim()) {
+            userEnte = entEl.textContent.trim();
+        }
     }
+    const entidadeName = userEnte || 'Prefeitura Municipal';
 
     measurementLayerGroup.eachLayer(layer => {
         const geojson = layer.toGeoJSON();
