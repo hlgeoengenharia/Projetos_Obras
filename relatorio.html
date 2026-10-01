@@ -95,6 +95,23 @@
             overflow: hidden !important;
         }
 
+        .a4-page > div.flex-1 {
+            height: 100% !important;
+            max-height: 100% !important;
+            box-sizing: border-box !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+        }
+
+        #report-freetext-editable,
+        .dynamic-continuation-editable {
+            box-sizing: border-box !important;
+            overflow-y: hidden !important;
+            word-break: break-word !important;
+        }
+
         #map-wrapper {
             width: 100%;
             position: relative;
@@ -608,7 +625,7 @@
 
                 <!-- Rótulo Rápido de 1 Linha -->
                 <div class="flex flex-col gap-1.5 pt-1 border-t border-slate-800">
-                    <span class="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Rótulo Curto no Mapa</span>
+                    <span class="text-[9px] text-slate-400 font-bold uppercase tracking-wider" title="Insere na primeira folha para mover livremente em toda a folha">Rótulo Curto na Folha (Folha 1)</span>
                     <div class="flex items-center gap-2">
                         <input type="text" id="ctrl-freetext-input" placeholder="Digite rótulo..." class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1.5 outline-none focus:border-emerald-500">
                         <button type="button" id="btn-add-freetext" class="bg-slate-700 hover:bg-slate-600 text-white p-1.5 rounded flex items-center justify-center transition-colors cursor-pointer shrink-0" title="Inserir Rótulo">
@@ -1067,18 +1084,267 @@
     let isTwoPagesMode = false;
     let paginationDebounceTimer = null;
 
+    function getPageNumberForEditable(editable) {
+        if (!editable) return 1;
+        const hostPage = editable.closest('.a4-page');
+        if (!hostPage) return 1;
+        if (hostPage.id === 'a4-page-root') return 1;
+        if (hostPage.id === 'a4-page-2') return 2;
+        const m = hostPage.id.match(/a4-page-(\d+)/);
+        return m ? parseInt(m[1], 10) : 2;
+    }
+
+    function getMaxBottomForEditable(editable) {
+        const hostPage = editable.closest('.a4-page');
+        if (!hostPage) return Infinity;
+        const hostBody = hostPage.querySelector('.flex-1') || hostPage;
+        const footer = hostBody.querySelector('footer');
+        const footerH = footer ? footer.offsetHeight : 28;
+        const bodyRect = hostBody.getBoundingClientRect();
+        
+        const footerTop = (footer && footer.getBoundingClientRect().top > 0) ? footer.getBoundingClientRect().top : (bodyRect.bottom - footerH);
+        const hardCeiling = bodyRect.bottom - footerH - 8;
+        return Math.min(footerTop - 4, hardCeiling);
+    }
+
+    function ensureBlockStructure(editable) {
+        if (!editable) return;
+        const nodes = Array.from(editable.childNodes);
+        nodes.forEach(n => {
+            if (n.nodeType === Node.TEXT_NODE && n.textContent.trim()) {
+                const div = document.createElement('div');
+                div.textContent = n.textContent;
+                editable.replaceChild(div, n);
+            } else if (n.nodeName === 'BR') {
+                const div = document.createElement('div');
+                div.innerHTML = '<br>';
+                editable.replaceChild(div, n);
+            }
+        });
+    }
+
+    function splitChildElementAtLimit(childEl, maxBottom) {
+        const text = (childEl.innerText || childEl.textContent || '').trim();
+        const words = text.split(/\s+/).filter(Boolean);
+        if (words.length <= 1) return null;
+
+        let low = 0, high = words.length - 1;
+        let splitWordIndex = -1;
+
+        while (low <= high) {
+            const mid = Math.floor((low + high) / 2);
+            childEl.textContent = words.slice(0, mid + 1).join(' ');
+            const range = document.createRange();
+            range.selectNode(childEl);
+            const rect = range.getBoundingClientRect();
+            if (rect && rect.bottom > maxBottom) {
+                splitWordIndex = mid;
+                high = mid - 1;
+            } else {
+                low = mid + 1;
+            }
+        }
+
+        if (splitWordIndex <= 0) {
+            childEl.textContent = text;
+            return null;
+        }
+
+        const firstHalf = words.slice(0, splitWordIndex).join(' ');
+        const secondHalf = words.slice(splitWordIndex).join(' ');
+
+        childEl.textContent = firstHalf;
+        const nextDiv = document.createElement('div');
+        nextDiv.textContent = secondHalf;
+        return nextDiv;
+    }
+
+    function handleEditableOverflow(editable, pageNum) {
+        if (!editable) return;
+        if (!pageNum) pageNum = getPageNumberForEditable(editable);
+
+        if (editable.classList.contains('freetext-placeholder')) return;
+
+        // Se na Folha 1 sem modo 2 folhas ativado, e ultrapassou a folha, ativa 2 folhas
+        if (pageNum === 1 && !isTwoPagesMode) {
+            const maxB = getMaxBottomForEditable(editable);
+            const edRect = editable.getBoundingClientRect();
+            if (edRect.bottom > maxB) {
+                setTwoPagesMode(true, false);
+                return;
+            }
+        }
+
+        ensureBlockStructure(editable);
+
+        const maxBottom = getMaxBottomForEditable(editable);
+        const children = Array.from(editable.childNodes);
+        if (children.length === 0) return;
+
+        let splitIndex = -1;
+        let splitSubNode = null;
+
+        for (let i = 0; i < children.length; i++) {
+            const child = children[i];
+            let childBottom = 0;
+
+            if (child.nodeType === Node.ELEMENT_NODE) {
+                const rect = child.getBoundingClientRect();
+                if (rect && (rect.height > 0 || rect.bottom > 0)) {
+                    childBottom = rect.bottom;
+                }
+            }
+            if (!childBottom) {
+                try {
+                    const range = document.createRange();
+                    range.selectNode(child);
+                    const r = range.getBoundingClientRect();
+                    if (r) childBottom = r.bottom;
+                } catch(e) {}
+            }
+
+            if (childBottom > maxBottom) {
+                if (child.nodeType === Node.ELEMENT_NODE && (child.innerText || child.textContent || '').trim().length > 30) {
+                    splitSubNode = splitChildElementAtLimit(child, maxBottom);
+                    if (splitSubNode) {
+                        splitIndex = i + 1;
+                        break;
+                    }
+                }
+                splitIndex = i;
+                break;
+            }
+        }
+
+        // Fallback: se nenhum nó individual reportou bottom > maxBottom, mas o editable como um todo passou
+        if (splitIndex === -1) {
+            const edRect = editable.getBoundingClientRect();
+            if (edRect.bottom > maxBottom && children.length > 1) {
+                splitIndex = children.length - 1;
+            }
+        }
+
+        if (splitIndex !== -1 && splitIndex < children.length) {
+            const nextPageNum = pageNum + 1;
+            const nextPage = getOrCreateContinuationPage(nextPageNum);
+            const nextEditable = nextPage.querySelector('.dynamic-continuation-editable');
+            if (!nextEditable) return;
+
+            if (splitSubNode && children[splitIndex - 1]) {
+                editable.insertBefore(splitSubNode, children[splitIndex - 1].nextSibling);
+            }
+
+            const currentChildren = Array.from(editable.childNodes);
+            const nodesToMove = currentChildren.slice(splitIndex);
+            if (nodesToMove.length === 0) return;
+
+            const sel = window.getSelection();
+            let focusedInsideMoved = false;
+            if (sel && sel.anchorNode) {
+                focusedInsideMoved = nodesToMove.some(n => n.contains(sel.anchorNode) || n === sel.anchorNode);
+            }
+
+            const fragment = document.createDocumentFragment();
+            nodesToMove.forEach(n => fragment.appendChild(n));
+
+            if (nextEditable.firstChild) {
+                nextEditable.insertBefore(fragment, nextEditable.firstChild);
+            } else {
+                nextEditable.appendChild(fragment);
+            }
+
+            if (focusedInsideMoved) {
+                nextEditable.focus();
+                if (sel) {
+                    try {
+                        const range = document.createRange();
+                        range.selectNodeContents(nextEditable);
+                        range.collapse(false);
+                        sel.removeAllRanges();
+                        sel.addRange(range);
+                    } catch(e) {}
+                }
+            }
+
+            updateAllPageFooters();
+            syncPrintPageBreaks();
+
+            // Recursão assíncrona caso a nova folha também precise quebrar
+            setTimeout(() => {
+                handleEditableOverflow(nextEditable, nextPageNum);
+            }, 30);
+        }
+    }
+
+    function handleEditableBackspace(e, editable, pageNum) {
+        if (e.key !== 'Backspace' || pageNum < 3) return;
+
+        const sel = window.getSelection();
+        if (!sel || !sel.anchorNode) return;
+
+        const isAtStart = (sel.anchorOffset === 0 && (
+            sel.anchorNode === editable || 
+            sel.anchorNode === editable.firstChild || 
+            (editable.firstChild && editable.firstChild.contains(sel.anchorNode))
+        ));
+
+        if (isAtStart) {
+            const prevPageNum = pageNum - 1;
+            const prevPage = document.getElementById(`a4-page-${prevPageNum}`);
+            const prevEditable = prevPage ? (prevPage.querySelector('.dynamic-continuation-editable') || document.getElementById('report-freetext-editable')) : null;
+            
+            if (prevEditable) {
+                e.preventDefault();
+                
+                const nodes = Array.from(editable.childNodes);
+                nodes.forEach(n => prevEditable.appendChild(n));
+
+                prevEditable.focus();
+                try {
+                    const range = document.createRange();
+                    range.selectNodeContents(prevEditable);
+                    range.collapse(false);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                } catch(err) {}
+
+                const currentPage = document.getElementById(`a4-page-${pageNum}`);
+                if (currentPage) currentPage.remove();
+
+                removeExcessContinuationPages(pageNum - 1);
+                updateAllPageFooters();
+                syncPrintPageBreaks();
+            }
+        }
+    }
+
+    function checkEmptyContinuationPages() {
+        const extraPages = Array.from(document.querySelectorAll('.dynamic-continuation-page'));
+        for (let i = extraPages.length - 1; i >= 0; i--) {
+            const p = extraPages[i];
+            const ed = p.querySelector('.dynamic-continuation-editable');
+            const text = ed ? (ed.innerText || '').trim() : '';
+            if (!text || text === '') {
+                p.remove();
+            } else {
+                break;
+            }
+        }
+        updateAllPageFooters();
+        syncPrintPageBreaks();
+    }
+
     function debouncedTextPagination() {
         clearTimeout(paginationDebounceTimer);
         paginationDebounceTimer = setTimeout(() => {
             checkDynamicTextPagination();
-        }, 200);
+        }, 150);
     }
 
     function updateAllPageFooters() {
         const pageColumn = document.querySelector('.page-column');
         if (!pageColumn) return;
         
-        // Coleta todas as páginas A4 ativas e visíveis (Folha 1, Folha 2 se ativa, e Folhas de continuação dinâmica)
         const allPages = Array.from(pageColumn.querySelectorAll('.a4-page')).filter(p => {
             return !p.classList.contains('hidden') && p.style.display !== 'none';
         });
@@ -1106,7 +1372,7 @@
                     <!-- Cabeçalho idêntico repetido na Folha de Continuação -->
                     <div id="page${pageNumber}-header-slot" class="w-full border-b-[2px] border-slate-800 pb-1.5 mb-1.5 dynamic-header-slot"></div>
 
-                    <!-- Corpo da Folha de Continuação com Caixa de Texto Acoplada -->
+                    <!-- Corpo da Folha de Continuação com Caixa de Observações Técnicas -->
                     <div class="w-full flex-1 flex flex-col justify-start">
                         <div class="w-full border border-slate-300 rounded overflow-hidden bg-white shadow-xs transition-all mt-1 flex-1 flex flex-col">
                             <div class="bg-slate-800 text-white px-2 py-0.5 flex justify-between items-center no-print select-none">
@@ -1114,7 +1380,7 @@
                                     <span class="material-symbols-outlined text-[12px] text-emerald-400">edit_note</span>
                                     <span class="font-extrabold text-[8px] uppercase tracking-wider">Observações Técnicas (Folha ${String(pageNumber).padStart(2, '0')})</span>
                                 </div>
-                                <span class="text-[7px] text-slate-400 font-medium">Continuação do texto técnico</span>
+                                <span class="text-[7px] text-slate-400 font-medium">Continuação das observações técnicas</span>
                             </div>
                             <div id="report-freetext-editable-page${pageNumber}" contenteditable="true" spellcheck="false" class="dynamic-continuation-editable p-2 outline-none text-slate-800 text-[8.5px] flex-1 bg-white cursor-text select-text focus:ring-1 focus:ring-emerald-500/50" style="line-height: ${freeTextStyles.lineHeight || '1.25'}; font-size: ${freeTextStyles.fontSize}px; font-weight: ${freeTextStyles.bold ? '700' : '400'}; font-style: ${freeTextStyles.italic ? 'italic' : 'normal'}; text-decoration: ${freeTextStyles.underline ? 'underline' : 'none'}; text-align: ${freeTextStyles.textAlign || 'left'}; color: ${freeTextStyles.color || '#0f172a'}; font-family: 'Plus Jakarta Sans', system-ui, sans-serif;"></div>
                         </div>
@@ -1131,7 +1397,17 @@
 
             const contEditable = page.querySelector('.dynamic-continuation-editable');
             if (contEditable) {
-                contEditable.addEventListener('input', debouncedTextPagination);
+                contEditable.addEventListener('input', function() {
+                    handleEditableOverflow(this, pageNumber);
+                    checkEmptyContinuationPages();
+                });
+                contEditable.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        requestAnimationFrame(() => handleEditableOverflow(this, pageNumber));
+                    } else if (e.key === 'Backspace') {
+                        handleEditableBackspace(e, this, pageNumber);
+                    }
+                });
                 contEditable.addEventListener('blur', checkDynamicTextPagination);
             }
         }
@@ -1158,152 +1434,25 @@
     }
 
     function checkDynamicTextPagination() {
-        const mainBox = document.getElementById('report-freetext-box');
         const mainEditable = document.getElementById('report-freetext-editable');
-        if (!mainEditable || !mainBox) return;
+        if (!mainEditable) return;
 
-        const baseHostPageNum = isTwoPagesMode ? 2 : 1;
-        const rawText = mainEditable.innerText.trim();
-        if (rawText === 'Clique aqui para digitar observações técnicas...' || !rawText) {
-            removeExcessContinuationPages(baseHostPageNum);
-            updateAllPageFooters();
+        if (mainEditable.classList.contains('freetext-placeholder')) {
+            checkEmptyContinuationPages();
             return;
         }
 
-        // Calcula a altura máxima permitida na folha atual antes do rodapé
-        const hostPage = isTwoPagesMode ? document.getElementById('a4-page-2') : document.getElementById('a4-page-root');
-        const hostBody = hostPage ? hostPage.querySelector('.flex-1') : null;
-        let maxAllowedEditableHeight = isTwoPagesMode ? 580 : 260;
-
-        if (hostBody) {
-            const hostRect = hostBody.getBoundingClientRect();
-            const boxRect = mainBox.getBoundingClientRect();
-            const footer = hostBody.querySelector('footer');
-            const footerH = footer ? footer.offsetHeight : 24;
-            const usedTop = boxRect.top - hostRect.top;
-            const availableForBox = Math.max(70, hostBody.clientHeight - usedTop - footerH - 14);
-            maxAllowedEditableHeight = Math.max(50, availableForBox - 22);
-        }
-
-        // Se cabe na folha atual e não há folhas extras criadas, encerra rapidamente
-        const extraPagesExist = document.querySelectorAll('.dynamic-continuation-page').length > 0;
-        if (mainEditable.scrollHeight <= maxAllowedEditableHeight + 10 && !extraPagesExist) {
-            removeExcessContinuationPages(baseHostPageNum);
-            updateAllPageFooters();
-            return;
-        }
-
-        // Reúne todo o texto atual (folha principal + quaisquer continuações)
-        let fullHtml = mainEditable.innerHTML;
-        const contBoxes = Array.from(document.querySelectorAll('.dynamic-continuation-editable'));
-        contBoxes.forEach(b => {
-            if (b.innerHTML.trim()) fullHtml += '<div>' + b.innerHTML + '</div>';
-        });
-
-        // Div de teste offscreen para aferição milimétrica
-        let testDiv = document.getElementById('_freetext_measurer');
-        if (!testDiv) {
-            testDiv = document.createElement('div');
-            testDiv.id = '_freetext_measurer';
-            testDiv.style.position = 'absolute';
-            testDiv.style.visibility = 'hidden';
-            testDiv.style.pointerEvents = 'none';
-            testDiv.style.left = '-9999px';
-            testDiv.style.top = '0';
-            document.body.appendChild(testDiv);
-        }
-
-        testDiv.style.width = (mainEditable.clientWidth || 740) + 'px';
-        testDiv.style.fontFamily = "'Plus Jakarta Sans', system-ui, sans-serif";
-        testDiv.style.fontSize = `${freeTextStyles.fontSize}px`;
-        testDiv.style.fontWeight = freeTextStyles.bold ? '700' : '400';
-        testDiv.style.fontStyle = freeTextStyles.italic ? 'italic' : 'normal';
-        testDiv.style.textDecoration = freeTextStyles.underline ? 'underline' : 'none';
-        testDiv.style.textAlign = freeTextStyles.textAlign || 'left';
-        testDiv.style.lineHeight = freeTextStyles.lineHeight || '1.25';
-        testDiv.style.padding = '8px';
-        testDiv.style.boxSizing = 'border-box';
-        testDiv.style.wordBreak = 'break-word';
-
-        // Separação em blocos estruturais
-        const tempContainer = document.createElement('div');
-        tempContainer.innerHTML = fullHtml;
-        let blocks = [];
-        if (tempContainer.children.length > 0) {
-            Array.from(tempContainer.childNodes).forEach(node => {
-                if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
-                    blocks.push(`<div>${node.textContent}</div>`);
-                } else if (node.nodeType === Node.ELEMENT_NODE) {
-                    blocks.push(node.outerHTML);
-                }
-            });
-        } else {
-            blocks = (tempContainer.innerText || '').split('\n').filter(Boolean).map(t => `<div>${t}</div>`);
-        }
-        if (blocks.length === 0) blocks = [''];
-
-        // Distribuição inteligente por páginas
-        let pageAllocations = [];
-        let currentPageBlocks = [];
-        let currentPageIndex = 0;
-        testDiv.innerHTML = '';
-
-        const getCapacityForIndex = (idx) => {
-            if (idx === 0) return maxAllowedEditableHeight;
-            return 860; // Folhas de continuação (somente cabeçalho + text box + rodapé)
-        };
-
-        let currentLimit = getCapacityForIndex(0);
-
-        for (let i = 0; i < blocks.length; i++) {
-            const blk = blocks[i];
-            testDiv.innerHTML += blk;
-
-            if (testDiv.scrollHeight > currentLimit && currentPageBlocks.length > 0) {
-                pageAllocations.push(currentPageBlocks.join(''));
-                currentPageIndex++;
-                currentLimit = getCapacityForIndex(currentPageIndex);
-                currentPageBlocks = [blk];
-                testDiv.innerHTML = blk;
-            } else {
-                currentPageBlocks.push(blk);
-            }
-        }
-        if (currentPageBlocks.length > 0) {
-            pageAllocations.push(currentPageBlocks.join(''));
-        }
-
-        // Aplica o primeiro bloco na folha principal
-        mainEditable.innerHTML = pageAllocations[0] || '';
-
-        // Cria ou preenche as folhas de continuação subsequentes
-        for (let p = 1; p < pageAllocations.length; p++) {
-            const targetPageNum = baseHostPageNum + p;
-            const contPage = getOrCreateContinuationPage(targetPageNum);
-            const contEditable = contPage.querySelector('.dynamic-continuation-editable');
-            if (contEditable) {
-                contEditable.innerHTML = pageAllocations[p];
-                contEditable.style.fontFamily = "'Plus Jakarta Sans', system-ui, sans-serif";
-                contEditable.style.fontSize = `${freeTextStyles.fontSize}px`;
-                contEditable.style.fontWeight = freeTextStyles.bold ? '700' : '400';
-                contEditable.style.fontStyle = freeTextStyles.italic ? 'italic' : 'normal';
-                contEditable.style.textDecoration = freeTextStyles.underline ? 'underline' : 'none';
-                contEditable.style.textAlign = freeTextStyles.textAlign || 'left';
-                contEditable.style.lineHeight = freeTextStyles.lineHeight || '1.25';
-                contEditable.style.color = freeTextStyles.color || '#0f172a';
-            }
-        }
-
-        // Remove folhas excedentes que deixaram de ser necessárias
-        removeExcessContinuationPages(baseHostPageNum + pageAllocations.length - 1);
-
-        // Atualiza numeração oficial de todos os rodapés (Folha XX / YY)
-        updateAllPageFooters();
+        const baseHostPageNum = getPageNumberForEditable(mainEditable);
+        handleEditableOverflow(mainEditable, baseHostPageNum);
     }
 
-    window.toggleTwoPagesMode = function(forceState) {
-        const newState = forceState !== undefined ? forceState : !isTwoPagesMode;
-        isTwoPagesMode = newState;
+    let isResizingMap = false;
+    let startResizeY = 0;
+    let initialMapHeight = 0;
+    let currentMapHeight = 350;
+
+    function setTwoPagesMode(state, resetHeight = true) {
+        isTwoPagesMode = state;
         document.body.classList.toggle('two-pages-mode', isTwoPagesMode);
 
         const page2 = document.getElementById('a4-page-2');
@@ -1311,7 +1460,6 @@
         const page1Slot = document.getElementById('page1-tables-slot');
         const page2Slot = document.getElementById('page2-tables-slot');
         const mapCoordsWrapper = document.getElementById('map-coords-wrapper');
-        const footer1Page = document.getElementById('page1-footer-page-num');
         const quickBtnLabel = document.getElementById('quick-pages-mode-label');
         const sidebarToggle = document.getElementById('ctrl-two-pages-toggle');
 
@@ -1322,11 +1470,14 @@
             }
             if (page2Slot && tablesContainer) page2Slot.appendChild(tablesContainer);
             syncPage2Header();
-            if (footer1Page) footer1Page.textContent = 'Página 01 / 02';
             if (quickBtnLabel) quickBtnLabel.textContent = 'Retornar para 1 Folha';
             if (sidebarToggle) sidebarToggle.checked = true;
-            if (mapCoordsWrapper) {
-                mapCoordsWrapper.style.minHeight = '720px';
+            if (resetHeight && mapCoordsWrapper) {
+                currentMapHeight = 740;
+                mapCoordsWrapper.style.flex = 'none';
+                mapCoordsWrapper.style.height = '740px';
+                mapCoordsWrapper.style.minHeight = '740px';
+                mapCoordsWrapper.style.maxHeight = '740px';
             }
         } else {
             if (page2) {
@@ -1334,43 +1485,50 @@
                 page2.style.display = 'none';
             }
             if (page1Slot && tablesContainer) page1Slot.appendChild(tablesContainer);
-            if (footer1Page) footer1Page.textContent = 'Página 01 / 01';
             if (quickBtnLabel) quickBtnLabel.textContent = 'Alternar para 2 Folhas';
             if (sidebarToggle) sidebarToggle.checked = false;
-            if (mapCoordsWrapper) {
-                mapCoordsWrapper.style.minHeight = '';
+            if (resetHeight && mapCoordsWrapper) {
+                currentMapHeight = 350;
+                mapCoordsWrapper.style.flex = 'none';
+                mapCoordsWrapper.style.height = '350px';
+                mapCoordsWrapper.style.minHeight = '350px';
+                mapCoordsWrapper.style.maxHeight = '350px';
             }
         }
 
+        updateAllPageFooters();
+        checkDynamicTextPagination();
+    }
+
+    window.toggleTwoPagesMode = function(forceState) {
+        setTwoPagesMode(forceState !== undefined ? forceState : !isTwoPagesMode, true);
         if (window.mapInstance) {
             setTimeout(() => {
                 window.mapInstance.invalidateSize({ pan: false });
                 updateGrids(window.mapInstance);
-            }, 150);
+            }, 120);
         }
-
-        setTimeout(() => {
-            checkDynamicTextPagination();
-            updateAllPageFooters();
-        }, 120);
     };
-
-    let isResizingMap = false;
-    let startResizeY = 0;
-    let initialMapHeight = 0;
 
     function initMapVerticalResizer() {
         const resizer = document.getElementById('map-vertical-resizer');
-        if (!resizer) return;
+        const mapCoordsWrapper = document.getElementById('map-coords-wrapper');
+        if (!resizer || !mapCoordsWrapper) return;
+
+        // Inicia com altura bem definida
+        mapCoordsWrapper.style.flex = 'none';
+        mapCoordsWrapper.style.height = currentMapHeight + 'px';
+        mapCoordsWrapper.style.minHeight = currentMapHeight + 'px';
+        mapCoordsWrapper.style.maxHeight = currentMapHeight + 'px';
 
         resizer.addEventListener('mousedown', (e) => {
             if (e.target.tagName.toLowerCase() === 'button' || e.target.closest('button')) return;
             isResizingMap = true;
             startResizeY = e.clientY;
-            const wrapper = document.getElementById('map-coords-wrapper');
-            initialMapHeight = wrapper ? wrapper.offsetHeight : 350;
+            initialMapHeight = mapCoordsWrapper.offsetHeight || currentMapHeight;
             document.body.style.cursor = 'ns-resize';
             document.body.style.userSelect = 'none';
+            mapCoordsWrapper.classList.remove('transition-all'); // Resposta instantânea e fluida
             e.preventDefault();
         });
 
@@ -1378,14 +1536,28 @@
             if (!isResizingMap) return;
             const dy = e.clientY - startResizeY;
             
-            if (dy > 60) {
-                if (!isTwoPagesMode) {
-                    window.toggleTwoPagesMode(true);
-                }
-            } else if (dy < -40) {
-                if (isTwoPagesMode) {
-                    window.toggleTwoPagesMode(false);
-                }
+            // Redimensionamento deslizante contínuo para QUALQUER parte da folha (180px a 880px)
+            let targetH = Math.round(initialMapHeight + dy);
+            targetH = Math.max(180, Math.min(880, targetH));
+            currentMapHeight = targetH;
+
+            mapCoordsWrapper.style.flex = 'none';
+            mapCoordsWrapper.style.height = targetH + 'px';
+            mapCoordsWrapper.style.minHeight = targetH + 'px';
+            mapCoordsWrapper.style.maxHeight = targetH + 'px';
+
+            // Transição inteligente das tabelas:
+            // Se o mapa ultrapassa 470px na Folha 1, as tabelas passam para a Folha 2
+            const threshold = 470;
+            if (targetH > threshold && !isTwoPagesMode) {
+                setTwoPagesMode(true, false);
+            } else if (targetH <= threshold && isTwoPagesMode) {
+                setTwoPagesMode(false, false);
+            }
+
+            const label = document.getElementById('resizer-status-label');
+            if (label) {
+                label.textContent = `Altura do Mapa: ${targetH}px (${isTwoPagesMode ? 'Tabelas na Folha 2' : 'Tabelas na Folha 1'}) - Arraste livremente`;
             }
 
             if (window.mapInstance) {
@@ -1399,10 +1571,22 @@
                 isResizingMap = false;
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
+                mapCoordsWrapper.classList.add('transition-all');
+
+                const label = document.getElementById('resizer-status-label');
+                if (label) {
+                    label.textContent = isTwoPagesMode
+                        ? `Altura do Mapa: ${currentMapHeight}px (Tabelas na Folha 2) - Arraste para ajustar`
+                        : `Altura do Mapa: ${currentMapHeight}px (Tabelas na Folha 1) - Arraste para ajustar`;
+                }
+
                 if (window.mapInstance) {
                     window.mapInstance.invalidateSize({ pan: false });
                     updateGrids(window.mapInstance);
                 }
+
+                checkDynamicTextPagination();
+                updateAllPageFooters();
             }
         });
     }
@@ -2189,8 +2373,9 @@
             });
         }
 
-        // Rótulo Rápido de 1 Linha
+        // Rótulo Rápido de 1 Linha (Insere SEMPRE na primeira folha e move livremente em toda a folha)
         const btnAddFreetext = document.getElementById('btn-add-freetext');
+        const freetextInput = document.getElementById('ctrl-freetext-input');
         if (btnAddFreetext) {
             btnAddFreetext.addEventListener('click', () => {
                 const txt = (document.getElementById('ctrl-freetext-input').value || '').trim();
@@ -2201,20 +2386,21 @@
                 const textDecoration = freeTextStyles.underline ? 'underline' : 'none';
                 const fontSize = `${freeTextStyles.fontSize}px`;
                 
-                const overlay = isTwoPagesMode ? (document.getElementById('free-text-overlay-page2') || document.getElementById('free-text-overlay')) : (document.getElementById('free-text-overlay') || document.body);
+                // SEMPRE na primeira folha para permitir arrastar por toda a folha (mapa, cabeçalho, tabelas e rodapé)
+                const overlay = document.getElementById('free-text-overlay') || document.body;
                 const id = 'ft_' + Date.now();
                 
                 const div = document.createElement('div');
                 div.id = id;
                 div.className = 'absolute pointer-events-auto cursor-move text-center select-none free-text-item';
                 div.style.left = '50%';
-                div.style.top = '35%';
+                div.style.top = '25%';
                 div.style.transform = 'translate(-50%, -50%)';
                 div.style.zIndex = '500';
                 div.style.color = freeTextStyles.color || '#0f172a';
                 div.style.background = 'transparent';
                 div.style.border = 'none';
-                div.style.padding = '1px 6px';
+                div.style.padding = '2px 8px';
                 div.style.fontSize = fontSize;
                 div.style.fontWeight = fontWeight;
                 div.style.fontStyle = fontStyle;
@@ -2223,7 +2409,7 @@
                 div.style.width = 'max-content';
                 div.style.fontFamily = "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif";
                 div.style.textTransform = "uppercase";
-                div.style.letterSpacing = "0.02em";
+                div.style.letterSpacing = "0.025em";
                 div.style.lineHeight = freeTextStyles.lineHeight || "1.2";
                 div.style.textAlign = freeTextStyles.textAlign || "left";
                 // Borda branca suave (soft white halo outline)
@@ -2244,22 +2430,34 @@
                     startY = e.clientY;
                     const rect = div.getBoundingClientRect();
                     const overlayRect = overlay.getBoundingClientRect();
-                    startLeft = rect.left - overlayRect.left + (rect.width/2);
-                    startTop = rect.top - overlayRect.top + (rect.height/2);
+                    startLeft = rect.left - overlayRect.left + (rect.width / 2);
+                    startTop = rect.top - overlayRect.top + (rect.height / 2);
                     selectMarker(div);
                     e.preventDefault();
+                    e.stopPropagation();
                 });
                 
                 document.addEventListener('mousemove', (e) => {
                     if (!isDragging) return;
                     const dx = e.clientX - startX;
                     const dy = e.clientY - startY;
-                    div.style.left = (startLeft + dx) + 'px';
-                    div.style.top = (startTop + dy) + 'px';
+                    let targetL = startLeft + dx;
+                    let targetT = startTop + dy;
+                    
+                    // Movimento livre por toda a primeira folha
+                    const oW = overlay.clientWidth || 794;
+                    const oH = overlay.clientHeight || 1123;
+                    targetL = Math.max(10, Math.min(oW - 10, targetL));
+                    targetT = Math.max(10, Math.min(oH - 10, targetT));
+                    
+                    div.style.left = targetL + 'px';
+                    div.style.top = targetT + 'px';
                 });
                 
                 document.addEventListener('mouseup', () => {
-                    isDragging = false;
+                    if (isDragging) {
+                        isDragging = false;
+                    }
                 });
                 
                 freeTextMarkers.push(div);
@@ -2267,9 +2465,17 @@
                 document.getElementById('ctrl-freetext-input').value = '';
             });
         }
+
+        if (freetextInput) {
+            freetextInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (btnAddFreetext) btnAddFreetext.click();
+                }
+            });
+        }
     }
 
-    
     function refreshMeasures(map, polys, lines) {
         // Instead of removing, we update styles directly to preserve user dragged positions
         measureLabels.forEach(marker => {
@@ -2580,11 +2786,26 @@ function addMeasureLabels(map, geomObj, labelArray, isPolygon=false) {
             if (this.classList.contains('freetext-placeholder')) {
                 this.classList.remove('freetext-placeholder');
             }
-            debouncedTextPagination();
+            const basePage = getPageNumberForEditable(this);
+            handleEditableOverflow(this, basePage);
+            checkEmptyContinuationPages();
+        });
+
+        el.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                const basePage = getPageNumberForEditable(this);
+                requestAnimationFrame(() => {
+                    handleEditableOverflow(this, basePage);
+                });
+            }
         });
 
         el.addEventListener('paste', function() {
-            setTimeout(checkDynamicTextPagination, 50);
+            setTimeout(() => {
+                const basePage = getPageNumberForEditable(this);
+                handleEditableOverflow(this, basePage);
+                checkEmptyContinuationPages();
+            }, 50);
         });
     }
 </script>
