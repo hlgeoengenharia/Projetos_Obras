@@ -148,12 +148,16 @@
             font-family: 'JetBrains Mono', monospace; background: transparent;
         }
 
-        .custom-point-marker { display: flex; align-items: center; justify-content: center; }
-        .custom-point-tag {
+        .custom-point-marker, .custom-point-pin-icon, .custom-point-text-marker { display: flex; align-items: center; justify-content: center; }
+        .custom-point-tag, .point-label-text {
             background: transparent; color: #000; border: none;
             padding: 0; border-radius: 0; font-size: 11px; font-weight: 900;
             font-family: 'JetBrains Mono', monospace; white-space: nowrap;
-            text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff;
+            text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0 0 3px #fff;
+            transition: transform 0.1s ease, filter 0.1s ease;
+        }
+        .point-label-text:hover {
+            filter: drop-shadow(0 0 3px rgba(16, 185, 129, 0.9));
         }
 
         /* Free Text Soft White Halo (Borda branca suave cartográfica) */
@@ -2424,7 +2428,64 @@
                 let isDragging = false;
                 let startX, startY, startLeft, startTop;
                 
+                // Duplo clique: permite editar o texto diretamente na folha
+                div.addEventListener('dblclick', (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    div.contentEditable = 'true';
+                    div.classList.remove('select-none', 'cursor-move');
+                    div.classList.add('cursor-text');
+                    div.style.outline = '2px dashed #10b981';
+                    div.style.outlineOffset = '3px';
+                    div.style.borderRadius = '3px';
+                    div.focus();
+
+                    // Seleciona todo o conteúdo para edição rápida
+                    try {
+                        const sel = window.getSelection();
+                        const range = document.createRange();
+                        range.selectNodeContents(div);
+                        sel.removeAllRanges();
+                        sel.addRange(range);
+                    } catch(err) {}
+                });
+
+                div.addEventListener('keydown', (e) => {
+                    if (div.isContentEditable && e.key === 'Enter') {
+                        e.preventDefault();
+                        div.blur();
+                    }
+                });
+
+                div.addEventListener('blur', () => {
+                    if (div.isContentEditable) {
+                        div.contentEditable = 'false';
+                        div.classList.add('select-none', 'cursor-move');
+                        div.classList.remove('cursor-text');
+
+                        if (selectedMarker === div) {
+                            div.style.outline = '2px dashed #ef4444';
+                            div.style.outlineOffset = '3px';
+                            div.style.borderRadius = '3px';
+                        } else {
+                            div.style.outline = 'none';
+                        }
+
+                        // Sincroniza com a barra lateral
+                        const cleanedText = (div.innerText || '').trim();
+                        if (cleanedText) {
+                            const inputEl = document.getElementById('ctrl-freetext-input');
+                            if (inputEl) inputEl.value = cleanedText;
+                        }
+                    }
+                });
+                
                 div.addEventListener('mousedown', (e) => {
+                    if (div.isContentEditable) {
+                        // Se estiver em modo de edição de texto, permite interação normal com o cursor e seleção
+                        e.stopPropagation();
+                        return;
+                    }
                     isDragging = true;
                     startX = e.clientX;
                     startY = e.clientY;
@@ -2433,6 +2494,8 @@
                     startLeft = rect.left - overlayRect.left + (rect.width / 2);
                     startTop = rect.top - overlayRect.top + (rect.height / 2);
                     selectMarker(div);
+                    const inputEl = document.getElementById('ctrl-freetext-input');
+                    if (inputEl) inputEl.value = (div.innerText || '').trim();
                     e.preventDefault();
                     e.stopPropagation();
                 });
@@ -2471,6 +2534,11 @@
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     if (btnAddFreetext) btnAddFreetext.click();
+                }
+            });
+            freetextInput.addEventListener('input', (e) => {
+                if (selectedMarker && selectedMarker.classList && selectedMarker.classList.contains('free-text-item') && !selectedMarker.isContentEditable) {
+                    selectedMarker.innerText = e.target.value;
                 }
             });
         }
@@ -2679,9 +2747,26 @@ function addMeasureLabels(map, geomObj, labelArray, isPolygon=false) {
                 }
             });
 
+            // Textos dos pontos com arraste livre no mapa do relatório
             pointsList.forEach(pt => {
-                const labelIcon = L.divIcon({ className: 'custom-point-marker', html: `<span class="custom-point-tag">${pt.id}</span>`, iconAnchor: [-12, 12] });
-                L.marker([pt.lat, pt.lng], {icon: labelIcon, interactive: false}).addTo(map);
+                const labelIcon = L.divIcon({
+                    className: 'custom-point-marker',
+                    html: `<span class="custom-point-tag" style="cursor: move; user-select: none; touch-action: none; display: inline-block; padding: 1px 3px;" title="Clique e arraste o texto ${pt.id} para posicionar no mapa">${pt.id}</span>`,
+                    iconAnchor: [-10, 12]
+                });
+                const txtMarker = L.marker([pt.lat, pt.lng], {
+                    icon: labelIcon,
+                    draggable: true,
+                    autoPan: true
+                }).addTo(map);
+
+                txtMarker.on('dragstart', () => {
+                    selectMarker(txtMarker);
+                });
+                txtMarker.on('click', (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    selectMarker(txtMarker);
+                });
             });
         }
 
@@ -2716,7 +2801,7 @@ function addMeasureLabels(map, geomObj, labelArray, isPolygon=false) {
         pointsList.forEach(pt => {
             const utmX = (500000 + (pt.lng - (-35)) * 111319).toFixed(2);
             const utmY = (10000000 + (pt.lat) * 110574).toFixed(2);
-            rows += `<tr class="hover:bg-slate-50 transition-colors"><td class="font-bold text-slate-900 bg-slate-50/60">${pt.id}</td><td class="text-slate-700">${pt.lat.toFixed(6)}</td><td class="text-slate-700">${pt.lng.toFixed(6)}</td><td class="text-slate-500">${toDMS(pt.lat, true)}</td><td class="text-slate-500">${toDMS(pt.lng, false)}</td><td class="font-semibold text-emerald-800">25 S</td><td class="text-slate-800">${utmX}</td><td class="text-slate-800">${utmY}</td></tr>`;
+            rows += `<tr id="coord-row-${pt.id}" class="hover:bg-slate-50 transition-colors"><td class="font-bold text-slate-900 bg-slate-50/60">${pt.id}</td><td class="text-slate-700">${pt.lat.toFixed(6)}</td><td class="text-slate-700">${pt.lng.toFixed(6)}</td><td class="text-slate-500">${toDMS(pt.lat, true)}</td><td class="text-slate-500">${toDMS(pt.lng, false)}</td><td class="font-semibold text-emerald-800">25 S</td><td class="text-slate-800">${utmX}</td><td class="text-slate-800">${utmY}</td></tr>`;
         });
         tbody.innerHTML = rows;
 

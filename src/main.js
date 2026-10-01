@@ -236,9 +236,27 @@ function getFeaturePropertyValue(theme, feature, requestedKey) {
        }
    }
 
-   // 3. Se for campo de fiscalização/vistoria (ex: recuo, ocupação, área invadida) ou pertencer à aba MPF/consolidada:
-   // busca a informação mais recente das abas parceiras (PF, SPU, Município) que alimentam o MPF
+   // 3. Valor direto no ID do campo se preenchido na feição (Prioridade para as atualizações cadastrais do usuário)
+   if (targetField && feature.properties[targetField.id] !== undefined && feature.properties[targetField.id] !== '' && feature.properties[targetField.id] !== '---') {
+       return feature.properties[targetField.id];
+   }
+
+   // 4. Valor direto pela requestedKey
+   if (feature.properties[requestedKey] !== undefined && feature.properties[requestedKey] !== '' && feature.properties[requestedKey] !== '---') {
+       return feature.properties[requestedKey];
+   }
+
+   // 5. Busca case-insensitive nas propriedades da feição
    const reqLower = requestedKey.toLowerCase();
+   for (const p in feature.properties) {
+       if (p.toLowerCase() === reqLower && feature.properties[p] !== undefined && feature.properties[p] !== '' && feature.properties[p] !== '---') {
+           return feature.properties[p];
+       }
+   }
+
+   // 6. FALLBACK: Se o campo direto na feição NÃO foi preenchido/atualizado,
+   // e for campo de fiscalização/vistoria (ex: recuo, ocupação, área invadida) ou pertencer à aba MPF/consolidada:
+   // busca a informação mais recente das abas parceiras (PF, SPU, Município) que alimentam o histórico
    const isMpfOrConsolidated = targetTab && (
        targetTab.type === 'consolidated_history' || 
        targetTab.isConsolidatedHistory || 
@@ -251,23 +269,6 @@ function getFeaturePropertyValue(theme, feature, requestedKey) {
        const latestFromTabs = getLatestRecordAcrossTabs(null, 'auto', targetField ? targetField.id : requestedKey, feature.properties, targetField ? targetField.label : requestedKey);
        if (latestFromTabs !== null && latestFromTabs !== undefined && String(latestFromTabs).trim() !== '' && String(latestFromTabs).trim() !== '---') {
            return latestFromTabs;
-       }
-   }
-
-   // 4. Valor direto no ID do campo se preenchido
-   if (targetField && feature.properties[targetField.id] !== undefined && feature.properties[targetField.id] !== '' && feature.properties[targetField.id] !== '---') {
-       return feature.properties[targetField.id];
-   }
-
-   // 5. Valor direto pela requestedKey
-   if (feature.properties[requestedKey] !== undefined && feature.properties[requestedKey] !== '' && feature.properties[requestedKey] !== '---') {
-       return feature.properties[requestedKey];
-   }
-
-   // 6. Busca case-insensitive nas propriedades
-   for (const p in feature.properties) {
-       if (p.toLowerCase() === reqLower && feature.properties[p] !== undefined && feature.properties[p] !== '' && feature.properties[p] !== '---') {
-           return feature.properties[p];
        }
    }
 
@@ -1898,7 +1899,8 @@ function initMap() {
             (typeof map.pm.globalDrawModeEnabled === 'function' && map.pm.globalDrawModeEnabled()) ||
             (map.pm.Draw && typeof map.pm.Draw.isActive === 'function' && map.pm.Draw.isActive())
         );
-        if (window.isMeasurementActive || (typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode) || isPmDrawing) {
+        const isMeasuringActive = !!(window.isMeasurementActive && ((typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode) || isPmDrawing));
+        if (isMeasuringActive) {
             return; // bubble para a ferramenta de medição (Leaflet-Geoman PM)
         }
         

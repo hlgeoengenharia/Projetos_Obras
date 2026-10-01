@@ -91,17 +91,13 @@ function toggleMeasurementPanel() {
         }
         window.isMeasurementActive = true;
         
-        // Re-enable editing on existing measurement layers
+        // Garante que todas as medições fiquem estáticas (sem mover pontos ou vértices)
         measurementLayerGroup.eachLayer(l => {
-            if (l.pm && typeof l.pm.enable === 'function') {
-                l.pm.enable({
-                    allowSelfIntersection: true,
-                    preventMarkerRemoval: false,
-                    snappable: window.isMeasurementSnappingEnabled
-                });
+            if (l.pm && typeof l.pm.disable === 'function') {
+                l.pm.disable();
             }
-            if (l.dragging && typeof l.dragging.enable === 'function') {
-                l.dragging.enable();
+            if (l.dragging && typeof l.dragging.disable === 'function') {
+                l.dragging.disable();
             }
         });
         
@@ -333,7 +329,28 @@ function closeMeasurementPanel() {
     if (panel) panel.classList.add('hidden');
     stopMeasurementDraw();
     window.isMeasurementActive = false;
+    window.currentMeasurementMode = null;
     currentMeasurementMode = null;
+
+    // Desativa completamente todos os modos Geoman no mapa
+    if (map && map.pm) {
+        try {
+            if (typeof map.pm.disableDraw === 'function') map.pm.disableDraw();
+            if (map.pm.Draw) {
+                ['Marker', 'CircleMarker', 'Line', 'Polygon', 'Rectangle', 'Circle', 'Cut', 'Text'].forEach(s => {
+                    if (map.pm.Draw[s] && typeof map.pm.Draw[s].disable === 'function') {
+                        map.pm.Draw[s].disable();
+                    }
+                });
+            }
+            if (typeof map.pm.disableGlobalEditMode === 'function') { try { map.pm.disableGlobalEditMode(); } catch(e) {} }
+            if (typeof map.pm.disableGlobalDragMode === 'function') { try { map.pm.disableGlobalDragMode(); } catch(e) {} }
+            if (typeof map.pm.disableGlobalRemovalMode === 'function') { try { map.pm.disableGlobalRemovalMode(); } catch(e) {} }
+            if (typeof map.pm.disableGlobalRotateMode === 'function') { try { map.pm.disableGlobalRotateMode(); } catch(e) {} }
+        } catch(e) {
+            // Silently ignore geoman teardown edge cases
+        }
+    }
 
     // Disable pm vertex editing on existing layers while panel is closed
     if (measurementLayerGroup) {
@@ -345,6 +362,11 @@ function closeMeasurementPanel() {
                 l.dragging.disable();
             }
         });
+    }
+
+    // Reativa a interatividade das camadas do tema selecionado
+    if (typeof updateThemeInteractivity === 'function') {
+        updateThemeInteractivity();
     }
 
     // Hide drawers and reset button states
@@ -461,11 +483,21 @@ window.fitMapToMeasurements = function() {
 
 function stopMeasurementDraw() {
     if (map && map.pm) {
-        map.pm.disableDraw();
+        try {
+            if (typeof map.pm.disableDraw === 'function') map.pm.disableDraw();
+            if (map.pm.Draw) {
+                ['Marker', 'CircleMarker', 'Line', 'Polygon', 'Rectangle', 'Circle', 'Cut', 'Text'].forEach(s => {
+                    if (map.pm.Draw[s] && typeof map.pm.Draw[s].disable === 'function') {
+                        map.pm.Draw[s].disable();
+                    }
+                });
+            }
+        } catch(e) {}
     }
     hideCadMeasureHud();
     lastDrawnVertex = null;
     currentMeasurementMode = null;
+    window.currentMeasurementMode = null;
     
     // Enable other map interactions
     const mapEl = document.getElementById('map');
@@ -552,7 +584,7 @@ function startMeasurementDraw(shape) {
     let inst = document.getElementById('meas-instruction');
     if(inst) {
         if (shape === 'Marker') {
-            inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no mapa para inserir pontos consecutivos.<br><span class="text-[9px] text-slate-400">Arraste para mover | Botão direito para excluir.</span></span>';
+            inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no mapa para inserir pontos consecutivos.<br><span class="text-[9px] text-slate-400">Botão direito para excluir.</span></span>';
         } else if (shape === 'Line') {
             inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no 1º ponto para iniciar a linha.<br><span class="text-[9px] text-slate-400">Aponte o cursor na direção e digite a medida exata (Enter para inserir).</span></span>';
         } else if (shape === 'Polygon') {
@@ -686,16 +718,11 @@ function setupMeasurementEvents() {
 
         try {
             if (currentShape === 'Polygon') {
-                // Enable Geoman vertex editing & vertex deletion
-                if (layer.pm) {
-                    layer.pm.enable({
-                        allowSelfIntersection: true,
-                        preventMarkerRemoval: false,
-                        snappable: window.isMeasurementSnappingEnabled
-                    });
+                if (layer.pm && typeof layer.pm.disable === 'function') {
+                    layer.pm.disable();
                 }
 
-                layer.bindTooltip('Polígono <span style="font-size:9px;opacity:0.75;">(Arraste vértices / Botão direito no vértice p/ excluir)</span>', { sticky: true });
+                layer.bindTooltip('Polígono', { sticky: true });
 
                 const renderPolygon = () => {
                     const geojson = layer.toGeoJSON();
@@ -735,16 +762,11 @@ function setupMeasurementEvents() {
                 layer.on('pm:markerdragend', renderPolygon);
 
             } else if (currentShape === 'Line') {
-                // Enable Geoman vertex editing & vertex deletion
-                if (layer.pm) {
-                    layer.pm.enable({
-                        allowSelfIntersection: true,
-                        preventMarkerRemoval: false,
-                        snappable: window.isMeasurementSnappingEnabled
-                    });
+                if (layer.pm && typeof layer.pm.disable === 'function') {
+                    layer.pm.disable();
                 }
 
-                layer.bindTooltip('Linha <span style="font-size:9px;opacity:0.75;">(Arraste vértices / Botão direito no vértice p/ excluir)</span>', { sticky: true });
+                layer.bindTooltip('Linha', { sticky: true });
 
                 const renderLine = () => {
                     const geojson = layer.toGeoJSON();
@@ -796,17 +818,15 @@ function setupMeasurementEvents() {
                 });
                 layer.setIcon(techIcon);
 
-                // Enable dragging for Point adjustment
-                if (layer.dragging) {
-                    layer.dragging.enable();
+                // Pontos em index.html são estáticos e fixos (não arrastáveis)
+                if (layer.dragging && typeof layer.dragging.disable === 'function') {
+                    layer.dragging.disable();
                 }
-                if (layer.pm) {
-                    layer.pm.enable({
-                        snappable: window.isMeasurementSnappingEnabled
-                    });
+                if (layer.pm && typeof layer.pm.disable === 'function') {
+                    layer.pm.disable();
                 }
 
-                // Prevent click propagation on mousedown so dragging existing marker doesn't spawn new marker
+                // Prevent click propagation on mousedown so clicking existing marker doesn't spawn new marker
                 layer.on('mousedown', (ev) => {
                     if (ev) L.DomEvent.stopPropagation(ev);
                 });
@@ -817,7 +837,7 @@ function setupMeasurementEvents() {
                     deleteFeature();
                 });
 
-                layer.bindTooltip(`P${pointLabel} <span style="font-size:9px;opacity:0.75;">(Arraste p/ mover | Botão direito p/ excluir)</span>`, {
+                layer.bindTooltip(`P${pointLabel} <span style="font-size:9px;opacity:0.75;">(Botão direito p/ excluir)</span>`, {
                     direction: 'top',
                     offset: [0, -10]
                 });
