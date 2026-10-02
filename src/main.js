@@ -469,6 +469,7 @@ async function loadThemes() {
                       color: t.cor,
                       icon: t.icone,
                       geometryType: t.tipo_geometria,
+                      geomType: t.tipo_geometria || 'Polygon',
                       cadastroType: t.tipo_cadastro,
                       formId: t.tipo_cadastro,
                       opacity: tMeta.opacity !== undefined ? tMeta.opacity : 0.4,
@@ -605,7 +606,8 @@ function saveThemes() {
           name: t.name,
           color: t.color,
           icon: t.icon,
-          geometryType: t.geometryType,
+          geometryType: t.geometryType || t.geomType || 'Polygon',
+          geomType: t.geomType || t.geometryType || 'Polygon',
           cadastroType: t.cadastroType,
           formId: t.formId,
           visible: t.visible,
@@ -618,8 +620,20 @@ function saveThemes() {
       localStorage.setItem('constructive_themes', JSON.stringify(themeMeta));
       saveThemesCustomOrder();
   } catch(e) {
-      // Mesmo sem feicões pode falhar se houver muitos temas — silencia
-      console.warn('[saveThemes] Não foi possível salvar metadados:', e.message);
+      // Fallback em caso de quota estourada: salva meta sem strings pesadas de imagem no localStorage
+      try {
+          const lightweightMeta = {};
+          Object.keys(meta).forEach(k => {
+              lightweightMeta[k] = { ...meta[k] };
+              if (lightweightMeta[k].customIcon && lightweightMeta[k].customIcon.length > 300) {
+                  delete lightweightMeta[k].customIcon;
+              }
+          });
+          localStorage.setItem('constructive_themes_meta', JSON.stringify(lightweightMeta));
+          localStorage.setItem('constructive_themes', JSON.stringify(themeMeta));
+      } catch(e2) {
+          // Se mesmo assim a cota estiver lotada por outros dados da aplicacao, silencia com seguranca
+      }
   }
 }
 
@@ -1728,16 +1742,33 @@ function initMap() {
 
       const iconName = theme && theme.icon ? theme.icon : 'location_on';
       const customIconData = theme && theme.customIcon ? theme.customIcon : null;
-      
-      const iconHtml = customIconData 
-        ? `<img src="${customIconData}" style="width:14px; height:14px; object-fit:contain; border-radius:50%;">`
-        : `<span class="material-symbols-outlined" style="color: ${color}; font-size: 15px; font-weight: bold;">${iconName === 'circle' ? 'circle' : iconName}</span>`;
 
+      // Se o usuário carregou um ícone personalizado, substitui integralmente pelo ícone carregado (sem o pino/gota SVG ao redor)
+      if (customIconData) {
+        const customMarkerHtml = `
+          <div class="map-pin-touch-wrap custom-icon-touch-wrap" style="position: relative; width: 36px; height: 36px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+            <div class="custom-user-icon-container" style="position: relative; width: 34px; height: 34px; cursor: pointer; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.45)); display: flex; align-items: center; justify-content: center;">
+              <img src="${customIconData}" alt="${theme ? theme.name : 'Ícone'}" style="width: 100%; height: 100%; object-fit: contain; pointer-events: none; -webkit-user-drag: none; user-select: none;">
+            </div>
+          </div>
+        `;
+        const userDivIcon = L.divIcon({
+          className: `custom-div-icon custom-user-div-icon theme-feature theme-${themeId}`,
+          html: customMarkerHtml,
+          iconSize: [36, 36],
+          iconAnchor: [18, 18],
+          tooltipAnchor: [0, -18]
+        });
+        return L.marker(latlng, { icon: userDivIcon });
+      }
+
+      // Caso padrão: pino 3D com formato de gota e o ícone do Material Symbols no centro
       const safeId = String(themeId).replace(/[^a-zA-Z0-9]/g, '_');
+      const iconHtml = `<span class="material-symbols-outlined" style="color: ${color}; font-size: 15px; font-weight: bold; pointer-events: none;">${iconName === 'circle' ? 'circle' : iconName}</span>`;
 
       const pinHtml = `
-        <div class="map-pin-touch-wrap">
-          <div class="map-pin-3d-marker" style="position: relative; width: 30px; height: 38px; cursor: pointer; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.35)); touch-action: none;">
+        <div class="map-pin-touch-wrap" style="position: relative; width: 30px; height: 38px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+          <div class="map-pin-3d-marker" style="position: relative; width: 30px; height: 38px; cursor: pointer; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.35));">
             <svg viewBox="0 0 30 38" width="30" height="38" style="display: block; overflow: visible; pointer-events: none;">
               <defs>
                 <linearGradient id="grad_pin_${safeId}" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -1898,14 +1929,15 @@ function initMap() {
         
         // Permite desenhar livremente sobre camadas se estiver ativamente criando feição de tema
         // ou se estiver ativamente no meio do traçado de uma medição geométrica
-        const isDrawingTheme = !!(typeof editingThemeId !== 'undefined' && editingThemeId);
+        const isDrawingActive = typeof map !== 'undefined' && map && map.pm && 
+            typeof map.pm.globalDrawModeEnabled === 'function' && map.pm.globalDrawModeEnabled();
+        const isDrawingTheme = !!(typeof editingThemeId !== 'undefined' && editingThemeId && isDrawingActive);
         const isMeasuringDrawing = !!(
             window.isMeasurementActive &&
             typeof currentMeasurementMode !== 'undefined' &&
             currentMeasurementMode &&
             ['Marker', 'Line', 'Polygon'].includes(currentMeasurementMode) &&
-            typeof map !== 'undefined' && map && map.pm &&
-            typeof map.pm.globalDrawModeEnabled === 'function' && map.pm.globalDrawModeEnabled()
+            isDrawingActive
         );
         if (isDrawingTheme || isMeasuringDrawing) {
             return; // bubble para a ferramenta de desenho/medição (Leaflet-Geoman PM)
@@ -1920,19 +1952,9 @@ function initMap() {
 
         const themeIdStr = String(feature.properties.themeId);
         
-        // Bloqueia e avisa se nenhuma camada foi selecionada no menu lateral
-        if (!window.activeSelectionThemeId) {
-            L.DomEvent.stopPropagation(e);
-            showWarningToast("Selecione uma camada no menu lateral para que as feições sejam selecionadas.");
-            return;
-        }
-        // Bloqueia e avisa se a feição clicada pertence a outra camada que não a selecionada no menu lateral
-        if (window.activeSelectionThemeId !== themeIdStr) {
-            L.DomEvent.stopPropagation(e);
-            const currentTheme = themes.find(t => String(t.id) === themeIdStr);
-            const themeName = currentTheme ? currentTheme.name : "outra camada";
-            showWarningToast(`Esta feição pertence à camada "${themeName}". Selecione-a no menu lateral para que suas feições sejam selecionadas.`);
-            return;
+        // Sincroniza a camada ativa no menu lateral automaticamente para uma experiência fluida e direta
+        if (!window.activeSelectionThemeId || window.activeSelectionThemeId !== themeIdStr) {
+            toggleSelectionTheme(themeIdStr, true);
         }
 
         L.DomEvent.stopPropagation(e);
@@ -3416,16 +3438,15 @@ function updateThemeInteractivity() {
         document.head.appendChild(styleTag);
     }
     
-    // Exclusividade de interação: apenas a camada selecionada no menu lateral
-    // tem feições clicáveis no mapa. Sem camada selecionada, nenhuma feição é clicável.
+    // Destaca a camada selecionada no mapa mantendo todas as feições visíveis interativas
     if (window.activeSelectionThemeId) {
         styleTag.innerHTML = `
-            .theme-feature { pointer-events: none !important; cursor: default; }
-            .theme-${window.activeSelectionThemeId} { pointer-events: auto !important; cursor: pointer; stroke-width: 2.5px; }
+            .theme-feature { pointer-events: auto !important; cursor: pointer; }
+            .theme-${window.activeSelectionThemeId} { stroke-width: 2.8px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.45)); }
         `;
     } else {
         styleTag.innerHTML = `
-            .theme-feature { pointer-events: none !important; cursor: default; }
+            .theme-feature { pointer-events: auto !important; cursor: pointer; }
         `;
     }
 }
@@ -3661,7 +3682,7 @@ function renderThemes() {
         <div class="flex items-center justify-between gap-2">
           <div class="flex items-center gap-2.5 min-w-0 flex-1">
             <div class="w-11 h-11 rounded-xl shrink-0 flex items-center justify-center text-white shadow-lg transition-transform hover:scale-105 border border-white/20" style="background-color: ${theme.color}; box-shadow: 0 4px 16px ${theme.color}80;">
-               <span class="material-symbols-outlined text-[22px]">${theme.icon || 'layers'}</span>
+               ${theme.customIcon ? `<img src="${theme.customIcon}" class="w-7 h-7 object-contain rounded-md" alt="Ícone">` : `<span class="material-symbols-outlined text-[22px]">${theme.icon || 'layers'}</span>`}
             </div>
             <div class="flex flex-col min-w-0 flex-1">
               <h3 class="text-xs sm:text-[13px] font-extrabold text-white tracking-wide uppercase drop-shadow-md leading-tight truncate ${!isVisible ? 'opacity-50' : ''}" title="${theme.name}">${theme.name}</h3>
@@ -3705,7 +3726,7 @@ function renderThemes() {
                 </button>
                 ` : ''}
                 ${canAddFeatures ? `
-                <button onclick="startEditingTheme('${theme.id}', '${theme.name}', '${theme.color}', '${theme.geomType || ''}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Adicionar Feição">
+                <button onclick="startEditingTheme('${theme.id}', '${theme.name}', '${theme.color}', '${theme.geometryType || theme.geomType || theme.tipo_geometria || ''}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Adicionar Feição">
                   <span class="material-symbols-outlined text-[18px]">add</span>
                 </button>
                 ` : ''}
@@ -5509,10 +5530,65 @@ function handleCustomIconUpload(input, previewContainerId, dataInputId, labelId)
     const file = input.files[0];
     const reader = new FileReader();
     reader.onload = function(e) {
-      const dataUrl = e.target.result;
-      document.getElementById(dataInputId).value = dataUrl;
-      document.getElementById(previewContainerId).innerHTML = `<img src="${dataUrl}" class="w-5 h-5 object-contain">`;
-      if (labelId) document.getElementById(labelId).innerText = file.name;
+      const rawDataUrl = e.target.result;
+      
+      // Otimiza o tamanho da imagem para ícone de mapa (máx 96x96px) para não estourar a quota do localStorage
+      const img = new Image();
+      img.onload = function() {
+        let w = img.width;
+        let h = img.height;
+        const maxDim = 96;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const optimizedDataUrl = (file.type === 'image/svg+xml') ? rawDataUrl : canvas.toDataURL('image/png');
+
+        const dataInput = document.getElementById(dataInputId);
+        if (dataInput) dataInput.value = optimizedDataUrl;
+
+        const previewContainer = document.getElementById(previewContainerId);
+        if (previewContainer) {
+          const previewIcon = previewContainer.querySelector('#new-icon-preview, #edit-icon-preview') || previewContainer.querySelector('.material-symbols-outlined');
+          const labelEl = labelId ? document.getElementById(labelId) : previewContainer.querySelector('#new-icon-label, #edit-icon-label');
+
+          if (previewIcon) {
+            previewIcon.outerHTML = `<img src="${optimizedDataUrl}" class="w-6 h-6 object-contain rounded shrink-0">`;
+          } else {
+            const existingImg = previewContainer.querySelector('img');
+            if (existingImg) {
+              existingImg.src = optimizedDataUrl;
+            } else {
+              previewContainer.insertAdjacentHTML('afterbegin', `<img src="${optimizedDataUrl}" class="w-6 h-6 object-contain rounded shrink-0">`);
+            }
+          }
+
+          if (labelEl) {
+            labelEl.innerText = file.name;
+          }
+        }
+      };
+      img.onerror = function() {
+        // Fallback para SVG ou formato vetorial puro se Image falhar
+        const dataInput = document.getElementById(dataInputId);
+        if (dataInput) dataInput.value = rawDataUrl;
+        const previewContainer = document.getElementById(previewContainerId);
+        if (previewContainer) {
+          const labelEl = labelId ? document.getElementById(labelId) : previewContainer.querySelector('#new-icon-label, #edit-icon-label');
+          previewContainer.innerHTML = `<img src="${rawDataUrl}" class="w-6 h-6 object-contain rounded shrink-0"> <span id="${labelId}" class="text-sm truncate">${file.name}</span>`;
+        }
+      };
+      img.src = rawDataUrl;
     };
     reader.readAsDataURL(file);
   }
@@ -6380,15 +6456,21 @@ function startEditingTheme(id, name, color, geomType) {
   });
 
   // Configurações e estilos do Geoman para desenhos
-  // Se a camada já possui feições e não há geomType, deduzimos da primeira feição
-  if (!geomType && theme && theme.features && theme.features.length > 0) {
+  // Se não foi passado geomType explicitamente, busca do tema (geometryType, geomType, tipo_geometria)
+  if (!geomType && theme) {
+    geomType = theme.geometryType || theme.geomType || theme.tipo_geometria || '';
+  }
+  // Se ainda não houver e a camada já possui feições, deduzimos da primeira feição
+  if (!geomType && theme && theme.features && theme.features.length > 0 && theme.features[0].geometry) {
     geomType = theme.features[0].geometry.type;
   }
   
   // Converter os tipos GeoJSON padronizados para os equivalentes da barra de ferramentas/Geoman
-  if (geomType === 'Point' || geomType === 'MultiPoint') geomType = 'marker';
-  else if (geomType === 'LineString' || geomType === 'MultiLineString') geomType = 'polyline';
-  else if (geomType === 'Polygon' || geomType === 'MultiPolygon') geomType = 'polygon';
+  const gNorm = String(geomType || '').toLowerCase();
+  if (gNorm.includes('point') || gNorm.includes('ponto') || gNorm === 'marker') geomType = 'marker';
+  else if (gNorm.includes('line') || gNorm.includes('linha') || gNorm === 'polyline') geomType = 'polyline';
+  else if (gNorm.includes('poly') || gNorm.includes('polig') || gNorm === 'polygon') geomType = 'polygon';
+  else geomType = 'polygon';
   
   const toolbar = document.getElementById('drawing-toolbar');
   toolbar.classList.remove('hidden');
@@ -6398,11 +6480,11 @@ function startEditingTheme(id, name, color, geomType) {
   nameLabel.textContent = "Editando: " + name;
   nameLabel.style.color = color;
   
-  // Show only the relevant button
+  // Mostra EXCLUSIVAMENTE o botão da geometria correspondente
   ['marker', 'polyline', 'polygon'].forEach(type => {
     const btn = document.getElementById('draw-btn-' + type);
     if (btn) {
-      if (type === geomType || !geomType) {
+      if (type === geomType) {
         btn.classList.remove('hidden');
       } else {
         btn.classList.add('hidden');
@@ -8321,16 +8403,8 @@ function stopGeometryEditing() {
       loadAllFeaturesToMap();
   }
 
-  // Restaura o estilo de pointer-events se houver uma seleção ativa
-  if (window.activeSelectionThemeId) {
-      const styleTag = document.getElementById('dynamic-selection-style');
-      if (styleTag) {
-          styleTag.innerHTML = `
-              .theme-feature { pointer-events: none !important; }
-              .theme-${window.activeSelectionThemeId} { pointer-events: auto !important; }
-          `;
-      }
-  }
+  // Restaura os estilos dinâmicos de tema e seleção
+  updateThemeInteractivity();
 
   const toolbar = document.getElementById('geometry-edit-toolbar');
   if (toolbar) {
