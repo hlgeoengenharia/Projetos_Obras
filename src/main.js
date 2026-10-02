@@ -468,6 +468,7 @@ async function loadThemes() {
                       name: t.nome,
                       color: t.cor,
                       icon: t.icone,
+                      customIcon: tMeta.customIcon || (t.metadata && t.metadata.customIcon) || (t.custom_icon) || (t.icone && (t.icone.startsWith('data:image') || t.icone.startsWith('http') || t.icone.startsWith('/')) ? t.icone : null) || null,
                       geometryType: t.tipo_geometria,
                       geomType: t.tipo_geometria || 'Polygon',
                       cadastroType: t.tipo_cadastro,
@@ -3718,20 +3719,20 @@ function renderThemes() {
         
         <!-- Barra de Ações da Camada (Visível ao expandir) -->
         ${hasAnyAction ? `
-        <div class="p-2.5 border-b border-white/10 bg-slate-900/40">
-            <div class="grid grid-flow-col auto-cols-fr gap-1.5 items-center w-full">
+        <div class="p-2.5 border-b border-white/10 bg-slate-900/40" onmousedown="event.stopPropagation()">
+            <div class="grid grid-flow-col auto-cols-fr gap-1.5 items-center w-full" onmousedown="event.stopPropagation()">
                 ${canSeeStats ? `
-                <button onclick="toggleLayerStatsMenu('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Painel de Estatísticas">
+                <button type="button" draggable="false" onmousedown="event.stopPropagation()" onclick="event.stopPropagation(); toggleLayerStatsMenu('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs cursor-pointer" title="Painel de Estatísticas">
                   <span class="material-symbols-outlined text-[18px]">pie_chart</span>
                 </button>
                 ` : ''}
                 ${canAddFeatures ? `
-                <button onclick="startEditingTheme('${theme.id}', '${theme.name}', '${theme.color}', '${theme.geometryType || theme.geomType || theme.tipo_geometria || ''}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Adicionar Feição">
+                <button type="button" draggable="false" onmousedown="event.stopPropagation()" onclick="event.stopPropagation(); startEditingTheme('${theme.id}', '${theme.name}', '${theme.color}', '${theme.geometryType || theme.geomType || theme.tipo_geometria || ''}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs cursor-pointer" title="Adicionar Feição">
                   <span class="material-symbols-outlined text-[18px]">add</span>
                 </button>
                 ` : ''}
                 ${canEditThemeStyle ? `
-                <button onclick="openEditThemeModal('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs" title="Configurações da Camada">
+                <button type="button" draggable="false" onmousedown="event.stopPropagation()" onclick="event.stopPropagation(); openEditThemeModal('${theme.id}')" class="flex items-center justify-center py-1.5 px-1 bg-white/10 hover:bg-white/25 active:scale-95 rounded-lg tooltip text-slate-200 transition-all border border-white/10 shadow-xs cursor-pointer" title="Configurações da Camada">
                   <span class="material-symbols-outlined text-[18px]">settings</span>
                 </button>
                 ` : ''}
@@ -3741,24 +3742,24 @@ function renderThemes() {
 
         <!-- Filtro Rápido Inteligente por Qualquer Coluna da Camada (Apenas com permissão de dados) -->
         ${canSeeData ? `
-        <div class="p-2 border-b border-white/10 bg-slate-900/30" id="filters-container-${theme.id}">
-          <div class="flex flex-col gap-1.5">
+        <div class="p-2 border-b border-white/10 bg-slate-900/30" id="filters-container-${theme.id}" onmousedown="event.stopPropagation()">
+          <div class="flex flex-col gap-1.5" onmousedown="event.stopPropagation()">
              <div class="flex items-center justify-between gap-2">
                 <span class="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 min-w-0">
                    <span class="material-symbols-outlined text-[13px] text-cyan-400 shrink-0">filter_alt</span>
                    <span class="truncate">Filtrar Registros</span>
                    <span id="filter-badge-${theme.id}" class="hidden ml-1 px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shrink-0"></span>
                 </span>
-                <div class="flex items-center gap-1.5 shrink-0">
-                   <button type="button" onclick="openFilterFieldsModal('${theme.id}')" id="btn-custom-fields-${theme.id}" class="px-2 py-1 rounded-lg ${hasCustomFilterFields ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white border-white/15'} active:scale-95 text-[11px] font-semibold transition-all border flex items-center gap-1 cursor-pointer shadow-xs" title="${hasCustomFilterFields ? `Filtro personalizado ativo (${customFilterFieldsCount} campos)` : 'Personalizar campos visíveis no filtro'}">
+                <div class="flex items-center gap-1.5 shrink-0" onmousedown="event.stopPropagation()">
+                   <button type="button" draggable="false" onmousedown="event.stopPropagation()" onclick="event.stopPropagation(); openFilterFieldsModal('${theme.id}')" id="btn-custom-fields-${theme.id}" class="px-2 py-1 rounded-lg ${hasCustomFilterFields ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white border-white/15'} active:scale-95 text-[11px] font-semibold transition-all border flex items-center gap-1 cursor-pointer shadow-xs" title="${hasCustomFilterFields ? `Filtro personalizado ativo (${customFilterFieldsCount} campos)` : 'Personalizar campos visíveis no filtro'}">
                       <span class="material-symbols-outlined text-[14px] text-cyan-400">tune</span>
                       <span>Campos${hasCustomFilterFields ? ` (${customFilterFieldsCount})` : ''}</span>
                    </button>
-                   <button type="button" onclick="addFilterRow('${theme.id}')" class="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 text-[11px] font-semibold text-slate-200 hover:text-white transition-all border border-white/15 flex items-center gap-1 cursor-pointer shadow-xs" title="Adicionar campo em cascata (+ Condição)">
+                   <button type="button" draggable="false" onmousedown="event.stopPropagation()" onclick="event.stopPropagation(); addFilterRow('${theme.id}')" class="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 text-[11px] font-semibold text-slate-200 hover:text-white transition-all border border-white/15 flex items-center gap-1 cursor-pointer shadow-xs" title="Adicionar campo em cascata (+ Condição)">
                       <span class="material-symbols-outlined text-[15px] text-cyan-400">add</span>
                       <span>Condição</span>
                    </button>
-                   <button type="button" onclick="clearSearch('${theme.id}')" class="px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 active:scale-95 text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 transition-all border border-cyan-500/25 flex items-center gap-1 cursor-pointer shadow-xs" title="Limpar filtro e mostrar todos os registros">
+                   <button type="button" draggable="false" onmousedown="event.stopPropagation()" onclick="event.stopPropagation(); clearSearch('${theme.id}')" class="px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 active:scale-95 text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 transition-all border border-cyan-500/25 flex items-center gap-1 cursor-pointer shadow-xs" title="Limpar filtro e mostrar todos os registros">
                       <span class="material-symbols-outlined text-[15px]">close</span>
                       <span>Limpar</span>
                    </button>
@@ -5551,6 +5552,7 @@ function handleCustomIconUpload(input, previewContainerId, dataInputId, labelId)
         canvas.width = w;
         canvas.height = h;
         const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, w, h);
         ctx.drawImage(img, 0, 0, w, h);
         const optimizedDataUrl = (file.type === 'image/svg+xml') ? rawDataUrl : canvas.toDataURL('image/png');
 
@@ -5824,10 +5826,11 @@ function openEditThemeModal(themeId, focusField = null) {
   
   const option = availableIcons.find(o => o.val === iconVal) || availableIcons[0];
   if (customIconVal) {
-    document.getElementById('edit-icon-preview-container').innerHTML = `<img src="${customIconVal}" class="w-5 h-5 object-contain">`;
-    document.getElementById('edit-icon-label').innerText = "Ícone Personalizado";
+    document.getElementById('edit-icon-preview-container').innerHTML = `<img src="${customIconVal}" class="w-5 h-5 object-contain rounded shrink-0"> <span id="edit-icon-label" class="text-sm truncate">Ícone Personalizado</span>`;
+    document.getElementById('edit-theme-custom-icon-data').value = customIconVal;
   } else {
     document.getElementById('edit-icon-preview-container').innerHTML = `<span class="material-symbols-outlined text-[20px] text-primary" id="edit-icon-preview">${option.val}</span><span id="edit-icon-label" class="text-sm">${option.label}</span>`;
+    document.getElementById('edit-theme-custom-icon-data').value = '';
   }
   
   document.getElementById('edit-theme-modal').classList.remove('hidden');
@@ -5973,11 +5976,13 @@ async function saveEditedTheme() {
         }
     }
     
+    const savedId = themeBeingEdited;
+    window.activeSelectionThemeId = String(savedId);
     saveThemes();
     loadAllFeaturesToMap(); // Update colors on the map
     renderThemes();
     if (typeof populateFormSelects === 'function') populateFormSelects();
-    if (typeof focusOnThemeCard === 'function') focusOnThemeCard(themeBeingEdited);
+    if (typeof focusOnThemeCard === 'function') focusOnThemeCard(savedId);
   }
   closeEditThemeModal();
 }
@@ -11303,6 +11308,10 @@ function setupSupabaseRealtime() {
                                   if (t.metadata.mainTitle !== undefined) existing.mainTitle = t.metadata.mainTitle;
                                   if (t.metadata.disp1Active !== undefined) existing.disp1Active = t.metadata.disp1Active;
                                   if (t.metadata.disp2Active !== undefined) existing.disp2Active = t.metadata.disp2Active;
+                                  if (t.metadata.customIcon !== undefined) existing.customIcon = t.metadata.customIcon;
+                              }
+                              if (t.icone && (t.icone.startsWith('data:image') || t.icone.startsWith('http') || t.icone.startsWith('/'))) {
+                                  existing.customIcon = t.icone;
                               }
                           } else {
                               const tMeta = t.metadata || {};
@@ -11311,8 +11320,11 @@ function setupSupabaseRealtime() {
                                   name: t.nome,
                                   color: t.cor,
                                   icon: t.icone,
+                                  customIcon: tMeta.customIcon || (t.icone && (t.icone.startsWith('data:image') || t.icone.startsWith('http') || t.icone.startsWith('/')) ? t.icone : null) || null,
                                   geometryType: t.tipo_geometria,
+                                  geomType: t.tipo_geometria || 'Polygon',
                                   cadastroType: t.tipo_cadastro,
+                                  formId: t.tipo_cadastro,
                                   opacity: tMeta.opacity !== undefined ? tMeta.opacity : 0.4,
                                   weight: tMeta.weight !== undefined ? tMeta.weight : 2,
                                   dashed: !!tMeta.dashed,
