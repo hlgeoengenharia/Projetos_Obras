@@ -99,7 +99,7 @@
         }
 
         function isRichField(f) {
-            return ['hiperlink', 'hiperlink_1n', 'attachment', 'photo', 'epol_1n', 'rip_1n', 'textarea'].includes(FieldFormatter.canonicalType(f || {}));
+            return ['hiperlink', 'hiperlink_1n', 'attachment', 'photo', 'epol_1n', 'rip_1n', 'textarea', 'geolocation'].includes(FieldFormatter.canonicalType(f || {}));
         }
 
         function resolveFieldHtml(f, featureData, fileMode) {
@@ -203,6 +203,13 @@
                                 }
                                 const hoverFieldCls = (opts && opts.interactiveHide) ? 'group/field ' : '';
                                 if (isRichField(f)) {
+                                    if (FieldFormatter.canonicalType(f) === 'geolocation' && resolveFieldHtml(f, featureData, fileModes[f.id]) !== FieldFormatter.EMPTY) {
+                                        return `
+                                        <div class="${hoverFieldCls}relative w-full p-0 my-0.5">
+                                            ${resolveFieldHtml(f, featureData, fileModes[f.id])}
+                                            ${opts && opts.interactiveHide ? `<button type="button" class="no-print opacity-0 group-hover/field:opacity-100 hover:text-red-400 text-slate-400 p-0.5 transition-opacity cursor-pointer absolute top-2.5 right-2.5 z-10" onclick="toggleHideField('${esc(f.id)}')" title="Ocultar este campo do relatório"><span class="material-symbols-outlined" style="font-size:13px;display:block">visibility_off</span></button>` : ''}
+                                        </div>`;
+                                    }
                                     return `
                                     <div class="${hoverFieldCls}relative px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50">
                                         <div class="flex items-center justify-between">
@@ -232,18 +239,43 @@
                     <div class="flex flex-wrap gap-2.5${edit ? ' a4-grid-fields-container' : ''}"${edit && edit.containerAttrs ? ' ' + edit.containerAttrs : ''}>
                         ${fldsToRender.map(f => {
                             const val = resolveFieldValue(f, featureData);
+                            const fType = FieldFormatter.canonicalType(f);
                             let pct = larguras[f.id];
                             if (!pct) {
-                                const span = Math.min(spans[f.id] || f.colSpan || 1, colCount);
-                                if (span >= colCount) pct = 100;
-                                else if (colCount === 3 && span === 2) pct = 66;
-                                else pct = colCount === 3 ? 33 : 50;
+                                if (fType === 'geolocation') {
+                                    pct = 100;
+                                } else {
+                                    const span = Math.min(spans[f.id] || f.colSpan || 1, colCount);
+                                    if (span >= colCount) pct = 100;
+                                    else if (colCount === 3 && span === 2) pct = 66;
+                                    else pct = colCount === 3 ? 33 : 50;
+                                }
                             }
                             pct = Math.round(pct);
                             const widthStyle = getFieldWidthStyle(pct);
                             const isLongText = pct >= 45 || String(val).length > 25 || (f.id && (f.id.includes('endereco') || f.id.includes('obs'))) || (f.label && (f.label.toLowerCase().includes('endereço') || f.label.toLowerCase().includes('observa')));
                             const valorHtml = isRichField(f) ? resolveFieldHtml(f, featureData, fileModes[f.id]) : esc(val);
                             const valorCls = (isLongText || isRichField(f)) ? 'break-words whitespace-normal leading-snug' : 'truncate';
+                            if (fType === 'geolocation' && valorHtml !== FieldFormatter.EMPTY) {
+                                if (edit) {
+                                    return `
+                                    <div class="relative group/field select-none w-full my-0.5" ${edit.fieldAttrs ? edit.fieldAttrs(f, pct) : ''}
+                                         style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">
+                                        <div class="flex items-center justify-between gap-1 mb-1">
+                                            <div class="flex items-center gap-1 min-w-0 flex-1">${edit.lead ? edit.lead(f, pct, 'card') : ''}<span class="text-[9.5px] uppercase font-bold text-slate-500 truncate" title="${esc(f.label)}">${esc(f.label)}</span></div>
+                                            <div class="flex items-center gap-1 shrink-0">${edit.tail ? edit.tail(f, pct, 'card') : ''}</div>
+                                        </div>
+                                        ${valorHtml}
+                                    </div>`;
+                                }
+                                const hoverFieldCls = (opts && opts.interactiveHide) ? 'group/field ' : '';
+                                return `
+                                    <div class="${hoverFieldCls}relative w-full my-0.5"
+                                         style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">
+                                        ${valorHtml}
+                                        ${opts && opts.interactiveHide ? `<button type="button" class="no-print opacity-0 group-hover/field:opacity-100 hover:text-red-400 text-slate-400 p-0.5 transition-opacity cursor-pointer absolute top-2.5 right-2.5 z-10" onclick="toggleHideField('${esc(f.id)}')" title="Ocultar este campo do relatório"><span class="material-symbols-outlined" style="font-size:13px;display:block">visibility_off</span></button>` : ''}
+                                    </div>`;
+                            }
                             if (edit) {
                                 return `
                                 <div class="relative group/field p-2 border ${pct > 55 ? 'border-sky-300 bg-sky-50/40' : 'border-slate-200 bg-slate-50/50'} rounded-lg select-none" ${edit.fieldAttrs ? edit.fieldAttrs(f, pct) : ''}
@@ -375,7 +407,25 @@
                 return out;
             });
 
-            // 3. Substitui padrões como @[Nome] ou @nome_campo
+            // 3. Substitui menções por label do campo (ex: @Proprietário ou @[Proprietário])
+            availableFields.forEach(f => {
+                if (f && f.label) {
+                    const labelEsc = f.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const regexLabel = new RegExp(`@\\[?${labelEsc}\\]?`, 'gi');
+                    if (regexLabel.test(result)) {
+                        let val = (typeof resolveFieldValue === 'function') ? resolveFieldValue(f, featureData, availableFields) : undefined;
+                        if (val === undefined || val === null || val === '—') {
+                            val = readFieldRaw(f, featureData);
+                            if (val !== undefined && val !== null) val = formatFieldValueForDisplay(val, f);
+                        }
+                        if (val !== undefined && val !== null && val !== '') {
+                            result = result.replace(regexLabel, esc(String(val)));
+                        }
+                    }
+                }
+            });
+
+            // 4. Substitui padrões como @[Nome] ou @nome_campo
             for (const [key, rawVal] of Object.entries(featureData)) {
                 if (rawVal !== null && rawVal !== undefined) {
                     const regex = new RegExp(`@\\[?${key}\\]?`, 'gi');
@@ -531,14 +581,23 @@
                             ${bloco.titulo ? `
                                 <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex items-center justify-between">
                                     <span class="whitespace-pre-line">${(esc(bloco.titulo)).replace(/\r?\n/g, '<br>')}</span>
-                                    <span class="no-print text-[10px] text-slate-400 font-normal">Clique para editar pontualmente</span>
+                                    <div class="no-print flex items-center gap-1.5">
+                                        <button type="button" onmousedown="event.preventDefault(); if (window.ReportBuilder && window.ReportBuilder.showMentionDropdown) window.ReportBuilder.showMentionDropdown(${idx});" class="text-[10px] text-sky-600 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded px-1.5 py-0.5 cursor-pointer font-medium flex items-center gap-1 transition-colors" title="Inserir campo cadastral da feição (@)"><span class="material-symbols-outlined text-[12px]">alternate_email</span>Inserir campo (@)</button>
+                                        <span class="text-[10px] text-slate-400 font-normal">Clique para editar pontualmente</span>
+                                    </div>
                                 </div>
                             ` : ''}
-                            <div id="viewer-free-text-${idx}" 
-                                 contenteditable="true" 
-                                 class="free-text-editable text-xs text-slate-800 leading-relaxed p-3 bg-white border border-dashed border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-sky-500 transition-all cursor-text print:border-none print:p-0" 
-                                 style="white-space: pre-wrap; line-height: ${bloco.espacamento || '1.6'}; text-align: ${bloco.alinhamento || 'justify'};"
-                                 title="Clique para editar este texto antes de exportar">${processedText}</div>
+                            <div class="relative">
+                                <div id="viewer-free-text-${idx}" 
+                                     contenteditable="true" 
+                                     class="free-text-editable text-xs text-slate-800 leading-relaxed p-3 bg-white border border-dashed border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-sky-500 transition-all cursor-text print:border-none print:p-0" 
+                                     style="white-space: pre-wrap; line-height: ${bloco.espacamento || '1.6'}; text-align: ${bloco.alinhamento || 'justify'};"
+                                     oninput="if(window.ReportBuilder && window.ReportBuilder.handleFreeTextInput) window.ReportBuilder.handleFreeTextInput(event, ${idx})" 
+                                     onkeydown="if(window.ReportBuilder && window.ReportBuilder.handleFreeTextKeyDown) window.ReportBuilder.handleFreeTextKeyDown(event, ${idx})" 
+                                     onblur="if(window.ReportBuilder && window.ReportBuilder.saveFreeTextContent) window.ReportBuilder.saveFreeTextContent(${idx}, this.innerHTML)" 
+                                     title="Clique para editar este texto antes de exportar">${processedText}</div>
+                                <div id="mention-dropdown-${idx}" class="hidden absolute left-2 top-2 z-50 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl shadow-2xl max-h-72 w-80 sm:w-96 overflow-y-auto p-1.5 text-xs no-print"></div>
+                            </div>
                         </div>
                     `;
         }
@@ -760,7 +819,7 @@
             const modes = bloco.campos_exibicao || {};   // { idDoCampo: 'lista' | 'imagem' }
             const fileMeta = { titulo: bloco.exibirLegenda !== false, autor: bloco.exibirResp !== false, data: bloco.exibirData !== false };
             const geometryCenter = getGeometryCenter();
-            const WIDE = ['textarea', 'hiperlink', 'hiperlink_1n', 'attachment', 'cep'];
+            const WIDE = ['textarea', 'hiperlink', 'hiperlink_1n', 'attachment', 'cep', 'geolocation'];
 
             const widthOf = (pct) => {
                 const p = Math.max(15, Math.min(100, Math.round(pct)));

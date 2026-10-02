@@ -973,9 +973,32 @@
         const FreeText = ReportFreeText.create({
             esc: escapeHtml,
             getFields: () => window.reportViewerFormFields || [],
-            save: (i, html) => avisarConstrutor({ tipo: 'construtor:acao', nome: 'saveFreeTextContent', args: [i, html] }),
-            setLineHeight: (i, v) => avisarConstrutor({ tipo: 'construtor:acao', nome: 'changeLineHeight', args: [i, v] })
+            getFeatureData: () => (reportPayload && reportPayload.featureData) || window.reportViewerFeatureData || {},
+            resolveFieldValue: (f, d) => (Blocks && Blocks.resolveFieldValue ? Blocks.resolveFieldValue(f, d) : undefined),
+            save: (i, html) => {
+                if (EDICAO) {
+                    avisarConstrutor({ tipo: 'construtor:acao', nome: 'saveFreeTextContent', args: [i, html] });
+                } else {
+                    if (tplAtual && tplAtual.blocos && tplAtual.blocos[i]) {
+                        tplAtual.blocos[i].conteudo = html;
+                    }
+                    if (reportPayload && reportPayload.template && reportPayload.template.blocos && reportPayload.template.blocos[i]) {
+                        reportPayload.template.blocos[i].conteudo = html;
+                    }
+                    scheduleEmissao();
+                }
+            },
+            setLineHeight: (i, v) => {
+                if (EDICAO) {
+                    avisarConstrutor({ tipo: 'construtor:acao', nome: 'changeLineHeight', args: [i, v] });
+                } else {
+                    if (tplAtual && tplAtual.blocos && tplAtual.blocos[i]) {
+                        tplAtual.blocos[i].espacamento = v;
+                    }
+                }
+            }
         });
+        window.ReportBuilder = criarPonteConstrutor();
         const { getOrgBadgeHtml, getStatusBadgeHtml, getRecuoBadgeHtml, getGeometryCenter, formatFieldValueForDisplay, readFieldRaw, isRichField,
                 resolveFieldHtml, resolveFieldValue, getFieldWidthStyle, renderAttributeGrid, replaceMentionsWithData,
                 getFooterPageNumberText, renderHeaderSlotHtml, renderFooterSlotHtml } = Blocks;
@@ -1154,6 +1177,7 @@
             }
             window.reportViewerFormTabs = formTabs;
             window.reportViewerFormFields = fields;
+            window.reportViewerFeatureData = featureData;
             // migra modelos antigos: um bloco de gráfico só com vários chart_ids vira um bloco por gráfico (cada um
             // arrastável e configurável à parte); "chart_id" (singular, do modelo padrão bem antigo) também migra
             tpl.blocos = normalizarBlocosGraficosGeral(tpl.blocos || []);
@@ -3091,7 +3115,7 @@
                             <!-- Dimensões da feição -->
                             <div id="map-dimensions-summary" class="mt-1.5 p-2 bg-slate-50 border border-slate-200 rounded-lg flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono">
                                 <div class="flex items-center gap-1.5">
-                                    <span class="font-bold text-emerald-700">Georreferenciamento:</span>
+                                    <span class="font-bold text-emerald-700">Arestas:</span>
                                     <span id="map-sides-text">Processando lados do polígono...</span>
                                 </div>
                                 <div id="map-area-text" class="font-bold text-slate-900">Área: —</div>
@@ -3226,7 +3250,117 @@
             } catch (e) { return { ok: false, motivo: 'erro' }; }
         }
 
+
+        // SINCRONIZAÇÃO EM TEMPO REAL: "Camadas ativas no mapa" sincronizado com o menu de camadas do projeto ativo em index.html
+        function sincronizarCamadasDoMenu(forceApply) {
+            if (typeof window === 'undefined' || !window.opener || !Array.isArray(window.opener.themes)) return;
+            try {
+                const op = window.opener;
+                let projectThemes = [];
+                if (op.document) {
+                    try {
+                        const domContainer = op.document.getElementById('themes-container');
+                        if (domContainer) {
+                            const cards = domContainer.querySelectorAll('.theme-card');
+                            if (cards && cards.length > 0) {
+                                const ids = Array.from(cards).map(c => String(c.dataset.id || c.id.replace('theme-card-', ''))).filter(Boolean);
+                                const tMap = new Map((op.themes || []).map(t => [String(t.id), t]));
+                                projectThemes = ids.map(id => tMap.get(id)).filter(t => t && ((typeof op.userCanOnTheme !== 'function') || op.userCanOnTheme(t.id, 'ver')));
+                            }
+                        }
+                    } catch(eDom) {}
+                }
+                if (!projectThemes.length) {
+                    const isThemeInMenu = (t) => {
+                        if (typeof op.userCanOnTheme === 'function' && !op.userCanOnTheme(t.id, 'ver')) return false;
+                        if (typeof op.isThemeInWorkspace === 'function') return op.isThemeInWorkspace(t.id);
+                        if (Array.isArray(op.activeWorkspaceThemes)) return op.activeWorkspaceThemes.some(x => String(x) === String(t.id));
+                        return true;
+                    };
+                    projectThemes = op.themes.filter(isThemeInMenu);
+                }
+                const geom = (renderArgs && renderArgs.featureGeometry) || (reportPayload && reportPayload.featureGeometry) || window.currentReportGeometry || null;
+                const mt = op.MapTools || window.MapTools;
+                if (!mt || typeof mt.collectNearbyLayers !== 'function') return;
+
+                const rotulos = (theme, f) => {
+                    try {
+                        if (typeof op.canUserSeeThemeData === 'function' && !op.canUserSeeThemeData(theme)) return null;
+                        if (typeof op.getFeaturePropertyValue !== 'function') return null;
+                        const lab = (k) => (typeof op.getThemeFieldLabel === 'function' ? op.getThemeFieldLabel(theme, k) : k);
+                        const partes = [];
+                        if (theme.disp2Active !== false) { const v = op.getFeaturePropertyValue(theme, f, theme.disp2 || 'Quadra'); if (v) partes.push(lab(theme.disp2 || 'Quadra') + ' ' + v); }
+                        if (theme.disp1Active !== false) { const v = op.getFeaturePropertyValue(theme, f, theme.disp1 || 'Lote'); if (v) partes.push(lab(theme.disp1 || 'Lote') + ' ' + v); }
+                        const titulo = op.getFeaturePropertyValue(theme, f, theme.mainTitle || 'Proprietário');
+                        return { r: partes.join(' • '), t: titulo ? String(titulo) : '' };
+                    } catch (e) { return null; }
+                };
+
+                const novasCamadas = mt.collectNearbyLayers(projectThemes, geom, {
+                    bufferM: 1500,
+                    excludeKey: (reportPayload && reportPayload.featureKey) || '',
+                    canSee: (id) => (typeof op.userCanOnTheme !== 'function') || op.userCanOnTheme(id, 'ver'),
+                    includeAllThemes: true,
+                    includeEmpty: true,
+                    labelFn: rotulos
+                });
+
+                if (Array.isArray(novasCamadas)) {
+                    if (!reportPayload) reportPayload = {};
+                    reportPayload.camadasMapa = novasCamadas;
+
+                    if (mapController) {
+                        const cfgAtual = mapController.getConfig();
+                        const ligadasExistentes = new Set((cfgAtual.camadasLigadas || []).map(String));
+                        const menuVisiveis = new Set(projectThemes.filter(t => t.visible !== false).map(t => String(t.id)));
+                        
+                        // Mantém ligadas as que já estavam ligadas pelo usuário OU as que estão visíveis no menu
+                        const novasLigadas = novasCamadas
+                            .filter(c => ligadasExistentes.has(String(c.id)) || menuVisiveis.has(String(c.id)))
+                            .map(c => String(c.id));
+                        
+                        mapController.setConfig({ camadasLigadas: novasLigadas });
+
+                        if (typeof mapController.setCamadas === 'function') {
+                            mapController.setCamadas(novasCamadas);
+                        }
+                    }
+
+                    if (temporalController && typeof temporalController.refreshLayers === 'function') {
+                        temporalController.refreshLayers();
+                    }
+
+                    renderMapToolsPanel();
+                    scheduleRepaginate();
+                    scheduleEmissao();
+                }
+            } catch(e) {
+                console.warn('[sincronizarCamadasDoMenu] Aviso na sincronização:', e);
+            }
+        }
+        window.sincronizarCamadasDoMenu = sincronizarCamadasDoMenu;
+
+        if (typeof BroadcastChannel !== 'undefined') {
+            try {
+                const bc = new BroadcastChannel('sig_project_sync');
+                bc.onmessage = (ev) => {
+                    if (ev.data && (ev.data.type === 'PROJECT_CHANGED' || ev.data.type === 'THEMES_CHANGED')) {
+                        sincronizarCamadasDoMenu(true);
+                    }
+                };
+            } catch(e) {}
+        }
+        window.addEventListener('storage', (ev) => {
+            if (ev.key === 'sig_last_active_project_change' || (ev.key && ev.key.startsWith('last_active_project_'))) {
+                sincronizarCamadasDoMenu(true);
+            }
+        });
+        window.addEventListener('focus', () => {
+            sincronizarCamadasDoMenu();
+        });
+
         async function initReportMiniMap(geometry) {
+            sincronizarCamadasDoMenu();
             window.currentReportGeometry = geometry;
             const mapContainer = document.getElementById('interactive-report-map');
             if (!mapContainer || typeof L === 'undefined' || !mapBloco) return;
@@ -3238,6 +3372,10 @@
             const config = MapTools.mergeAjustes(mapBaseConfig, ajustes);
             config.referencia.ativo = false;
             const camadas = (reportPayload && Array.isArray(reportPayload.camadasMapa)) ? reportPayload.camadasMapa : [];
+
+            if (Array.isArray(camadas) && camadas.length > 0 && (!config.camadasLigadas || config.camadasLigadas.length === 0)) {
+                config.camadasLigadas = camadas.map(c => String(c.id));
+            }
 
             try {
                 lastPontosKey = blocosKey(config);
@@ -3912,23 +4050,50 @@
             const tc = temporalController;
             const tcfg = tc ? tc.getConfig() : null;
             const statusTxt = { 'verificando': 'verificando…', 'sem-cobertura': 'sem imagem no local' };
+
+            const isSatAtivo = (id) => {
+                if (!reportPayload || !Array.isArray(reportPayload.ortofotos)) return false;
+                const exists = reportPayload.ortofotos.some(x => String(x.id) === String(id));
+                if (!exists) return false;
+                if (!tcfg || !tcfg.ativo) return false;
+                const excluidas = (tcfg.excluidas || []).map(String);
+                return !excluidas.includes(String(id));
+            };
+
+            const satHistoricoItensHtml = (typeof SATELLITE_CATALOG !== 'undefined') ? Object.keys(SATELLITE_CATALOG).map(key => {
+                const item = SATELLITE_CATALOG[key];
+                const checked = isSatAtivo(item.id);
+                return `
+                    <label class="row" title="${esc(item.nome)}" style="padding:2px 0;cursor:pointer">
+                        <input type="checkbox" ${checked ? 'checked' : ''} onchange="mapPanelToggleSatHistorico('${esc(item.id)}', this.checked)">
+                        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#f1f5f9">${esc(item.nome)}</span>
+                        <span style="color:#94a3b8;font-size:10px">${esc(item.dataTxt)}</span>
+                    </label>
+                `;
+            }).join('') : '';
+
             const satHistoricoHtml = `
                 <div style="margin-top:6px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.1)">
                     <div style="font-weight:700;margin-bottom:3px;font-size:11px">Satélite / Datas Históricas</div>
-                    <div style="display:flex;gap:4px">
-                        <select id="mp-sat-temporal-sel" style="flex:1;padding:4px;border:1px solid rgba(255,255,255,0.18);border-radius:8px;background:#1e293b;color:#f8fafc;font-size:11px">
-                            <option value="sat-google-2026">Google Satélite (2026)</option>
-                            <option value="sat-wayback-2024">Esri Wayback (2024)</option>
-                            <option value="sat-wayback-2020">Esri Wayback (2020)</option>
-                            <option value="sat-wayback-2016">Esri Wayback (2016)</option>
-                            <option value="sat-wayback-2014">Esri Wayback (2014)</option>
-                        </select>
-                        <button type="button" class="act" style="width:auto;padding:4px 8px;font-size:11px" onclick="mapPanelAddSatHistorico()">+ Incluir</button>
+                    <div class="mp-inner-card" style="border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:6px 8px;margin-top:4px;background:#1e293b;color:#f1f5f9">
+                        ${satHistoricoItensHtml}
                     </div>
                 </div>
             `;
+
+            const ortofotosLocais = tc ? tc.list().filter(x => !String(x.id).startsWith('sat-')) : [];
+            const ortofotosLocaisHtml = ortofotosLocais.length ? `
+                <div class="mp-inner-card" style="border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:6px 8px;margin-top:4px;background:#1e293b;color:#f1f5f9">${ortofotosLocais.map(x => `
+                    <label class="row ${x.status === 'sem-cobertura' ? 'off' : ''}" title="${esc(x.nome)}" style="padding:2px 0">
+                        <input type="checkbox" ${x.incluida ? 'checked' : ''} ${x.status === 'sem-cobertura' ? 'disabled' : ''} onchange="mapPanelOrtofoto('${esc(x.id)}', this.checked)">
+                        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#f1f5f9">${esc(x.nome)}</span>
+                        <span style="color:#94a3b8;font-size:10px">${esc(x.dataTxt)}</span>
+                        ${statusTxt[x.status] ? `<span style="color:#f59e0b;font-size:10px">${statusTxt[x.status]}</span>` : ''}
+                    </label>`).join('')}</div>` : '';
+
             const temporalHtml = !tc
-                ? '<div style="color:#94a3b8">Nenhuma ortofoto disponível para esta feição.</div>' + satHistoricoHtml
+                ? `${chk('mp-temp', 'Análise temporal (uma imagem por data)', false, "mapPanelTemporal('ativo', this.checked)")}
+                   ${satHistoricoHtml}`
                 : `${chk('mp-temp', 'Análise temporal (uma imagem por data)', tcfg.ativo, "mapPanelTemporal('ativo', this.checked)")}
                     <div style="display:flex;gap:4px;margin:3px 0">
                         <select onchange="mapPanelTemporal('ordem', this.value)" style="flex:1;padding:4px;border:1px solid rgba(255,255,255,0.18);border-radius:8px;background:#1e293b;color:#f8fafc">
@@ -3941,13 +4106,7 @@
                     </div>
                     ${chk('mp-temp-cont', 'Contorno da feição', tcfg.contorno, "mapPanelTemporal('contorno', this.checked)")}
                     ${chk('mp-temp-sync', 'Mover um quadro move todos', tcfg.sincronizar, "mapPanelTemporal('sincronizar', this.checked)")}
-                    <div class="mp-inner-card" style="border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:6px 8px;margin-top:4px;background:#1e293b;color:#f1f5f9">${tc.list().map(x => `
-                        <label class="row ${x.status === 'sem-cobertura' ? 'off' : ''}" title="${esc(x.nome)}" style="padding:2px 0">
-                            <input type="checkbox" ${x.incluida ? 'checked' : ''} ${x.status === 'sem-cobertura' ? 'disabled' : ''} onchange="mapPanelOrtofoto('${esc(x.id)}', this.checked)">
-                            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#f1f5f9">${esc(x.nome)}</span>
-                            <span style="color:#94a3b8;font-size:10px">${esc(x.dataTxt)}</span>
-                            ${statusTxt[x.status] ? `<span style="color:#f59e0b;font-size:10px">${statusTxt[x.status]}</span>` : ''}
-                        </label>`).join('')}</div>
+                    ${ortofotosLocaisHtml}
                     ${satHistoricoHtml}`;
             const ortofotosBase = (reportPayload && Array.isArray(reportPayload.ortofotos)) ? reportPayload.ortofotos : [];
             const camadasHtml = !cfg.camadasVizinhas
@@ -4433,29 +4592,32 @@
             }
         };
 
-        function mapPanelAddSatHistorico() {
-            const sel = document.getElementById('mp-sat-temporal-sel');
-            if (!sel || !sel.value) return;
-            const key = sel.value;
-            const satDef = SATELLITE_CATALOG[key];
+        function mapPanelToggleSatHistorico(id, on) {
+            const satDef = SATELLITE_CATALOG[id];
             if (!satDef) return;
 
             if (!reportPayload) reportPayload = {};
             if (!Array.isArray(reportPayload.ortofotos)) reportPayload.ortofotos = [];
 
-            const idx = reportPayload.ortofotos.findIndex(x => x.id === satDef.id);
-            if (idx >= 0) {
-                if (temporalController) {
-                    temporalController.toggle(satDef.id, true);
-                }
-            } else {
+            const idx = reportPayload.ortofotos.findIndex(x => String(x.id) === String(satDef.id));
+            if (idx < 0) {
                 reportPayload.ortofotos.push(JSON.parse(JSON.stringify(satDef)));
             }
 
             const geom = (renderArgs && renderArgs.featureGeometry) || (reportPayload && reportPayload.featureGeometry) || window.currentReportGeometry || null;
             let cfgTemp = temporalController ? temporalController.getConfig() : ((mapController && mapController.getConfig().temporal) || { ativo: true, ordem: 'desc', colunas: 2, alturaMm: 45, contorno: true, sincronizar: true, excluidas: [] });
-            cfgTemp = Object.assign({}, cfgTemp, { ativo: true });
-            cfgTemp.excluidas = (cfgTemp.excluidas || []).filter(id => id !== satDef.id);
+            
+            if (on) {
+                cfgTemp.ativo = true;
+            }
+
+            let excluidas = Array.from(new Set((cfgTemp.excluidas || []).map(String)));
+            if (on) {
+                excluidas = excluidas.filter(x => x !== String(id));
+            } else {
+                if (!excluidas.includes(String(id))) excluidas.push(String(id));
+            }
+            cfgTemp.excluidas = excluidas;
 
             if (temporalController) {
                 try { temporalController.destroy(); } catch (e) {}
@@ -4472,10 +4634,18 @@
             if (mapController) {
                 mapController.setConfig({ temporal: cfgTemp });
             }
-            temporalController.start();
+            if (cfgTemp.ativo) {
+                temporalController.start();
+            }
             renderMapToolsPanel();
             scheduleRepaginate();
             scheduleEmissao();
+        }
+
+        function mapPanelAddSatHistorico() {
+            const sel = document.getElementById('mp-sat-temporal-sel');
+            if (!sel || !sel.value) return;
+            mapPanelToggleSatHistorico(sel.value, true);
         }
         function mapPanelMedidas(key, value) { if (mapController) mapController.setConfig({ medidas: { [key]: value } }); }
         function mapPanelResetMedidas() { if (mapController) mapController.resetMeasures(); }

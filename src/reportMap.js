@@ -950,6 +950,14 @@
                 cfg = Object.assign({}, cfg, { camadasLigadas: Array.from(set) });
                 apply();
             },
+            /** Atualiza dinamicamente as camadas vizinhas (ex: quando o usuário altera o projeto ativo no menu de camadas). */
+            setCamadas(novas) {
+                camadas.length = 0;
+                if (Array.isArray(novas)) {
+                    novas.forEach(c => camadas.push(c));
+                }
+                apply();
+            },
             /** Liga/desliga uma camada pelo id no mapa de localização (card próprio, independente das camadas do mapa principal). */
             toggleLocatorLayer(id, on) {
                 const set = new Set(cfg.situacao.camadas.map(String));

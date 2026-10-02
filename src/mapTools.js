@@ -1625,7 +1625,8 @@
         const max = opts.maxPerLayer || 1500;
         const out = [];
         (themes || []).forEach(theme => {
-            if (!theme || theme.visible === false) return;
+            if (!theme) return;
+            if (!opts.includeAllThemes && theme.visible === false) return;
             if (typeof opts.canSee === 'function' && !opts.canSee(theme.id)) return;
             const feats = [];
             let total = 0;
@@ -1655,10 +1656,21 @@
                     feats.push({ type: 'Feature', properties: props, geometry: { type: f.geometry.type, coordinates: roundCoords(f.geometry.coordinates, 6) } });
                 }
             });
-            if (feats.length) {
+            if (feats.length || opts.includeAllThemes || opts.includeEmpty) {
+                const fallbackFeats = (!feats.length && theme.features && theme.features.length)
+                    ? theme.features.slice(0, max).filter(f => f && f.geometry).map(f => ({
+                        type: 'Feature',
+                        properties: {},
+                        geometry: { type: f.geometry.type, coordinates: roundCoords(f.geometry.coordinates, 6) }
+                    }))
+                    : feats;
+
+                const firstFeat = feats[0] || (theme.features && theme.features.find(f => f && f.geometry));
+                const kind = firstFeat ? geomKind(firstFeat.geometry) : (theme.geometry_type || 'polygon');
+
                 out.push({
                     id: String(theme.id), name: theme.name || 'Camada', color: isHexColor(theme.color) ? theme.color : '#0284c7',
-                    kind: geomKind(feats[0].geometry), features: feats, truncated: total > feats.length,
+                    kind: kind, features: fallbackFeats, truncated: total > feats.length,
                     campos: campos
                 });
             }

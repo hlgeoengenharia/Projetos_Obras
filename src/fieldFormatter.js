@@ -218,6 +218,120 @@
         return `${conv(lat, 'N', 'S')} ${conv(lng, 'E', 'W')}`;
     }
 
+    function utmZoneFromLng(lng) {
+        return Math.floor((lng + 180) / 6) + 1;
+    }
+
+    function latLngToUtmSirgas(lat, lng) {
+        if (typeof window !== 'undefined' && window.MapTools && typeof window.MapTools.latLngToUtm === 'function') {
+            return window.MapTools.latLngToUtm(lat, lng);
+        }
+        if (typeof MapTools !== 'undefined' && typeof MapTools.latLngToUtm === 'function') {
+            return MapTools.latLngToUtm(lat, lng);
+        }
+        const zone = utmZoneFromLng(lng);
+        const south = lat < 0;
+        const GRS80_A = 6378137;
+        const GRS80_F = 1 / 298.257222101;
+        const UTM_K0 = 0.9996;
+        const rad = deg => deg * Math.PI / 180;
+        const cm = (zone - 1) * 6 - 180 + 3;
+        const n = GRS80_F / (2 - GRS80_F);
+        const A = GRS80_A / (1 + n) * (1 + n * n / 4 + Math.pow(n, 4) / 64);
+        const a1 = n / 2 - 2 * n * n / 3 + 5 * Math.pow(n, 3) / 16;
+        const a2 = 13 * n * n / 48 - 3 * Math.pow(n, 3) / 5;
+        const a3 = 61 * Math.pow(n, 3) / 240;
+        const phi = rad(lat);
+        const dl = rad(lng - cm);
+        const q = 2 * Math.sqrt(n) / (1 + n);
+        const tt = Math.sinh(Math.atanh(Math.sin(phi)) - q * Math.atanh(q * Math.sin(phi)));
+        const xi0 = Math.atan2(tt, Math.cos(dl));
+        const eta0 = Math.atanh(Math.sin(dl) / Math.sqrt(1 + tt * tt));
+        let xi = xi0, eta = eta0;
+        [a1, a2, a3].forEach((a, i) => {
+            const j = i + 1;
+            xi += a * Math.sin(2 * j * xi0) * Math.cosh(2 * j * eta0);
+            eta += a * Math.cos(2 * j * xi0) * Math.sinh(2 * j * eta0);
+        });
+        return { zone, hemisphere: south ? 'S' : 'N', e: 500000 + UTM_K0 * A * eta, n: UTM_K0 * A * xi + (south ? 10000000 : 0) };
+    }
+
+    function formatGmsSingle(value, posChar, negChar, casasSeg = 2) {
+        if (typeof window !== 'undefined' && window.MapTools && typeof window.MapTools.fmtGms === 'function') {
+            return window.MapTools.fmtGms(value, posChar, negChar, casasSeg);
+        }
+        if (typeof MapTools !== 'undefined' && typeof MapTools.fmtGms === 'function') {
+            return MapTools.fmtGms(value, posChar, negChar, casasSeg);
+        }
+        const abs = Math.abs(value);
+        let d = Math.floor(abs);
+        let m = Math.floor((abs - d) * 60);
+        let s = ((abs - d) * 60 - m) * 60;
+        s = Number(s.toFixed(casasSeg));
+        if (s >= 60) { s = 0; m += 1; }
+        if (m >= 60) { m = 0; d += 1; }
+        const sTxt = (s < 10 ? '0' : '') + s.toFixed(casasSeg).replace('.', ',');
+        const mTxt = m < 10 ? '0' + m : String(m);
+        return `${d}° ${mTxt}' ${sTxt}" ${value < 0 ? negChar : posChar}`;
+    }
+
+    function formatGeolocationTableHtml(value, field, opts) {
+        opts = opts || {};
+        const g = parseGeolocation(value, opts.geometryCenter);
+        if (!g) return EMPTY;
+        const label = escapeHtml((field && (field.label || field.name)) || 'Geolocalização');
+        const lat = g.lat;
+        const lng = g.lng;
+        const latGms = escapeHtml(formatGmsSingle(lat, 'N', 'S', 2));
+        const lngGms = escapeHtml(formatGmsSingle(lng, 'E', 'W', 2));
+        const utm = latLngToUtmSirgas(lat, lng);
+        const zoneTxt = escapeHtml(`${utm.zone} ${utm.hemisphere}`);
+        const eTxt = escapeHtml(formatNumber(utm.e));
+        const nTxt = escapeHtml(formatNumber(utm.n));
+
+        return `<div class="w-full border border-slate-300 rounded overflow-hidden my-1 bg-white shadow-2xs page-break-avoid">
+            <div class="bg-[#0b1a30] text-white px-2.5 py-1.5 flex justify-between items-center">
+                <div class="flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[13px] text-emerald-400">format_list_bulleted</span>
+                    <h2 class="font-bold text-[9px] uppercase tracking-wider text-white">${label}</h2>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="report-table w-full text-center font-mono text-[8px] border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50 text-[8px] uppercase font-bold text-slate-700">
+                            <th class="text-center px-2 py-1 border-r border-b border-slate-200" rowspan="2">Localização</th>
+                            <th class="text-center px-2 py-1 border-r border-b border-slate-200 bg-slate-100/70" colspan="2">Decimais</th>
+                            <th class="text-center px-2 py-1 border-r border-b border-slate-200 bg-slate-50" colspan="2">GMS</th>
+                            <th class="text-center px-2 py-1 border-b border-slate-200 bg-emerald-50/50 text-emerald-950" colspan="3">UTM (SIRGAS 2000)</th>
+                        </tr>
+                        <tr class="bg-slate-50 text-[7px] font-bold text-slate-600 uppercase border-b border-slate-200">
+                            <th class="text-center px-1.5 py-1 border-r border-slate-200">Lat (°)</th>
+                            <th class="text-center px-1.5 py-1 border-r border-slate-200">Long (°)</th>
+                            <th class="text-center px-1.5 py-1 border-r border-slate-200">Lat (DMS)</th>
+                            <th class="text-center px-1.5 py-1 border-r border-slate-200">Long (DMS)</th>
+                            <th class="text-center px-1.5 py-1 border-r border-slate-200">Zona</th>
+                            <th class="text-center px-1.5 py-1 border-r border-slate-200">E (m)</th>
+                            <th class="text-center px-1.5 py-1">N (m)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="bg-white hover:bg-slate-50 border-b border-slate-200">
+                            <td class="font-bold text-slate-800 px-2 py-1 border-r border-slate-200 border-b">Ponto Central</td>
+                            <td class="text-slate-700 px-2 py-1 border-r border-slate-200 border-b">${lat.toFixed(6)}</td>
+                            <td class="text-slate-700 px-2 py-1 border-r border-slate-200 border-b">${lng.toFixed(6)}</td>
+                            <td class="text-slate-600 px-2 py-1 border-r border-slate-200 border-b">${latGms}</td>
+                            <td class="text-slate-600 px-2 py-1 border-r border-slate-200 border-b">${lngGms}</td>
+                            <td class="font-semibold text-emerald-800 px-2 py-1 border-r border-slate-200 border-b">${zoneTxt}</td>
+                            <td class="text-slate-800 px-2 py-1 border-r border-slate-200 border-b">${eTxt}</td>
+                            <td class="text-slate-800 px-2 py-1 border-b">${nTxt}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>`;
+    }
+
     function formatDate(value) {
         const s = String(value).trim();
         const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
@@ -429,6 +543,8 @@
         if (type !== 'geolocation' && isEmptyValue(value)) return EMPTY;
 
         switch (type) {
+            case 'geolocation':
+                return formatGeolocationTableHtml(value, field, opts);
             case 'hiperlink': {
                 const l = parseLink(value);
                 return (l.url || l.title || l.number) ? linkBlockHtml(l) : EMPTY;
@@ -460,6 +576,7 @@
         formatNumber,
         formatDate,
         formatDMS,
+        formatGeolocationTableHtml,
         normalizeUrl,
         parseFiles,
         isImageFile,

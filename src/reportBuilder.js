@@ -4618,9 +4618,28 @@
                             return { r: partes.join(' • '), t: titulo ? String(titulo) : '' };
                         } catch (e) { return null; }
                     };
-                    camadasMapa = window.MapTools.collectNearbyLayers(window.themes, featureGeometry, {
+                    let themesToCollect = window.themes;
+                    let includeAll = false;
+                    const domContainer = (typeof document !== 'undefined') ? document.getElementById('themes-container') : null;
+                    const menuCards = domContainer ? domContainer.querySelectorAll('.theme-card') : null;
+                    if (menuCards && menuCards.length > 0) {
+                        const menuIds = Array.from(menuCards).map(c => String(c.dataset.id || c.id.replace('theme-card-', ''))).filter(Boolean);
+                        const themesMap = new Map((window.themes || []).map(t => [String(t.id), t]));
+                        themesToCollect = menuIds.map(id => themesMap.get(id)).filter(t => t && ((typeof window.userCanOnTheme !== 'function') || window.userCanOnTheme(t.id, 'ver')));
+                        includeAll = true;
+                    } else if (typeof window.isThemeInWorkspace === 'function') {
+                        themesToCollect = (window.themes || []).filter(t => window.isThemeInWorkspace(t.id) && ((typeof window.userCanOnTheme !== 'function') || window.userCanOnTheme(t.id, 'ver')));
+                        if (themesToCollect.length > 0) includeAll = true;
+                    } else if (Array.isArray(window.activeWorkspaceThemes) && window.activeWorkspaceThemes.length > 0) {
+                        const wsIds = new Set(window.activeWorkspaceThemes.map(String));
+                        themesToCollect = (window.themes || []).filter(t => wsIds.has(String(t.id)) && ((typeof window.userCanOnTheme !== 'function') || window.userCanOnTheme(t.id, 'ver')));
+                        includeAll = true;
+                    }
+                    camadasMapa = window.MapTools.collectNearbyLayers(themesToCollect, featureGeometry, {
                         excludeKey: featureKeyMapa,
                         canSee: (id) => (typeof window.userCanOnTheme !== 'function') || window.userCanOnTheme(id, 'ver'),
+                        includeAllThemes: includeAll,
+                        includeEmpty: includeAll,
                         labelFn: rotulos,
                         // campos da camada (para a coluna Confrontantes) e valores das feições próximas: só com permissão de ver os dados
                         fieldsFn: (theme) => {

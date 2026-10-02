@@ -1894,14 +1894,15 @@ function initMap() {
             return; // bubble to map click
         }
         
-        // Se a ferramenta de medição estiver ativa ou em modo de desenho, permite o clique livre em qualquer ponto ou camada sem interceptar e sem exibir avisos
+        // Se a ferramenta de medição estiver ativa ou em modo de desenho/edição de feições, permite o clique livre em qualquer ponto ou camada sem interceptar e sem exibir avisos
+        const isDrawingTheme = !!(typeof editingThemeId !== 'undefined' && editingThemeId);
         const isPmDrawing = typeof map !== 'undefined' && map && map.pm && (
             (typeof map.pm.globalDrawModeEnabled === 'function' && map.pm.globalDrawModeEnabled()) ||
             (map.pm.Draw && typeof map.pm.Draw.isActive === 'function' && map.pm.Draw.isActive())
         );
-        const isMeasuringActive = !!(window.isMeasurementActive && ((typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode) || isPmDrawing));
-        if (isMeasuringActive) {
-            return; // bubble para a ferramenta de medição (Leaflet-Geoman PM)
+        const isMeasuringActive = !!(window.isMeasurementActive && (typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode));
+        if (isDrawingTheme || isPmDrawing || isMeasuringActive) {
+            return; // bubble para a ferramenta de desenho/medição (Leaflet-Geoman PM)
         }
         
         // Intercepta Ctrl + Clique para Multi-Seleção de feições
@@ -1980,8 +1981,166 @@ function initMap() {
     }
   });
 
+  // Processa a criação de feição com resposta imediata na UI (sem esperar rede) e salvamento em background
+  function processarCriacaoFeicaoImediata(feature) {
+    const targetThemeId = feature.properties.themeId || editingThemeId;
+    if (!targetThemeId) return;
+
+    const geomType = feature.geometry.type;
+
+    // 1. Adiciona imediatamente ao tema em memória e no cache local
+    const theme = themes.find(t => String(t.id) === String(targetThemeId));
+    if (theme) {
+        if (!theme.features) theme.features = [];
+        if (!feature.properties._bbox && typeof computeGeoJSONBbox === 'function') {
+            feature.properties._bbox = computeGeoJSONBbox(feature.geometry);
+        }
+        theme.features.push(feature);
+        if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.indexThemeFeatures === 'function') {
+            window.GeoEngineTurbo.indexThemeFeatures(targetThemeId, theme.features);
+        } else if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.indexTheme === 'function') {
+            window.GeoEngineTurbo.indexTheme(targetThemeId, theme.features);
+        }
+        if (window.GeoTurboDB && typeof window.GeoTurboDB.saveThemeData === 'function') {
+            window.GeoTurboDB.saveThemeData(targetThemeId, theme.features, theme.features.length);
+        }
+    }
+
+    // 2. Adiciona a feição imediatamente ao mapa Leaflet
+    geojsonLayer.addData(feature);
+
+    // 3. Finaliza o modo de desenho
+    stopDrawingMode();
+
+    // 4. Localiza a layer criada e abre imediatamente o card do formulário
+    let createdLayer = null;
+    geojsonLayer.eachLayer(l => {
+        if (l.feature && l.feature.properties) {
+            const p = l.feature.properties;
+            if ((feature.properties.id_banco && p.id_banco === feature.properties.id_banco) ||
+                (feature.properties._tempId && p._tempId === feature.properties._tempId)) {
+                createdLayer = l;
+            }
+        }
+    });
+
+    if (createdLayer) {
+        activeFeatureLayer = createdLayer;
+        window.activeFeatureLayer = createdLayer;
+        window.activeFeatureData = feature.properties;
+        highlightFeature(feature.properties._tempId, true);
+        showFeatureInfoModal(createdLayer);
+    }
+
+    // 5. Salva no Supabase ou enfileira no OfflineSync de forma assíncrona em background (sem travar a tela)
+    (async () => {
+        const isDeviceOffline = (typeof navigator !== 'undefined' && !navigator.onLine) || (typeof localStorage !== 'undefined' && localStorage.getItem('geogestor_modo_campo') === 'true');
+
+        if (isDeviceOffline) {
+            if (window.OfflineSync && typeof window.OfflineSync.enqueueCreate === 'function') {
+                await window.OfflineSync.enqueueCreate(targetThemeId, feature);
+            }
+        } else if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            try {
+                const { data: insData, error: insErr } = await supabaseClient.from('feicoes').insert({
+                    theme_id: targetThemeId,
+                    propriedades: feature.properties,
+                    geometria: feature.geometry
+                }).select();
+
+                if (!insErr && insData && insData.length > 0) {
+                    feature.properties.id_banco = insData[0].id;
+                    if (createdLayer && createdLayer.feature && createdLayer.feature.properties) {
+                        createdLayer.feature.properties.id_banco = insData[0].id;
+                    }
+                    const tName = (themes.find(t => t.id === targetThemeId)?.name) || targetThemeId;
+                    if (window.auditLogger && typeof window.auditLogger.log === 'function') {
+                        window.auditLogger.log('CRIAR_FEICAO', `${tName} — Nova Feição #${insData[0].id}`, {
+                            tema: tName,
+                            feicao_id: insData[0].id,
+                            tipo_geometria: geomType
+                        });
+                    }
+                } else {
+                    if (window.OfflineSync && typeof window.OfflineSync.enqueueCreate === 'function') {
+                        await window.OfflineSync.enqueueCreate(targetThemeId, feature);
+                    }
+                }
+            } catch(eDb) {
+                console.error("Erro ao salvar nova feição no Supabase, enfileirando offline:", eDb);
+                if (window.OfflineSync && typeof window.OfflineSync.enqueueCreate === 'function') {
+                    await window.OfflineSync.enqueueCreate(targetThemeId, feature);
+                }
+            }
+        } else {
+            if (window.OfflineSync && typeof window.OfflineSync.enqueueCreate === 'function') {
+                await window.OfflineSync.enqueueCreate(targetThemeId, feature);
+            }
+        }
+    })();
+  }
+  window.processarCriacaoFeicaoImediata = processarCriacaoFeicaoImediata;
+
+  // Coleta de ponto de campo direto via coordenadas de GPS do dispositivo
+  window.coletarPontoGPS = function() {
+    if (!editingThemeId) {
+        if (typeof showWarningToast === 'function') showWarningToast("Selecione uma camada para coletar o ponto.");
+        return;
+    }
+    if (!navigator.geolocation) {
+        if (typeof showErrorToast === 'function') showErrorToast("Geolocalização não suportada neste dispositivo.");
+        else alert("Geolocalização não suportada neste dispositivo.");
+        return;
+    }
+    const gpsBtn = document.getElementById('draw-btn-gps');
+    if (gpsBtn) {
+        gpsBtn.classList.add('opacity-50', 'pointer-events-none');
+    }
+    if (typeof showToast === 'function') showToast("Obtendo posição GPS de alta precisão...", "info");
+
+    navigator.geolocation.getCurrentPosition(function(pos) {
+        if (gpsBtn) {
+            gpsBtn.classList.remove('opacity-50', 'pointer-events-none');
+        }
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const acc = pos.coords.accuracy ? pos.coords.accuracy.toFixed(1) : null;
+
+        const feature = {
+            type: 'Feature',
+            geometry: {
+                type: 'Point',
+                coordinates: [lng, lat]
+            },
+            properties: {
+                themeId: editingThemeId,
+                _tempId: 'feat_' + Math.random().toString(36).substr(2, 9),
+                'Coordenadas Geográficas WGS 84': `Latitude: ${lat.toFixed(6)} e Longitude: ${lng.toFixed(6)}`
+            }
+        };
+        if (acc) {
+            feature.properties['Precisão GPS (m)'] = `${acc} m`;
+        }
+
+        map.setView([lat, lng], Math.max(map.getZoom(), 18));
+        processarCriacaoFeicaoImediata(feature);
+        if (typeof showToast === 'function') showToast(`Ponto GPS coletado com sucesso! (Precisão: ${acc ? acc + 'm' : 'alta'})`, 'success');
+    }, function(err) {
+        if (gpsBtn) {
+            gpsBtn.classList.remove('opacity-50', 'pointer-events-none');
+        }
+        console.error("[GPS] Falha ao capturar posição:", err);
+        if (typeof showErrorToast === 'function') showErrorToast("Não foi possível acessar sua localização GPS. Verifique as permissões.");
+        else alert("Não foi possível acessar sua localização GPS.");
+    }, {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+    });
+  };
+
   // Drawing Complete Event
-  map.on('pm:create', async function(e) {
+  map.on('pm:create', function(e) {
     if (!editingThemeId) return;
     
     const feature = e.layer.toGeoJSON();
@@ -2005,92 +2164,7 @@ function initMap() {
     
     map.removeLayer(e.layer);
 
-    // 1. Salvar no Supabase ou enfileirar no OfflineSync se estiver sem rede
-    const isDeviceOffline = (typeof navigator !== 'undefined' && !navigator.onLine) || (typeof localStorage !== 'undefined' && localStorage.getItem('geogestor_modo_campo') === 'true');
-
-    if (isDeviceOffline) {
-        if (window.OfflineSync && typeof window.OfflineSync.enqueueCreate === 'function') {
-            await window.OfflineSync.enqueueCreate(editingThemeId, feature);
-        }
-    } else if (typeof supabaseClient !== 'undefined' && supabaseClient) {
-        try {
-            const { data: insData, error: insErr } = await supabaseClient.from('feicoes').insert({
-                theme_id: editingThemeId,
-                propriedades: feature.properties,
-                geometria: feature.geometry
-            }).select();
-
-            if (!insErr && insData && insData.length > 0) {
-                feature.properties.id_banco = insData[0].id;
-                const tName = (themes.find(t => t.id === editingThemeId)?.name) || editingThemeId;
-                if (window.auditLogger && typeof window.auditLogger.log === 'function') {
-                    window.auditLogger.log('CRIAR_FEICAO', `${tName} — Nova Feição #${insData[0].id}`, {
-                        tema: tName,
-                        feicao_id: insData[0].id,
-                        tipo_geometria: geomType
-                    });
-                }
-            } else {
-                if (window.OfflineSync && typeof window.OfflineSync.enqueueCreate === 'function') {
-                    await window.OfflineSync.enqueueCreate(editingThemeId, feature);
-                }
-            }
-        } catch(eDb) {
-            console.error("Erro ao salvar nova feição no Supabase, enfileirando offline:", eDb);
-            if (window.OfflineSync && typeof window.OfflineSync.enqueueCreate === 'function') {
-                await window.OfflineSync.enqueueCreate(editingThemeId, feature);
-            }
-        }
-    } else {
-        if (window.OfflineSync && typeof window.OfflineSync.enqueueCreate === 'function') {
-            await window.OfflineSync.enqueueCreate(editingThemeId, feature);
-        }
-    }
-
-    // 2. Adiciona ao tema em memória e no cache turbo
-    const theme = themes.find(t => String(t.id) === String(editingThemeId));
-    if (theme) {
-        if (!theme.features) theme.features = [];
-        if (!feature.properties._bbox && typeof computeGeoJSONBbox === 'function') {
-            feature.properties._bbox = computeGeoJSONBbox(feature.geometry);
-        }
-        theme.features.push(feature);
-        if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.indexThemeFeatures === 'function') {
-            window.GeoEngineTurbo.indexThemeFeatures(editingThemeId, theme.features);
-        } else if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.indexTheme === 'function') {
-            window.GeoEngineTurbo.indexTheme(editingThemeId, theme.features);
-        }
-        if (window.GeoTurboDB && typeof window.GeoTurboDB.saveThemeData === 'function') {
-            window.GeoTurboDB.saveThemeData(editingThemeId, theme.features, theme.features.length);
-        }
-    }
-
-    // 3. Adiciona a feição imediatamente ao mapa
-    geojsonLayer.addData(feature);
-
-    // 4. Atualiza os cards das camadas
-    renderThemes();
-
-    // 5. Finaliza o modo de desenho
-    stopDrawingMode();
-
-    // 6. Localiza a layer criada e abre imediatamente o card do formulário
-    let createdLayer = null;
-    geojsonLayer.eachLayer(l => {
-        if (l.feature && l.feature.properties) {
-            const p = l.feature.properties;
-            if ((feature.properties.id_banco && p.id_banco === feature.properties.id_banco) ||
-                (feature.properties._tempId && p._tempId === feature.properties._tempId)) {
-                createdLayer = l;
-            }
-        }
-    });
-
-    if (createdLayer) {
-        activeFeatureLayer = createdLayer;
-        highlightFeature(feature.properties._tempId, true);
-        showFeatureInfoModal(createdLayer);
-    }
+    processarCriacaoFeicaoImediata(feature);
   });
 
   map.on('zoomend', function() {
@@ -2738,6 +2812,26 @@ window.onSelectUserProject = async function(val) {
     if (catalogModal && !catalogModal.classList.contains('hidden')) {
         window.renderSharedLayersCatalog();
     }
+
+    if (typeof window.broadcastProjectLayersChange === 'function') {
+        window.broadcastProjectLayersChange();
+    }
+};
+
+window.broadcastProjectLayersChange = function() {
+    try {
+        if (typeof BroadcastChannel !== 'undefined') {
+            if (!window._sigProjectSyncChannel) {
+                window._sigProjectSyncChannel = new BroadcastChannel('sig_project_sync');
+            }
+            window._sigProjectSyncChannel.postMessage({
+                type: 'PROJECT_CHANGED',
+                projectId: window.activeProjectId,
+                timestamp: Date.now()
+            });
+        }
+        localStorage.setItem('sig_last_active_project_change', String(Date.now()));
+    } catch(e) {}
 };
 
 window.openCreateProjectModal = function() {
@@ -2946,6 +3040,7 @@ window.toggleItemInWorkspace = async function(type, id) {
     renderRasterLayersList();
     loadAllFeaturesToMap();
     window.renderSharedLayersCatalog();
+    if (typeof window.broadcastProjectLayersChange === 'function') window.broadcastProjectLayersChange();
 };
 
 window.removeThemeFromWorkspace = async function(themeId) {
@@ -2963,6 +3058,7 @@ window.removeThemeFromWorkspace = async function(themeId) {
     if (catalogModal && !catalogModal.classList.contains('hidden')) {
         window.renderSharedLayersCatalog();
     }
+    if (typeof window.broadcastProjectLayersChange === 'function') window.broadcastProjectLayersChange();
 };
 
 window.removeRasterFromWorkspace = async function(rasterId) {
@@ -3711,6 +3807,7 @@ function toggleThemeVisibility(themeId, inputEl) {
       } else {
           loadAllFeaturesToMap();
       }
+      if (typeof window.broadcastProjectLayersChange === 'function') window.broadcastProjectLayersChange();
   }, 0);
 }
 
@@ -6301,6 +6398,35 @@ function startEditingTheme(id, name, color, geomType) {
     }
   });
 
+  // Botão Ponto GPS dedicado para campo (apenas para feições de ponto)
+  const gpsBtn = document.getElementById('draw-btn-gps');
+  if (gpsBtn) {
+    if (geomType === 'marker') {
+      gpsBtn.classList.remove('hidden');
+      gpsBtn.classList.add('flex');
+    } else {
+      gpsBtn.classList.add('hidden');
+      gpsBtn.classList.remove('flex');
+    }
+  }
+
+  // Ocultar snap se for ponto (relevante apenas para linhas/polígonos)
+  const snapBtn = document.getElementById('snap-btn');
+  if (snapBtn) {
+    if (geomType === 'marker') {
+      snapBtn.classList.add('hidden');
+    } else {
+      snapBtn.classList.remove('hidden');
+    }
+  }
+
+  // Ajustar posição dos controles de mapa no mobile para não sobrepor a toolbar
+  const navControls = document.getElementById('map-navigation-controls');
+  if (navControls && window.innerWidth < 640) {
+    navControls.classList.add('bottom-24');
+    navControls.classList.remove('bottom-6');
+  }
+
   // Automatically start drawing
   if (geomType) {
     setDrawingMode(geomType);
@@ -6320,8 +6446,20 @@ function stopDrawingMode() {
   editingThemeId = null;
   map.pm.disableDraw();
   const toolbar = document.getElementById('drawing-toolbar');
-  toolbar.classList.add('hidden');
-  toolbar.classList.remove('flex');
+  if (toolbar) {
+    toolbar.classList.add('hidden');
+    toolbar.classList.remove('flex');
+  }
+  const gpsBtn = document.getElementById('draw-btn-gps');
+  if (gpsBtn) {
+    gpsBtn.classList.add('hidden');
+    gpsBtn.classList.remove('flex');
+  }
+  const navControls = document.getElementById('map-navigation-controls');
+  if (navControls) {
+    navControls.classList.remove('bottom-24');
+    navControls.classList.add('bottom-6');
+  }
 }
 
 // --- IMPORT / EXPORT GEOJSON ---
@@ -9473,7 +9611,7 @@ function goToMyLocation() {
         iconSize: [20, 20],
         iconAnchor: [10, 10]
       });
-      myLocationMarker = L.marker([lat, lng], { icon: locationIcon, zIndexOffset: 1000 }).addTo(map);
+      myLocationMarker = L.marker([lat, lng], { icon: locationIcon, zIndexOffset: 1000, interactive: false }).addTo(map);
     }
   }, function(error) {
     if (btn) btn.classList.remove('animate-pulse', 'opacity-50');

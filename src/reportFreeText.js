@@ -20,6 +20,51 @@
         ctx = ctx || {};
         const esc = ctx.esc || escPadrao;
 
+        function getFeatureData() {
+            if (ctx.getFeatureData) {
+                try {
+                    const fd = ctx.getFeatureData();
+                    if (fd && typeof fd === 'object') return fd;
+                } catch (e) {}
+            }
+            if (typeof window !== 'undefined' && window.reportViewerFeatureData) return window.reportViewerFeatureData;
+            if (typeof reportPayload !== 'undefined' && reportPayload && reportPayload.featureData) return reportPayload.featureData;
+            return {};
+        }
+
+        function getFeatureValueForField(f) {
+            if (!f) return '';
+            const data = getFeatureData();
+            if (!data || Object.keys(data).length === 0) return '';
+
+            if (ctx.resolveFieldValue) {
+                try {
+                    const res = ctx.resolveFieldValue(f, data);
+                    if (res !== undefined && res !== null && res !== '—' && res !== '') return String(res);
+                } catch (e) {}
+            }
+
+            let rawVal = undefined;
+            if (f.id && data[f.id] !== undefined && data[f.id] !== null && data[f.id] !== '') {
+                rawVal = data[f.id];
+            } else if (f.name && data[f.name] !== undefined && data[f.name] !== null && data[f.name] !== '') {
+                rawVal = data[f.name];
+            } else if (f.name && data[f.name.toLowerCase()] !== undefined && data[f.name.toLowerCase()] !== null && data[f.name.toLowerCase()] !== '') {
+                rawVal = data[f.name.toLowerCase()];
+            } else if (f.label && data[f.label] !== undefined && data[f.label] !== null && data[f.label] !== '') {
+                rawVal = data[f.label];
+            }
+
+            if (rawVal === undefined || rawVal === null || rawVal === '') return '';
+
+            if (typeof FieldFormatter !== 'undefined' && typeof FieldFormatter.toText === 'function') {
+                try {
+                    return FieldFormatter.toText(rawVal, f);
+                } catch (e) {}
+            }
+            return String(rawVal);
+        }
+
         function execFormat(command, value = null) {
             const cmd = String(command || '').toLowerCase();
             
@@ -107,16 +152,16 @@
             }
 
             // Localiza o editor ativo e salva imediatamente o conteúdo com as tags formatadas
-            let activeEditor = container ? container.closest('.free-text-editor') : null;
+            let activeEditor = container ? (container.closest('.free-text-editor') || container.closest('.free-text-editable')) : null;
             if (!activeEditor && tagsToFormat && tagsToFormat.size > 0) {
                 const firstTag = tagsToFormat.values().next().value;
-                if (firstTag) activeEditor = firstTag.closest('.free-text-editor');
+                if (firstTag) activeEditor = firstTag.closest('.free-text-editor') || firstTag.closest('.free-text-editable');
             }
             if (!activeEditor) {
-                activeEditor = document.querySelector('.free-text-editor:focus');
+                activeEditor = document.querySelector('.free-text-editor:focus') || document.querySelector('.free-text-editable:focus');
             }
             if (activeEditor) {
-                const blockIdxAttr = activeEditor.id ? activeEditor.id.replace('free-text-editor-', '') : null;
+                const blockIdxAttr = activeEditor.id ? activeEditor.id.replace('free-text-editor-', '').replace('viewer-free-text-', '') : null;
                 const blockIdx = blockIdxAttr !== null ? parseInt(blockIdxAttr, 10) : null;
                 if (blockIdx !== null && !isNaN(blockIdx)) {
                     saveFreeTextContent(blockIdx, activeEditor.innerHTML);
@@ -125,7 +170,8 @@
         }
 
         function changeLineHeight(blockIndex, lineHeight) {
-            const editor = document.getElementById(`free-text-editor-${blockIndex}`);
+            const editor = document.getElementById(`free-text-editor-${blockIndex}`) || 
+                           document.getElementById(`viewer-free-text-${blockIndex}`);
             if (editor) {
                 editor.style.lineHeight = lineHeight;
             }
@@ -242,11 +288,13 @@
             activeMentionState.selectedIndex = 0;
             dropdown.innerHTML = `
                 <div class="px-2.5 py-1.5 text-[10px] font-bold uppercase text-slate-400 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 rounded-t-lg">
-                    <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[13px] text-sky-500">alternate_email</span> Campos com Origem da Aba</span>
+                    <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[13px] text-sky-500">alternate_email</span> Campos Cadastrais da Feição</span>
                     <span class="text-[9px] font-mono">${filtered.length} encontrados</span>
                 </div>
                 <div class="py-1 space-y-1 max-h-64 overflow-y-auto custom-scrollbar">
-                    ${filtered.map((f, i) => `
+                    ${filtered.map((f, i) => {
+                        const featVal = getFeatureValueForField(f);
+                        return `
                         <div class="mention-dropdown-item flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${i === 0 ? 'bg-sky-100 text-sky-900 dark:bg-sky-900/60 dark:text-sky-100 font-bold' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'}" 
                              data-field-id="${esc(f.id)}" 
                              data-field-name="${esc(f.name)}" 
@@ -256,7 +304,10 @@
                             <div class="flex items-center gap-2 min-w-0 flex-1">
                                 <span class="material-symbols-outlined text-[15px] text-sky-500 shrink-0">alternate_email</span>
                                 <div class="flex flex-col min-w-0">
-                                    <span class="truncate text-xs font-bold text-slate-800 dark:text-slate-100">${esc(f.label)}</span>
+                                    <div class="flex items-center gap-1.5 min-w-0 flex-wrap">
+                                        <span class="truncate text-xs font-bold text-slate-800 dark:text-slate-100">${esc(f.label)}</span>
+                                        ${featVal ? `<span class="text-[10.5px] font-mono font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-1 py-0.2 rounded truncate max-w-[200px]" title="Valor da feição: ${esc(featVal)}">→ ${esc(featVal)}</span>` : '<span class="text-[9.5px] text-slate-400 italic">(vazio)</span>'}
+                                    </div>
                                     <div class="flex items-center gap-1 text-[10.5px] text-slate-500 dark:text-slate-400">
                                         <span class="material-symbols-outlined text-[12px] text-slate-400">tab</span>
                                         <span>Aba: <strong class="text-slate-700 dark:text-slate-200 font-semibold">${esc(f.tabTitle || 'Aba Geral')}</strong></span>
@@ -268,7 +319,7 @@
                                 <span class="text-[9px] font-mono text-slate-400 dark:text-slate-400 uppercase bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">${esc(f.type || 'text')}</span>
                             </div>
                         </div>
-                    `).join('')}
+                    `;}).join('')}
                 </div>
             `;
             dropdown.classList.remove('hidden');
@@ -301,7 +352,8 @@
         }
 
         function insertMentionField(blockIndex, fieldId, fieldName, fieldLabel, tabTitle = '') {
-            const editor = document.getElementById(`free-text-editor-${blockIndex}`);
+            const editor = document.getElementById(`free-text-editor-${blockIndex}`) || 
+                           document.getElementById(`viewer-free-text-${blockIndex}`);
             if (!editor) return;
 
             editor.focus();
@@ -322,9 +374,11 @@
                 }
             }
 
-            // Insere o token formatado com a indicação visual da aba (sem negrito forçado por padrão para permitir formatação rica personalizada)
-            const displayTag = tabTitle ? `@${fieldLabel} (${tabTitle})` : `@${fieldLabel}`;
-            const tokenHtml = `<span class="mention-tag inline-block bg-sky-100 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200 px-1.5 py-0.5 rounded font-mono text-[11px] select-all align-middle cursor-pointer transition-all hover:ring-1 hover:ring-sky-400" data-field-id="${fieldId}" data-field-name="${fieldName}" data-tab-title="${tabTitle}" contenteditable="false" title="Clique para selecionar e aplicar Negrito, Itálico ou Sublinhado • Campo: ${fieldLabel} • Aba: ${tabTitle}">${displayTag}</span>&nbsp;`;
+            // Puxa o dado do campo da feição
+            const fieldDef = { id: fieldId, name: fieldName, label: fieldLabel, tabTitle: tabTitle };
+            const featureVal = getFeatureValueForField(fieldDef);
+            const displayTag = featureVal || (tabTitle ? `@${fieldLabel} (${tabTitle})` : `@${fieldLabel}`);
+            const tokenHtml = `<span class="mention-tag inline-block bg-sky-100 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200 px-1.5 py-0.5 rounded font-mono text-[11px] select-all align-middle cursor-pointer transition-all hover:ring-1 hover:ring-sky-400" data-field-id="${fieldId}" data-field-name="${fieldName}" data-field-label="${fieldLabel}" data-tab-title="${tabTitle}" contenteditable="false" title="Campo: ${fieldLabel} (${tabTitle}) • Clique para selecionar e aplicar formatação">${displayTag}</span>&nbsp;`;
             document.execCommand('insertHTML', false, tokenHtml);
 
             hideMentionDropdown(blockIndex);
