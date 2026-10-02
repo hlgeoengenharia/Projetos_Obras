@@ -709,6 +709,39 @@
 <!-- Google Map -->
 <div id="map" class="absolute inset-0 z-0 w-full h-full"></div>
 
+<!-- Mira Central de Ajuste de Ponto Estilo Google Earth / Waze -->
+<div id="point-adjust-center-reticle" class="pointer-events-none absolute inset-0 z-[1000] hidden items-center justify-center select-none">
+  <!-- Container da Mira (centralizado na tela do mapa) -->
+  <div class="relative flex flex-col items-center justify-center pointer-events-none" style="transform: translateY(-19px);">
+    <!-- Pino / Ícone Flutuante -->
+    <div id="reticle-floating-pin" class="relative z-10 transition-transform duration-150 ease-out" style="transform-origin: bottom center;">
+      <!-- Conteúdo inserido dinamicamente (pino com cor da camada ou ícone customizado) -->
+      <div id="reticle-pin-content"></div>
+    </div>
+    
+    <!-- Sombra e Mira de Precisão no Solo (na ponta exata de contato) -->
+    <div class="relative flex items-center justify-center" style="margin-top: -3px;">
+      <!-- Sombra dinâmica no solo -->
+      <div id="reticle-ground-shadow" class="w-6 h-2 bg-black/45 rounded-full blur-[1.5px] transition-all duration-150"></div>
+      
+      <!-- Mira de Alta Precisão (Crosshair Circular estilo Google Earth) -->
+      <div class="absolute -top-3.5 w-8 h-8 rounded-full border border-dashed border-cyan-400/90 flex items-center justify-center shadow-[0_0_12px_rgba(6,182,212,0.4)]">
+        <!-- Ponto central de precisão milimétrica -->
+        <div class="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]"></div>
+        <!-- Linhas cruzadas finas -->
+        <div class="absolute w-full h-[1px] bg-cyan-400/50"></div>
+        <div class="absolute h-full w-[1px] bg-cyan-400/50"></div>
+      </div>
+    </div>
+
+    <!-- Badge de Coordenadas Flutuante em Tempo Real -->
+    <div id="reticle-coords-badge" class="absolute -bottom-10 px-3 py-1 rounded-full bg-slate-900/90 text-cyan-300 border border-cyan-500/30 text-[11px] font-mono tracking-tight shadow-xl whitespace-nowrap hidden sm:flex items-center gap-1.5 backdrop-blur-md">
+      <span class="material-symbols-outlined text-[13px] text-cyan-400">my_location</span>
+      <span id="reticle-coords-text">0.000000, 0.000000</span>
+    </div>
+  </div>
+</div>
+
 <!-- Indicador de Densidade de Feições e Zoom -->
 <div id="map-density-indicator" class="pointer-events-none absolute top-16 md:top-20 left-1/2 -translate-x-1/2 z-[999] hidden items-center gap-2 px-4 py-2 rounded-full bg-slate-900/95 text-white dark:bg-slate-950/95 dark:text-slate-100 backdrop-blur-md shadow-2xl border border-amber-400/40 text-xs font-bold transition-all duration-300">
   <span class="material-symbols-outlined text-amber-400 text-[18px] animate-pulse">zoom_in</span>
@@ -2029,17 +2062,21 @@
 </div>
 
 <!-- Geometry Edit Toolbar -->
-<div id="geometry-edit-toolbar" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-slate-900 rounded-full shadow-2xl border border-slate-200 dark:border-slate-800 p-2 hidden items-center gap-2">
-  <div class="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-bold uppercase tracking-wider mr-2 flex items-center gap-1">
-    <span class="material-symbols-outlined text-[16px]">edit_location_alt</span>
-    Ajustando
+<div id="geometry-edit-toolbar" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-full shadow-2xl border border-slate-200 dark:border-slate-800 p-2 hidden items-center gap-2 max-w-[94vw]">
+  <div class="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-cyan-300 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1 shrink-0">
+    <span class="material-symbols-outlined text-[16px] animate-pulse">center_focus_strong</span>
+    <span id="geometry-edit-badge-text">Ajustando</span>
   </div>
-  <div class="text-[11px] text-slate-500 hidden sm:block mr-2 px-2 border-l border-slate-200 dark:border-slate-700 leading-tight">
-     <span class="font-bold text-slate-700 dark:text-slate-300">Arrastar:</span> Move ou Cria Nós<br/>
-     <span class="font-bold text-slate-700 dark:text-slate-300">Botão Direito:</span> Exclui Nós
+  <div id="geometry-edit-hint" class="text-[11px] text-slate-500 hidden sm:block px-2 border-l border-slate-200 dark:border-slate-700 leading-tight">
+     <span class="font-bold text-slate-700 dark:text-slate-300">Mova o mapa:</span> Posicione o ponto na mira central
   </div>
-  <button class="px-4 py-2 bg-primary text-white rounded-full font-medium text-sm hover:bg-primary/90 transition-colors shadow" onclick="stopGeometryEditing()">
-    Concluir
+  <button type="button" id="btn-cancel-geometry-edit" class="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-full font-medium text-xs transition-colors shrink-0 flex items-center gap-1 cursor-pointer active:scale-95" onclick="cancelGeometryEditing()">
+    <span class="material-symbols-outlined text-[16px]">close</span>
+    <span>Cancelar</span>
+  </button>
+  <button type="button" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full font-bold text-xs transition-all shadow-md shrink-0 flex items-center gap-1 cursor-pointer active:scale-95" onclick="stopGeometryEditing()">
+    <span class="material-symbols-outlined text-[16px]">check</span>
+    <span>Confirmar</span>
   </button>
 </div>
 
@@ -2786,7 +2823,7 @@
 <script src="src/customFields.js?v=20260927_media_lightbox"></script>
 <script src="src/tableJoin.js"></script>
 <script src="src/geo-engine-turbo.js"></script>
-<script src="src/main.js?v=20261002_feat_custom_icon_persist_fix"></script>
+<script src="src/main.js?v=20261002_feat_google_earth_point_adjust"></script>
 <script src="src/spatialAnalytics.js?v=20260911b"></script>
 <script src="src/measurement.js"></script>
 <script src="src/cesium-integration.js"></script>

@@ -8228,6 +8228,11 @@ function closeFeatureInfoModal(keepLayer = false) {
 }
 
 let mapClickAdjustPointHandler = null;
+window._isAdjustingPointWithReticle = false;
+window._pointOriginalLatLng = null;
+window._onReticleMoveStart = null;
+window._onReticleMove = null;
+window._onReticleMoveEnd = null;
 
 function editFeatureGeometry() {
   const layerToEdit = activeFeatureLayer;
@@ -8240,7 +8245,7 @@ function editFeatureGeometry() {
 
   closeFeatureInfoModal(true); // Keep activeFeatureLayer
   
-  if (layerToEdit && layerToEdit.pm) {
+  if (layerToEdit) {
       // Temporariamente suspende o bloqueio de pointer-events na seleção para permitir edição
       const styleTag = document.getElementById('dynamic-selection-style');
       if (styleTag) styleTag.innerHTML = '';
@@ -8249,42 +8254,110 @@ function editFeatureGeometry() {
       const isPoint = (geomType === 'Point' || geomType === 'MultiPoint');
 
       if (isPoint) {
-          // Habilita arrasto direto no Leaflet (otimizado para touch mobile)
-          if (layerToEdit.dragging && typeof layerToEdit.dragging.enable === 'function') {
-              layerToEdit.dragging.enable();
+          // MODO GOOGLE EARTH: O ícone/mira fica fixo no centro da tela e o usuário move o mapa livremente por baixo
+          window._isAdjustingPointWithReticle = true;
+          window._pointOriginalLatLng = L.latLng(layerToEdit.getLatLng().lat, layerToEdit.getLatLng().lng);
+
+          // Centraliza suavemente o mapa na posição atual da feição
+          map.setView(window._pointOriginalLatLng, map.getZoom(), { animate: true });
+
+          // Oculta temporariamente o marcador original do mapa
+          if (layerToEdit._icon) {
+              layerToEdit._icon.style.opacity = '0';
+              layerToEdit._icon.style.pointerEvents = 'none';
           }
 
-          try {
-              layerToEdit.pm.enable({
-                  snappable: true,
-                  snapDistance: 25
-              });
-          } catch(e) {}
-
-          // Destaca visualmente o marcador com efeito de elevação, halo e prioridade máxima de z-index
-          if (layerToEdit._icon) {
-              layerToEdit._icon.classList.add('marker-adjusting-active');
-              if (typeof layerToEdit.setZIndexOffset === 'function') {
-                  layerToEdit.setZIndexOffset(10000);
+          // Monta o pino na mira central refletindo exatamente o tema (cor + ícone ou customIcon)
+          const themeId = layerToEdit.feature && layerToEdit.feature.properties && layerToEdit.feature.properties.themeId;
+          const theme = themes.find(t => String(t.id) === String(themeId));
+          const reticlePinContent = document.getElementById('reticle-pin-content');
+          if (reticlePinContent) {
+              const color = theme ? theme.color : '#0ea5e9';
+              const iconName = theme && theme.icon ? theme.icon : 'location_on';
+              const customIconData = theme && theme.customIcon ? theme.customIcon : null;
+              
+              if (customIconData) {
+                  reticlePinContent.innerHTML = `
+                      <div style="position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.55));">
+                          <img src="${customIconData}" alt="Ícone" style="width: 100%; height: 100%; object-fit: contain; pointer-events: none;">
+                      </div>
+                  `;
+              } else {
+                  const safeId = String(themeId || 'reticle').replace(/[^a-zA-Z0-9]/g, '_');
+                  reticlePinContent.innerHTML = `
+                      <div style="position: relative; width: 34px; height: 44px; filter: drop-shadow(0 5px 8px rgba(0,0,0,0.5));">
+                        <svg viewBox="0 0 30 38" width="34" height="44" style="display: block; overflow: visible;">
+                          <defs>
+                            <linearGradient id="grad_pin_reticle_${safeId}" x1="0%" y1="0%" x2="0%" y2="100%">
+                              <stop offset="0%" stop-color="${color}" />
+                              <stop offset="100%" stop-color="#0f172a" stop-opacity="0.85" />
+                            </linearGradient>
+                          </defs>
+                          <path d="M15,1 C7.268,1 1,7.268 1,15 C1,23.8 15,36.5 15,36.5 C15,36.5 29,23.8 29,15 C29,7.268 22.732,1 15,1 Z" 
+                                fill="${color}" 
+                                stroke="#ffffff" 
+                                stroke-width="1.8" 
+                                stroke-linejoin="round" />
+                          <circle cx="15" cy="14" r="8" fill="#ffffff" />
+                        </svg>
+                        <div style="position: absolute; top: 0; left: 0; width: 34px; height: 32px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
+                          <span class="material-symbols-outlined" style="color: ${color}; font-size: 16px; font-weight: bold;">${iconName === 'circle' ? 'circle' : iconName}</span>
+                        </div>
+                      </div>
+                  `;
               }
           }
 
-          // Recurso Toque no Mapa (Tap-to-Reposition): tocar no mapa move o ponto diretamente
-          if (mapClickAdjustPointHandler && map) {
-              map.off('click', mapClickAdjustPointHandler);
+          // Exibe o overlay de Mira Central
+          const reticleOverlay = document.getElementById('point-adjust-center-reticle');
+          if (reticleOverlay) {
+              reticleOverlay.classList.remove('hidden');
+              reticleOverlay.classList.add('flex');
           }
-          mapClickAdjustPointHandler = function(e) {
-              if (layerToEdit && typeof layerToEdit.setLatLng === 'function' && e && e.latlng) {
-                  layerToEdit.setLatLng(e.latlng);
-                  if (typeof showToast === 'function') {
-                      showToast("Ponto reposicionado! Toque em 'Concluir' para salvar.", "info");
-                  }
+
+          // Efeitos de elevação 3D ao mover o mapa e sincronização em tempo real
+          const floatingPin = document.getElementById('reticle-floating-pin');
+          const groundShadow = document.getElementById('reticle-ground-shadow');
+          const coordsText = document.getElementById('reticle-coords-text');
+
+          window._onReticleMoveStart = function() {
+              if (floatingPin) floatingPin.style.transform = 'translateY(-14px) scale(1.12)';
+              if (groundShadow) {
+                  groundShadow.style.transform = 'scale(0.65)';
+                  groundShadow.style.opacity = '0.25';
               }
           };
-          map.on('click', mapClickAdjustPointHandler);
 
-      } else {
-          // Linhas e Polígonos
+          window._onReticleMove = function() {
+              if (!map) return;
+              const center = map.getCenter();
+              if (coordsText) coordsText.textContent = `${center.lat.toFixed(6)}, ${center.lng.toFixed(6)}`;
+              if (layerToEdit && typeof layerToEdit.setLatLng === 'function') {
+                  layerToEdit.setLatLng(center);
+              }
+          };
+
+          window._onReticleMoveEnd = function() {
+              if (floatingPin) floatingPin.style.transform = 'translateY(0) scale(1)';
+              if (groundShadow) {
+                  groundShadow.style.transform = 'scale(1)';
+                  groundShadow.style.opacity = '0.45';
+              }
+              if (!map) return;
+              const center = map.getCenter();
+              if (coordsText) coordsText.textContent = `${center.lat.toFixed(6)}, ${center.lng.toFixed(6)}`;
+              if (layerToEdit && typeof layerToEdit.setLatLng === 'function') {
+                  layerToEdit.setLatLng(center);
+              }
+          };
+
+          map.on('movestart', window._onReticleMoveStart);
+          map.on('move', window._onReticleMove);
+          map.on('moveend', window._onReticleMoveEnd);
+          window._onReticleMove();
+
+      } else if (layerToEdit.pm) {
+          // Linhas e Polígonos continuam com edição de nós do Geoman
           layerToEdit.pm.enable({
               allowSelfIntersection: true,
               preventMarkerRemoval: false,
@@ -8296,10 +8369,14 @@ function editFeatureGeometry() {
       if (toolbar) {
           toolbar.classList.remove('hidden');
           toolbar.classList.add('flex');
-          const hintEl = toolbar.querySelector('.text-\\[11px\\]');
+          const badgeText = document.getElementById('geometry-edit-badge-text');
+          if (badgeText) {
+              badgeText.textContent = isPoint ? "Ajustando Ponto" : "Editando Geometria";
+          }
+          const hintEl = document.getElementById('geometry-edit-hint') || toolbar.querySelector('.text-\\[11px\\]');
           if (hintEl) {
               if (isPoint) {
-                  hintEl.innerHTML = '<span class="font-bold text-slate-700 dark:text-slate-300">Arraste</span> o ponto ou <span class="font-bold text-slate-700 dark:text-slate-300">toque no mapa</span> para reposicionar';
+                  hintEl.innerHTML = '<span class="font-bold text-slate-700 dark:text-slate-300">Mova o mapa:</span> A mira central fixa a nova posição';
               } else {
                   hintEl.innerHTML = '<span class="font-bold text-slate-700 dark:text-slate-300">Arrastar:</span> Move ou Cria Nós<br/><span class="font-bold text-slate-700 dark:text-slate-300">Botão Direito:</span> Exclui Nós';
               }
@@ -8309,7 +8386,36 @@ function editFeatureGeometry() {
 }
  
 function stopGeometryEditing() {
-  // Remove listener de toque no mapa se existir
+  if (window._isAdjustingPointWithReticle) {
+      window._isAdjustingPointWithReticle = false;
+      if (map) {
+          if (window._onReticleMoveStart) map.off('movestart', window._onReticleMoveStart);
+          if (window._onReticleMove) map.off('move', window._onReticleMove);
+          if (window._onReticleMoveEnd) map.off('moveend', window._onReticleMoveEnd);
+      }
+      window._onReticleMoveStart = null;
+      window._onReticleMove = null;
+      window._onReticleMoveEnd = null;
+
+      const reticleOverlay = document.getElementById('point-adjust-center-reticle');
+      if (reticleOverlay) {
+          reticleOverlay.classList.add('hidden');
+          reticleOverlay.classList.remove('flex');
+      }
+
+      if (activeFeatureLayer) {
+          if (activeFeatureLayer._icon) {
+              activeFeatureLayer._icon.style.opacity = '';
+              activeFeatureLayer._icon.style.pointerEvents = '';
+          }
+          if (map) {
+              const finalCenter = map.getCenter();
+              activeFeatureLayer.setLatLng(finalCenter);
+          }
+      }
+  }
+
+  // Remove listener de toque legado se existir
   if (mapClickAdjustPointHandler && map) {
       map.off('click', mapClickAdjustPointHandler);
       mapClickAdjustPointHandler = null;
@@ -8422,6 +8528,59 @@ function stopGeometryEditing() {
       showFeatureInfoModal(activeFeatureLayer);
   }
 }
+
+function cancelGeometryEditing() {
+  if (window._isAdjustingPointWithReticle) {
+      window._isAdjustingPointWithReticle = false;
+      if (map) {
+          if (window._onReticleMoveStart) map.off('movestart', window._onReticleMoveStart);
+          if (window._onReticleMove) map.off('move', window._onReticleMove);
+          if (window._onReticleMoveEnd) map.off('moveend', window._onReticleMoveEnd);
+      }
+      window._onReticleMoveStart = null;
+      window._onReticleMove = null;
+      window._onReticleMoveEnd = null;
+
+      const reticleOverlay = document.getElementById('point-adjust-center-reticle');
+      if (reticleOverlay) {
+          reticleOverlay.classList.add('hidden');
+          reticleOverlay.classList.remove('flex');
+      }
+
+      if (activeFeatureLayer && window._pointOriginalLatLng) {
+          activeFeatureLayer.setLatLng(window._pointOriginalLatLng);
+          if (map) map.panTo(window._pointOriginalLatLng);
+      }
+      if (activeFeatureLayer && activeFeatureLayer._icon) {
+          activeFeatureLayer._icon.style.opacity = '';
+          activeFeatureLayer._icon.style.pointerEvents = '';
+      }
+  } else if (activeFeatureLayer && activeFeatureLayer.pm) {
+      try { activeFeatureLayer.pm.disable(); } catch(e) {}
+  }
+
+  // Remove listener de toque legado se existir
+  if (mapClickAdjustPointHandler && map) {
+      map.off('click', mapClickAdjustPointHandler);
+      mapClickAdjustPointHandler = null;
+  }
+
+  const toolbar = document.getElementById('geometry-edit-toolbar');
+  if (toolbar) {
+      toolbar.classList.add('hidden');
+      toolbar.classList.remove('flex');
+  }
+
+  updateThemeInteractivity();
+
+  if (activeFeatureLayer) {
+      showFeatureInfoModal(activeFeatureLayer);
+  }
+  if (typeof showToast === 'function') {
+      showToast("Ajuste cancelado.", "info");
+  }
+}
+window.cancelGeometryEditing = cancelGeometryEditing;
 
 async function deleteActiveFeature() {
   if (!activeFeatureLayer) return;
