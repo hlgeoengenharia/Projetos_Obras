@@ -1736,28 +1736,30 @@ function initMap() {
       const safeId = String(themeId).replace(/[^a-zA-Z0-9]/g, '_');
 
       const pinHtml = `
-        <div class="map-pin-3d-marker" style="position: relative; width: 30px; height: 38px; cursor: pointer; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.35)); transition: transform 0.15s ease-out;">
-          <svg viewBox="0 0 30 38" width="30" height="38" style="display: block; overflow: visible;">
-            <defs>
-              <linearGradient id="grad_pin_${safeId}" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stop-color="${color}" />
-                <stop offset="100%" stop-color="#0f172a" stop-opacity="0.85" />
-              </linearGradient>
-            </defs>
-            <!-- Sombra de projeção no solo -->
-            <ellipse cx="15" cy="37" rx="5.5" ry="1.8" fill="rgba(0,0,0,0.25)" />
-            <!-- Pino 3D com formato de gota e ponta para baixo -->
-            <path d="M15,1 C7.268,1 1,7.268 1,15 C1,23.8 15,36.5 15,36.5 C15,36.5 29,23.8 29,15 C29,7.268 22.732,1 15,1 Z" 
-                  fill="${color}" 
-                  stroke="#ffffff" 
-                  stroke-width="1.8" 
-                  stroke-linejoin="round" />
-            <!-- Círculo interior branco com relevo para acomodar o ícone -->
-            <circle cx="15" cy="14" r="8" fill="#ffffff" />
-          </svg>
-          <!-- Ícone da camada perfeitamente centralizado -->
-          <div style="position: absolute; top: 5px; left: 6px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
-            ${iconHtml}
+        <div class="map-pin-touch-wrap">
+          <div class="map-pin-3d-marker" style="position: relative; width: 30px; height: 38px; cursor: pointer; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.35)); touch-action: none;">
+            <svg viewBox="0 0 30 38" width="30" height="38" style="display: block; overflow: visible; pointer-events: none;">
+              <defs>
+                <linearGradient id="grad_pin_${safeId}" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="${color}" />
+                  <stop offset="100%" stop-color="#0f172a" stop-opacity="0.85" />
+                </linearGradient>
+              </defs>
+              <!-- Sombra de projeção no solo -->
+              <ellipse cx="15" cy="37" rx="5.5" ry="1.8" fill="rgba(0,0,0,0.25)" />
+              <!-- Pino 3D com formato de gota e ponta para baixo -->
+              <path d="M15,1 C7.268,1 1,7.268 1,15 C1,23.8 15,36.5 15,36.5 C15,36.5 29,23.8 29,15 C29,7.268 22.732,1 15,1 Z" 
+                    fill="${color}" 
+                    stroke="#ffffff" 
+                    stroke-width="1.8" 
+                    stroke-linejoin="round" />
+              <!-- Círculo interior branco com relevo para acomodar o ícone -->
+              <circle cx="15" cy="14" r="8" fill="#ffffff" />
+            </svg>
+            <!-- Ícone da camada perfeitamente centralizado -->
+            <div style="position: absolute; top: 5px; left: 6px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
+              ${iconHtml}
+            </div>
           </div>
         </div>
       `;
@@ -1894,14 +1896,18 @@ function initMap() {
             return; // bubble to map click
         }
         
-        // Se a ferramenta de medição estiver ativa ou em modo de desenho/edição de feições, permite o clique livre em qualquer ponto ou camada sem interceptar e sem exibir avisos
+        // Permite desenhar livremente sobre camadas se estiver ativamente criando feição de tema
+        // ou se estiver ativamente no meio do traçado de uma medição geométrica
         const isDrawingTheme = !!(typeof editingThemeId !== 'undefined' && editingThemeId);
-        const isPmDrawing = typeof map !== 'undefined' && map && map.pm && (
-            (typeof map.pm.globalDrawModeEnabled === 'function' && map.pm.globalDrawModeEnabled()) ||
-            (map.pm.Draw && typeof map.pm.Draw.isActive === 'function' && map.pm.Draw.isActive())
+        const isMeasuringDrawing = !!(
+            window.isMeasurementActive &&
+            typeof currentMeasurementMode !== 'undefined' &&
+            currentMeasurementMode &&
+            ['Marker', 'Line', 'Polygon'].includes(currentMeasurementMode) &&
+            typeof map !== 'undefined' && map && map.pm &&
+            typeof map.pm.globalDrawModeEnabled === 'function' && map.pm.globalDrawModeEnabled()
         );
-        const isMeasuringActive = !!(window.isMeasurementActive && (typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode));
-        if (isDrawingTheme || isPmDrawing || isMeasuringActive) {
+        if (isDrawingTheme || isMeasuringDrawing) {
             return; // bubble para a ferramenta de desenho/medição (Leaflet-Geoman PM)
         }
         
@@ -3399,6 +3405,10 @@ function toggleSelectionTheme(themeId, forceState = null) {
     });
     
     // Update map interactivity using CSS to guarantee Leaflet redraws don't override it
+    updateThemeInteractivity();
+}
+
+function updateThemeInteractivity() {
     let styleTag = document.getElementById('dynamic-selection-style');
     if (!styleTag) {
         styleTag = document.createElement('style');
@@ -3419,6 +3429,8 @@ function toggleSelectionTheme(themeId, forceState = null) {
         `;
     }
 }
+window.updateThemeInteractivity = updateThemeInteractivity;
+window.toggleSelectionTheme = toggleSelectionTheme;
 
 function toggleThemeListAndSelection(themeId) {
     const listEl = document.getElementById('list-' + themeId);
@@ -8128,8 +8140,17 @@ function closeFeatureInfoModal(keepLayer = false) {
   }
 }
 
+let mapClickAdjustPointHandler = null;
+
 function editFeatureGeometry() {
   const layerToEdit = activeFeatureLayer;
+  if (!layerToEdit) return;
+
+  // 1. Limpa o highlight anterior para não deixar círculos fantasmas sobrepostos
+  if (typeof clearHighlight === 'function') {
+      clearHighlight();
+  }
+
   closeFeatureInfoModal(true); // Keep activeFeatureLayer
   
   if (layerToEdit && layerToEdit.pm) {
@@ -8137,37 +8158,89 @@ function editFeatureGeometry() {
       const styleTag = document.getElementById('dynamic-selection-style');
       if (styleTag) styleTag.innerHTML = '';
 
-      layerToEdit.pm.enable({
-        allowSelfIntersection: true,
-        preventMarkerRemoval: false,
-        snappable: true,
-      });
+      const geomType = layerToEdit.feature && layerToEdit.feature.geometry && layerToEdit.feature.geometry.type;
+      const isPoint = (geomType === 'Point' || geomType === 'MultiPoint');
+
+      if (isPoint) {
+          // Habilita arrasto direto no Leaflet (otimizado para touch mobile)
+          if (layerToEdit.dragging && typeof layerToEdit.dragging.enable === 'function') {
+              layerToEdit.dragging.enable();
+          }
+
+          try {
+              layerToEdit.pm.enable({
+                  snappable: true,
+                  snapDistance: 25
+              });
+          } catch(e) {}
+
+          // Destaca visualmente o marcador com efeito de elevação, halo e prioridade máxima de z-index
+          if (layerToEdit._icon) {
+              layerToEdit._icon.classList.add('marker-adjusting-active');
+              if (typeof layerToEdit.setZIndexOffset === 'function') {
+                  layerToEdit.setZIndexOffset(10000);
+              }
+          }
+
+          // Recurso Toque no Mapa (Tap-to-Reposition): tocar no mapa move o ponto diretamente
+          if (mapClickAdjustPointHandler && map) {
+              map.off('click', mapClickAdjustPointHandler);
+          }
+          mapClickAdjustPointHandler = function(e) {
+              if (layerToEdit && typeof layerToEdit.setLatLng === 'function' && e && e.latlng) {
+                  layerToEdit.setLatLng(e.latlng);
+                  if (typeof showToast === 'function') {
+                      showToast("Ponto reposicionado! Toque em 'Concluir' para salvar.", "info");
+                  }
+              }
+          };
+          map.on('click', mapClickAdjustPointHandler);
+
+      } else {
+          // Linhas e Polígonos
+          layerToEdit.pm.enable({
+              allowSelfIntersection: true,
+              preventMarkerRemoval: false,
+              snappable: true,
+          });
+      }
 
       const toolbar = document.getElementById('geometry-edit-toolbar');
       if (toolbar) {
           toolbar.classList.remove('hidden');
           toolbar.classList.add('flex');
-      }
-
-      // Para feição do tipo PONTO: ao soltar após arrastar, encerra a edição vetorial, fecha o pop-up AJUSTANDO e volta ao formulário
-      const geomType = layerToEdit.feature && layerToEdit.feature.geometry && layerToEdit.feature.geometry.type;
-      if (geomType === 'Point' || geomType === 'MultiPoint') {
-          const onPointDragEnd = () => {
-              layerToEdit.off('pm:dragend', onPointDragEnd);
-              layerToEdit.off('dragend', onPointDragEnd);
-              setTimeout(() => {
-                  stopGeometryEditing();
-              }, 50);
-          };
-          layerToEdit.once('pm:dragend', onPointDragEnd);
-          layerToEdit.once('dragend', onPointDragEnd);
+          const hintEl = toolbar.querySelector('.text-\\[11px\\]');
+          if (hintEl) {
+              if (isPoint) {
+                  hintEl.innerHTML = '<span class="font-bold text-slate-700 dark:text-slate-300">Arraste</span> o ponto ou <span class="font-bold text-slate-700 dark:text-slate-300">toque no mapa</span> para reposicionar';
+              } else {
+                  hintEl.innerHTML = '<span class="font-bold text-slate-700 dark:text-slate-300">Arrastar:</span> Move ou Cria Nós<br/><span class="font-bold text-slate-700 dark:text-slate-300">Botão Direito:</span> Exclui Nós';
+              }
+          }
       }
   }
 }
  
 function stopGeometryEditing() {
-  if (activeFeatureLayer && activeFeatureLayer.pm) {
-    activeFeatureLayer.pm.disable();
+  // Remove listener de toque no mapa se existir
+  if (mapClickAdjustPointHandler && map) {
+      map.off('click', mapClickAdjustPointHandler);
+      mapClickAdjustPointHandler = null;
+  }
+
+  if (activeFeatureLayer) {
+    if (activeFeatureLayer.pm && typeof activeFeatureLayer.pm.disable === 'function') {
+        try { activeFeatureLayer.pm.disable(); } catch(e) {}
+    }
+    if (activeFeatureLayer.dragging && typeof activeFeatureLayer.dragging.disable === 'function') {
+        try { activeFeatureLayer.dragging.disable(); } catch(e) {}
+    }
+    if (activeFeatureLayer._icon) {
+        activeFeatureLayer._icon.classList.remove('marker-adjusting-active');
+        if (typeof activeFeatureLayer.setZIndexOffset === 'function') {
+            activeFeatureLayer.setZIndexOffset(0);
+        }
+    }
     activeFeatureLayer.feature.geometry = activeFeatureLayer.toGeoJSON().geometry;
     
     const geomType = activeFeatureLayer.feature.geometry.type;

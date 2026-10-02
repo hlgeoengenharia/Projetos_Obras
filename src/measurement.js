@@ -332,21 +332,29 @@ function closeMeasurementPanel() {
     window.currentMeasurementMode = null;
     currentMeasurementMode = null;
 
-    // Desativa completamente todos os modos Geoman no mapa
+    // Desativa completamente modos de desenho e modos globais no Geoman apenas se estiverem ativos
     if (map && map.pm) {
         try {
             if (typeof map.pm.disableDraw === 'function') map.pm.disableDraw();
             if (map.pm.Draw) {
                 ['Marker', 'CircleMarker', 'Line', 'Polygon', 'Rectangle', 'Circle', 'Cut', 'Text'].forEach(s => {
                     if (map.pm.Draw[s] && typeof map.pm.Draw[s].disable === 'function') {
-                        map.pm.Draw[s].disable();
+                        try { map.pm.Draw[s].disable(); } catch(e) {}
                     }
                 });
             }
-            if (typeof map.pm.disableGlobalEditMode === 'function') { try { map.pm.disableGlobalEditMode(); } catch(e) {} }
-            if (typeof map.pm.disableGlobalDragMode === 'function') { try { map.pm.disableGlobalDragMode(); } catch(e) {} }
-            if (typeof map.pm.disableGlobalRemovalMode === 'function') { try { map.pm.disableGlobalRemovalMode(); } catch(e) {} }
-            if (typeof map.pm.disableGlobalRotateMode === 'function') { try { map.pm.disableGlobalRotateMode(); } catch(e) {} }
+            if (typeof map.pm.globalEditModeEnabled === 'function' && map.pm.globalEditModeEnabled()) {
+                try { map.pm.disableGlobalEditMode(); } catch(e) {}
+            }
+            if (typeof map.pm.globalDragModeEnabled === 'function' && map.pm.globalDragModeEnabled()) {
+                try { map.pm.disableGlobalDragMode(); } catch(e) {}
+            }
+            if (typeof map.pm.globalRemovalModeEnabled === 'function' && map.pm.globalRemovalModeEnabled()) {
+                try { map.pm.disableGlobalRemovalMode(); } catch(e) {}
+            }
+            if (typeof map.pm.globalRotateModeEnabled === 'function' && map.pm.globalRotateModeEnabled()) {
+                try { map.pm.disableGlobalRotateMode(); } catch(e) {}
+            }
         } catch(e) {
             // Silently ignore geoman teardown edge cases
         }
@@ -356,10 +364,10 @@ function closeMeasurementPanel() {
     if (measurementLayerGroup) {
         measurementLayerGroup.eachLayer(l => {
             if (l.pm && typeof l.pm.disable === 'function') {
-                l.pm.disable();
+                try { l.pm.disable(); } catch(e) {}
             }
             if (l.dragging && typeof l.dragging.disable === 'function') {
-                l.dragging.disable();
+                try { l.dragging.disable(); } catch(e) {}
             }
         });
     }
@@ -367,6 +375,8 @@ function closeMeasurementPanel() {
     // Reativa a interatividade das camadas do tema selecionado
     if (typeof updateThemeInteractivity === 'function') {
         updateThemeInteractivity();
+    } else if (typeof window.updateThemeInteractivity === 'function') {
+        window.updateThemeInteractivity();
     }
 
     // Hide drawers and reset button states

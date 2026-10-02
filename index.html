@@ -404,8 +404,57 @@
         background: rgba(15, 23, 42, 0.5) !important;
         color: #94a3b8 !important;
       }
-      .dark .leaflet-control-attribution a {
-        color: #38bdf8 !important;
+      /* Marcadores de feição: área de toque aprimorada e suporte para toque mobile */
+      .custom-div-icon {
+        touch-action: none !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
+        -webkit-user-drag: none !important;
+        -webkit-touch-callout: none !important;
+      }
+      .map-pin-touch-wrap {
+        position: relative;
+        width: 44px;
+        height: 50px;
+        margin-left: -7px;
+        margin-top: -6px;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        touch-action: none !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
+        -webkit-user-drag: none !important;
+        -webkit-touch-callout: none !important;
+        cursor: pointer;
+      }
+
+      /* Estilo ativo durante "Ajustar Mapa" de Ponto */
+      .marker-adjusting-active {
+        z-index: 10000 !important;
+      }
+      .marker-adjusting-active .map-pin-3d-marker {
+        transform: scale(1.35) translateY(-10px) !important;
+        filter: drop-shadow(0 0 16px rgba(14, 165, 233, 0.95)) drop-shadow(0 12px 20px rgba(0,0,0,0.6)) !important;
+        transition: none !important;
+      }
+      .marker-adjusting-active::before {
+        content: '';
+        position: absolute;
+        bottom: 0px;
+        left: 50%;
+        width: 36px;
+        height: 36px;
+        transform: translateX(-50%);
+        border-radius: 50%;
+        background: rgba(14, 165, 233, 0.35);
+        border: 2px dashed #0ea5e9;
+        animation: marker-pulse-halo 1.5s ease-in-out infinite;
+        pointer-events: none;
+      }
+      @keyframes marker-pulse-halo {
+        0%, 100% { transform: translateX(-50%) scale(0.85); opacity: 0.5; }
+        50% { transform: translateX(-50%) scale(1.4); opacity: 0.95; }
       }
     </style>
 
