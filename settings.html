@@ -6601,6 +6601,11 @@
             return false;
         }
 
+        window.isUploadingTiles = true;
+        if (window.SessionSecurity && typeof window.SessionSecurity.keepAlive === 'function') {
+            window.SessionSecurity.keepAlive();
+        }
+
         async function uploadFileWorker(file) {
             const relPath = file.webkitRelativePath || `${rootFolderName}/${file.name}`;
             const targetStoragePath = `${currentStorageFolder}/${relPath}`;
@@ -6613,6 +6618,10 @@
             progressBar.style.width = `${pct}%`;
             percentText.innerText = `${pct}% (${completed}/${totalFiles})`;
             statusText.innerText = `Enviando ${completed} de ${totalFiles} imagens para o Cloudflare R2...`;
+
+            if (completed % 15 === 0 && window.SessionSecurity && typeof window.SessionSecurity.keepAlive === 'function') {
+                window.SessionSecurity.keepAlive();
+            }
         }
 
         // Fila paralela sem pausas artificiais
@@ -6627,6 +6636,11 @@
             }
         }
         await Promise.all(executing);
+
+        window.isUploadingTiles = false;
+        if (window.SessionSecurity && typeof window.SessionSecurity.keepAlive === 'function') {
+            window.SessionSecurity.keepAlive();
+        }
 
         if (hasErrors) {
             statusText.innerText = 'Upload concluído com avisos em alguns arquivos.';

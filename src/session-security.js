@@ -341,6 +341,21 @@
     function checkInactivityLoop() {
         if (isOfflineLocked) return; // Se já está com a tela de bloqueio offline visível, aguarda desbloqueio
 
+        // Se o sistema estiver realizando um upload pesado ou envio de ortofoto, renova automaticamente a sessão
+        const isUploadActive = (typeof window !== 'undefined') && (
+            window.isSystemProcessingBackgroundUpload === true || 
+            window.isUploadingTiles === true ||
+            (document.getElementById('upload-progress-container') && 
+             !document.getElementById('upload-progress-container').classList.contains('hidden') &&
+             document.getElementById('upload-progress-bar') && 
+             document.getElementById('upload-progress-bar').style.width !== '100%')
+        );
+        if (isUploadActive) {
+            recordActivity();
+            if (isWarningOpen) hideWarningModal();
+            return;
+        }
+
         const lastAct = getLastActivity();
         if (!lastAct) {
             recordActivity();
@@ -535,6 +550,11 @@
         },
         isModoCampo: function() {
             return localStorage.getItem(MODO_CAMPO_KEY) === 'true';
+        },
+        recordActivity: recordActivity,
+        keepAlive: function() {
+            recordActivity();
+            if (isWarningOpen) hideWarningModal();
         }
     };
 
