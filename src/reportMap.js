@@ -60,8 +60,43 @@
         let cfg = JSON.parse(JSON.stringify(opts.config));
 
         // preferCanvas: os vetores vão para um canvas, que a captura da imagem (Word/PNG) copia sem deslocamento
-        const map = L.map(opts.container, { zoomControl: true, attributionControl: true, zoomSnap: 0.25, preferCanvas: true, maxZoom: 24, minZoom: 1 });
+        const map = L.map(opts.container, { zoomControl: true, attributionControl: true, zoomSnap: 0.25, preferCanvas: true, maxZoom: 24, minZoom: 1, scrollWheelZoom: false });
         if (map.attributionControl && map.attributionControl.setPrefix) map.attributionControl.setPrefix(false);
+
+        // Rolagem inteligente: a rodinha do mouse rola a folha do relatório normalmente.
+        // O zoom via rodinha é ativado segurando Ctrl (ou Cmd), ou usando os controles +/- do mapa.
+        try {
+            const mapContainerEl = typeof opts.container === 'string' ? (doc && doc.getElementById ? doc.getElementById(opts.container) : null) : opts.container;
+            if (mapContainerEl && typeof mapContainerEl.addEventListener === 'function') {
+                let hintEl = null;
+                const showScrollHint = () => {
+                    if (!hintEl && doc && doc.createElement) {
+                        hintEl = doc.createElement('div');
+                        hintEl.className = 'map-scroll-hint no-print';
+                        hintEl.textContent = 'Use Ctrl + rolagem para aplicar zoom no mapa';
+                        hintEl.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(15,23,42,0.88);color:#fff;padding:6px 12px;border-radius:8px;font-size:11px;font-weight:600;pointer-events:none;z-index:1000;opacity:0;transition:opacity 0.2s ease;box-shadow:0 4px 12px rgba(0,0,0,0.3);white-space:nowrap;';
+                        mapContainerEl.appendChild(hintEl);
+                    }
+                    if (hintEl) {
+                        hintEl.style.opacity = '1';
+                        clearTimeout(hintEl._timer);
+                        hintEl._timer = setTimeout(() => { if (hintEl) hintEl.style.opacity = '0'; }, 1000);
+                    }
+                };
+
+                mapContainerEl.addEventListener('wheel', (ev) => {
+                    if (ev.ctrlKey || ev.metaKey) {
+                        ev.preventDefault();
+                        if (typeof map.getZoom === 'function' && typeof map.setZoom === 'function') {
+                            const delta = ev.deltaY < 0 ? 0.5 : -0.5;
+                            map.setZoom(map.getZoom() + delta);
+                        }
+                    } else {
+                        showScrollHint();
+                    }
+                }, { passive: false });
+            }
+        } catch (e) {}
 
         const state = { draw: null, mlayers: [], measure: null, dlines: [], base: null, orto: null, feature: null, mask: null, neighbors: {}, scaleControl: null, markers: {}, pts: {}, nlabels: {}, grid: [], notes: {}, locator: null, exporting: false };
         const vertData = MT.vertices(opts.geometry || null); // vértices onde o usuário pode marcar pontos

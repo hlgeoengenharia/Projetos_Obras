@@ -71,7 +71,7 @@
         } else {
             btn.classList.remove('bg-rose-600', 'text-white', 'shadow-[0_0_18px_rgba(225,29,72,0.85)]', 'ring-2', 'ring-rose-400', 'ring-offset-2', 'ring-offset-slate-900', 'animate-pulse');
             btn.classList.add('hover:bg-slate-100', 'dark:hover:bg-slate-800', 'text-indigo-600', 'dark:text-indigo-400');
-            btn.title = 'Comparador de Ortofotos (Swipe / Cortina)';
+            btn.title = 'Comparar Ortofotos';
             if (icon) icon.textContent = 'compare';
 
             const dot = btn.querySelector('.swipe-active-dot');
@@ -172,7 +172,7 @@
 
                     <!-- Divisor e Botão Fechar (Encerrar Swipe) -->
                     <div class="w-[1px] h-5 bg-white/20 ml-0.5"></div>
-                    <button id="swipe-btn-close" type="button" onclick="window.SwipeComparator.stop()" title="Encerrar Comparador de Ortofotos"
+                    <button id="swipe-btn-close" type="button" onclick="window.SwipeComparator.stop()" title="Encerrar Comparação de Ortofotos"
                             class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-white/10 hover:bg-rose-600 text-white/80 hover:text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shrink-0 cursor-pointer"
                             aria-label="Encerrar">
                         <span class="material-symbols-outlined text-[17px] sm:text-[18px]">close</span>
@@ -555,15 +555,17 @@
         if (!raster) return null;
         const isXYZ = (raster.tipo === 'xyz_tiles') || (raster.url_imagem && raster.url_imagem.includes('{z}'));
         if (isXYZ) {
-            const nativeMax = raster.zoom_max || 22;
+            const nativeMin = Math.max(16, Number(raster.zoom_min) || 16);
+            const nativeMax = Number(raster.zoom_max) || 21;
             const lyr = L.tileLayer(raster.url_imagem, {
                 minZoom: 1,
-                minNativeZoom: (raster.zoom_min !== undefined && raster.zoom_min !== null) ? raster.zoom_min : 14,
+                minNativeZoom: nativeMin,
                 maxNativeZoom: nativeMax,
                 maxZoom: 24,
                 keepBuffer: 16,
                 opacity: 1.0,
                 zIndex: 300,
+                errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
                 attribution: raster.nome || 'Ortofoto'
             });
             lyr.on('tileload', updateClip);

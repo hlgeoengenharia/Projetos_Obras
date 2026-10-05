@@ -170,6 +170,17 @@
                             </div>
                             ${subtituloHtml}
                         </div>`;
+            const rawDensidade = String(bloco.densidade || 'normal').toLowerCase();
+            const isUltraCompact = rawDensidade === 'ultracompact' || rawDensidade === 'ultra-compacto' || rawDensidade === 'ultracompacta';
+            const isCompact = !isUltraCompact && (rawDensidade === 'compact' || rawDensidade === 'compacto' || rawDensidade === 'compacta' || rawDensidade === 'tight');
+
+            // Configurações de espaçamento e tipografia conforme densidade
+            const gridGapCls = isUltraCompact ? 'gap-1' : (isCompact ? 'gap-1.5' : 'gap-2.5');
+            const cardPadCls = isUltraCompact ? 'py-1 px-1.5' : (isCompact ? 'p-1.5' : 'p-2');
+            const labelTextCls = isUltraCompact ? 'text-[8px] font-bold text-slate-500 uppercase tracking-tight leading-none' : (isCompact ? 'text-[8.5px] font-bold text-slate-500 uppercase tracking-tight' : 'text-[9.5px] uppercase font-bold text-slate-500 truncate');
+            const valTextCls = isUltraCompact ? 'text-[10px] font-semibold text-slate-800 leading-tight mt-0' : (isCompact ? 'text-[11px] font-semibold text-slate-800 leading-snug mt-0' : 'text-xs font-bold text-slate-800 mt-0.5');
+            const col1PadCls = isUltraCompact ? 'px-2 py-0.5 text-[10px]' : (isCompact ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs');
+
             const topoEdicao = (f, pct, modo, rotuloHtml) => `
                                         <div class="flex items-center justify-between gap-1 mb-1">
                                             <div class="flex items-center gap-1 min-w-0 flex-1">${edit.lead ? edit.lead(f, pct, modo) : ''}${rotuloHtml}</div>
@@ -187,7 +198,7 @@
                                     const attrs = edit.fieldAttrs ? edit.fieldAttrs(f, 100) : '';
                                     if (isRichField(f)) {
                                         return `
-                                    <div class="px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50 group/field select-none" ${attrs}>
+                                    <div class="${col1PadCls} bg-white odd:bg-slate-50/50 group/field select-none" ${attrs}>
                                         <div class="flex items-center justify-between gap-2">
                                             <div class="flex items-center gap-2 min-w-0">${edit.lead ? edit.lead(f, 100, 'linha') : ''}<span class="font-bold text-slate-600 truncate">${esc(f.label)}:</span></div>
                                             <div class="flex items-center gap-2">${edit.tail ? edit.tail(f, 100, 'linha') : ''}</div>
@@ -196,7 +207,7 @@
                                     </div>`;
                                     }
                                     return `
-                                    <div class="flex items-center justify-between px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50 group/field select-none" ${attrs}>
+                                    <div class="flex items-center justify-between ${col1PadCls} bg-white odd:bg-slate-50/50 group/field select-none" ${attrs}>
                                         <div class="flex items-center gap-2 min-w-0">${edit.lead ? edit.lead(f, 100, 'linha') : ''}<span class="font-bold text-slate-600 truncate">${esc(f.label)}:</span></div>
                                         <div class="flex items-center gap-2 min-w-0"><span class="font-semibold text-slate-900 truncate font-mono text-[11px]">${esc(val)}</span>${edit.tail ? edit.tail(f, 100, 'linha') : ''}</div>
                                     </div>`;
@@ -211,7 +222,7 @@
                                         </div>`;
                                     }
                                     return `
-                                    <div class="${hoverFieldCls}relative px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50">
+                                    <div class="${hoverFieldCls}relative ${col1PadCls} bg-white odd:bg-slate-50/50">
                                         <div class="flex items-center justify-between">
                                             <div class="font-bold text-slate-600">${esc(f.label)}:</div>
                                             ${opts && opts.interactiveHide ? `<button type="button" class="no-print opacity-0 group-hover/field:opacity-100 hover:text-red-600 text-slate-400 p-0.5 transition-opacity cursor-pointer" onclick="toggleHideField('${esc(f.id)}')" title="Ocultar este campo do relatório"><span class="material-symbols-outlined" style="font-size:13px;display:block">visibility_off</span></button>` : ''}
@@ -220,7 +231,7 @@
                                     </div>`;
                                 }
                                 return `
-                                    <div class="${hoverFieldCls}relative flex items-center justify-between px-3 py-1.5 text-xs bg-white odd:bg-slate-50/50">
+                                    <div class="${hoverFieldCls}relative flex items-center justify-between ${col1PadCls} bg-white odd:bg-slate-50/50">
                                         <span class="font-bold text-slate-600 truncate">${esc(f.label)}:</span>
                                         <div class="flex items-center gap-1.5 min-w-0">
                                             <span class="font-semibold text-slate-900 truncate font-mono text-[11px]">${esc(val)}</span>
@@ -236,7 +247,7 @@
 
             return `
                 <div class="mb-4 page-break-avoid">${cabecalho}
-                    <div class="flex flex-wrap gap-2.5${edit ? ' a4-grid-fields-container' : ''}"${edit && edit.containerAttrs ? ' ' + edit.containerAttrs : ''}>
+                    <div class="flex flex-wrap ${gridGapCls}${edit ? ' a4-grid-fields-container' : ''}"${edit && edit.containerAttrs ? ' ' + edit.containerAttrs : ''}>
                         ${fldsToRender.map(f => {
                             const val = resolveFieldValue(f, featureData);
                             const fType = FieldFormatter.canonicalType(f);
@@ -262,7 +273,7 @@
                                     <div class="relative group/field select-none w-full my-0.5" ${edit.fieldAttrs ? edit.fieldAttrs(f, pct) : ''}
                                          style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">
                                         <div class="flex items-center justify-between gap-1 mb-1">
-                                            <div class="flex items-center gap-1 min-w-0 flex-1">${edit.lead ? edit.lead(f, pct, 'card') : ''}<span class="text-[9.5px] uppercase font-bold text-slate-500 truncate" title="${esc(f.label)}">${esc(f.label)}</span></div>
+                                            <div class="flex items-center gap-1 min-w-0 flex-1">${edit.lead ? edit.lead(f, pct, 'card') : ''}<span class="${labelTextCls}" title="${esc(f.label)}">${esc(f.label)}</span></div>
                                             <div class="flex items-center gap-1 shrink-0">${edit.tail ? edit.tail(f, pct, 'card') : ''}</div>
                                         </div>
                                         ${valorHtml}
@@ -278,21 +289,21 @@
                             }
                             if (edit) {
                                 return `
-                                <div class="relative group/field p-2 border ${pct > 55 ? 'border-sky-300 bg-sky-50/40' : 'border-slate-200 bg-slate-50/50'} rounded-lg select-none" ${edit.fieldAttrs ? edit.fieldAttrs(f, pct) : ''}
-                                     style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">${topoEdicao(f, pct, 'card', `<span class="text-[9.5px] uppercase font-bold text-slate-500 truncate" title="${esc(f.label)}">${esc(f.label)}</span>`)}
-                                    <div class="text-xs font-bold text-slate-800 mt-0.5 ${valorCls}">${valorHtml}</div>
+                                <div class="relative group/field ${cardPadCls} border ${pct > 55 ? 'border-sky-300 bg-sky-50/40' : 'border-slate-200 bg-slate-50/50'} rounded-lg select-none" ${edit.fieldAttrs ? edit.fieldAttrs(f, pct) : ''}
+                                     style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">${topoEdicao(f, pct, 'card', `<span class="${labelTextCls}" title="${esc(f.label)}">${esc(f.label)}</span>`)}
+                                    <div class="${valTextCls} ${valorCls}">${valorHtml}</div>
                                 </div>
                             `;
                             }
                             const hoverFieldCls = (opts && opts.interactiveHide) ? 'group/field ' : '';
                             return `
-                                <div class="${hoverFieldCls}relative p-2 border border-slate-200 rounded-lg bg-slate-50/50"
+                                <div class="${hoverFieldCls}relative ${cardPadCls} border border-slate-200 rounded-lg bg-slate-50/50"
                                      style="flex: 0 0 ${widthStyle}; max-width: ${widthStyle}; width: ${widthStyle}; box-sizing: border-box;">
                                     <div class="flex items-center justify-between">
-                                        <div class="text-[9.5px] uppercase font-bold text-slate-500 truncate">${esc(f.label)}</div>
+                                        <div class="${labelTextCls}">${esc(f.label)}</div>
                                         ${opts && opts.interactiveHide ? `<button type="button" class="no-print opacity-0 group-hover/field:opacity-100 hover:text-red-600 text-slate-400 p-0.5 transition-opacity cursor-pointer" onclick="toggleHideField('${esc(f.id)}')" title="Ocultar este campo do relatório"><span class="material-symbols-outlined" style="font-size:13px;display:block">visibility_off</span></button>` : ''}
                                     </div>
-                                    <div class="text-xs font-bold text-slate-800 mt-0.5 ${valorCls}">${valorHtml}</div>
+                                    <div class="${valTextCls} ${valorCls}">${valorHtml}</div>
                                 </div>
                             `;
                         }).join('')}
@@ -925,13 +936,262 @@
             return { split: { rowsHtml, chunkHtml } };
         }
 
+        // =====================================================================================
+        // PRANCHA TÉCNICA DE ENGENHARIA / TOPOGRAFIA (NBR 16752)
+        // Formatos normalizados: A3 (1 mapa + loc), A2/A1/A0 (2 mapas: Atual x Proposta + loc)
+        // Selo oficial de 180mm no canto inferior direito com edição por duplo clique
+        // =====================================================================================
+        function renderPranchaTopograficaHtml(pranchaCfg, opts) {
+            opts = opts || {};
+            const prancha = pranchaCfg || {};
+            const formato = String(prancha.formato || 'A3').toUpperCase();
+            const isA3 = (formato === 'A3');
+            const isA2plus = ['A2', 'A1', 'A0'].includes(formato);
+
+            const pd = (typeof window !== 'undefined' && window.PageSize && window.PageSize.dims)
+                ? window.PageSize.dims({ tamanho: formato, orientacao: 'landscape' })
+                : { widthMm: (isA3 ? 420 : 594), heightMm: (isA3 ? 297 : 420), widthPx: (isA3 ? 1588 : 2245), heightPx: (isA3 ? 1123 : 1587), label: `${formato} Paisagem` };
+
+            const featureData = opts.featureData || {};
+            const featureGeometry = opts.featureGeometry || null;
+            const tpl = opts.template || {};
+
+            // Valores de campos resolvidos com fallback
+            const titulo = prancha.titulo_projeto || 'PROJETO DE RETIFICAÇÃO DE ÁREA';
+            const responsavelNome = prancha.responsavel_nome || 'ENG. RESPONSÁVEL TÉCNICO';
+            const responsavelCrea = prancha.responsavel_crea || 'CREA / CAU: 000000-D/PB';
+            const proprietarioNome = prancha.proprietario_nome || featureData.proprietario || featureData.nome || featureData.titular || 'PROPRIETÁRIO DO IMÓVEL';
+            const proprietarioCpf = prancha.proprietario_cpf || featureData.cpf || featureData.cnpj || featureData.cpf_cnpj || '000.000.000-00';
+            const localLogradouro = prancha.local_logradouro || featureData.logradouro || featureData.endereco || featureData.rua || 'RUA DAS FLORES, S/N - SETOR CENTRAL';
+            const inscricaoMun = prancha.inscricao_municipal || featureData.inscricao_municipal || featureData.inscricao || featureData.matricula || '01.02.003.0040.001';
+            const dataTxt = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(new Date());
+
+            // Medidas automáticas da geometria (se houver)
+            let areaM2 = 0;
+            let perimM = 0;
+            if (featureGeometry && typeof window !== 'undefined' && window.turf) {
+                try {
+                    areaM2 = window.turf.area(featureGeometry);
+                    const line = window.turf.polygonToLine(featureGeometry);
+                    perimM = window.turf.length(line, { units: 'kilometers' }) * 1000;
+                } catch(e) {}
+            }
+            const areaFormatada = areaM2 > 0 ? areaM2.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' m²' : '600,00 m²';
+            const areaHa = areaM2 > 0 ? '(' + (areaM2 / 10000).toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' ha)' : '(0,0600 ha)';
+            const perimFormatado = perimM > 0 ? perimM.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' m' : '100,00 m';
+
+            // Selo Oficial NBR 16752 (180 mm de largura fixa no canto inferior direito)
+            const seloHtml = `
+                <div id="prancha-selo-tecnico" class="prancha-selo-container bg-white text-slate-900 border-2 border-slate-900 select-none shadow-xs" style="width: 180mm; min-width: 180mm; max-width: 180mm; box-sizing: border-box; font-family: 'IBM Plex Sans', sans-serif;">
+                    <!-- Linha 1: Brasão e Entidade -->
+                    <div class="p-2 border-b-2 border-slate-900 flex items-center justify-between gap-2 bg-slate-50">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="material-symbols-outlined text-[26px] text-slate-800">account_balance</span>
+                            <div class="leading-tight">
+                                <div class="text-[9px] font-black uppercase tracking-wider text-slate-800">PREFEITURA MUNICIPAL</div>
+                                <div class="text-[8px] font-bold text-slate-600 uppercase">SECRETARIA DE OBRAS &amp; PLANEJAMENTO</div>
+                            </div>
+                        </div>
+                        <span class="text-[8px] font-mono font-bold bg-slate-200 px-1.5 py-0.5 rounded text-slate-700">NBR 16752</span>
+                    </div>
+
+                    <!-- Linha 2: Título do Projeto -->
+                    <div class="p-2 border-b border-slate-900 bg-white">
+                        <div class="text-[8px] font-bold uppercase tracking-wider text-slate-500">PROJETO / OBRA:</div>
+                        <div class="text-xs font-black uppercase text-slate-900 tracking-wide mt-0.5 prancha-editavel" data-prancha-field="titulo_projeto" title="Duplo clique para editar" ondblclick="editarTextoInlinePrancha(this, 'titulo_projeto')">${esc(titulo)}</div>
+                    </div>
+
+                    <!-- Linha 3: Proprietário e Local -->
+                    <div class="p-2 border-b border-slate-900 grid grid-cols-2 gap-2 text-[9px] leading-tight">
+                        <div class="border-r border-slate-300 pr-1">
+                            <div class="text-[7.5px] font-bold uppercase text-slate-500">PROPRIETÁRIO:</div>
+                            <div class="font-bold text-slate-900 truncate prancha-editavel" data-prancha-field="proprietario_nome" title="Duplo clique para editar" ondblclick="editarTextoInlinePrancha(this, 'proprietario_nome')">${esc(proprietarioNome)}</div>
+                            <div class="text-[8px] font-mono text-slate-600 mt-0.5">CPF/CNPJ: <span class="prancha-editavel" data-prancha-field="proprietario_cpf" title="Duplo clique para editar" ondblclick="editarTextoInlinePrancha(this, 'proprietario_cpf')">${esc(proprietarioCpf)}</span></div>
+                        </div>
+                        <div class="pl-1">
+                            <div class="text-[7.5px] font-bold uppercase text-slate-500">LOCALIZAÇÃO:</div>
+                            <div class="font-bold text-slate-900 truncate prancha-editavel" data-prancha-field="local_logradouro" title="Duplo clique para editar" ondblclick="editarTextoInlinePrancha(this, 'local_logradouro')">${esc(localLogradouro)}</div>
+                            <div class="text-[8px] font-mono text-slate-600 mt-0.5">INSCRIÇÃO: <span class="prancha-editavel" data-prancha-field="inscricao_municipal" title="Duplo clique para editar" ondblclick="editarTextoInlinePrancha(this, 'inscricao_municipal')">${esc(inscricaoMun)}</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Linha 4: Quadro de Áreas / Memorial de Áreas -->
+                    <div class="p-2 border-b border-slate-900 bg-slate-50 text-[9px]">
+                        <div class="text-[7.5px] font-bold uppercase tracking-wider text-slate-500 mb-1">QUADRO RESUMO DE ÁREAS:</div>
+                        ${isA2plus ? `
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="bg-white p-1 rounded border border-slate-200">
+                                <div class="text-[7px] font-bold uppercase text-slate-400">1. Situação Atual (Oficial)</div>
+                                <div class="font-black text-slate-800 text-[10px]">${areaFormatada}</div>
+                                <div class="text-[7.5px] font-mono text-slate-500">Perímetro: ${perimFormatado}</div>
+                            </div>
+                            <div class="bg-emerald-50/80 p-1 rounded border border-emerald-200">
+                                <div class="text-[7px] font-bold uppercase text-emerald-800">2. Situação Proposta (Projeto)</div>
+                                <div class="font-black text-emerald-900 text-[10px]">${areaFormatada}</div>
+                                <div class="text-[7.5px] font-mono text-emerald-700">Perímetro: ${perimFormatado}</div>
+                            </div>
+                        </div>
+                        ` : `
+                        <div class="flex items-center justify-between font-mono bg-white p-1 rounded border border-slate-200">
+                            <div><span class="text-slate-500 text-[8px]">Área: </span><b class="text-slate-900">${areaFormatada}</b> <span class="text-[8px] text-slate-400">${areaHa}</span></div>
+                            <div><span class="text-slate-500 text-[8px]">Perímetro: </span><b class="text-slate-900">${perimFormatado}</b></div>
+                        </div>
+                        `}
+                    </div>
+
+                    <!-- Linha 5: Responsável Técnico -->
+                    <div class="p-2 border-b border-slate-900 grid grid-cols-2 gap-2 text-[9px] leading-tight">
+                        <div class="border-r border-slate-300 pr-1">
+                            <div class="text-[7.5px] font-bold uppercase text-slate-500">RESPONSÁVEL TÉCNICO:</div>
+                            <div class="font-bold text-slate-900 truncate prancha-editavel" data-prancha-field="responsavel_nome" title="Duplo clique para editar" ondblclick="editarTextoInlinePrancha(this, 'responsavel_nome')">${esc(responsavelNome)}</div>
+                            <div class="text-[8px] font-mono text-slate-600 mt-0.5 prancha-editavel" data-prancha-field="responsavel_crea" title="Duplo clique para editar" ondblclick="editarTextoInlinePrancha(this, 'responsavel_crea')">${esc(responsavelCrea)}</div>
+                        </div>
+                        <div class="pl-1 flex flex-col justify-end items-center text-center">
+                            <div class="w-full border-b border-dashed border-slate-400 mb-1"></div>
+                            <div class="text-[7.5px] uppercase font-bold text-slate-500">ASSINATURA DIGITAL / VISTO</div>
+                        </div>
+                    </div>
+
+                    <!-- Linha 6: Rodapé Metadados -->
+                    <div class="p-1.5 bg-slate-100 flex items-center justify-between text-[8px] font-mono text-slate-700">
+                        <div>ESCALAS: <b>1:500</b> / <b>1:5.000</b></div>
+                        <div>DATUM: <b>SIRGAS 2000</b></div>
+                        <div>DATA: <b>${esc(dataTxt)}</b></div>
+                        <div class="font-black bg-slate-900 text-white px-1.5 py-0.5 rounded text-[7.5px]">FOLHA 01/01</div>
+                    </div>
+                </div>
+            `;
+
+            // Layout da Prancha A3 vs A2/A1/A0
+            const mainBodyHtml = isA3 ? `
+                <div class="flex-1 min-h-0 flex gap-2.5 p-2.5">
+                    <!-- Coluna Esquerda: Planta Principal de Situação / Cadastral + Memorial Descritivo -->
+                    <div class="flex-1 min-w-0 flex flex-col gap-2.5">
+                        <div class="flex-1 min-h-0 flex flex-col border border-slate-300 rounded-lg overflow-hidden bg-white shadow-2xs">
+                            <div class="bg-slate-900 text-white px-3 py-1.5 flex items-center justify-between text-[11px] font-bold">
+                                <span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[15px] text-emerald-400">map</span> PLANTA TOPOGRÁFICA DO IMÓVEL (SITUAÇÃO GERAL)</span>
+                                <span class="font-mono text-[9.5px] bg-slate-800 px-2 py-0.5 rounded text-emerald-300">ESCALA INDICADA 1:500</span>
+                            </div>
+                            <div class="flex-1 relative bg-slate-100 min-h-[300px]" id="map-prancha-principal-wrap">
+                                <div id="map-prancha-principal" class="w-full h-full"></div>
+                            </div>
+                        </div>
+
+                        <!-- Memorial Descritivo / Tabela de Vértices -->
+                        <div id="prancha-memorial-quadro" class="border border-slate-300 rounded-lg overflow-hidden bg-white p-2">
+                            <div class="flex items-center justify-between border-b border-slate-200 pb-1 mb-1.5 text-[9.5px] font-bold uppercase text-slate-800">
+                                <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[13px] text-emerald-600">table_rows</span> MEMORIAL DESCRITIVO — COORDENADAS UTM &amp; CONFRONTANTES</span>
+                                <span class="text-[8.5px] font-mono text-slate-500">SIRGAS 2000 / UTM FUSO 25S</span>
+                            </div>
+                            <div class="overflow-x-auto max-h-[160px]" id="prancha-tabela-vertices-slot">
+                                <!-- Preenchido dinamicamente com os vértices e confrontantes da feição -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Coluna Direita (180mm fixa): Mapa de Localização + Selo Oficial -->
+                    <div class="w-[180mm] min-w-[180mm] max-w-[180mm] flex flex-col justify-between gap-2.5 shrink-0">
+                        <!-- Planta de Localização Urbana -->
+                        <div class="flex flex-col border border-slate-300 rounded-lg overflow-hidden bg-white shadow-2xs h-[220px]">
+                            <div class="bg-slate-800 text-white px-2.5 py-1 flex items-center justify-between text-[10px] font-bold">
+                                <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[13px] text-sky-400">near_me</span> PLANTA DE LOCALIZAÇÃO</span>
+                                <span class="font-mono text-[8.5px] bg-slate-700 px-1 py-0.2 rounded text-sky-300">1:5.000</span>
+                            </div>
+                            <div class="flex-1 relative bg-slate-100" id="map-prancha-localizacao-wrap">
+                                <div id="map-prancha-localizacao" class="w-full h-full"></div>
+                            </div>
+                        </div>
+
+                        <!-- Selo Oficial NBR 16752 -->
+                        ${seloHtml}
+                    </div>
+                </div>
+            ` : `
+                <div class="flex-1 min-h-0 flex gap-2.5 p-2.5">
+                    <!-- Área Esquerda: 2 Mapas Lado a Lado + Tabela de Vértices abaixo -->
+                    <div class="flex-1 min-w-0 flex flex-col gap-2.5">
+                        <!-- Os Dois Mapas Lado a Lado (Situação Atual vs Proposta) -->
+                        <div class="flex-1 grid grid-cols-2 gap-2.5 min-h-0">
+                            <!-- Quadro 1: Situação Atual -->
+                            <div class="flex flex-col border border-slate-300 rounded-lg overflow-hidden bg-white shadow-2xs">
+                                <div class="bg-slate-900 text-white px-3 py-1.5 flex items-center justify-between text-[11px] font-bold">
+                                    <span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[15px] text-sky-400">history_toggle_off</span> 1. SITUAÇÃO ATUAL (BASE CADASTRAL OFICIAL / CTM)</span>
+                                    <span class="font-mono text-[9px] bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">ESCALA 1:500</span>
+                                </div>
+                                <div class="flex-1 relative bg-slate-100 min-h-[300px]" id="map-prancha-atual-wrap">
+                                    <div id="map-prancha-atual" class="w-full h-full"></div>
+                                </div>
+                            </div>
+
+                            <!-- Quadro 2: Situação Proposta -->
+                            <div class="flex flex-col border border-emerald-900 rounded-lg overflow-hidden bg-white shadow-2xs">
+                                <div class="bg-emerald-950 text-white px-3 py-1.5 flex items-center justify-between text-[11px] font-bold">
+                                    <span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[15px] text-emerald-400">architecture</span> 2. SITUAÇÃO PROPOSTA (PROJETO DE OBRAS)</span>
+                                    <span class="font-mono text-[9px] bg-emerald-900 px-1.5 py-0.5 rounded text-emerald-300">ESCALA 1:500</span>
+                                </div>
+                                <div class="flex-1 relative bg-slate-100 min-h-[300px]" id="map-prancha-proposta-wrap">
+                                    <div id="map-prancha-proposta" class="w-full h-full"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Memorial Descritivo / Tabela de Vértices -->
+                        <div id="prancha-memorial-quadro" class="border border-slate-300 rounded-lg overflow-hidden bg-white p-2">
+                            <div class="flex items-center justify-between border-b border-slate-200 pb-1 mb-1.5 text-[9.5px] font-bold uppercase text-slate-800">
+                                <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[13px] text-emerald-600">table_rows</span> MEMORIAL DESCRITIVO — COORDENADAS UTM &amp; CONFRONTANTES</span>
+                                <span class="text-[8.5px] font-mono text-slate-500">SIRGAS 2000 / UTM FUSO 25S</span>
+                            </div>
+                            <div class="overflow-x-auto" id="prancha-tabela-vertices-slot">
+                                <!-- Preenchido dinamicamente com os vértices e confrontantes da feição -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Coluna Direita (180mm fixa): Mapa de Localização + Selo Oficial -->
+                    <div class="w-[180mm] min-w-[180mm] max-w-[180mm] flex flex-col justify-between gap-2.5 shrink-0">
+                        <!-- Planta de Localização Urbana -->
+                        <div class="flex flex-col border border-slate-300 rounded-lg overflow-hidden bg-white shadow-2xs h-[250px]">
+                            <div class="bg-slate-800 text-white px-2.5 py-1 flex items-center justify-between text-[10px] font-bold">
+                                <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[13px] text-sky-400">near_me</span> PLANTA DE LOCALIZAÇÃO</span>
+                                <span class="font-mono text-[8.5px] bg-slate-700 px-1 py-0.2 rounded text-sky-300">1:5.000</span>
+                            </div>
+                            <div class="flex-1 relative bg-slate-100" id="map-prancha-localizacao-wrap">
+                                <div id="map-prancha-localizacao" class="w-full h-full"></div>
+                            </div>
+                        </div>
+
+                        <!-- Selo Oficial NBR 16752 -->
+                        ${seloHtml}
+                    </div>
+                </div>
+            `;
+
+            return `
+                <div class="technical-board-page w-full text-slate-900 bg-white" data-prancha-formato="${formato}" style="max-width: ${pd.widthPx}px; min-width: ${pd.widthPx}px; width: ${pd.widthPx}px; min-height: ${pd.heightPx}px; height: ${pd.heightPx}px; padding: 10mm 10mm 10mm 20mm; box-sizing: border-box; margin: 20px auto; position: relative;">
+                    <!-- Moldura Técnica NBR 16752 (2px contínuo) -->
+                    <div class="technical-board-frame w-full h-full relative border-2 border-slate-900 flex flex-col justify-between" style="box-sizing: border-box;">
+                        
+                        <!-- Barra de Cabeçalho Superior da Moldura -->
+                        <div class="bg-slate-900 text-white px-3 py-1.5 flex items-center justify-between text-[10.5px] font-mono select-none">
+                            <span class="font-bold flex items-center gap-2"><span class="material-symbols-outlined text-[16px] text-emerald-400">square_foot</span> SISTEMA CARTOGRÁFICO GEOGESTOR • PLANTA TÉCNICA OFICIAL</span>
+                            <span class="opacity-90 font-bold">NBR 16752 • FORMATO ${formato} (${pd.widthMm} × ${pd.heightMm} mm)</span>
+                        </div>
+
+                        <!-- Área de Desenho e Mapas -->
+                        ${mainBodyHtml}
+                    </div>
+                </div>
+            `;
+        }
+
         return {
             resolveTabIds, getReportSchema, getTableDensityClasses, getLaudoDensityStyles, reportBlockNotice, renderSyntheticTable, renderAnalyticalLaudo,
             getOrgBadgeHtml, getStatusBadgeHtml, getRecuoBadgeHtml,
             getGeometryCenter, formatFieldValueForDisplay, readFieldRaw, isRichField, resolveFieldHtml, resolveFieldValue,
             getFieldWidthStyle, renderAttributeGrid, replaceMentionsWithData,
             getFooterPageNumberText, renderHeaderSlotHtml, renderFooterSlotHtml,
-            renderHeaderBlock, renderFreeTextBlock
+            renderHeaderBlock, renderFreeTextBlock,
+            renderPranchaTopograficaHtml
         };
     }
 

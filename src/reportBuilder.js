@@ -11,6 +11,7 @@
     let builderScope = 'individual';
     let sortableInstance = null;
     let activeAccordionId = 'acc-layout'; // Card 0 aberto por padrão
+    let selectedGridBlockId = null;
     window._customUploadedLogoUrl = null;
 
     /**
@@ -25,11 +26,35 @@
     /** Dimensões da folha do modelo em edição (A4 ou A3, retrato ou paisagem). */
     function pageDims() {
         const cfg = currentTemplate && currentTemplate.config_pagina;
-        if (window.PageSize) return window.PageSize.dims(cfg);
+        if (typeof PageSize !== 'undefined' && PageSize.dims) return PageSize.dims(cfg);
+        if (typeof window !== 'undefined' && window.PageSize && window.PageSize.dims) return window.PageSize.dims(cfg);
         const land = !!(cfg && cfg.orientacao === 'landscape');
         return { name: 'A4', orient: land ? 'landscape' : 'portrait', widthMm: land ? 297 : 210, heightMm: land ? 210 : 297,
                  widthPx: land ? 1123 : 794, heightPx: land ? 794 : 1123, cssPageSize: 'A4 ' + (land ? 'landscape' : 'portrait'),
                  label: land ? '297 × 210 mm (Paisagem)' : '210 × 297 mm (Retrato)' };
+    }
+
+    /** Dimensões máximas efetivas considerando pranchas técnicas NBR 16752 (A3=1588px, A2=2245px...) */
+    function effectiveMaxPageDims() {
+        const pd = pageDims();
+        let maxW = pd.widthPx;
+        let maxH = pd.heightPx;
+        try {
+            const prancha = (typeof getPranchaConfig === 'function') ? getPranchaConfig() : null;
+            if (prancha && prancha.ativa && prancha.formato && prancha.formato !== 'none') {
+                const pranchaSize = (typeof ReportPageSize !== 'undefined' && ReportPageSize.getPageDimensions)
+                    ? ReportPageSize.getPageDimensions(prancha.formato, 'landscape')
+                    : (prancha.formato === 'A3' ? { widthPx: 1588, heightPx: 1123 }
+                      : prancha.formato === 'A2' ? { widthPx: 2245, heightPx: 1588 }
+                      : prancha.formato === 'A1' ? { widthPx: 3179, heightPx: 2245 }
+                      : prancha.formato === 'A0' ? { widthPx: 4494, heightPx: 3179 } : null);
+                if (pranchaSize && pranchaSize.widthPx > maxW) {
+                    maxW = pranchaSize.widthPx;
+                    maxH = Math.max(maxH, pranchaSize.heightPx);
+                }
+            }
+        } catch(e) {}
+        return { widthPx: maxW, heightPx: maxH, base: pd };
     }
 
     function initReportBuilderTab(formId, formName = 'Formulário', opts) {
@@ -71,6 +96,10 @@
                 margens_mm: { top: 15, bottom: 15, left: 15, right: 15 }
             };
         }
+        // Fichas Individuais são estritamente em folha A4 (pranchas maiores entram como anexo topográfico no Mini-Mapa)
+        if (currentTemplate.tipo !== 'geral') {
+            currentTemplate.config_pagina.tamanho = 'A4';
+        }
         if (!currentTemplate.config_pagina.margens_mm) {
             currentTemplate.config_pagina.margens_mm = { top: 15, bottom: 15, left: 15, right: 15 };
         }
@@ -100,6 +129,7 @@
         const templates = getScopedTemplates(formId);
         const isGeral = builderScope === 'geral';
         const pd = pageDims();
+        const ed = effectiveMaxPageDims();
         // o atalho no popup lista TODAS as abas do cadastro (inclusive a de Relatórios); as demais listas do módulo não
         const formTabs = window.ReportAdapter.getFormTabs ? window.ReportAdapter.getFormTabs(formId, { includeReportsTab: true }) : [];
         // só salva com o nome do documento preenchido e, na ficha individual, o atalho no popup escolhido
@@ -147,13 +177,22 @@
 
                     <!-- Botões de Ação -->
                     <div class="flex items-center gap-2 self-end xl:self-center shrink-0">
+                        ${isGeral ? `
                         <div class="flex flex-col">
                             <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Folha</label>
-                            <div class="inline-flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700" title="Tamanho do papel do relatório">
+                            <div class="inline-flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700" title="Tamanho do papel do relatório geral">
                                 <button type="button" onclick="ReportBuilder.setPageSize('A4')" class="px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${pd.name === 'A4' ? 'bg-primary text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-primary'}">A4</button>
                                 <button type="button" onclick="ReportBuilder.setPageSize('A3')" class="px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${pd.name === 'A3' ? 'bg-primary text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-primary'}">A3</button>
                             </div>
                         </div>
+                        ` : `
+                        <div class="flex flex-col">
+                            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Folha</label>
+                            <div class="inline-flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700" title="Tamanho do papel da ficha individual (A4 padrão oficial)">
+                                <span class="px-3 py-1 rounded-lg text-xs font-bold bg-primary text-white shadow-xs">A4</span>
+                            </div>
+                        </div>
+                        `}
                         <button type="button" onclick="ReportBuilder.previewReal()" class="flex items-center gap-1.5 px-4 py-2.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="${isGeral ? 'Abre o relatório de verdade com uma lista de exemplo (várias feições) e o modelo como está agora, sem precisar salvar' : 'Abre o relatório de verdade (o mesmo da impressão, do PDF e do Word) com uma feição de teste e o modelo como está agora, sem precisar salvar'}">
                             <span class="material-symbols-outlined text-[18px]">visibility</span>
                             <span>Preview</span>
@@ -171,21 +210,44 @@
 
                 <!-- Grid Principal: Acordeão Lateral (largura fixa otimizada) + Folha Virtual A4 Estilo Word (expande com o espaço disponível) -->
                 <div class="flex flex-col lg:flex-row gap-6 items-start w-full">
-                    <!-- PAINEL ESQUERDO: ACORDEÃO DE CONFIGURAÇÃO PRÉVIA DOS BLOCOS -->
-                    <div class="w-full lg:w-[380px] xl:w-[410px] shrink-0 flex flex-col gap-3" id="accordion-blocks-panel">
+                    <!-- PAINEL ESQUERDO: ACORDEÃO DE CONFIGURAÇÃO PRÉVIA DOS BLOCOS (SEMPRE À VISTA DURANTE A ROLAGEM) -->
+                    <div class="w-full lg:w-[380px] xl:w-[410px] shrink-0 flex flex-col gap-3 select-none pr-1 custom-scrollbar" id="accordion-blocks-panel" style="position: sticky !important; top: 10px !important; z-index: 35; max-height: calc(100vh - 20px); overflow-y: auto;">
                         ${renderAccordionPanel(formId)}
                     </div>
 
                     <!-- PAINEL DIREITO: FOLHA VIRTUAL A4 (ESTILO WORD / PROCESSADOR DE TEXTO REAL) -->
                     <div class="flex-1 min-w-0 w-full flex flex-col items-center">
-                        <!-- Barra de Status e Dica de Edição da Folha -->
-                        <div class="w-full mb-3 flex items-center justify-between px-2 text-xs">
+                        <!-- Barra de Status e Dica de Edição da Folha (Sticky no topo da rolagem com blur suave) -->
+                        <div class="w-full sticky top-0 z-30 mb-3 flex items-center justify-between px-3 py-2 text-xs bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm transition-all">
                             <div class="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                                 <span class="material-symbols-outlined text-[17px] text-amber-500">edit_note</span>
                                 <span class="font-bold">Folha ${pd.name} Interativa:</span>
-                                <span class="text-slate-400 text-[11px]">Dê duplo-clique em qualquer texto da folha para editar</span>
+                                <span class="text-slate-400 text-[11px] hidden sm:inline">Dê duplo-clique em qualquer texto da folha para editar</span>
                             </div>
-                            <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-2 flex-wrap justify-end">
+                                <!-- BARRA DE ZOOM ESTILO EDGE / ACROBAT (SEMPRE VISÍVEL DURANTE A ROLAGEM) -->
+                                <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 select-none shadow-2xs">
+                                    <span class="material-symbols-outlined text-[15px] text-slate-400">zoom_in</span>
+                                    <button type="button" onclick="ReportBuilder.changeZoom(-0.1)" class="w-5 h-5 flex items-center justify-center rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs cursor-pointer" title="Diminuir Zoom">−</button>
+                                    <select id="builder-zoom-select" onchange="ReportBuilder.setZoom(this.value)" class="text-[11px] font-semibold bg-transparent border-0 text-slate-700 dark:text-slate-200 cursor-pointer focus:ring-0 py-0 pl-1 pr-4">
+                                        <option value="fit">Ajustar à página</option>
+                                        <option value="fit-width">Ajustar à largura</option>
+                                        <option value="0.33">33%</option>
+                                        <option value="0.5">50%</option>
+                                        <option value="0.67">67%</option>
+                                        <option value="0.75">75%</option>
+                                        <option value="0.85">85%</option>
+                                        <option value="1" selected>100%</option>
+                                        <option value="1.25">125%</option>
+                                        <option value="1.5">150%</option>
+                                    </select>
+                                    <button type="button" onclick="ReportBuilder.changeZoom(0.1)" class="w-5 h-5 flex items-center justify-center rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs cursor-pointer" title="Aumentar Zoom">+</button>
+                                    <button type="button" onclick="ReportBuilder.setZoom('fit-width')" class="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer ml-0.5" title="Enquadrar a largura da folha perfeitamente na tela">
+                                        <span class="material-symbols-outlined text-[14px]">fit_screen</span>
+                                        <span class="text-[10px] font-semibold">Ajustar</span>
+                                    </button>
+                                </div>
+
                                 <button type="button" id="btn-folha-real" onclick="ReportBuilder.alternarFolhaReal()" class="flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-semibold cursor-pointer transition-colors" title="Ligado: a folha é a própria página do relatório (mapa, paginação e tudo). Desligado: folha clássica (esquemática).">
                                     <span class="material-symbols-outlined text-[14px]">web</span><span id="btn-folha-real-texto">Página real</span>
                                 </button>
@@ -196,9 +258,11 @@
                         <!-- ESTÚDIO DE DOCUMENTO (DESKTOP CINZA COM RÉGUA E PAPEL BRANCO PURO) -->
                         <div class="w-full bg-slate-200/80 dark:bg-slate-900/90 p-3 sm:p-6 lg:p-8 rounded-2xl border border-slate-300/80 dark:border-slate-800 flex flex-col items-center overflow-x-auto shadow-inner">
                             
-                            <!-- PÁGINA REAL: o próprio relatório_view.html em modo edição (iframe do tamanho do conteúdo) -->
-                            <div id="a4-real" class="hidden w-full flex flex-col items-center">
-                                <iframe id="a4-real-frame" title="Folha A4 Interativa (a própria página do relatório)" class="w-full border-0 bg-transparent" style="height: 1200px;" scrolling="no"></iframe>
+                            <!-- PÁGINA REAL: o próprio relatório_view.html em modo edição com largura exata do documento sem cortes -->
+                            <div id="a4-real" class="hidden w-full flex flex-col items-center overflow-x-auto py-2">
+                                <div id="a4-real-zoom-wrap" class="flex justify-center" style="transform-origin: top center; transition: transform 0.15s ease-out; width: ${ed.widthPx}px;">
+                                    <iframe id="a4-real-frame" title="Folha ${pd.name} Interativa (a própria página do relatório)" class="border-0 bg-transparent block" style="height: 1200px; width: ${ed.widthPx}px; min-width: ${ed.widthPx}px; max-width: none;" scrolling="no"></iframe>
+                                </div>
                             </div>
 
                             <div id="a4-classica" class="w-full flex flex-col items-center">
@@ -255,7 +319,7 @@
     // ================================================================================================
     const CHAVE_FOLHA_REAL = 'constructive_folha_real';
     // ações que a página real pode pedir (as mesmas funções dos botões da folha clássica)
-    const ACOES_FOLHA_REAL = ['moveBlock', 'removeBlock', 'atualizarPropriedade', 'reordenarCampos', 'moveSynthetic1nColumn', 'editSynthetic1nColTitle', 'removeColumnFromSynthetic1n',
+    const ACOES_FOLHA_REAL = ['moveBlock', 'moveActiveGrid', 'setGridDensity', 'removeBlock', 'atualizarPropriedade', 'reordenarCampos', 'moveSynthetic1nColumn', 'editSynthetic1nColTitle', 'removeColumnFromSynthetic1n',
         'changeFieldWidthStep', 'setFieldWidthExact', 'removeFieldFromGrid', 'removeFieldFromAnalytical1n', 'setFieldFileMode', 'saveFreeTextContent', 'changeLineHeight'];
     let folhaRealPronta = false;
     let folhaRealTimer = null;
@@ -308,9 +372,10 @@
 
     function enviarFolhaReal() {
         const frame = document.getElementById('a4-real-frame');
-        if (!frame || !frame.contentWindow || !folhaRealPronta || !currentTemplate || !currentTemplate.form_id || !window.ReportPreview) return;
+        if (!frame || !frame.contentWindow || !currentTemplate || !currentTemplate.form_id || !window.ReportPreview) return;
         try {
-            frame.contentWindow.postMessage({ tipo: 'construtor:dados', payload: montarPayloadPrevia() }, window.location.origin);
+            const targetOrigin = (window.location.origin && window.location.origin !== 'null') ? window.location.origin : '*';
+            frame.contentWindow.postMessage({ tipo: 'construtor:dados', payload: montarPayloadPrevia() }, targetOrigin);
         } catch (e) {
             console.error('[ReportBuilder] Falha ao enviar o modelo para a página do relatório:', e);
         }
@@ -319,13 +384,53 @@
     /** Mensagens vindas da página do relatório embutida (só do nosso iframe e da nossa origem). */
     function tratarMensagemFolhaReal(e) {
         const frame = document.getElementById('a4-real-frame');
-        if (!frame || e.source !== frame.contentWindow || e.origin !== window.location.origin) return;
+        if (!frame || e.source !== frame.contentWindow) return;
+        if (window.location.origin && window.location.origin !== 'null' && e.origin && e.origin !== 'null' && e.origin !== '' && e.origin !== window.location.origin) return;
         const m = e.data || {};
-        if (m.tipo === 'construtor:pronto') { folhaRealPronta = true; enviarFolhaReal(); }
-        else if (m.tipo === 'construtor:altura' && m.altura > 0) frame.style.height = Math.ceil(m.altura) + 'px';
+        if (m.tipo === 'construtor:pronto') {
+            folhaRealPronta = true;
+            const ed = effectiveMaxPageDims();
+            frame.style.width = ed.widthPx + 'px';
+            frame.style.minWidth = ed.widthPx + 'px';
+            const zoomWrap = document.getElementById('a4-real-zoom-wrap');
+            if (zoomWrap) zoomWrap.style.width = ed.widthPx + 'px';
+            enviarFolhaReal();
+            // Se a tela for menor que a folha física ou se houver prancha larga, ajusta suavemente à largura
+            const container = document.getElementById('a4-real');
+            if (container && container.clientWidth > 0 && container.clientWidth < ed.widthPx) {
+                setTimeout(() => setZoom('fit-width'), 80);
+            }
+        }
+        else if (m.tipo === 'construtor:altura' && m.altura > 0) {
+            frame.style.height = Math.ceil(m.altura) + 'px';
+            const ed = effectiveMaxPageDims();
+            let targetW = ed.widthPx;
+            if (m.largura && m.largura > targetW) {
+                targetW = Math.ceil(m.largura);
+            }
+            frame.style.width = targetW + 'px';
+            frame.style.minWidth = targetW + 'px';
+            const zoomWrap = document.getElementById('a4-real-zoom-wrap');
+            if (zoomWrap) zoomWrap.style.width = targetW + 'px';
+            if (builderCurrentZoom && builderCurrentZoom !== 1) setZoom(builderCurrentZoom);
+        }
         else if (m.tipo === 'construtor:acao' && ACOES_FOLHA_REAL.includes(m.nome) && Array.isArray(m.args)) {
             const fn = window.ReportBuilder && window.ReportBuilder[m.nome];
             if (typeof fn === 'function') fn.apply(null, m.args);
+        }
+        else if (m.tipo === 'construtor:selecionar') {
+            const idx = m.indice;
+            if (m.id && currentTemplate && currentTemplate.blocos) {
+                const b = currentTemplate.blocos.find(x => x.id === m.id);
+                if (b && b.tipo === 'grade_campos') {
+                    selectActiveGrid(b.id);
+                }
+            } else if (typeof idx === 'number' && currentTemplate && currentTemplate.blocos && currentTemplate.blocos[idx]) {
+                const b = currentTemplate.blocos[idx];
+                if (b.tipo === 'grade_campos') {
+                    selectActiveGrid(b.id);
+                }
+            }
         }
     }
     if (typeof window !== 'undefined' && window.addEventListener) window.addEventListener('message', tratarMensagemFolhaReal);
@@ -672,7 +777,34 @@
             ${isGeral ? '' : (() => {
                 const existingGrids = (currentTemplate?.blocos || []).filter(b => b.tipo === 'grade_campos');
                 const hasExistingGrid = existingGrids.length > 0;
-                const activeGridFieldCount = hasExistingGrid ? (existingGrids[0].campos_selecionados?.length || 0) : 0;
+                let activeGrid = null;
+                if (selectedGridBlockId) {
+                    activeGrid = existingGrids.find(g => g.id === selectedGridBlockId);
+                }
+                if (!activeGrid && hasExistingGrid) {
+                    activeGrid = existingGrids[0];
+                    selectedGridBlockId = activeGrid.id;
+                }
+                const activeGridFieldCount = activeGrid ? (activeGrid.campos_selecionados?.length || 0) : 0;
+                const gridSelectorHtml = existingGrids.length > 1 ? `
+                    <div class="p-2.5 bg-sky-500/10 border border-sky-500/30 rounded-xl space-y-2">
+                        <div class="flex items-center justify-between">
+                            <label class="text-[10px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400">Grade Selecionada na Folha:</label>
+                            <span class="text-[9.5px] font-medium text-slate-400">Clique na folha para alternar</span>
+                        </div>
+                        <select onchange="ReportBuilder.selectActiveGrid(this.value)" class="w-full px-2.5 py-1 text-xs font-bold bg-white dark:bg-slate-800 border border-sky-300 dark:border-sky-700 rounded-lg text-sky-900 dark:text-sky-200 focus:outline-none">
+                            ${existingGrids.map((g, gi) => `<option value="${g.id}" ${g.id === activeGrid.id ? 'selected' : ''}>Grade ${gi + 1}: ${escapeHtml(g.titulo || 'Grade')} (${(g.campos_selecionados || []).length} campos)</option>`).join('')}
+                        </select>
+                        <div class="flex items-center gap-1.5 pt-0.5">
+                            <button type="button" onclick="ReportBuilder.moveActiveGrid(-1)" class="flex-1 py-1.5 px-2 bg-white dark:bg-slate-800 hover:bg-sky-50 dark:hover:bg-sky-950/60 border border-sky-300 dark:border-sky-700 hover:border-sky-500 rounded-lg text-xs font-bold text-sky-800 dark:text-sky-200 flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-2xs" title="Mover esta grade para cima na folha">
+                                <span class="material-symbols-outlined text-[16px] text-sky-600">arrow_upward</span> Mover Grade para Cima
+                            </button>
+                            <button type="button" onclick="ReportBuilder.moveActiveGrid(1)" class="flex-1 py-1.5 px-2 bg-white dark:bg-slate-800 hover:bg-sky-50 dark:hover:bg-sky-950/60 border border-sky-300 dark:border-sky-700 hover:border-sky-500 rounded-lg text-xs font-bold text-sky-800 dark:text-sky-200 flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-2xs" title="Mover esta grade para baixo na folha">
+                                <span class="material-symbols-outlined text-[16px] text-sky-600">arrow_downward</span> Mover Grade para Baixo
+                            </button>
+                        </div>
+                    </div>
+                ` : '';
 
                 return renderAccordionCard({
                     id: 'acc-grid',
@@ -685,21 +817,23 @@
                                 <div class="p-2.5 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 rounded-xl flex items-center justify-between text-xs">
                                     <div class="flex items-center gap-1.5 min-w-0">
                                         <span class="material-symbols-outlined text-sky-600 text-[18px]">check_circle</span>
-                                        <span class="font-bold text-sky-900 dark:text-sky-200 truncate">Grade ativa na Folha A4 (${activeGridFieldCount} campos)</span>
+                                        <span class="font-bold text-sky-900 dark:text-sky-200 truncate">Destino: ${escapeHtml(activeGrid ? activeGrid.titulo : 'Grade')} (${activeGridFieldCount} campos)</span>
                                     </div>
-                                    <span class="text-[10px] font-mono text-sky-700 dark:text-sky-300 font-bold bg-sky-100 dark:bg-sky-900 px-2 py-0.5 rounded">Pronta</span>
+                                    <span class="text-[10px] font-mono text-sky-700 dark:text-sky-300 font-bold bg-sky-100 dark:bg-sky-900 px-2 py-0.5 rounded">Ativa</span>
                                 </div>
                             ` : ''}
+
+                            ${gridSelectorHtml}
 
                             <!-- Personalização de Título e Subtítulo da Grade -->
                             <div class="p-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2">
                                 <div>
                                     <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Título da Grade de Atributos:</label>
-                                    <input type="text" id="cfg-grid-title-input" value="${escapeHtml(hasExistingGrid ? (existingGrids[0].titulo || 'Dados Cadastrais do Imóvel') : 'Dados Cadastrais do Imóvel')}" onchange="ReportBuilder.updateExistingGridTitle(this.value)" placeholder="Ex: Dados Cadastrais do Imóvel" class="w-full px-2.5 py-1 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg font-medium text-slate-800 dark:text-white focus:ring-1 focus:ring-primary focus:outline-none" />
+                                    <input type="text" id="cfg-grid-title-input" value="${escapeHtml(activeGrid ? (activeGrid.titulo || 'Dados Cadastrais do Imóvel') : 'Dados Cadastrais do Imóvel')}" onchange="ReportBuilder.updateExistingGridTitle(this.value)" placeholder="Ex: Dados Cadastrais do Imóvel" class="w-full px-2.5 py-1 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg font-medium text-slate-800 dark:text-white focus:ring-1 focus:ring-primary focus:outline-none" />
                                 </div>
                                 <div>
                                     <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Subtítulo / Observação da Seção:</label>
-                                    <input type="text" id="cfg-grid-subtitle-input" value="${escapeHtml(hasExistingGrid ? (existingGrids[0].subtitulo || '') : '')}" onchange="ReportBuilder.updateExistingGridSubtitle(this.value)" placeholder="Ex: Observação sobre titularidade..." class="w-full px-2.5 py-1 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg font-medium text-slate-800 dark:text-white focus:ring-1 focus:ring-primary focus:outline-none" />
+                                    <input type="text" id="cfg-grid-subtitle-input" value="${escapeHtml(activeGrid ? (activeGrid.subtitulo || '') : '')}" onchange="ReportBuilder.updateExistingGridSubtitle(this.value)" placeholder="Ex: Observação sobre titularidade..." class="w-full px-2.5 py-1 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg font-medium text-slate-800 dark:text-white focus:ring-1 focus:ring-primary focus:outline-none" />
                                 </div>
                             </div>
 
@@ -778,6 +912,16 @@
                                     <button type="button" id="btn-col-2" onclick="ReportBuilder.selectGridColumns(2)" class="px-2.5 py-1 rounded-md text-xs font-bold bg-primary text-white shadow-xs">2 Colunas</button>
                                     <button type="button" id="btn-col-3" onclick="ReportBuilder.selectGridColumns(3)" class="px-2.5 py-1 rounded-md text-xs font-bold text-slate-500 hover:text-primary">3 Colunas</button>
                                     <button type="button" id="btn-col-1" onclick="ReportBuilder.selectGridColumns(1)" class="px-2.5 py-1 rounded-md text-xs font-bold text-slate-500 hover:text-primary">Lista 1 Col</button>
+                                </div>
+                            </div>
+
+                            <!-- Densidade dos Campos (Normal, Compacto, Ultra-compacto) -->
+                            <div class="flex items-center justify-between pt-1">
+                                <label class="text-xs font-bold text-slate-600 dark:text-slate-400">Densidade dos Campos:</label>
+                                <div class="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                                    <button type="button" onclick="ReportBuilder.setGridDensity('normal')" class="px-2.5 py-1 rounded-md text-xs font-bold ${(!activeGrid || !activeGrid.densidade || activeGrid.densidade === 'normal') ? 'bg-primary text-white shadow-xs' : 'text-slate-500 hover:text-primary'}">Normal</button>
+                                    <button type="button" onclick="ReportBuilder.setGridDensity('compacto')" class="px-2.5 py-1 rounded-md text-xs font-bold ${activeGrid?.densidade === 'compacto' || activeGrid?.densidade === 'compact' ? 'bg-primary text-white shadow-xs' : 'text-slate-500 hover:text-primary'}">Compacto</button>
+                                    <button type="button" onclick="ReportBuilder.setGridDensity('ultra-compacto')" class="px-2.5 py-1 rounded-md text-xs font-bold ${activeGrid?.densidade === 'ultra-compacto' || activeGrid?.densidade === 'ultracompact' ? 'bg-primary text-white shadow-xs' : 'text-slate-500 hover:text-primary'}">Ultra-compacto</button>
                                 </div>
                             </div>
 
@@ -1274,23 +1418,85 @@
                 `
             })}
 
-            <!-- CARD: MINI-MAPA CARTOGRÁFICO (SIG) -->
+            <!-- CARD: MINI-MAPA CARTOGRÁFICO (SIG) & PRANCHA TÉCNICA -->
             ${isGeral ? '' : (() => {
                 const existingMap = (currentTemplate?.blocos || []).find(b => b.tipo === 'mapa_estatico');
-                const mcfg = window.MapTools ? window.MapTools.normalizeMapConfig(existingMap || {}) : { destaque: { ativo: true, cor: '#10b981', esmaecerEntorno: false }, baseMap: 'osm', camadasVizinhas: true, norte: true, escala: true, projecao: true, alturaMm: 90, medidas: { ativo: true, lados: true, total: true, perimetro: false }, pontos: { ativo: false, sistema: 'utm', tabela: true, memorial: false }, temporal: { ativo: false, ordem: 'asc', colunas: 2, alturaMm: 70, sincronizar: true, contorno: true, excluidas: [] }, rotulos: { ativo: false, campo: 'rotulo' }, confrontantes: { ativo: false }, referencia: { ativo: false }, comparacaoArea: { ativo: false }, situacao: { ativo: false }, quadriculado: { ativo: false } };
-                const chk = (id, label, checked) => `
-                    <label class="flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
-                        <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} class="rounded text-primary focus:ring-0" />
-                        <span>${label}</span>
-                    </label>`;
+                const pranchaCfg = getPranchaConfig();
+                const temPrancha = pranchaCfg && pranchaCfg.ativa && pranchaCfg.formato !== 'none';
+                const formatoLabel = temPrancha ? `Prancha ${pranchaCfg.formato}` : (existingMap ? 'Na folha A4' : 'Precisão SIG');
+
                 return renderAccordionCard({
                     id: 'acc-map',
                     title: 'Mini-Mapa Cartográfico (SIG)',
                     icon: 'map',
-                    badge: existingMap ? 'Na folha' : 'Precisão Cartográfica',
+                    badge: formatoLabel,
                     content: `
-                    <div class="flex flex-col gap-3">
-                        <p class="text-[11px] text-slate-500">O mapa é montado com a feição real quando o relatório é aberto, já com <strong>todas as opções ligadas</strong> (destaque, medidas, pontos e tabela, confrontantes, análise temporal, rótulos, quadriculado, mapa de situação e elementos). Quem gera o relatório escolhe o que mostrar e ajusta tudo no painel <em>Configurações do Mapa</em>, inclusive as escolhas que dependem dos dados (camadas dos confrontantes, campo da área e pontos dos vértices).</p>
+                    <div class="flex flex-col gap-3.5">
+                        <p class="text-[11px] text-slate-500">O mapa é montado com a feição real quando o relatório é aberto, já com <strong>todas as opções ligadas</strong> (destaque, medidas de lados, confrontantes, pontos UTM, análise temporal e mapa de localização). O usuário ajusta o que quiser no relatório real, pelo painel <em>Configurações do Mapa</em>.</p>
+
+                        <!-- SEÇÃO: PRANCHA TÉCNICA DE ENGENHARIA / TOPOGRAFIA (NBR 16752) -->
+                        <div class="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-xl space-y-3">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="material-symbols-outlined text-[18px] text-emerald-600 dark:text-emerald-400">architecture</span>
+                                    <span class="text-xs font-bold text-emerald-900 dark:text-emerald-200 uppercase tracking-wide">Planta Topográfica Padronizada</span>
+                                </div>
+                                <span class="text-[9.5px] font-mono px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 font-bold">NBR 16752</span>
+                            </div>
+
+                            <p class="text-[10.5px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                                Adiciona uma folha técnica de engenharia com selo oficial de 180mm, mapa de localização e plantas de situação para retificação, desmembramento e remembramento.
+                            </p>
+
+                            <!-- Seletor de Formato da Prancha Técnica -->
+                            <div>
+                                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Formato da Folha da Planta Técnica:</label>
+                                <div class="grid grid-cols-5 gap-1" id="cfg-prancha-formato-group">
+                                    <button type="button" onclick="ReportBuilder.setPranchaFormato('none')" class="py-1.5 px-1 rounded-lg border text-center text-xs font-bold transition-all cursor-pointer ${(!temPrancha) ? 'bg-primary text-white border-primary shadow-xs' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300'}" title="Sem folha técnica adicional (mini-mapa na folha A4)">Sem Folha</button>
+                                    <button type="button" onclick="ReportBuilder.setPranchaFormato('A3')" class="py-1.5 px-1 rounded-lg border text-center text-xs font-bold transition-all cursor-pointer ${pranchaCfg?.formato === 'A3' ? 'bg-primary text-white border-primary shadow-xs' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300'}" title="A3 Paisagem (420×297mm) - 1 Planta Principal + Localização + Selo">A3</button>
+                                    <button type="button" onclick="ReportBuilder.setPranchaFormato('A2')" class="py-1.5 px-1 rounded-lg border text-center text-xs font-bold transition-all cursor-pointer ${pranchaCfg?.formato === 'A2' ? 'bg-primary text-white border-primary shadow-xs' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300'}" title="A2 Paisagem (594×420mm) - 2 Plantas (Atual x Proposta) + Selo">A2</button>
+                                    <button type="button" onclick="ReportBuilder.setPranchaFormato('A1')" class="py-1.5 px-1 rounded-lg border text-center text-xs font-bold transition-all cursor-pointer ${pranchaCfg?.formato === 'A1' ? 'bg-primary text-white border-primary shadow-xs' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300'}" title="A1 Paisagem (841×594mm) - 2 Plantas (Atual x Proposta) + Selo">A1</button>
+                                    <button type="button" onclick="ReportBuilder.setPranchaFormato('A0')" class="py-1.5 px-1 rounded-lg border text-center text-xs font-bold transition-all cursor-pointer ${pranchaCfg?.formato === 'A0' ? 'bg-primary text-white border-primary shadow-xs' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300'}" title="A0 Paisagem (1189×841mm) - 2 Plantas (Atual x Proposta) + Selo">A0</button>
+                                </div>
+                            </div>
+
+                            ${temPrancha ? `
+                            <!-- Seletor de Posição da Folha da Planta no Documento -->
+                            <div>
+                                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Posição da Folha no Relatório:</label>
+                                <div class="grid grid-cols-2 gap-2" id="cfg-prancha-posicao-group">
+                                    <button type="button" onclick="ReportBuilder.setPranchaPosicao('final')" class="py-1.5 px-2 rounded-lg border text-center text-xs font-bold transition-all cursor-pointer ${pranchaCfg.posicao !== 'inicio' ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">
+                                        📄 No Final (Anexo Oficial)
+                                    </button>
+                                    <button type="button" onclick="ReportBuilder.setPranchaPosicao('inicio')" class="py-1.5 px-2 rounded-lg border text-center text-xs font-bold transition-all cursor-pointer ${pranchaCfg.posicao === 'inicio' ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}">
+                                        📑 No Início (Abertura)
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Finalidade do Projeto Topográfico -->
+                            <div>
+                                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Finalidade da Planta Técnica:</label>
+                                <select id="cfg-prancha-tipo" onchange="ReportBuilder.setPranchaTipo(this.value)" class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-bold text-slate-800 dark:text-white focus:ring-1 focus:ring-primary focus:outline-none">
+                                    <option value="retificacao" ${pranchaCfg.tipo_projeto === 'retificacao' ? 'selected' : ''}>📐 Projeto de Retificação de Área (Situação Atual vs Proposta)</option>
+                                    <option value="desmembramento" ${pranchaCfg.tipo_projeto === 'desmembramento' ? 'selected' : ''}>✂️ Projeto de Desmembramento de Lotes</option>
+                                    <option value="remembramento" ${pranchaCfg.tipo_projeto === 'remembramento' ? 'selected' : ''}>🔗 Projeto de Remembramento / Unificação</option>
+                                    <option value="cadastral" ${pranchaCfg.tipo_projeto === 'cadastral' ? 'selected' : ''}>📍 Levantamento Planialtimétrico Cadastral</option>
+                                </select>
+                            </div>
+
+                            <!-- Dados Padrão do Selo Técnico de Engenharia (Editáveis) -->
+                            <div class="space-y-1.5 pt-1 border-t border-emerald-200/60 dark:border-emerald-800/40">
+                                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Selo / Carimbo Técnico (180mm - Editável):</label>
+                                <input type="text" id="cfg-prancha-selo-titulo" value="${escapeHtml(pranchaCfg.titulo_projeto || 'PROJETO DE RETIFICAÇÃO DE ÁREA')}" onchange="ReportBuilder.updatePranchaField('titulo_projeto', this.value)" placeholder="Título do Projeto no Selo" class="w-full px-2.5 py-1 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-medium text-slate-800 dark:text-white" />
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <input type="text" id="cfg-prancha-selo-resp" value="${escapeHtml(pranchaCfg.responsavel_nome || '')}" onchange="ReportBuilder.updatePranchaField('responsavel_nome', this.value)" placeholder="Responsável Técnico (Nome)" class="px-2 py-1 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-medium text-slate-800 dark:text-white" />
+                                    <input type="text" id="cfg-prancha-selo-crea" value="${escapeHtml(pranchaCfg.responsavel_crea || '')}" onchange="ReportBuilder.updatePranchaField('responsavel_crea', this.value)" placeholder="CREA/CAU" class="px-2 py-1 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-medium text-slate-800 dark:text-white" />
+                                </div>
+                            </div>
+                            ` : ''}
+                        </div>
+
                         <button type="button" onclick="ReportBuilder.insertMapBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
                             <span class="material-symbols-outlined text-[16px]">${existingMap ? 'sync' : 'add_circle'}</span> ${existingMap ? 'Restaurar o padrão completo do Mini-Mapa' : 'Inserir Mini-Mapa na Folha'}
                         </button>
@@ -2342,6 +2548,7 @@
     /** Escolhe a folha do relatório: 'A4' ou 'A3'. */
     function setPageSize(tamanho) {
         if (!currentTemplate || !currentTemplate.config_pagina) return;
+        if (builderScope !== 'geral') return; // Relatório individual é fixo em A4; pranchas A3-A0 ficam no Mini-Mapa
         const novo = String(tamanho).toUpperCase() === 'A3' ? 'A3' : 'A4';
         if (currentTemplate.config_pagina.tamanho === novo) return;
         currentTemplate.config_pagina.tamanho = novo;
@@ -2562,7 +2769,7 @@
         const customTitle = titleInput ? titleInput.value.trim() : 'Dados Cadastrais do Imóvel';
         const customSub = subtitleInput ? subtitleInput.value.trim() : '';
 
-        currentTemplate.blocos.push({
+        const newGrid = {
             id: 'blk_grid_' + Date.now(),
             tipo: 'grade_campos',
             titulo: customTitle || 'Dados Cadastrais do Imóvel',
@@ -2571,39 +2778,90 @@
             campos_spans: {},
             campos_larguras: {},
             colunasLayout: selectedGridCols
-        });
+        };
+        currentTemplate.blocos.push(newGrid);
+        selectedGridBlockId = newGrid.id;
 
         if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
             window.ReportAdapter.saveReportTemplate(currentTemplate);
         }
         renderA4Blocks();
+        agendarEnvioFolhaReal();
 
         const formId = currentTemplate?.form_id;
         const panel = document.getElementById('accordion-blocks-panel');
         if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
     }
 
+    function selectActiveGrid(gridId) {
+        if (!gridId) return;
+        selectedGridBlockId = gridId;
+        const formId = currentTemplate?.form_id;
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && formId) panel.innerHTML = renderAccordionPanel(formId);
+        renderA4Blocks();
+    }
+
+    function getActiveGridBlock() {
+        if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return null;
+        const grids = currentTemplate.blocos.filter(b => b.tipo === 'grade_campos');
+        if (grids.length === 0) return null;
+        if (selectedGridBlockId) {
+            const match = grids.find(b => b.id === selectedGridBlockId);
+            if (match) return match;
+        }
+        selectedGridBlockId = grids[0].id;
+        return grids[0];
+    }
+
     function updateExistingGridTitle(newTitle) {
         if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
-        const block = currentTemplate.blocos.find(b => b.tipo === 'grade_campos');
+        const block = getActiveGridBlock();
         if (block) {
             block.titulo = newTitle;
             if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
                 window.ReportAdapter.saveReportTemplate(currentTemplate);
             }
             renderA4Blocks();
+            agendarEnvioFolhaReal();
         }
     }
 
     function updateExistingGridSubtitle(newSub) {
         if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
-        const block = currentTemplate.blocos.find(b => b.tipo === 'grade_campos');
+        const block = getActiveGridBlock();
         if (block) {
             block.subtitulo = newSub;
             if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
                 window.ReportAdapter.saveReportTemplate(currentTemplate);
             }
             renderA4Blocks();
+            agendarEnvioFolhaReal();
+        }
+    }
+
+    function setGridDensity(densidade, index, blockId, ev) {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
+        let gridBlock = null;
+        if (blockId) {
+            gridBlock = currentTemplate.blocos.find(b => b.id === blockId);
+        }
+        if (!gridBlock && typeof index === 'number' && currentTemplate.blocos[index]?.tipo === 'grade_campos') {
+            gridBlock = currentTemplate.blocos[index];
+        }
+        if (!gridBlock) {
+            gridBlock = getActiveGridBlock();
+        }
+        if (gridBlock) {
+            gridBlock.densidade = densidade;
+            if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+                window.ReportAdapter.saveReportTemplate(currentTemplate);
+            }
+            renderA4Blocks();
+            agendarEnvioFolhaReal();
+            const panel = document.getElementById('accordion-blocks-panel');
+            if (panel && currentTemplate.form_id) panel.innerHTML = renderAccordionPanel(currentTemplate.form_id);
         }
     }
 
@@ -2616,6 +2874,7 @@
                 window.ReportAdapter.saveReportTemplate(currentTemplate);
             }
             renderA4Blocks();
+            agendarEnvioFolhaReal();
         }
     }
 
@@ -2628,6 +2887,7 @@
                 window.ReportAdapter.saveReportTemplate(currentTemplate);
             }
             renderA4Blocks();
+            agendarEnvioFolhaReal();
         }
     }
 
@@ -2640,6 +2900,7 @@
                 window.ReportAdapter.saveReportTemplate(currentTemplate);
             }
             renderA4Blocks();
+            agendarEnvioFolhaReal();
         }
     }
 
@@ -2652,6 +2913,7 @@
                 window.ReportAdapter.saveReportTemplate(currentTemplate);
             }
             renderA4Blocks();
+            agendarEnvioFolhaReal();
         }
     }
 
@@ -2667,6 +2929,7 @@
                 window.ReportAdapter.saveReportTemplate(currentTemplate);
             }
             renderA4Blocks();
+            agendarEnvioFolhaReal();
             refreshLaudoTabSequenceList();
         }
     }
@@ -2684,7 +2947,7 @@
         if (typeof targetBlockIndex === 'number' && currentTemplate.blocos[targetBlockIndex]?.tipo === 'grade_campos') {
             gridBlock = currentTemplate.blocos[targetBlockIndex];
         } else {
-            gridBlock = currentTemplate.blocos.find(b => b.tipo === 'grade_campos');
+            gridBlock = getActiveGridBlock();
         }
 
         if (!gridBlock) {
@@ -2710,6 +2973,7 @@
             window.ReportAdapter.saveReportTemplate(currentTemplate);
         }
         renderA4Blocks();
+        agendarEnvioFolhaReal();
 
         const formId = currentTemplate?.form_id;
         const panel = document.getElementById('accordion-blocks-panel');
@@ -2723,7 +2987,7 @@
         }
         if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
 
-        let gridBlock = currentTemplate.blocos.find(b => b.tipo === 'grade_campos');
+        let gridBlock = getActiveGridBlock();
         if (!gridBlock) {
             gridBlock = {
                 id: 'blk_grid_' + Date.now(),
@@ -2735,6 +2999,7 @@
                 colunasLayout: selectedGridCols || 2
             };
             currentTemplate.blocos.push(gridBlock);
+            selectedGridBlockId = gridBlock.id;
         } else {
             if (!Array.isArray(gridBlock.campos_selecionados)) {
                 gridBlock.campos_selecionados = [];
@@ -2742,6 +3007,7 @@
             const existingSet = new Set(gridBlock.campos_selecionados.map(item => typeof item === 'string' ? item : item.id));
             if (existingSet.has(fieldId)) {
                 renderA4Blocks();
+                agendarEnvioFolhaReal();
                 return;
             }
             gridBlock.campos_selecionados.push(fieldId);
@@ -2751,6 +3017,7 @@
             window.ReportAdapter.saveReportTemplate(currentTemplate);
         }
         renderA4Blocks();
+        agendarEnvioFolhaReal();
 
         const formId = currentTemplate?.form_id;
         const panel = document.getElementById('accordion-blocks-panel');
@@ -2866,6 +3133,117 @@
         renderA4Blocks();
         const panel = document.getElementById('accordion-blocks-panel');
         if (panel && currentTemplate.form_id) panel.innerHTML = renderAccordionPanel(currentTemplate.form_id);
+    }
+
+    // --- MANIPULADORES DA PRANCHA TÉCNICA DE ENGENHARIA (NBR 16752) ---
+    function getPranchaConfig() {
+        if (!currentTemplate) return null;
+        if (!currentTemplate.prancha_topografica) {
+            const userProf = window.currentUserProfile || {};
+            currentTemplate.prancha_topografica = {
+                ativa: false,
+                formato: 'none',
+                posicao: 'final',
+                tipo_projeto: 'retificacao',
+                titulo_projeto: 'PROJETO DE RETIFICAÇÃO DE ÁREA',
+                responsavel_nome: userProf.nome || userProf.full_name || '',
+                responsavel_crea: userProf.crea || '',
+                responsavel_cargo: 'Responsável Técnico',
+                proprietario_nome: '',
+                proprietario_cpf: '',
+                local_logradouro: '',
+                inscricao_municipal: ''
+            };
+        }
+        return currentTemplate.prancha_topografica;
+    }
+
+    function setPranchaFormato(formato) {
+        const prancha = getPranchaConfig();
+        if (!prancha) return;
+        prancha.formato = formato;
+        prancha.ativa = (formato && formato !== 'none');
+        
+        // Sincroniza também no bloco mapa_estatico se existir
+        const mapBlock = (currentTemplate.blocos || []).find(b => b.tipo === 'mapa_estatico');
+        if (mapBlock) {
+            if (!mapBlock.mapa) mapBlock.mapa = {};
+            mapBlock.mapa.prancha_topografica = JSON.parse(JSON.stringify(prancha));
+        }
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && currentTemplate.form_id) panel.innerHTML = renderAccordionPanel(currentTemplate.form_id);
+        renderA4Blocks();
+        const ed = effectiveMaxPageDims();
+        const frame = document.getElementById('a4-real-frame');
+        const zoomWrap = document.getElementById('a4-real-zoom-wrap');
+        if (frame) {
+            frame.style.width = ed.widthPx + 'px';
+            frame.style.minWidth = ed.widthPx + 'px';
+        }
+        if (zoomWrap) {
+            zoomWrap.style.width = ed.widthPx + 'px';
+        }
+        if (builderCurrentZoom) setZoom(builderCurrentZoom);
+        agendarEnvioFolhaReal();
+    }
+
+    function setPranchaPosicao(posicao) {
+        const prancha = getPranchaConfig();
+        if (!prancha) return;
+        prancha.posicao = (posicao === 'inicio') ? 'inicio' : 'final';
+        
+        const mapBlock = (currentTemplate.blocos || []).find(b => b.tipo === 'mapa_estatico');
+        if (mapBlock && mapBlock.mapa) {
+            mapBlock.mapa.prancha_topografica = JSON.parse(JSON.stringify(prancha));
+        }
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && currentTemplate.form_id) panel.innerHTML = renderAccordionPanel(currentTemplate.form_id);
+        renderA4Blocks();
+    }
+
+    function setPranchaTipo(tipo) {
+        const prancha = getPranchaConfig();
+        if (!prancha) return;
+        prancha.tipo_projeto = tipo;
+        if (tipo === 'retificacao') prancha.titulo_projeto = 'PROJETO DE RETIFICAÇÃO DE ÁREA';
+        else if (tipo === 'desmembramento') prancha.titulo_projeto = 'PROJETO DE DESMEMBRAMENTO DE LOTES';
+        else if (tipo === 'remembramento') prancha.titulo_projeto = 'PROJETO DE REMEMBRAMENTO / UNIFICAÇÃO';
+        else if (tipo === 'cadastral') prancha.titulo_projeto = 'LEVANTAMENTO PLANIALTIMÉTRICO CADASTRAL';
+
+        const mapBlock = (currentTemplate.blocos || []).find(b => b.tipo === 'mapa_estatico');
+        if (mapBlock && mapBlock.mapa) {
+            mapBlock.mapa.prancha_topografica = JSON.parse(JSON.stringify(prancha));
+        }
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
+        const panel = document.getElementById('accordion-blocks-panel');
+        if (panel && currentTemplate.form_id) panel.innerHTML = renderAccordionPanel(currentTemplate.form_id);
+        renderA4Blocks();
+    }
+
+    function updatePranchaField(field, value) {
+        const prancha = getPranchaConfig();
+        if (!prancha) return;
+        prancha[field] = value;
+
+        const mapBlock = (currentTemplate.blocos || []).find(b => b.tipo === 'mapa_estatico');
+        if (mapBlock && mapBlock.mapa) {
+            mapBlock.mapa.prancha_topografica = JSON.parse(JSON.stringify(prancha));
+        }
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
     }
 
     // Filtro de Feições, Tabela de Feições, Mapa das Feições e Gráficos do Dashboard (Relatório Geral) não têm mais
@@ -4167,25 +4545,129 @@
     }
 
     // --- CONTROLE GERAL DO TEMPLATE ---
-    function removeBlock(index) {
-        if (!currentTemplate || !currentTemplate.blocos) return;
+    function removeBlock(index, blockId) {
+        if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
+        if (blockId) {
+            const fIdx = currentTemplate.blocos.findIndex(b => b.id === blockId);
+            if (fIdx !== -1) index = fIdx;
+        }
+        if (index < 0 || index >= currentTemplate.blocos.length) return;
         currentTemplate.blocos.splice(index, 1);
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
         renderA4Blocks();
+        agendarEnvioFolhaReal();
     }
 
-    function moveBlock(index, direction) {
-        if (!currentTemplate || !currentTemplate.blocos) return;
+    function moveBlock(index, direction, blockId) {
+        if (!currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
+        if (blockId) {
+            const fIdx = currentTemplate.blocos.findIndex(b => b.id === blockId);
+            if (fIdx !== -1) index = fIdx;
+        }
+        if (index < 0 || index >= currentTemplate.blocos.length) return;
         const currentBlock = currentTemplate.blocos[index];
-        if (currentBlock && currentBlock.tipo === 'rodape') return; // Rodapé fica sempre no final da folha
+        if (!currentBlock || currentBlock.tipo === 'cabecalho' || currentBlock.tipo === 'rodape') return;
 
-        const target = index + direction;
+        let target = index + direction;
+        // Pula eventuais blocos de cabeçalho no topo ou rodapé no fim
+        while (target >= 0 && target < currentTemplate.blocos.length && (currentTemplate.blocos[target].tipo === 'cabecalho' || currentTemplate.blocos[target].tipo === 'rodape')) {
+            target += direction;
+        }
         if (target < 0 || target >= currentTemplate.blocos.length) return;
         const targetBlock = currentTemplate.blocos[target];
-        if (targetBlock && targetBlock.tipo === 'rodape') return; // Não permite passar para depois do rodapé fixo
+        if (!targetBlock || targetBlock.tipo === 'cabecalho' || targetBlock.tipo === 'rodape') return;
 
         const item = currentTemplate.blocos.splice(index, 1)[0];
         currentTemplate.blocos.splice(target, 0, item);
+
+        if (window.ReportAdapter && typeof window.ReportAdapter.saveReportTemplate === 'function') {
+            window.ReportAdapter.saveReportTemplate(currentTemplate);
+        }
         renderA4Blocks();
+        agendarEnvioFolhaReal();
+
+        if (currentBlock.tipo === 'grade_campos') {
+            selectedGridBlockId = currentBlock.id;
+            renderAccordionPanel();
+        }
+    }
+
+    function moveActiveGrid(direction) {
+        const grid = getActiveGridBlock();
+        if (!grid || !currentTemplate || !Array.isArray(currentTemplate.blocos)) return;
+        moveBlock(-1, direction, grid.id);
+    }
+
+    let builderCurrentZoom = 1;
+    function setZoom(val) {
+        let zoom = 1;
+        const stage = document.getElementById('a4-sheet-stage');
+        const frame = document.getElementById('a4-real-frame');
+        const zoomWrap = document.getElementById('a4-real-zoom-wrap');
+        const container = document.getElementById('a4-real') || (stage && stage.parentElement);
+
+        const ed = effectiveMaxPageDims();
+        const docWidth = ed.widthPx;
+        const docHeight = ed.heightPx;
+
+        if (frame) {
+            frame.style.width = docWidth + 'px';
+            frame.style.minWidth = docWidth + 'px';
+            frame.style.maxWidth = 'none';
+        }
+
+        if (val === 'fit' || val === 'fit-width') {
+            const containerW = container ? Math.max(300, container.clientWidth - 40) : 800;
+            const containerH = window.innerHeight - 220;
+            if (val === 'fit-width') {
+                zoom = Math.min(1.5, Math.max(0.25, containerW / docWidth));
+            } else {
+                zoom = Math.min(1.5, Math.max(0.25, Math.min(containerW / docWidth, containerH / docHeight)));
+            }
+        } else {
+            zoom = parseFloat(val) || 1;
+        }
+
+        builderCurrentZoom = zoom;
+        const sel = document.getElementById('builder-zoom-select');
+        if (sel) {
+            if (val === 'fit' || val === 'fit-width') {
+                sel.value = val;
+            } else {
+                sel.value = String(Math.round(zoom * 100) / 100);
+            }
+        }
+
+        if (stage) {
+            stage.style.transform = `scale(${zoom})`;
+            stage.style.transformOrigin = 'top center';
+            stage.style.transition = 'transform 0.15s ease-out';
+            if (zoom < 1) {
+                stage.style.marginBottom = `-${Math.round((1 - zoom) * (stage.offsetHeight || docHeight))}px`;
+            } else {
+                stage.style.marginBottom = '0px';
+            }
+        }
+
+        if (zoomWrap) {
+            zoomWrap.style.width = docWidth + 'px';
+            zoomWrap.style.transform = `scale(${zoom})`;
+            zoomWrap.style.transformOrigin = 'top center';
+            zoomWrap.style.transition = 'transform 0.15s ease-out';
+            const frameH = (frame && frame.offsetHeight) ? frame.offsetHeight : docHeight;
+            if (zoom < 1) {
+                zoomWrap.style.marginBottom = `-${Math.round((1 - zoom) * frameH)}px`;
+            } else {
+                zoomWrap.style.marginBottom = '0px';
+            }
+        }
+    }
+
+    function changeZoom(delta) {
+        const novo = Math.round((builderCurrentZoom + delta) * 10) / 10;
+        setZoom(Math.max(0.25, Math.min(2.0, novo)));
     }
 
     function updateAtalhoAba(value) {
@@ -4687,20 +5169,36 @@
             ortofotos: ortofotosMapa,
             timestamp: Date.now()
         };
+        // Fallback em memória para a janela filha ler diretamente via window.opener sem limites de cota
+        window.activeReportPayload = payload;
+
         const persistPayload = () => {
+            let ok = false;
             try {
                 const json = JSON.stringify(payload);
-                sessionStorage.setItem('constructive_active_report_payload', json);
-                localStorage.setItem('constructive_active_report_payload', json);
-                return true;
-            } catch(e) { return false; }
+                try {
+                    sessionStorage.setItem('constructive_active_report_payload', json);
+                    ok = true;
+                } catch(eSess) {}
+                try {
+                    localStorage.setItem('constructive_active_report_payload', json);
+                    ok = true;
+                } catch(eLoc) {
+                    try {
+                        localStorage.removeItem('constructive_active_report_payload');
+                        localStorage.setItem('constructive_active_report_payload', json);
+                        ok = true;
+                    } catch(eRetry) {}
+                }
+            } catch(e) {}
+            return ok;
         };
         // Se as camadas vizinhas não couberem no armazenamento do navegador, reduz até caber (a feição e os dados vão sempre)
         if (!persistPayload()) {
-            payload.camadasMapa = payload.camadasMapa.map(c => Object.assign({}, c, { features: c.features.slice(0, 200), truncated: true }));
+            payload.camadasMapa = (payload.camadasMapa || []).map(c => Object.assign({}, c, { features: (c.features || []).slice(0, 50), truncated: true }));
             if (!persistPayload()) {
                 payload.camadasMapa = [];
-                if (!persistPayload()) console.error('[ReportBuilder] Erro ao salvar payload do relatório.');
+                persistPayload();
             }
         }
         window.open(`relatorio_view.html?templateId=${encodeURIComponent(templateId)}`, '_blank');
@@ -4716,14 +5214,29 @@
         if (!currentTemplate || !currentTemplate.form_id) return;
         if (!window.ReportPreview) { alert('Módulo de prévia não carregado. Recarregue a página.'); return; }
         const payload = montarPayloadPrevia();
+        let saved = false;
         try {
             const json = JSON.stringify(payload);
-            sessionStorage.setItem('constructive_active_report_payload', json);
-            localStorage.setItem('constructive_active_report_payload', json);
+            try {
+                sessionStorage.setItem('constructive_active_report_payload', json);
+                saved = true;
+            } catch (eSession) {}
+            try {
+                localStorage.setItem('constructive_active_report_payload', json);
+                saved = true;
+            } catch (eLocal) {
+                // Tenta liberar espaço no localStorage removendo chaves temporárias antigas
+                try {
+                    localStorage.removeItem('constructive_active_report_payload');
+                    localStorage.setItem('constructive_active_report_payload', json);
+                    saved = true;
+                } catch (eRetry) {}
+            }
         } catch (e) {
-            alert('Não foi possível preparar a prévia (armazenamento do navegador cheio).');
-            return;
+            console.warn('[ReportBuilder] Falha na serialização da prévia:', e);
         }
+        // Fallback em memória para a janela filha ler via window.opener
+        window.activeReportPayload = payload;
         window.open('relatorio_view.html?templateId=' + encodeURIComponent(currentTemplate.id || '') + '&previa=1', '_blank');
     }
 
@@ -4840,6 +5353,8 @@
         updateBlockProperty,
         removeBlock,
         moveBlock,
+        moveActiveGrid,
+        setGridDensity,
         toggleDisponibilizarMapa,
         updateTemplateName,
         onTemplateChange,
@@ -4858,7 +5373,15 @@
         updateSynthetic1nSubtitle,
         updateAnalytical1nTitle,
         updateAnalytical1nSubtitle,
-        promptCustomTabTitle
+        promptCustomTabTitle,
+        selectActiveGrid,
+        setZoom,
+        changeZoom,
+        getPranchaConfig,
+        setPranchaFormato,
+        setPranchaPosicao,
+        setPranchaTipo,
+        updatePranchaField
     };
 
 })();

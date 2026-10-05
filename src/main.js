@@ -1564,6 +1564,16 @@ function initMap() {
     maxNativeZoom: 19,
     maxZoom: 24
   });
+
+  // Satélite Google Híbrido com imagens de alta resolução e nomes de ruas/logradouros
+  baseLayers['Satélite (Google)'] = L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+    subdomains: ['0', '1', '2', '3'],
+    maxNativeZoom: 21,
+    maxZoom: 24,
+    keepBuffer: 8,
+    updateWhenIdle: false,
+    attribution: '&copy; Google Maps'
+  });
   
   baseLayers['Satélite'] = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     attribution: 'Tiles &copy; Esri',
@@ -1953,9 +1963,24 @@ function initMap() {
 
         const themeIdStr = String(feature.properties.themeId);
         
-        // Sincroniza a camada ativa no menu lateral automaticamente para uma experiência fluida e direta
-        if (!window.activeSelectionThemeId || window.activeSelectionThemeId !== themeIdStr) {
-            toggleSelectionTheme(themeIdStr, true);
+        // Trava de segurança: SÓ é permitido selecionar feições se a sua camada estiver selecionada no menu lateral
+        if (!window.activeSelectionThemeId) {
+            L.DomEvent.stopPropagation(e);
+            if (typeof showWarningToast === 'function') {
+                showWarningToast("Selecione uma camada no menu lateral para que suas feições possam ser selecionadas.");
+            }
+            return;
+        }
+        
+        // Bloqueia e avisa se a feição clicada pertence a outra camada diferente da selecionada no menu lateral
+        if (window.activeSelectionThemeId !== themeIdStr) {
+            L.DomEvent.stopPropagation(e);
+            const currentTheme = themes.find(t => String(t.id) === themeIdStr);
+            const themeName = currentTheme ? currentTheme.name : "outra camada";
+            if (typeof showWarningToast === 'function') {
+                showWarningToast(`Esta feição pertence à camada "${themeName}". Selecione-a no menu lateral para que suas feições sejam selecionadas.`);
+            }
+            return;
         }
 
         L.DomEvent.stopPropagation(e);
@@ -1979,6 +2004,8 @@ function initMap() {
       });
     }
   }).addTo(map);
+
+  updateThemeInteractivity();
 
   map.on('contextmenu', function(e) {
     if (window.selectedMultiFeatures && window.selectedMultiFeatures.length > 0) {
@@ -3439,15 +3466,16 @@ function updateThemeInteractivity() {
         document.head.appendChild(styleTag);
     }
     
-    // Destaca a camada selecionada no mapa mantendo todas as feições visíveis interativas
+    // Exclusividade de interação: apenas a camada selecionada no menu lateral
+    // tem feições clicáveis no mapa. Sem camada selecionada, nenhuma feição é clicável.
     if (window.activeSelectionThemeId) {
         styleTag.innerHTML = `
-            .theme-feature { pointer-events: auto !important; cursor: pointer; }
-            .theme-${window.activeSelectionThemeId} { stroke-width: 2.8px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.45)); }
+            .theme-feature { pointer-events: none !important; cursor: default; }
+            .theme-${window.activeSelectionThemeId} { pointer-events: auto !important; cursor: pointer; stroke-width: 2.8px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.45)); }
         `;
     } else {
         styleTag.innerHTML = `
-            .theme-feature { pointer-events: auto !important; cursor: pointer; }
+            .theme-feature { pointer-events: none !important; cursor: default; }
         `;
     }
 }
@@ -7621,23 +7649,33 @@ function showFeatureInfoModal(layer) {
       geomEditToolbar.classList.add('hidden');
       geomEditToolbar.classList.remove('flex');
   }
-  // Sincronização em tempo real com o banco (se outro usuário editou a feição)
+  // Sincronização em segundo plano resiliente com o banco (se outro usuário editou a feição)
   const isDeviceOffline = (typeof navigator !== 'undefined' && !navigator.onLine) || (typeof localStorage !== 'undefined' && localStorage.getItem('geogestor_modo_campo') === 'true');
   const bankId = layer.feature && layer.feature.properties && layer.feature.properties.id_banco;
   if (!isDeviceOffline && bankId && typeof supabaseClient !== 'undefined' && supabaseClient) {
-      supabaseClient
-          .from('feicoes')
-          .select('propriedades, geometria')
-          .eq('id', bankId)
-          .maybeSingle()
-          .then(({ data: freshRow, error }) => {
-              if (!error && freshRow && freshRow.propriedades) {
+      const syncFreshFeature = async (retries = 1) => {
+          try {
+              const { data: freshRow, error } = await supabaseClient
+                  .from('feicoes')
+                  .select('propriedades, geometria')
+                  .eq('id', bankId)
+                  .maybeSingle();
+
+              if (error) {
+                  // Se foi erro transitório de conexão e ainda há retries, tenta mais uma vez
+                  if (retries > 0) {
+                      setTimeout(() => syncFreshFeature(retries - 1), 600);
+                  }
+                  return;
+              }
+
+              if (freshRow && freshRow.propriedades && layer.feature && layer.feature.properties) {
                   const currentProps = layer.feature.properties || {};
                   layer.feature.properties = { ...currentProps, ...freshRow.propriedades, id_banco: bankId, themeId: themeId || currentProps.themeId };
                   if (freshRow.geometria) layer.feature.geometry = freshRow.geometria;
                   
                   if (themeId) {
-                      const theme = themes.find(t => t.id === themeId);
+                      const theme = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes.find(t => t.id === themeId) : null;
                       if (theme && theme.features) {
                           const idx = theme.features.findIndex(f => f.properties && f.properties.id_banco === bankId);
                           if (idx !== -1) {
@@ -7651,7 +7689,14 @@ function showFeatureInfoModal(layer) {
                       renderFeatureInfo();
                   }
               }
-          }).catch(console.warn);
+          } catch(e) {
+              // Falha silenciosa resiliente: não interrompe a UI, a feição já está renderizada via cache local
+              if (retries > 0) {
+                  setTimeout(() => syncFreshFeature(retries - 1), 600);
+              }
+          }
+      };
+      syncFreshFeature();
   }
 }
 
@@ -9882,10 +9927,10 @@ function switchLayer(name) {
 }
 
 function toggleMapType() {
-  if (currentMapType === 'Mapa') {
-    switchLayer('Híbrido');
-  } else {
+  if (currentMapType === 'Satélite (Google)') {
     switchLayer('Mapa');
+  } else {
+    switchLayer('Satélite (Google)');
   }
 }
 
@@ -10808,12 +10853,17 @@ function abrirRelatorioGeralComModelo(tpl, theme) {
     };
     try {
         const json = JSON.stringify(payload);
-        sessionStorage.setItem('constructive_active_report_payload', json);
-        localStorage.setItem('constructive_active_report_payload', json);
+        try { sessionStorage.setItem('constructive_active_report_payload', json); } catch(eS) {}
+        try { localStorage.setItem('constructive_active_report_payload', json); } catch(eL) {
+            try {
+                localStorage.removeItem('constructive_active_report_payload');
+                localStorage.setItem('constructive_active_report_payload', json);
+            } catch(eR) {}
+        }
     } catch (e) {
-        alert('Não foi possível preparar o relatório (armazenamento do navegador cheio).');
-        return;
+        console.warn('[Main] Falha na serialização do payload:', e);
     }
+    window.activeReportPayload = payload;
     window.open('relatorio_view.html?templateId=' + encodeURIComponent(tpl.id), '_blank');
 }
 
@@ -11732,9 +11782,10 @@ async function loadRasterLayers() {
                 return false;
             });
             
-            // Limpar overlays antigos do mapa
-            Object.values(leafletRasterOverlays).forEach(overlay => {
-                if (map) map.removeLayer(overlay);
+            // Limpar overlays antigos do mapa e do cache de instâncias
+            Object.keys(leafletRasterOverlays).forEach(k => {
+                if (map && leafletRasterOverlays[k]) map.removeLayer(leafletRasterOverlays[k]);
+                delete leafletRasterOverlays[k];
             });
             // Por padrão as ortofotos iniciam DESLIGADAS — o usuário ativa no switch quando quiser ver
             rasterLayers = visibleRasters.map(r => ({ ...r, visivel: false }));
@@ -11752,13 +11803,14 @@ async function loadRasterLayers() {
                     let overlay = null;
 
                     if (isXYZ) {
-                        const nativeMax = raster.zoom_max || 22;
+                        const nativeMin = Math.max(16, Number(raster.zoom_min) || 16);
+                        const nativeMax = Number(raster.zoom_max) || 21;
                         overlay = L.tileLayer(raster.url_imagem, {
                             minZoom: 1,
-                            minNativeZoom: raster.zoom_min || 14,
+                            minNativeZoom: nativeMin,
                             maxNativeZoom: nativeMax,
                             maxZoom: 24,
-                            keepBuffer: 2,
+                            keepBuffer: 4,
                             zIndex: 300 + (rasterLayers.length - idx),
                             opacity: raster.opacidade !== undefined ? raster.opacidade : 0.9,
                             attribution: raster.nome || 'Ortofoto'
@@ -12175,19 +12227,28 @@ window.toggleRasterVisibility = async function(rasterId, checkbox) {
     }
 
     raster.visivel = isVisible;
-    const overlay = leafletRasterOverlays[rasterId];
+    let overlay = leafletRasterOverlays[rasterId];
     
     if (isVisible) {
+        const isXYZ = (raster.tipo === 'xyz_tiles') || (raster.url_imagem && raster.url_imagem.includes('{z}'));
+        // Se a URL mudou ou tipo mudou, descarta overlay antigo e recria
+        if (overlay && isXYZ && overlay._url !== raster.url_imagem) {
+            if (map) map.removeLayer(overlay);
+            overlay = null;
+            delete leafletRasterOverlays[rasterId];
+        }
+
         if (overlay && map) {
             overlay.addTo(map);
         } else if (map) {
             const isXYZ = (raster.tipo === 'xyz_tiles') || (raster.url_imagem && raster.url_imagem.includes('{z}'));
             let newOverlay;
             if (isXYZ) {
-                const nativeMax = raster.zoom_max || 22;
+                const nativeMin = Math.max(16, Number(raster.zoom_min) || 16);
+                const nativeMax = Number(raster.zoom_max) || 21;
                 newOverlay = L.tileLayer(raster.url_imagem, {
                     minZoom: 1,
-                    minNativeZoom: raster.zoom_min || 14,
+                    minNativeZoom: nativeMin,
                     maxNativeZoom: nativeMax,
                     maxZoom: 24,
                     keepBuffer: 16,
@@ -12447,10 +12508,11 @@ window.activateRasterFromModal = async function(rasterId) {
                 const isXYZ = (raster.tipo === 'xyz_tiles') || (raster.url_imagem && raster.url_imagem.includes('{z}'));
                 let tileLayer;
                 if (isXYZ) {
-                    const nativeMax = raster.zoom_max || 22;
+                    const nativeMin = Math.max(16, Number(raster.zoom_min) || 16);
+                    const nativeMax = Number(raster.zoom_max) || 21;
                     tileLayer = L.tileLayer(raster.url_imagem, {
                         minZoom: 1,
-                        minNativeZoom: raster.zoom_min || 14,
+                        minNativeZoom: nativeMin,
                         maxNativeZoom: nativeMax,
                         maxZoom: 24,
                         keepBuffer: 16,
@@ -13241,9 +13303,14 @@ window.openSetEntityModal = function(id, type) {
 
     // Popula dropdown de entidades
     if (selectEl) {
+        const currentMunName = (typeof rawMunNome !== 'undefined' && rawMunNome) || sessionStorage.getItem('municipio_ativo_nome') || (window.activeMunicipioData && window.activeMunicipioData.nome) || '';
         let opts = '<option value="">🌐 Geral / Compartilhada (Todas as Entidades)</option>';
         (window.allEntidadesList || []).forEach(e => {
-            opts += `<option value="${e.nome}">${e.sigla ? '[' + e.sigla + '] ' : ''}${e.nome}</option>`;
+            const isMunType = (e.tipo === 'municipal') || (e.nome && e.nome.toLowerCase().includes('prefeitura'));
+            const displayLabel = isMunType && currentMunName 
+                ? (e.sigla ? '[' + e.sigla + '] ' : '') + `${e.nome} de ${currentMunName}`
+                : (e.sigla ? '[' + e.sigla + '] ' : '') + e.nome;
+            opts += `<option value="${e.nome}">${displayLabel}</option>`;
         });
         selectEl.innerHTML = opts;
         selectEl.value = currentEntity;

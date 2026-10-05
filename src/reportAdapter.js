@@ -531,7 +531,10 @@
                     if (rIdx >= 0) frm.reportTemplates[rIdx] = template;
                     else frm.reportTemplates.push(template);
                     if (typeof saveFormsToStorage === 'function') {
-                        saveFormsToStorage();
+                        try {
+                            const res = saveFormsToStorage();
+                            if (res && typeof res.catch === 'function') res.catch(() => {});
+                        } catch(eStorage) {}
                     }
                 }
             }

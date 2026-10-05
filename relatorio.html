@@ -11,6 +11,29 @@
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
 <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Supabase Client & Auth Guard -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+<script>
+    // Proteção de Acesso: Oculta o documento e redireciona ao login se não autenticado
+    document.documentElement.style.visibility = 'hidden';
+    (async function checkRelatorioAuth() {
+        try {
+            if (typeof window.supabaseClient !== 'undefined' && window.supabaseClient) {
+                const { data, error } = await window.supabaseClient.auth.getSession();
+                if (error || !data || !data.session) {
+                    window.location.replace('login.html');
+                    return;
+                }
+            }
+        } catch(e) {
+            window.location.replace('login.html');
+            return;
+        }
+        document.documentElement.style.visibility = 'visible';
+    })();
+</script>
 <script>
     // Buffer Leaflet GridLayers: pre-carrega +1 tile em todas as direções (buffer de 256px)
     // Elimina qualquer faixa branca ou deslocamento ao redimensionar ou imprimir em PDF

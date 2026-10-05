@@ -11,12 +11,20 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    // dimensões em mm, em retrato
-    const SIZES = { A4: { w: 210, h: 297 }, A3: { w: 297, h: 420 } };
+    // dimensões em mm, em retrato (Normas NBR 16752 / ISO 216)
+    const SIZES = {
+        A4: { w: 210, h: 297 },
+        A3: { w: 297, h: 420 },
+        A2: { w: 420, h: 594 },
+        A1: { w: 594, h: 841 },
+        A0: { w: 841, h: 1189 }
+    };
     const MM_TO_PX = 3.78; // 1 mm ≈ 3,78 px a 96 DPI
 
     function normalizeName(tamanho) {
-        return String(tamanho || '').toUpperCase() === 'A3' ? 'A3' : 'A4';
+        const t = String(tamanho || '').toUpperCase();
+        if (['A0', 'A1', 'A2', 'A3', 'A4'].includes(t)) return t;
+        return 'A4';
     }
 
     /** Dimensões efetivas da folha (mm e px) já considerando a orientação. */

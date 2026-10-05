@@ -1,5 +1,5 @@
 // sw.js — Service Worker do GeoGestor (Suporte a PWA e Modo Offline)
-const CACHE_NAME = 'geogestor-app-shell-v2';
+const CACHE_NAME = 'geogestor-app-shell-v3';
 
 const CORE_ASSETS = [
     './',
@@ -136,7 +136,23 @@ self.addEventListener('fetch', (event) => {
                         headers: { 'Content-Type': 'image/gif' }
                     });
                 }
-                throw err;
+                // Para navegação HTML, iframes e documentos, tenta retornar do cache ou resposta controlada
+                if (request.mode === 'navigate' || request.destination === 'iframe' || request.destination === 'document' || url.pathname.endsWith('.html')) {
+                    const cleanPath = url.pathname.split('/').pop() || 'index.html';
+                    return caches.match(url.pathname, { ignoreSearch: true })
+                        .then(match => match || caches.match(cleanPath, { ignoreSearch: true }))
+                        .then(match => {
+                            if (match) return match;
+                            return fetch(request);
+                        })
+                        .catch(() => {
+                            return new Response('<!DOCTYPE html><html><body><p>Recarregando...</p><script>setTimeout(()=>location.reload(), 1000);</script></body></html>', {
+                                status: 200,
+                                headers: { 'Content-Type': 'text/html; charset=utf-8' }
+                            });
+                        });
+                }
+                return new Response('', { status: 408, statusText: 'Offline/Timeout' });
             });
         })
     );

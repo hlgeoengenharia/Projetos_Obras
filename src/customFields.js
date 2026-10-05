@@ -868,14 +868,63 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
     return html;
 }
 
+// === COMPRESSÃO E OTIMIZAÇÃO DE IMAGENS CLIENT-SIDE (ECONOMIA DE COTA STORAGE) ===
+async function compressImageFile(file, maxDimension = 1920, quality = 0.82) {
+    if (!file || !file.type || !file.type.startsWith('image/') || file.type === 'image/svg+xml') {
+        return file; // Retorna original se não for imagem raster compatível
+    }
+    return new Promise((resolve) => {
+        const img = new Image();
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            img.onload = () => {
+                try {
+                    let { width, height } = img;
+                    if (width > maxDimension || height > maxDimension) {
+                        if (width > height) {
+                            height = Math.round((height * maxDimension) / width);
+                            width = maxDimension;
+                        } else {
+                            width = Math.round((width * maxDimension) / height);
+                            height = maxDimension;
+                        }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Converte para WebP (alta compressão, qualidade excelente)
+                    canvas.toBlob((blob) => {
+                        if (blob && blob.size < file.size) {
+                            const newFileName = file.name.replace(/\.[^/.]+$/, "") + ".webp";
+                            resolve(new File([blob], newFileName, { type: 'image/webp' }));
+                        } else {
+                            resolve(file); // Mantém original se já for menor
+                        }
+                    }, 'image/webp', quality);
+                } catch(err) {
+                    console.warn('[CustomFields] Falha na compressão do canvas, usando arquivo original:', err);
+                    resolve(file);
+                }
+            };
+            img.onerror = () => resolve(file);
+            img.src = e.target.result;
+        };
+        reader.onerror = () => resolve(file);
+        reader.readAsDataURL(file);
+    });
+}
+
 // === UPLOAD PARA SUPABASE STORAGE ===
 async function handleSupabaseUpload(event, fieldId, isPhoto) {
-    const file = event.target.files[0];
-    if (!file) return;
+    const rawFile = event.target.files[0];
+    if (!rawFile) return;
     
     let inputTitle = '';
     while (!inputTitle || inputTitle.trim() === '') {
-        inputTitle = prompt(`Digite um título para o ${isPhoto ? 'a foto' : 'documento'}:\n(Arquivo: ${file.name})`);
+        inputTitle = prompt(`Digite um título para o ${isPhoto ? 'a foto' : 'documento'}:\n(Arquivo: ${rawFile.name})`);
         if (inputTitle === null) {
             event.target.value = '';
             return;
@@ -887,6 +936,9 @@ async function handleSupabaseUpload(event, fieldId, isPhoto) {
     const originalText = btnText.innerText;
     btnText.innerText = 'Processando...';
     
+    // Otimiza e comprime imagens de fotos antes do upload (economiza até 95% do storage)
+    const file = await compressImageFile(rawFile);
+
     let publicUrl = '';
     let filePath = '';
 
@@ -894,7 +946,7 @@ async function handleSupabaseUpload(event, fieldId, isPhoto) {
 
     if (!isOffline && typeof supabaseClient !== 'undefined' && supabaseClient) {
         try {
-            const fileExt = file.name.split('.').pop() || 'bin';
+            const fileExt = file.name.split('.').pop() || 'webp';
             const folderPrefix = (typeof activeMunicipioId !== 'undefined' && activeMunicipioId) ? `anexos_${activeMunicipioId}` : 'anexos';
             const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
             filePath = `${folderPrefix}/${fileName}`;

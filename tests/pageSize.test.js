@@ -34,7 +34,10 @@ eq('A3 paisagem: legenda', a3l.label, '420 × 297 mm (Paisagem)');
 // modelos antigos (sem tamanho) e valores inválidos caem em A4 retrato
 eq('sem config → A4 retrato', PS.dims(undefined).cssPageSize, 'A4 portrait');
 eq('sem tamanho → A4', PS.dims({ orientacao: 'landscape' }).cssPageSize, 'A4 landscape');
-eq('tamanho inválido → A4', PS.dims({ tamanho: 'A0' }).name, 'A4');
+eq('tamanho inválido → A4', PS.dims({ tamanho: 'INVALID' }).name, 'A4');
+eq('A0 suportado (paisagem)', PS.dims({ tamanho: 'A0', orientacao: 'landscape' }).widthMm, 1189);
+eq('A1 suportado (paisagem)', PS.dims({ tamanho: 'A1', orientacao: 'landscape' }).widthMm, 841);
+eq('A2 suportado (paisagem)', PS.dims({ tamanho: 'A2', orientacao: 'landscape' }).widthMm, 594);
 
 console.log(`pageSize: ${total - failed}/${total} verificações passaram`);
 if (failed > 0) {

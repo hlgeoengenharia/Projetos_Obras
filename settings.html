@@ -1832,18 +1832,24 @@
 
         <!-- Área de Upload Direto da Pasta de Tiles -->
         <div class="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-5 border border-dashed border-slate-300 dark:border-slate-700 mb-5">
-          <label class="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-2">
-            <span class="material-symbols-outlined text-[18px] text-emerald-500">folder_zip</span>
-            Selecionar Pasta de Tiles (Ortofoto Fatiada)
-          </label>
+          <div class="flex items-center justify-between gap-2 mb-2 flex-wrap">
+            <label class="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+              <span class="material-symbols-outlined text-[18px] text-emerald-500">folder_zip</span>
+              Selecionar Pasta de Tiles (Ortofoto Fatiada)
+            </label>
+            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              Nuvem Cloudflare R2 Turbo · Custo Zero Egress
+            </span>
+          </div>
           <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">
-            Selecione a pasta gerada pelo <b>processar_ortofoto.bat</b>. Todas as imagens de zoom serão enviadas e a camada será registrada automaticamente no mapa.
+            Selecione a pasta gerada pelo <b>processar_ortofoto.bat</b>. As imagens serão enviadas em alta velocidade com 12 conexões simultâneas para o Cloudflare R2 e a camada será registrada automaticamente no WebGIS.
           </p>
 
           <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
             <input type="file" id="storage-folder-input" webkitdirectory directory multiple class="flex-1 text-sm text-slate-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-500/10 file:text-emerald-600 hover:file:bg-emerald-500/20 cursor-pointer" onchange="handleFolderSelectionChange(this)">
-            <button onclick="uploadTileFolderToSupabase()" class="shrink-0 px-6 py-2.5 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-500 transition-all flex items-center gap-2 shadow-md shadow-emerald-500/20">
-              <span class="material-symbols-outlined text-[18px]">cloud_upload</span> Enviar Pasta Completa
+            <button onclick="uploadTileFolderToSupabase()" class="shrink-0 px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold rounded-lg hover:from-emerald-500 hover:to-teal-500 transition-all flex items-center gap-2 shadow-md shadow-emerald-500/20">
+              <span class="material-symbols-outlined text-[18px]">cloud_upload</span> Enviar para Nuvem R2
             </button>
           </div>
 
@@ -3421,7 +3427,22 @@
           form.id = generateUUID();
         }
       });
-      localStorage.setItem('constructive_forms', JSON.stringify(forms));
+      try {
+        const leanForms = forms.map(f => {
+          if (!f.reportTemplates) return f;
+          const copy = { ...f };
+          delete copy.reportTemplates;
+          return copy;
+        });
+        localStorage.setItem('constructive_forms', JSON.stringify(leanForms));
+      } catch (err) {
+        try {
+          const minimalForms = forms.map(f => ({ id: f.id, name: f.name, entidade: f.entidade, tabs: f.tabs }));
+          localStorage.setItem('constructive_forms', JSON.stringify(minimalForms));
+        } catch (err2) {
+          // Dados preservados na memória e persistidos no Supabase abaixo
+        }
+      }
       
       if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         try {
@@ -4366,11 +4387,21 @@
       document.getElementById('forms-view').classList.add('hidden');
       document.getElementById('form-builder-view').classList.remove('hidden');
       document.getElementById('form-preview-view').classList.add('hidden');
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      const builderViewNew = document.getElementById('form-builder-view');
+      if (builderViewNew && typeof builderViewNew.scrollIntoView === 'function') {
+        builderViewNew.scrollIntoView({ behavior: 'instant', block: 'start' });
+      }
     }
 
     function closeFormBuilder() {
       document.getElementById('forms-view').classList.remove('hidden');
       document.getElementById('form-builder-view').classList.add('hidden');
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      const formsView = document.getElementById('forms-view');
+      if (formsView && typeof formsView.scrollIntoView === 'function') {
+        formsView.scrollIntoView({ behavior: 'instant', block: 'start' });
+      }
     }
 
     function editForm(id) {
@@ -4399,6 +4430,13 @@
       
       document.getElementById('forms-view').classList.add('hidden');
       document.getElementById('form-builder-view').classList.remove('hidden');
+      
+      // Ao clicar em um Cadastro, garante sempre entrada pelo topo da página
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      const builderView = document.getElementById('form-builder-view');
+      if (builderView && typeof builderView.scrollIntoView === 'function') {
+        builderView.scrollIntoView({ behavior: 'instant', block: 'start' });
+      }
     }
 
     async function cloneForm(id) {
@@ -4898,10 +4936,20 @@
       document.getElementById('forms-view').classList.add('hidden');
       document.getElementById('form-builder-view').classList.add('hidden');
       document.getElementById('form-preview-view').classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      const previewView = document.getElementById('form-preview-view');
+      if (previewView && typeof previewView.scrollIntoView === 'function') {
+        previewView.scrollIntoView({ behavior: 'instant', block: 'start' });
+      }
     }
     function closePreviewForm() {
       document.getElementById('forms-view').classList.remove('hidden');
       document.getElementById('form-preview-view').classList.add('hidden');
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      const formsView = document.getElementById('forms-view');
+      if (formsView && typeof formsView.scrollIntoView === 'function') {
+        formsView.scrollIntoView({ behavior: 'instant', block: 'start' });
+      }
     }
 
     function generateBCITemplate() {
@@ -6487,6 +6535,8 @@
         }
     }
 
+    const CLOUDFLARE_TILES_WORKER = 'https://ortofotos-tiles.heltonleite-geotec.workers.dev';
+
     async function uploadTileFolderToSupabase() {
         if (typeof supabaseClient === 'undefined' || !supabaseClient) { alert('Supabase não conectado.'); return; }
         if (!currentStorageFolder) { alert('Selecione uma pasta antes de enviar.'); return; }
@@ -6514,7 +6564,7 @@
         let completed = 0;
         let hasErrors = false;
 
-        statusText.innerText = `Preparando envio de ${totalFiles} arquivos...`;
+        statusText.innerText = `Preparando envio de ${totalFiles} imagens para o Cloudflare R2...`;
         statusText.className = 'text-slate-500';
 
         // Detecta dinamicamente o maior zoom presente nos arquivos
@@ -6527,36 +6577,26 @@
             }
         }
 
-        // Upload inteligente com Concorrência 2 e Cadência Suave contra Rate Limit 429
-        const CONCURRENCY = 2;
+        // Upload paralelo de alta velocidade para Cloudflare R2 (12 conexões simultâneas)
+        const CONCURRENCY = 12;
         const fileList = Array.from(files);
 
-        async function uploadWithRetry(targetPath, file, maxRetries = 5) {
+        async function uploadWithRetryR2(targetPath, file, maxRetries = 3) {
+            const targetUrl = `${CLOUDFLARE_TILES_WORKER}/${targetPath}`;
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                const { error } = await supabaseClient.storage
-                    .from('obras_arquivos')
-                    .upload(targetPath, file, { cacheControl: '86400', upsert: true });
-
-                if (!error) return true;
-
-                // Se tomou 429 (Rate Limit / Too Many Connections), aguarda com espera progressiva
-                const isRateLimit = error.message && (
-                    error.message.includes('429') || 
-                    error.message.includes('Too many connections') || 
-                    error.message.includes('rate limit') ||
-                    error.statusCode === 429
-                );
-                
-                if (isRateLimit && attempt < maxRetries) {
-                    const waitMs = attempt * 2500; // 2.5s, 5.0s, 7.5s
-                    statusText.innerText = `Aguardando liberação do servidor (${attempt}/${maxRetries})...`;
-                    await new Promise(r => setTimeout(r, waitMs));
-                } else if (attempt === maxRetries) {
-                    console.warn(`Falha após ${maxRetries} tentativas no arquivo ${targetPath}:`, error);
-                    return false;
-                } else {
-                    await new Promise(r => setTimeout(r, 600));
+                try {
+                    const res = await fetch(targetUrl, {
+                        method: 'PUT',
+                        body: file
+                    });
+                    if (res.ok) return true;
+                } catch (e) {
+                    if (attempt === maxRetries) {
+                        console.warn(`Falha após ${maxRetries} tentativas no R2 ${targetPath}:`, e);
+                        return false;
+                    }
                 }
+                await new Promise(r => setTimeout(r, 200 * attempt));
             }
             return false;
         }
@@ -6565,20 +6605,17 @@
             const relPath = file.webkitRelativePath || `${rootFolderName}/${file.name}`;
             const targetStoragePath = `${currentStorageFolder}/${relPath}`;
 
-            const ok = await uploadWithRetry(targetStoragePath, file);
+            const ok = await uploadWithRetryR2(targetStoragePath, file);
             if (!ok) hasErrors = true;
 
             completed++;
             const pct = Math.round((completed / totalFiles) * 100);
             progressBar.style.width = `${pct}%`;
             percentText.innerText = `${pct}% (${completed}/${totalFiles})`;
-            statusText.innerText = `Enviando ${completed} de ${totalFiles} imagens...`;
-
-            // Pausa cadenciada para não saturar a cota por minuto do Supabase
-            await new Promise(r => setTimeout(r, 75));
+            statusText.innerText = `Enviando ${completed} de ${totalFiles} imagens para o Cloudflare R2...`;
         }
 
-        // Fila de concorrência com controle de fluxo
+        // Fila paralela sem pausas artificiais
         const executing = [];
         for (const file of fileList) {
             const p = uploadFileWorker(file).then(() => {
@@ -6595,26 +6632,19 @@
             statusText.innerText = 'Upload concluído com avisos em alguns arquivos.';
             statusText.className = 'text-amber-500 font-semibold';
         } else {
-            statusText.innerText = 'Upload da pasta de tiles concluído com 100% de sucesso!';
+            statusText.innerText = 'Upload no Cloudflare R2 concluído com 100% de sucesso!';
             statusText.className = 'text-green-500 font-semibold';
         }
-
-        // Obtém a URL base pública e cadastra na tabela imagens_raster
-        const { data: urlData } = supabaseClient.storage
-            .from('obras_arquivos')
-            .getPublicUrl(`${currentStorageFolder}/${rootFolderName}`);
-
-        const baseUrl = urlData ? urlData.publicUrl : '';
 
         // Detecta extensão real das imagens fatiadas (webp ou png)
         const sampleFile = fileList.find(f => f.name.endsWith('.webp') || f.name.endsWith('.png'));
         const fileExt = sampleFile && sampleFile.name.endsWith('.webp') ? 'webp' : 'png';
-        const tileTemplateUrl = `${baseUrl}/{z}/{x}/{y}.${fileExt}`;
+        const tileTemplateUrl = `${CLOUDFLARE_TILES_WORKER}/${currentStorageFolder}/${rootFolderName}/{z}/{x}/{y}.${fileExt}`;
 
         let userEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || 'Prefeitura Municipal';
         if (activeMunicipioId) {
             try {
-                // Tenta insert com campos novos (entidade, compartilhada)
+                // Tenta insert com campos completos
                 const { error: insError } = await supabaseClient.from('imagens_raster').insert({
                     municipio_id: activeMunicipioId,
                     nome: cleanLayerName,
@@ -6631,7 +6661,6 @@
 
                 if (insError) {
                     console.warn('Tentando insert no schema básico:', insError);
-                    // Fallback para tabela com apenas as colunas originais
                     const { error: fbError } = await supabaseClient.from('imagens_raster').insert({
                         municipio_id: activeMunicipioId,
                         nome: cleanLayerName,
@@ -6642,7 +6671,8 @@
                     });
                     if (fbError) console.error('Erro no fallback:', fbError);
                 }
-                showStorageToast(`Ortofoto "${cleanLayerName}" cadastrada no mapa com sucesso!`);
+                showStorageToast(`Ortofoto "${cleanLayerName}" cadastrada no mapa via Cloudflare R2!`);
+                await loadFolderFiles(currentStorageFolder);
             } catch (eDb) {
                 console.warn('Erro ao registrar na tabela imagens_raster:', eDb);
             }

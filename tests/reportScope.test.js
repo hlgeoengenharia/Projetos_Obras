@@ -63,9 +63,9 @@ ok('individual: mantém Cabeçalho, Caixa de texto livre e Rodapé', has(html, '
 ok('individual: tem o atalho no popup da feição', has(html, 'Atalho no Popup da Feição'));
 ok('atalho lista a aba de Relatórios', has(html, 'Na Aba: Relatórios'));
 ok('não há mais seletor Escopo nem botão Imprimir A4 / PDF', !has(html, '>Escopo<') && !has(html, 'Imprimir A4 / PDF'));
-ok('seletor de folha A4 | A3', has(html, "ReportBuilder.setPageSize('A4')") && has(html, "ReportBuilder.setPageSize('A3')"));
-ok('A4 marcado por padrão', /setPageSize\('A4'\)"[^>]*bg-primary/.test(html) && !/setPageSize\('A3'\)"[^>]*bg-primary/.test(html));
+ok('individual: folha textual padronizada em A4 (sem seletor A3 no topo do individual)', has(html, 'bg-primary text-white shadow-xs">A4</span>') && !has(html, "ReportBuilder.setPageSize('A3')"));
 ok('folha A4 no título', has(html, 'Folha A4 Interativa') && has(html, '210 × 297 mm (Retrato)'));
+ok('individual: opções de prancha topográfica NBR 16752 no card do mapa (A3, A2, A1, A0)', has(html, 'Planta Topográfica Padronizada') && has(html, "ReportBuilder.setPranchaFormato('A3')") && has(html, "ReportBuilder.setPranchaFormato('A0')"));
 
 // ---------------------------------------------------------------- Mini-Mapa (card do Relatório Individual)
 ok('card do mapa: só o texto e o botão (nenhuma opção; tudo já vem ligado)', has(html, 'Mini-Mapa Cartográfico') && has(html, 'todas as opções ligadas') && ['cfg-map-x-rotulos', 'cfg-map-x-confr', 'cfg-map-x-area', 'cfg-map-x-sit', 'cfg-map-x-grade', 'cfg-map-temp-ativo', 'cfg-map-pts-ativo', 'cfg-map-pts-tab', 'cfg-map-pts-mem', 'cfg-map-med-ativo', 'cfg-map-destaque', 'cfg-map-base', 'cfg-map-altura', 'cfg-map-camadas', 'cfg-map-norte', 'cfg-map-escala', 'cfg-map-proj', 'cfg-map-note'].every(id => !has(html, 'id="' + id + '"')) && has(html, 'ReportBuilder.insertMapBlock()'));
@@ -100,17 +100,15 @@ ok('prévia avisa que o usuário marca pontos e cita o memorial e o sistema (UTM
 ok('prévia mostra a área e os lados (medidas todas ligadas)', has(folha, 'Área 1.012,40 m²') && has(folha, '25,40 m'));
 Object.keys(inputs).forEach(k => delete inputs[k]);
 
-// ---------------------------------------------------------------- A3
+// ---------------------------------------------------------------- Prancha Técnica e A4 Fixo no Individual
 RB.setPageSize('A3');
-html = container.innerHTML;
-ok('A3: título e dimensões da folha', has(html, 'Folha A3 Interativa') && has(html, '297 × 420 mm (Retrato)'));
-ok('A3: seletor marca A3', /setPageSize\('A3'\)"[^>]*bg-primary/.test(html) && !/setPageSize\('A4'\)"[^>]*bg-primary/.test(html));
-ok('A3: card de layout cita as medidas do A3', has(html, 'Layout A3') && has(html, 'Retrato (297×420)') && has(html, 'Paisagem (420×297)'));
-const salvos = RA.getReportTemplates('f1');
-ok('A3 fica gravado no modelo', salvos.length === 1 && salvos[0].config_pagina.tamanho === 'A3');
-
-RB.setPageSize('A4');
-ok('volta para A4', has(container.innerHTML, 'Folha A4 Interativa'));
+ok('individual ignora setPageSize A3 e permanece em A4', RA.getReportTemplates('f1')[0].config_pagina.tamanho === 'A4');
+RB.setPranchaFormato('A3');
+ok('prancha técnica A3 configurada', RB.getPranchaConfig().formato === 'A3' && RB.getPranchaConfig().ativa);
+RB.setPranchaPosicao('inicio');
+ok('prancha técnica no início configurada', RB.getPranchaConfig().posicao === 'inicio');
+RB.setPranchaFormato('none');
+ok('prancha técnica desativada', !RB.getPranchaConfig().ativa);
 
 // ---------------------------------------------------------------- escopo GERAL (camada)
 RB.initReportBuilderTab('f1', 'MPF', { scope: 'geral' });
@@ -121,6 +119,13 @@ ok('geral: sem os cards de Filtro/Tabela/Mapa/Gráficos no construtor (agora ao 
 ok('geral: NÃO tem Grade, Quadro Analítico nem Mapa', !has(html, 'Grade de Atributos') && !has(html, 'Quadro Analítico e Sintético') && !has(html, 'Mini-Mapa Cartográfico'));
 ok('geral: sem atalho no popup da feição', !has(html, 'Atalho no Popup da Feição'));
 ok('geral: também escolhe A4 | A3', has(html, "ReportBuilder.setPageSize('A3')"));
+RB.setPageSize('A3');
+html = container.innerHTML;
+ok('geral A3: seletor marca A3', /setPageSize\('A3'\)"[^>]*bg-primary/.test(html) && !/setPageSize\('A4'\)"[^>]*bg-primary/.test(html));
+ok('geral A3: título e dimensões da folha', has(html, 'Folha A3 Interativa') && has(html, '297 × 420 mm (Retrato)'));
+ok('geral A3: card de layout cita as medidas do A3', has(html, 'Layout A3') && has(html, 'Retrato (297×420)') && has(html, 'Paisagem (420×297)'));
+RB.setPageSize('A4');
+ok('geral: volta para A4', has(container.innerHTML, 'Folha A4 Interativa'));
 ok('geral: também tem o botão "Preview" (usa a lista de exemplo, sem feição única)', has(html, 'ReportBuilder.previewReal()') && (has(html, 'Preview') || has(html, 'Ver como sairá')) && has(html, 'lista de exemplo'));
 {
     let abertaGeral;

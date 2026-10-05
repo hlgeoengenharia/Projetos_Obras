@@ -48,3 +48,8 @@ ortofoto_*
 *.mov
 *.avi
 video_orcamento/
+
+# Credenciais e Tokens Cloudflare
+CloudFlare/
+*r2_config.json
+

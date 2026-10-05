@@ -12,62 +12,88 @@ import urllib.error
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import hmac
+import hashlib
+import datetime
+
 SUPABASE_URL = "https://iqejynikmeroiqyigsjo.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlxZWp5bmlrbWVyb2lxeWlnc2pvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMzNjU2MDgsImV4cCI6MjA5ODk0MTYwOH0.aT91yVtQDYTluMUkx8HKoYrNhlniVC8Rd0iv2-LnASQ"
-BUCKET_NAME = "obras_arquivos"
+
+# Configurações do Cloudflare R2 (com cache CDN de borda)
+R2_CONFIG = {
+    "endpoint_host": "cc081e2e8b5b0550b2a2c6278e731395.r2.cloudflarestorage.com",
+    "access_key_id": "e246fda086280ff0313f7c0b19986213",
+    "secret_access_key": "d768abbbf53d9dfdece94f0ffc97158c1454ceea2c8c6b40e92d7c880353a03f",
+    "bucket_name": "ortofotos-webgis",
+    "worker_url": "https://ortofotos-tiles.heltonleite-geotec.workers.dev"
+}
+
+_R2_CONFIG_FILE = Path(__file__).resolve().parent / "CloudFlare" / "r2_config.json"
+if _R2_CONFIG_FILE.exists():
+    try:
+        with open(_R2_CONFIG_FILE, "r", encoding="utf-8") as f:
+            R2_CONFIG.update(json.load(f))
+    except Exception:
+        pass
+
+def _r2_sign(key, msg):
+    return hmac.new(key, msg.encode('utf-8'), hashlib.sha256).digest()
+
+def _r2_get_signing_key(secret_key, date_stamp):
+    k_date = _r2_sign(('AWS4' + secret_key).encode('utf-8'), date_stamp)
+    k_region = _r2_sign(k_date, 'auto')
+    k_service = _r2_sign(k_region, 's3')
+    return _r2_sign(k_service, 'aws4_request')
 
 def upload_single_tile(file_path, storage_path, max_retries=3):
-    url = f"{SUPABASE_URL}/storage/v1/object/{BUCKET_NAME}/{storage_path}"
     ext = file_path.suffix.lower()
-    content_type = "image/webp" if ext == ".webp" else ("image/png" if ext == ".png" else "image/jpeg")
+    content_type = "image/webp" if ext == ".webp" else ("image/png" if ext == ".png" else "application/octet-stream")
+
+    try:
+        with open(file_path, "rb") as f:
+            data = f.read()
+    except Exception:
+        return False
+
+    payload_hash = hashlib.sha256(data).hexdigest()
+    t = datetime.datetime.now(datetime.timezone.utc)
+    amz_date = t.strftime('%Y%m%dT%H%M%SZ')
+    date_stamp = t.strftime('%Y%m%d')
+
+    host = R2_CONFIG["endpoint_host"]
+    bucket = R2_CONFIG["bucket_name"]
+    canonical_uri = f"/{bucket}/{storage_path}"
+    canonical_headers = f"host:{host}\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{amz_date}\n"
+    signed_headers = "host;x-amz-content-sha256;x-amz-date"
+    canonical_request = f"PUT\n{canonical_uri}\n\n{canonical_headers}\n{signed_headers}\n{payload_hash}"
+
+    credential_scope = f"{date_stamp}/auto/s3/aws4_request"
+    string_to_sign = f"AWS4-HMAC-SHA256\n{amz_date}\n{credential_scope}\n{hashlib.sha256(canonical_request.encode('utf-8')).hexdigest()}"
+
+    signing_key = _r2_get_signing_key(R2_CONFIG["secret_access_key"], date_stamp)
+    signature = hmac.new(signing_key, string_to_sign.encode('utf-8'), hashlib.sha256).hexdigest()
+
+    auth_header = f"AWS4-HMAC-SHA256 Credential={R2_CONFIG['access_key_id']}/{credential_scope}, SignedHeaders={signed_headers}, Signature={signature}"
+    url = f"https://{host}/{bucket}/{storage_path}"
+
+    headers = {
+        'host': host,
+        'x-amz-date': amz_date,
+        'x-amz-content-sha256': payload_hash,
+        'Authorization': auth_header,
+        'Content-Type': content_type
+    }
 
     for attempt in range(1, max_retries + 1):
         try:
-            with open(file_path, "rb") as f:
-                data = f.read()
-
-            req = urllib.request.Request(
-                url,
-                data=data,
-                headers={
-                    "apikey": SUPABASE_KEY,
-                    "Authorization": f"Bearer {SUPABASE_KEY}",
-                    "Content-Type": content_type,
-                    "x-upsert": "true",
-                    "cache-control": "max-age=86400"
-                },
-                method="POST"
-            )
-
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            req = urllib.request.Request(url, data=data, headers=headers, method='PUT')
+            with urllib.request.urlopen(req, timeout=25) as resp:
                 if resp.status in (200, 201):
                     return True
-        except urllib.error.HTTPError as e:
-            if e.code in (400, 409):
-                try:
-                    req_put = urllib.request.Request(
-                        url,
-                        data=data,
-                        headers={
-                            "apikey": SUPABASE_KEY,
-                            "Authorization": f"Bearer {SUPABASE_KEY}",
-                            "Content-Type": content_type,
-                            "cache-control": "max-age=86400"
-                        },
-                        method="PUT"
-                    )
-                    with urllib.request.urlopen(req_put, timeout=30) as resp_put:
-                        if resp_put.status in (200, 201):
-                            return True
-                except Exception:
-                    pass
-            if attempt == max_retries:
-                return False
-            time.sleep(0.4 * attempt)
         except Exception:
             if attempt == max_retries:
                 return False
-            time.sleep(0.4 * attempt)
+            time.sleep(0.3 * attempt)
     return False
 
 def get_municipios():
@@ -191,10 +217,12 @@ try:
 
             self.log_signal.emit(f"[+] Total de imagens: {total:,} arquivos")
             self.log_signal.emit(f"[+] Níveis de Zoom: {z_min} ao {z_max} (Formato .{sample_ext})")
-            self.log_signal.emit(f"[+] Destino: {municipio_pasta}/{pasta.name}")
-            self.log_signal.emit(f"[+] Enviando com 16 conexões simultâneas...")
+            self.log_signal.emit(f"[+] Nuvem de Destino: Cloudflare R2 (Bucket: {R2_CONFIG['bucket_name']})")
+            self.log_signal.emit(f"[+] CDN de Alta Velocidade: {R2_CONFIG['worker_url']}")
+            self.log_signal.emit(f"[+] Pasta: {municipio_pasta}/{pasta.name}")
+            self.log_signal.emit(f"[+] Enviando com 20 conexões simultâneas...")
 
-            WORKERS = 16
+            WORKERS = 20
             start_time = time.time()
             enviados = 0
             falhas = 0
@@ -225,17 +253,19 @@ try:
                         self.progress_signal.emit(pct, vel_str, time_str)
 
             total_min = (time.time() - start_time) / 60
-            self.log_signal.emit(f"\n[✓] Upload finalizado em {total_min:.2f} minutos!")
+            self.log_signal.emit(f"\n[✓] Upload para Cloudflare R2 finalizado em {total_min:.2f} minutos!")
 
-            tile_template_url = f"{SUPABASE_URL}/storage/v1/object/public/{BUCKET_NAME}/{municipio_pasta}/{pasta.name}/{{z}}/{{x}}/{{y}}.{sample_ext}"
+            worker_base = R2_CONFIG.get("worker_url", "https://ortofotos-tiles.heltonleite-geotec.workers.dev").rstrip('/')
+            tile_template_url = f"{worker_base}/{municipio_pasta}/{pasta.name}/{{z}}/{{x}}/{{y}}.{sample_ext}"
             self.log_signal.emit(f"[+] Registrando camada '{self.nome_camada}' no banco...")
+            self.log_signal.emit(f"[+] URL do Mapa: {tile_template_url}")
 
             ok_db = registrar_camada_raster(self.municipio_obj.get('id'), self.nome_camada, tile_template_url, z_min, z_max, self.entidade)
             if ok_db:
                 self.log_signal.emit("[✓] Camada registrada com sucesso no banco de dados!")
-                self.finished_signal.emit(True, f"Upload concluído com 100% de sucesso!\nA ortofoto já está disponível no mapa para {self.municipio_obj.get('nome')}.")
+                self.finished_signal.emit(True, f"Upload concluído com 100% de sucesso no Cloudflare R2!\nA ortofoto já está disponível no mapa para {self.municipio_obj.get('nome')}.")
             else:
-                self.finished_signal.emit(True, "Upload de arquivos concluído!\n(Aviso: vincule a pasta no Gerenciador de Arquivos se não aparecer automaticamente).")
+                self.finished_signal.emit(True, "Upload no Cloudflare R2 concluído!\n(Aviso: vincule a pasta no Gerenciador de Arquivos se não aparecer automaticamente).")
 
 
     class MainWindow(QMainWindow):

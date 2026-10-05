@@ -47,6 +47,19 @@
 
 
     function grade(bloco, index, fields, featureData, colCount) {
+        const dens = String(bloco.densidade || 'normal').toLowerCase();
+        const isUltra = dens === 'ultracompact' || dens === 'ultra-compacto' || dens === 'ultracompacta';
+        const isComp = !isUltra && (dens === 'compact' || dens === 'compacto' || dens === 'compacta' || dens === 'tight');
+        const isNorm = !isUltra && !isComp;
+
+        const densPills = `
+            <div class="inline-flex items-center bg-white border border-slate-200 rounded p-0.5 shadow-2xs gap-0.5 text-[9px] font-bold print:hidden" title="Densidade dos campos da grade">
+                <button type="button" class="px-1.5 py-0.5 rounded cursor-pointer transition-colors ${isNorm ? 'bg-sky-600 text-white shadow-2xs' : 'text-slate-500 hover:text-sky-700 hover:bg-slate-100'}" onclick="ReportBuilder.setGridDensity('normal', ${index}, '${bloco.id || ''}', event)" title="Espaçamento Normal (Confortável)">Normal</button>
+                <button type="button" class="px-1.5 py-0.5 rounded cursor-pointer transition-colors ${isComp ? 'bg-sky-600 text-white shadow-2xs' : 'text-slate-500 hover:text-sky-700 hover:bg-slate-100'}" onclick="ReportBuilder.setGridDensity('compacto', ${index}, '${bloco.id || ''}', event)" title="Espaçamento Compacto (Economiza altura)">Compacto</button>
+                <button type="button" class="px-1.5 py-0.5 rounded cursor-pointer transition-colors ${isUltra ? 'bg-sky-600 text-white shadow-2xs' : 'text-slate-500 hover:text-sky-700 hover:bg-slate-100'}" onclick="ReportBuilder.setGridDensity('ultra-compacto', ${index}, '${bloco.id || ''}', event)" title="Espaçamento Ultra-compacto (Máximo aproveitamento)">Ultra-compacto</button>
+            </div>
+        `;
+
         const dica = colCount === 1
             ? '<span class="text-[9px] text-sky-600 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded font-medium print:hidden">Arraste ⠿ para reordenar</span>'
             : '<span class="text-[9px] text-sky-600 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded font-medium print:hidden">Arraste ⠿ para reordenar • Use [-] [+] ou clique no % para a largura</span>';
@@ -55,7 +68,7 @@
             titleAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')" title="Duplo clique para editar o título"`,
             subtituloClass: 'cursor-text hover:bg-sky-50 px-1 rounded',
             subtituloAttrs: `ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'subtitulo')" title="Duplo clique para editar o subtítulo / observação"`,
-            headerExtra: `<div class="flex items-center gap-2"><span class="text-[10px] font-mono text-slate-400 font-normal">${colCount === 1 ? 'Lista Corrida' : colCount + ' Colunas'}</span>${dica}</div>`,
+            headerExtra: `<div class="flex items-center gap-2 flex-wrap"><span class="text-[10px] font-mono text-slate-400 font-normal">${colCount === 1 ? 'Lista Corrida' : colCount + ' Colunas'}</span>${densPills}${dica}</div>`,
             containerAttrs: `data-block-index="${index}"`,
             fieldAttrs: (f) => `data-field-id="${f.id}" data-block-index="${index}"`,
             lead: (f, pct, modo) => `<span class="field-drag-handle cursor-grab active:cursor-grabbing text-slate-300 group-hover/field:text-sky-600 hover:bg-slate-200/60 p-0.5 rounded transition-colors" title="Arraste para mover de posição ${modo === 'linha' ? 'na lista' : 'na grade'}"><span class="material-symbols-outlined text-[15px] leading-none">drag_indicator</span></span>`,
@@ -71,6 +84,7 @@
 
 
     function cabecalho(bloco, index, tpl, opts) {
+        if (!bloco) return '';
         const todas = !!bloco.repetir_todas_folhas;
         const badgeHtml = `<span class="self-start text-[9px] font-sans font-bold ${todas ? 'text-sky-600 bg-sky-50 border-sky-200' : 'text-slate-500 bg-slate-100 border-slate-200'} border px-1.5 py-0.5 rounded select-none print:hidden">${todas ? 'Todas as Folhas' : 'Apenas 1ª Folha'}</span>`;
         const o = opts || {};
@@ -87,6 +101,7 @@
 
 
     function rodape(bloco) {
+        if (!bloco) return '';
         const segunda = bloco.inicio_numeracao === 'segunda';
         const qrHtml = '<span class="text-slate-500 font-normal" title="O QR code é gerado na emissão do relatório">[QR code de verificação]</span>';
         return blocks.renderFooterSlotHtml(bloco, segunda ? 2 : 1, segunda ? 10 : 1, 0, 0, { bare: true, qrHtml: qrHtml });
