@@ -158,9 +158,17 @@
                 fldsToRender = fldsToRender.filter(f => !hiddenSet.has(f.id) && !hiddenSet.has(f.name));
             }
             const hiddenCount = totalAntesDeOcultar - fldsToRender.length;
-
             const tituloHtml = `<span class="whitespace-pre-line${edit && edit.titleClass ? ' ' + edit.titleClass : ''}"${edit && edit.titleAttrs ? ' ' + edit.titleAttrs : ''}>${(esc(bloco.titulo || 'Dados Cadastrais')).replace(/\r?\n/g, '<br>')}</span>`;
-            const restoreBadge = (!edit && hiddenCount > 0) ? `<button type="button" class="no-print text-[10px] text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded px-2 py-0.5 ml-2 flex items-center gap-1 cursor-pointer font-medium normal-case transition-colors" onclick="restoreHiddenFields()" title="Clique para restaurar todos os campos ocultos"><span class="material-symbols-outlined text-[13px]">visibility</span>${hiddenCount} oculto(s) • Restaurar</button>` : '';
+            const isMapHid = !edit && !!(opts && opts.isMapHidden);
+            let restoreText = '';
+            if (hiddenCount > 0 && isMapHid) {
+                restoreText = `${hiddenCount} campo(s) + mapa ocultos • Restaurar`;
+            } else if (hiddenCount > 0) {
+                restoreText = `${hiddenCount} oculto(s) • Restaurar`;
+            } else if (isMapHid) {
+                restoreText = `Mapa oculto • Restaurar`;
+            }
+            const restoreBadge = (!edit && (hiddenCount > 0 || isMapHid)) ? `<button type="button" class="no-print text-[10px] text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded px-2 py-0.5 ml-2 flex items-center gap-1 cursor-pointer font-medium normal-case transition-colors" onclick="restoreHiddenFields()" title="Clique para restaurar todos os campos e o mapa ocultos"><span class="material-symbols-outlined text-[13px]">visibility</span>${restoreText}</button>` : '';
             const subtituloHtml = (bloco.subtitulo || (edit && edit.subtituloAttrs)) ? `
                 <div class="text-[10.5px] text-slate-500 font-normal normal-case mt-0.5 whitespace-pre-line${edit && edit.subtituloClass ? ' ' + edit.subtituloClass : ''}"${edit && edit.subtituloAttrs ? ' ' + edit.subtituloAttrs : ''}>${(esc(bloco.subtitulo || (edit ? 'Duplo clique para adicionar subtítulo / observação...' : ''))).replace(/\r?\n/g, '<br>')}</div>` : '';
             const cabecalho = `

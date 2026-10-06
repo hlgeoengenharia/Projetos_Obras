@@ -15,10 +15,16 @@
     const WARNING_THRESHOLD_MS = INACTIVITY_LIMIT_MS - WARNING_DURATION_MS; // 14 minutos
 
     const STORAGE_KEY = 'geogestor_last_activity_ts';
+    const WORKING_HEARTBEAT_KEY = 'geogestor_working_heartbeat_ts';
     const EXPIRED_FLAG_KEY = 'geogestor_session_expired';
     const BROADCAST_CHANNEL_NAME = 'geogestor_session_channel';
     const OFFLINE_PIN_KEY = 'geogestor_offline_pin';
     const MODO_CAMPO_KEY = 'geogestor_modo_campo';
+
+    const _setInterval = (typeof setInterval === 'function') ? setInterval : (typeof window !== 'undefined' && typeof window.setInterval === 'function') ? window.setInterval.bind(window) : function() { return 0; };
+    const _clearInterval = (typeof clearInterval === 'function') ? clearInterval : (typeof window !== 'undefined' && typeof window.clearInterval === 'function') ? window.clearInterval.bind(window) : function() {};
+    const _setTimeout = (typeof setTimeout === 'function') ? setTimeout : (typeof window !== 'undefined' && typeof window.setTimeout === 'function') ? window.setTimeout.bind(window) : function() { return 0; };
+    const _clearTimeout = (typeof clearTimeout === 'function') ? clearTimeout : (typeof window !== 'undefined' && typeof window.clearTimeout === 'function') ? window.clearTimeout.bind(window) : function() {};
 
     let timerInterval = null;
     let warningModalEl = null;
@@ -29,6 +35,107 @@
     let lastThrottledRecord = 0;
     let broadcastChannel = null;
     let lastGpsCoords = null;
+
+    // Detecta se o usuário está trabalhando ativamente em um formulário ou em tela de relatório
+    function isUserActivelyWorking() {
+        if (typeof window === 'undefined' || typeof document === 'undefined') return false;
+
+        // 1. Tela de Relatório (relatorio.html, relatorio_view.html ou qualquer rota de relatório)
+        const loc = (typeof window !== 'undefined' && window.location) ? window.location : null;
+        const path = (loc && loc.pathname) ? String(loc.pathname).toLowerCase() : '';
+        const href = (loc && loc.href) ? String(loc.href).toLowerCase() : '';
+        if (path.includes('relatorio') || href.includes('relatorio')) {
+            return true;
+        }
+
+        // 2. Construtor de formulários ou configuração de campos em settings.html
+        if (path.includes('settings.html')) {
+            const fbModal = document.getElementById('form-builder-modal');
+            if (fbModal && !fbModal.classList.contains('hidden') && fbModal.style.display !== 'none') {
+                return true;
+            }
+            const fxModal = document.getElementById('formula-modal');
+            if (fxModal && !fxModal.classList.contains('hidden') && fxModal.style.display !== 'none') {
+                return true;
+            }
+        }
+
+        // 3. Foco em qualquer campo de entrada, texto ou formulário ativo
+        const activeEl = document.activeElement;
+        if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT' || activeEl.isContentEditable)) {
+            return true;
+        }
+
+        // 4. Modais ou painéis de formulário visíveis e abertos na página
+        const formModalSelectors = [
+            '#feature-info-modal',
+            '#new-visit-modal',
+            '#visits-modal',
+            '#target-theme-select-modal',
+            '#field-mapping-modal',
+            '#new-theme-modal',
+            '#edit-theme-modal',
+            '#filter-fields-modal',
+            '#remap-attributes-modal',
+            '#edit-raster-modal',
+            '#add-layer-modal',
+            '#set-entity-modal',
+            '#shared-layers-modal',
+            '#project-modal',
+            '#table-join-modal',
+            '#orcamento-modal',
+            '#measurement-report-modal',
+            '#modal-tipo-area',
+            '#coordinate-query-panel',
+            '#form-builder-modal',
+            '.modal-form-open',
+            '[data-form-active="true"]'
+        ];
+
+        for (let sel of formModalSelectors) {
+            const el = document.querySelector(sel);
+            if (el) {
+                const isHidden = el.classList.contains('hidden') || 
+                                 el.style.display === 'none' || 
+                                 el.style.visibility === 'hidden' || 
+                                 el.getAttribute('aria-hidden') === 'true';
+                if (!isHidden && (el.offsetWidth > 0 || el.offsetHeight > 0)) {
+                    return true;
+                }
+            }
+        }
+
+        // 5. Qualquer modal ou drawer visível que contenha inputs/textarea/select ou tag <form>
+        const visibleModals = document.querySelectorAll('.modal:not(.hidden), [id*="modal"]:not(.hidden), [id*="drawer"]:not(.hidden), [class*="drawer"]:not(.hidden)');
+        for (let m of visibleModals) {
+            if (m.id === 'session-warning-modal' || m.id === 'session-lgpd-modal' || m.id === 'session-offline-lock-modal') continue;
+            if (m.offsetWidth > 0 && m.offsetHeight > 0) {
+                if (m.querySelector('input, textarea, select, form')) {
+                    return true;
+                }
+            }
+        }
+
+        // 6. Variáveis de controle de formulário / edição
+        if (window.isFormOpen === true || window.isEditingFeature === true || window.currentOpenForm) {
+            return true;
+        }
+
+        return false;
+    }
+
+    // Emite heartbeat de trabalho ativo (preserva a sessão em todas as abas)
+    function emitWorkingHeartbeat() {
+        const now = Date.now();
+        try {
+            localStorage.setItem(WORKING_HEARTBEAT_KEY, String(now));
+            localStorage.setItem(STORAGE_KEY, String(now));
+            localStorage.removeItem(EXPIRED_FLAG_KEY);
+        } catch(e) {}
+        if (broadcastChannel) {
+            try { broadcastChannel.postMessage({ type: 'WORKING_HEARTBEAT', timestamp: now }); } catch(e) {}
+        }
+    }
 
     // Detecta se o sistema está offline ou em modo de coleta de campo
     function isSystemOffline() {
@@ -42,8 +149,9 @@
         if (typeof BroadcastChannel !== 'undefined') {
             broadcastChannel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
             broadcastChannel.onmessage = function(ev) {
-                if (ev.data && ev.data.type === 'ACTIVITY_RESET') {
+                if (ev.data && (ev.data.type === 'ACTIVITY_RESET' || ev.data.type === 'WORKING_HEARTBEAT')) {
                     hideWarningModal();
+                    recordActivity();
                 } else if (ev.data && ev.data.type === 'FORCE_LOGOUT') {
                     performLogout(true, true);
                 } else if (ev.data && ev.data.type === 'OFFLINE_UNLOCK') {
@@ -66,10 +174,10 @@
             <span class="font-medium text-xs tracking-wide text-slate-100">${message}</span>
         `;
         document.body.appendChild(toast);
-        setTimeout(() => toast.classList.remove('translate-y-10', 'opacity-0'), 10);
-        setTimeout(() => {
+        _setTimeout(() => toast.classList.remove('translate-y-10', 'opacity-0'), 10);
+        _setTimeout(() => {
             toast.classList.add('translate-y-10', 'opacity-0');
-            setTimeout(() => toast.remove(), 350);
+            _setTimeout(() => toast.remove(), 350);
         }, 4000);
     }
 
@@ -278,7 +386,7 @@
         if (offlineLockModalEl) {
             offlineLockModalEl.style.display = 'flex';
             const pinInput = document.getElementById('offline-lock-pin-input');
-            if (pinInput) setTimeout(() => pinInput.focus(), 100);
+            if (pinInput) _setTimeout(() => pinInput.focus(), 100);
         }
     }
 
@@ -300,6 +408,22 @@
 
     // Executa Logout Completo e Invalida Chaves de Sessão
     async function performLogout(skipBroadcast = false, force = false) {
+        // Se estiver trabalhando em formulário ou relatório (nesta aba ou em outra), cancela logout automático!
+        if (!force && isUserActivelyWorking()) {
+            console.log("🛡️ Logout automático cancelado: Usuário trabalhando em formulário ou relatório.");
+            recordActivity();
+            emitWorkingHeartbeat();
+            hideWarningModal();
+            return;
+        }
+        const lastWorking = parseInt(localStorage.getItem(WORKING_HEARTBEAT_KEY) || '0', 10);
+        if (!force && lastWorking && (Date.now() - lastWorking < 120000)) {
+            console.log("🛡️ Logout automático cancelado: Usuário ativo em outra aba (relatório ou formulário).");
+            recordActivity();
+            hideWarningModal();
+            return;
+        }
+
         // Se estiver offline e o logout não for forçado manualmente, protege a sessão com bloqueio local
         if (!force && isSystemOffline()) {
             console.warn("🛡️ Dispositivo Offline detectado. Ativando Bloqueio Local em vez de logout para proteger a coleta de campo.");
@@ -312,7 +436,7 @@
             try { broadcastChannel.postMessage({ type: 'FORCE_LOGOUT' }); } catch(e) {}
         }
 
-        clearInterval(timerInterval);
+        _clearInterval(timerInterval);
         
         try {
             sessionStorage.clear();
@@ -334,14 +458,32 @@
             try { await window.supabaseClient.auth.signOut({ scope: 'global' }); } catch(e) {}
         }
 
-        window.location.replace('login.html?reason=inactivity');
+        if (typeof window !== 'undefined' && window.location && typeof window.location.replace === 'function') {
+            window.location.replace('login.html?reason=inactivity');
+        }
     }
 
     // Loop de Verificação de Inatividade a cada 1 segundo
     function checkInactivityLoop() {
         if (isOfflineLocked) return; // Se já está com a tela de bloqueio offline visível, aguarda desbloqueio
 
-        // Se o sistema estiver realizando um upload pesado ou envio de ortofoto, renova automaticamente a sessão
+        // 1. Se o usuário estiver trabalhando ativamente nesta aba (em formulário ou página de relatório)
+        if (isUserActivelyWorking()) {
+            recordActivity();
+            emitWorkingHeartbeat();
+            if (isWarningOpen) hideWarningModal();
+            return;
+        }
+
+        // 2. Se outra aba do sistema estiver ativa com relatório ou formulário aberto nos últimos 2 minutos
+        const lastWorking = parseInt(localStorage.getItem(WORKING_HEARTBEAT_KEY) || '0', 10);
+        if (lastWorking && (Date.now() - lastWorking < 120000)) {
+            recordActivity();
+            if (isWarningOpen) hideWarningModal();
+            return;
+        }
+
+        // 3. Se o sistema estiver realizando um upload pesado ou envio de ortofoto, renova automaticamente a sessão
         const isUploadActive = (typeof window !== 'undefined') && (
             window.isSystemProcessingBackgroundUpload === true || 
             window.isUploadingTiles === true ||
@@ -352,6 +494,7 @@
         );
         if (isUploadActive) {
             recordActivity();
+            emitWorkingHeartbeat();
             if (isWarningOpen) hideWarningModal();
             return;
         }
@@ -447,7 +590,8 @@
 
     // Inicia o módulo de segurança com validação rigorosa pré-renderização
     function initSessionSecurity() {
-        const currentPath = window.location.pathname.toLowerCase();
+        const loc = (typeof window !== 'undefined' && window.location) ? window.location : null;
+        const currentPath = (loc && loc.pathname) ? String(loc.pathname).toLowerCase() : '';
         // Não ativa o detector na página de login ou registro público
         if (currentPath.endsWith('login.html') || currentPath.endsWith('signup.html') || currentPath.endsWith('forgot-password.html') || currentPath.endsWith('reset-password.html')) {
             return;
@@ -456,18 +600,22 @@
         // 1. CHECAGEM CRÍTICA DE EXPIRAÇÃO PREGRESSA (Bloqueia reentrada por Favoritos)
         const isExpired = localStorage.getItem(EXPIRED_FLAG_KEY) === 'true';
         const lastAct = getLastActivity();
+        const lastWorking = parseInt(localStorage.getItem(WORKING_HEARTBEAT_KEY) || '0', 10);
+        const hasRecentHeartbeat = lastWorking && (Date.now() - lastWorking < 120000);
         const now = Date.now();
 
-        // Expira APENAS se o tempo limite tiver sido excedido ou se marcado como expirado sem atividade recente (2 min)
-        if ((lastAct && (now - lastAct >= INACTIVITY_LIMIT_MS)) || (isExpired && (!lastAct || now - lastAct >= 120000))) {
-            if (isSystemOffline()) {
-                console.log("🛡️ Sistema em Modo Offline / Campo — Bloqueio local ativado em vez de logout.");
-                showOfflineLockModal();
+        // Expira APENAS se não estiver trabalhando ativamente e o tempo limite tiver sido excedido
+        if (!isUserActivelyWorking() && !hasRecentHeartbeat) {
+            if ((lastAct && (now - lastAct >= INACTIVITY_LIMIT_MS)) || (isExpired && (!lastAct || now - lastAct >= 120000))) {
+                if (isSystemOffline()) {
+                    console.log("🛡️ Sistema em Modo Offline / Campo — Bloqueio local ativado em vez de logout.");
+                    showOfflineLockModal();
+                    return;
+                }
+                console.warn("🛡️ Sessão expirada por inatividade detectada. Redirecionando para login...");
+                performLogout(true, true);
                 return;
             }
-            console.warn("🛡️ Sessão expirada por inatividade detectada. Redirecionando para login...");
-            performLogout(true, true);
-            return;
         }
 
         // Limpa flag de expiração antiga e registra atividade atual
@@ -475,14 +623,24 @@
             localStorage.removeItem(EXPIRED_FLAG_KEY);
         } catch(e) {}
         recordActivity();
+        if (isUserActivelyWorking()) {
+            emitWorkingHeartbeat();
+        }
         ensureWarningModal();
         ensureLgpdModal();
 
-        // Eventos Globais de Monitoramento de Atividade (Mouse, Toque, Teclado, Scroll)
-        const activityEvents = ['mousemove', 'mousedown', 'pointerdown', 'keydown', 'touchstart', 'wheel', 'scroll'];
+        // Eventos Globais de Monitoramento de Atividade (Mouse, Toque, Teclado, Scroll, Formulários/Digitação)
+        const activityEvents = ['mousemove', 'mousedown', 'pointerdown', 'keydown', 'touchstart', 'wheel', 'scroll', 'input', 'change', 'focusin', 'select'];
         activityEvents.forEach(evt => {
             window.addEventListener(evt, recordActivity, { passive: true });
         });
+
+        // Heartbeat periódico a cada 15 segundos se o usuário estiver em formulário ou tela de relatório
+        _setInterval(() => {
+            if (isUserActivelyWorking()) {
+                emitWorkingHeartbeat();
+            }
+        }, 15000);
 
         // Monitoramento de Deslocamento por GPS (Caminhar no terreno conta como atividade)
         if (typeof navigator !== 'undefined' && navigator.geolocation) {
@@ -518,7 +676,7 @@
         });
 
         // Loop de checagem a cada 1000ms
-        timerInterval = setInterval(checkInactivityLoop, 1000);
+        timerInterval = _setInterval(checkInactivityLoop, 1000);
         console.log("🛡️ Sistema de Segurança de Sessão Ativo: Inatividade de 15 min com blindagem para Modo Offline / Campo.");
     }
 
@@ -551,9 +709,12 @@
         isModoCampo: function() {
             return localStorage.getItem(MODO_CAMPO_KEY) === 'true';
         },
+        isActivelyWorking: isUserActivelyWorking,
+        emitWorkingHeartbeat: emitWorkingHeartbeat,
         recordActivity: recordActivity,
         keepAlive: function() {
             recordActivity();
+            emitWorkingHeartbeat();
             if (isWarningOpen) hideWarningModal();
         }
     };

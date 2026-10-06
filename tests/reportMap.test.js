@@ -119,14 +119,14 @@ ok('nenhuma camada vizinha ligada por padrão', t.layersOf('geojson').length ===
 ok('escala gráfica (metros) ligada', Array.from(t.map.controls).some(c => c.kind === 'scale' && c.o.metric === true && c.o.imperial === false));
 ok('norte visível', t.doc.els['map-north'].style.display === '');
 ok('escala aproximada e projeção SIRGAS 2000 UTM 25S, cada uma no seu quadro', /Escala aprox\. 1:/.test(t.doc.els['map-escala-txt'].textContent) && /SIRGAS 2000 \/ UTM zona 25S/.test(t.doc.els['map-proj-txt'].textContent) && t.doc.els['map-info-wrap'].style.display === '');
-ok('legenda mostra a feição do relatório', /Feição do relatório/.test(t.doc.els['map-legend'].innerHTML));
+ok('legenda mostra o título Legenda', /Legenda/.test(t.doc.els['map-legend'].innerHTML));
 eq('projeção do controlador', t.ctl.projection.label, 'SIRGAS 2000 / UTM zona 25S');
 ok('notifica a mudança inicial', t.changes.length === 1);
 
 // ---------------------------------------------------------------- destaque
 t.ctl.setConfig({ destaque: { ativo: false } });
 ok('destaque desligado: feição sai do mapa', t.layersOf('geojson').length === 0);
-ok('destaque desligado: legenda sem a feição', !/Feição do relatório/.test(t.doc.els['map-legend'].innerHTML));
+ok('destaque desligado: legenda sem o título', !/Legenda/.test(t.doc.els['map-legend'].innerHTML));
 t.ctl.setConfig({ destaque: { ativo: true, cor: '#ff00ff', espessura: 5, preenchimento: 0.6 } });
 eq('destaque com nova cor/espessura', (() => { const s = t.layersOf('geojson')[0].args.o.style(); return [s.color, s.weight, s.fillOpacity]; })(), ['#ff00ff', 5, 0.6]);
 t.ctl.setConfig({ destaque: { cor: 'invalida' } });
@@ -673,7 +673,7 @@ t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefin
     // legenda
     const legend = docE.els['map-legend'];
     ok('legenda: itens com chave (feição e camada ligada), identificados por data-leg', /data-leg="feicao"/.test(legend.innerHTML) && /data-leg="c:1"/.test(legend.innerHTML));
-    eq('itens da legenda para o painel', b.ctl.legendItems().map(i => [i.key, i.nome, i.oculto]), [['feicao', 'Feição do relatório', false], ['c:1', 'Lotes <vizinhos>', false]]);
+    eq('itens da legenda para o painel', b.ctl.legendItems().map(i => [i.key, i.nome, i.oculto]), [['feicao', 'Legenda', false], ['c:1', 'Lotes <vizinhos>', false]]);
     b.ctl.renameLegend('c:1', '  Lotes da quadra  ');
     ok('renomear um item da legenda (nome limpo e escapado no HTML)', /Lotes da quadra/.test(legend.innerHTML) && !/Lotes &lt;vizinhos&gt;/.test(legend.innerHTML));
     b.ctl.renameLegend('c:1', '<b>x</b>');
@@ -688,11 +688,11 @@ t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefin
     ok('restaurar legenda', legend.style.display === '' && /data-leg="feicao"/.test(legend.innerHTML) && b.ctl.getConfig().legenda.ocultos.length === 0);
     eq('chave desconhecida é ignorada', (b.ctl.renameLegend('c:zzz', 'x'), b.ctl.getConfig().legenda.nomes), {});
     // dois cliques no item: campo de texto no lugar do nome
-    const span = { textContent: 'Feição do relatório', children: [], appendChild(c) { this.children.push(c); } };
+    const span = { textContent: 'Legenda', children: [], appendChild(c) { this.children.push(c); } };
     const row = { getAttribute: () => 'feicao', querySelector: () => span };
     legend.listeners.dblclick({ target: { closest: () => row } });
     const campo = span.children[0];
-    ok('dois cliques abrem o campo de texto com o nome atual', !!campo && campo.tag === 'input' && campo.value === 'Feição do relatório' && campo.focused === true);
+    ok('dois cliques abrem o campo de texto com o nome atual', !!campo && campo.tag === 'input' && campo.value === 'Legenda' && campo.focused === true);
     campo.value = 'Imóvel objeto';
     campo.listeners.keydown({ key: 'Enter', stopPropagation() {} });
     ok('Enter grava o nome direto na legenda', b.ctl.getConfig().legenda.nomes.feicao === 'Imóvel objeto' && /Imóvel objeto/.test(legend.innerHTML));
@@ -993,7 +993,7 @@ t = build({});
 ok('situação desligada: caixa escondida e nenhum mapa extra', t.doc.els['map-locator'].style.display === 'none' && t.L.__maps.length === 1);
 t.ctl.setConfig({ situacao: { ativo: true } });
 const loc = t.L.__maps[1];
-ok('situação ligada: mapa pequeno criado na caixa, sem interação e sem controles', t.doc.els['map-locator'].style.display === 'block' && !!loc && loc.options.zoomControl === false && loc.options.dragging === false && loc.options.attributionControl === false);
+ok('situação ligada: mapa pequeno criado na caixa, com pan/drag e sem controles nativos', t.doc.els['map-locator'].style.display === 'block' && !!loc && loc.options.zoomControl === false && loc.options.dragging === true && loc.options.attributionControl === false);
 ok('situação: fundo de ruas, ponto da feição e retângulo do que o mapa principal mostra', Array.from(loc.layers).some(l => l.kind === 'tile') && Array.from(loc.layers).some(l => l.kind === 'circle') && Array.from(loc.layers).some(l => l.kind === 'rectangle'));
 eq('situação: 6 níveis de zoom abaixo do mapa principal, centrada na feição', [loc.zoom, loc.center.lat, loc.center.lng], [12, -7.015, -34.835]);
 t.map.zoom = 19; t.map.handlers.zoomend();
@@ -1007,16 +1007,17 @@ eq('situação desligada de novo: caixa escondida', t.doc.els['map-locator'].sty
 t = build({});
 t.ctl.setConfig({ situacao: { ativo: true } });
 let loc2 = t.L.__maps[1];
-ok('seta do norte da caixa: criada escondida por padrão', t.doc.els['map-locator'].children.length === 1 && t.doc.els['map-locator'].children[0].className === 'report-locator-north' && t.doc.els['map-locator'].children[0].style.display !== 'flex');
+const norteLoc = Array.from(t.doc.els['map-locator'].children).find(c => c.className === 'report-locator-north');
+ok('seta do norte da caixa: criada escondida por padrão', !!norteLoc && norteLoc.style.display !== 'flex');
 ok('mapa de referência padrão: ruas (OSM)', Array.from(loc2.layers).some(l => l.kind === 'tile' && /openstreetmap/.test(l.args.u)));
 t.ctl.setConfig({ situacao: { baseMap: 'satelite' } });
 ok('trocar para satélite: tile antigo sai, o novo é de satélite', !Array.from(loc2.layers).some(l => l.kind === 'tile' && /openstreetmap/.test(l.args.u)) && Array.from(loc2.layers).some(l => l.kind === 'tile' && /arcgisonline/.test(l.args.u)));
 t.ctl.setConfig({ situacao: { baseMap: 'nenhum' } });
 ok('"Sem mapa base": nenhum tile na caixa', !Array.from(loc2.layers).some(l => l.kind === 'tile'));
 t.ctl.setConfig({ situacao: { norte: true } });
-eq('seta do norte: liga', t.doc.els['map-locator'].children[0].style.display, 'flex');
+eq('seta do norte: liga', norteLoc.style.display, 'flex');
 t.ctl.setConfig({ situacao: { norte: false } });
-eq('seta do norte: desliga', t.doc.els['map-locator'].children[0].style.display, 'none');
+eq('seta do norte: desliga', norteLoc.style.display, 'none');
 ok('camada escolhida para a caixa entra nela (cor própria, sem clique)', !Array.from(loc2.layers).some(l => l.kind === 'geojson'));
 t.ctl.toggleLocatorLayer('1', true);
 ok('toggleLocatorLayer liga a camada 1 na caixa', Array.from(loc2.layers).filter(l => l.kind === 'geojson').length === 1);
@@ -1028,6 +1029,15 @@ ok('a camada da caixa de localização não aparece no mapa principal (é indepe
 t.ctl.setConfig({ situacao: { ativo: false } });
 t.ctl.setConfig({ situacao: { ativo: true } });
 eq('desligar e religar (sem recriar o mapa) mantém a camada escolhida', Array.from(loc2.layers).filter(l => l.kind === 'geojson').length, 1);
+
+// rótulos de campos nas feições da caixa de localização
+camadas[0].features[0].properties = { nome: 'Lote 01' };
+t.ctl.toggleLocatorLayer('1', true);
+t.ctl.setConfig({ situacao: { campos: { '1': ['titulo'] } } });
+const locLabels = Array.from(loc2.layers).filter(l => l.kind === 'marker' && l.args.o && l.args.o.icon && l.args.o.icon.className === 'report-loc-nlabel');
+ok('rótulo de campos configurado na caixa de localização gera marcadores no minimapa', locLabels.length > 0);
+const headerElLoc = Array.from(t.doc.els['map-locator'].children).find(c => c.className === 'report-locator-header');
+ok('botões de zoom da rodateto têm classe no-print para não sair na impressão', headerElLoc && /no-print/.test(headerElLoc.innerHTML));
 
 // ---------------------------------------------------------------- anotações de texto
 const notas = (tt) => tt.layersOf('marker').filter(m => m.args.o.icon.className === 'report-note');

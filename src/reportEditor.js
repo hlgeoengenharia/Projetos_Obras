@@ -86,7 +86,7 @@
     function cabecalho(bloco, index, tpl, opts) {
         if (!bloco) return '';
         const todas = !!bloco.repetir_todas_folhas;
-        const badgeHtml = `<span class="self-start text-[9px] font-sans font-bold ${todas ? 'text-sky-600 bg-sky-50 border-sky-200' : 'text-slate-500 bg-slate-100 border-slate-200'} border px-1.5 py-0.5 rounded select-none print:hidden">${todas ? 'Todas as Folhas' : 'Apenas 1ª Folha'}</span>`;
+        const badgeHtml = `<button type="button" onclick="(window.ReportBuilder?.toggleHeaderRepeatMode || window.parent?.ReportBuilder?.toggleHeaderRepeatMode)()" class="self-start text-[9px] font-sans font-bold ${todas ? 'text-sky-700 bg-sky-100 hover:bg-sky-200 border-sky-300' : 'text-slate-600 bg-slate-100 hover:bg-slate-200 border-slate-300'} border px-2 py-0.5 rounded select-none print:hidden cursor-pointer transition-colors shadow-2xs flex items-center gap-1" title="Clique para alternar: 1ª Folha vs Todas as Folhas"><span class="material-symbols-outlined text-[11px] leading-none">sync</span><span>${todas ? 'Todas as Folhas' : 'Apenas 1ª Folha'}</span></button>`;
         const o = opts || {};
         return blocks.renderHeaderSlotHtml(bloco, tpl || {}, o.padLeftMm || 0, o.padRightMm || 0, {
             bare: !!o.bare,

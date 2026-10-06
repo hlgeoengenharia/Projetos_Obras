@@ -1181,14 +1181,14 @@ function renderFieldMappingModal(sourceTitle, targetTitle, sourceFields, targetF
 
             rowsHtml += `
                 <div class="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200/70 dark:border-slate-700/60 field-mapping-row" data-source-id="${escapeHtml(sf.id)}">
-                    <div class="w-[45%] flex flex-col">
-                        <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate" title="${escapeHtml(sf.label)}">${escapeHtml(sf.label)}</span>
+                    <div class="w-[45%] flex flex-col pr-2">
+                        <span class="text-xs font-bold text-slate-800 dark:text-slate-100 break-words leading-tight" title="${escapeHtml(sf.label)}">${escapeHtml(sf.label)}</span>
                         ${safeSample}
                     </div>
-                    <div class="w-[10%] flex items-center justify-center text-slate-400">
+                    <div class="w-[8%] flex items-center justify-center text-slate-400">
                         <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
                     </div>
-                    <div class="w-[45%]">
+                    <div class="w-[47%]">
                         <select class="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 target-field-select cursor-pointer">
                             ${optsHtml}
                         </select>
@@ -1588,6 +1588,15 @@ function initMap() {
 
   baseLayers['Mapa'].addTo(map);
 
+  map.on('baselayerchange', function(e) {
+    const isSat = e && e.name && /sat[eé]lite|h[ií]brido/i.test(e.name);
+    const mapContainer = document.getElementById('map');
+    if (mapContainer) {
+      if (isSat) mapContainer.classList.add('basemap-satellite');
+      else mapContainer.classList.remove('basemap-satellite');
+    }
+  });
+
   // Geoman Options
   if (map.pm) {
     try {
@@ -1871,39 +1880,34 @@ function initMap() {
 
         let tooltipContent = '';
         
+        const cleanLabelValue = (v) => {
+          if (v === null || v === undefined) return '';
+          let s = String(v).trim();
+          // Remove prefixos redundantes gravados na string (ex: "Nome: ", "Logradouro: ", etc.)
+          s = s.replace(/^(nome|logradouro|tipo|bairro|lote|quadra|setor|cota|titulo|descri[cç][aã]o)\s*:\s*/i, '').trim();
+          return escapeHtml(s);
+        };
+
         const showDisp1 = theme.disp1Active !== false && disp1Val;
         const showDisp2 = theme.disp2Active !== false && disp2Val;
         
-        const safeDisp1Label = escapeHtml(disp1Label);
-        const safeDisp2Label = escapeHtml(disp2Label);
-        const safeDisp1Val = escapeHtml(disp1Val);
-        const safeDisp2Val = escapeHtml(disp2Val);
+        const cleanVal1 = showDisp1 ? cleanLabelValue(disp1Val) : '';
+        const cleanVal2 = showDisp2 ? cleanLabelValue(disp2Val) : '';
 
-        const geomType = feature.geometry ? feature.geometry.type : '';
-        const isLineGeom = geomType === 'LineString' || geomType === 'MultiLineString';
-        const isLineTheme = theme && (
-          theme.geometryType === 'Linha' || 
-          theme.geometryType === 'LineString' || 
-          theme.geometryType === 'MultiLineString' || 
-          (theme.name && /curva.*n[íi]vel|isolin/i.test(theme.name)) ||
-          theme.fill === false
-        );
-        const isContourOrLine = isLineTheme || isLineGeom || (theme && theme.name && /curva.*n[íi]vel|isolin/i.test(theme.name));
-        const badgeClass = isContourOrLine ? 'contour-elevation-label' : '';
-
-        if (showDisp1 && showDisp2) {
-          tooltipContent = `<div style="${rotationStyle}" class="${badgeClass} text-[11px] font-bold whitespace-nowrap">${safeDisp1Label}: ${safeDisp1Val} - ${safeDisp2Label}: ${safeDisp2Val}</div>`;
-        } else if (showDisp1) {
-          const displayTxt = (isContourOrLine && safeDisp1Label.toLowerCase() === 'cota') ? `${safeDisp1Val}` : `${safeDisp1Label}: ${safeDisp1Val}`;
-          tooltipContent = `<div style="${rotationStyle}" class="${badgeClass} text-[11px] font-bold whitespace-nowrap">${displayTxt}</div>`;
-        } else if (showDisp2) {
-          const displayTxt = (isContourOrLine && safeDisp2Label.toLowerCase() === 'cota') ? `${safeDisp2Val}` : `${safeDisp2Label}: ${safeDisp2Val}`;
-          tooltipContent = `<div style="${rotationStyle}" class="${badgeClass} text-[11px] font-bold whitespace-nowrap">${displayTxt}</div>`;
+        let displayTxt = '';
+        if (cleanVal1 && cleanVal2) {
+          displayTxt = `${cleanVal1} · ${cleanVal2}`;
+        } else if (cleanVal1) {
+          displayTxt = cleanVal1;
+        } else if (cleanVal2) {
+          displayTxt = cleanVal2;
         } else if (theme.mainTitle) {
           const mainVal = getFeaturePropertyValue(theme, feature, theme.mainTitle);
-          if (mainVal) {
-            tooltipContent = `<div style="${rotationStyle}" class="${badgeClass} text-[11px] font-bold whitespace-nowrap">${escapeHtml(mainVal)}</div>`;
-          }
+          if (mainVal) displayTxt = cleanLabelValue(mainVal);
+        }
+
+        if (displayTxt) {
+          tooltipContent = `<div style="${rotationStyle}" class="map-feature-label">${displayTxt}</div>`;
         }
         
         if (tooltipContent) {
@@ -6022,6 +6026,7 @@ window.openRemapAttributesModal = function(specificThemeId = null) {
         alert("Camada não encontrada.");
         return;
     }
+    themeBeingEdited = themeId;
 
     // 1. Preenche dados do tema
     const nameInput = document.getElementById('remap-theme-name');
@@ -6057,6 +6062,67 @@ window.onRemapTemplateChanged = function() {
     window.renderRemapFieldMapping(theme);
 };
 
+window.handleRemapFileInput = function(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const statusEl = document.getElementById('remap-file-status');
+    if (statusEl) {
+        statusEl.classList.remove('hidden');
+        statusEl.innerHTML = '<span class="material-symbols-outlined text-[14px] animate-spin">refresh</span> Lendo arquivo original...';
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const geojson = JSON.parse(e.target.result);
+            if (!geojson.features || !geojson.features.length) {
+                throw new Error("Nenhuma feição encontrada no arquivo GeoJSON.");
+            }
+
+            window.remapLoadedOriginalFeatures = geojson.features;
+            
+            // Extrai propriedades originais
+            const originalCols = new Set();
+            const originalSamples = {};
+            geojson.features.forEach(f => {
+                if (f.properties) {
+                    Object.entries(f.properties).forEach(([k, v]) => {
+                        if (k && !k.startsWith('_')) {
+                            originalCols.add(k);
+                            if (v !== undefined && v !== null && String(v).trim() !== '' && !originalSamples[k]) {
+                                originalSamples[k] = String(v).trim();
+                            }
+                        }
+                    });
+                }
+            });
+
+            window.remapOriginalPropertiesList = Array.from(originalCols);
+            window.remapOriginalSamplesMap = originalSamples;
+
+            if (statusEl) {
+                statusEl.innerHTML = `<span class="material-symbols-outlined text-[15px] text-emerald-600 dark:text-emerald-400">check_circle</span> Arquivo "<b>${file.name}</b>" carregado! <b>${geojson.features.length.toLocaleString('pt-BR')} feições</b> e <b>${originalCols.size} colunas originais</b> prontas para mapear.`;
+            }
+
+            // Re-renderiza o mapeamento com as colunas originais no topo
+            const themeId = themeBeingEdited;
+            const theme = themes.find(t => t.id === themeId);
+            if (theme) {
+                window.renderRemapFieldMapping(theme);
+            }
+
+        } catch(err) {
+            console.error("Erro ao ler arquivo original no remapeamento:", err);
+            if (statusEl) {
+                statusEl.classList.remove('hidden');
+                statusEl.innerHTML = `<span class="text-red-600">Erro ao ler arquivo: ${err.message}</span>`;
+            }
+        }
+    };
+    reader.readAsText(file);
+};
+
 window.renderRemapFieldMapping = function(theme) {
     const container = document.getElementById('remap-fields-container');
     if (!container) return;
@@ -6064,23 +6130,91 @@ window.renderRemapFieldMapping = function(theme) {
 
     const selectedFormId = document.getElementById('remap-cadastro-type')?.value;
     const features = theme.features || [];
+
+    // Mapeamento de IDs de formulários para labels humanos (ex: f_zlx463nfy -> "Bairro")
+    const formFieldLabelsMap = {};
+    if (typeof allForms !== 'undefined' && Array.isArray(allForms)) {
+        allForms.forEach(form => {
+            const schema = form.schema || form.tabs;
+            if (Array.isArray(schema)) {
+                schema.forEach(tab => {
+                    if (Array.isArray(tab.fields)) {
+                        tab.fields.forEach(field => {
+                            if (field.id) {
+                                formFieldLabelsMap[field.id] = field.label || field.name || field.id;
+                            }
+                        });
+                    }
+                });
+            }
+        });
+    }
+
     const availablePropKeys = new Set();
     const sampleValuesMap = {};
+    const virtualPropLabels = {};
 
+    // 1. Colunas do arquivo original carregado pelo usuário (se houver)
+    const originalFileCols = window.remapOriginalPropertiesList || [];
+    const originalFileSamples = window.remapOriginalSamplesMap || {};
+
+    // 2. Colunas existentes na camada
     features.forEach(f => {
         if (f.properties) {
             Object.entries(f.properties).forEach(([k, v]) => {
-                if (k && !k.startsWith('_') && typeof v !== 'object') {
+                if (!k || k.startsWith('_')) return;
+                // Ignora campos de sistema / infraestrutura
+                if (k === 'id_banco' || k === 'themeId' || k === '_tempId' || k === '_hiddenFields') return;
+
+                // Detecta se é campo de CEP / Endereço em JSON
+                let cepObj = null;
+                if (typeof v === 'string' && v.trim().startsWith('{') && (v.includes('"logradouro"') || v.includes('"bairro"') || v.includes('"cep"'))) {
+                    try { cepObj = JSON.parse(v); } catch(e){}
+                } else if (typeof v === 'object' && v !== null && (v.logradouro !== undefined || v.bairro !== undefined || v.cep !== undefined)) {
+                    cepObj = v;
+                }
+
+                if (cepObj) {
+                    const prefixLabel = formFieldLabelsMap[k] || 'Endereço/CEP';
+                    const subDefs = [
+                        { sub: 'logradouro', label: `${prefixLabel} ➔ Logradouro` },
+                        { sub: 'bairro', label: `${prefixLabel} ➔ Bairro` },
+                        { sub: 'cep', label: `${prefixLabel} ➔ CEP` },
+                        { sub: 'numero', label: `${prefixLabel} ➔ Número` },
+                        { sub: 'complemento', label: `${prefixLabel} ➔ Complemento` },
+                        { sub: 'cidade', label: `${prefixLabel} ➔ Cidade` },
+                        { sub: 'uf', label: `${prefixLabel} ➔ UF` }
+                    ];
+                    subDefs.forEach(sd => {
+                        const virtKey = `${k}.${sd.sub}`;
+                        availablePropKeys.add(virtKey);
+                        virtualPropLabels[virtKey] = sd.label;
+                        if (cepObj[sd.sub] && !sampleValuesMap[virtKey]) {
+                            sampleValuesMap[virtKey] = String(cepObj[sd.sub]).trim();
+                        }
+                    });
+                } else {
+                    // Propriedade normal ou campo de formulário gravado
                     availablePropKeys.add(k);
                     if (v !== undefined && v !== null && String(v).trim() !== '' && !sampleValuesMap[k]) {
                         sampleValuesMap[k] = String(v).trim();
+                    }
+                    if (formFieldLabelsMap[k]) {
+                        virtualPropLabels[k] = `${formFieldLabelsMap[k]} [${k}]`;
                     }
                 }
             });
         }
     });
 
-    const sortedPropKeys = Array.from(availablePropKeys).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+    const sortedPropKeys = Array.from(availablePropKeys).sort((a, b) => {
+        // Coloca subpropriedades de endereço no topo, seguidas pelas outras
+        const aIsVirt = a.includes('.');
+        const bIsVirt = b.includes('.');
+        if (aIsVirt && !bIsVirt) return -1;
+        if (!aIsVirt && bIsVirt) return 1;
+        return a.localeCompare(b, 'pt-BR', { sensitivity: 'base' });
+    });
 
     const countEl = document.getElementById('remap-features-count');
     if (countEl) {
@@ -6099,7 +6233,7 @@ window.renderRemapFieldMapping = function(theme) {
     if (formSchema && Array.isArray(formSchema)) {
         formSchema.forEach(tab => {
             if (tab.fields && Array.isArray(tab.fields) && tab.fields.length > 0) {
-                // Título da Aba centralizado estilo Importar GeoJSON
+                // Título da Aba
                 htmlContent += `<div class="font-bold text-center text-xs text-slate-700 dark:text-slate-300 mt-4 mb-2 uppercase tracking-wider bg-slate-100 dark:bg-slate-800/80 py-2 rounded-lg border border-slate-200 dark:border-slate-700/80 shadow-2xs">${tab.title || 'Aba'}</div>`;
 
                 tab.fields.forEach(field => {
@@ -6109,18 +6243,40 @@ window.renderRemapFieldMapping = function(theme) {
                     const fieldIdNorm = field.id.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
                     let matchedKey = savedMappings[field.id] || savedMappings[field.label] || '';
-                    if (!matchedKey || !availablePropKeys.has(matchedKey)) {
-                        for (const pKey of sortedPropKeys) {
-                            const pNorm = pKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-                            if (pNorm === fieldLabelNorm || pNorm === fieldIdNorm) {
-                                matchedKey = pKey;
+
+                    // Auto-match com colunas do arquivo original (prioridade máxima se arquivo foi carregado)
+                    if (originalFileCols.length > 0) {
+                        for (const origCol of originalFileCols) {
+                            const oNorm = origCol.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                            if (oNorm === fieldLabelNorm || (fieldLabelNorm.includes('nome') && (oNorm.includes('nome') || oNorm.includes('logr'))) || (fieldLabelNorm.includes('bairro') && oNorm.includes('bairro'))) {
+                                matchedKey = `orig::${origCol}`;
                                 break;
                             }
                         }
+                    }
+
+                    // Se não tiver correspondência com arquivo original, busca nas propriedades da camada
+                    if (!matchedKey || (!matchedKey.startsWith('orig::') && !availablePropKeys.has(matchedKey))) {
+                        // 1. Prioriza propriedades virtuais de CEP para campos como Nome, Bairro, CEP
+                        if (fieldLabelNorm.includes('nome') || fieldLabelNorm.includes('logradouro') || fieldLabelNorm === 'endereco') {
+                            matchedKey = sortedPropKeys.find(k => k === 'LOGRADOURO' || k === 'NOME' || k.endsWith('.logradouro')) || '';
+                        } else if (fieldLabelNorm.includes('bairro')) {
+                            matchedKey = sortedPropKeys.find(k => k === 'BAIRRO' || k.endsWith('.bairro') || (formFieldLabelsMap[k] && formFieldLabelsMap[k].toLowerCase().includes('bairro'))) || '';
+                        } else if (fieldLabelNorm === 'cep' || fieldLabelNorm.includes('codigo postal')) {
+                            matchedKey = sortedPropKeys.find(k => k === 'CEP' || k.endsWith('.cep')) || '';
+                        } else if (fieldLabelNorm.includes('numero') || fieldLabelNorm === 'num' || fieldLabelNorm === 'nº') {
+                            matchedKey = sortedPropKeys.find(k => k === 'NUMERO' || k.endsWith('.numero')) || '';
+                        } else if (fieldLabelNorm.includes('tipo') || fieldLabelNorm.includes('logradouro')) {
+                            matchedKey = sortedPropKeys.find(k => (formFieldLabelsMap[k] && formFieldLabelsMap[k].toLowerCase().includes('tipo')) || k.toLowerCase().includes('tipo')) || '';
+                        } else if (fieldLabelNorm.includes('setor')) {
+                            matchedKey = sortedPropKeys.find(k => (formFieldLabelsMap[k] && formFieldLabelsMap[k].toLowerCase().includes('setor')) || k.toLowerCase().includes('setor')) || '';
+                        }
+
+                        // 2. Busca exata de string
                         if (!matchedKey) {
                             for (const pKey of sortedPropKeys) {
-                                const pNorm = pKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-                                if (pNorm.includes(fieldLabelNorm) || fieldLabelNorm.includes(pNorm) || pNorm.includes(fieldIdNorm)) {
+                                const pNorm = (virtualPropLabels[pKey] || pKey).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                                if (pNorm === fieldLabelNorm || pKey === field.id) {
                                     matchedKey = pKey;
                                     break;
                                 }
@@ -6133,18 +6289,38 @@ window.renderRemapFieldMapping = function(theme) {
                     const shouldBeCheckedInitially = isCurrentlyEmpty && !!matchedKey;
 
                     let options = `<option value="">-- Não mapeado --</option>`;
+
+                    // Grupo 1: Colunas do Arquivo Original Carregado (se houver)
+                    if (originalFileCols.length > 0) {
+                        options += `<optgroup label="⭐ Colunas do Arquivo Original">`;
+                        originalFileCols.forEach(col => {
+                            const valKey = `orig::${col}`;
+                            const isSelected = (matchedKey === valKey) ? 'selected' : '';
+                            const sample = originalFileSamples[col] ? ` (ex: "${originalFileSamples[col].substring(0, 24)}")` : '';
+                            options += `<option value="${valKey}" ${isSelected}>📁 ${col}${sample}</option>`;
+                        });
+                        options += `</optgroup>`;
+                    }
+
+                    // Grupo 2: Propriedades da Camada / Endereço
+                    options += `<optgroup label="Propriedades da Camada">`;
                     sortedPropKeys.forEach(prop => {
                         const isSelected = (matchedKey === prop) ? 'selected' : '';
-                        const sampleVal = sampleValuesMap[prop] ? ` (ex: "${sampleValuesMap[prop].substring(0, 20)}")` : '';
-                        options += `<option value="${prop}" ${isSelected}>${prop}${sampleVal}</option>`;
+                        const displayLabel = virtualPropLabels[prop] || prop;
+                        const sampleVal = sampleValuesMap[prop] ? ` (ex: "${sampleValuesMap[prop].substring(0, 24)}")` : '';
+                        options += `<option value="${prop}" ${isSelected}>${displayLabel}${sampleVal}</option>`;
                     });
+                    options += `</optgroup>`;
 
                     htmlContent += `
-                        <div class="flex items-center gap-2 mb-2 p-1 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors" data-remap-field-id="${field.id}" data-remap-field-label="${field.label}">
-                            <input type="checkbox" class="remap-active-check shrink-0 cursor-pointer" ${shouldBeCheckedInitially ? 'checked' : ''} onchange="window.updateRemapSelectedCount()">
-                            <span class="w-1/3 text-xs text-slate-700 dark:text-slate-300 font-semibold truncate" title="${field.label}">${field.label}</span>
+                        <div class="flex items-center gap-2.5 mb-2 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors border border-slate-200/70 dark:border-slate-800" data-remap-field-id="${field.id}" data-remap-field-label="${field.label}">
+                            <input type="checkbox" class="remap-active-check shrink-0 cursor-pointer w-4 h-4 text-primary rounded" ${shouldBeCheckedInitially ? 'checked' : ''} onchange="window.updateRemapSelectedCount()">
+                            <div class="w-[44%] min-w-0 pr-2">
+                                <span class="text-xs text-slate-800 dark:text-slate-200 font-semibold break-words leading-tight block" title="${field.label}">${field.label}</span>
+                                ${field.type ? `<span class="text-[10px] text-slate-400 dark:text-slate-500 font-mono block mt-0.5">${field.type}</span>` : ''}
+                            </div>
                             <span class="material-symbols-outlined text-slate-400 text-sm shrink-0">arrow_forward</span>
-                            <select onchange="this.parentElement.querySelector('.remap-active-check').checked = (this.value !== '')" class="remap-source-select flex-1 px-2.5 py-1.5 text-xs font-medium bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary dark:text-white truncate">
+                            <select onchange="this.parentElement.querySelector('.remap-active-check').checked = (this.value !== '')" class="remap-source-select flex-1 min-w-0 px-2.5 py-1.5 text-xs font-medium bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary dark:text-white">
                                 ${options}
                             </select>
                         </div>
@@ -6230,12 +6406,48 @@ window.applyRemapAttributes = async function() {
         let updatedCount = 0;
         const updatedDbPayloads = [];
 
-        features.forEach(f => {
+        features.forEach((f, idx) => {
             if (!f.properties) f.properties = {};
             let changed = false;
 
+            const origFeat = (window.remapLoadedOriginalFeatures && window.remapLoadedOriginalFeatures[idx])
+                ? window.remapLoadedOriginalFeatures[idx]
+                : null;
+
+            // Se o usuário carregou o arquivo original, restaura as colunas originais de volta na feição!
+            if (origFeat && origFeat.properties) {
+                Object.entries(origFeat.properties).forEach(([origK, origV]) => {
+                    if (origK && !origK.startsWith('_') && origV !== undefined && origV !== null) {
+                        f.properties[origK] = origV;
+                    }
+                });
+                changed = true;
+            }
+
             mappings.forEach(m => {
-                const rawVal = f.properties[m.sourceProp];
+                let rawVal = undefined;
+                if (m.sourceProp.startsWith('orig::')) {
+                    const origColName = m.sourceProp.replace('orig::', '');
+                    if (origFeat && origFeat.properties) {
+                        rawVal = origFeat.properties[origColName];
+                    }
+                } else if (m.sourceProp.includes('.')) {
+                    const [parentKey, childKey] = m.sourceProp.split('.');
+                    const parentVal = f.properties[parentKey];
+                    if (parentVal) {
+                        let parsed = null;
+                        if (typeof parentVal === 'object') parsed = parentVal;
+                        else if (typeof parentVal === 'string' && parentVal.trim().startsWith('{')) {
+                            try { parsed = JSON.parse(parentVal); } catch(e){}
+                        }
+                        if (parsed && parsed[childKey] !== undefined) {
+                            rawVal = parsed[childKey];
+                        }
+                    }
+                } else {
+                    rawVal = f.properties[m.sourceProp];
+                }
+
                 if (rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '') {
                     // Grava em todas as formas de chave para garantia 100% de leitura no formulário
                     f.properties[m.fieldId] = rawVal;
@@ -6958,13 +7170,14 @@ function renderImportFieldMapping() {
                       
                       let matchedProp = null;
                       
-                      // Auto-match
+                      // Auto-match inteligente: permite que campos com correspondência exata usem a mesma coluna de origem (1:N)
                       for (let i = 0; i < detectedProperties.length; i++) {
                           const prop = detectedProperties[i];
-                          if (mappedProperties.has(prop)) continue;
-                          
                           const normProp = normalizeStr(prop);
-                          if (sub.matchKey === normProp || (sub.idSuffix === '' && normName === normProp) || (normProp.length > 3 && (sub.matchKey.includes(normProp) || normProp.includes(sub.matchKey)))) {
+                          const isExactMatch = (sub.matchKey === normProp || (sub.idSuffix === '' && normName === normProp));
+                          const isPartialMatch = !isExactMatch && (normProp.length > 3 && (sub.matchKey.includes(normProp) || normProp.includes(sub.matchKey)));
+
+                          if (isExactMatch || (isPartialMatch && !mappedProperties.has(prop))) {
                               matchedProp = prop;
                               mappedProperties.add(prop);
                               break;
@@ -6982,9 +7195,11 @@ function renderImportFieldMapping() {
                       let indent = sub.idSuffix ? 'ml-4 border-l-2 border-slate-200 dark:border-slate-700 pl-2' : '';
                       
                       htmlContent += `
-                        <div class="flex items-center gap-2 mb-2 ${indent}">
-                          <span class="w-1/3 text-sm text-slate-600 dark:text-slate-400 font-medium truncate" title="${fullLabel}">${fullLabel}</span>
-                          <span class="material-symbols-outlined text-slate-400 text-sm">arrow_forward</span>
+                        <div class="flex items-center gap-2.5 mb-2 ${indent} p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors border border-slate-100 dark:border-slate-800/60">
+                          <div class="w-[44%] min-w-0 pr-2">
+                            <span class="text-xs text-slate-800 dark:text-slate-200 font-semibold break-words leading-tight block" title="${fullLabel}">${fullLabel}</span>
+                          </div>
+                          <span class="material-symbols-outlined text-slate-400 text-sm shrink-0">arrow_forward</span>
                           ${mappingControl}
                         </div>
                       `;
@@ -6999,16 +7214,18 @@ function renderImportFieldMapping() {
       if (!mappedProperties.has(prop)) {
           let mappingControl;
           if (formFields.length > 0) {
-              mappingControl = `<span class="flex-1 text-sm text-slate-500 italic">-- Manter Original --</span><input type="hidden" class="property-rename-input" data-original="${prop}" value="${prop}">`;
+              mappingControl = `<span class="flex-1 text-xs text-slate-500 italic">-- Manter Original --</span><input type="hidden" class="property-rename-input" data-original="${prop}" value="${prop}">`;
           } else {
-              mappingControl = `<input type="text" list="standard-fields-list" data-original="${prop}" value="${prop}" class="flex-1 px-2 py-1 text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded focus:outline-none focus:ring-1 focus:ring-primary dark:text-white property-rename-input">`;
+              mappingControl = `<input type="text" list="standard-fields-list" data-original="${prop}" value="${prop}" class="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary dark:text-white property-rename-input">`;
           }
           
           unmappedRows.push(`
-            <div class="flex items-center gap-2 mb-2">
-              <input type="checkbox" checked class="property-import-checkbox w-4 h-4 text-primary rounded border-slate-300 dark:border-slate-700 focus:ring-primary" data-original="${prop}">
-              <span class="w-1/3 text-sm text-slate-600 dark:text-slate-400 font-mono truncate" title="${prop}">${prop}</span>
-              <span class="material-symbols-outlined text-slate-400 text-sm">arrow_forward</span>
+            <div class="flex items-center gap-2.5 mb-2 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors border border-slate-100 dark:border-slate-800/60">
+              <input type="checkbox" checked class="property-import-checkbox w-4 h-4 text-primary rounded border-slate-300 dark:border-slate-700 focus:ring-primary shrink-0" data-original="${prop}">
+              <div class="w-[44%] min-w-0 pr-2">
+                <span class="text-xs text-slate-700 dark:text-slate-300 font-mono break-words leading-tight block" title="${prop}">${prop}</span>
+              </div>
+              <span class="material-symbols-outlined text-slate-400 text-sm shrink-0">arrow_forward</span>
               ${mappingControl}
             </div>
           `);
@@ -7341,10 +7558,12 @@ async function confirmGlobalImport() {
     }
   });
 
+  const inverseMappings = [];
   document.querySelectorAll('.property-rename-select-inverse').forEach(select => {
     const targetFieldId = select.getAttribute('data-target-field-id');
     const geojsonProp = select.value;
     if (geojsonProp) {
+        inverseMappings.push({ targetFieldId, geojsonProp });
         mapping[geojsonProp] = targetFieldId;
     }
   });
@@ -7397,18 +7616,27 @@ async function confirmGlobalImport() {
     
     // Process all properties
     Object.keys(f.properties).forEach(key => {
-      if (key !== 'themeId') {
-        const mappedKey = mapping[key] || key;
-        let val = f.properties[key];
-        
-        let actualKey = mappedKey;
+      if (key !== 'themeId' && key !== '_tempId') {
+        const mappedKey = (!formId && mapping[key]) ? mapping[key] : key;
+        newProps[mappedKey] = f.properties[key];
+      }
+    });
+
+    // Se temos mapeamentos de formulário customizado, aplica todos os pares (permite 1:N - a mesma coluna em múltiplos campos)
+    if (inverseMappings.length > 0) {
+      inverseMappings.forEach(m => {
+        const geoProp = m.geojsonProp;
+        if (f.properties[geoProp] === undefined || f.properties[geoProp] === null) return;
+
+        let val = f.properties[geoProp];
+        let actualKey = m.targetFieldId;
         let subField = null;
-        if (mappedKey.includes('__')) {
-            const parts = mappedKey.split('__');
+        if (actualKey.includes('__')) {
+            const parts = actualKey.split('__');
             actualKey = parts[0];
             subField = parts[1];
         }
-        
+
         if (formFieldsMap[actualKey]) {
             const fieldType = formFieldsMap[actualKey];
             if ((fieldType === 'cpfcnpj' || fieldType === 'ipl' || fieldType === 'ipf' || fieldType === 'insc_imob_cabedelo' || fieldType === 'epol' || fieldType === 'rip') && typeof val === 'string') {
@@ -7425,7 +7653,7 @@ async function confirmGlobalImport() {
                 }
             } else if (fieldType === 'cep') {
                 let currentCep = { cep: "", logradouro: "", numero: "", bairro: "", cidade: "", uf: "", complemento: "" };
-                if (newProps[actualKey] && newProps[actualKey].startsWith('{')) {
+                if (newProps[actualKey] && typeof newProps[actualKey] === 'string' && newProps[actualKey].startsWith('{')) {
                     try { currentCep = Object.assign(currentCep, JSON.parse(newProps[actualKey])); } catch(e) {}
                 }
                 
@@ -7435,7 +7663,7 @@ async function confirmGlobalImport() {
                     if (subField === 'cep') currentCep.cep = lowerVal.replace(/\D/g, '');
                     else currentCep[subField] = lowerVal;
                 } else {
-                    let lowerKey = key.toLowerCase();
+                    let lowerKey = geoProp.toLowerCase();
                     if (lowerKey.includes('cep')) currentCep.cep = lowerVal.replace(/\D/g, '');
                     else if (lowerKey === 'numero' || lowerKey === 'num' || lowerKey === 'nº' || lowerKey === 'n') currentCep.numero = lowerVal;
                     else if (lowerKey.includes('bairro')) currentCep.bairro = lowerVal;
@@ -7450,8 +7678,8 @@ async function confirmGlobalImport() {
         }
         
         newProps[actualKey] = val;
-      }
-    });
+      });
+    }
     
     // Ensure standard fields exist ONLY if no custom template is used to avoid bloat
     if (!formId) {

@@ -197,7 +197,7 @@
                             <span class="material-symbols-outlined text-[18px]">visibility</span>
                             <span>Preview</span>
                         </button>
-                        <button type="button" ${podeSalvar ? 'onclick="ReportBuilder.saveCurrentTemplate()"' : 'disabled'} class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${podeSalvar ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer' : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed'}" title="${podeSalvar ? 'Salvar Modelo' : `Preencha ${isGeral ? 'o nome do documento' : 'o nome do documento e o atalho no popup da feição'} para salvar`}">
+                        <button type="button" ${podeSalvar ? 'onclick="ReportBuilder.saveCurrentTemplate()"' : 'disabled'} id="rpt-btn-save-template" class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${podeSalvar ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer' : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed'}" title="${podeSalvar ? 'Salvar Modelo' : `Preencha ${isGeral ? 'o nome do documento' : 'o nome do documento e o atalho no popup da feição'} para salvar`}">
                             <span class="material-symbols-outlined text-[18px]">save</span>
                             <span>Salvar Modelo</span>
                         </button>
@@ -211,7 +211,7 @@
                 <!-- Grid Principal: Acordeão Lateral (largura fixa otimizada) + Folha Virtual A4 Estilo Word (expande com o espaço disponível) -->
                 <div class="flex flex-col lg:flex-row gap-6 items-start w-full">
                     <!-- PAINEL ESQUERDO: ACORDEÃO DE CONFIGURAÇÃO PRÉVIA DOS BLOCOS (SEMPRE À VISTA DURANTE A ROLAGEM) -->
-                    <div class="w-full lg:w-[380px] xl:w-[410px] shrink-0 flex flex-col gap-3 select-none pr-1 custom-scrollbar" id="accordion-blocks-panel" style="position: sticky !important; top: 10px !important; z-index: 35; max-height: calc(100vh - 20px); overflow-y: auto;">
+                    <div class="w-full lg:w-[380px] xl:w-[410px] shrink-0 flex flex-col gap-3 select-none pr-1.5 custom-scrollbar" id="accordion-blocks-panel" style="position: sticky !important; top: 10px !important; z-index: 35; max-height: calc(100vh - 20px); overflow-y: auto !important; overflow-x: hidden !important; -webkit-overflow-scrolling: touch;">
                         ${renderAccordionPanel(formId)}
                     </div>
 
@@ -663,25 +663,83 @@
             ${(() => {
                 const existingHdr = (currentTemplate?.blocos || []).find(b => b.tipo === 'cabecalho');
                 const repeatMode = existingHdr?.repetir_todas_folhas ? 'todas' : 'primeira';
+                const defaultLogo = typeof getDefaultEntityLogoUrl === 'function' ? getDefaultEntityLogoUrl() : '';
+                const effectiveLogo = window._customUploadedLogoUrl || existingHdr?.logo_url || defaultLogo || '';
+                const isCustomLogo = !!window._customUploadedLogoUrl;
 
                 return renderAccordionCard({
                     id: 'acc-header',
                     title: 'Cabeçalho Institucional',
                     icon: 'account_balance',
-                    badge: existingHdr ? (repeatMode === 'todas' ? 'Todas as Folhas' : '1ª Folha') : null,
+                    badge: existingHdr ? (repeatMode === 'todas' ? 'Todas as Folhas' : '1ª Folha') : 'Não Inserido',
                     content: `
                         <div class="flex flex-col gap-3">
+                            <!-- Status e Ação Rápida de Inserção -->
+                            <div class="flex items-center justify-between p-2 rounded-xl border ${existingHdr ? 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800'}">
+                                <div class="flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-[18px] ${existingHdr ? 'text-emerald-600' : 'text-amber-600'}">
+                                        ${existingHdr ? 'task_alt' : 'info'}
+                                    </span>
+                                    <span class="text-xs font-bold ${existingHdr ? 'text-emerald-900 dark:text-emerald-200' : 'text-amber-900 dark:text-amber-200'}">
+                                        ${existingHdr ? 'Cabeçalho ativo na folha' : 'Cabeçalho ainda não inserido'}
+                                    </span>
+                                </div>
+                                <button type="button" onclick="ReportBuilder.insertHeaderBlock()" class="px-3 py-1 bg-primary text-white rounded-lg text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center gap-1 cursor-pointer">
+                                    <span class="material-symbols-outlined text-[14px]">${existingHdr ? 'refresh' : 'add_circle'}</span>
+                                    <span>${existingHdr ? 'Atualizar' : 'Inserir na Folha'}</span>
+                                </button>
+                            </div>
+
+                            <!-- Opção de Repetição nas Folhas (NO TOPO DO CARD PARA FÁCIL ACESSO) -->
+                            <div class="p-2.5 bg-sky-50/60 dark:bg-sky-950/20 rounded-xl border border-sky-200 dark:border-sky-800/60 text-xs">
+                                <label class="text-[10px] font-bold uppercase text-sky-800 dark:text-sky-300 block mb-1.5 flex items-center justify-between">
+                                    <span>Repetição do Cabeçalho nas Folhas</span>
+                                    <span class="font-normal text-[9.5px] opacity-75">Clique para alternar</span>
+                                </label>
+                                <div class="grid grid-cols-2 gap-2" id="cfg-hdr-repeat-group">
+                                    <label id="btn-hdr-repeat-first" 
+                                         onclick="ReportBuilder.setHeaderRepeatMode(false)" 
+                                         class="flex items-center gap-2 p-2 rounded-xl border text-left cursor-pointer transition-all select-none ${repeatMode !== 'todas' ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs ring-1 ring-primary/30' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 hover:border-slate-300'}">
+                                        <input type="radio" name="cfg-hdr-repeat" id="cfg-hdr-repeat-first" value="primeira" ${repeatMode !== 'todas' ? 'checked' : ''} onchange="ReportBuilder.setHeaderRepeatMode(false)" class="w-4 h-4 text-primary focus:ring-0 cursor-pointer accent-primary" />
+                                        <div class="min-w-0 flex-1">
+                                            <div class="font-bold text-[11px] leading-tight flex items-center justify-between">
+                                                <span>Apenas 1ª Folha</span>
+                                                <span id="icon-hdr-repeat-first" class="material-symbols-outlined text-[15px] ${repeatMode !== 'todas' ? 'text-primary' : 'hidden'}">check_circle</span>
+                                            </div>
+                                            <div class="text-[9px] opacity-75 leading-tight mt-0.5">Padrão do relatório</div>
+                                        </div>
+                                    </label>
+                                    <label id="btn-hdr-repeat-all" 
+                                         onclick="ReportBuilder.setHeaderRepeatMode(true)" 
+                                         class="flex items-center gap-2 p-2 rounded-xl border text-left cursor-pointer transition-all select-none ${repeatMode === 'todas' ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs ring-1 ring-primary/30' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 hover:border-slate-300'}">
+                                        <input type="radio" name="cfg-hdr-repeat" id="cfg-hdr-repeat-all" value="todas" ${repeatMode === 'todas' ? 'checked' : ''} onchange="ReportBuilder.setHeaderRepeatMode(true)" class="w-4 h-4 text-primary focus:ring-0 cursor-pointer accent-primary" />
+                                        <div class="min-w-0 flex-1">
+                                            <div class="font-bold text-[11px] leading-tight flex items-center justify-between">
+                                                <span>Todas as Folhas</span>
+                                                <span id="icon-hdr-repeat-all" class="material-symbols-outlined text-[15px] ${repeatMode === 'todas' ? 'text-primary' : 'hidden'}">check_circle</span>
+                                            </div>
+                                            <div class="text-[9px] opacity-75 leading-tight mt-0.5">Repete em todas</div>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
                             <!-- Upload ou Seleção de Brasão / Logo Oficial -->
                             <div class="flex flex-col gap-1.5">
-                                <label class="text-[10px] font-bold uppercase text-slate-500">Brasão / Logomarca Oficial</label>
+                                <div class="flex items-center justify-between">
+                                    <label class="text-[10px] font-bold uppercase text-slate-500">Brasão / Logomarca Oficial</label>
+                                    <button type="button" id="btn-reset-hdr-logo" onclick="ReportBuilder.resetHeaderLogoToDefault()" class="${isCustomLogo ? '' : 'hidden'} text-[10px] text-primary hover:underline font-bold cursor-pointer">
+                                        Restaurar Logo Padrão
+                                    </button>
+                                </div>
                                 <div class="flex items-center gap-3 p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl">
                                     <div class="w-12 h-12 rounded-xl bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 flex items-center justify-center overflow-hidden shrink-0">
-                                        <img id="cfg-hdr-logo-preview" src="${window._customUploadedLogoUrl || ''}" class="${window._customUploadedLogoUrl ? '' : 'hidden'} w-full h-full object-contain" />
-                                        <span id="cfg-hdr-logo-icon" class="material-symbols-outlined text-primary text-[24px] ${window._customUploadedLogoUrl ? 'hidden' : ''}">account_balance</span>
+                                        <img id="cfg-hdr-logo-preview" src="${effectiveLogo}" class="${effectiveLogo ? '' : 'hidden'} w-full h-full object-contain" />
+                                        <span id="cfg-hdr-logo-icon" class="material-symbols-outlined text-primary text-[24px] ${effectiveLogo ? 'hidden' : ''}">account_balance</span>
                                     </div>
                                     <div class="flex-1 min-w-0">
                                         <input type="file" id="cfg-hdr-file-input" accept="image/*" onchange="ReportBuilder.handleLogoUpload(event)" class="text-xs file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-primary file:text-white hover:file:bg-primary/90 cursor-pointer w-full text-slate-500" />
-                                        <span class="text-[10px] text-slate-400 block mt-0.5">PNG, JPG ou SVG (fundo transparente recomendado)</span>
+                                        <span class="text-[10px] text-slate-400 block mt-0.5">${effectiveLogo ? 'Logo padrão da entidade ativa (você pode escolher outra se desejar)' : 'PNG, JPG ou SVG (fundo transparente recomendado)'}</span>
                                     </div>
                                 </div>
                             </div>
@@ -708,37 +766,6 @@
                                     <input type="checkbox" id="cfg-hdr-protocol" ${(existingHdr ? existingHdr.exibirProtocolo !== false : true) ? 'checked' : ''} onchange="ReportBuilder.updateHeaderProperty('protocolo', this.checked)" class="rounded text-primary focus:ring-0 cursor-pointer" />
                                     <span>Número de Protocolo e Autenticação</span>
                                 </label>
-                            </div>
-
-                            <!-- Opção de Repetição nas Folhas -->
-                            <div class="p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                                <label class="text-[10px] font-bold uppercase text-slate-500 block mb-1.5">Repetição do Cabeçalho nas Folhas</label>
-                                <div class="grid grid-cols-2 gap-2" id="cfg-hdr-repeat-group">
-                                    <label id="btn-hdr-repeat-first" 
-                                         onclick="ReportBuilder.setHeaderRepeatMode(false)" 
-                                         class="flex items-center gap-2.5 p-2.5 rounded-xl border text-left cursor-pointer transition-all select-none ${repeatMode !== 'todas' ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs ring-1 ring-primary/30' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 hover:border-slate-300'}">
-                                        <input type="radio" name="cfg-hdr-repeat" id="cfg-hdr-repeat-first" value="primeira" ${repeatMode !== 'todas' ? 'checked' : ''} onchange="ReportBuilder.setHeaderRepeatMode(false)" class="w-4 h-4 text-primary focus:ring-0 cursor-pointer accent-primary" />
-                                        <div class="min-w-0 flex-1">
-                                            <div class="font-bold text-[11px] leading-tight flex items-center justify-between">
-                                                <span>Apenas 1ª Folha</span>
-                                                <span id="icon-hdr-repeat-first" class="material-symbols-outlined text-[15px] ${repeatMode !== 'todas' ? 'text-primary' : 'hidden'}">check_circle</span>
-                                            </div>
-                                            <div class="text-[9.5px] opacity-75 leading-tight mt-0.5">Padrão do relatório</div>
-                                        </div>
-                                    </label>
-                                    <label id="btn-hdr-repeat-all" 
-                                         onclick="ReportBuilder.setHeaderRepeatMode(true)" 
-                                         class="flex items-center gap-2.5 p-2.5 rounded-xl border text-left cursor-pointer transition-all select-none ${repeatMode === 'todas' ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs ring-1 ring-primary/30' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 hover:border-slate-300'}">
-                                        <input type="radio" name="cfg-hdr-repeat" id="cfg-hdr-repeat-all" value="todas" ${repeatMode === 'todas' ? 'checked' : ''} onchange="ReportBuilder.setHeaderRepeatMode(true)" class="w-4 h-4 text-primary focus:ring-0 cursor-pointer accent-primary" />
-                                        <div class="min-w-0 flex-1">
-                                            <div class="font-bold text-[11px] leading-tight flex items-center justify-between">
-                                                <span>Todas as Folhas</span>
-                                                <span id="icon-hdr-repeat-all" class="material-symbols-outlined text-[15px] ${repeatMode === 'todas' ? 'text-primary' : 'hidden'}">check_circle</span>
-                                            </div>
-                                            <div class="text-[9.5px] opacity-75 leading-tight mt-0.5">Repete no topo</div>
-                                        </div>
-                                    </label>
-                                </div>
                             </div>
 
                             <button type="button" onclick="ReportBuilder.insertHeaderBlock()" class="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 mt-1 cursor-pointer">
@@ -1607,8 +1634,8 @@
         const isOpen = (activeAccordionId === id);
         const cor = CORES_CARD[id] || COR_CARD_PADRAO;
         return `
-            <div class="${cor.corpo} rounded-2xl border border-l-4 ${cor.barra} ${isOpen ? 'shadow-md ' + cor.borda : cor.borda} overflow-hidden transition-all duration-200" data-cor-card="${id}">
-                <button type="button" onclick="ReportBuilder.toggleAccordion('${id}')" class="w-full p-3.5 sm:p-4 flex items-center justify-between gap-3 text-left ${cor.cabecalho} hover:brightness-95 transition-colors select-none cursor-pointer">
+            <div class="${cor.corpo} shrink-0 w-full rounded-2xl border border-l-4 ${cor.barra} ${isOpen ? 'shadow-md ' + cor.borda : cor.borda} transition-all duration-200" style="flex-shrink: 0 !important; min-height: fit-content;" data-cor-card="${id}">
+                <button type="button" onclick="ReportBuilder.toggleAccordion('${id}')" class="w-full p-3.5 sm:p-4 flex items-center justify-between gap-3 text-left ${cor.cabecalho} hover:brightness-95 transition-colors select-none cursor-pointer shrink-0 rounded-t-2xl ${isOpen ? '' : 'rounded-b-2xl'}" title="${isOpen ? 'Clique para recolher este card' : 'Clique para acessar as configurações deste card'}">
                     <div class="flex items-center gap-2.5 min-w-0">
                         <div class="w-8 h-8 rounded-xl ${cor.icone} ${isOpen ? 'ring-2 ring-offset-1 ring-white/70' : ''} flex items-center justify-center shrink-0 transition-colors">
                             <span class="material-symbols-outlined text-[18px]">${icon}</span>
@@ -1618,9 +1645,9 @@
                             ${badge ? `<span class="text-[9px] font-bold uppercase tracking-wider ${cor.texto} opacity-80">${badge}</span>` : ''}
                         </div>
                     </div>
-                    <span class="material-symbols-outlined text-[20px] text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180 text-primary' : ''}">expand_more</span>
+                    <span class="material-symbols-outlined text-[20px] text-slate-400 transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180 text-primary' : ''}">expand_more</span>
                 </button>
-                <div class="p-4 pt-3 border-t ${cor.borda} ${isOpen ? 'block' : 'hidden'}">
+                <div class="p-4 pt-3 border-t ${cor.borda} ${isOpen ? 'block' : 'hidden'} custom-scrollbar" style="${isOpen ? 'max-height: min(72vh, 620px); overflow-y: auto !important; overflow-x: hidden !important; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;' : ''}">
                     ${content}
                 </div>
             </div>
@@ -1636,6 +1663,14 @@
         const panel = document.getElementById('accordion-blocks-panel');
         if (panel && formId) {
             panel.innerHTML = renderAccordionPanel(formId);
+            if (activeAccordionId) {
+                setTimeout(() => {
+                    const opened = panel.querySelector(`[data-cor-card="${activeAccordionId}"]`);
+                    if (opened) {
+                        opened.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                }, 40);
+            }
         }
     }
 
@@ -2581,6 +2616,50 @@
     }
 
     // --- MANIPULADORES DO CARD 1: CABEÇALHO ---
+    function getDefaultEntityLogoUrl() {
+        if (window._customUploadedLogoUrl) return window._customUploadedLogoUrl;
+        try {
+            if (typeof window !== 'undefined') {
+                if (window.currentUserEntityLogoUrl) return window.currentUserEntityLogoUrl;
+                if (window.parent && window.parent.currentUserEntityLogoUrl) return window.parent.currentUserEntityLogoUrl;
+
+                // Tenta pegar de elementos de avatar de perfil na tela
+                const avatar = document.querySelector('.profile-avatar-img') || (window.parent && window.parent.document && window.parent.document.querySelector('.profile-avatar-img'));
+                if (avatar && avatar.src && !avatar.src.includes('avatar.png') && !avatar.src.includes('account_balance')) {
+                    return avatar.src;
+                }
+
+                // Tenta pegar do cartão do município ativo
+                const munCardLogo = document.querySelector('[data-orig-logo]')?.dataset?.origLogo || (window.parent && window.parent.document && window.parent.document.querySelector('[data-orig-logo]')?.dataset?.origLogo);
+                if (munCardLogo) return munCardLogo;
+
+                // Tenta pegar de storage
+                const munLogo = sessionStorage.getItem('municipio_ativo_logo') || localStorage.getItem('municipio_ativo_logo');
+                if (munLogo) return munLogo;
+            }
+        } catch(e) {}
+        return '';
+    }
+
+    function resetHeaderLogoToDefault() {
+        window._customUploadedLogoUrl = null;
+        const defaultLogo = getDefaultEntityLogoUrl();
+        const preview = document.getElementById('cfg-hdr-logo-preview');
+        const iconPlaceholder = document.getElementById('cfg-hdr-logo-icon');
+        const btnReset = document.getElementById('btn-reset-hdr-logo');
+        if (defaultLogo) {
+            if (preview) { preview.src = defaultLogo; preview.classList.remove('hidden'); }
+            if (iconPlaceholder) iconPlaceholder.classList.add('hidden');
+        } else {
+            if (preview) { preview.classList.add('hidden'); }
+            if (iconPlaceholder) iconPlaceholder.classList.remove('hidden');
+        }
+        if (btnReset) btnReset.classList.add('hidden');
+        const fileInput = document.getElementById('cfg-hdr-file-input');
+        if (fileInput) fileInput.value = '';
+        updateHeaderProperty('logo_url', defaultLogo || null);
+    }
+
     function handleLogoUpload(event) {
         const file = event.target.files && event.target.files[0];
         if (!file) return;
@@ -2594,6 +2673,10 @@
             }
             const iconPlaceholder = document.getElementById('cfg-hdr-logo-icon');
             if (iconPlaceholder) iconPlaceholder.classList.add('hidden');
+            const btnReset = document.getElementById('btn-reset-hdr-logo');
+            if (btnReset) btnReset.classList.remove('hidden');
+
+            updateHeaderProperty('logo_url', e.target.result);
         };
         reader.readAsDataURL(file);
     }
@@ -2606,6 +2689,10 @@
         const protocolo = document.getElementById('cfg-hdr-protocol')?.checked ?? true;
         const repetirTodas = document.getElementById('cfg-hdr-repeat-all')?.checked ?? false;
 
+        const defaultLogo = getDefaultEntityLogoUrl();
+        const existingHdr = (currentTemplate?.blocos || []).find(b => b.tipo === 'cabecalho');
+        const effectiveLogoUrl = window._customUploadedLogoUrl || existingHdr?.logo_url || defaultLogo || null;
+
         // Se já houver um cabeçalho, removemos para atualizar/reinserir no topo sem duplicidade
         currentTemplate.blocos = (currentTemplate.blocos || []).filter(b => b.tipo !== 'cabecalho');
 
@@ -2615,7 +2702,7 @@
             titulo: titulo,
             subtitulo: subtitulo,
             logo: logo,
-            logo_url: window._customUploadedLogoUrl || null,
+            logo_url: effectiveLogoUrl,
             exibirDataHora: dataHora,
             exibirProtocolo: protocolo,
             repetir_todas_folhas: repetirTodas
@@ -2640,6 +2727,8 @@
             if (property === 'logo') {
                 hdr.logo = !!value;
                 hdr.exibir_logo = !!value;
+            } else if (property === 'logo_url') {
+                hdr.logo_url = value;
             } else if (property === 'dataHora') {
                 hdr.exibirDataHora = !!value;
             } else if (property === 'protocolo') {
@@ -2705,6 +2794,19 @@
         }
 
         renderA4Blocks();
+    }
+
+    function toggleHeaderRepeatMode() {
+        if (!currentTemplate) return;
+        if (!currentTemplate.blocos) currentTemplate.blocos = [];
+        let hdr = currentTemplate.blocos.find(b => b.tipo === 'cabecalho');
+        if (!hdr) {
+            insertHeaderBlock();
+            hdr = currentTemplate.blocos.find(b => b.tipo === 'cabecalho');
+        }
+        if (hdr) {
+            setHeaderRepeatMode(!hdr.repetir_todas_folhas);
+        }
     }
 
     // --- MANIPULADORES DO CARD 2: GRADE DE ATRIBUTOS ---
@@ -4670,10 +4772,35 @@
         setZoom(Math.max(0.25, Math.min(2.0, novo)));
     }
 
+    function updateSaveButtonState() {
+        if (!currentTemplate) return;
+        const isGeral = builderScope === 'geral';
+        const temNome = !!(currentTemplate.nome && currentTemplate.nome.trim());
+        const temAtalho = isGeral || !!(currentTemplate.atalho_aba && currentTemplate.atalho_aba.trim());
+        const podeSalvar = temNome && temAtalho;
+
+        const btn = document.getElementById('rpt-btn-save-template');
+        if (btn) {
+            btn.disabled = !podeSalvar;
+            if (podeSalvar) {
+                btn.removeAttribute('disabled');
+                btn.onclick = () => ReportBuilder.saveCurrentTemplate();
+                btn.className = 'flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer';
+                btn.title = 'Salvar Modelo';
+            } else {
+                btn.setAttribute('disabled', 'disabled');
+                btn.onclick = null;
+                btn.className = 'flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed';
+                btn.title = `Preencha ${isGeral ? 'o nome do documento' : 'o nome do documento e o atalho no popup da feição'} para salvar`;
+            }
+        }
+    }
+
     function updateAtalhoAba(value) {
         if (!currentTemplate) return;
         currentTemplate.atalho_aba = value;
         currentTemplate.disponibilizar_no_mapa = (value !== 'none');
+        updateSaveButtonState();
         saveCurrentTemplate(false);
     }
 
@@ -4682,12 +4809,22 @@
         currentTemplate.disponibilizar_no_mapa = checked;
         if (!checked) currentTemplate.atalho_aba = 'none';
         else if (currentTemplate.atalho_aba === 'none') currentTemplate.atalho_aba = 'header';
+        updateSaveButtonState();
         saveCurrentTemplate(false);
     }
 
     function updateTemplateName(name) {
         if (!currentTemplate) return;
         currentTemplate.nome = name;
+        updateSaveButtonState();
+        const sel = document.getElementById('rpt-select-template');
+        if (sel && sel.value === currentTemplate.id) {
+            const opt = sel.querySelector(`option[value="${currentTemplate.id}"]`);
+            if (opt) {
+                const rotulo = name && name.trim() ? name : '(sem nome)';
+                opt.textContent = `${rotulo} (${currentTemplate.tipo === 'geral' ? 'Relatório Geral da Camada' : 'Ficha Individual'})`;
+            }
+        }
     }
 
     function onTemplateChange(selectedVal) {
@@ -4720,8 +4857,23 @@
         }
         const ok = window.ReportAdapter.saveReportTemplate(currentTemplate);
         if (showAlert) {
-            if (ok) alert('Modelo de Relatório salvo com sucesso!');
-            else alert('Erro ao salvar modelo.');
+            if (ok) {
+                alert('Modelo de Relatório salvo com sucesso!');
+                const formId = currentTemplate ? currentTemplate.form_id : null;
+                if (formId) {
+                    const templates = getScopedTemplates(formId);
+                    const sel = document.getElementById('rpt-select-template');
+                    if (sel) {
+                        sel.innerHTML = `
+                            ${templates.map(t => `<option value="${t.id}" ${t.id === currentTemplate.id ? 'selected' : ''}>${escapeHtml(t.nome && t.nome.trim() ? t.nome : '(sem nome)')} (${t.tipo === 'geral' ? 'Relatório Geral da Camada' : 'Ficha Individual'})</option>`).join('')}
+                            <option value="__new__">+ Criar Novo Modelo de Relatório...</option>
+                        `;
+                    }
+                }
+                updateSaveButtonState();
+            } else {
+                alert('Erro ao salvar modelo.');
+            }
         }
     }
 
@@ -5285,8 +5437,11 @@
         selectMapMode,
         selectPhotoLayout,
         handleLogoUpload,
+        getDefaultEntityLogoUrl,
+        resetHeaderLogoToDefault,
         insertHeaderBlock,
         setHeaderRepeatMode,
+        toggleHeaderRepeatMode,
         updateHeaderProperty,
         insertGridBlock,
         addSelectedFieldsToExistingGrid,

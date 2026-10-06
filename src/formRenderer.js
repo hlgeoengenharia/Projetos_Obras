@@ -201,6 +201,31 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
                             }
                         }
                     }
+
+                    // Fallback Inteligente: se o campo estiver vazio e não for CEP, tenta extrair de JSON de CEP presente na feição
+                    if ((!value || value === '') && f.type !== 'cep') {
+                        const normLabel = (f.label || f.name || f.id || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+                        for (const [k, v] of Object.entries(featureData)) {
+                            let cepObj = null;
+                            if (v && typeof v === 'string' && v.trim().startsWith('{') && (v.includes('"logradouro"') || v.includes('"bairro"') || v.includes('"cep"'))) {
+                                try { cepObj = JSON.parse(v); } catch(e){}
+                            } else if (v && typeof v === 'object' && (v.logradouro !== undefined || v.bairro !== undefined || v.cep !== undefined)) {
+                                cepObj = v;
+                            }
+                            if (cepObj) {
+                                if (normLabel.includes('nome') || normLabel.includes('logradouro') || normLabel === 'endereco') {
+                                    if (cepObj.logradouro) { value = cepObj.logradouro; break; }
+                                } else if (normLabel.includes('bairro')) {
+                                    if (cepObj.bairro) { value = cepObj.bairro; break; }
+                                } else if (normLabel === 'cep' || normLabel.includes('codigo postal')) {
+                                    if (cepObj.cep) { value = cepObj.cep; break; }
+                                } else if (normLabel.includes('numero') || normLabel === 'num' || normLabel === 'nº') {
+                                    if (cepObj.numero) { value = cepObj.numero; break; }
+                                }
+                            }
+                        }
+                    }
+
                     if (value === undefined || value === null) value = '';
 
                     if (isTabEditMode) {

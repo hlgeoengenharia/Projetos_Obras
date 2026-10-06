@@ -169,17 +169,46 @@
             if (!cfg.rotulos.ativo) return;
             function labelVal(props) {
                 if (!props) return '';
-                const campo = cfg.rotulos.campo || 'rotulo';
-                if (campo === 'titulo') return props.t || props.titulo || props.nome || props.name || props.r || '';
-                if (campo === 'rotulo') return props.r || props.rotulo || props.t || props.nome || '';
-                if (campo.indexOf('f:') === 0) {
-                    const fk = campo.slice(2);
-                    if (props.f && props.f[fk] !== undefined && props.f[fk] !== null) return String(props.f[fk]);
-                    if (props[fk] !== undefined && props[fk] !== null) return String(props[fk]);
+                const campos = (Array.isArray(cfg.rotulos.campos) && cfg.rotulos.campos.length)
+                    ? cfg.rotulos.campos
+                    : (cfg.rotulos.campo ? String(cfg.rotulos.campo).split(',').map(s => s.trim()).filter(Boolean) : ['rotulo']);
+
+                const partes = [];
+                campos.forEach(cId => {
+                    let v = '';
+                    if (cId === 'titulo') {
+                        v = props.t || props.titulo || props.nome || props.name || '';
+                    } else if (cId === 'rotulo') {
+                        v = props.r || props.rotulo || '';
+                    } else if (cId.indexOf('f:') === 0) {
+                        const fk = cId.slice(2);
+                        if (props.f && props.f[fk] !== undefined && props.f[fk] !== null) {
+                            v = String(props.f[fk]);
+                        } else if (props[fk] !== undefined && props[fk] !== null) {
+                            v = String(props[fk]);
+                        } else if (props.f) {
+                            const lk = fk.toLowerCase();
+                            const mk = Object.keys(props.f).find(k => k.toLowerCase() === lk);
+                            if (mk && props.f[mk] !== undefined && props.f[mk] !== null) v = String(props.f[mk]);
+                        }
+                        if (!v) {
+                            const lk = fk.toLowerCase();
+                            const mk = Object.keys(props).find(k => k.toLowerCase() === lk && k !== 'geometry');
+                            if (mk && props[mk] !== undefined && props[mk] !== null) v = String(props[mk]);
+                        }
+                    } else {
+                        if (props.f && props.f[cId] !== undefined && props.f[cId] !== null) v = String(props.f[cId]);
+                        else if (props[cId] !== undefined && props[cId] !== null) v = String(props[cId]);
+                    }
+                    v = String(v || '').trim();
+                    if (v && !partes.includes(v)) partes.push(v);
+                });
+
+                if (partes.length) return partes.join(' • ');
+                if (campos.includes('rotulo') || campos.includes('titulo') || !campos.some(k => k.startsWith('f:'))) {
+                    return props.r || props.t || props.nome || props.name || '';
                 }
-                if (props[campo] !== undefined && props[campo] !== null) return String(props[campo]);
-                if (props.f && props.f[campo] !== undefined && props.f[campo] !== null) return String(props.f[campo]);
-                return props.r || props.t || '';
+                return '';
             }
             const itens = [];
             c.features.forEach((x, i) => {
@@ -344,18 +373,25 @@
 
         /**
          * Troca o rótulo de um marcador por um campo de texto: Enter ou sair do campo grava (onCommit(texto));
-         * Esc cancela (onCancel). Serve às medidas e aos nomes dos pontos.
+         * Esc cancela (onCancel). Serve às medidas, aos nomes dos pontos e às anotações.
          */
-        function editInline(mk, selector, atual, onCommit, onCancel) {
+        function editInline(mk, selector, atual, onCommit, onCancel, isMultiline) {
             const root = mk && mk.getElement ? mk.getElement() : null;
             const span = root && root.querySelector ? root.querySelector(selector) : null;
             if (!span || !doc) return;
             if (mk.dragging && mk.dragging.disable) mk.dragging.disable();
-            const input = doc.createElement('input');
-            input.type = 'text';
+            const input = doc.createElement(isMultiline ? 'textarea' : 'input');
+            if (!isMultiline) input.type = 'text';
             input.value = atual;
-            input.maxLength = 60;
-            input.className = 'report-measure-input';
+            input.maxLength = isMultiline ? 300 : 60;
+            input.className = 'report-measure-input' + (isMultiline ? ' report-note-textarea' : '');
+            if (isMultiline) {
+                input.style.width = '180px';
+                input.style.minHeight = '50px';
+                input.style.font = 'inherit';
+                input.style.fontSize = '11px';
+                input.style.resize = 'vertical';
+            }
             span.textContent = '';
             span.appendChild(input);
             if (input.focus) input.focus();
@@ -369,7 +405,7 @@
             const stop = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
             input.addEventListener('keydown', (ev) => {
                 stop(ev);
-                if (ev.key === 'Enter') finish(true);
+                if (ev.key === 'Enter' && !ev.shiftKey) finish(true);
                 else if (ev.key === 'Escape') finish(false);
             });
             input.addEventListener('blur', () => finish(true));
@@ -605,24 +641,158 @@
             });
         }
 
-        // ------------------------------------------------------------ mapa de localização (card próprio: mapa de referência, camadas e norte da própria caixa)
+        // ------------------------------------------------------------ mapa de localização (card próprio: mapa de referência, camadas, norte, escala e tamanho ajustável)
+        function getSafeZoom(m, fallback) {
+            if (!m) return fallback;
+            if (m._loaded === false) return fallback;
+            try {
+                if (typeof m.getZoom === 'function') {
+                    const z = m.getZoom();
+                    if (isFinite(Number(z))) return Number(z);
+                }
+            } catch(e) {}
+            return fallback;
+        }
+
+        function getSafeCenter(m) {
+            if (!m) return null;
+            if (m._loaded === false) return null;
+            try {
+                if (typeof m.getCenter === 'function') {
+                    const c = m.getCenter();
+                    if (c && isFinite(Number(c.lat)) && isFinite(Number(c.lng))) return c;
+                }
+            } catch(e) {}
+            return null;
+        }
+
+        function updateLocatorChips() {
+            if (!state.locator) return;
+            const loc = state.locator;
+            const lm = loc.map;
+            const ct = center || [-34.8, -7];
+            if (loc.escalaEl) {
+                const z = getSafeZoom(lm, 12);
+                loc.escalaEl.textContent = 'Escala aprox. ' + MT.formatScale(MT.approxScale(MT.scaleDenominator(z, ct[1])));
+                if (loc.escalaEl.style) loc.escalaEl.style.display = cfg.situacao.escala ? 'block' : 'none';
+            }
+            if (loc.projEl && loc.projEl.style) {
+                loc.projEl.textContent = proj.label || 'SIRGAS 2000';
+                loc.projEl.style.display = cfg.situacao.projecao ? 'block' : 'none';
+            }
+        }
+
+        function wireLocatorResize(box, handle) {
+            if (!handle || handle._wiredResize || !doc || !doc.addEventListener) return;
+            handle._wiredResize = true;
+            handle.addEventListener('mousedown', (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); });
+            handle.addEventListener('pointerdown', (ev) => {
+                if (!ev) return;
+                if (ev.stopPropagation) ev.stopPropagation();
+                if (ev.preventDefault) ev.preventDefault();
+                const startX = ev.clientX, startY = ev.clientY;
+                const startW = box.offsetWidth || (box.getBoundingClientRect && box.getBoundingClientRect().width) || 140;
+                const startH = box.offsetHeight || (box.getBoundingClientRect && box.getBoundingClientRect().height) || 140;
+                let curW = startW, curH = startH;
+                const onMove = (m) => {
+                    curW = Math.max(90, Math.min(600, Math.round(startW + (m.clientX - startX))));
+                    curH = Math.max(90, Math.min(600, Math.round(startH + (m.clientY - startY))));
+                    box.style.width = curW + 'px';
+                    box.style.height = curH + 'px';
+                    if (state.locator && state.locator.map && state.locator.map.invalidateSize) {
+                        state.locator.map.invalidateSize();
+                    }
+                };
+                const onUp = () => {
+                    doc.removeEventListener('pointermove', onMove);
+                    doc.removeEventListener('pointerup', onUp);
+                    cfg.situacao = MT.normalizeSituacao(Object.assign({}, cfg.situacao, { w: curW, h: curH }));
+                    notify();
+                    if (typeof window !== 'undefined' && typeof window.renderMapToolsPanel === 'function') {
+                        window.renderMapToolsPanel();
+                    }
+                };
+                doc.addEventListener('pointermove', onMove);
+                doc.addEventListener('pointerup', onUp);
+            });
+        }
+
         function applySituacao() {
             const box = el('map-locator');
             // display explícito: o CSS da caixa é "display:none", então '' (voltar ao CSS) a deixaria invisível
             if (box && box.style) box.style.display = cfg.situacao.ativo ? 'block' : 'none';
             if (!cfg.situacao.ativo || !box) return;
+
+            // Largura e altura da caixa ajustadas pelo usuário ou padrão
+            const w = (cfg.situacao && cfg.situacao.w) || 140;
+            const h = (cfg.situacao && cfg.situacao.h) || 140;
+            if (box && box.style) {
+                box.style.width = w + 'px';
+                box.style.height = h + 'px';
+            }
+
             if (!state.locator) {
-                const lm = L.map(box, { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false, preferCanvas: true });
+                const lm = L.map(box, { zoomControl: false, attributionControl: false, dragging: true, scrollWheelZoom: true, doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false, preferCanvas: true });
                 const ct = center || [-34.8, -7];
-                if (L.circleMarker) L.circleMarker([ct[1], ct[0]], { radius: 4, color: '#dc2626', weight: 2, fillColor: '#dc2626', fillOpacity: 1, interactive: false }).addTo(lm);
-                let norteEl = null;
+                let pontoFeicao = null;
+                if (L.circleMarker) pontoFeicao = L.circleMarker([ct[1], ct[0]], { radius: 4, color: '#dc2626', weight: 2, fillColor: '#dc2626', fillOpacity: 1, interactive: false }).addTo(lm);
+
+                let norteEl = null, headerEl = null, resizeEl = null, escalaEl = null, projEl = null;
                 if (box.appendChild && doc && doc.createElement) {
                     norteEl = doc.createElement('div');
                     norteEl.className = 'report-locator-north';
                     norteEl.innerHTML = '<span class="material-symbols-outlined">navigation</span>';
                     box.appendChild(norteEl);
+
+                    headerEl = doc.createElement('div');
+                    headerEl.className = 'report-locator-header';
+                    headerEl.innerHTML = '<span class="report-locator-title">Localização</span><div class="report-locator-zoom-btns no-print"><button type="button" class="loc-btn-in" title="Aumentar zoom">+</button><button type="button" class="loc-btn-out" title="Diminuir zoom">−</button></div>';
+                    box.appendChild(headerEl);
+
+                    escalaEl = doc.createElement('div');
+                    escalaEl.className = 'report-locator-chip report-locator-scale';
+                    box.appendChild(escalaEl);
+
+                    projEl = doc.createElement('div');
+                    projEl.className = 'report-locator-chip report-locator-proj';
+                    projEl.textContent = proj.label || 'SIRGAS 2000';
+                    box.appendChild(projEl);
+
+                    resizeEl = doc.createElement('div');
+                    resizeEl.className = 'report-locator-resize-handle no-print';
+                    resizeEl.title = 'Arraste para redimensionar (largura e altura)';
+                    box.appendChild(resizeEl);
                 }
-                state.locator = { map: lm, rect: null, base: null, baseKey: null, camadaLayers: {}, norteEl: norteEl };
+                state.locator = {
+                    map: lm, rect: null, pontoFeicao: pontoFeicao, base: null, baseKey: null,
+                    camadaLayers: {}, camadaLabels: {}, norteEl: norteEl, headerEl: headerEl,
+                    resizeEl: resizeEl, escalaEl: escalaEl, projEl: projEl
+                };
+                if (headerEl && headerEl.querySelector) {
+                    const bIn = headerEl.querySelector('.loc-btn-in');
+                    const bOut = headerEl.querySelector('.loc-btn-out');
+                    if (bIn && bIn.addEventListener) bIn.addEventListener('click', (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); api.zoomSituacao(1); });
+                    if (bOut && bOut.addEventListener) bOut.addEventListener('click', (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); api.zoomSituacao(-1); });
+                }
+                if (resizeEl) wireLocatorResize(box, resizeEl);
+                if (lm.on) {
+                    lm.on('zoomend', () => {
+                        const z = getSafeZoom(lm, null);
+                        if (z !== null) {
+                            cfg.situacao.zoom = z;
+                            notify();
+                            updateLocatorChips();
+                        }
+                    });
+                    lm.on('moveend', () => {
+                        const c = getSafeCenter(lm);
+                        if (c && typeof c.lat === 'number' && typeof c.lng === 'number') {
+                            cfg.situacao.center = [c.lng, c.lat];
+                            notify();
+                            updateLocatorChips();
+                        }
+                    });
+                }
             }
             const loc = state.locator;
             const lm = loc.map;
@@ -640,27 +810,140 @@
             }
 
             // camadas escolhidas para aparecer no mapa de localização (além do ponto vermelho da feição)
+            if (!loc.camadaLabels) loc.camadaLabels = {};
             const idsOn = new Set((cfg.situacao.camadas || []).map(String));
             Object.keys(loc.camadaLayers).forEach(id => { if (!idsOn.has(id)) { lm.removeLayer(loc.camadaLayers[id]); delete loc.camadaLayers[id]; } });
-            camadas.forEach(c => {
-                const id = String(c.id);
-                if (!idsOn.has(id) || loc.camadaLayers[id]) return;
-                loc.camadaLayers[id] = L.geoJSON({ type: 'FeatureCollection', features: c.features }, {
-                    style: () => ({ color: c.color, weight: 1, fillColor: c.color, fillOpacity: 0.15 }),
-                    pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 3, color: c.color, weight: 1, fillColor: c.color, fillOpacity: 0.8 }),
-                    interactive: false
-                });
-                loc.camadaLayers[id].addTo(lm);
+            Object.keys(loc.camadaLabels).forEach(id => {
+                if (!idsOn.has(id)) {
+                    (loc.camadaLabels[id] || []).forEach(m => lm.removeLayer(m));
+                    delete loc.camadaLabels[id];
+                }
             });
 
-            // seta do norte da caixa (a caixa toda gira com a rotação do próprio mapa de localização, sempre 0° por ora)
+            function locFeatureLabel(props, camposList) {
+                if (!props || !camposList || !camposList.length) return '';
+                const partes = [];
+                camposList.forEach(cId => {
+                    let v = '';
+                    if (cId === 'titulo') {
+                        v = props.t || props.titulo || props.nome || props.name || '';
+                    } else if (cId === 'rotulo') {
+                        v = props.r || props.rotulo || '';
+                    } else if (cId.indexOf('f:') === 0) {
+                        const fk = cId.slice(2);
+                        if (props.f && props.f[fk] !== undefined && props.f[fk] !== null) v = String(props.f[fk]);
+                        else if (props[fk] !== undefined && props[fk] !== null) v = String(props[fk]);
+                        else if (props.f) {
+                            const lk = fk.toLowerCase();
+                            const mk = Object.keys(props.f).find(k => k.toLowerCase() === lk);
+                            if (mk && props.f[mk] !== undefined && props.f[mk] !== null) v = String(props.f[mk]);
+                        }
+                        if (!v) {
+                            const lk = fk.toLowerCase();
+                            const mk = Object.keys(props).find(k => k.toLowerCase() === lk && k !== 'geometry');
+                            if (mk && props[mk] !== undefined && props[mk] !== null) v = String(props[mk]);
+                        }
+                    } else {
+                        if (props.f && props.f[cId] !== undefined && props.f[cId] !== null) v = String(props.f[cId]);
+                        else if (props[cId] !== undefined && props[cId] !== null) v = String(props[cId]);
+                    }
+                    v = String(v || '').trim();
+                    if (v && !partes.includes(v)) partes.push(v);
+                });
+                return partes.join(' • ');
+            }
+
+            camadas.forEach(c => {
+                const id = String(c.id);
+                if (!idsOn.has(id)) return;
+                if (!loc.camadaLayers[id]) {
+                    loc.camadaLayers[id] = L.geoJSON({ type: 'FeatureCollection', features: c.features }, {
+                        style: () => ({ color: c.color, weight: 1, fillColor: c.color, fillOpacity: 0.15 }),
+                        pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 3, color: c.color, weight: 1, fillColor: c.color, fillOpacity: 0.8 }),
+                        interactive: false
+                    });
+                    loc.camadaLayers[id].addTo(lm);
+                }
+
+                if (loc.camadaLabels[id]) {
+                    loc.camadaLabels[id].forEach(m => lm.removeLayer(m));
+                    delete loc.camadaLabels[id];
+                }
+                const camposDaCamada = (cfg.situacao.campos && cfg.situacao.campos[id])
+                    ? cfg.situacao.campos[id]
+                    : ((cfg.situacao.campos && cfg.situacao.campos._all) ? cfg.situacao.campos._all : []);
+
+                if (camposDaCamada && camposDaCamada.length && c.features && c.features.length) {
+                    const labelMarkers = [];
+                    c.features.forEach((x, i) => {
+                        const val = locFeatureLabel(x.properties, camposDaCamada);
+                        if (!val) return;
+                        let ctPt = null;
+                        if (x.geometry) {
+                            if (x.geometry.type === 'Point' && Array.isArray(x.geometry.coordinates)) {
+                                ctPt = [x.geometry.coordinates[1], x.geometry.coordinates[0]];
+                            } else {
+                                const bb = MT.geometryBBox(x.geometry);
+                                if (bb) {
+                                    const bc = MT.bboxCenter(bb);
+                                    ctPt = [bc[1], bc[0]];
+                                }
+                            }
+                        }
+                        if (ctPt && isFinite(ctPt[0]) && isFinite(ctPt[1])) {
+                            const html = '<span class="report-loc-label" style="display:inline-block;white-space:nowrap;font:700 7.5px/1 monospace;color:#0f172a;background:rgba(255,255,255,0.92);padding:1px 3px;border-radius:2px;box-shadow:0 1px 3px rgba(0,0,0,0.3);transform:translate(-50%,-50%);pointer-events:none;">' + escapeHtml(val) + '</span>';
+                            const mk = L.marker(ctPt, { icon: L.divIcon({ className: 'report-loc-nlabel', html: html, iconSize: [0, 0] }), interactive: false });
+                            mk.addTo(lm);
+                            labelMarkers.push(mk);
+                        }
+                    });
+                    loc.camadaLabels[id] = labelMarkers;
+                }
+            });
+
+            // seta do norte da caixa
             if (loc.norteEl && loc.norteEl.style) loc.norteEl.style.display = cfg.situacao.norte ? 'flex' : 'none';
+
+            // Escala e projeção na caixa de localização
+            updateLocatorChips();
+
+            // Destaque do imóvel / feição no mapa de localização
+            if (loc.pontoFeicao) {
+                if (cfg.situacao.destaque === false) {
+                    lm.removeLayer(loc.pontoFeicao);
+                } else {
+                    const has = (typeof lm.hasLayer === 'function')
+                        ? lm.hasLayer(loc.pontoFeicao)
+                        : (lm.layers && typeof lm.layers.has === 'function')
+                            ? lm.layers.has(loc.pontoFeicao)
+                            : (Array.isArray(lm.layers) ? lm.layers.includes(loc.pontoFeicao) : false);
+                    if (!has) {
+                        loc.pontoFeicao.addTo(lm);
+                    }
+                }
+            }
 
             if (lm.invalidateSize) lm.invalidateSize();
             const ct = center || [-34.8, -7];
-            lm.setView([ct[1], ct[0]], Math.max(1, Math.round(map.getZoom()) - 6), { animate: false });
+            const mainZ = getSafeZoom(map, 18);
+            const z = (cfg.situacao.zoom !== null && cfg.situacao.zoom !== undefined && isFinite(Number(cfg.situacao.zoom)))
+                ? Number(cfg.situacao.zoom)
+                : Math.max(1, Math.round(mainZ) - 6);
+            const locCenter = (cfg.situacao.center && Array.isArray(cfg.situacao.center) && cfg.situacao.center.length >= 2 && isFinite(cfg.situacao.center[0]) && isFinite(cfg.situacao.center[1]))
+                ? [Number(cfg.situacao.center[1]), Number(cfg.situacao.center[0])]
+                : [ct[1], ct[0]];
+            const curCenter = getSafeCenter(lm);
+            const curZoom = getSafeZoom(lm, null);
+            const needsSetView = !curCenter || Math.abs(curCenter.lat - locCenter[0]) > 0.000001 || Math.abs(curCenter.lng - locCenter[1]) > 0.000001 || curZoom !== z;
+            if (needsSetView && lm.setView) {
+                lm.setView(locCenter, z, { animate: false });
+            }
             if (loc.rect) { lm.removeLayer(loc.rect); loc.rect = null; }
-            if (L.rectangle && map.getBounds) loc.rect = L.rectangle(map.getBounds(), { color: '#dc2626', weight: 1.5, fill: false, interactive: false }).addTo(lm);
+            if (L.rectangle && map && map.getBounds) {
+                try {
+                    loc.rect = L.rectangle(map.getBounds(), { color: '#dc2626', weight: 1.5, fill: false, interactive: false }).addTo(lm);
+                } catch(e) {}
+            }
         }
 
         // ------------------------------------------------------------ anotações de texto (arraste = mover; duplo clique = editar)
@@ -669,13 +952,17 @@
             clearNotes();
             cfg.anotacoes.forEach(n => {
                 const rot = n.rot !== undefined ? n.rot : 0;
-                const html = '<span class="report-note-label" style="transform:' + labelTransform(rot) + ';' + estiloCss(n.estilo) + '" title="Duplo clique para editar • arraste para mover">' + escapeHtml(n.texto) + ROT_HANDLE + '</span>';
+                const tamanho = n.tamanho || 10;
+                const cor = n.cor || '#0f172a';
+                const alinhamento = n.alinhamento || 'center';
+                const linesHtml = escapeHtml(n.texto).replace(/\n/g, '<br>');
+                const html = '<span class="report-note-label" style="transform:' + labelTransform(rot) + ';' + estiloCss(n.estilo) + ';font-size:' + tamanho + 'px;color:' + cor + ';text-align:' + alinhamento + ';" title="Duplo clique para editar • arraste para mover">' + linesHtml + ROT_HANDLE + '</span>';
                 const icon = L.divIcon({ className: 'report-note', html: html, iconSize: [0, 0] });
                 const mk = L.marker([n.lat, n.lng], { icon: icon, draggable: true, keyboard: false, zIndexOffset: 1600 });
                 mk.addTo(map);
                 mk.on('dblclick', (e) => {
                     if (L.DomEvent && L.DomEvent.stopPropagation && e) L.DomEvent.stopPropagation(e);
-                    editInline(mk, '.report-note-label', n.texto, (txt) => api.renameNote(n.id, txt), applyNotes);
+                    editInline(mk, '.report-note-label', n.texto, (txt) => api.renameNote(n.id, txt), applyNotes, true);
                 });
                 mk.on('dragend', () => {
                     const ll = mk.getLatLng();
@@ -779,15 +1066,22 @@
 
         // ------------------------------------------------------------ legenda editável e elementos que o usuário move
         const LEG_ID = (id) => String(id).replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 64);
-        /** Itens da legenda: { key, cor, padrao, nome (o que aparece), oculto }. */
+        /** Itens da legenda: { key, cor, padrao, isTitulo, nome (o que aparece), oculto }. */
         function legendItems() {
             const itens = [];
-            if (cfg.destaque.ativo) itens.push({ key: 'feicao', cor: cfg.destaque.cor, padrao: 'Feição do relatório' });
+            if (cfg.destaque.ativo) itens.push({ key: 'feicao', cor: cfg.destaque.cor, padrao: 'Legenda', isTitulo: true });
             if (cfg.camadasVizinhas) {
                 const on = new Set(cfg.camadasLigadas.map(String));
                 camadas.filter(c => on.has(String(c.id))).forEach(c => itens.push({ key: 'c:' + LEG_ID(c.id), cor: c.color, padrao: c.name + (c.truncated ? ' *' : '') }));
             }
-            return itens.map(i => ({ key: i.key, cor: i.cor, padrao: i.padrao, nome: cfg.legenda.nomes[i.key] || i.padrao, oculto: cfg.legenda.ocultos.indexOf(i.key) >= 0 }));
+            return itens.map(i => ({
+                key: i.key,
+                cor: i.cor,
+                padrao: i.padrao,
+                isTitulo: !!i.isTitulo,
+                nome: (i.key === 'feicao' && (!cfg.legenda.nomes[i.key] || cfg.legenda.nomes[i.key] === 'Feição do relatório')) ? 'Legenda' : (cfg.legenda.nomes[i.key] || i.padrao),
+                oculto: cfg.legenda.ocultos.indexOf(i.key) >= 0
+            }));
         }
 
         function onLegendDbl(ev) {
@@ -837,9 +1131,25 @@
         function wireMove(e, key) {
             if (!e || !e.addEventListener || e._reportMove || !doc || !doc.addEventListener) return;
             e._reportMove = true;
-            e.addEventListener('mousedown', (ev) => { if (ev && ev.stopPropagation && !(ev.target && ev.target.tagName === 'INPUT')) ev.stopPropagation(); });
+            e.addEventListener('mousedown', (ev) => {
+                if (key === 'situacao') {
+                    const header = e.querySelector ? e.querySelector('.report-locator-header') : null;
+                    const isHeader = header && (header === ev.target || (header.contains && header.contains(ev.target)));
+                    const isZoomBtn = ev.target && (ev.target.closest ? ev.target.closest('.report-locator-zoom-btns') : false);
+                    const isResize = ev.target && (ev.target.closest ? ev.target.closest('.report-locator-resize-handle') : false);
+                    if (!isHeader || isZoomBtn || isResize) return;
+                }
+                if (ev && ev.stopPropagation && !(ev.target && ev.target.tagName === 'INPUT')) ev.stopPropagation();
+            });
             e.addEventListener('pointerdown', (ev) => {
                 if (!ev || (ev.target && ev.target.tagName === 'INPUT')) return;
+                if (key === 'situacao') {
+                    const header = e.querySelector ? e.querySelector('.report-locator-header') : null;
+                    const isHeader = header && (header === ev.target || (header.contains && header.contains(ev.target)));
+                    const isZoomBtn = ev.target && (ev.target.closest ? ev.target.closest('.report-locator-zoom-btns') : false);
+                    const isResize = ev.target && (ev.target.closest ? ev.target.closest('.report-locator-resize-handle') : false);
+                    if (!isHeader || isZoomBtn || isResize) return;
+                }
                 if (ev.stopPropagation) ev.stopPropagation();
                 if (ev.preventDefault) ev.preventDefault();
                 const c = map.getContainer ? map.getContainer() : null;
@@ -893,7 +1203,12 @@
             const legend = el('map-legend');
             if (legend) {
                 const visiveis = legendItems().filter(i => !i.oculto);
-                legend.innerHTML = visiveis.map(i => '<div data-leg="' + escapeHtml(i.key) + '" title="Duplo clique para renomear"><i style="background:' + escapeHtml(i.cor) + '"></i><span>' + escapeHtml(i.nome) + '</span></div>').join('');
+                legend.innerHTML = visiveis.map(i => {
+                    if (i.key === 'feicao' || i.isTitulo) {
+                        return '<div class="map-legend-title" data-leg="' + escapeHtml(i.key) + '" title="Duplo clique para renomear" style="font-weight:700;font-size:11px;margin-bottom:3px;padding-bottom:2px;border-bottom:1px solid rgba(0,0,0,0.12)"><span>' + escapeHtml(i.nome) + '</span></div>';
+                    }
+                    return '<div data-leg="' + escapeHtml(i.key) + '" title="Duplo clique para renomear"><i style="background:' + escapeHtml(i.cor) + '"></i><span>' + escapeHtml(i.nome) + '</span></div>';
+                }).join('');
                 show(legend, visiveis.length > 0);
                 if (legend.addEventListener && !legend._reportLeg) { legend._reportLeg = true; legend.addEventListener('dblclick', onLegendDbl); }
             }
@@ -951,6 +1266,9 @@
                 next.medidas = Object.assign({}, cfg.medidas, (patch && patch.medidas) || {});
                 next.pontos = Object.assign({}, cfg.pontos, (patch && patch.pontos) || {});
                 ['rotulos', 'confrontantes', 'referencia', 'comparacaoArea', 'situacao', 'quadriculado', 'medicoes'].forEach(k => { next[k] = Object.assign({}, cfg[k], (patch && patch[k]) || {}); });
+                if (patch && patch.rotulos && patch.rotulos.campo !== undefined && patch.rotulos.campos === undefined) {
+                    delete next.rotulos.campos;
+                }
                 const pontosNovos = next.pontos;
                 const camadaAnt = cfg.confrontantes.camada;
                 const refAnt = cfg.referencia.camada;
@@ -999,6 +1317,37 @@
                 if (on) set.add(String(id)); else set.delete(String(id));
                 cfg.situacao = MT.normalizeSituacao(Object.assign({}, cfg.situacao, { camadas: Array.from(set) }));
                 applySituacao();
+                notify();
+            },
+            /** Altera o zoom do mapa de localização em delta (+1 ou -1). */
+            zoomSituacao(delta) {
+                const loc = state.locator;
+                const lm = loc ? loc.map : null;
+                const mainZ = (map && map._loaded && map.getZoom) ? map.getZoom() : 15;
+                const curZ = (cfg.situacao.zoom !== null && cfg.situacao.zoom !== undefined && isFinite(Number(cfg.situacao.zoom)))
+                    ? Number(cfg.situacao.zoom)
+                    : ((lm && lm._loaded && lm.getZoom) ? lm.getZoom() : Math.max(1, Math.round(mainZ) - 6));
+                const nextZ = Math.max(1, Math.min(19, Math.round(curZ + Number(delta || 0))));
+                cfg.situacao = MT.normalizeSituacao(Object.assign({}, cfg.situacao, { zoom: nextZ }));
+                applySituacao();
+                notify();
+            },
+            /** Restaura tamanho, posição e zoom padrão do mapa de localização. */
+            resetSituacao() {
+                cfg.situacao = MT.normalizeSituacao(Object.assign({}, cfg.situacao, {
+                    w: 140, h: 140, zoom: null, center: null
+                }));
+                if (cfg.elementos && cfg.elementos.situacao) {
+                    cfg.elementos.situacao = { dx: 0, dy: 0 };
+                }
+                const box = el('map-locator');
+                if (box && box.style) {
+                    box.style.width = '140px';
+                    box.style.height = '140px';
+                    box.style.transform = '';
+                }
+                applySituacao();
+                applyOverlays();
                 notify();
             },
             /** Configuração completa para salvar (inclui a vista atual). */
@@ -1308,7 +1657,50 @@
                 applyNotes();
                 notify();
             },
+            setNoteSize(id, deltaOrVal) {
+                cfg.anotacoes = cfg.anotacoes.map(a => {
+                    if (a.id !== id) return a;
+                    const cur = a.tamanho || 10;
+                    const next = (typeof deltaOrVal === 'number' && Math.abs(deltaOrVal) <= 5) ? Math.max(8, Math.min(28, cur + deltaOrVal)) : Math.max(8, Math.min(28, Number(deltaOrVal) || 10));
+                    return Object.assign({}, a, { tamanho: next });
+                });
+                applyNotes();
+                notify();
+            },
+            setNoteColor(id, cor) {
+                cfg.anotacoes = cfg.anotacoes.map(a => a.id === id ? Object.assign({}, a, { cor: cor }) : a);
+                applyNotes();
+                notify();
+            },
+            setNoteAlign(id, align) {
+                if (['left', 'center', 'justify', 'right'].indexOf(align) < 0) return;
+                cfg.anotacoes = cfg.anotacoes.map(a => a.id === id ? Object.assign({}, a, { alinhamento: align }) : a);
+                applyNotes();
+                notify();
+            },
             removeNote(id) { cfg.anotacoes = cfg.anotacoes.filter(a => a.id !== id); apply(); },
+            // ---- mapa de localização (situação)
+            zoomSituacao(delta) {
+                if (!state.locator || !state.locator.map) return;
+                const lm = state.locator.map;
+                const next = (lm.getZoom ? lm.getZoom() : 12) + delta;
+                if (lm.setZoom) lm.setZoom(next);
+                cfg.situacao = MT.normalizeSituacao(Object.assign({}, cfg.situacao, { zoom: next }));
+                notify();
+                updateLocatorChips();
+            },
+            setSituacaoSize(w, h) {
+                cfg.situacao = MT.normalizeSituacao(Object.assign({}, cfg.situacao, { w: w, h: h }));
+                notify();
+                applySituacao();
+            },
+            resetSituacao() {
+                cfg.situacao = MT.normalizeSituacao(Object.assign({}, cfg.situacao, { w: 140, h: 140, zoom: null, center: null }));
+                if (cfg.elementos) delete cfg.elementos.situacao;
+                notify();
+                applySituacao();
+                applyElementPositions();
+            },
             /** Liga/desliga o modo de saída (impressão, PNG, Word): sem marcadores de vértice livres. */
             setExportMode(on) { if (state.exporting === !!on) return; state.exporting = !!on; applyPoints(); },
             /** Redesenha tudo (depois que a página trocou os elementos de sobreposição). */

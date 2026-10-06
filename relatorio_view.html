@@ -16,23 +16,23 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="src/pageSize.js?v=20260922q"></script>
-    <script src="src/mapTools.js?v=20260922q"></script>
-    <script src="src/reportMap.js?v=20260922q"></script>
-    <script src="src/reportTemporal.js?v=20260922q"></script>
-    <script src="src/reportExport.js?v=20260922q"></script>
-    <script src="src/reportBlocks.js?v=20260922q"></script>
-    <script src="src/reportEditor.js?v=20260922q"></script>
-    <script src="src/reportFreeText.js?v=20260922q"></script>
-    <script src="src/reportWord.js?v=20260922q"></script>
-    <script src="src/reportDocx.js?v=20260922q"></script>
-    <script src="src/mapSnapshot.js?v=20260922q"></script>
-    <script src="src/verificarEmissao.js?v=20260922q"></script>
+    <script src="src/pageSize.js?v=20261005b"></script>
+    <script src="src/mapTools.js?v=20261005b"></script>
+    <script src="src/reportMap.js?v=20261005b"></script>
+    <script src="src/reportTemporal.js?v=20261005b"></script>
+    <script src="src/reportExport.js?v=20261005b"></script>
+    <script src="src/reportBlocks.js?v=20261005b"></script>
+    <script src="src/reportEditor.js?v=20261005b"></script>
+    <script src="src/reportFreeText.js?v=20261005b"></script>
+    <script src="src/reportWord.js?v=20261005b"></script>
+    <script src="src/reportDocx.js?v=20261005b"></script>
+    <script src="src/mapSnapshot.js?v=20261005b"></script>
+    <script src="src/verificarEmissao.js?v=20261005b"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="src/fieldFormatter.js?v=20260922q"></script>
-    <script src="src/reportData.js?v=20260922q"></script>
-    <script src="src/layerFilter.js?v=20260922q"></script>
+    <script src="src/fieldFormatter.js?v=20261005b"></script>
+    <script src="src/reportData.js?v=20261005b"></script>
+    <script src="src/layerFilter.js?v=20261005b"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Tailwind CSS -->
@@ -41,6 +41,7 @@
     <!-- Supabase Client & Auth Guard -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
+    <script src="src/session-security.js"></script>
     <script>
         // Proteção de Acesso: Oculta o documento e redireciona ao login se não autenticado
         document.documentElement.style.visibility = 'hidden';
@@ -217,8 +218,9 @@
         /* Mini-mapa: sobreposições impressas junto com o mapa */
         .report-map-overlay { position: absolute; z-index: 500; pointer-events: none; }
         #map-north { top: 8px; right: 8px; background: rgba(0,0,0,.72); color: #fff; padding: 4px 6px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; font: 700 10px monospace; line-height: 1; }
-        #map-info-wrap { bottom: 34px; left: 8px; display: flex; gap: 4px; align-items: center; max-width: 70%; flex-wrap: wrap; }
-        .map-chip { background: rgba(0,0,0,.72); color: #fff; padding: 3px 7px; border-radius: 5px; font: 9px monospace; pointer-events: auto; cursor: move; touch-action: none; }
+        #map-info-wrap { bottom: 8px; left: 8px; display: flex; gap: 4px; align-items: center; max-width: 80%; flex-wrap: wrap; z-index: 500; }
+        .map-chip { background: rgba(0,0,0,.75); color: #fff; padding: 3px 8px; border-radius: 5px; font: 600 9.5px/1.2 monospace; pointer-events: auto; cursor: move; touch-action: none; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
+        .leaflet-control-scale { display: none !important; }
         /* ferramenta de medição ativa: nada no mapa reage ao mouse (só o próprio mapa), e o cursor é a mira */
         .report-drawing, .report-drawing * { cursor: crosshair !important; }
         .report-drawing .leaflet-interactive, .report-drawing .leaflet-marker-icon, .report-drawing .leaflet-control-scale { pointer-events: none !important; }
@@ -238,7 +240,8 @@
         /* divisória ajustável das colunas Distância e Confrontantes (só na tela) */
         .col-resize { position: absolute; top: 0; right: -4px; width: 9px; height: 100%; cursor: col-resize; z-index: 5; touch-action: none; }
         .col-resize:hover, .col-resize.ativo { background: rgba(5,150,105,.35); }
-        #map-north, #map-legend, #map-locator, .leaflet-control-scale { pointer-events: auto; cursor: move; touch-action: none; }
+        #map-north, #map-legend, .leaflet-control-scale { pointer-events: auto; cursor: move; touch-action: none; }
+        #map-locator { pointer-events: auto; touch-action: none; }
         #map-legend [data-leg] span { cursor: text; }
         #map-legend { bottom: 22px; right: 8px; background: rgba(255,255,255,.92); border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 7px; font: 9px sans-serif; color: #0f172a; max-width: 45%; }
         #map-legend div { display: flex; align-items: center; gap: 5px; line-height: 1.5; }
@@ -253,25 +256,37 @@
         .report-tframe-title { display: flex; justify-content: space-between; gap: 6px; background: #0f172a; color: #fff; padding: 2px 7px; border-radius: 6px 6px 0 0; font: 700 9.5px/16px monospace; }
         .report-tframe-title span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .report-tframe-wrap { border: 1px solid #cbd5e1; border-top: 0; background: #e2e8f0; position: relative; overflow: hidden; border-radius: 0 0 6px 6px; }
-        #map-locator { top: 8px; left: 46px; width: 128px; height: 128px; border: 2px solid #0f172a; border-radius: 6px; background: #e2e8f0; overflow: hidden; display: none; }
-        .report-locator-north { position: absolute; top: 3px; right: 3px; width: 16px; height: 16px; display: none; align-items: center; justify-content: center; background: rgba(15,23,42,.75); color: #fbbf24; border-radius: 4px; z-index: 600; pointer-events: none; }
+        #map-locator { top: 8px; left: 46px; width: 140px; height: 140px; border: 2px solid #0f172a; border-radius: 6px; background: #e2e8f0; overflow: hidden; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.25); position: absolute; z-index: 550; user-select: none; }
+        .report-locator-header { position: absolute; top: 0; left: 0; right: 0; height: 20px; background: rgba(15,23,42,.88); backdrop-filter: blur(4px); z-index: 1000; display: flex; align-items: center; padding: 0 6px; cursor: move; user-select: none; color: #fff; }
+        .report-locator-title { font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; pointer-events: none; }
+        .report-locator-zoom-btns { display: flex; gap: 2px; }
+        .report-locator-zoom-btns button { width: 16px; height: 16px; border: 0; background: rgba(255,255,255,.2); color: #fff; border-radius: 3px; font-size: 11px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+        .report-locator-zoom-btns button:hover { background: rgba(255,255,255,.45); }
+        .report-locator-chip { position: absolute; background: rgba(0,0,0,.75); color: #fff; padding: 2px 5px; border-radius: 3px; font: 600 8.5px monospace; z-index: 950; pointer-events: none; }
+        .report-locator-scale { bottom: 5px; left: 5px; }
+        .report-locator-proj { bottom: 5px; right: 5px; }
+        .report-locator-resize-handle { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: se-resize; z-index: 1000; touch-action: none; background: linear-gradient(135deg, transparent 50%, rgba(15,23,42,.65) 50%, rgba(15,23,42,.65) 70%, transparent 70%, transparent 80%, rgba(15,23,42,.65) 80%); border-bottom-right-radius: 4px; }
+        .report-locator-north { position: absolute; top: 22px; right: 4px; width: 16px; height: 16px; display: none; align-items: center; justify-content: center; background: rgba(15,23,42,.75); color: #fbbf24; border-radius: 4px; z-index: 950; pointer-events: none; }
         .report-locator-north .material-symbols-outlined { font-size: 13px; }
-        .report-nlabel, .report-glabel { background: transparent; border: 0; }
+        .report-nlabel, .report-glabel, .report-loc-nlabel { background: transparent; border: 0; }
         .report-glabel { pointer-events: none; }
         .report-nlabel-l { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; font: 8px/10px monospace; color: #0f172a; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff; cursor: move; }
+        .report-loc-label { display: inline-block; white-space: nowrap; font: 700 7.5px/1 monospace; color: #0f172a; background: rgba(255,255,255,0.92); padding: 1px 3px; border-radius: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.3); transform: translate(-50%,-50%); pointer-events: none; }
         .report-glabel span { position: absolute; white-space: nowrap; font: 8px/10px monospace; color: #1e293b; background: rgba(255,255,255,.85); padding: 0 2px; }
         .report-glabel span.e { transform: translate(-50%, -110%); }
         .report-glabel span.n { transform: translate(2px, -50%); }
         .report-note { background: transparent; border: 0; }
-        .report-note-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; background: #ffffff; color: #0f172a; border: 1px solid #000000; border-radius: 4px; padding: 0 5px; font: 10px/14px sans-serif; cursor: move; }
+        .report-note-label { position: absolute; transform: translate(-50%, -50%); display: inline-block; white-space: pre; width: max-content; max-width: 480px; word-break: normal !important; overflow-wrap: normal !important; word-wrap: normal !important; background: #ffffff; color: #0f172a; border: 1px solid #000000; border-radius: 4px; padding: 4px 8px; box-shadow: 0 2px 6px rgba(0,0,0,.18); font-family: 'IBM Plex Sans', sans-serif; line-height: 1.35; cursor: move; }
+        .report-note-textarea { min-width: 200px; max-width: 460px; min-height: 54px; font-family: inherit; font-size: 11px; line-height: 1.35; border: 1px solid #059669; border-radius: 4px; padding: 4px 6px; outline: none; resize: vertical; white-space: pre-wrap; word-break: normal; }
         .report-vertex-handle { cursor: pointer; }
-        @media print { .report-vertex-handle { display: none !important; } }
+        @media print { .report-vertex-handle, .report-locator-zoom-btns, .report-locator-resize-handle, .no-print { display: none !important; } }
         .report-point { background: transparent; border: 0; }
         .report-point-dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #dc2626; border: 2px solid #fff; box-shadow: 0 0 0 1px #7f1d1d; }
         .report-point-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: #7f1d1d; font: 10px/14px monospace; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff; cursor: move; }
         .report-measure-input { width: 120px; font: 700 9px monospace; border: 1px solid #059669; border-radius: 3px; padding: 0 3px; outline: none; }
         @media print {
             .leaflet-control-zoom, #map-tools-panel, #map-tools-toggle, #pesquisa-tools-panel, #pesquisa-tools-toggle, .sidebar-column, #dica-viewer, header { display: none !important; }
+            .report-locator-zoom-btns, .report-locator-resize-handle { display: none !important; }
             .layout-wrapper { display: block !important; min-height: auto !important; width: 100% !important; background: white !important; }
             .page-column { display: block !important; padding: 0 !important; background: white !important; overflow: visible !important; width: 100% !important; }
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -590,14 +605,15 @@
         html.modo-edicao #pesquisa-tools-panel, html.modo-edicao #pesquisa-tools-toggle,
         html.modo-edicao .sidebar-column, html.modo-edicao #map-sidebar-column { display: none !important; width: 0 !important; }
         html.modo-edicao .layout-wrapper { display: flex !important; justify-content: center !important; background: transparent !important; min-height: auto !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
-        html.modo-edicao .page-column { display: flex !important; justify-content: center !important; align-items: flex-start !important; background: transparent !important; padding: 0 0 32px 0 !important; width: 100% !important; max-width: none !important; overflow: visible !important; }
+        html.modo-edicao .page-column { display: flex !important; justify-content: center !important; align-items: flex-start !important; background: transparent !important; padding: 24px 16px 36px 16px !important; width: 100% !important; max-width: none !important; overflow: visible !important; box-sizing: border-box !important; }
         html.modo-edicao #a4-document-container { width: auto !important; max-width: none !important; min-width: 0 !important; padding: 0 !important; margin: 0 auto !important; display: flex !important; flex-direction: column !important; align-items: center !important; }
         html.modo-edicao .a4-page { width: var(--page-width, 794px) !important; min-width: var(--page-width, 794px) !important; max-width: var(--page-width, 794px) !important; box-sizing: border-box !important; margin: 0 auto 24px auto !important; box-shadow: 0 6px 24px rgba(0,0,0,0.10) !important; background: #fff !important; }
         html.modo-edicao main { padding: 0; }
         .edit-bloco { --cor-bloco: #0ea5e9; position: relative; outline: 1px dashed transparent; outline-offset: 3px; border-radius: 6px; transition: outline-color .12s; }
         .edit-bloco:hover { outline-color: var(--cor-bloco); }
         .edit-bloco.selecionado { outline: 2px solid var(--cor-bloco); }
-        .edit-bloco-barra { display: none; position: absolute; top: -15px; right: 6px; z-index: 60; align-items: center; gap: 2px; background: var(--cor-bloco); color: #fff; border-radius: 8px; padding: 3px 7px; font: 600 9px/1 ui-monospace, monospace; text-transform: uppercase; box-shadow: 0 2px 8px rgba(0,0,0,.25); user-select: none; }
+        .edit-bloco-barra { display: none; position: absolute; top: -14px; right: 8px; z-index: 60; align-items: center; gap: 3px; background: var(--cor-bloco); color: #fff; border-radius: 8px; padding: 3px 8px; font: 600 9.5px/1 ui-monospace, monospace; text-transform: uppercase; box-shadow: 0 2px 8px rgba(0,0,0,.25); user-select: none; white-space: nowrap; }
+        .edit-bloco-cabecalho > .edit-bloco-barra { top: -12px; right: 12px; }
         .edit-bloco:hover > .edit-bloco-barra, .edit-bloco.selecionado > .edit-bloco-barra { display: flex; }
         /* alça para regular a largura do cartão de campo arrastando com o mouse (como a altura do mapa) */
         .quadro-seta { display: inline-flex; align-items: center; border: 0; background: none; cursor: pointer; padding: 0; color: #475569; border-radius: 4px; }
@@ -1591,7 +1607,7 @@
                          style="width: ${pageWidthPx}px; min-width: ${pageWidthPx}px; max-width: ${pageWidthPx}px; min-height: ${pageHeightPx}px; box-sizing: border-box; background: #fff;">
                         
                         <!-- Cabeçalho Institucional: Fora do corpo, acima da margem superior -->
-                        ${showHeader ? envolverEdicao(EDICAO ? Editor.cabecalho(hdrBloco, blocos.indexOf(hdrBloco), tpl, { padLeftMm: mm.left, padRightMm: mm.right }) : renderHeaderSlotHtml(hdrBloco, tpl, mm.left, mm.right), blocos.indexOf(hdrBloco), hdrBloco, { fixo: true }) : ''}
+                        ${showHeader ? envolverEdicao(EDICAO ? Editor.cabecalho(hdrBloco, blocos.indexOf(hdrBloco), tpl, { padLeftMm: mm.left, padRightMm: mm.right }) : renderHeaderSlotHtml(hdrBloco, tpl, mm.left, mm.right), blocos.indexOf(hdrBloco), hdrBloco, { fixo: true, classe: 'edit-bloco-cabecalho' }) : ''}
 
                         <!-- Corpo da Folha: Delimitado entre as margens superior e inferior -->
                         <div ${pageIdAttr} class="a4-page-body-slot flex flex-col gap-3.5 w-full flex-1" style="padding: ${padTopMm}mm ${mm.right}mm ${padBotMm}mm ${mm.left}mm; box-sizing: border-box;">
@@ -3316,10 +3332,22 @@
         }
 
         function getHiddenFieldsKey() {
-            const tid = (renderArgs && renderArgs.templateId) || (reportPayload && reportPayload.templateId) || 'default';
-            const fid = (renderArgs && renderArgs.featureId) || (reportPayload && reportPayload.featureId) || 'default';
+            const tid = (renderArgs && renderArgs.tpl && renderArgs.tpl.id) || (renderArgs && renderArgs.templateId) || (reportPayload && reportPayload.templateId) || 'default';
+            const fid = (renderArgs && renderArgs.featureId) || (reportPayload && reportPayload.featureId) || (reportPayload && reportPayload.featureKey) || 'default';
             return 'rpt_hidden_fields_' + tid + '_' + fid;
         }
+
+        function getHideMapKey() {
+            const tid = (renderArgs && renderArgs.tpl && renderArgs.tpl.id) || (renderArgs && renderArgs.templateId) || (reportPayload && reportPayload.templateId) || 'default';
+            const fid = (renderArgs && renderArgs.featureId) || (reportPayload && reportPayload.featureId) || (reportPayload && reportPayload.featureKey) || 'default';
+            return 'rpt_hidden_map_' + tid + '_' + fid;
+        }
+
+        window.isMapHidden = function() {
+            try {
+                return localStorage.getItem(getHideMapKey()) === '1';
+            } catch (e) { return false; }
+        };
 
         function getHiddenFields() {
             try {
@@ -3338,9 +3366,33 @@
             scheduleRepaginate();
         };
 
+        window.toggleHideMap = function() {
+            const hidden = window.isMapHidden();
+            try {
+                if (hidden) localStorage.removeItem(getHideMapKey());
+                else localStorage.setItem(getHideMapKey(), '1');
+            } catch (e) {}
+            scheduleRepaginate();
+            if (typeof renderMapToolsPanel === 'function') {
+                setTimeout(renderMapToolsPanel, 50);
+            }
+        };
+
+        window.restoreHiddenMap = function() {
+            try { localStorage.removeItem(getHideMapKey()); } catch (e) {}
+            scheduleRepaginate();
+            if (typeof renderMapToolsPanel === 'function') {
+                setTimeout(renderMapToolsPanel, 50);
+            }
+        };
+
         window.restoreHiddenFields = function() {
             try { localStorage.removeItem(getHiddenFieldsKey()); } catch (e) {}
+            try { localStorage.removeItem(getHideMapKey()); } catch (e) {}
             scheduleRepaginate();
+            if (typeof renderMapToolsPanel === 'function') {
+                setTimeout(renderMapToolsPanel, 50);
+            }
         };
 
         function renderSingleBlock(bloco, idx, featureData, featureGeometry, fields, tpl) {
@@ -3350,17 +3402,35 @@
 
                 case 'grade_campos': {
                     if (EDICAO) return Editor.grade(bloco, idx, fields, featureData, bloco.colunasLayout || 2);
-                    return renderAttributeGrid(bloco, featureData, fields, { hiddenFields: getHiddenFields(), interactiveHide: true });
+                    return renderAttributeGrid(bloco, featureData, fields, {
+                        hiddenFields: getHiddenFields(),
+                        interactiveHide: true,
+                        isMapHidden: window.isMapHidden()
+                    });
                 }
 
                 case 'mapa_estatico': {
                     mapBloco = bloco;
+                    if (window.isMapHidden()) {
+                        return `
+                            <div class="no-print mb-3 p-2.5 bg-amber-50 dark:bg-amber-950/30 border border-dashed border-amber-300 dark:border-amber-700 rounded-lg flex items-center justify-between gap-2 text-xs text-amber-900 dark:text-amber-200">
+                                <div class="flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-[18px] text-amber-600 dark:text-amber-400">visibility_off</span>
+                                    <span><strong>Mapa ocultado:</strong> ${(escapeHtml(bloco.titulo || 'Delimitação Cartográfica do Imóvel')).replace(/\r?\n/g, ' ')}</span>
+                                </div>
+                                <button type="button" onclick="toggleHideMap()" class="text-[10px] font-bold px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white cursor-pointer transition shadow-2xs flex items-center gap-1.5" title="Restaurar visualização do mapa na folha">
+                                    <span class="material-symbols-outlined text-[13px]">visibility</span>
+                                    Exibir mapa
+                                </button>
+                            </div>
+                        `;
+                    }
                     const mcfg = MapTools.normalizeMapConfig(bloco);
                     if (mapAlturaMm === null) mapAlturaMm = mcfg.alturaMm;
                     const mapPx = Math.round(mapAlturaMm * 3.78);
                     const isQuebra = !!(bloco.quebrarPagina || (bloco.mapa && bloco.mapa.quebrarPagina));
                     return `
-                        <div class="mb-4 page-break-avoid" ${isQuebra ? 'data-quebra-pagina="1"' : ''}>
+                        <div class="mb-4 page-break-avoid group/map relative" ${isQuebra ? 'data-quebra-pagina="1"' : ''}>
                             <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2 flex flex-wrap items-center justify-between gap-2">
                                 <span class="whitespace-pre-line">${(escapeHtml(bloco.titulo || 'Delimitação Cartográfica do Imóvel')).replace(/\r?\n/g, '<br>')}</span>
                                 <div class="no-print flex items-center gap-1.5 normal-case font-sans">
@@ -3371,11 +3441,19 @@
                                         ${isQuebra ? '✓ Folha exclusiva' : 'Saltar folha'}
                                     </button>
                                     <span class="text-[10px] font-mono font-bold text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/60 px-1.5 py-0.5 rounded border border-sky-200 dark:border-sky-800">${mapAlturaMm} mm</span>
+                                    <button type="button" onclick="toggleHideMap()" class="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 hover:bg-red-50 text-slate-700 hover:text-red-600 border border-slate-300 hover:border-red-300 cursor-pointer transition-colors shadow-2xs flex items-center gap-1" title="Ocultar este mapa do relatório">
+                                        <span class="material-symbols-outlined" style="font-size:13px;display:block">visibility_off</span>
+                                        Ocultar mapa
+                                    </button>
                                 </div>
                             </div>
                             <!-- Mini-mapa Leaflet (configurado no painel "Mapa" à direita) -->
                             <div id="map-wrap" class="relative rounded-lg overflow-hidden border border-slate-300 shadow-xs" style="height: ${mapPx}px;">
                                 <div id="interactive-report-map" class="w-full bg-slate-200 z-0" style="height: ${mapPx}px;"></div>
+                                <button type="button" class="no-print opacity-0 group-hover/map:opacity-100 hover:text-red-600 text-slate-600 bg-white/90 hover:bg-white p-1 rounded-md border border-slate-300 transition-opacity cursor-pointer absolute top-2 right-2 z-20 shadow-xs flex items-center gap-1 text-[10.5px] font-bold" onclick="toggleHideMap()" title="Ocultar este mapa do relatório">
+                                    <span class="material-symbols-outlined" style="font-size:14px;display:block">visibility_off</span>
+                                    <span>Ocultar</span>
+                                </button>
                                 <div id="map-resize" class="no-print" title="Arraste para ajustar a altura do mapa (a largura acompanha a folha)"></div>
                                 <div id="map-north" class="report-map-overlay"><span class="material-symbols-outlined" style="font-size:18px;color:#fbbf24">navigation</span><span>N</span></div>
                                 <div id="map-info-wrap" class="report-map-overlay"><div id="map-escala-txt" class="map-chip" title="Arraste para mover"></div><div id="map-proj-txt" class="map-chip" title="Arraste para mover"></div></div>
@@ -3566,16 +3644,92 @@
                     } catch (e) { return null; }
                 };
 
+                // Preservar campos existentes em camadas já carregadas
+                const camposAnterioresMap = new Map();
+                if (reportPayload && Array.isArray(reportPayload.camadasMapa)) {
+                    reportPayload.camadasMapa.forEach(c => {
+                        if (c && c.id && Array.isArray(c.campos) && c.campos.length) {
+                            camposAnterioresMap.set(String(c.id), c.campos);
+                        }
+                    });
+                }
+
+                const camposFn = (theme) => {
+                    try {
+                        if (typeof op.canUserSeeThemeData === 'function' && !op.canUserSeeThemeData(theme)) return [];
+                        const vistos = new Set();
+                        const lista = [];
+                        const add = (k, l, tabTitle) => {
+                            const s = String(k || '');
+                            if (!s || vistos.has(s.toLowerCase())) return;
+                            vistos.add(s.toLowerCase());
+                            lista.push({ k: s, l: String(l || s).slice(0, 60), tabTitle: tabTitle || '' });
+                        };
+                        const forms = (typeof op.allForms !== 'undefined' && Array.isArray(op.allForms)) ? op.allForms : (Array.isArray(window.allForms) ? window.allForms : []);
+                        const form = theme.formId ? forms.find(f => f.id === theme.formId) : null;
+                        ((form && (form.schema || form.tabs)) || []).forEach(tab => (tab.fields || []).forEach(fl => add(fl.id || fl.name || fl.label, fl.label || fl.name || fl.id, tab.title || tab.name)));
+                        (theme.features || []).slice(0, 30).forEach(ft => Object.keys((ft && ft.properties) || {}).forEach(k => {
+                            if (k.charAt(0) !== '_' && k !== 'themeId' && k !== 'id_banco' && k !== 'f' && k !== 'r' && k !== 't') {
+                                add(k, typeof op.getThemeFieldLabel === 'function' ? op.getThemeFieldLabel(theme, k) : k, '');
+                            }
+                        }));
+                        return lista;
+                    } catch (e) { return []; }
+                };
+
+                const valoresFn = (theme, f, campos) => {
+                    const out = {};
+                    try {
+                        if (typeof op.getFeaturePropertyValue === 'function') {
+                            campos.forEach(c => {
+                                const v = op.getFeaturePropertyValue(theme, f, c.k);
+                                if (v !== undefined && v !== null && v !== '') out[c.k] = v;
+                            });
+                        } else if (f && f.properties) {
+                            campos.forEach(c => {
+                                const v = f.properties.f ? f.properties.f[c.k] : f.properties[c.k];
+                                if (v !== undefined && v !== null && v !== '') out[c.k] = v;
+                            });
+                        }
+                    } catch (e) { /* sem valores */ }
+                    return out;
+                };
+
                 const novasCamadas = mt.collectNearbyLayers(projectThemes, geom, {
                     bufferM: 1500,
+                    dataBufferM: 1500,
                     excludeKey: (reportPayload && reportPayload.featureKey) || '',
                     canSee: (id) => (typeof op.userCanOnTheme !== 'function') || op.userCanOnTheme(id, 'ver'),
                     includeAllThemes: true,
                     includeEmpty: true,
-                    labelFn: rotulos
+                    labelFn: rotulos,
+                    fieldsFn: camposFn,
+                    valuesFn: valoresFn
                 });
 
                 if (Array.isArray(novasCamadas)) {
+                    novasCamadas.forEach(c => {
+                        if ((!c.campos || !c.campos.length) && camposAnterioresMap.has(String(c.id))) {
+                            c.campos = camposAnterioresMap.get(String(c.id));
+                        }
+                        if (!c.campos || !c.campos.length) {
+                            const vistos = new Set();
+                            const lista = [];
+                            (c.features || []).slice(0, 30).forEach(ft => {
+                                const p = (ft && ft.properties && ft.properties.f) ? ft.properties.f : (ft && ft.properties ? ft.properties : {});
+                                Object.keys(p).forEach(k => {
+                                    if (k.charAt(0) !== '_' && k !== 'themeId' && k !== 'id_banco' && k !== 'r' && k !== 't' && k !== 'f') {
+                                        const s = String(k);
+                                        if (!vistos.has(s.toLowerCase())) {
+                                            vistos.add(s.toLowerCase());
+                                            lista.push({ k: s, l: s, tabTitle: '' });
+                                        }
+                                    }
+                                });
+                            });
+                            if (lista.length) c.campos = lista;
+                        }
+                    });
                     if (!reportPayload) reportPayload = {};
                     reportPayload.camadasMapa = novasCamadas;
 
@@ -4456,18 +4610,44 @@
             renderMapToolsPanel();
         }
 
-        function mapPanelSelectRotuloCampo(val, e) {
+        function mapPanelToggleRotuloCampo(val, e) {
             if (e) {
                 if (typeof e.stopPropagation === 'function') e.stopPropagation();
                 if (typeof e.preventDefault === 'function') e.preventDefault();
             }
-            if (mapController) {
-                mapPanelExtra('rotulos', 'campo', val);
+            if (!mapController) return;
+            const cfg = mapController.getConfig();
+            let curCampos = (Array.isArray(cfg.rotulos.campos) && cfg.rotulos.campos.length)
+                ? cfg.rotulos.campos.slice()
+                : (cfg.rotulos.campo ? String(cfg.rotulos.campo).split(',').map(s => s.trim()).filter(Boolean) : ['rotulo']);
+
+            if (val === 'rotulo' || val === 'titulo') {
+                curCampos = [val];
+            } else {
+                curCampos = curCampos.filter(x => x !== 'rotulo' && x !== 'titulo');
+                const idx = curCampos.indexOf(val);
+                if (idx >= 0) {
+                    curCampos.splice(idx, 1);
+                } else {
+                    curCampos.push(val);
+                }
+                if (!curCampos.length) {
+                    curCampos = ['rotulo'];
+                }
             }
-            const sel = document.getElementById('mp-rotulo-campo-sel');
-            if (sel) sel.value = val;
-            mapPanelRotulosDropdownAberto = false;
+
+            mapController.setConfig({
+                rotulos: {
+                    campos: curCampos,
+                    campo: curCampos.join(',')
+                }
+            });
+            mapPanelRotulosDropdownAberto = true;
             renderMapToolsPanel();
+        }
+
+        function mapPanelSelectRotuloCampo(val, e) {
+            mapPanelToggleRotuloCampo(val, e);
         }
 
         document.addEventListener('click', function(e) {
@@ -4481,12 +4661,45 @@
             }
         });
 
+        let mapPanelLocCamadaCamposAberta = null;
+        function mapPanelToggleLocCamposExp(camId, e) {
+            if (e) {
+                if (typeof e.stopPropagation === 'function') e.stopPropagation();
+                if (typeof e.preventDefault === 'function') e.preventDefault();
+            }
+            mapPanelLocCamadaCamposAberta = (String(mapPanelLocCamadaCamposAberta) === String(camId)) ? null : String(camId);
+            renderMapToolsPanel();
+        }
+
+        function mapPanelToggleLocCampo(camId, campoId, e) {
+            if (e) {
+                if (typeof e.stopPropagation === 'function') e.stopPropagation();
+                if (typeof e.preventDefault === 'function') e.preventDefault();
+            }
+            if (!mapController) return;
+            const cfg = mapController.getConfig();
+            const situacao = Object.assign({}, cfg.situacao);
+            const camposObj = Object.assign({}, situacao.campos || {});
+            let lista = (camposObj[String(camId)] || []).slice();
+            const idx = lista.indexOf(campoId);
+            if (idx >= 0) {
+                lista.splice(idx, 1);
+            } else {
+                lista.push(campoId);
+            }
+            camposObj[String(camId)] = lista;
+            situacao.campos = camposObj;
+            mapController.setConfig({ situacao: situacao });
+            renderMapToolsPanel();
+        }
+
         function renderMapToolsPanel() {
             const curTpl = (renderArgs && renderArgs.tpl) || (typeof reportPayload !== 'undefined' && reportPayload.template) || null;
             const pranchaCfgObj = (curTpl && curTpl.prancha_topografica) || (mapBloco && mapBloco.mapa && mapBloco.mapa.prancha_topografica) || null;
             const temPrancha = !!(pranchaCfgObj && pranchaCfgObj.formato && pranchaCfgObj.formato !== 'none');
             const temPranchaInstances = !!(window._pranchaMapInstances && Object.keys(window._pranchaMapInstances).length > 0);
-            const temQualquerMapa = !!mapController || temPrancha || temPranchaInstances;
+            const temBlocoMapa = !!(curTpl && Array.isArray(curTpl.blocos) && curTpl.blocos.some(b => b.tipo === 'mapa_estatico'));
+            const temQualquerMapa = !!mapController || temPrancha || temPranchaInstances || temBlocoMapa;
 
             if (!temQualquerMapa) {
                 applyMapPanelVisibility();
@@ -4547,6 +4760,25 @@
             const estM = (cfg.medidas && cfg.medidas.estilo) || { lados: {}, total: {}, perimetro: {} };
             const estTodos = { n: ['lados', 'total', 'perimetro'].every(g => estM[g] && estM[g].n), i: ['lados', 'total', 'perimetro'].every(g => estM[g] && estM[g].i), s: ['lados', 'total', 'perimetro'].every(g => estM[g] && estM[g].s) };
             const cams = camadasDoPayload();
+            cams.forEach(c => {
+                if (!c.campos || !c.campos.length) {
+                    const vistos = new Set();
+                    const lista = [];
+                    (c.features || []).slice(0, 30).forEach(ft => {
+                        const p = (ft && ft.properties && ft.properties.f) ? ft.properties.f : (ft && ft.properties ? ft.properties : {});
+                        Object.keys(p).forEach(k => {
+                            if (k.charAt(0) !== '_' && k !== 'themeId' && k !== 'id_banco' && k !== 'r' && k !== 't' && k !== 'f') {
+                                const s = String(k);
+                                if (!vistos.has(s.toLowerCase())) {
+                                    vistos.add(s.toLowerCase());
+                                    lista.push({ k: s, l: s, tabTitle: '' });
+                                }
+                            }
+                        });
+                    });
+                    if (lista.length) c.campos = lista;
+                }
+            });
             const camOpts = (sel) => '<option value="">Escolha a camada…</option>' + cams.map(c => `<option value="${esc(c.id)}" ${String(sel) === String(c.id) ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
             const temRotulo = cams.some(c => c.features.some(f => f.properties && f.properties.r));
             const temNome = cams.some(c => c.features.some(f => f.properties && f.properties.t));
@@ -4633,70 +4865,90 @@
                 });
             });
 
+            const rotulosCamposSel = (Array.isArray(cfg.rotulos.campos) && cfg.rotulos.campos.length)
+                ? cfg.rotulos.campos
+                : (cfg.rotulos.campo ? String(cfg.rotulos.campo).split(',').map(s => s.trim()).filter(Boolean) : ['rotulo']);
+
             let rotuloCampoSelecionadoNome = 'Rótulo padrão (Quadra / Lote)';
-            if (cfg.rotulos.campo === 'titulo') {
+            if (rotulosCamposSel.length === 1 && rotulosCamposSel[0] === 'rotulo') {
+                rotuloCampoSelecionadoNome = 'Rótulo padrão (Quadra / Lote)';
+            } else if (rotulosCamposSel.length === 1 && rotulosCamposSel[0] === 'titulo') {
                 rotuloCampoSelecionadoNome = 'Nome / Título principal';
-            } else if (String(cfg.rotulos.campo || '').startsWith('f:')) {
-                const fk = cfg.rotulos.campo.slice(2);
-                let achou = false;
-                for (const c of cams) {
-                    const fl = (c.campos || []).find(f => (f.k || f.id) === fk);
-                    if (fl) {
-                        const tab = fl.tabTitle || abaDoCampo(fl) || getFieldTabName(c, fl) || '';
-                        rotuloCampoSelecionadoNome = `${fl.l || fl.label || fl.k} (${c.name})${tab ? ' — ' + tab : ''}`;
-                        achou = true;
-                        break;
+            } else {
+                const nomes = [];
+                rotulosCamposSel.forEach(cid => {
+                    if (cid === 'rotulo') { nomes.push('Rótulo padrão'); return; }
+                    if (cid === 'titulo') { nomes.push('Nome / Título'); return; }
+                    const fk = cid.startsWith('f:') ? cid.slice(2) : cid;
+                    let nomeCurto = fk;
+                    for (const c of cams) {
+                        const fl = (c.campos || []).find(f => (f.k || f.id) === fk);
+                        if (fl) {
+                            nomeCurto = fl.l || fl.label || fl.k;
+                            break;
+                        }
                     }
-                }
-                if (!achou) rotuloCampoSelecionadoNome = cfg.rotulos.campo;
+                    nomes.push(nomeCurto);
+                });
+                rotuloCampoSelecionadoNome = nomes.length ? nomes.join(' • ') : 'Rótulo padrão (Quadra / Lote)';
+            }
+
+            if (mapPanelRotulosCamadaAberta === null && cams.length > 0) {
+                const primeiraComCampos = cams.find(c => c.campos && c.campos.length > 0) || cams[0];
+                if (primeiraComCampos) mapPanelRotulosCamadaAberta = String(primeiraComCampos.id);
             }
 
             const rotulosHtml = `
                 <div style="font-weight:700;margin:8px 0 2px">Rótulos nas feições vizinhas</div>
-                ${chkN('mp-x-rot', 'Exibir rótulos no mapa', cfg.rotulos.ativo, "mapPanelExtra('rotulos', 'ativo', this.checked)", !temRotulo && !camposDisponiveis.length, nis('rotulos', '', cfg.rotulos.estilo))}
+                ${chkN('mp-x-rot', 'Exibir rótulos no mapa', cfg.rotulos.ativo, "mapPanelExtra('rotulos', 'ativo', this.checked)", !cams.length, nis('rotulos', '', cfg.rotulos.estilo))}
                 ${cfg.rotulos.ativo ? `
-                    <div style="margin:4px 0 2px;font-size:11px;color:#94a3b8">Campo do rótulo:</div>
+                    <div style="margin:4px 0 2px;font-size:11px;color:#94a3b8">Campo(s) do rótulo:</div>
                     <div style="position:relative;margin:3px 0 6px">
                         <button type="button" id="mp-rotulo-campo-btn" onclick="mapPanelToggleRotulosDropdown(event)" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:#1e293b;border:1px solid rgba(255,255,255,0.18);border-radius:8px;color:#f8fafc;font-size:11px;font-weight:500;cursor:pointer;text-align:left">
                             <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(rotuloCampoSelecionadoNome)}</span>
                             <span style="font-size:10px;color:#94a3b8;margin-left:6px;transition:transform .15s;${mapPanelRotulosDropdownAberto ? 'transform:rotate(180deg)' : ''}">&#9662;</span>
                         </button>
                         <select id="mp-rotulo-campo-sel" style="display:none" onchange="mapPanelExtra('rotulos', 'campo', this.value)">
-                            <option value="rotulo" ${cfg.rotulos.campo === 'rotulo' ? 'selected' : ''}>Rótulo padrão (Quadra / Lote)</option>
-                            <option value="titulo" ${cfg.rotulos.campo === 'titulo' ? 'selected' : ''}>Nome / Título principal</option>
-                            ${camposDisponiveis.map(cp => `<option value="${esc(cp.id)}" ${cfg.rotulos.campo === cp.id ? 'selected' : ''}>${esc(cp.label)}</option>`).join('')}
+                            <option value="rotulo" ${rotulosCamposSel.includes('rotulo') ? 'selected' : ''}>Rótulo padrão (Quadra / Lote)</option>
+                            <option value="titulo" ${rotulosCamposSel.includes('titulo') ? 'selected' : ''}>Nome / Título principal</option>
+                            ${camposDisponiveis.map(cp => `<option value="${esc(cp.id)}" ${rotulosCamposSel.includes(cp.id) ? 'selected' : ''}>${esc(cp.label)}</option>`).join('')}
                         </select>
                         ${mapPanelRotulosDropdownAberto ? `
-                        <div id="mp-rotulo-dropdown-menu" onclick="event.stopPropagation()" class="mp-inner-card" style="position:relative;margin-top:4px;background:#1e293b;border:1px solid rgba(255,255,255,0.18);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.5);max-height:280px;overflow-y:auto;z-index:30;padding:4px">
-                            <div onclick="mapPanelSelectRotuloCampo('rotulo', event)" style="display:flex;align-items:center;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;color:#f8fafc;background:${cfg.rotulos.campo === 'rotulo' ? '#047857' : 'transparent'};margin-bottom:2px">
+                        <div id="mp-rotulo-dropdown-menu" onclick="event.stopPropagation()" class="mp-inner-card" style="position:relative;margin-top:4px;background:#1e293b;border:1px solid rgba(255,255,255,0.18);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.5);max-height:300px;overflow-y:auto;z-index:30;padding:4px">
+                            <div onclick="mapPanelToggleRotuloCampo('rotulo', event)" style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;color:#f8fafc;background:${rotulosCamposSel.includes('rotulo') ? '#047857' : 'transparent'};margin-bottom:2px">
+                                <input type="checkbox" ${rotulosCamposSel.includes('rotulo') ? 'checked' : ''} onclick="event.stopPropagation(); mapPanelToggleRotuloCampo('rotulo', event)" style="cursor:pointer;accent-color:#059669;margin:0">
                                 <span style="flex:1">Rótulo padrão (Quadra / Lote)</span>
-                                ${cfg.rotulos.campo === 'rotulo' ? '<span style="font-weight:bold;margin-left:6px">✓</span>' : ''}
+                                ${rotulosCamposSel.includes('rotulo') ? '<span style="font-weight:bold;margin-left:6px">✓</span>' : ''}
                             </div>
-                            <div onclick="mapPanelSelectRotuloCampo('titulo', event)" style="display:flex;align-items:center;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;color:#f8fafc;background:${cfg.rotulos.campo === 'titulo' ? '#047857' : 'transparent'};margin-bottom:4px">
+                            <div onclick="mapPanelToggleRotuloCampo('titulo', event)" style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:11px;color:#f8fafc;background:${rotulosCamposSel.includes('titulo') ? '#047857' : 'transparent'};margin-bottom:4px">
+                                <input type="checkbox" ${rotulosCamposSel.includes('titulo') ? 'checked' : ''} onclick="event.stopPropagation(); mapPanelToggleRotuloCampo('titulo', event)" style="cursor:pointer;accent-color:#059669;margin:0">
                                 <span style="flex:1">Nome / Título principal</span>
-                                ${cfg.rotulos.campo === 'titulo' ? '<span style="font-weight:bold;margin-left:6px">✓</span>' : ''}
+                                ${rotulosCamposSel.includes('titulo') ? '<span style="font-weight:bold;margin-left:6px">✓</span>' : ''}
                             </div>
                             <div style="border-top:1px solid rgba(255,255,255,0.1);margin:4px 0"></div>
-                            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;padding:4px 6px 2px;letter-spacing:0.04em">Camadas</div>
+                            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;padding:4px 6px 2px;letter-spacing:0.04em">Campos das Camadas (selecione um ou mais)</div>
                             ${!cams.length ? '<div style="padding:6px 8px;font-size:11px;color:#64748b">Nenhuma camada disponível</div>' : cams.map(c => {
                                 const aberta = String(mapPanelRotulosCamadaAberta) === String(c.id);
                                 const campos = c.campos || [];
+                                const totalSel = campos.filter(fl => rotulosCamposSel.includes('f:' + (fl.k || fl.id))).length;
                                 return `
                                 <div style="margin-bottom:3px;border-radius:6px;overflow:hidden;border:1px solid ${aberta ? 'rgba(52,211,153,0.35)' : 'rgba(255,255,255,0.08)'}">
                                     <div onclick="mapPanelToggleRotulosCamada('${esc(c.id)}', event)" style="display:flex;align-items:center;gap:6px;padding:6px 8px;cursor:pointer;background:${aberta ? '#0f172a' : 'rgba(255,255,255,0.03)'};user-select:none">
                                         <i style="display:inline-block;width:10px;height:7px;border-radius:2px;background:${esc(c.color)};flex:none"></i>
                                         <span style="flex:1;font-size:11px;font-weight:600;color:#f1f5f9;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span>
+                                        ${totalSel > 0 ? `<span style="font-size:9.5px;color:#34d399;font-weight:700;background:rgba(52,211,153,0.15);padding:1px 5px;border-radius:999px;flex:none">${totalSel} sel.</span>` : ''}
                                         <span style="font-size:10px;color:#94a3b8;flex:none">${campos.length}</span>
                                         <span style="font-size:9px;color:#94a3b8;flex:none;transition:transform .15s;${aberta ? 'transform:rotate(90deg)' : ''}">&#9656;</span>
                                     </div>
                                     ${aberta ? `
-                                    <div style="background:#0b1120;padding:3px;border-top:1px solid rgba(255,255,255,0.08);max-height:140px;overflow-y:auto">
+                                    <div style="background:#0b1120;padding:3px;border-top:1px solid rgba(255,255,255,0.08);max-height:160px;overflow-y:auto">
                                         ${!campos.length ? '<div style="padding:6px 8px;font-size:10.5px;color:#64748b;font-style:italic">Sem campos com dados nesta camada</div>' : campos.map(fl => {
                                             const cid = 'f:' + (fl.k || fl.id);
-                                            const isSel = cfg.rotulos.campo === cid;
+                                            const isSel = rotulosCamposSel.includes(cid);
                                             const tabNome = fl.tabTitle || abaDoCampo(fl) || getFieldTabName(c, fl) || '';
                                             return `
-                                            <div onclick="mapPanelSelectRotuloCampo('${esc(cid)}', event)" style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:4px;cursor:pointer;margin-bottom:1px;background:${isSel ? '#047857' : 'transparent'};color:${isSel ? '#fff' : '#cbd5e1'};font-size:11px">
+                                            <div onclick="mapPanelToggleRotuloCampo('${esc(cid)}', event)" style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:4px;cursor:pointer;margin-bottom:1px;background:${isSel ? '#047857' : 'transparent'};color:${isSel ? '#fff' : '#cbd5e1'};font-size:11px">
+                                                <input type="checkbox" ${isSel ? 'checked' : ''} onclick="event.stopPropagation(); mapPanelToggleRotuloCampo('${esc(cid)}', event)" style="cursor:pointer;accent-color:#059669;margin:0">
                                                 <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(fl.l || fl.label || fl.k)}</span>
                                                 ${tabNome ? `<span style="font-size:9.5px;padding:1px 5px;border-radius:3px;background:rgba(255,255,255,0.1);color:#94a3b8;flex:none">Aba: ${esc(tabNome)}</span>` : ''}
                                                 ${isSel ? '<span style="font-weight:bold;margin-left:4px">✓</span>' : ''}
@@ -4705,6 +4957,7 @@
                                     </div>` : ''}
                                 </div>`;
                             }).join('')}
+                            <button type="button" onclick="mapPanelToggleRotulosDropdown(event)" class="act primary" style="width:100%;margin-top:6px;padding:5px;font-size:11px">Concluir seleção</button>
                         </div>` : ''}
                     </div>
                     ${corRow('rotulos', 'Cor dos rótulos', cfg.rotulos.cor)}
@@ -4718,8 +4971,8 @@
                 ${legItens.length ? legItens.map(i => `
                     <div style="display:flex;align-items:center;gap:6px;padding:3px 0">
                         <input type="checkbox" ${i.oculto ? '' : 'checked'} title="Mostrar na legenda" onchange="mapPanelLegendaVer('${esc(i.key)}', this.checked)">
-                        <i style="display:inline-block;width:12px;height:8px;border-radius:2px;background:${esc(i.cor)};flex:none"></i>
-                        <input type="text" value="${esc(i.nome)}" maxlength="60" oninput="if(mapController)mapController.renameLegend('${esc(i.key)}', this.value)" onchange="mapPanelLegendaNome('${esc(i.key)}', this.value)" style="flex:1;min-width:0;padding:3px 6px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;font-size:11px;background:#0f172a;color:#f8fafc">
+                        ${i.key === 'feicao' ? '' : `<i style="display:inline-block;width:12px;height:8px;border-radius:2px;background:${esc(i.cor)};flex:none"></i>`}
+                        <input type="text" value="${esc(i.nome)}" maxlength="60" oninput="if(mapController)mapController.renameLegend('${esc(i.key)}', this.value)" onchange="mapPanelLegendaNome('${esc(i.key)}', this.value)" style="flex:1;min-width:0;padding:3px 6px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;font-size:11px;background:#0f172a;color:#f8fafc;${i.key === 'feicao' ? 'font-weight:700;' : ''}">
                     </div>`).join('') : '<div style="color:#94a3b8;font-size:11px">Sem itens: ligue o destaque da feição ou uma camada ativa.</div>'}
                 </div>
                 <div style="color:#94a3b8;line-height:1.35;margin:3px 0;font-size:10.5px">Dois cliques num item da legenda, no mapa, também renomeiam (vazio restaura o nome original).</div>
@@ -4739,27 +4992,110 @@
             `;
             // MAPA DE LOCALIZAÇÃO (card próprio, logo abaixo de "Mapa base"): mapa de referência, camadas e norte da própria caixa
             const locCamadasOn = new Set((cfg.situacao.camadas || []).map(String));
+            const sitW = cfg.situacao.w || 160;
+            const sitH = cfg.situacao.h || 140;
             const localizacaoHtml = `
                 ${chk('mp-loc-ativo', 'Mostrar o mapa de localização', cfg.situacao.ativo, "mapPanelExtra('situacao', 'ativo', this.checked)")}
                 ${cfg.situacao.ativo ? `
-                    <select onchange="mapPanelExtra('situacao', 'baseMap', this.value)" style="width:100%;padding:5px;border:1px solid rgba(255,255,255,0.18);border-radius:8px;background:#1e293b;color:#f8fafc;margin-bottom:3px">
-                        <option value="osm" ${cfg.situacao.baseMap === 'osm' ? 'selected' : ''}>Ruas (OpenStreetMap)</option>
-                        <option value="satelite" ${cfg.situacao.baseMap === 'satelite' ? 'selected' : ''}>Satélite</option>
-                        <option value="nenhum" ${cfg.situacao.baseMap === 'nenhum' ? 'selected' : ''}>Sem mapa base</option>
-                    </select>
-                    <div style="font-weight:700;margin:4px 0 2px">Camadas na caixa</div>
-                    ${!camadas.length ? '<div style="color:#94a3b8">Nenhuma outra camada estava ativa no mapa ao abrir este relatório.</div>' : camadas.map(c => `<label class="row"><input type="checkbox" ${locCamadasOn.has(String(c.id)) ? 'checked' : ''} onchange="mapPanelLocatorLayer('${esc(c.id)}', this.checked)"><i style="display:inline-block;width:12px;height:8px;border-radius:2px;background:${esc(c.color)}"></i><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span></label>`).join('')}
-                    ${chk('mp-loc-norte', 'Seta do norte', cfg.situacao.norte, "mapPanelExtra('situacao', 'norte', this.checked)")}
-                    <div style="color:#94a3b8;line-height:1.35;margin-top:3px">Arraste a caixa, no mapa, para mudar de lugar.</div>
+                    <div style="margin-top:4px">
+                        <label style="font-size:10.5px;color:#94a3b8;display:block;margin-bottom:2px">Mapa base da caixa:</label>
+                        <select onchange="mapPanelExtra('situacao', 'baseMap', this.value)" style="width:100%;padding:5px;border:1px solid rgba(255,255,255,0.18);border-radius:8px;background:#1e293b;color:#f8fafc;margin-bottom:4px">
+                            <option value="osm" ${cfg.situacao.baseMap === 'osm' ? 'selected' : ''}>Ruas (OpenStreetMap)</option>
+                            <option value="satelite" ${cfg.situacao.baseMap === 'satelite' ? 'selected' : ''}>Satélite</option>
+                            <option value="nenhum" ${cfg.situacao.baseMap === 'nenhum' ? 'selected' : ''}>Sem mapa base</option>
+                        </select>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;margin:4px 0">
+                        <span style="font-size:10.5px;color:#94a3b8;flex:1">Zoom da caixa:</span>
+                        <button type="button" class="act" style="padding:2px 8px;font-weight:700" title="Aumentar zoom do mapa de localização" onclick="mapPanelSituacaoZoom(1)">＋</button>
+                        <button type="button" class="act" style="padding:2px 8px;font-weight:700" title="Diminuir zoom do mapa de localização" onclick="mapPanelSituacaoZoom(-1)">－</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:4px 0">
+                        <label style="font-size:10px;color:#94a3b8">Largura (px)<input type="number" min="90" max="600" step="10" value="${sitW}" onchange="mapPanelSituacaoDim('w', this.value)" style="width:100%;padding:3px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;background:#0f172a;color:#f8fafc"></label>
+                        <label style="font-size:10px;color:#94a3b8">Altura (px)<input type="number" min="90" max="600" step="10" value="${sitH}" onchange="mapPanelSituacaoDim('h', this.value)" style="width:100%;padding:3px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;background:#0f172a;color:#f8fafc"></label>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:2px;margin:4px 0">
+                        ${chk('mp-loc-norte', 'Seta do norte', cfg.situacao.norte, "mapPanelExtra('situacao', 'norte', this.checked)")}
+                        ${chk('mp-loc-escala', 'Escala na caixa', cfg.situacao.escala, "mapPanelExtra('situacao', 'escala', this.checked)")}
+                        ${chk('mp-loc-proj', 'Sistema de projeção', cfg.situacao.projecao, "mapPanelExtra('situacao', 'projecao', this.checked)")}
+                        ${chk('mp-loc-destaque', 'Destacar contorno do imóvel', cfg.situacao.destaque !== false, "mapPanelExtra('situacao', 'destaque', this.checked)")}
+                    </div>
+                    <div style="font-weight:700;margin:6px 0 2px">Camadas na caixa</div>
+                    ${!camadas.length ? '<div style="color:#94a3b8;font-size:10.5px">Nenhuma outra camada estava ativa no mapa ao abrir este relatório.</div>' : camadas.map(c => {
+                        const isAtiva = locCamadasOn.has(String(c.id));
+                        const camposDaCamada = (cfg.situacao.campos && cfg.situacao.campos[String(c.id)]) || [];
+                        const isAberta = String(mapPanelLocCamadaCamposAberta) === String(c.id);
+                        const totalSel = camposDaCamada.length;
+                        return `
+                        <div style="margin-bottom:4px;border:1px solid ${isAberta ? 'rgba(52,211,153,0.35)' : 'rgba(255,255,255,0.08)'};border-radius:6px;background:${isAberta ? 'rgba(15,23,42,0.6)' : 'rgba(255,255,255,0.02)'};overflow:hidden">
+                            <div style="display:flex;align-items:center;gap:6px;padding:4px 6px">
+                                <input type="checkbox" ${isAtiva ? 'checked' : ''} onchange="mapPanelLocatorLayer('${esc(c.id)}', this.checked)" style="cursor:pointer;accent-color:#059669;margin:0">
+                                <i style="display:inline-block;width:12px;height:8px;border-radius:2px;background:${esc(c.color)};flex:none"></i>
+                                <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">${esc(c.name)}</span>
+                                ${isAtiva ? `
+                                    <button type="button" class="act" onclick="mapPanelToggleLocCamposExp('${esc(c.id)}', event)" style="padding:1px 6px;font-size:9.5px;display:flex;align-items:center;gap:3px;background:${totalSel > 0 ? 'rgba(5,150,105,0.25)' : 'rgba(255,255,255,0.08)'};border-color:${totalSel > 0 ? '#059669' : 'rgba(255,255,255,0.15)'};color:${totalSel > 0 ? '#34d399' : '#cbd5e1'}">
+                                        <span>${totalSel > 0 ? totalSel + ' campo' + (totalSel > 1 ? 's' : '') : 'Campos'}</span>
+                                        <span style="font-size:8px;transition:transform .15s;${isAberta ? 'transform:rotate(180deg)' : ''}">&#9662;</span>
+                                    </button>
+                                ` : ''}
+                            </div>
+                            ${(isAtiva && isAberta) ? `
+                                <div style="background:#0b1120;padding:4px 6px;border-top:1px solid rgba(255,255,255,0.08);max-height:180px;overflow-y:auto">
+                                    <div style="font-size:9.5px;color:#94a3b8;margin-bottom:3px;text-transform:uppercase;font-weight:700">Campos visíveis no mapa de localização:</div>
+                                    <div onclick="mapPanelToggleLocCampo('${esc(c.id)}', 'rotulo', event)" style="display:flex;align-items:center;gap:5px;padding:3px 6px;border-radius:4px;cursor:pointer;margin-bottom:1px;background:${camposDaCamada.includes('rotulo') ? '#047857' : 'transparent'};color:${camposDaCamada.includes('rotulo') ? '#fff' : '#cbd5e1'};font-size:10.5px">
+                                        <input type="checkbox" ${camposDaCamada.includes('rotulo') ? 'checked' : ''} onclick="event.stopPropagation(); mapPanelToggleLocCampo('${esc(c.id)}', 'rotulo', event)" style="cursor:pointer;accent-color:#059669;margin:0">
+                                        <span style="flex:1">Rótulo padrão (Quadra / Lote)</span>
+                                        ${camposDaCamada.includes('rotulo') ? '<span style="font-weight:bold;margin-left:4px">✓</span>' : ''}
+                                    </div>
+                                    <div onclick="mapPanelToggleLocCampo('${esc(c.id)}', 'titulo', event)" style="display:flex;align-items:center;gap:5px;padding:3px 6px;border-radius:4px;cursor:pointer;margin-bottom:2px;background:${camposDaCamada.includes('titulo') ? '#047857' : 'transparent'};color:${camposDaCamada.includes('titulo') ? '#fff' : '#cbd5e1'};font-size:10.5px">
+                                        <input type="checkbox" ${camposDaCamada.includes('titulo') ? 'checked' : ''} onclick="event.stopPropagation(); mapPanelToggleLocCampo('${esc(c.id)}', 'titulo', event)" style="cursor:pointer;accent-color:#059669;margin:0">
+                                        <span style="flex:1">Nome / Título principal</span>
+                                        ${camposDaCamada.includes('titulo') ? '<span style="font-weight:bold;margin-left:4px">✓</span>' : ''}
+                                    </div>
+                                    ${!(c.campos && c.campos.length) ? '' : c.campos.map(fl => {
+                                        const cid = 'f:' + (fl.k || fl.id);
+                                        const isSel = camposDaCamada.includes(cid);
+                                        return `
+                                        <div onclick="mapPanelToggleLocCampo('${esc(c.id)}', '${esc(cid)}', event)" style="display:flex;align-items:center;gap:5px;padding:3px 6px;border-radius:4px;cursor:pointer;margin-bottom:1px;background:${isSel ? '#047857' : 'transparent'};color:${isSel ? '#fff' : '#cbd5e1'};font-size:10.5px">
+                                            <input type="checkbox" ${isSel ? 'checked' : ''} onclick="event.stopPropagation(); mapPanelToggleLocCampo('${esc(c.id)}', '${esc(cid)}', event)" style="cursor:pointer;accent-color:#059669;margin:0">
+                                            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(fl.l || fl.label || fl.k)}</span>
+                                            ${isSel ? '<span style="font-weight:bold;margin-left:4px">✓</span>' : ''}
+                                        </div>`;
+                                    }).join('')}
+                                </div>
+                            ` : ''}
+                        </div>`;
+                    }).join('')}
+                    <div style="color:#94a3b8;line-height:1.35;margin-top:4px;font-size:10.5px">Arraste a barra superior da caixa para mover. No mapa, use o mouse para dar zoom e centralizar. Puxe o canto inferior direito para redimensionar.</div>
+                    <button type="button" class="act" style="margin-top:4px" onclick="mapPanelSituacaoReset()">Restaurar tamanho e posição padrão</button>
                 ` : ''}
             `;
+            const btnAlign = (n, a, title, sym) => `<button type="button" title="${title}" class="${(n.alinhamento || 'center') === a ? 'on' : ''}" onclick="mapPanelNotaAlinhamento('${esc(n.id)}', '${a}')" style="padding:1px 5px;font-size:11px;font-weight:bold;${(n.alinhamento || 'center') === a ? 'background:#059669;color:#fff;border-color:#059669;' : ''}">${sym}</button>`;
             const notasHtml = `
                 <button type="button" class="act" style="margin-top:5px" onclick="mapPanelNotaAdd()">+ Anotação de texto no centro do mapa</button>
                 ${notas.length ? `<div class="mp-inner-card" style="border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:6px 8px;margin-top:5px;background:#1e293b;color:#f1f5f9">${notas.map(n => `
-                    <div style="display:flex;align-items:center;gap:4px;padding:3px 0">
-                        <input type="text" value="${esc(n.texto)}" maxlength="80" onchange="mapPanelNotaRenomear('${esc(n.id)}', this.value)" style="flex:1;min-width:0;padding:3px 6px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;font-size:11px;background:#0f172a;color:#f8fafc">
-                        ${nisNota(n)}
-                        <button type="button" title="Remover" onclick="mapPanelNotaRemover('${esc(n.id)}')" style="border:0;background:none;cursor:pointer;color:#f87171;font-size:14px;line-height:1">×</button>
+                    <div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:4px">
+                        <div style="display:flex;align-items:flex-start;gap:4px">
+                            <textarea maxlength="300" rows="2" placeholder="Texto técnico da anotação..." onchange="mapPanelNotaRenomear('${esc(n.id)}', this.value)" style="flex:1;min-width:0;padding:4px 6px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;font-size:11px;background:#0f172a;color:#f8fafc;resize:vertical;font-family:inherit;line-height:1.35">${esc(n.texto)}</textarea>
+                            <button type="button" title="Remover anotação" onclick="mapPanelNotaRemover('${esc(n.id)}')" style="border:0;background:none;cursor:pointer;color:#f87171;font-size:16px;line-height:1;padding:2px 4px">×</button>
+                        </div>
+                        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-top:5px">
+                            ${nisNota(n)}
+                            <div class="nis" style="display:inline-flex;align-items:center;gap:1px">
+                                ${btnAlign(n, 'left', 'Alinhar à esquerda', '⇤')}
+                                ${btnAlign(n, 'center', 'Centralizar texto', '≡')}
+                                ${btnAlign(n, 'justify', 'Justificar texto', '⫸')}
+                                ${btnAlign(n, 'right', 'Alinhar à direita', '⇥')}
+                            </div>
+                            <div style="display:inline-flex;align-items:center;gap:2px;background:rgba(255,255,255,0.06);border-radius:4px;padding:1px 4px">
+                                <button type="button" title="Diminuir tamanho da fonte" onclick="mapPanelNotaTamanho('${esc(n.id)}', -1)" style="border:0;background:none;color:#cbd5e1;cursor:pointer;font-size:11px;padding:0 3px">A-</button>
+                                <span style="font-size:10px;color:#94a3b8;min-width:22px;text-align:center">${n.tamanho || 11}px</span>
+                                <button type="button" title="Aumentar tamanho da fonte" onclick="mapPanelNotaTamanho('${esc(n.id)}', 1)" style="border:0;background:none;color:#cbd5e1;cursor:pointer;font-size:11px;padding:0 3px">A+</button>
+                            </div>
+                            <label title="Cor do texto" style="display:inline-flex;align-items:center;margin-left:auto;cursor:pointer">
+                                <input type="color" value="${esc(n.cor || '#0f172a')}" onchange="mapPanelNotaCor('${esc(n.id)}', this.value)" style="width:24px;height:20px;padding:0;border:1px solid rgba(255,255,255,0.2);border-radius:4px;background:transparent;cursor:pointer">
+                            </label>
+                        </div>
                     </div>`).join('')}</div>` : ''}
             `;
             const tc = temporalController;
@@ -4875,18 +5211,41 @@
             const mapBlocoAtual = (renderArgs && renderArgs.tpl && renderArgs.tpl.blocos) ? renderArgs.tpl.blocos.find(b => b.tipo === 'mapa_estatico') : null;
             const isQuebra = !!(mapBlocoAtual && (mapBlocoAtual.quebrarPagina || (mapBlocoAtual.mapa && mapBlocoAtual.mapa.quebrarPagina)));
 
+            const mapHiddenCardHtml = window.isMapHidden() ? `
+                <div style="margin: 8px 0 10px; padding: 10px 12px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 8px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-size: 11px; font-weight: 700; color: #fbbf24; display: flex; align-items: center; gap: 6px;">
+                            <span class="material-symbols-outlined" style="font-size: 16px;">visibility_off</span>
+                            Mapa Oculto na Folha
+                        </span>
+                        <button type="button" onclick="toggleHideMap()" class="act primary" style="width: auto; padding: 3px 8px; font-size: 10.5px; background: #d97706; border-color: #d97706; color: #fff; cursor: pointer;">
+                            Exibir
+                        </button>
+                    </div>
+                    <p style="font-size: 10px; color: #fde68a; margin: 4px 0 0 0;">O mapa está ocultado na impressão e pré-visualização.</p>
+                </div>
+            ` : (temBlocoMapa ? `
+                <div style="margin: 6px 0 10px;">
+                    <button type="button" onclick="toggleHideMap()" class="act" style="display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 11px; padding: 6px 10px; color: #f87171; border-color: rgba(248, 113, 113, 0.3); background: rgba(248, 113, 113, 0.08); width: 100%; cursor: pointer;">
+                        <span class="material-symbols-outlined" style="font-size: 15px;">visibility_off</span>
+                        Ocultar Mapa do Relatório
+                    </button>
+                </div>
+            ` : '');
+
             panel.innerHTML = `
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #e2e8f0" class="panel-header">
                     <strong style="font-size:13px" class="panel-header-title">Configurações do Mapa</strong>
                     <button type="button" onclick="mapPanelHide()" style="border:0;background:none;cursor:pointer;font-size:16px;line-height:1;color:inherit" title="Recolher">×</button>
                 </div>
                 <div style="padding:0 12px 12px">
+                    ${mapHiddenCardHtml}
                     ${seletorMapasHtml}
                     <h4 data-sec-h="destaque" class="${secH('destaque')}" onclick="mapPanelSecao('destaque')">Feição em destaque<span class="chev">&#9662;</span></h4><div data-sec="destaque" class="sec-body" style="display:${secD('destaque')}">
                     ${chk('mp-destaque', 'Destacar a feição', cfg.destaque.ativo, "mapPanelDestaque('ativo', this.checked)")}
                     ${chk('mp-esmaecer', 'Esmaecer o entorno', cfg.destaque.esmaecerEntorno, "mapPanelDestaque('esmaecerEntorno', this.checked)", kind !== 'polygon')}
                     ${cfg.destaque.esmaecerEntorno && kind === 'polygon' ? `<label class="row">Intensidade do esmaecimento <input type="range" id="mp-esmaecer-int" min="10" max="95" value="${Math.round(cfg.destaque.opacidadeEntorno * 100)}" oninput="mapPanelDestaque('opacidadeEntorno', this.value / 100)" style="flex:1"></label>` : ''}
-                    <label class="row">Cor <input type="color" value="${esc(cfg.destaque.cor)}" oninput="mapPanelDestaque('cor', this.value)" style="width:34px;height:22px;padding:0;border:1px solid #cbd5e1"></label>
+                    <label class="row">Cor <input type="color" value="${esc(cfg.destaque.cor || '#10b981')}" oninput="mapPanelDestaque('cor', this.value)" style="width:34px;height:22px;padding:0;border:1px solid #cbd5e1"></label>
                     <label class="row">Preenchimento <input type="range" min="0" max="90" value="${Math.round(cfg.destaque.preenchimento * 100)}" oninput="mapPanelDestaque('preenchimento', this.value / 100)" style="flex:1"></label>
                     </div>
                     <h4 data-sec-h="camadas" class="${secH('camadas')}" onclick="mapPanelSecao('camadas')">Camadas ativas no mapa<span class="chev">&#9662;</span></h4><div data-sec="camadas" class="sec-body" style="display:${secD('camadas')}">
@@ -5347,6 +5706,19 @@
         function mapPanelNotaAdd() { if (mapController) { mapController.addNote(''); renderMapToolsPanel(); } }
         function mapPanelNotaRenomear(id, txt) { if (mapController) { mapController.renameNote(id, txt); renderMapToolsPanel(); } }
         function mapPanelNotaRemover(id) { if (mapController) { mapController.removeNote(id); renderMapToolsPanel(); } }
+        function mapPanelNotaTamanho(id, delta) { if (mapController) { mapController.setNoteSize(id, delta); renderMapToolsPanel(); } }
+        function mapPanelNotaCor(id, cor) { if (mapController) { mapController.setNoteColor(id, cor); renderMapToolsPanel(); } }
+        function mapPanelNotaAlinhamento(id, align) { if (mapController) { mapController.setNoteAlign(id, align); renderMapToolsPanel(); } }
+        function mapPanelSituacaoZoom(delta) { if (mapController) { mapController.zoomSituacao(delta); renderMapToolsPanel(); } }
+        function mapPanelSituacaoDim(prop, val) {
+            if (!mapController) return;
+            const cfg = mapController.getConfig();
+            const sit = Object.assign({}, cfg.situacao);
+            sit[prop] = Math.max(90, Math.min(600, Number(val) || 160));
+            mapController.setConfig({ situacao: sit });
+            renderMapToolsPanel();
+        }
+        function mapPanelSituacaoReset() { if (mapController) { mapController.resetSituacao(); renderMapToolsPanel(); } }
         function mapPanelTemporal(key, value) { if (temporalController) temporalController.setConfig({ [key]: key === 'colunas' ? Number(value) : value }); }
         function mapPanelOrtofoto(id, on) { if (temporalController) temporalController.toggle(id, on); }
 
@@ -5490,6 +5862,9 @@
         function mapPanelLocatorLayer(id, on) {
             if (mapController) {
                 mapController.toggleLocatorLayer(id, on);
+                if (!on && String(mapPanelLocCamadaCamposAberta) === String(id)) {
+                    mapPanelLocCamadaCamposAberta = null;
+                }
                 renderMapToolsPanel();
             }
         }

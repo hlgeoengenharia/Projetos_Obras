@@ -298,43 +298,72 @@
         z-index: 10 !important;
       }
       
-      /* Custom Tooltip Labels for Features */
+      /* Rótulos Cartográficos Elegantes estilo Google Earth / GIS Profissional */
       .leaflet-custom-label {
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
-        color: #ffffff !important;
-        text-shadow: 
-          0 0 3px rgba(0,0,0,0.9),
-          0 0 5px rgba(0,0,0,0.7),
-          0 1px 2px rgba(0,0,0,0.8) !important;
         padding: 0 !important;
-        text-align: center;
-        line-height: 1.1;
-        font-family: 'Inter', sans-serif !important;
-        letter-spacing: 0.3px;
-      }
-      html.dark .leaflet-custom-label {
-        background: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-        color: #ffffff !important;
+        margin: 0 !important;
+        pointer-events: none !important;
+        user-select: none !important;
       }
       .leaflet-custom-label::before,
       .leaflet-custom-label::after {
-        display: none !important; /* Hide tooltip arrows */
+        display: none !important; /* Remove qualquer seta de tooltip */
       }
+      .map-feature-label,
       .contour-elevation-label {
-        font-family: 'Inter', monospace, sans-serif !important;
-        font-size: 10px !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        font-size: 11px !important;
         font-weight: 700 !important;
-        background: rgba(15, 23, 42, 0.8) !important;
+        letter-spacing: 0.04em !important;
+        line-height: 1 !important;
+        white-space: nowrap !important;
+        pointer-events: none !important;
+        user-select: none !important;
+        display: inline-block;
+        
+        /* Padrão Google Maps / Google Earth em mapa claro:
+           Texto escuro nítido com halo branco puro em 8 direções */
+        color: #0f172a !important;
+        text-shadow:
+          -1.5px -1.5px 0 #ffffff,
+           1.5px -1.5px 0 #ffffff,
+          -1.5px  1.5px 0 #ffffff,
+           1.5px  1.5px 0 #ffffff,
+           0px   -1.5px 0 #ffffff,
+           0px    1.5px 0 #ffffff,
+          -1.5px  0px   0 #ffffff,
+           1.5px  0px   0 #ffffff,
+           0px    0px   3px #ffffff,
+           0px    0px   5px rgba(255, 255, 255, 0.95) !important;
+      }
+
+      /* Modo Escuro ou Imagem de Satélite:
+         Texto branco brilhante com halo escuro profundo em 8 direções */
+      html.dark .map-feature-label,
+      html.dark .contour-elevation-label,
+      .basemap-satellite .map-feature-label,
+      .basemap-satellite .contour-elevation-label {
         color: #ffffff !important;
-        padding: 1px 5px !important;
-        border-radius: 4px !important;
-        border: 1px solid rgba(255, 255, 255, 0.3) !important;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5) !important;
-        letter-spacing: 0.5px;
+        text-shadow:
+          -1.5px -1.5px 0 #020617,
+           1.5px -1.5px 0 #020617,
+          -1.5px  1.5px 0 #020617,
+           1.5px  1.5px 0 #020617,
+           0px   -1.5px 0 #020617,
+           0px    1.5px 0 #020617,
+          -1.5px  0px   0 #020617,
+           1.5px  0px   0 #020617,
+           0px    0px   3px #020617,
+           0px    0px   5px rgba(2, 6, 23, 0.95) !important;
       }
 
       /* Forcar fundo escuro e texto branco no dialogo de CRS Cesium */
@@ -1321,6 +1350,10 @@
             <option value="">Padrão Genérico</option>
             <option value="orcamento_obra">🏗️ Orçamento de Obra (SINAPI / Caixa)</option>
         </select>
+        <button type="button" onclick="const tId = themeBeingEdited; closeEditThemeModal(); openRemapAttributesModal(tId);" class="w-full py-2 px-3 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-600 dark:text-sky-300 border border-sky-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer" title="Reconectar / Mapear colunas da camada com os campos do formulário">
+            <span class="material-symbols-outlined text-[16px]">sync_alt</span>
+            <span>Reconectar / Mapear Atributos (De-Para)</span>
+        </button>
       </div>
 
       <div>
@@ -1431,7 +1464,7 @@
 
 <!-- Modal Reconectar / Mapear Atributos (De-Para) -->
 <div id="remap-attributes-modal" class="fixed inset-0 z-[110] bg-black/60 backdrop-blur-xs hidden flex items-center justify-center p-4">
-  <div class="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-6 w-full max-w-lg border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200">
+  <div class="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-6 w-full max-w-3xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200">
     <!-- Header -->
     <div class="flex items-center justify-between mb-2">
       <h3 class="text-xl font-bold text-slate-900 dark:text-white">Reconectar / Mapear Atributos</h3>
@@ -1459,6 +1492,25 @@
             <option value="orcamento_obra">🏗️ Orçamento de Obra (SINAPI / Caixa)</option>
           </select>
         </div>
+
+        <!-- Card para Reconectar com o Arquivo Original -->
+        <div class="p-3 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 rounded-xl">
+          <div class="flex items-center justify-between gap-2">
+            <div>
+              <span class="text-xs font-bold text-sky-900 dark:text-sky-200 flex items-center gap-1">
+                <span class="material-symbols-outlined text-[16px] text-sky-600 dark:text-sky-400">upload_file</span>
+                Resgatar Colunas do Arquivo Original
+              </span>
+              <span class="text-[11px] text-sky-700 dark:text-sky-300 block mt-0.5">Selecione o arquivo GeoJSON importado para listar todas as colunas originais (Nome, Bairro, etc.).</span>
+            </div>
+            <button type="button" onclick="document.getElementById('remap-file-input').click()" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white rounded-lg text-xs font-bold shrink-0 flex items-center gap-1 shadow-xs cursor-pointer transition-all">
+              <span class="material-symbols-outlined text-[15px]">file_open</span>
+              <span>Carregar GeoJSON</span>
+            </button>
+            <input type="file" id="remap-file-input" accept=".geojson,.json" class="hidden" onchange="window.handleRemapFileInput(this)">
+          </div>
+          <div id="remap-file-status" class="hidden mt-2 text-[11px] font-semibold text-emerald-800 dark:text-emerald-200 bg-emerald-100/80 dark:bg-emerald-950/60 p-2 rounded-lg border border-emerald-300 dark:border-emerald-700 flex items-center gap-1.5"></div>
+        </div>
         
         <div>
           <div class="flex items-center justify-between mb-1">
@@ -1472,7 +1524,13 @@
               </button>
             </div>
           </div>
-          <p class="text-xs text-slate-500 mb-3">Vincule as colunas identificadas aos campos do formulário.</p>
+          <p class="text-xs text-slate-500 mb-2">Vincule as colunas identificadas aos campos do formulário.</p>
+
+          <div class="flex items-center justify-between px-3 py-1.5 mb-1 bg-slate-100 dark:bg-slate-800/60 rounded-lg text-[11px] font-bold text-slate-600 dark:text-slate-300">
+            <span class="w-[46%] uppercase tracking-wider">Campo do Cadastro</span>
+            <span class="w-[8%] text-center"></span>
+            <span class="w-[46%] uppercase tracking-wider">Coluna de Origem (Arquivo / Camada)</span>
+          </div>
           
           <div id="remap-fields-container" class="flex flex-col gap-2">
             <!-- Fields dynamically generated here with exact Import layout -->
@@ -1889,8 +1947,8 @@
 </div>
 
 <!-- Global Import Modal -->
-<div id="global-import-modal" class="fixed inset-0 z-[100] bg-black/50 hidden flex items-center justify-center">
-  <div class="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-6 w-full max-w-lg border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col">
+<div id="global-import-modal" class="fixed inset-0 z-[100] bg-black/50 hidden flex items-center justify-center p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-6 w-full max-w-3xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col">
     <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Importar GeoJSON</h3>
     
     <div class="mb-4">
@@ -1915,6 +1973,13 @@
         <div>
           <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Mapeamento de Campos (Opcional)</label>
           <p class="text-xs text-slate-500 mb-2">Renomeie os campos identificados ou deixe como estão.</p>
+
+          <div class="flex items-center justify-between px-3 py-1.5 mb-1 bg-slate-100 dark:bg-slate-800/60 rounded-lg text-[11px] font-bold text-slate-600 dark:text-slate-300">
+            <span class="w-[46%] uppercase tracking-wider">Campo do Cadastro</span>
+            <span class="w-[8%] text-center"></span>
+            <span class="w-[46%] uppercase tracking-wider">Coluna de Origem (Arquivo)</span>
+          </div>
+
           <div id="global-import-fields-container" class="flex flex-col gap-2">
             <!-- Fields will be dynamically generated here -->
           </div>
@@ -2813,11 +2878,11 @@
 <script src="supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.1/dist-browser/geotiff.js"></script>
-<script src="src/formRenderer.js?v=20260927_media_lightbox"></script>
-<script src="src/customFields.js?v=20260927_media_lightbox"></script>
+<script src="src/formRenderer.js?v=20261006_labels_google_earth_v1"></script>
+<script src="src/customFields.js?v=20261006_labels_google_earth_v1"></script>
 <script src="src/tableJoin.js"></script>
 <script src="src/geo-engine-turbo.js"></script>
-<script src="src/main.js?v=20261005_fix_ortofoto_resampling_r2"></script>
+<script src="src/main.js?v=20261006_labels_google_earth_v1"></script>
 <script src="src/spatialAnalytics.js?v=20260911b"></script>
 <script src="src/measurement.js"></script>
 <script src="src/cesium-integration.js"></script>
@@ -2826,11 +2891,11 @@
 <script src="src/offline-sync.js"></script>
 <script src="src/swipe-comparator.js?v=20261003_feat_tile_resilience"></script>
 <script src="src/orcamento.js?v=20260910a"></script>
-<script src="src/mapTools.js?v=20260922q"></script>
-<script src="src/fieldFormatter.js?v=20260922q"></script>
-<script src="src/reportData.js?v=20260922q"></script>
-<script src="src/reportAdapter.js?v=20260922q"></script>
-<script src="src/reportBuilder.js?v=20260922q"></script>
+<script src="src/mapTools.js?v=20261005b"></script>
+<script src="src/fieldFormatter.js?v=20261005b"></script>
+<script src="src/reportData.js?v=20261005b"></script>
+<script src="src/reportAdapter.js?v=20261005b"></script>
+<script src="src/reportBuilder.js?v=20261005b"></script>
 <script>
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {

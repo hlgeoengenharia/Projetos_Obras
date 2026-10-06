@@ -120,7 +120,20 @@
                 if (item.lat !== undefined || item.rot !== undefined) itens[k] = item;
             });
         }
-        return { ativo: bool(x.ativo, false), campo: x.campo === 'titulo' ? 'titulo' : 'rotulo', cor: isHexColor(x.cor) ? x.cor : MAP_DEFAULTS.rotulos.cor, estilo: normalizeEstilo(x.estilo, MAP_DEFAULTS.rotulos.estilo), itens };
+        let campos = [];
+        if (typeof x.campo === 'string' && x.campo.trim()) {
+            const spl = x.campo.split(',').map(s => s.trim()).filter(Boolean);
+            campos = spl.filter(s => s === 'rotulo' || s === 'titulo' || s.startsWith('f:'));
+        }
+        if (!campos.length && Array.isArray(x.campos) && x.campos.length) {
+            campos = x.campos.map(String).map(s => s.trim()).filter(s => s === 'rotulo' || s === 'titulo' || s.startsWith('f:'));
+        }
+        if (!campos.length) {
+            campos = ['rotulo'];
+        }
+        const campoStr = (campos.length === 1) ? campos[0] : campos.join(',');
+
+        return { ativo: bool(x.ativo, false), campo: campoStr, campos: campos, cor: isHexColor(x.cor) ? x.cor : MAP_DEFAULTS.rotulos.cor, estilo: normalizeEstilo(x.estilo, MAP_DEFAULTS.rotulos.estilo), itens };
     }
     function normalizeConfrontantes(x) {
         x = x || {};
@@ -319,12 +332,44 @@
         x = x || {};
         return { ativo: bool(x.ativo, false), campo: ID_REF.test(String(x.campo || '')) ? String(x.campo) : '' };
     }
-    /** Mapa de localização (card próprio): liga/desliga, mapa de referência dele, camadas mostradas e seta do norte. */
+    /** Mapa de localização (card próprio): liga/desliga, mapa de referência dele, camadas mostradas, seta do norte, escala, projeção, zoom e tamanho. */
     function normalizeSituacao(s) {
         s = s || {};
         const baseMap = ['osm', 'satelite', 'nenhum'].indexOf(s.baseMap) >= 0 ? s.baseMap : 'osm';
         const camadas = (Array.isArray(s.camadas) ? s.camadas : []).map(String).filter(Boolean).slice(0, 30);
-        return { ativo: bool(s.ativo, false), baseMap: baseMap, camadas: camadas, norte: bool(s.norte, false) };
+        const w = clamp(s.w, 90, 600, 140);
+        const h = clamp(s.h, 90, 600, 140);
+        const zoom = (s.zoom !== undefined && s.zoom !== null && isFinite(Number(s.zoom))) ? Number(s.zoom) : null;
+        let center = null;
+        if (Array.isArray(s.center) && s.center.length >= 2 && isFinite(Number(s.center[0])) && isFinite(Number(s.center[1]))) {
+            center = [Number(s.center[0]), Number(s.center[1])];
+        }
+        let campos = {};
+        if (s.campos && typeof s.campos === 'object') {
+            if (Array.isArray(s.campos)) {
+                campos._all = s.campos.map(String).filter(Boolean).slice(0, 30);
+            } else {
+                Object.keys(s.campos).forEach(k => {
+                    if (Array.isArray(s.campos[k])) {
+                        campos[String(k)] = s.campos[k].map(String).filter(Boolean).slice(0, 20);
+                    }
+                });
+            }
+        }
+        return {
+            ativo: bool(s.ativo, false),
+            baseMap: baseMap,
+            camadas: camadas,
+            campos: campos,
+            norte: bool(s.norte, false),
+            escala: bool(s.escala, false),
+            projecao: bool(s.projecao, false),
+            destaque: bool(s.destaque, true),
+            zoom: zoom,
+            center: center,
+            w: w,
+            h: h
+        };
     }
     function normalizeQuadriculado(x) {
         x = x || {};
@@ -336,11 +381,17 @@
         (Array.isArray(a) ? a : []).forEach(x => {
             if (!x || out.length >= 30) return;
             const lat = Number(x.lat), lng = Number(x.lng);
-            const texto = String(x.texto === undefined ? '' : x.texto).replace(/[\r\n]+/g, ' ').trim().slice(0, 80);
+            const texto = String(x.texto === undefined ? '' : x.texto).replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim().slice(0, 300);
             if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || !texto) return;
             const id = /^a[0-9]{1,4}$/.test(String(x.id)) ? String(x.id) : 'a' + (out.length + 1);
             if (out.some(o => o.id === id)) return;
-            const item = { id: id, lat: lat, lng: lng, texto: texto, estilo: normalizeEstilo(x.estilo, MAP_DEFAULTS.rotulos.estilo) };
+            const item = {
+                id: id, lat: lat, lng: lng, texto: texto,
+                estilo: normalizeEstilo(x.estilo, MAP_DEFAULTS.rotulos.estilo),
+                tamanho: clamp(x.tamanho, 8, 28, 10),
+                cor: isHexColor(x.cor) ? x.cor : '#0f172a',
+                alinhamento: ['center', 'justify', 'left', 'right'].indexOf(x.alinhamento) >= 0 ? x.alinhamento : 'center'
+            };
             const rot = normalizeRotacoes({ a: x.rot }).a;
             if (x.rot !== undefined && rot !== undefined && rot !== 0) item.rot = rot;
             out.push(item);
@@ -1123,7 +1174,13 @@
     /** Texto de um confrontante: os campos escolhidos (juntos por " — "); sem campos escolhidos, Quadra/Lote e nome principal. */
     function textoConfrontante(f, campos) {
         const props = (f && f.properties) || {};
-        if (campos && campos.length) return campos.map(k => (props.f && props.f[k]) || '').filter(Boolean).join(' — ');
+        if (campos && campos.length) {
+            return campos.map(k => {
+                const v1 = (props.f && props.f[k] !== undefined && props.f[k] !== null) ? props.f[k] : '';
+                const v2 = (props[k] !== undefined && props[k] !== null) ? props[k] : '';
+                return String(v1 || v2 || '').trim();
+            }).filter(Boolean).join(' — ');
+        }
         return [props.r, props.t].filter(Boolean).join(' — ');
     }
 
@@ -1632,7 +1689,8 @@
             let total = 0;
             // campos disponíveis para a coluna Confrontantes e seus valores (só perto da feição e só se a página do mapa liberou)
             const campos = typeof opts.fieldsFn === 'function' ? (opts.fieldsFn(theme) || []).slice(0, 40) : [];
-            const areaDados = expandBBoxMeters(bbox, opts.dataBufferM === undefined ? 80 : opts.dataBufferM);
+            const dataBuf = opts.dataBufferM === undefined ? (opts.bufferM === undefined ? 1500 : opts.bufferM) : opts.dataBufferM;
+            const areaDados = expandBBoxMeters(bbox, dataBuf);
             (theme.features || []).forEach(f => {
                 if (!f || !f.geometry) return;
                 if (opts.excludeKey && featureKey(f.properties) === opts.excludeKey) return;
