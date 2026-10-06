@@ -407,6 +407,34 @@
                 tx.objectStore(STORE_THEMES).delete(themeId);
                 tx.objectStore(STORE_META).delete(`theme_${themeId}_updated`);
             } catch (e) {}
+        },
+
+        async getAllThemeCounts() {
+            try {
+                const db = await getDB();
+                if (!db) return {};
+                return new Promise((resolve) => {
+                    const tx = db.transaction(STORE_THEMES, 'readonly');
+                    const store = tx.objectStore(STORE_THEMES);
+                    const counts = {};
+                    const req = store.openCursor();
+                    req.onsuccess = (e) => {
+                        const cursor = e.target.result;
+                        if (cursor) {
+                            const val = cursor.value;
+                            if (val && val.themeId) {
+                                counts[String(val.themeId)] = typeof val.count === 'number' ? val.count : (Array.isArray(val.features) ? val.features.length : 0);
+                            }
+                            cursor.continue();
+                        } else {
+                            resolve(counts);
+                        }
+                    };
+                    req.onerror = () => resolve({});
+                });
+            } catch (e) {
+                return {};
+            }
         }
     };
 
@@ -499,6 +527,11 @@
 
         indexTheme(themeId, features) {
             return this.indexThemeFeatures(themeId, features);
+        },
+
+        hasThemeTree(themeId) {
+            const tree = themeTrees.get(themeId);
+            return !!(tree && tree.data && ((tree.data.children && tree.data.children.length > 0) || !tree.data.leaf));
         },
 
         // Busca feições visíveis no viewport em O(log N) - Microssegundos

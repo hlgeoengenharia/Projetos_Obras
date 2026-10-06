@@ -366,6 +366,78 @@
            0px    0px   5px rgba(2, 6, 23, 0.95) !important;
       }
 
+      /* ==========================================================================
+         Controle de Escala Métrico (Largura de Rua ~8 metros) e Antipoluição Visual
+         ========================================================================== */
+      /* Em zoom distante (zoom < 16.5): esconde completamente os rótulos de ruas para zerar a poluição visual */
+      .map-zoom-low .street-name-label,
+      .map-zoom-low .street-feature-label {
+        display: none !important;
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
+
+      /* No zoom 17 (rua física com ~7px na tela): texto compacto de 8px preso estritamente na largura */
+      .map-zoom-17 .street-feature-label {
+        font-size: 8px !important;
+        line-height: 8px !important;
+        max-height: 9px !important;
+        letter-spacing: 0.02em !important;
+        text-shadow:
+          -1px -1px 0 #ffffff,
+           1px -1px 0 #ffffff,
+          -1px  1px 0 #ffffff,
+           1px  1px 0 #ffffff,
+           0px  0px   2px #ffffff !important;
+      }
+
+      /* No zoom 18 (rua física com ~14px na tela): texto de 10px elegante */
+      .map-zoom-18 .street-feature-label {
+        font-size: 10px !important;
+        line-height: 10.5px !important;
+        max-height: 11px !important;
+        letter-spacing: 0.03em !important;
+      }
+
+      /* No zoom 19+ (rua física com > 25px na tela): texto padrão de 11.5px */
+      .map-zoom-high .street-feature-label {
+        font-size: 11.5px !important;
+        line-height: 12px !important;
+        max-height: 13px !important;
+        letter-spacing: 0.04em !important;
+      }
+
+      .street-feature-label {
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        max-height: 13px !important;
+      }
+
+      /* Antipoluição visual de rótulos de polígonos/lotes (CTM, Quadras, Loteamentos)
+         "Se não der pra ficar dentro da feição não mostra, simples assim"
+         Em zoom < 18, um lote urbano tem poucos pixels na tela. Oculta 100% dos rótulos de polígonos. */
+      .map-zoom-low .polygon-feature-label,
+      .map-zoom-low .polygon-name-label,
+      .map-zoom-16 .polygon-feature-label,
+      .map-zoom-16 .polygon-name-label,
+      .map-zoom-17 .polygon-feature-label,
+      .map-zoom-17 .polygon-name-label {
+        display: none !important;
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
+
+      .polygon-feature-label {
+        font-size: 9.5px !important;
+        line-height: 10px !important;
+        max-height: 12px !important;
+        letter-spacing: 0.02em !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+      }
+
       /* Forcar fundo escuro e texto branco no dialogo de CRS Cesium */
       #cesium-crs-select,
       #cesium-crs-zoffset {
@@ -1295,8 +1367,8 @@
           <input type="color" id="edit-theme-color-input" class="w-full h-10 cursor-pointer rounded bg-slate-50 border-none">
         </div>
         <div class="flex-1">
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Transparência (<span id="edit-theme-opacity-val">40%</span>)</label>
-          <input type="range" id="edit-theme-opacity-input" min="0" max="1" step="0.1" value="0.4" class="w-full mt-2 accent-primary" oninput="document.getElementById('edit-theme-opacity-val').textContent = Math.round(this.value * 100) + '%'">
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Transparência da Aresta (<span id="edit-theme-stroke-opacity-val">100%</span>)</label>
+          <input type="range" id="edit-theme-stroke-opacity-input" min="0" max="1" step="0.05" value="1" class="w-full mt-2 accent-primary" oninput="document.getElementById('edit-theme-stroke-opacity-val').textContent = Math.round(this.value * 100) + '%'">
         </div>
       </div>
       <div class="flex gap-4">
@@ -1304,21 +1376,27 @@
           <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Espessura (Linhas) - <span id="edit-theme-weight-val">2</span>px</label>
           <input type="range" id="edit-theme-weight-input" min="1" max="10" step="1" value="2" class="w-full mt-2 accent-primary" oninput="document.getElementById('edit-theme-weight-val').textContent = this.value">
         </div>
-        <div class="flex-1 flex gap-3">
-          <div class="flex-1 flex flex-col justify-center">
-            <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-2">Tracejado</label>
-            <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="edit-theme-dashed-input" class="sr-only peer">
-              <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
-            </label>
-          </div>
-          <div class="flex-1 flex flex-col justify-center">
-            <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-2" title="Preencher interior do polígono com a cor selecionada">Preenchimento</label>
-            <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="edit-theme-fill-input" class="sr-only peer" checked>
-              <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
-            </label>
-          </div>
+        <div class="flex-1">
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Transparência do Preenchimento (<span id="edit-theme-fill-opacity-val">40%</span>)</label>
+          <input type="range" id="edit-theme-fill-opacity-input" min="0" max="1" step="0.05" value="0.4" class="w-full mt-2 accent-primary" oninput="document.getElementById('edit-theme-fill-opacity-val').textContent = Math.round(this.value * 100) + '%'; if(document.getElementById('edit-theme-opacity-input')) document.getElementById('edit-theme-opacity-input').value = this.value; if(document.getElementById('edit-theme-opacity-val')) document.getElementById('edit-theme-opacity-val').textContent = Math.round(this.value * 100) + '%';">
+          <input type="hidden" id="edit-theme-opacity-input" value="0.4">
+          <span id="edit-theme-opacity-val" class="hidden">40%</span>
+        </div>
+      </div>
+      <div class="flex gap-4">
+        <div class="flex-1 flex flex-col justify-center">
+          <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-2">Linha Tracejada</label>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="edit-theme-dashed-input" class="sr-only peer">
+            <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
+          </label>
+        </div>
+        <div class="flex-1 flex flex-col justify-center">
+          <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-2" title="Preencher interior do polígono com a cor selecionada">Preenchimento</label>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="edit-theme-fill-input" class="sr-only peer" checked>
+            <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
+          </label>
         </div>
       </div>
       <div>
@@ -2878,11 +2956,11 @@
 <script src="supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.1/dist-browser/geotiff.js"></script>
-<script src="src/formRenderer.js?v=20261006_labels_google_earth_v1"></script>
-<script src="src/customFields.js?v=20261006_labels_google_earth_v1"></script>
+<script src="src/formRenderer.js?v=20261006_perf_turbo_labels_v4"></script>
+<script src="src/customFields.js?v=20261006_perf_turbo_labels_v4"></script>
 <script src="src/tableJoin.js"></script>
-<script src="src/geo-engine-turbo.js"></script>
-<script src="src/main.js?v=20261006_labels_google_earth_v1"></script>
+<script src="src/geo-engine-turbo.js?v=20261006_turbo_speed_v7"></script>
+<script src="src/main.js?v=20261006_turbo_speed_v7"></script>
 <script src="src/spatialAnalytics.js?v=20260911b"></script>
 <script src="src/measurement.js"></script>
 <script src="src/cesium-integration.js"></script>

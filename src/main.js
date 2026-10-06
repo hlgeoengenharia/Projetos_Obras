@@ -192,16 +192,24 @@ window.normalizeStatValue = normalizeStatValue;
 
 function getFeaturePropertyValue(theme, feature, requestedKey) {
    if (!requestedKey || !feature || !feature.properties) return undefined;
+
+   const norm = str => (str || '').toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, '');
+   const reqNorm = norm(requestedKey);
+   if (!reqNorm) return undefined;
    
    // 1. Localiza a definição do formulário e campo
    let form = null;
-   if (theme && theme.formId && typeof allForms !== 'undefined') {
-       form = allForms.find(f => f.id === theme.formId);
+   const themeFormId = theme ? (theme.formId || theme.cadastroType || theme.tipo_cadastro) : null;
+   if (themeFormId && typeof allForms !== 'undefined' && Array.isArray(allForms)) {
+       form = allForms.find(f => f.id === themeFormId || (f.title && norm(f.title) === norm(themeFormId)));
+   }
+   if (!form && theme && theme.name && typeof allForms !== 'undefined' && Array.isArray(allForms)) {
+       form = allForms.find(f => f.title && norm(f.title) === norm(theme.name));
    }
    if (!form && typeof allForms !== 'undefined' && Array.isArray(allForms)) {
        form = allForms.find(f => {
            const schema = f.schema || f.tabs || [];
-           return schema.some(tab => (tab.fields || []).some(fld => fld.id === requestedKey || (fld.label && fld.label.toLowerCase() === requestedKey.toLowerCase())));
+           return schema.some(tab => (tab.fields || []).some(fld => fld.id === requestedKey || norm(fld.label) === reqNorm || norm(fld.name) === reqNorm));
        });
    }
 
@@ -213,8 +221,8 @@ function getFeaturePropertyValue(theme, feature, requestedKey) {
        if (tab.fields) {
            const field = tab.fields.find(f => 
                f.id === requestedKey ||
-               (f.label && f.label.toLowerCase() === requestedKey.toLowerCase()) || 
-               (f.name && f.name.toLowerCase() === requestedKey.toLowerCase())
+               norm(f.label) === reqNorm || 
+               norm(f.name) === reqNorm
            );
            if (field) {
                targetField = field;
@@ -236,38 +244,84 @@ function getFeaturePropertyValue(theme, feature, requestedKey) {
        }
    }
 
-   // 3. Valor direto no ID do campo se preenchido na feição (Prioridade para as atualizações cadastrais do usuário)
-   if (targetField && feature.properties[targetField.id] !== undefined && feature.properties[targetField.id] !== '' && feature.properties[targetField.id] !== '---') {
-       return feature.properties[targetField.id];
+   const isValidVal = v => v !== undefined && v !== null && String(v).trim() !== '' && String(v).trim() !== '---';
+
+   // 3. Valor direto no ID, label ou name do targetField
+   if (targetField) {
+       if (isValidVal(feature.properties[targetField.id])) return feature.properties[targetField.id];
+       if (targetField.name && isValidVal(feature.properties[targetField.name])) return feature.properties[targetField.name];
+       if (targetField.label && isValidVal(feature.properties[targetField.label])) return feature.properties[targetField.label];
    }
 
    // 4. Valor direto pela requestedKey
-   if (feature.properties[requestedKey] !== undefined && feature.properties[requestedKey] !== '' && feature.properties[requestedKey] !== '---') {
+   if (isValidVal(feature.properties[requestedKey])) {
        return feature.properties[requestedKey];
    }
 
-   // 5. Busca case-insensitive nas propriedades da feição
-   const reqLower = requestedKey.toLowerCase();
+   // 5. Busca normalizada (case-insensitive e sem acentos) nas propriedades da feição
+   const targetLabelNorm = targetField && targetField.label ? norm(targetField.label) : null;
+   const targetNameNorm = targetField && targetField.name ? norm(targetField.name) : null;
+
    for (const p in feature.properties) {
-       if (p.toLowerCase() === reqLower && feature.properties[p] !== undefined && feature.properties[p] !== '' && feature.properties[p] !== '---') {
+       const pNorm = norm(p);
+       if ((pNorm === reqNorm || (targetLabelNorm && pNorm === targetLabelNorm) || (targetNameNorm && pNorm === targetNameNorm)) && isValidVal(feature.properties[p])) {
            return feature.properties[p];
        }
    }
 
-   // 6. FALLBACK: Se o campo direto na feição NÃO foi preenchido/atualizado,
-   // e for campo de fiscalização/vistoria (ex: recuo, ocupação, área invadida) ou pertencer à aba MPF/consolidada:
-   // busca a informação mais recente das abas parceiras (PF, SPU, Município) que alimentam o histórico
+   // 6. Aliases frequentes para campos essenciais (Proprietário, Logradouro, Quadra, Lote)
+   if (reqNorm.includes('proprietario') || reqNorm.includes('possuidor')) {
+       const propAliases = ['proprietario', 'proprietaria', 'nome_proprietario', 'nomeproprietario', 'nome_prop', 'proprietario_possuidor', 'titular', 'nometitular', 'nome_do_proprietario'];
+       for (const alias of propAliases) {
+           for (const p in feature.properties) {
+               if (norm(p) === alias && isValidVal(feature.properties[p])) {
+                   return feature.properties[p];
+               }
+           }
+       }
+   } else if (reqNorm.includes('logradouro') || reqNorm === 'nome' || reqNorm.includes('endereco')) {
+       const streetAliases = ['logradouro', 'nomelogradouro', 'nome_logradouro', 'nmlogrado', 'rua', 'nome_rua', 'nomerua', 'nome', 'endereco'];
+       for (const alias of streetAliases) {
+           for (const p in feature.properties) {
+               if (norm(p) === alias && isValidVal(feature.properties[p])) {
+                   return feature.properties[p];
+               }
+           }
+       }
+   } else if (reqNorm.includes('quadra')) {
+       const qAliases = ['quadra', 'quadractm', 'numquadra', 'num_quadra', 'cdquadra', 'nuquadra'];
+       for (const alias of qAliases) {
+           for (const p in feature.properties) {
+               if (norm(p) === alias && isValidVal(feature.properties[p])) {
+                   return feature.properties[p];
+               }
+           }
+       }
+   } else if (reqNorm.includes('lote')) {
+       const lAliases = ['lote', 'lotectm', 'numlote', 'num_lote', 'cdlote', 'nulote'];
+       for (const alias of lAliases) {
+           for (const p in feature.properties) {
+               if (norm(p) === alias && isValidVal(feature.properties[p])) {
+                   return feature.properties[p];
+               }
+           }
+       }
+   }
+
+   // 7. FALLBACK: Se o campo direto na feição NÃO foi preenchido/atualizado,
+   // e for campo de fiscalização/vistoria ou pertencer à aba MPF/consolidada:
    const isMpfOrConsolidated = targetTab && (
        targetTab.type === 'consolidated_history' || 
        targetTab.isConsolidatedHistory || 
        (targetTab.title && targetTab.title.toUpperCase().includes('MPF'))
    );
+   const reqLower = requestedKey.toLowerCase();
    const isSurveyField = reqLower.includes('recuo') || reqLower.includes('ocupac') || reqLower.includes('area') ||
                          (targetField && targetField.label && (targetField.label.toLowerCase().includes('recuo') || targetField.label.toLowerCase().includes('ocupac') || targetField.label.toLowerCase().includes('area')));
 
    if ((isMpfOrConsolidated || isSurveyField) && typeof getLatestRecordAcrossTabs === 'function') {
        const latestFromTabs = getLatestRecordAcrossTabs(null, 'auto', targetField ? targetField.id : requestedKey, feature.properties, targetField ? targetField.label : requestedKey);
-       if (latestFromTabs !== null && latestFromTabs !== undefined && String(latestFromTabs).trim() !== '' && String(latestFromTabs).trim() !== '---') {
+       if (isValidVal(latestFromTabs)) {
            return latestFromTabs;
        }
    }
@@ -474,6 +528,8 @@ async function loadThemes() {
                       cadastroType: t.tipo_cadastro,
                       formId: t.tipo_cadastro,
                       opacity: tMeta.opacity !== undefined ? tMeta.opacity : 0.4,
+                      strokeOpacity: tMeta.strokeOpacity !== undefined ? tMeta.strokeOpacity : (tMeta.stroke_opacity !== undefined ? tMeta.stroke_opacity : 1.0),
+                      fillOpacity: tMeta.fillOpacity !== undefined ? tMeta.fillOpacity : (tMeta.fill_opacity !== undefined ? tMeta.fill_opacity : (tMeta.opacity !== undefined ? tMeta.opacity : 0.4)),
                       weight: tMeta.weight !== undefined ? tMeta.weight : 2,
                       dashed: !!tMeta.dashed,
                       fill: tMeta.fill !== undefined ? !!tMeta.fill : undefined,
@@ -528,6 +584,9 @@ async function loadThemes() {
   }
   window.themes = themes;
   window.loadThemeProperties = loadThemeProperties;
+  if (typeof prewarmThemeCounts === 'function') {
+      prewarmThemeCounts();
+  }
   } finally {
       isLoadingThemes = false;
   }
@@ -1597,6 +1656,27 @@ function initMap() {
     }
   });
 
+  function updateMapZoomLevelClasses() {
+    if (!map) return;
+    const z = map.getZoom();
+    const mapContainer = document.getElementById('map');
+    if (!mapContainer) return;
+
+    mapContainer.classList.remove('map-zoom-low', 'map-zoom-16', 'map-zoom-17', 'map-zoom-18', 'map-zoom-high');
+    if (z < 16.5) {
+      mapContainer.classList.add('map-zoom-low');
+    } else if (z < 17.5) {
+      mapContainer.classList.add('map-zoom-17');
+    } else if (z < 18.5) {
+      mapContainer.classList.add('map-zoom-18');
+    } else {
+      mapContainer.classList.add('map-zoom-high');
+    }
+  }
+
+  map.on('zoomend', updateMapZoomLevelClasses);
+  updateMapZoomLevelClasses();
+
   // Geoman Options
   if (map.pm) {
     try {
@@ -1713,13 +1793,42 @@ function initMap() {
         }
       }
 
+      // Resolução independente de opacidade da aresta e do preenchimento:
+      let strokeOpacity = 1;
+      if (theme) {
+        if (theme.strokeOpacity !== undefined) strokeOpacity = Number(theme.strokeOpacity);
+        else if (theme.stroke_opacity !== undefined) strokeOpacity = Number(theme.stroke_opacity);
+        else if (theme.opacity !== undefined && theme.opacity <= 0.001) strokeOpacity = 0; // retrocompatibilidade opacidade 0%
+        else strokeOpacity = 1;
+      }
+
+      let fillOpacity = 0.4;
+      if (theme) {
+        if (theme.fillOpacity !== undefined) fillOpacity = Number(theme.fillOpacity);
+        else if (theme.fill_opacity !== undefined) fillOpacity = Number(theme.fill_opacity);
+        else if (theme.opacity !== undefined) fillOpacity = Number(theme.opacity);
+        else fillOpacity = 0.4;
+      }
+
+      // Se houver classificação temática ativa com opacidade definida
+      if (theme && theme._activeClassification && opacity) {
+        fillOpacity = opacity;
+      }
+
+      const isStrokeZero = strokeOpacity <= 0.001;
+      const isFillZero = fillOpacity <= 0.001 || !shouldFill;
+
+      const strokeVisible = !isStrokeZero;
+      const fillVisible = shouldFill && !isFillZero && !isLineGeom && !isLineTheme;
+
       return {
-        fill: shouldFill,
-        fillColor: shouldFill ? color : 'transparent',
-        fillOpacity: shouldFill ? opacity : 0,
+        stroke: strokeVisible,
+        fill: fillVisible,
+        fillColor: fillVisible ? color : 'transparent',
+        fillOpacity: fillVisible ? fillOpacity : 0,
         color: color,
-        opacity: (shouldFill && opacity < 0.8) ? 0.9 : 1,
-        weight: weight,
+        opacity: strokeVisible ? strokeOpacity : 0,
+        weight: strokeVisible ? weight : 0,
         dashArray: dashArray,
         className: `theme-feature theme-${themeId}`
       };
@@ -1838,21 +1947,31 @@ function initMap() {
         const disp1Val = getFeaturePropertyValue(theme, feature, disp1Key);
         const disp2Val = getFeaturePropertyValue(theme, feature, disp2Key);
         
+        const geomType = feature.geometry ? feature.geometry.type : '';
+        const isLineGeom = geomType === 'LineString' || geomType === 'MultiLineString';
+
         let rotationStyle = '';
-        if (feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString') {
+        let totalMeters = 0;
+        if (isLineGeom) {
             try {
-                let lines = feature.geometry.type === 'MultiLineString' ? layer.getLatLngs() : [layer.getLatLngs()];
+                let lines = geomType === 'MultiLineString' ? layer.getLatLngs() : [layer.getLatLngs()];
                 let totalLength = 0;
                 let segments = [];
                 lines.forEach(line => {
-                    for (let i = 0; i < line.length - 1; i++) {
-                        const p1 = map.project(line[i], 0);
-                        const p2 = map.project(line[i+1], 0);
-                        const dx = p2.x - p1.x;
-                        const dy = p2.y - p1.y;
-                        const len = Math.sqrt(dx*dx + dy*dy);
-                        totalLength += len;
-                        segments.push({ len, angle: Math.atan2(dy, dx) * 180 / Math.PI });
+                    if (Array.isArray(line)) {
+                        for (let i = 0; i < line.length - 1; i++) {
+                            const p1 = map.project(line[i], 0);
+                            const p2 = map.project(line[i+1], 0);
+                            const dx = p2.x - p1.x;
+                            const dy = p2.y - p1.y;
+                            const len = Math.sqrt(dx*dx + dy*dy);
+                            totalLength += len;
+                            segments.push({ len, angle: Math.atan2(dy, dx) * 180 / Math.PI });
+
+                            if (line[i] && line[i+1] && typeof line[i].distanceTo === 'function') {
+                                totalMeters += line[i].distanceTo(line[i+1]);
+                            }
+                        }
                     }
                 });
                 
@@ -1873,7 +1992,7 @@ function initMap() {
                     if (angle > 90 || angle < -90) {
                         angle += 180;
                     }
-                    rotationStyle = `transform: rotate(${angle}deg); transform-origin: center; display: inline-block;`;
+                    rotationStyle = `transform: rotate(${angle.toFixed(1)}deg); transform-origin: center; display: inline-block;`;
                 }
             } catch(e) { console.error("Error calculating line angle:", e); }
         }
@@ -1907,7 +2026,48 @@ function initMap() {
         }
 
         if (displayTxt) {
-          tooltipContent = `<div style="${rotationStyle}" class="map-feature-label">${displayTxt}</div>`;
+          const currentZoom = (typeof map !== 'undefined' && map) ? map.getZoom() : 16;
+          
+          if (isLineGeom) {
+              // Se for logradouro (linha) e o trecho for menor que 30 metros, não desenha o rótulo para não poluir
+              if (totalMeters > 0 && totalMeters < 30) {
+                  tooltipContent = '';
+              } else {
+                  const maxWidthStyle = totalMeters > 0 ? `max-width: ${Math.max(80, Math.round(totalMeters * 1.5))}px;` : '';
+                  tooltipContent = `<div style="${rotationStyle}; ${maxWidthStyle}" class="map-feature-label street-feature-label" title="${displayTxt}">${displayTxt}</div>`;
+              }
+          } else {
+              // Para Polígonos/Lotes (ex: CTM-Municipal): "se não der pra ficar dentro da feição não mostra, simples assim"
+              // 1. Em zoom < 18, um lote urbano tem menos de ~15px de largura na tela (o texto nunca cabe).
+              // Não vincular tooltip economiza milhares de nós DOM e acelera instantaneamente o mapa.
+              if (currentZoom < 18) {
+                  tooltipContent = '';
+              } else {
+                  // 2. Em zoom >= 18, verifica se a feição na tela tem largura/altura suficientes para conter o texto
+                  let fitsInPolygon = true;
+                  if (layer.getBounds && typeof map !== 'undefined' && map) {
+                      try {
+                          const b = layer.getBounds();
+                          if (b && b.isValid && b.isValid()) {
+                              const nw = map.latLngToLayerPoint(b.getNorthWest());
+                              const se = map.latLngToLayerPoint(b.getSouthEast());
+                              const pxW = Math.abs(se.x - nw.x);
+                              const pxH = Math.abs(se.y - nw.y);
+                              const estW = Math.max(28, displayTxt.length * 7.5);
+                              const estH = 14;
+                              if (pxW < (estW + 4) || pxH < (estH + 4)) {
+                                  fitsInPolygon = false;
+                              }
+                          }
+                      } catch(eFit) { fitsInPolygon = false; }
+                  }
+                  if (fitsInPolygon) {
+                      tooltipContent = `<div class="map-feature-label polygon-feature-label" title="${displayTxt}">${displayTxt}</div>`;
+                  } else {
+                      tooltipContent = '';
+                  }
+              }
+          }
         }
         
         if (tooltipContent) {
@@ -1925,10 +2085,11 @@ function initMap() {
                 }
             }
             if (hasValidCoords) {
+                const tooltipClass = isLineGeom ? 'leaflet-custom-label street-name-label' : 'leaflet-custom-label polygon-name-label';
                 layer.bindTooltip(tooltipContent, {
                     permanent: true,
                     direction: 'center',
-                    className: 'leaflet-custom-label'
+                    className: tooltipClass
                 });
             }
           } catch(eTooltip) {
@@ -2227,8 +2388,16 @@ function initMap() {
     processarCriacaoFeicaoImediata(feature);
   });
 
+  let lastZoomCrossed18 = (typeof map !== 'undefined' && map) ? (map.getZoom() >= 18) : false;
   map.on('zoomend', function() {
-    updateLabelsVisibility();
+    const currentZ = map.getZoom();
+    const isZ18OrMore = currentZ >= 18;
+    if (isZ18OrMore !== lastZoomCrossed18) {
+      lastZoomCrossed18 = isZ18OrMore;
+      loadAllFeaturesToMap();
+    } else {
+      updateLabelsVisibility();
+    }
   });
 
   // Re-renderiza com busca espacial rápida (R-Tree) e debounce conforme o usuário navega.
@@ -2244,7 +2413,7 @@ function initMap() {
       clearTimeout(moveEndTimer);
       moveEndTimer = setTimeout(() => {
           loadAllFeaturesToMap();
-      }, 70);
+      }, 200);
   });
 
   // Garante que o mapa cubra 100% da tela dinamicamente em celulares e redimensionamentos
@@ -2263,7 +2432,10 @@ function initMap() {
             console.warn('Erro ao carregar projetos do usuário:', eProj);
         }
     }
-    renderThemes(); // mostra os cards já — a contagem preenche conforme carrega
+    if (typeof prewarmThemeCounts === 'function') {
+        try { await prewarmThemeCounts(); } catch(ePw) {}
+    }
+    renderThemes(); // mostra os cards já com as contagens recuperadas do cache ou metadados
     
     // Priorização Inteligente de Carregamento (estilo Google Maps / ArcGIS):
     // Carrega no Splash Screen APENAS as camadas ativas e visíveis no projeto atual,
@@ -2288,7 +2460,7 @@ function initMap() {
             const pct = 50 + Math.round((loadedCount / totalToLoad) * 40);
             updateSplashProgress(`🗺️ Carregando camada ativa "${t.name}"...`, pct);
         }
-        await loadThemeProperties(t.id);
+        await loadThemeProperties(t.id, false, true);
         loadedCount++;
     }
     
@@ -2333,7 +2505,7 @@ function initMap() {
                 const targetTheme = remainingThemes[idx];
                 if (targetTheme && !targetTheme._propertiesFullyLoaded) {
                     try {
-                        await loadThemeProperties(targetTheme.id);
+                        await loadThemeProperties(targetTheme.id, false, true);
                     } catch (eIdle) {
                         console.warn('[BackgroundPreload] Falha silenciosa ao pré-carregar tema inativo:', targetTheme.name, eIdle);
                     }
@@ -2370,19 +2542,20 @@ function updateLabelsVisibility() {
         if (tooltipPane) tooltipPane.style.display = '';
     }
 
-    // Esconde o rótulo apenas se for um polígono com área e o rótulo não couber dentro dele.
-    // Para linhas (curvas de nível, eixos, redes) e pontos, o rótulo NUNCA deve ser ocultado
-    // pelo teste de altura de caixa delimitadora (que falha em linhas horizontais/planas).
+    // Regra de ouro: se não der pra ficar dentro da feição não mostra.
+    // Polígonos/lotes urbanos: NUNCA aparecem em zoom < 18 (lote tem menos de ~15px na tela).
+    const isBelowPolygonZoom = currentZoom < 18;
+    const mapBounds = (typeof map.getBounds === 'function') ? map.getBounds() : null;
+
     geojsonLayer.eachLayer(layer => {
         if (!layer.getTooltip || !layer.getTooltip()) return;
 
         const tooltipEl = layer.getTooltip()._container;
         if (!tooltipEl) return;
 
-        // Se for linha, ponto ou camada do tipo linha/curva, mantém sempre visível
-        const isPolyline = (layer instanceof L.Polyline) && !(layer instanceof L.Polygon);
         const feat = layer.feature;
         const geomType = feat && feat.geometry ? feat.geometry.type : '';
+        const isPolyline = (layer instanceof L.Polyline) && !(layer instanceof L.Polygon);
         const isLineGeom = geomType === 'LineString' || geomType === 'MultiLineString';
         
         let isContourOrLineTheme = false;
@@ -2394,18 +2567,32 @@ function updateLabelsVisibility() {
         }
 
         if (isPolyline || isLineGeom || isContourOrLineTheme || (layer instanceof L.Marker)) {
-            tooltipEl.style.opacity = '1';
+            // Linhas de rua: se zoom < 16.5, oculta para zerar poluição visual
+            const shouldHideLine = isLineGeom && currentZoom < 16.5;
+            const target = shouldHideLine ? '0' : '1';
+            if (tooltipEl.style.opacity !== target) tooltipEl.style.opacity = target;
+            return;
+        }
+
+        // Se for polígono e o zoom for < 18: oculta imediatamente sem reflow
+        if (isBelowPolygonZoom) {
+            if (tooltipEl.style.opacity !== '0') tooltipEl.style.opacity = '0';
             return;
         }
 
         if (!layer.getBounds) {
-            tooltipEl.style.opacity = '1';
+            if (tooltipEl.style.opacity !== '1') tooltipEl.style.opacity = '1';
             return;
         }
 
         const bounds = layer.getBounds();
         if (!bounds || !bounds.isValid || !bounds.isValid()) {
-            tooltipEl.style.opacity = '1';
+            if (tooltipEl.style.opacity !== '1') tooltipEl.style.opacity = '1';
+            return;
+        }
+
+        if (mapBounds && typeof mapBounds.intersects === 'function' && !mapBounds.intersects(bounds)) {
+            if (tooltipEl.style.opacity !== '0') tooltipEl.style.opacity = '0';
             return;
         }
 
@@ -2415,16 +2602,12 @@ function updateLabelsVisibility() {
         const pxWidth = Math.abs(se.x - nw.x);
         const pxHeight = Math.abs(se.y - nw.y);
 
-        if (!tooltipEl._cachedW) {
-            tooltipEl.style.opacity = '1';
-            tooltipEl._cachedW = tooltipEl.offsetWidth || 50;
-            tooltipEl._cachedH = tooltipEl.offsetHeight || 20;
-        }
-        const labelWidth = tooltipEl._cachedW;
-        const labelHeight = tooltipEl._cachedH;
+        // Estimativa matemática vetorial baseada no texto (ZERO layout thrashing / sem offsetWidth)
+        const textContent = tooltipEl.textContent || '';
+        const estWidth = Math.max(28, textContent.length * 7.5);
+        const estHeight = 14;
 
-        const margin = 4;
-        const fits = (labelWidth + margin) <= pxWidth && (labelHeight + margin) <= pxHeight;
+        const fits = (estWidth + 4) <= pxWidth && (estHeight + 4) <= pxHeight;
         const targetOpacity = fits ? '1' : '0';
         if (tooltipEl.style.opacity !== targetOpacity) {
             tooltipEl.style.opacity = targetOpacity;
@@ -3219,7 +3402,7 @@ function loadAllFeaturesToMap() {
           } else {
               theme._tooManyFeaturesInView = null;
           }
-      } else if (withGeom.length > MAX_FEATURES_PER_VIEW && bounds) {
+      } else if (bounds && (withGeom.length > 50 || (window.GeoEngineTurbo && window.GeoEngineTurbo.hasThemeTree && window.GeoEngineTurbo.hasThemeTree(theme.id)))) {
           // Busca espacial ultrarrápida O(log N) usando R-Tree se disponível
           let hits = null;
           if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.queryViewport === 'function') {
@@ -3590,7 +3773,9 @@ function renderThemes() {
     const hasAnyAction = canSeeStats || canAddFeatures || canEditThemeStyle;
     const canSeeData = typeof canUserSeeThemeData === 'function' ? canUserSeeThemeData(theme) : true;
 
-    const featureCount = theme.features ? theme.features.length : 0;
+    const activeCount = theme.features ? theme.features.length : 0;
+    const estimatedCount = typeof getThemeEstimatedCount === 'function' ? getThemeEstimatedCount(theme) : null;
+    const featureCount = activeCount > 0 ? activeCount : (estimatedCount !== null ? estimatedCount : 0);
     const isVisible = theme.visible !== false;
     const isActiveSelection = window.activeSelectionThemeId === String(theme.id);
     
@@ -3877,8 +4062,158 @@ function toggleThemeVisibility(themeId, inputEl) {
   }, 0);
 }
 
+// --- CATÁLOGO DE FALLBACKS GEOJSON LOCAIS (Base territorial intacta) ---
+const LOCAL_GEOJSON_FALLBACKS = [
+    {
+        matches: (name) => {
+            const n = String(name || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+            return n.includes('ctm') || n.includes('cabedelo') || n.includes('municipal') || n.includes('base territorial');
+        },
+        files: ['Jeojson/Base_Cabedelo_V02.geojson', 'Jeojson/Base_Cabedelo.geojson'],
+        estimatedCount: 20709
+    },
+    {
+        matches: (name) => {
+            const n = String(name || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+            return n.startsWith('lpm') || n.includes('lpm');
+        },
+        files: ['Jeojson/LPM.geojson'],
+        estimatedCount: 864
+    },
+    {
+        matches: (name) => {
+            const n = String(name || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+            return n.startsWith('ltm') || n.startsWith('ltn') || n.includes('ltm') || n.includes('ltn');
+        },
+        files: ['Jeojson/LTN.geojson'],
+        estimatedCount: 784
+    },
+    {
+        matches: (name) => {
+            const n = String(name || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+            return n.includes('poligono');
+        },
+        files: ['Jeojson/Poligonos.geojson'],
+        estimatedCount: 327
+    },
+    {
+        matches: (name) => {
+            const n = String(name || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+            return n.includes('loteamento') || n.includes('invasao');
+        },
+        files: ['Jeojson/Invasao.geojson'],
+        estimatedCount: 31
+    },
+    {
+        matches: (name) => {
+            const n = String(name || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+            return n.includes('mpf') || n.includes('imoveis');
+        },
+        files: ['Jeojson/Imoveis_MPF_V04.geojson'],
+        estimatedCount: 283
+    }
+];
+
+function getThemeEstimatedCount(theme) {
+    if (!theme) return null;
+    if (typeof theme._cachedCount === 'number' && theme._cachedCount > 0) return theme._cachedCount;
+    if (theme.metadata && typeof theme.metadata.featureCount === 'number' && theme.metadata.featureCount > 0) return theme.metadata.featureCount;
+    if (theme.metadata && typeof theme.metadata.total_features === 'number' && theme.metadata.total_features > 0) return theme.metadata.total_features;
+    const name = theme.name || '';
+    const fb = LOCAL_GEOJSON_FALLBACKS.find(f => f.matches(name));
+    return fb ? fb.estimatedCount : null;
+}
+window.getThemeEstimatedCount = getThemeEstimatedCount;
+
+async function tryLoadLocalGeojsonFallback(theme) {
+    if (!theme) return false;
+    const name = theme.name || '';
+    const match = LOCAL_GEOJSON_FALLBACKS.find(f => f.matches(name));
+    if (!match) return false;
+
+    console.log(`[GeoEngineTurbo] Buscando recuperação local para o tema "${theme.name}"...`);
+    for (const filePath of match.files) {
+        try {
+            // Tenta caminhos relativos e absolutos locais
+            const pathsToTry = [filePath, '/' + filePath, './' + filePath];
+            let resp = null;
+            for (const p of pathsToTry) {
+                try {
+                    const r = await fetch(p);
+                    if (r.ok) { resp = r; break; }
+                } catch(eFetch) {}
+            }
+            if (!resp) continue;
+
+            const geojson = await resp.json();
+            if (geojson && Array.isArray(geojson.features) && geojson.features.length > 0) {
+                console.log(`[GeoEngineTurbo] Sucesso! Recuperadas ${geojson.features.length} feições de "${filePath}" para "${theme.name}".`);
+                const themeId = theme.id;
+                theme.features = geojson.features.map((f, idx) => ({
+                    type: "Feature",
+                    geometry: f.geometry,
+                    properties: {
+                        ...(f.properties || {}),
+                        themeId,
+                        id_banco: f.properties?.id_banco || f.id || `local_${themeId}_${idx}`,
+                        _propertiesLoaded: true
+                    }
+                }));
+                theme._propertiesFullyLoaded = true;
+                theme._geometryLoaded = true;
+                theme._cachedCount = theme.features.length;
+
+                // Indexa na R-Tree
+                if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.indexThemeFeatures === 'function') {
+                    window.GeoEngineTurbo.indexThemeFeatures(theme.id, theme.features);
+                }
+
+                // Salva no IndexedDB de forma segura
+                if (window.GeoTurboDB && typeof window.GeoTurboDB.saveThemeData === 'function') {
+                    await window.GeoTurboDB.saveThemeData(themeId, theme.features, theme.features.length);
+                }
+
+                if (theme.visible !== false) {
+                    loadAllFeaturesToMap();
+                }
+
+                const countEl = document.getElementById('theme-count-' + themeId);
+                if (countEl) countEl.textContent = theme.features.length;
+
+                return true;
+            }
+        } catch (err) {
+            console.warn(`[GeoEngineTurbo] Falha ao ler GeoJSON local "${filePath}":`, err);
+        }
+    }
+    return false;
+}
+window.tryLoadLocalGeojsonFallback = tryLoadLocalGeojsonFallback;
+
+async function prewarmThemeCounts() {
+    if (!window.GeoTurboDB || typeof window.GeoTurboDB.getAllThemeCounts !== 'function') return;
+    try {
+        const counts = await window.GeoTurboDB.getAllThemeCounts();
+        if (counts && Object.keys(counts).length > 0) {
+            themes.forEach(t => {
+                const c = counts[String(t.id)];
+                if (typeof c === 'number' && c > 0) {
+                    t._cachedCount = c;
+                    const countEl = document.getElementById('theme-count-' + t.id);
+                    if (countEl && (!t.features || t.features.length === 0)) {
+                        countEl.textContent = c;
+                    }
+                }
+            });
+        }
+    } catch(e) {
+        console.warn('[GeoEngineTurbo] Falha em prewarmThemeCounts:', e);
+    }
+}
+window.prewarmThemeCounts = prewarmThemeCounts;
+
 // Carrega propriedades completas de todas as feições de uma camada
-async function loadThemeProperties(themeId, forceReload = false) {
+async function loadThemeProperties(themeId, forceReload = false, skipMapRender = false) {
     if (typeof userCanOnTheme === 'function' && !userCanOnTheme(themeId, 'ver')) return;
     const theme = themes.find(t => t.id === themeId);
     if (!theme || (theme._propertiesFullyLoaded && !forceReload)) return;
@@ -3911,14 +4246,16 @@ async function loadThemeProperties(themeId, forceReload = false) {
             ]);
             
             const realDbCount = countRes.count;
-            if (!countRes.error && typeof realDbCount === 'number' && realDbCount !== cached.features.length) {
-                console.log(`[GeoEngineTurbo] Sincronização detectou alteração no tema "${theme.name}": banco=${realDbCount} vs cache=${cached.features.length}. Atualizando base...`);
+            // BLINDAGEM CRÍTICA: Só invalida se o banco tiver contagem comprovadamente MAIOR (> cached.length)
+            // JAMAIS invalida se realDbCount for 0 ou menor, ou se der erro no Supabase!
+            if (!countRes.error && typeof realDbCount === 'number' && realDbCount > 0 && realDbCount > cached.features.length) {
+                console.log(`[GeoEngineTurbo] Sincronização detectou novas feições no banco para "${theme.name}": banco=${realDbCount} vs cache=${cached.features.length}. Atualizando base...`);
                 shouldInvalidateCache = true;
             }
 
             const dbLastUpdate = themeRes?.data?.metadata?.last_feature_updated_at;
             const cachedTimestamp = cached.lastUpdated || cached.timestamp || 0;
-            if (dbLastUpdate && cachedTimestamp && new Date(dbLastUpdate).getTime() > cachedTimestamp) {
+            if (dbLastUpdate && cachedTimestamp && new Date(dbLastUpdate).getTime() > cachedTimestamp && (!countRes.error && typeof realDbCount === 'number' && realDbCount > 0)) {
                 console.log(`[GeoEngineTurbo] Sincronização detectou nova edição no tema "${theme.name}". Atualizando cache local...`);
                 shouldInvalidateCache = true;
             }
@@ -3937,13 +4274,16 @@ async function loadThemeProperties(themeId, forceReload = false) {
 
         theme._propertiesFullyLoaded = true;
         theme._geometryLoaded = true;
+        theme._cachedCount = theme.features.length;
 
         // Indexa na R-Tree para consultas espaciais instantâneas
         if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.indexThemeFeatures === 'function') {
             window.GeoEngineTurbo.indexThemeFeatures(theme.id, theme.features);
         }
 
-        loadAllFeaturesToMap();
+        if (!skipMapRender && theme.visible !== false) {
+            loadAllFeaturesToMap();
+        }
 
         const countEl = document.getElementById('theme-count-' + themeId);
         if (countEl) countEl.textContent = theme.features.length;
@@ -3975,7 +4315,12 @@ async function loadThemeProperties(themeId, forceReload = false) {
         theme.features = [];
     }
 
-    if (!supabaseClient) return;
+    if (!supabaseClient) {
+        if (!theme.features || theme.features.length === 0) {
+            await tryLoadLocalGeojsonFallback(theme);
+        }
+        return;
+    }
 
     try {
         // Carga completa do tema (geometria + propriedades) pela rede:
@@ -4051,19 +4396,43 @@ async function loadThemeProperties(themeId, forceReload = false) {
             }
         });
 
+        // BLINDAGEM DE RECUPERAÇÃO: se o Supabase não retornou feições (banco vazio ou RLS)
+        if (allRows.length === 0 && (!theme.features || theme.features.length === 0)) {
+            // Se tínhamos feições no cache local, restaura imediatamente
+            if (cached && cached.features && cached.features.length > 0) {
+                console.log(`[GeoEngineTurbo] Preservando ${cached.features.length} feições do cache seguro para "${theme.name}"`);
+                theme.features = cached.features.map(f => ({
+                    ...f,
+                    properties: { ...(f.properties || {}), themeId, _propertiesLoaded: true }
+                }));
+                theme._propertiesFullyLoaded = true;
+                theme._geometryLoaded = true;
+                theme._cachedCount = theme.features.length;
+            } else {
+                // Tenta fallback local da pasta Jeojson (Base_Cabedelo_V02.geojson com 20.709 feições, etc.)
+                const recovered = await tryLoadLocalGeojsonFallback(theme);
+                if (recovered) {
+                    console.log(`[GeoEngineTurbo] Tema "${theme.name}" restaurado via fallback local (${theme.features.length} feições)`);
+                }
+            }
+        }
+
         if (hadPageError) {
             if (typeof showWarningToast === 'function') {
                 showWarningToast(`"${theme.name}": algumas feições não carregaram (${allRows.length} de ${count || '?'}). Desligue e ligue a camada de novo pra tentar completar.`);
             }
             console.warn(`[LazyLoad] Tema "${theme.name}" carregado PARCIALMENTE: ${allRows.length} de ${count} feições`);
         } else {
-            theme._propertiesFullyLoaded = true;
-            theme._geometryLoaded = true;
-            console.log(`[LazyLoad] Tema "${theme.name}" carregado por completo: ${allRows.length} feições`);
+            if (theme.features.length > 0) {
+                theme._propertiesFullyLoaded = true;
+                theme._geometryLoaded = true;
+                theme._cachedCount = theme.features.length;
+                console.log(`[LazyLoad] Tema "${theme.name}" carregado por completo: ${theme.features.length} feições`);
 
-            // Grava no cache persistente IndexedDB para próximos acessos instantâneos
-            if (window.GeoTurboDB && typeof window.GeoTurboDB.saveThemeData === 'function') {
-                window.GeoTurboDB.saveThemeData(themeId, theme.features, theme.features.length);
+                // Grava no cache persistente IndexedDB para próximos acessos instantâneos
+                if (window.GeoTurboDB && typeof window.GeoTurboDB.saveThemeData === 'function') {
+                    window.GeoTurboDB.saveThemeData(themeId, theme.features, theme.features.length);
+                }
             }
         }
 
@@ -4073,7 +4442,9 @@ async function loadThemeProperties(themeId, forceReload = false) {
         }
 
         // Desenha no mapa
-        loadAllFeaturesToMap();
+        if (!skipMapRender && theme.visible !== false) {
+            loadAllFeaturesToMap();
+        }
 
         const countEl = document.getElementById('theme-count-' + themeId);
         if (countEl) countEl.textContent = theme.features.length;
@@ -5780,9 +6151,26 @@ function openEditThemeModal(themeId, focusField = null) {
   document.getElementById('edit-theme-name-input').value = theme.name;
   document.getElementById('edit-theme-color-input').value = theme.color;
   
-  const opacityVal = theme.opacity !== undefined ? theme.opacity : 0.4;
-  document.getElementById('edit-theme-opacity-input').value = opacityVal;
-  document.getElementById('edit-theme-opacity-val').textContent = Math.round(opacityVal * 100) + '%';
+  const strokeOpacityVal = theme.strokeOpacity !== undefined ? theme.strokeOpacity : (theme.stroke_opacity !== undefined ? theme.stroke_opacity : 1);
+  const strokeInput = document.getElementById('edit-theme-stroke-opacity-input');
+  if (strokeInput) {
+    strokeInput.value = strokeOpacityVal;
+    const strokeValEl = document.getElementById('edit-theme-stroke-opacity-val');
+    if (strokeValEl) strokeValEl.textContent = Math.round(strokeOpacityVal * 100) + '%';
+  }
+
+  const fillOpacityVal = theme.fillOpacity !== undefined ? theme.fillOpacity : (theme.fill_opacity !== undefined ? theme.fill_opacity : (theme.opacity !== undefined ? theme.opacity : 0.4));
+  const fillInputEl = document.getElementById('edit-theme-fill-opacity-input');
+  if (fillInputEl) {
+    fillInputEl.value = fillOpacityVal;
+    const fillValEl = document.getElementById('edit-theme-fill-opacity-val');
+    if (fillValEl) fillValEl.textContent = Math.round(fillOpacityVal * 100) + '%';
+  }
+
+  const opacityInput = document.getElementById('edit-theme-opacity-input');
+  if (opacityInput) opacityInput.value = fillOpacityVal;
+  const opacityValEl = document.getElementById('edit-theme-opacity-val');
+  if (opacityValEl) opacityValEl.textContent = Math.round(fillOpacityVal * 100) + '%';
   
   const customIconVal = theme.customIcon || '';
   document.getElementById('edit-theme-custom-icon-data').value = customIconVal;
@@ -5930,7 +6318,14 @@ function updateEditThemeFields() {
 async function saveEditedTheme() {
   const name = document.getElementById('edit-theme-name-input').value;
   const color = document.getElementById('edit-theme-color-input').value;
-  const opacity = parseFloat(document.getElementById('edit-theme-opacity-input').value);
+
+  const strokeOpacityEl = document.getElementById('edit-theme-stroke-opacity-input');
+  const strokeOpacity = strokeOpacityEl ? parseFloat(strokeOpacityEl.value) : 1;
+
+  const fillOpacityEl = document.getElementById('edit-theme-fill-opacity-input');
+  const fillOpacity = fillOpacityEl ? parseFloat(fillOpacityEl.value) : (document.getElementById('edit-theme-opacity-input') ? parseFloat(document.getElementById('edit-theme-opacity-input').value) : 0.4);
+
+  const opacity = fillOpacity;
   const weight = parseInt(document.getElementById('edit-theme-weight-input').value);
   const dashed = document.getElementById('edit-theme-dashed-input').checked;
   const fill = document.getElementById('edit-theme-fill-input') ? document.getElementById('edit-theme-fill-input').checked : true;
@@ -5950,7 +6345,9 @@ async function saveEditedTheme() {
   if (theme) {
     theme.name = name;
     theme.color = color;
-    theme.opacity = opacity;
+    theme.strokeOpacity = isNaN(strokeOpacity) ? 1 : strokeOpacity;
+    theme.fillOpacity = isNaN(fillOpacity) ? 0.4 : fillOpacity;
+    theme.opacity = theme.fillOpacity;
     theme.weight = weight;
     theme.dashed = dashed;
     theme.fill = fill;
@@ -5986,7 +6383,11 @@ async function saveEditedTheme() {
             
             if (window.supabaseTemasHasMetadata) {
                 updatePayload.metadata = {
-                    opacity: opacity,
+                    opacity: theme.opacity,
+                    strokeOpacity: theme.strokeOpacity,
+                    stroke_opacity: theme.strokeOpacity,
+                    fillOpacity: theme.fillOpacity,
+                    fill_opacity: theme.fillOpacity,
                     weight: weight,
                     dashed: dashed,
                     fill: fill,
@@ -6011,7 +6412,12 @@ async function saveEditedTheme() {
     const savedId = themeBeingEdited;
     window.activeSelectionThemeId = String(savedId);
     saveThemes();
-    loadAllFeaturesToMap(); // Update colors on the map
+    if (geojsonLayer && typeof geojsonLayer.setStyle === 'function' && geojsonLayer.options && typeof geojsonLayer.options.style === 'function') {
+        geojsonLayer.setStyle(geojsonLayer.options.style);
+        if (typeof updateLabelsVisibility === 'function') updateLabelsVisibility();
+    } else {
+        loadAllFeaturesToMap(); // Update colors on the map
+    }
     renderThemes();
     if (typeof populateFormSelects === 'function') populateFormSelects();
     if (typeof focusOnThemeCard === 'function') focusOnThemeCard(savedId);
@@ -11708,6 +12114,7 @@ window.resetThemeClassification = function(themeId) {
 };
 
 let feicoesRealtimeTimeout = null;
+let temasRealtimeTimeout = null;
 const pendingRealtimeRecords = new Map();
 
 function setupSupabaseRealtime() {
@@ -11722,66 +12129,76 @@ function setupSupabaseRealtime() {
                 : { event: '*', schema: 'public', table: 'temas' },
               async (payload) => {
                   console.log("Realtime: temas table changed!", payload);
-                  // Para temas, é seguro recarregar (são poucos registros)
-                  let temasQuery = supabaseClient.from('temas').select('*');
-                  if (activeMunicipioId) temasQuery = temasQuery.eq('municipio_id', activeMunicipioId);
-                  const { data: dbTemas } = await temasQuery;
-                  if (dbTemas) {
-                      // Reconstroi temas e atualiza propriedades/estilos em memória preservando features já carregadas
-                      dbTemas.forEach(t => {
-                          const existing = themes.find(th => String(th.id) === String(t.id));
-                          if (existing) {
-                              existing.name = t.nome || existing.name;
-                              existing.color = t.cor || existing.color;
-                              existing.icon = t.icone || existing.icon;
-                              if (t.metadata) {
-                                  existing.metadata = t.metadata;
-                                  if (t.metadata.opacity !== undefined) existing.opacity = t.metadata.opacity;
-                                  if (t.metadata.weight !== undefined) existing.weight = t.metadata.weight;
-                                  if (t.metadata.dashed !== undefined) existing.dashed = !!t.metadata.dashed;
-                                  if (t.metadata.fill !== undefined) existing.fill = !!t.metadata.fill;
-                                  if (t.metadata.disp1 !== undefined) existing.disp1 = t.metadata.disp1;
-                                  if (t.metadata.disp2 !== undefined) existing.disp2 = t.metadata.disp2;
-                                  if (t.metadata.mainTitle !== undefined) existing.mainTitle = t.metadata.mainTitle;
-                                  if (t.metadata.disp1Active !== undefined) existing.disp1Active = t.metadata.disp1Active;
-                                  if (t.metadata.disp2Active !== undefined) existing.disp2Active = t.metadata.disp2Active;
-                                  if (t.metadata.customIcon !== undefined) existing.customIcon = t.metadata.customIcon;
+                  clearTimeout(temasRealtimeTimeout);
+                  temasRealtimeTimeout = setTimeout(async () => {
+                      let temasQuery = supabaseClient.from('temas').select('*');
+                      if (activeMunicipioId) temasQuery = temasQuery.eq('municipio_id', activeMunicipioId);
+                      const { data: dbTemas } = await temasQuery;
+                      if (dbTemas) {
+                          dbTemas.forEach(t => {
+                              const existing = themes.find(th => String(th.id) === String(t.id));
+                              if (existing) {
+                                  existing.name = t.nome || existing.name;
+                                  existing.color = t.cor || existing.color;
+                                  existing.icon = t.icone || existing.icon;
+                                  if (t.metadata) {
+                                      existing.metadata = t.metadata;
+                                      if (t.metadata.opacity !== undefined) existing.opacity = t.metadata.opacity;
+                                      if (t.metadata.strokeOpacity !== undefined) existing.strokeOpacity = t.metadata.strokeOpacity;
+                                      else if (t.metadata.stroke_opacity !== undefined) existing.strokeOpacity = t.metadata.stroke_opacity;
+                                      if (t.metadata.fillOpacity !== undefined) existing.fillOpacity = t.metadata.fillOpacity;
+                                      else if (t.metadata.fill_opacity !== undefined) existing.fillOpacity = t.metadata.fill_opacity;
+                                      if (t.metadata.weight !== undefined) existing.weight = t.metadata.weight;
+                                      if (t.metadata.dashed !== undefined) existing.dashed = !!t.metadata.dashed;
+                                      if (t.metadata.fill !== undefined) existing.fill = !!t.metadata.fill;
+                                      if (t.metadata.disp1 !== undefined) existing.disp1 = t.metadata.disp1;
+                                      if (t.metadata.disp2 !== undefined) existing.disp2 = t.metadata.disp2;
+                                      if (t.metadata.mainTitle !== undefined) existing.mainTitle = t.metadata.mainTitle;
+                                      if (t.metadata.disp1Active !== undefined) existing.disp1Active = t.metadata.disp1Active;
+                                      if (t.metadata.disp2Active !== undefined) existing.disp2Active = t.metadata.disp2Active;
+                                      if (t.metadata.customIcon !== undefined) existing.customIcon = t.metadata.customIcon;
+                                  }
+                                  if (t.icone && (t.icone.startsWith('data:image') || t.icone.startsWith('http') || t.icone.startsWith('/'))) {
+                                      existing.customIcon = t.icone;
+                                  }
+                              } else {
+                                  const tMeta = t.metadata || {};
+                                  themes.push({
+                                      id: t.id,
+                                      name: t.nome,
+                                      color: t.cor,
+                                      icon: t.icone,
+                                      customIcon: tMeta.customIcon || (t.icone && (t.icone.startsWith('data:image') || t.icone.startsWith('http') || t.icone.startsWith('/')) ? t.icone : null) || null,
+                                      geometryType: t.tipo_geometria,
+                                      geomType: t.tipo_geometria || 'Polygon',
+                                      cadastroType: t.tipo_cadastro,
+                                      formId: t.tipo_cadastro,
+                                      opacity: tMeta.opacity !== undefined ? tMeta.opacity : 0.4,
+                                      strokeOpacity: tMeta.strokeOpacity !== undefined ? tMeta.strokeOpacity : (tMeta.stroke_opacity !== undefined ? tMeta.stroke_opacity : 1.0),
+                                      fillOpacity: tMeta.fillOpacity !== undefined ? tMeta.fillOpacity : (tMeta.fill_opacity !== undefined ? tMeta.fill_opacity : (tMeta.opacity !== undefined ? tMeta.opacity : 0.4)),
+                                      weight: tMeta.weight !== undefined ? tMeta.weight : 2,
+                                      dashed: !!tMeta.dashed,
+                                      fill: tMeta.fill !== undefined ? !!tMeta.fill : undefined,
+                                      disp1: tMeta.disp1 || 'Lote',
+                                      disp2: tMeta.disp2 || 'Quadra',
+                                      mainTitle: tMeta.mainTitle || '',
+                                      disp1Active: tMeta.disp1Active !== false,
+                                      disp2Active: tMeta.disp2Active !== false,
+                                      visible: false,
+                                      features: []
+                                  });
                               }
-                              if (t.icone && (t.icone.startsWith('data:image') || t.icone.startsWith('http') || t.icone.startsWith('/'))) {
-                                  existing.customIcon = t.icone;
-                              }
-                          } else {
-                              const tMeta = t.metadata || {};
-                              themes.push({
-                                  id: t.id,
-                                  name: t.nome,
-                                  color: t.cor,
-                                  icon: t.icone,
-                                  customIcon: tMeta.customIcon || (t.icone && (t.icone.startsWith('data:image') || t.icone.startsWith('http') || t.icone.startsWith('/')) ? t.icone : null) || null,
-                                  geometryType: t.tipo_geometria,
-                                  geomType: t.tipo_geometria || 'Polygon',
-                                  cadastroType: t.tipo_cadastro,
-                                  formId: t.tipo_cadastro,
-                                  opacity: tMeta.opacity !== undefined ? tMeta.opacity : 0.4,
-                                  weight: tMeta.weight !== undefined ? tMeta.weight : 2,
-                                  dashed: !!tMeta.dashed,
-                                  fill: tMeta.fill !== undefined ? !!tMeta.fill : undefined,
-                                  disp1: tMeta.disp1 || 'Lote',
-                                  disp2: tMeta.disp2 || 'Quadra',
-                                  mainTitle: tMeta.mainTitle || '',
-                                  disp1Active: tMeta.disp1Active !== false,
-                                  disp2Active: tMeta.disp2Active !== false,
-                                  visible: false,
-                                  features: []
-                              });
-                          }
-                      });
-                      themes = themes.filter(th => dbTemas.some(t => String(t.id) === String(th.id)));
-                  }
-                  renderThemes();
-                  if (typeof loadAllFeaturesToMap === 'function') {
-                      loadAllFeaturesToMap();
-                  }
+                          });
+                          themes = themes.filter(th => dbTemas.some(t => String(t.id) === String(th.id)));
+                      }
+                      renderThemes();
+                      if (geojsonLayer && typeof geojsonLayer.setStyle === 'function' && geojsonLayer.options && typeof geojsonLayer.options.style === 'function') {
+                          geojsonLayer.setStyle(geojsonLayer.options.style);
+                          if (typeof updateLabelsVisibility === 'function') updateLabelsVisibility();
+                      } else if (typeof loadAllFeaturesToMap === 'function') {
+                          loadAllFeaturesToMap();
+                      }
+                  }, 600);
               }
           )
           .subscribe();
