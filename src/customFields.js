@@ -179,6 +179,54 @@ window.viewMediaAttachment = function(url, name = 'Arquivo', title = '') {
     }
 };
 
+// === UTILITÁRIOS PARA NÚMERO EM SEQUÊNCIA (AUTO-INCREMENTO) E CONTATO / TELEFONE ===
+function getNextAlphanumericSequence(lastValue, defaultStart = 'A1') {
+    if (!lastValue || typeof lastValue !== 'string' || !lastValue.trim()) {
+        return (defaultStart && typeof defaultStart === 'string' && defaultStart.trim()) ? defaultStart.trim() : 'A1';
+    }
+    const str = lastValue.trim();
+    
+    // Procura por números no final da string (ex: 'A1' -> 'A' + '1', 'Lote 09' -> 'Lote ' + '09', '10' -> '' + '10')
+    const match = str.match(/^(.*?)(\d+)$/);
+    if (match) {
+        const prefix = match[1];
+        const numStr = match[2];
+        const numLen = numStr.length;
+        const nextNum = parseInt(numStr, 10) + 1;
+        // Preserva os zeros à esquerda se houver (ex: '01' -> '02', '009' -> '010')
+        const nextNumStr = String(nextNum).padStart(numLen, '0');
+        return prefix + nextNumStr;
+    }
+    
+    // Se for uma única letra maiúscula (ex: 'A' -> 'B', 'Z' -> 'A1')
+    if (/^[A-Z]$/.test(str)) {
+        if (str === 'Z') return 'A1';
+        return String.fromCharCode(str.charCodeAt(0) + 1);
+    }
+    
+    return str + ' 1';
+}
+window.getNextAlphanumericSequence = getNextAlphanumericSequence;
+
+function maskPhone(input) {
+    if (!input) return;
+    let v = (input.value || '').replace(/\D/g, '');
+    if (v.length > 11) v = v.substring(0, 11);
+    if (v.length > 10) {
+        // Celular com 9 dígitos: (99) 99999-9999
+        v = v.replace(/^(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+    } else if (v.length > 6) {
+        // Fixo ou celular em digitação: (99) 9999-9999
+        v = v.replace(/^(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
+    } else if (v.length > 2) {
+        v = v.replace(/^(\d{2})(\d{0,5})/, '($1) $2');
+    } else if (v.length > 0) {
+        v = v.replace(/^(\d{0,2})/, '($1');
+    }
+    input.value = v;
+}
+window.maskPhone = maskPhone;
+
 // === RENDERIZAÇÃO DE CAMPOS AVANÇADOS ===
 function generateFeatureInputHtml(f, value, isFeatureEditMode) {
     if (!value) value = '';
@@ -364,6 +412,27 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
                 formattedVal = cleanVal.replace(/(\d{1})(\d{4})(\d{3})(\d{2})(\d{4})(\d{4})(\d{1})/, "$1.$2.$3.$4.$5.$6.$7");
             }
             return `<div class="text-xs font-mono text-slate-700 dark:text-slate-300 break-words">${formattedVal || '<span class="text-slate-400 opacity-50 tracking-widest">---</span>'}</div>`;
+        } else if (f.type === 'sequence') {
+            return `<div class="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5"><span class="px-2 py-0.5 rounded text-xs font-mono font-bold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/80 shadow-xs">${value || '<span class="text-slate-400 opacity-50 tracking-widest font-normal">---</span>'}</span></div>`;
+        } else if (f.type === 'phone') {
+            const cleanDigits = String(value || '').replace(/\D/g, '');
+            if (!cleanDigits) {
+                return `<div class="text-xs text-slate-700 dark:text-slate-300 break-words"><span class="text-slate-400 opacity-50 tracking-widest">---</span></div>`;
+            }
+            let masked = value;
+            if (cleanDigits.length === 11) {
+                masked = cleanDigits.replace(/^(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+            } else if (cleanDigits.length === 10) {
+                masked = cleanDigits.replace(/^(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
+            }
+            const waUrl = `https://wa.me/55${cleanDigits}`;
+            return `
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-xs font-mono font-semibold text-slate-700 dark:text-slate-200">${masked}</span>
+                <a href="${waUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-colors shadow-xs" title="Abrir conversa no WhatsApp">
+                    <span class="material-symbols-outlined text-[14px] text-emerald-600 dark:text-emerald-400">chat</span> WhatsApp
+                </a>
+            </div>`;
         } else if (f.type === 'cep') {
             let cepData = {};
             try { cepData = typeof value === 'string' && value.startsWith('{') ? JSON.parse(value) : {}; } catch(e){}
@@ -730,6 +799,29 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
         html += `
           <div class="relative">
               <input type="text" data-key="${f.id}" id="insc-imob-cabedelo-input-${f.id}" value="${value}" class="feature-data-input w-full px-3 py-2 ${calcBgClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm dark:text-white font-mono transition-colors pr-10" placeholder="1.0004.028.04.0521.0039.8" maxlength="25" oninput="maskInscImobCabedelo(this)" ${calcReadonly} ${formulaAttr} />
+          </div>
+        `;
+    } else if (f.type === 'sequence') {
+        html += `
+          <div class="relative">
+              <input type="text" data-key="${f.id}" id="sequence-input-${f.id}" value="${value}" class="feature-data-input w-full px-3 py-2 ${calcBgClass} border border-blue-300 dark:border-blue-700/60 bg-blue-50/20 dark:bg-blue-950/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm font-semibold dark:text-white transition-colors pr-12" placeholder="Ex: A1, 01, Lote 1" onchange="try{if(this.value.trim()){localStorage.setItem('last_seq_${f.id}', this.value.trim());}}catch(e){}" ${calcReadonly} ${formulaAttr} />
+              <span class="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-blue-500/15 text-blue-700 dark:text-blue-300 pointer-events-none select-none" title="Número Sequencial Automático (Editável)">SEQ</span>
+          </div>
+        `;
+    } else if (f.type === 'phone') {
+        let displayVal = value || '';
+        const cleanP = displayVal.replace(/\D/g, '');
+        if (cleanP.length === 11) {
+            displayVal = cleanP.replace(/^(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+        } else if (cleanP.length === 10) {
+            displayVal = cleanP.replace(/^(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
+        }
+        html += `
+          <div class="relative">
+              <input type="text" data-key="${f.id}" id="phone-input-${f.id}" value="${displayVal}" class="feature-data-input w-full px-3 py-2 ${calcBgClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm dark:text-white font-mono transition-colors pr-10" placeholder="(00) 00000-0000" maxlength="15" inputmode="tel" oninput="maskPhone(this)" ${calcReadonly} ${formulaAttr} />
+              <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-emerald-600 dark:text-emerald-400 pointer-events-none flex items-center select-none" title="Contato / WhatsApp">
+                  <span class="material-symbols-outlined text-[18px]">phone</span>
+              </span>
           </div>
         `;
     } else if (f.type === 'cep') {

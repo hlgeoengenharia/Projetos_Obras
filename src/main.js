@@ -8681,6 +8681,9 @@ async function saveFeatureData() {
     const key = input.getAttribute('data-key');
     if (key) {
         activeFeatureLayer.feature.properties[key] = input.value;
+        if (input.id && input.id.startsWith('sequence-input-')) {
+            try { if (input.value && input.value.trim()) localStorage.setItem('last_seq_' + key, input.value.trim()); } catch(e){}
+        }
     }
   });
   

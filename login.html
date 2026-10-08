@@ -385,7 +385,12 @@
     if (error) {
       submitBtn.disabled = false;
       submitText.textContent = 'Entrar';
-      showError('E-mail ou senha inválidos.');
+      console.error('Erro de autenticação:', error);
+      if (error.status === 402 || (error.message && (error.message.includes('exceed_db_size_quota') || error.message.includes('restricted')))) {
+        showError('⚠️ O projeto no Supabase está temporariamente restrito por cota de disco (exceed_db_size_quota). Acesse o painel do Supabase para reativar o serviço ou fazer upgrade.');
+      } else {
+        showError(error.message || 'E-mail ou senha inválidos.');
+      }
       return;
     }
 

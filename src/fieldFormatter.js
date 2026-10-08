@@ -142,6 +142,12 @@
             d = d.replace(/^(\d{1})\.(\d{2})\.(\d{3})\.(\d{6})(\d)/, '$1.$2.$3.$4/$5');
             d = d.replace(/^(\d{1})\.(\d{2})\.(\d{3})\.(\d{6})\/(\d{4})(\d)/, '$1.$2.$3.$4/$5-$6');
             return d;
+        },
+        phone(v) {
+            const d = digitsOf(v);
+            if (d.length === 11) return d.replace(/^(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+            if (d.length === 10) return d.replace(/^(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
+            return String(v || '');
         }
     };
 
@@ -465,6 +471,8 @@
                 if (!cep) return String(value).trim();
                 return formatCepText(cep) || EMPTY;
             }
+            case 'phone': return masks.phone(String(value).trim()) || EMPTY;
+            case 'sequence': return String(value).trim() || EMPTY;
             case 'cpfcnpj': return masks.cpfcnpj(String(value).trim());
             case 'ipl':
             case 'ipf': return masks.ipl(String(value).trim());

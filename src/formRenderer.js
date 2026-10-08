@@ -228,6 +228,33 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
 
                     if (value === undefined || value === null) value = '';
 
+                    // Auto-incremento sequencial inteligente para campos do tipo 'sequence'
+                    if (f.type === 'sequence' && (!value || String(value).trim() === '') && isTabEditMode) {
+                        let lastSeq = null;
+                        const activeTheme = window.currentFormTheme || (window.themes && window.themes.find(t => String(t.id) === String(window.currentFormThemeId)));
+                        if (activeTheme && Array.isArray(activeTheme.features) && activeTheme.features.length > 0) {
+                            for (let i = activeTheme.features.length - 1; i >= 0; i--) {
+                                const feat = activeTheme.features[i];
+                                const p = feat && feat.properties;
+                                if (p) {
+                                    const cand = p[f.id] || p[f.name] || p[f.label];
+                                    if (cand && String(cand).trim()) {
+                                        lastSeq = String(cand).trim();
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (!lastSeq) {
+                            try { lastSeq = localStorage.getItem('last_seq_' + f.id); } catch(e){}
+                        }
+                        if (typeof window.getNextAlphanumericSequence === 'function') {
+                            value = window.getNextAlphanumericSequence(lastSeq, (f.options && f.options.trim()) || 'A1');
+                        } else {
+                            value = lastSeq ? lastSeq + ' 1' : ((f.options && f.options.trim()) || 'A1');
+                        }
+                    }
+
                     if (isTabEditMode) {
                         html += `<div>
                             <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-0.5">${f.label}</label>
@@ -1245,9 +1272,31 @@ function renderMultipleTab(tab, featureData, isEditMode) {
     
     if (tab.fields && tab.fields.length > 0) {
         tab.fields.forEach(f => {
+            let subVal = '';
+            if (f.type === 'sequence') {
+                let lastSeq = null;
+                if (Array.isArray(records) && records.length > 0) {
+                    for (let i = records.length - 1; i >= 0; i--) {
+                        const r = records[i];
+                        const cand = r && (r[f.id] || r[f.name] || r[f.label]);
+                        if (cand && String(cand).trim()) {
+                            lastSeq = String(cand).trim();
+                            break;
+                        }
+                    }
+                }
+                if (!lastSeq) {
+                    try { lastSeq = localStorage.getItem('last_seq_' + f.id); } catch(e){}
+                }
+                if (typeof window.getNextAlphanumericSequence === 'function') {
+                    subVal = window.getNextAlphanumericSequence(lastSeq, (f.options && f.options.trim()) || 'A1');
+                } else {
+                    subVal = lastSeq ? lastSeq + ' 1' : ((f.options && f.options.trim()) || 'A1');
+                }
+            }
             html += `<div class="${['textarea', 'attachment', 'photo', 'geolocation', 'cep', 'hiperlink', 'hiperlink_1n', 'epol_1n', 'rip_1n', 'table_join'].includes(f.type) ? 'md:col-span-2' : ''}">
                 <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">${f.label}</label>
-                ${window.generateFeatureInputHtml ? window.generateFeatureInputHtml(f, '', true, true) : ''}
+                ${window.generateFeatureInputHtml ? window.generateFeatureInputHtml(f, subVal, true, true) : ''}
             </div>`;
         });
     }
@@ -1392,7 +1441,12 @@ window.saveMultipleRecord = function(tabId) {
     let newRecord = { _created_at: new Date().toISOString() };
     inputs.forEach(inp => {
         const key = inp.getAttribute('data-key');
-        if(key && key !== tabId) newRecord[key] = inp.value;
+        if(key && key !== tabId) {
+            newRecord[key] = inp.value;
+            if (inp.id && inp.id.startsWith('sequence-input-')) {
+                try { if (inp.value && inp.value.trim()) localStorage.setItem('last_seq_' + key, inp.value.trim()); } catch(e){}
+            }
+        }
     });
     
     const hiddenDataInput = document.getElementById('multiple-data-' + tabId);

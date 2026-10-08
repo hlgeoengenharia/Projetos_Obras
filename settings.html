@@ -3803,7 +3803,7 @@
               builderTabs.forEach(t => {
                   if(t.id !== activeTab.id) {
                       (t.fields || []).forEach(f => {
-                           if(['text', 'number', 'select', 'cpfcnpj', 'ipl', 'ipf', 'insc_imob_cabedelo', 'epol', 'epol_1n', 'rip', 'rip_1n'].includes(f.type)) {
+                           if(['text', 'number', 'sequence', 'phone', 'select', 'cpfcnpj', 'ipl', 'ipf', 'insc_imob_cabedelo', 'epol', 'epol_1n', 'rip', 'rip_1n'].includes(f.type)) {
                               let optsJson = (typeof f.options === 'string') ? f.options.split(',').map(o => o.trim()).filter(o => o).join('|') : '';
                               optionsHtml += `<option value="${f.id}" data-opts="${optsJson}">[${t.title}] ${f.label || 'Campo Sem Nome'}</option>`;
                           }
@@ -4677,6 +4677,8 @@
                 <option value="text" ${f.type === 'text' ? 'selected' : ''}>Texto Curto</option>
                 <option value="textarea" ${f.type === 'textarea' ? 'selected' : ''}>Texto Longo</option>
                 <option value="number" ${f.type === 'number' ? 'selected' : ''}>Número</option>
+                <option value="sequence" ${f.type === 'sequence' ? 'selected' : ''}>Número em Sequência (Auto-incremento: A1, A2...)</option>
+                <option value="phone" ${f.type === 'phone' ? 'selected' : ''}>Contato / Telefone (WhatsApp)</option>
                 <option value="currency" ${f.type === 'currency' ? 'selected' : ''}>Moeda (Padrão: R$ 1.000,00)</option>
                 <option value="area_m2" ${f.type === 'area_m2' ? 'selected' : ''}>m² (Padrão: 10,00 m²)</option>
                 <option value="length_m" ${f.type === 'length_m' ? 'selected' : ''}>m (Padrão: 10,00 m)</option>
