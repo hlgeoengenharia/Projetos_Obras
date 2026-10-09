@@ -1881,8 +1881,18 @@ function initMap() {
       return true;
     },
     style: function(feature) {
-      const featThemeId = feature.properties?.themeId || feature.properties?.theme_id || feature.themeId || feature.theme_id;
-      const theme = themes.find(t => String(t.id).toLowerCase() === String(featThemeId).toLowerCase());
+      let themeId = feature.properties?.themeId || feature.properties?.theme_id || feature.themeId || feature.theme_id;
+      if (!themeId && typeof themes !== 'undefined' && Array.isArray(themes)) {
+        const ownerTheme = themes.find(t => 
+            t.features && t.features.some(f => f === feature || (f.properties && feature.properties && (f.properties._tempId === feature.properties._tempId || (f.properties.id_banco && f.properties.id_banco === feature.properties.id_banco))))
+        );
+        if (ownerTheme) {
+            themeId = ownerTheme.id;
+            if (feature.properties) feature.properties.themeId = ownerTheme.id;
+        }
+      }
+      themeId = themeId || '';
+      const theme = themes.find(t => String(t.id).toLowerCase() === String(themeId).toLowerCase());
       let color = theme ? theme.color : '#333333';
       let opacity = theme && theme.opacity !== undefined ? theme.opacity : 0.4;
       let weight = theme && theme.weight !== undefined ? theme.weight : 2;
@@ -1992,8 +2002,18 @@ function initMap() {
       };
     },
     pointToLayer: function(feature, latlng) {
-      const themeId = feature.properties.themeId;
-      const theme = themes.find(t => String(t.id) === String(themeId));
+      let themeId = feature.properties?.themeId || feature.properties?.theme_id || feature.themeId || feature.theme_id;
+      if (!themeId && typeof themes !== 'undefined' && Array.isArray(themes)) {
+        const ownerTheme = themes.find(t => 
+            t.features && t.features.some(f => f === feature || (f.properties && feature.properties && (f.properties._tempId === feature.properties._tempId || (f.properties.id_banco && f.properties.id_banco === feature.properties.id_banco))))
+        );
+        if (ownerTheme) {
+            themeId = ownerTheme.id;
+            if (feature.properties) feature.properties.themeId = ownerTheme.id;
+        }
+      }
+      themeId = themeId || '';
+      const theme = themes.find(t => String(t.id).toLowerCase() === String(themeId).toLowerCase());
       let color = theme ? theme.color : '#0284c7';
       
       // Preservar cor de classificação se ativa
@@ -2078,8 +2098,19 @@ function initMap() {
       if (!feature.properties) feature.properties = {};
       if (!feature.properties._tempId) feature.properties._tempId = 'feat_' + Math.random().toString(36).substr(2, 9);
       
-      const featThemeId = feature.properties?.themeId || feature.properties?.theme_id || feature.themeId || feature.theme_id;
-      const theme = themes.find(t => String(t.id).toLowerCase() === String(featThemeId).toLowerCase());
+      let themeId = feature.properties?.themeId || feature.properties?.theme_id || feature.themeId || feature.theme_id;
+      if (!themeId && typeof themes !== 'undefined' && Array.isArray(themes)) {
+        const ownerTheme = themes.find(t => 
+            t.features && t.features.some(f => f === feature || (f.properties && feature.properties && (f.properties._tempId === feature.properties._tempId || (f.properties.id_banco && f.properties.id_banco === feature.properties.id_banco))))
+        );
+        if (ownerTheme) {
+            themeId = ownerTheme.id;
+            feature.properties.themeId = ownerTheme.id;
+        }
+      }
+      themeId = themeId || '';
+      const featThemeId = themeId;
+      const theme = themes.find(t => String(t.id).toLowerCase() === String(themeId).toLowerCase());
       if (theme) {
         const disp1Key = theme.disp1 || 'Lote';
         const disp2Key = theme.disp2 || 'Quadra';

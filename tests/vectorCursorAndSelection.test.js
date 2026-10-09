@@ -69,4 +69,17 @@ test('Validação de Cursor em Feições Vetoriais e Seleção de Camadas (CTM-M
             'map.on("click") deve verificar se o clique ocorreu dentro de um polígono da camada ativa selecionada'
         );
     });
+
+    await t.test('7. style function define themeId de forma segura sem ReferenceError', () => {
+        // Extrai a função style e testa execução
+        assert.ok(
+            !mainJs.includes('const featThemeId = feature.properties?.themeId'),
+            'style não deve deixar themeId indefinido usando featThemeId sem declarar themeId'
+        );
+        assert.ok(
+            mainJs.includes('className: `theme-feature theme-${themeId}`'),
+            'style deve usar className formatado com themeId'
+        );
+    });
 });
+
