@@ -412,6 +412,20 @@
         overflow: hidden !important;
         text-overflow: ellipsis !important;
         max-height: 13px !important;
+        pointer-events: none !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
+      }
+
+      /* Blindagem de toque no mobile: Rótulos nunca devem interceptar o toque do dedo sobre a linha de rua */
+      .leaflet-tooltip,
+      .leaflet-tooltip-pane,
+      .leaflet-custom-label,
+      .street-name-label,
+      .polygon-name-label {
+        pointer-events: none !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
       }
 
       /* Antipoluição visual de rótulos de polígonos/lotes (CTM, Quadras, Loteamentos)

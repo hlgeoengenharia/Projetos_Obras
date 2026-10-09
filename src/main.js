@@ -1726,9 +1726,53 @@ function initMap() {
     console.warn("Leaflet Geoman não foi carregado corretamente.");
   }
 
-  // Canvas Renderer acelerado por GPU com tolerância touch adaptativa (24px no celular para fácil seleção de linhas)
+  // Canvas Renderer acelerado por GPU com tolerância touch adaptativa ampliada (35px para fácil seleção de linhas com toque no celular)
   const isTouchActive = (typeof isTouchDevice !== 'undefined' && isTouchDevice) || ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-  const canvasRenderer = (typeof L.canvas === 'function') ? L.canvas({ padding: 0.5, tolerance: isTouchActive ? 24 : 10 }) : null;
+  const canvasRenderer = (typeof L.canvas === 'function') ? L.canvas({ padding: 0.5, tolerance: 35 }) : null;
+
+  // Função universal para localizar linha de logradouro sob o toque/clique no mapa
+  function findClosestLineLayer(latlng, maxPixels = 38) {
+    if (!geojsonLayer || !map || !latlng || typeof map.latLngToLayerPoint !== 'function' || !L.LineUtil || typeof L.LineUtil.pointToSegmentDistance !== 'function') {
+        return null;
+    }
+    const clickPoint = map.latLngToLayerPoint(latlng);
+    let closestLayer = null;
+    let minDistance = maxPixels;
+
+    geojsonLayer.eachLayer(layer => {
+        if (!layer.feature || !layer.feature.geometry) return;
+        const gType = layer.feature.geometry.type;
+        if (gType === 'LineString' || gType === 'MultiLineString') {
+            const themeId = layer.feature.properties?.themeId;
+            const theme = themes.find(t => String(t.id) === String(themeId));
+            if (!theme || theme.visible === false) return;
+
+            const isSelectedTheme = (window.activeSelectionThemeId && String(window.activeSelectionThemeId) === String(themeId));
+            const maxAllowedDist = isSelectedTheme ? (maxPixels + 12) : maxPixels;
+
+            if (typeof layer.getLatLngs === 'function') {
+                const rawLines = gType === 'MultiLineString' ? layer.getLatLngs() : [layer.getLatLngs()];
+                rawLines.forEach(line => {
+                    if (Array.isArray(line)) {
+                        for (let i = 0; i < line.length - 1; i++) {
+                            if (line[i] && line[i+1]) {
+                                const p1 = map.latLngToLayerPoint(line[i]);
+                                const p2 = map.latLngToLayerPoint(line[i+1]);
+                                const dist = L.LineUtil.pointToSegmentDistance(clickPoint, p1, p2);
+                                if (dist <= maxAllowedDist && dist < minDistance) {
+                                    minDistance = dist;
+                                    closestLayer = layer;
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    });
+    return closestLayer;
+  }
+  window.findClosestLineLayer = findClosestLineLayer;
 
   // Layer Group for all GeoJSON features
   geojsonLayer = L.geoJSON(null, {
@@ -1849,8 +1893,9 @@ function initMap() {
       const fillVisible = shouldFill && !isFillZero && !isLineGeom && !isLineTheme;
 
       let finalWeight = strokeVisible ? weight : 0;
-      if (isLineGeom && strokeVisible && (typeof isTouchActive !== 'undefined' ? isTouchActive : true)) {
-        finalWeight = Math.max(Number(weight) || 2, 3.5);
+      if (isLineGeom && strokeVisible) {
+        const isCurrentActiveTheme = window.activeSelectionThemeId && String(window.activeSelectionThemeId) === String(themeId);
+        finalWeight = Math.max(Number(weight) || 2, isTouchActive ? (isCurrentActiveTheme ? 6 : 4.5) : 3.5);
       }
 
       return {
@@ -2159,6 +2204,17 @@ function initMap() {
             return;
         }
 
+        // Se o usuário tocou num polígono mas próximo a uma linha de logradouro (rua), prioriza a linha!
+        const gType = feature.geometry ? feature.geometry.type : '';
+        const isPolyGeom = gType === 'Polygon' || gType === 'MultiPolygon';
+        if (isPolyGeom && e.latlng && typeof findClosestLineLayer === 'function') {
+            const nearLineLayer = findClosestLineLayer(e.latlng, 35);
+            if (nearLineLayer && nearLineLayer !== layer) {
+                nearLineLayer.fire('click', e);
+                return;
+            }
+        }
+
         const themeIdStr = String(feature.properties.themeId);
         
         // Auto-ativação fluida no celular/desktop: se a feição clicada pertence a uma camada visível,
@@ -2213,7 +2269,7 @@ function initMap() {
     }
   });
 
-  // Close feature info modal when clicking on the map
+  // Detecção Inteligente de Proximidade para Toque em Linhas / Logradouros no Celular / Touch
   map.on('click', function(e) {
     if (!e.originalEvent || (!e.originalEvent.ctrlKey && !e.originalEvent.metaKey)) {
         if (window.selectedMultiFeatures && window.selectedMultiFeatures.length > 0) {
@@ -2223,15 +2279,24 @@ function initMap() {
     if (window.isSelectingStreetViewCoordinate) {
         return; // ignore modal closing if selecting street view coordinate
     }
+
+    // Não intercepta se o usuário estiver desenhando ou medindo
+    const isDrawing = document.getElementById('drawing-toolbar') && !document.getElementById('drawing-toolbar').classList.contains('hidden');
+    const isEditing = document.getElementById('geometry-edit-toolbar') && !document.getElementById('geometry-edit-toolbar').classList.contains('hidden');
+    if (isDrawing || isEditing) return;
+
+    // Verifica se o toque no mapa ocorreu próximo a uma linha de logradouro (tolerância touch de 38px)
+    if (e.latlng && typeof findClosestLineLayer === 'function') {
+        const closestLayer = findClosestLineLayer(e.latlng, 38);
+        if (closestLayer) {
+            closestLayer.fire('click', e);
+            return;
+        }
+    }
+
     const featureModal = document.getElementById('feature-info-modal');
     if (featureModal && !featureModal.classList.contains('hidden')) {
-      // Check if we are not actively drawing or editing geometry
-      const isDrawing = document.getElementById('drawing-toolbar') && !document.getElementById('drawing-toolbar').classList.contains('hidden');
-      const isEditing = document.getElementById('geometry-edit-toolbar') && !document.getElementById('geometry-edit-toolbar').classList.contains('hidden');
-      
-      if (!isDrawing && !isEditing) {
         closeFeatureInfoModal();
-      }
     }
   });
 
@@ -3474,6 +3539,20 @@ function loadAllFeaturesToMap() {
     }
   });
 
+  // Estratificação Cartográfica Profissional:
+  // 1º Polígonos (fundo) -> 2º Linhas/Logradouros (meio, sobre polígonos) -> 3º Pontos (topo)
+  // Garante que linhas de logradouros nunca sejam cobertas visualmente ou no clique por polígonos
+  const _geomZIndexOrder = {
+    'Polygon': 1, 'MultiPolygon': 1,
+    'LineString': 2, 'MultiLineString': 2,
+    'Point': 3, 'MultiPoint': 3
+  };
+  allFeatures.sort((a, b) => {
+    const oA = _geomZIndexOrder[a.geometry?.type] || 1;
+    const oB = _geomZIndexOrder[b.geometry?.type] || 1;
+    return oA - oB;
+  });
+
   const densityIndicator = document.getElementById('map-density-indicator');
   const densityText = document.getElementById('map-density-text');
   if (densityIndicator) {
@@ -4089,6 +4168,14 @@ function toggleThemeVisibility(themeId, inputEl) {
 
   // Atualização em background (não bloqueia a thread de cliques)
   setTimeout(async () => {
+      if (isChecked) {
+          if (typeof toggleSelectionTheme === 'function') {
+              toggleSelectionTheme(themeId, true);
+          }
+          if (typeof updateThemeInteractivity === 'function') {
+              updateThemeInteractivity();
+          }
+      }
       if (isChecked && !theme._propertiesFullyLoaded) {
           await loadThemeProperties(theme.id);
       } else {

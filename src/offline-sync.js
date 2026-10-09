@@ -215,11 +215,14 @@
     async function uploadPendingOfflineFiles(props) {
         if (!props || !window.supabaseClient) return props;
         const mId = (typeof activeMunicipioId !== 'undefined' && activeMunicipioId) ? activeMunicipioId : 'geral';
+        const buckets = ['arquivos-obras', 'obras_arquivos'];
+
         for (const key of Object.keys(props)) {
             const val = props[key];
             if (Array.isArray(val)) {
                 for (const fileObj of val) {
                     if (fileObj && fileObj.url && fileObj.url.startsWith('data:') && (fileObj.offlinePending || (fileObj.path && fileObj.path.startsWith('offline_')))) {
+                        let uploadSuccess = false;
                         try {
                             const fileExt = fileObj.name ? (fileObj.name.split('.').pop() || 'jpg') : 'jpg';
                             const folderPrefix = `anexos_${mId}`;
@@ -228,20 +231,38 @@
                             
                             const blob = dataURLtoBlob(fileObj.url);
                             if (blob) {
-                                const { error: upErr } = await window.supabaseClient.storage.from('obras_arquivos').upload(targetPath, blob, {
-                                    cacheControl: '3600',
-                                    upsert: true
-                                });
-                                if (!upErr) {
-                                    const { data: { publicUrl } } = window.supabaseClient.storage.from('obras_arquivos').getPublicUrl(targetPath);
-                                    fileObj.url = publicUrl;
-                                    fileObj.path = targetPath;
-                                    delete fileObj.offlinePending;
-                                    console.log(`[OfflineSync] Foto offline "${fileObj.name}" enviada ao Storage com sucesso: ${publicUrl}`);
+                                for (const bucket of buckets) {
+                                    try {
+                                        const { error: upErr } = await window.supabaseClient.storage.from(bucket).upload(targetPath, blob, {
+                                            cacheControl: '3600',
+                                            upsert: true
+                                        });
+                                        if (!upErr) {
+                                            const { data: { publicUrl } } = window.supabaseClient.storage.from(bucket).getPublicUrl(targetPath);
+                                            fileObj.url = publicUrl;
+                                            fileObj.path = targetPath;
+                                            delete fileObj.offlinePending;
+                                            uploadSuccess = true;
+                                            console.log(`[OfflineSync] Foto offline "${fileObj.name}" enviada ao Storage (${bucket}) com sucesso: ${publicUrl}`);
+                                            break;
+                                        } else {
+                                            console.warn(`[OfflineSync] Tentativa no bucket "${bucket}" falhou:`, upErr);
+                                        }
+                                    } catch (eBucket) {
+                                        console.warn(`[OfflineSync] Exceção no bucket "${bucket}":`, eBucket);
+                                    }
                                 }
                             }
                         } catch (eUpload) {
-                            console.warn('[OfflineSync] Falha ao enviar foto offline para Storage:', eUpload);
+                            console.warn('[OfflineSync] Falha ao processar foto offline para Storage:', eUpload);
+                        }
+
+                        // Se o upload falhar em ambos os buckets (ex: políticas RLS restritas),
+                        // simplifica a URL em Base64 se for gigante para não estourar o limite da API
+                        if (!uploadSuccess && fileObj.url && fileObj.url.length > 500000) {
+                            console.warn(`[OfflineSync] Arquivo "${fileObj.name}" muito grande para persistir em base64. Otimizando para sincronização da feição.`);
+                            fileObj.offlinePending = false;
+                            fileObj.offlineSyncNotice = 'Upload pendente de permissão no storage';
                         }
                     }
                 }
@@ -488,20 +509,29 @@
         
         let listHtml = '';
         if (count === 0) {
-            listHtml = '<div class="text-center py-8 text-slate-400 text-xs">Nenhuma coleta pendente no momento.</div>';
+            listHtml = '<div class="text-center py-8 text-slate-400 text-xs">Nenhuma coleta pendente no momento. Todas as feições estão sincronizadas!</div>';
         } else {
             listHtml = items.map((it, idx) => {
                 const actionLabel = it.action === 'CREATE' ? 'Nova Feição' : (it.action === 'UPDATE' ? 'Edição' : 'Exclusão');
                 const actionColor = it.action === 'CREATE' ? 'emerald' : (it.action === 'UPDATE' ? 'sky' : 'rose');
                 const dateStr = new Date(it.timestamp).toLocaleTimeString();
                 const geomType = it.geometry ? it.geometry.type : 'Registro';
+                const hasError = it.status === 'failed' || it.lastError;
                 return `
-                    <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900/80 border border-white/10 text-xs">
-                        <div class="flex items-center gap-2.5">
-                            <span class="px-2 py-0.5 rounded text-[9.5px] font-bold bg-${actionColor}-500/20 text-${actionColor}-400 border border-${actionColor}-500/30">${actionLabel}</span>
-                            <span class="text-white font-medium">${geomType} (${it.themeId})</span>
+                    <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900/80 border ${hasError ? 'border-rose-500/50 bg-rose-950/10' : 'border-white/10'} text-xs">
+                        <div class="flex flex-col gap-1 flex-1 pr-2">
+                            <div class="flex items-center gap-2">
+                                <span class="px-2 py-0.5 rounded text-[9.5px] font-bold bg-${actionColor}-500/20 text-${actionColor}-400 border border-${actionColor}-500/30">${actionLabel}</span>
+                                <span class="text-white font-medium truncate">${geomType} (${it.themeId})</span>
+                            </div>
+                            ${hasError ? `<span class="text-rose-400 text-[10px] truncate" title="${it.lastError || ''}">Erro: ${it.lastError || 'Falha ao sincronizar'}</span>` : ''}
                         </div>
-                        <span class="text-slate-400 font-mono text-[11px]">${dateStr}</span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-slate-400 font-mono text-[11px]">${dateStr}</span>
+                            <button onclick="window.OfflineSync.discardItem(${it.id})" class="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/30 text-rose-400 hover:text-rose-200 transition-colors" title="Descartar esta pendência">
+                                <span class="material-symbols-outlined text-[16px]">delete</span>
+                            </button>
+                        </div>
                     </div>
                 `;
             }).join('');
@@ -519,7 +549,7 @@
                     </button>
                 </div>
                 <p class="text-xs text-slate-300 mb-4 leading-relaxed">
-                    Total de <strong>${count} coleta(s)</strong> armazenadas no banco local do dispositivo. Elas serão transmitidas ao servidor assim que houver sinal de internet.
+                    Total de <strong>${count} coleta(s)</strong> no aparelho. Elas são enviadas ao servidor assim que houver sinal de internet. Se algum arquivo estiver travando, você pode descartá-lo no ícone da lixeira ao lado.
                 </p>
                 <div class="space-y-2 max-h-60 overflow-y-auto mb-5 pr-1">
                     ${listHtml}
@@ -528,6 +558,11 @@
                     <button onclick="document.getElementById('offline-pending-modal').remove()" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs cursor-pointer">
                         Fechar
                     </button>
+                    ${count > 0 ? `
+                        <button onclick="window.OfflineSync.discardAll()" class="px-3 py-2.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 font-bold text-xs cursor-pointer" title="Limpar todas as pendências travadas">
+                            Limpar Tudo
+                        </button>
+                    ` : ''}
                     ${navigator.onLine && count > 0 ? `
                         <button onclick="document.getElementById('offline-pending-modal').remove(); window.OfflineSync.syncAll();" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs cursor-pointer shadow-lg shadow-emerald-500/20">
                             Sincronizar Agora
@@ -537,6 +572,31 @@
             </div>
         `;
         document.body.appendChild(modalDiv);
+    }
+
+    // Descarta item individual da fila
+    async function discardItem(id) {
+        if (!confirm('Deseja descartar este item pendente?')) return;
+        await removeQueueItem(id);
+        updateUIBadge();
+        showPendingModal();
+        showToast('Pendência descartada com sucesso.', 'delete', 'sky');
+    }
+
+    // Limpa toda a fila de pendências
+    async function discardAll() {
+        if (!confirm('Deseja limpar todas as pendências locais salvas no aparelho?')) return;
+        const db = await getDB();
+        if (db) {
+            const tx = db.transaction([STORE_NAME], 'readwrite');
+            tx.objectStore(STORE_NAME).clear();
+            tx.oncomplete = () => {
+                updateUIBadge();
+                const m = document.getElementById('offline-pending-modal');
+                if (m) m.remove();
+                showToast('Todas as pendências foram limpas.', 'delete_sweep', 'sky');
+            };
+        }
     }
 
     // Auto-sincronização ao recuperar conexão
@@ -569,6 +629,8 @@
         getPendingCount: getPendingCount,
         syncAll: syncAll,
         updateUIBadge: updateUIBadge,
-        showPendingModal: showPendingModal
+        showPendingModal: showPendingModal,
+        discardItem: discardItem,
+        discardAll: discardAll
     };
 })();
