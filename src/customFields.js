@@ -541,7 +541,7 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
             }
         }
         
-        return `<div class="text-xs text-slate-700 dark:text-slate-300 break-words">${formattedValue || '<span class="text-slate-400 opacity-50 tracking-widest">---</span>'}</div>`;
+        return `<div class="text-[12.5px] text-slate-800 dark:text-slate-200 break-words leading-tight">${formattedValue || '<span class="text-slate-400 dark:text-slate-500 opacity-50 tracking-widest font-normal">---</span>'}</div>`;
     }
 
     // MODO EDIÇÃO

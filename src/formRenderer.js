@@ -157,14 +157,19 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
         // Render Edit and Report buttons inside the tab if not in edit mode
         if (!isEditMode && !isReportsTab && (!isConsolidated && (!isOrcamento || (tab.fields && tab.fields.length > 0)) || reportShortcutHtml)) {
             html += `
-            <div class="flex flex-wrap items-center justify-center gap-2 mb-4">
-                ${(canEditThisTab && !isConsolidated && (!isOrcamento || (tab.fields && tab.fields.length > 0))) ? `
-                <button type="button" onclick="toggleFeatureEditMode('${tab.id}')" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto text-sm">
-                    <span class="material-symbols-outlined text-[18px]">edit</span>
-                    Editar esta aba
-                </button>
-                ` : ''}
-                ${reportShortcutHtml}
+            <div class="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-slate-200/70 dark:border-slate-700/60">
+                <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[15px] text-blue-500">description</span> Atributos Cadastrais
+                </span>
+                <div class="flex items-center gap-1.5">
+                    ${(canEditThisTab && !isConsolidated && (!isOrcamento || (tab.fields && tab.fields.length > 0))) ? `
+                    <button type="button" onclick="toggleFeatureEditMode('${tab.id}')" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-xs flex items-center gap-1.5 text-xs">
+                        <span class="material-symbols-outlined text-[15px]">edit</span>
+                        Editar esta aba
+                    </button>
+                    ` : ''}
+                    ${reportShortcutHtml}
+                </div>
             </div>`;
         }
 
@@ -175,7 +180,7 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
         } else if (tab.isMultiple) {
             html += renderMultipleTab(tab, featureData, isTabEditMode);
         } else {
-            html += `<div class="flex flex-col gap-2">`;
+            html += `<div class="flex flex-col gap-1.5">`;
             if (tab.fields && tab.fields.length > 0) {
                 tab.fields.forEach(f => {
                     let value = featureData[f.id];
@@ -256,17 +261,25 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
                     }
 
                     if (isTabEditMode) {
-                        html += `<div>
-                            <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-0.5">${f.label}</label>
+                        html += `
+                        <div class="bg-white/95 dark:bg-slate-800/90 border border-slate-200/90 dark:border-slate-700 rounded-lg p-2.5 shadow-2xs">
+                            <label class="block text-[10.5px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                                <span class="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
+                                ${f.label}
+                            </label>
                             ${window.generateFeatureInputHtml ? window.generateFeatureInputHtml(f, value, true) : ''}
                         </div>`;
                     } else {
+                        const hasVal = (value !== undefined && value !== null && String(value).trim() !== '' && String(value).trim() !== '---');
                         html += `
-                        <div class="flex flex-col gap-0.5">
-                            <div class="bg-blue-50/50 dark:bg-slate-800/50 border-l-[2px] border-cyan-500 rounded-md px-1.5 py-0.5 w-fit shadow-sm">
-                                <span class="text-[10px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">${f.label}</span>
+                        <div class="group relative bg-white dark:bg-slate-800/80 hover:bg-slate-50/90 dark:hover:bg-slate-800/95 border border-slate-200/80 dark:border-slate-700/80 rounded-lg px-3 py-1.5 transition-all shadow-2xs hover:border-slate-300 dark:hover:border-slate-600">
+                            <div class="flex items-center justify-between gap-1 mb-0.5">
+                                <span class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                    <span class="w-1.5 h-1.5 rounded-full ${hasVal ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-600'} shrink-0"></span>
+                                    <span class="truncate">${f.label}</span>
+                                </span>
                             </div>
-                            <div class="border border-dashed border-slate-300/50 dark:border-slate-600/50 rounded-md px-2 py-1 bg-slate-50/30 dark:bg-slate-900/10 min-h-[24px] flex flex-col justify-center">
+                            <div class="text-[12.5px] font-medium text-slate-800 dark:text-slate-100 min-h-[20px] flex items-center break-words pl-3">
                                 ${window.generateFeatureInputHtml ? window.generateFeatureInputHtml(f, value, false) : ''}
                             </div>
                         </div>`;
