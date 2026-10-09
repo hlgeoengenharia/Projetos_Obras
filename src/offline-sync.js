@@ -211,6 +211,27 @@
         }
     }
 
+    // Atualiza status e último erro de um item na fila
+    async function updateQueueItemStatus(id, status, lastError = null) {
+        const db = await getDB();
+        if (!db) return;
+        return new Promise((resolve) => {
+            const tx = db.transaction([STORE_NAME], 'readwrite');
+            const store = tx.objectStore(STORE_NAME);
+            const getReq = store.get(id);
+            getReq.onsuccess = () => {
+                if (getReq.result) {
+                    const it = getReq.result;
+                    it.status = status;
+                    if (lastError) it.lastError = String(lastError);
+                    store.put(it);
+                }
+                resolve(true);
+            };
+            getReq.onerror = () => resolve(false);
+        });
+    }
+
     // Faz upload de fotos/documentos coletados offline para o Supabase Storage
     async function uploadPendingOfflineFiles(props) {
         if (!props || !window.supabaseClient) return props;
@@ -257,12 +278,14 @@
                             console.warn('[OfflineSync] Falha ao processar foto offline para Storage:', eUpload);
                         }
 
-                        // Se o upload falhar em ambos os buckets (ex: políticas RLS restritas),
-                        // simplifica a URL em Base64 se for gigante para não estourar o limite da API
-                        if (!uploadSuccess && fileObj.url && fileObj.url.length > 500000) {
+                        // Se o upload falhar no storage, remove a URL gigante em Base64
+                        // para não estourar o limite de payload da API PostgREST (Erro HTTP 413)
+                        if (!uploadSuccess && fileObj.url && fileObj.url.length > 200000) {
                             console.warn(`[OfflineSync] Arquivo "${fileObj.name}" muito grande para persistir em base64. Otimizando para sincronização da feição.`);
+                            delete fileObj.url;
                             fileObj.offlinePending = false;
-                            fileObj.offlineSyncNotice = 'Upload pendente de permissão no storage';
+                            fileObj.storageError = true;
+                            fileObj.offlineSyncNotice = 'Upload pendente de permissão no storage (anexo removido do payload para não travar a feição)';
                         }
                     }
                 }
@@ -290,6 +313,24 @@
             return;
         }
 
+        // Validação proativa de sessão antes do envio
+        if (window.supabaseClient.auth) {
+            try {
+                const { data: sessCheck } = await window.supabaseClient.auth.getSession();
+                if (!sessCheck?.session) {
+                    console.log('[OfflineSync] Sessão não detectada, tentando renovar com refreshSession...');
+                    const { data: refCheck, error: refErr } = await window.supabaseClient.auth.refreshSession();
+                    if (refErr || !refCheck?.session) {
+                        showToast("Sessão expirada. Faça login novamente no sistema para sincronizar os dados.", "lock", "amber");
+                        updateUIBadge();
+                        return;
+                    }
+                }
+            } catch (eAuth) {
+                console.warn('[OfflineSync] Aviso ao verificar sessão do Supabase:', eAuth);
+            }
+        }
+
         const items = await getPendingItems();
         if (!items || items.length === 0) {
             if (!isAuto) {
@@ -304,6 +345,7 @@
 
         let successCount = 0;
         let failCount = 0;
+        let lastErrorMessage = '';
 
         for (const item of items) {
             try {
@@ -341,8 +383,11 @@
                         await removeQueueItem(item.id);
                         successCount++;
                     } else {
+                        const errMsg = insErr?.message || insErr?.details || 'Erro ao inserir no Supabase (verifique permissões)';
                         console.error('[OfflineSync] Erro ao sincronizar CREATE:', insErr);
+                        await updateQueueItemStatus(item.id, 'failed', errMsg);
                         failCount++;
+                        lastErrorMessage = errMsg;
                     }
                 } else if (item.action === 'UPDATE') {
                     if (item.idBanco) {
@@ -375,8 +420,11 @@
                             await removeQueueItem(item.id);
                             successCount++;
                         } else {
+                            const errMsg = updErr?.message || updErr?.details || 'Erro ao atualizar no Supabase (verifique permissões)';
                             console.error('[OfflineSync] Erro ao sincronizar UPDATE:', updErr);
+                            await updateQueueItemStatus(item.id, 'failed', errMsg);
                             failCount++;
+                            lastErrorMessage = errMsg;
                         }
                     } else {
                         // Sem ID de banco, remove item órfão
@@ -393,16 +441,22 @@
                             await removeQueueItem(item.id);
                             successCount++;
                         } else {
+                            const errMsg = delErr?.message || delErr?.details || 'Erro ao excluir no Supabase';
                             console.error('[OfflineSync] Erro ao sincronizar DELETE:', delErr);
+                            await updateQueueItemStatus(item.id, 'failed', errMsg);
                             failCount++;
+                            lastErrorMessage = errMsg;
                         }
                     } else {
                         await removeQueueItem(item.id);
                     }
                 }
             } catch(e) {
+                const errMsg = e?.message || 'Exceção durante sincronização';
                 console.error('[OfflineSync] Exceção durante item da sincronização:', e);
+                await updateQueueItemStatus(item.id, 'failed', errMsg);
                 failCount++;
+                lastErrorMessage = errMsg;
             }
         }
 
@@ -415,7 +469,8 @@
                 loadAllFeaturesToMap();
             }
         } else if (failCount > 0) {
-            showToast(`Houve erro em ${failCount} item(ns). Tentaremos novamente assim que o sinal estabilizar.`, "error", "rose");
+            const detalhe = lastErrorMessage ? `: ${lastErrorMessage.substring(0, 50)}...` : '';
+            showToast(`Houve erro em ${failCount} item(ns)${detalhe}. Clique na lista ao lado para ver detalhes ou descartar.`, "error", "rose");
         }
     }
 
@@ -477,11 +532,16 @@
 
         if (count > 0) {
             badgeEl.innerHTML = `
-                <button onclick="window.OfflineSync.syncAll()" class="header-glass-card inline-flex items-center gap-2 px-3 py-1.5 rounded-2xl border border-emerald-500/60 bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 text-xs font-bold shadow-lg shadow-emerald-500/10 cursor-pointer active:scale-95 transition-all" title="Clique para enviar as coletas de campo ao servidor central">
-                    <span class="material-symbols-outlined text-[17px] text-emerald-400">cloud_upload</span>
-                    <span>Sincronizar</span>
-                    <span class="px-1.5 py-0.2 rounded-full bg-emerald-500 text-slate-950 font-black text-[10px]">${count}</span>
-                </button>
+                <div class="header-glass-card inline-flex items-center rounded-2xl border border-emerald-500/60 bg-emerald-950/40 shadow-lg shadow-emerald-500/10 overflow-hidden">
+                    <button onclick="window.OfflineSync.syncAll()" class="inline-flex items-center gap-2 px-3 py-1.5 hover:bg-emerald-900/60 text-emerald-300 text-xs font-bold cursor-pointer active:scale-95 transition-all" title="Clique para enviar as coletas de campo ao servidor central">
+                        <span class="material-symbols-outlined text-[17px] text-emerald-400">cloud_upload</span>
+                        <span>Sincronizar</span>
+                        <span class="px-1.5 py-0.2 rounded-full bg-emerald-500 text-slate-950 font-black text-[10px]">${count}</span>
+                    </button>
+                    <button onclick="window.OfflineSync.showPendingModal()" class="px-2.5 py-1.5 border-l border-emerald-500/30 hover:bg-emerald-900/60 text-emerald-300 text-xs cursor-pointer transition-all flex items-center justify-center" title="Ver detalhes das coletas ou descartar itens travados">
+                        <span class="material-symbols-outlined text-[17px]">format_list_bulleted</span>
+                    </button>
+                </div>
             `;
             badgeEl.classList.remove('hidden');
             return;
