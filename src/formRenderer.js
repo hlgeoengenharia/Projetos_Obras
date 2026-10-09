@@ -48,14 +48,17 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
         return;
     }
 
-    let html = '<div class="flex flex-col border-t border-slate-200 dark:border-slate-700">';
+    let html = '<div class="flex flex-col w-full">';
 
     let primaryTabId = options.activeTabId || visibleTabs.find(t => t.isPrimary)?.id;
     if (!primaryTabId && visibleTabs.length > 0) primaryTabId = visibleTabs[0].id;
 
+    // Barra de abas horizontais em linha (com rolagem lateral caso existam muitas abas)
+    html += `
+    <div class="bg-slate-100/90 dark:bg-slate-800/85 border-b border-slate-200 dark:border-slate-700/80 px-2 py-1.5 flex items-center gap-1.5 overflow-x-auto whitespace-nowrap no-scrollbar scroll-smooth" id="feature-tabs-bar">`;
+
     visibleTabs.forEach((tab) => {
         let isPrimary = tab.id === primaryTabId;
-        
         let recordCountHtml = '';
         if (tab.isMultiple) {
             let records = [];
@@ -65,24 +68,32 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
             if (!Array.isArray(records)) records = [];
             
             if (records.length > 0) {
-                recordCountHtml = `<span class="ml-1 bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm group-hover:bg-white group-hover:text-emerald-600 transition-colors">${records.length}</span>`;
+                recordCountHtml = `<span class="ml-1 bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-xs">${records.length}</span>`;
             }
         }
-        
         const isOrcamento = (tab.id === 'orcamento_obra' || tab.tabType === 'orcamento_nativo');
 
         html += `
-            <div class="border-b last:border-b-0 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 transition-all accordion-section ${isPrimary ? 'border-l-4 border-l-sky-500 shadow-inner' : ''}" id="acc-section-${tab.id}" ${(tab.condition && tab.condition.enabled && tab.condition.fieldId) ? `data-condition-field="${tab.condition.fieldId}" data-condition-operator="${tab.condition.operator}" data-condition-value="${(tab.condition.value || '').toLowerCase()}"` : ''}>
-                <button type="button" onclick="switchDynamicTab('${tab.id}')" class="group w-full px-3 py-3 sm:px-4 sm:py-3.5 flex items-center justify-center ${isPrimary ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold' : 'bg-slate-50 dark:bg-slate-900/40 text-slate-700 dark:text-slate-300'} hover:bg-blue-600 dark:hover:bg-blue-600 active:bg-blue-700 dark:active:bg-blue-700 active:scale-95 hover:shadow-[0_0_25px_rgba(59,130,246,0.6)] hover:z-10 relative transition-all duration-300 ease-out overflow-hidden">
-                    <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-150%] group-hover:translate-x-[150%] transition-transform duration-1000 ease-in-out"></div>
-                    <h3 class="text-sm font-bold uppercase tracking-wider flex items-center gap-2 text-center transition-all duration-300 group-hover:scale-105 group-hover:tracking-widest relative z-10">
-                        ${isOrcamento ? '<span class="material-symbols-outlined text-emerald-500 text-[18px]">request_quote</span>' : (isPrimary ? '<span class="material-symbols-outlined text-amber-500 group-hover:text-yellow-300 group-hover:drop-shadow-[0_0_8px_rgba(253,224,71,0.8)] transition-all text-[18px]">star</span>' : '')}
-                        ${tab.title}
-                        ${recordCountHtml}
-                    </h3>
-                </button>
-                
-                <div id="acc-content-${tab.id}" class="accordion-content transition-all duration-300 ${isPrimary ? 'block p-4 sm:p-5 border-t border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-950' : 'hidden'}">
+            <button type="button" onclick="switchDynamicTab('${tab.id}')" id="tab-btn-${tab.id}" class="tab-pill-btn shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 ${isPrimary ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs border border-slate-200 dark:border-slate-700' : 'bg-transparent text-slate-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800/60 font-medium'}">
+                ${isOrcamento ? '<span class="material-symbols-outlined text-emerald-500 text-[15px]">request_quote</span>' : (isPrimary ? '<span class="material-symbols-outlined text-amber-500 text-[15px]">star</span>' : '')}
+                <span>${tab.title}</span>
+                ${recordCountHtml}
+            </button>
+        `;
+    });
+
+    html += `</div>`; // fecha feature-tabs-bar
+
+    // Container com o conteúdo das abas
+    html += `<div class="flex-1 overflow-y-auto">`;
+
+    visibleTabs.forEach((tab) => {
+        let isPrimary = tab.id === primaryTabId;
+        const isOrcamento = (tab.id === 'orcamento_obra' || tab.tabType === 'orcamento_nativo');
+
+        html += `
+            <div class="accordion-section" id="acc-section-${tab.id}" ${(tab.condition && tab.condition.enabled && tab.condition.fieldId) ? `data-condition-field="${tab.condition.fieldId}" data-condition-operator="${tab.condition.operator}" data-condition-value="${(tab.condition.value || '').toLowerCase()}"` : ''}>
+                <div id="acc-content-${tab.id}" class="accordion-content transition-all duration-200 ${isPrimary ? 'block p-3.5 sm:p-4 bg-slate-50/40 dark:bg-slate-950/30' : 'hidden'}">
         `;
         
         const canEditThisTab = (options.isPreview || typeof window.canEditFormTab !== 'function') || window.canEditFormTab(formId, tab.id, { ...options, tabTitle: tab.title, tab });
@@ -157,19 +168,14 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
         // Render Edit and Report buttons inside the tab if not in edit mode
         if (!isEditMode && !isReportsTab && (!isConsolidated && (!isOrcamento || (tab.fields && tab.fields.length > 0)) || reportShortcutHtml)) {
             html += `
-            <div class="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-slate-200/70 dark:border-slate-700/60">
-                <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-[15px] text-blue-500">description</span> Atributos Cadastrais
-                </span>
-                <div class="flex items-center gap-1.5">
-                    ${(canEditThisTab && !isConsolidated && (!isOrcamento || (tab.fields && tab.fields.length > 0))) ? `
-                    <button type="button" onclick="toggleFeatureEditMode('${tab.id}')" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-xs flex items-center gap-1.5 text-xs">
-                        <span class="material-symbols-outlined text-[15px]">edit</span>
-                        Editar esta aba
-                    </button>
-                    ` : ''}
-                    ${reportShortcutHtml}
-                </div>
+            <div class="flex flex-wrap items-center justify-center gap-2 mb-3">
+                ${(canEditThisTab && !isConsolidated && (!isOrcamento || (tab.fields && tab.fields.length > 0))) ? `
+                <button type="button" onclick="toggleFeatureEditMode('${tab.id}')" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-xs flex items-center justify-center gap-2 text-xs">
+                    <span class="material-symbols-outlined text-[16px]">edit</span>
+                    Editar esta aba
+                </button>
+                ` : ''}
+                ${reportShortcutHtml}
             </div>`;
         }
 
@@ -262,24 +268,21 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
 
                     if (isTabEditMode) {
                         html += `
-                        <div class="bg-white/95 dark:bg-slate-800/90 border border-slate-200/90 dark:border-slate-700 rounded-lg p-2.5 shadow-2xs">
-                            <label class="block text-[10.5px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                                <span class="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
-                                ${f.label}
-                            </label>
-                            ${window.generateFeatureInputHtml ? window.generateFeatureInputHtml(f, value, true) : ''}
+                        <div class="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-2xs bg-white dark:bg-slate-900">
+                            <div class="bg-slate-100 dark:bg-slate-800/80 px-2.5 py-1 border-b border-slate-200 dark:border-slate-700">
+                                <span class="text-[10px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider block">${f.label}</span>
+                            </div>
+                            <div class="p-2.5 bg-white dark:bg-slate-900">
+                                ${window.generateFeatureInputHtml ? window.generateFeatureInputHtml(f, value, true) : ''}
+                            </div>
                         </div>`;
                     } else {
-                        const hasVal = (value !== undefined && value !== null && String(value).trim() !== '' && String(value).trim() !== '---');
                         html += `
-                        <div class="group relative bg-white dark:bg-slate-800/80 hover:bg-slate-50/90 dark:hover:bg-slate-800/95 border border-slate-200/80 dark:border-slate-700/80 rounded-lg px-3 py-1.5 transition-all shadow-2xs hover:border-slate-300 dark:hover:border-slate-600">
-                            <div class="flex items-center justify-between gap-1 mb-0.5">
-                                <span class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                                    <span class="w-1.5 h-1.5 rounded-full ${hasVal ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-600'} shrink-0"></span>
-                                    <span class="truncate">${f.label}</span>
-                                </span>
+                        <div class="group border border-slate-200/90 dark:border-slate-700/80 rounded-lg overflow-hidden shadow-2xs transition-all hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-900">
+                            <div class="bg-slate-100 dark:bg-slate-800/80 px-2.5 py-1 border-b border-slate-200/80 dark:border-slate-700/70">
+                                <span class="text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider block truncate">${f.label}</span>
                             </div>
-                            <div class="text-[12.5px] font-medium text-slate-800 dark:text-slate-100 min-h-[20px] flex items-center break-words pl-3">
+                            <div class="bg-white dark:bg-slate-900/90 px-2.5 py-1.5 min-h-[26px] flex items-center text-[12.5px] font-medium text-slate-800 dark:text-slate-100 break-words">
                                 ${window.generateFeatureInputHtml ? window.generateFeatureInputHtml(f, value, false) : ''}
                             </div>
                         </div>`;
@@ -307,7 +310,7 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
         `;
     });
     
-    html += '</div>';
+    html += '</div></div>';
     
     // Inject Tab Logic Engine for conditions
     html += `
@@ -331,11 +334,10 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
                     }
                 }
                 
-                if (isMatch) {
-                    acc.style.display = 'block';
-                } else {
-                    acc.style.display = 'none';
-                }
+                acc.style.display = isMatch ? 'block' : 'none';
+                const tabId = acc.id.replace('acc-section-', '');
+                const tabBtn = document.getElementById('tab-btn-' + tabId);
+                if (tabBtn) tabBtn.style.display = isMatch ? 'inline-flex' : 'none';
             });
         }
         
@@ -1327,42 +1329,31 @@ function renderMultipleTab(tab, featureData, isEditMode) {
 }
 
 window.switchDynamicTab = function(tabId) {
-    const content = document.getElementById('acc-content-' + tabId);
-    const isAlreadyOpen = content && !content.classList.contains('hidden');
+    window.currentActiveTabId = tabId;
 
     document.querySelectorAll('.accordion-content').forEach(el => {
         el.classList.add('hidden');
-        el.classList.remove('block', 'p-4', 'sm:p-5', 'border-t', 'border-slate-200', 'dark:border-slate-700', 'bg-slate-100', 'dark:bg-slate-950');
+        el.classList.remove('block');
     });
-    
-    document.querySelectorAll('.accordion-section').forEach(el => {
-        el.classList.remove('border-l-4', 'border-l-sky-500', 'shadow-inner');
-        const btn = el.querySelector('button');
-        if (btn) {
-            btn.classList.remove('bg-white', 'dark:bg-slate-800', 'text-blue-600', 'dark:text-blue-400', 'font-bold');
-            btn.classList.add('bg-slate-50', 'dark:bg-slate-900/40', 'text-slate-700', 'dark:text-slate-300');
-        }
-    });
-    
-    if (content && !isAlreadyOpen) {
-        window.currentActiveTabId = tabId;
+
+    const content = document.getElementById('acc-content-' + tabId);
+    if (content) {
         content.classList.remove('hidden');
-        content.classList.add('block', 'p-4', 'sm:p-5', 'border-t', 'border-slate-200', 'dark:border-slate-700', 'bg-slate-100', 'dark:bg-slate-950');
-        
-        const section = document.getElementById('acc-section-' + tabId);
-        if (section) {
-            section.classList.add('border-l-4', 'border-l-sky-500', 'shadow-inner');
-            const btn = section.querySelector('button');
-            if (btn) {
-                btn.classList.remove('bg-slate-50', 'dark:bg-slate-900/40', 'text-slate-700', 'dark:text-slate-300');
-                btn.classList.add('bg-white', 'dark:bg-slate-800', 'text-blue-600', 'dark:text-blue-400', 'font-bold');
-            }
-            setTimeout(() => {
-                section.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 100);
-        }
-    } else {
-        window.currentActiveTabId = null;
+        content.classList.add('block');
+    }
+
+    document.querySelectorAll('.tab-pill-btn').forEach(btn => {
+        btn.classList.remove('bg-white', 'dark:bg-slate-900', 'text-blue-600', 'dark:text-blue-400', 'font-bold', 'shadow-xs', 'border', 'border-slate-200', 'dark:border-slate-700');
+        btn.classList.add('bg-transparent', 'text-slate-600', 'dark:text-slate-400', 'font-medium');
+    });
+
+    const activeBtn = document.getElementById('tab-btn-' + tabId);
+    if (activeBtn) {
+        activeBtn.classList.remove('bg-transparent', 'text-slate-600', 'dark:text-slate-400', 'font-medium');
+        activeBtn.classList.add('bg-white', 'dark:bg-slate-900', 'text-blue-600', 'dark:text-blue-400', 'font-bold', 'shadow-xs', 'border', 'border-slate-200', 'dark:border-slate-700');
+        try {
+            activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        } catch(e) {}
     }
 };
 
