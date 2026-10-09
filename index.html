@@ -461,6 +461,16 @@
         border: 2px solid #06b6d4 !important;
         box-shadow: 0 0 15px rgba(6, 182, 212, 0.25) !important;
       }
+      /* Oculta barras de rolagem nativas para abas horizontais mantendo rolagem fluida */
+      .no-scrollbar::-webkit-scrollbar {
+        display: none !important;
+        height: 0 !important;
+        width: 0 !important;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none !important;
+        scrollbar-width: none !important;
+      }
       /* Barra de Rolagem Customizada Clara e Fácil de Clicar/Arrastar */
       .custom-scrollbar::-webkit-scrollbar {
         width: 8px;
@@ -2251,30 +2261,30 @@
 <!-- Professional Feature Info Panel (Floating & Glassmorphism) -->
 <div id="feature-info-modal" class="z-[100] bg-transparent pointer-events-none hidden">
   <div id="feature-info-card" class="fixed top-[4.5rem] md:top-[5rem] right-4 md:right-6 bottom-4 max-h-[calc(100dvh-5.5rem)] z-[100] bg-white dark:bg-[#0B1120] backdrop-blur-2xl rounded-2xl border border-slate-200 dark:border-slate-800 shadow-[0_15px_40px_rgba(0,0,0,0.5)] w-[92%] sm:w-[520px] md:w-[560px] lg:w-[600px] sm:max-w-[600px] flex flex-col overflow-hidden pointer-events-auto transition-transform duration-300">
-    <div class="px-4 py-2.5 border-b border-slate-200 dark:border-slate-700/80 flex justify-between items-center cursor-move touch-none bg-slate-100/95 dark:bg-slate-800/95" id="feature-info-header">
-        <div id="feature-actions-container" class="flex items-center rounded-lg overflow-hidden border border-slate-300/60 dark:border-slate-700 shadow-xs bg-white/90 dark:bg-slate-700/80 backdrop-blur-sm">
+    <div class="px-4 py-2.5 border-b border-slate-300 dark:border-slate-700 flex justify-between items-center cursor-move touch-none bg-slate-200 dark:bg-slate-800" id="feature-info-header">
+        <div id="feature-actions-container" class="flex items-center rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600 shadow-xs bg-white dark:bg-slate-700">
 
-            <button id="btn-edit-feature-geometry" onclick="editFeatureGeometry()" class="flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-800 dark:text-slate-200 font-medium text-sm transition-all tooltip" title="Ajustar no Mapa">
+            <button id="btn-edit-feature-geometry" onclick="editFeatureGeometry()" class="flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 hover:bg-slate-100/80 active:bg-slate-200 dark:hover:bg-slate-600/50 dark:active:bg-slate-600/80 text-slate-800 dark:text-slate-200 font-medium text-sm transition-all tooltip" title="Ajustar no Mapa">
                 <span class="material-symbols-outlined text-[18px]">edit_location_alt</span>
                 <span class="hidden sm:inline">Ajustar Mapa</span>
             </button>
 
-            <button id="btn-print-feature-report" onclick="printActiveFeatureReport()" class="flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-800 dark:text-slate-200 font-medium text-sm transition-all tooltip" title="Gerar Relatório A4" style="display: none;">
+            <button id="btn-print-feature-report" onclick="printActiveFeatureReport()" class="flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 hover:bg-slate-100/80 active:bg-slate-200 dark:hover:bg-slate-600/50 dark:active:bg-slate-600/80 text-slate-800 dark:text-slate-200 font-medium text-sm transition-all tooltip" title="Gerar Relatório A4" style="display: none;">
                 <span class="material-symbols-outlined text-[18px]">description</span>
                 <span id="btn-print-feature-report-label" class="hidden sm:inline">Relatório A4</span>
             </button>
         </div>
         <div class="flex items-center gap-2 ml-2">
-            <div class="flex items-center rounded-lg overflow-hidden border border-slate-300/50 dark:border-white/10 shadow-sm bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
-                <button id="btn-delete-feature" onclick="deleteActiveFeature()" class="p-1.5 px-2 hover:bg-red-50/50 active:bg-red-100/50 dark:hover:bg-red-900/40 dark:active:bg-red-900/60 text-red-500 transition-all tooltip" title="Excluir Feição">
+            <div class="flex items-center rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600 shadow-xs bg-white dark:bg-slate-800">
+                <button id="btn-delete-feature" onclick="deleteActiveFeature()" class="p-1.5 px-2 hover:bg-red-50 active:bg-red-100 dark:hover:bg-red-900/40 dark:active:bg-red-900/60 text-red-500 transition-all tooltip" title="Excluir Feição">
                     <span class="material-symbols-outlined text-[18px]">delete</span>
                 </button>
             </div>
-            <div class="flex items-center rounded-lg overflow-hidden border border-slate-300/50 dark:border-white/10 shadow-sm bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm">
-                <button onclick="toggleFeatureInfoFullscreen()" id="btn-feature-fullscreen" class="p-1.5 px-2 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-500 dark:text-slate-400 transition-all border-r border-slate-300/50 dark:border-white/10 tooltip" title="Expandir Tela">
+            <div class="flex items-center rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600 shadow-xs bg-white dark:bg-slate-800">
+                <button onclick="toggleFeatureInfoFullscreen()" id="btn-feature-fullscreen" class="p-1.5 px-2 hover:bg-slate-100 active:bg-slate-200 dark:hover:bg-slate-700 dark:active:bg-slate-600 text-slate-600 dark:text-slate-400 transition-all border-r border-slate-300 dark:border-slate-700 tooltip" title="Expandir Tela">
                     <span class="material-symbols-outlined text-[18px]">open_in_full</span>
                 </button>
-                <button onclick="closeFeatureInfoModal()" class="p-1.5 px-2 hover:bg-slate-100/50 active:bg-slate-200/50 dark:hover:bg-slate-700/50 dark:active:bg-slate-600/50 text-slate-500 dark:text-slate-400 transition-all tooltip" title="Fechar">
+                <button onclick="closeFeatureInfoModal()" class="p-1.5 px-2 hover:bg-slate-100 active:bg-slate-200 dark:hover:bg-slate-700 dark:active:bg-slate-600 text-slate-600 dark:text-slate-400 transition-all tooltip" title="Fechar">
                     <span class="material-symbols-outlined">close</span>
                 </button>
             </div>
@@ -3072,7 +3082,7 @@
 <script src="supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.1/dist-browser/geotiff.js"></script>
-<script src="src/formRenderer.js?v=20261009_compact_cards_v2_tabs_row"></script>
+<script src="src/formRenderer.js?v=20261009_high_contrast_cards_v3"></script>
 <script src="src/customFields.js?v=20261009_compact_cards_v1"></script>
 <script src="src/tableJoin.js"></script>
 <script src="src/geo-engine-turbo.js?v=20261006_turbo_speed_v7"></script>

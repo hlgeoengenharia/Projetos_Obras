@@ -55,7 +55,7 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
 
     // Barra de abas horizontais em linha (com rolagem lateral caso existam muitas abas)
     html += `
-    <div class="bg-slate-100/90 dark:bg-slate-800/85 border-b border-slate-200 dark:border-slate-700/80 px-2 py-1.5 flex items-center gap-1.5 overflow-x-auto whitespace-nowrap no-scrollbar scroll-smooth" id="feature-tabs-bar">`;
+    <div class="bg-slate-200 dark:bg-slate-800 border-b border-slate-300 dark:border-slate-700 px-2 py-1.5 flex items-center gap-1.5 overflow-x-auto whitespace-nowrap no-scrollbar scroll-smooth" id="feature-tabs-bar">`;
 
     visibleTabs.forEach((tab) => {
         let isPrimary = tab.id === primaryTabId;
@@ -74,7 +74,7 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
         const isOrcamento = (tab.id === 'orcamento_obra' || tab.tabType === 'orcamento_nativo');
 
         html += `
-            <button type="button" onclick="switchDynamicTab('${tab.id}')" id="tab-btn-${tab.id}" class="tab-pill-btn shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 ${isPrimary ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs border border-slate-200 dark:border-slate-700' : 'bg-transparent text-slate-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800/60 font-medium'}">
+            <button type="button" onclick="switchDynamicTab('${tab.id}')" id="tab-btn-${tab.id}" class="tab-pill-btn shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 ${isPrimary ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs border border-slate-300 dark:border-slate-700' : 'bg-white/40 dark:bg-slate-700/40 text-slate-700 dark:text-slate-300 hover:bg-white/80 dark:hover:bg-slate-700 font-medium'}">
                 ${isOrcamento ? '<span class="material-symbols-outlined text-emerald-500 text-[15px]">request_quote</span>' : (isPrimary ? '<span class="material-symbols-outlined text-amber-500 text-[15px]">star</span>' : '')}
                 <span>${tab.title}</span>
                 ${recordCountHtml}
@@ -268,9 +268,9 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
 
                     if (isTabEditMode) {
                         html += `
-                        <div class="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-2xs bg-white dark:bg-slate-900">
-                            <div class="bg-slate-100 dark:bg-slate-800/80 px-2.5 py-1 border-b border-slate-200 dark:border-slate-700">
-                                <span class="text-[10px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider block">${f.label}</span>
+                        <div class="border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden shadow-2xs bg-white dark:bg-slate-900">
+                            <div class="bg-slate-200 dark:bg-slate-800 px-3 py-1.5 border-b border-slate-300 dark:border-slate-700">
+                                <span class="text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider block">${f.label}</span>
                             </div>
                             <div class="p-2.5 bg-white dark:bg-slate-900">
                                 ${window.generateFeatureInputHtml ? window.generateFeatureInputHtml(f, value, true) : ''}
@@ -278,11 +278,11 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
                         </div>`;
                     } else {
                         html += `
-                        <div class="group border border-slate-200/90 dark:border-slate-700/80 rounded-lg overflow-hidden shadow-2xs transition-all hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-900">
-                            <div class="bg-slate-100 dark:bg-slate-800/80 px-2.5 py-1 border-b border-slate-200/80 dark:border-slate-700/70">
-                                <span class="text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider block truncate">${f.label}</span>
+                        <div class="group border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden shadow-2xs transition-all hover:border-slate-400 dark:hover:border-slate-600 bg-white dark:bg-slate-900">
+                            <div class="bg-slate-200 dark:bg-slate-800 px-3 py-1.5 border-b border-slate-300 dark:border-slate-700">
+                                <span class="text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider block truncate">${f.label}</span>
                             </div>
-                            <div class="bg-white dark:bg-slate-900/90 px-2.5 py-1.5 min-h-[26px] flex items-center text-[12.5px] font-medium text-slate-800 dark:text-slate-100 break-words">
+                            <div class="bg-white dark:bg-slate-900 px-3 py-2 min-h-[30px] flex items-center text-[13px] font-semibold text-slate-900 dark:text-slate-100 break-words">
                                 ${window.generateFeatureInputHtml ? window.generateFeatureInputHtml(f, value, false) : ''}
                             </div>
                         </div>`;
@@ -1343,14 +1343,14 @@ window.switchDynamicTab = function(tabId) {
     }
 
     document.querySelectorAll('.tab-pill-btn').forEach(btn => {
-        btn.classList.remove('bg-white', 'dark:bg-slate-900', 'text-blue-600', 'dark:text-blue-400', 'font-bold', 'shadow-xs', 'border', 'border-slate-200', 'dark:border-slate-700');
-        btn.classList.add('bg-transparent', 'text-slate-600', 'dark:text-slate-400', 'font-medium');
+        btn.classList.remove('bg-white', 'dark:bg-slate-900', 'text-blue-600', 'dark:text-blue-400', 'font-bold', 'shadow-xs', 'border', 'border-slate-300', 'dark:border-slate-700');
+        btn.classList.add('bg-white/40', 'dark:bg-slate-700/40', 'text-slate-700', 'dark:text-slate-300', 'font-medium');
     });
 
     const activeBtn = document.getElementById('tab-btn-' + tabId);
     if (activeBtn) {
-        activeBtn.classList.remove('bg-transparent', 'text-slate-600', 'dark:text-slate-400', 'font-medium');
-        activeBtn.classList.add('bg-white', 'dark:bg-slate-900', 'text-blue-600', 'dark:text-blue-400', 'font-bold', 'shadow-xs', 'border', 'border-slate-200', 'dark:border-slate-700');
+        activeBtn.classList.remove('bg-white/40', 'dark:bg-slate-700/40', 'text-slate-700', 'dark:text-slate-300', 'font-medium');
+        activeBtn.classList.add('bg-white', 'dark:bg-slate-900', 'text-blue-600', 'dark:text-blue-400', 'font-bold', 'shadow-xs', 'border', 'border-slate-300', 'dark:border-slate-700');
         try {
             activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
         } catch(e) {}
