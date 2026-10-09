@@ -1,15 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="9 8 30 30" width="48" height="48">
   <defs>
-    <linearGradient id="pDeckGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+    <linearGradient id="pDeckGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#fef3c7"/>
       <stop offset="100%" stop-color="#fde68a"/>
     </linearGradient>
-    <filter id="pShadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-opacity="0.3"/>
-    </filter>
   </defs>
-  <!-- Círculo base -->
-  <circle cx="24" cy="24" r="22" fill="#ffffff" stroke="#d97706" stroke-width="2.5" filter="url(#pShadow)"/>
   <!-- Tablado da passarela em perspectiva -->
   <path d="M18,12 L30,12 L35,36 L13,36 Z" fill="url(#pDeckGrad)"/>
   <!-- Réguas / tábuas de madeira da passarela -->

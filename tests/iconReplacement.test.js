@@ -98,5 +98,15 @@ test('Simulação DOM: selectIcon substitui tema que tinha ícone customizado se
     assert.ok(elements['edit-icon-preview-container'].innerHTML.includes('Pino (Localização)'), 'Preview container deve conter o novo label');
 });
 
+test('src/main.js renderiza TODOS os ícones (padrão e customizados) com o pino de ponta aguda apontando para o solo', () => {
+    // Verifica que não existe mais branch customIconData retornando divIcon flat 36x36
+    assert.ok(!mainJs.includes('custom-user-div-icon theme-feature'), 'Não deve existir ícone customizado flat em disco flutuante sem o pino');
+    // Verifica que pointToLayer usa o pino gota com agulha no solo
+    assert.ok(mainJs.includes('iconAnchor: [15, 37]'), 'Pino deve estar ancorado exatamente na ponta aguda inferior [15, 37]');
+    assert.ok(mainJs.includes('M15,1 C7.268,1 1,7.268 1,15 C1,23.8 15,36.5 15,36.5'), 'Pino deve conter a geometria da ponta aguda em gota');
+    assert.ok(mainJs.includes('<circle cx="15" cy="14" r="8" fill="#ffffff" />'), 'Pino deve conter o círculo interior branco para o ícone');
+});
+
 console.log(`\nResultado: ${passed}/${total} verificações passaram.`);
 if (passed !== total) process.exit(1);
+

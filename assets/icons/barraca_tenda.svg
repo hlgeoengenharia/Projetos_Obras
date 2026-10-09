@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="8 7 32 34" width="48" height="48">
   <defs>
     <linearGradient id="tentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#0284c7"/>
@@ -8,17 +8,12 @@
       <stop offset="0%" stop-color="#38bdf8"/>
       <stop offset="100%" stop-color="#0284c7"/>
     </linearGradient>
-    <filter id="tShadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-opacity="0.3"/>
-    </filter>
   </defs>
-  <!-- Círculo base -->
-  <circle cx="24" cy="24" r="22" fill="#ffffff" stroke="#0284c7" stroke-width="2.5" filter="url(#tShadow)"/>
   <!-- Pernas de sustentação -->
-  <line x1="11" y1="28" x2="11" y2="39" stroke="#475569" stroke-width="2.2" stroke-linecap="round"/>
-  <line x1="37" y1="28" x2="37" y2="39" stroke="#475569" stroke-width="2.2" stroke-linecap="round"/>
-  <line x1="19" y1="27" x2="19" y2="38" stroke="#64748b" stroke-width="1.8" stroke-linecap="round"/>
-  <line x1="29" y1="27" x2="29" y2="38" stroke="#64748b" stroke-width="1.8" stroke-linecap="round"/>
+  <line x1="11" y1="28" x2="11" y2="39" stroke="#334155" stroke-width="2.4" stroke-linecap="round"/>
+  <line x1="37" y1="28" x2="37" y2="39" stroke="#334155" stroke-width="2.4" stroke-linecap="round"/>
+  <line x1="19" y1="27" x2="19" y2="38" stroke="#475569" stroke-width="2.0" stroke-linecap="round"/>
+  <line x1="29" y1="27" x2="29" y2="38" stroke="#475569" stroke-width="2.0" stroke-linecap="round"/>
   <!-- Painéis da lona da tenda/barraca -->
   <path d="M24,10 L10,24 L18,27 L24,10 Z" fill="url(#tentTop)"/>
   <path d="M24,10 L18,27 L30,27 L24,10 Z" fill="#0ea5e9"/>
@@ -26,5 +21,5 @@
   <!-- Saia / beiral da lona -->
   <path d="M10,24 L10,27.5 L18,30.5 L30,30.5 L38,27.5 L38,24 L30,27 L18,27 Z" fill="#0369a1"/>
   <!-- Pontalete superior -->
-  <circle cx="24" cy="9.5" r="1.5" fill="#f59e0b"/>
+  <circle cx="24" cy="9.5" r="1.6" fill="#f59e0b"/>
 </svg>

@@ -619,13 +619,36 @@ function initMap() {
       const color = theme ? theme.color : '#333333';
       const iconName = theme && theme.icon ? theme.icon : 'circle';
       
+      const customIconData = theme && theme.customIcon ? theme.customIcon : null;
+      const iconInner = customIconData
+        ? `<img src="${customIconData}" alt="Ícone" style="width: 14px; height: 14px; object-fit: contain; pointer-events: none;">`
+        : `<span class="material-symbols-outlined" style="color: ${color}; font-size: 15px; font-weight: bold; pointer-events: none;">${iconName === 'circle' ? 'circle' : iconName}</span>`;
+
+      const pinHtml = `
+        <div class="map-pin-touch-wrap" style="position: relative; width: 30px; height: 38px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+          <div class="map-pin-3d-marker" style="position: relative; width: 30px; height: 38px; cursor: pointer; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.35));">
+            <svg viewBox="0 0 30 38" width="30" height="38" style="display: block; overflow: visible; pointer-events: none;">
+              <ellipse cx="15" cy="37" rx="5.5" ry="1.8" fill="rgba(0,0,0,0.25)" />
+              <path d="M15,1 C7.268,1 1,7.268 1,15 C1,23.8 15,36.5 15,36.5 C15,36.5 29,23.8 29,15 C29,7.268 22.732,1 15,1 Z" 
+                    fill="${color}" 
+                    stroke="#ffffff" 
+                    stroke-width="1.8" 
+                    stroke-linejoin="round" />
+              <circle cx="15" cy="14" r="8" fill="#ffffff" />
+            </svg>
+            <div style="position: absolute; top: 5px; left: 6px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
+              ${iconInner}
+            </div>
+          </div>
+        </div>
+      `;
+
       const customIcon = L.divIcon({
         className: 'custom-div-icon',
-        html: `<div style="background-color: ${color}; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
-                 <span class="material-symbols-outlined" style="color: white; font-size: 14px;">${iconName}</span>
-               </div>`,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12]
+        html: pinHtml,
+        iconSize: [30, 38],
+        iconAnchor: [15, 37],
+        tooltipAnchor: [0, -36]
       });
       return L.marker(latlng, { icon: customIcon });
     },

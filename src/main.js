@@ -1950,28 +1950,11 @@ function initMap() {
       const iconName = theme && theme.icon ? theme.icon : 'location_on';
       const customIconData = theme && theme.customIcon ? theme.customIcon : null;
 
-      // Se o usuário carregou um ícone personalizado, substitui integralmente pelo ícone carregado (sem o pino/gota SVG ao redor)
-      if (customIconData) {
-        const customMarkerHtml = `
-          <div class="map-pin-touch-wrap custom-icon-touch-wrap" style="position: relative; width: 36px; height: 36px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
-            <div class="custom-user-icon-container" style="position: relative; width: 34px; height: 34px; cursor: pointer; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.45)); display: flex; align-items: center; justify-content: center;">
-              <img src="${customIconData}" alt="${theme ? theme.name : 'Ícone'}" style="width: 100%; height: 100%; object-fit: contain; pointer-events: none; -webkit-user-drag: none; user-select: none;">
-            </div>
-          </div>
-        `;
-        const userDivIcon = L.divIcon({
-          className: `custom-div-icon custom-user-div-icon theme-feature theme-${themeId}`,
-          html: customMarkerHtml,
-          iconSize: [36, 36],
-          iconAnchor: [18, 18],
-          tooltipAnchor: [0, -18]
-        });
-        return L.marker(latlng, { icon: userDivIcon });
-      }
-
-      // Caso padrão: pino 3D com formato de gota e o ícone do Material Symbols no centro
+      // Todos os ícones (padrão ou personalizados) exibem o pino 3D com a ponta aguda voltada para o solo (iconAnchor: [15, 37])
       const safeId = String(themeId).replace(/[^a-zA-Z0-9]/g, '_');
-      const iconHtml = `<span class="material-symbols-outlined" style="color: ${color}; font-size: 15px; font-weight: bold; pointer-events: none;">${iconName === 'circle' ? 'circle' : iconName}</span>`;
+      const iconHtml = customIconData
+        ? `<img src="${customIconData}" alt="${theme ? theme.name : 'Ícone'}" style="width: 14px; height: 14px; object-fit: contain; pointer-events: none; -webkit-user-drag: none; user-select: none;">`
+        : `<span class="material-symbols-outlined" style="color: ${color}; font-size: 15px; font-weight: bold; pointer-events: none;">${iconName === 'circle' ? 'circle' : iconName}</span>`;
 
       const pinHtml = `
         <div class="map-pin-touch-wrap" style="position: relative; width: 30px; height: 38px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
@@ -1985,7 +1968,7 @@ function initMap() {
               </defs>
               <!-- Sombra de projeção no solo -->
               <ellipse cx="15" cy="37" rx="5.5" ry="1.8" fill="rgba(0,0,0,0.25)" />
-              <!-- Pino 3D com formato de gota e ponta para baixo -->
+              <!-- Pino 3D com formato de gota e ponta para baixo apontando para o solo -->
               <path d="M15,1 C7.268,1 1,7.268 1,15 C1,23.8 15,36.5 15,36.5 C15,36.5 29,23.8 29,15 C29,7.268 22.732,1 15,1 Z" 
                     fill="${color}" 
                     stroke="#ffffff" 
@@ -1994,7 +1977,7 @@ function initMap() {
               <!-- Círculo interior branco com relevo para acomodar o ícone -->
               <circle cx="15" cy="14" r="8" fill="#ffffff" />
             </svg>
-            <!-- Ícone da camada perfeitamente centralizado -->
+            <!-- Ícone da camada perfeitamente centralizado no círculo interior branco -->
             <div style="position: absolute; top: 5px; left: 6px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
               ${iconHtml}
             </div>
@@ -9137,36 +9120,32 @@ function editFeatureGeometry() {
               const iconName = theme && theme.icon ? theme.icon : 'location_on';
               const customIconData = theme && theme.customIcon ? theme.customIcon : null;
               
-              if (customIconData) {
-                  reticlePinContent.innerHTML = `
-                      <div style="position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.55));">
-                          <img src="${customIconData}" alt="Ícone" style="width: 100%; height: 100%; object-fit: contain; pointer-events: none;">
-                      </div>
-                  `;
-              } else {
-                  const safeId = String(themeId || 'reticle').replace(/[^a-zA-Z0-9]/g, '_');
-                  reticlePinContent.innerHTML = `
-                      <div style="position: relative; width: 34px; height: 44px; filter: drop-shadow(0 5px 8px rgba(0,0,0,0.5));">
-                        <svg viewBox="0 0 30 38" width="34" height="44" style="display: block; overflow: visible;">
-                          <defs>
-                            <linearGradient id="grad_pin_reticle_${safeId}" x1="0%" y1="0%" x2="0%" y2="100%">
-                              <stop offset="0%" stop-color="${color}" />
-                              <stop offset="100%" stop-color="#0f172a" stop-opacity="0.85" />
-                            </linearGradient>
-                          </defs>
-                          <path d="M15,1 C7.268,1 1,7.268 1,15 C1,23.8 15,36.5 15,36.5 C15,36.5 29,23.8 29,15 C29,7.268 22.732,1 15,1 Z" 
-                                fill="${color}" 
-                                stroke="#ffffff" 
-                                stroke-width="1.8" 
-                                stroke-linejoin="round" />
-                          <circle cx="15" cy="14" r="8" fill="#ffffff" />
-                        </svg>
-                        <div style="position: absolute; top: 0; left: 0; width: 34px; height: 32px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
-                          <span class="material-symbols-outlined" style="color: ${color}; font-size: 16px; font-weight: bold;">${iconName === 'circle' ? 'circle' : iconName}</span>
-                        </div>
-                      </div>
-                  `;
-              }
+              const safeId = String(themeId || 'reticle').replace(/[^a-zA-Z0-9]/g, '_');
+              const iconInner = customIconData
+                  ? `<img src="${customIconData}" alt="Ícone" style="width: 15px; height: 15px; object-fit: contain; pointer-events: none;">`
+                  : `<span class="material-symbols-outlined" style="color: ${color}; font-size: 16px; font-weight: bold;">${iconName === 'circle' ? 'circle' : iconName}</span>`;
+
+              reticlePinContent.innerHTML = `
+                  <div style="position: relative; width: 34px; height: 44px; filter: drop-shadow(0 5px 8px rgba(0,0,0,0.5));">
+                    <svg viewBox="0 0 30 38" width="34" height="44" style="display: block; overflow: visible;">
+                      <defs>
+                        <linearGradient id="grad_pin_reticle_${safeId}" x1="0%" y1="0%" x2="0%" y2="100%">
+                          <stop offset="0%" stop-color="${color}" />
+                          <stop offset="100%" stop-color="#0f172a" stop-opacity="0.85" />
+                        </linearGradient>
+                      </defs>
+                      <path d="M15,1 C7.268,1 1,7.268 1,15 C1,23.8 15,36.5 15,36.5 C15,36.5 29,23.8 29,15 C29,7.268 22.732,1 15,1 Z" 
+                            fill="${color}" 
+                            stroke="#ffffff" 
+                            stroke-width="1.8" 
+                            stroke-linejoin="round" />
+                      <circle cx="15" cy="14" r="8" fill="#ffffff" />
+                    </svg>
+                    <div style="position: absolute; top: 0; left: 0; width: 34px; height: 32px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
+                      ${iconInner}
+                    </div>
+                  </div>
+              `;
           }
 
           // Exibe o overlay de Mira Central
@@ -12479,6 +12458,10 @@ window.applyThemeClassification = function(themeId, fieldId, colorsJson) {
                         });
                     } else if (layer.setIcon) {
                         const iconName = theme.icon || 'location_on';
+                        const customIconData = theme.customIcon;
+                        const iconInner = customIconData
+                            ? `<img src="${customIconData}" alt="Ícone" style="width: 14px; height: 14px; object-fit: contain; pointer-events: none;">`
+                            : `<span class="material-symbols-outlined" style="color: ${newColor}; font-size: 15px; font-weight: bold; pointer-events: none;">${iconName === 'circle' ? 'circle' : iconName}</span>`;
                         const pinHtml = `
                             <div class="map-pin-3d-marker" style="position: relative; width: 30px; height: 38px; cursor: pointer; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.35)); transition: transform 0.15s ease-out;">
                               <svg viewBox="0 0 30 38" width="30" height="38" style="display: block; overflow: visible;">
@@ -12490,15 +12473,17 @@ window.applyThemeClassification = function(themeId, fieldId, colorsJson) {
                                       stroke-linejoin="round" />
                                 <circle cx="15" cy="14" r="8" fill="#ffffff" />
                               </svg>
-                              <span class="material-symbols-outlined" style="position: absolute; top: 5px; left: 7px; color: ${newColor}; font-size: 15px; font-weight: bold; pointer-events: none;">${iconName === 'circle' ? 'circle' : iconName}</span>
+                              <div style="position: absolute; top: 5px; left: 6px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
+                                ${iconInner}
+                              </div>
                             </div>
                         `;
                         layer.setIcon(L.divIcon({
                             html: pinHtml,
                             className: 'custom-map-pin',
                             iconSize: [30, 38],
-                            iconAnchor: [15, 38],
-                            popupAnchor: [0, -38]
+                            iconAnchor: [15, 37],
+                            popupAnchor: [0, -36]
                         }));
                     }
                 }
@@ -12535,6 +12520,10 @@ window.resetThemeClassification = function(themeId) {
                 } else if (layer.setIcon) {
                     const iconName = theme.icon || 'location_on';
                     const color = theme.color || '#0284c7';
+                    const customIconData = theme.customIcon;
+                    const iconInner = customIconData
+                        ? `<img src="${customIconData}" alt="Ícone" style="width: 14px; height: 14px; object-fit: contain; pointer-events: none;">`
+                        : `<span class="material-symbols-outlined" style="color: ${color}; font-size: 15px; font-weight: bold; pointer-events: none;">${iconName === 'circle' ? 'circle' : iconName}</span>`;
                     const pinHtml = `
                         <div class="map-pin-3d-marker" style="position: relative; width: 30px; height: 38px; cursor: pointer; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.35)); transition: transform 0.15s ease-out;">
                           <svg viewBox="0 0 30 38" width="30" height="38" style="display: block; overflow: visible;">
@@ -12546,15 +12535,17 @@ window.resetThemeClassification = function(themeId) {
                                   stroke-linejoin="round" />
                             <circle cx="15" cy="14" r="8" fill="#ffffff" />
                           </svg>
-                          <span class="material-symbols-outlined" style="position: absolute; top: 5px; left: 7px; color: ${color}; font-size: 15px; font-weight: bold; pointer-events: none;">${iconName === 'circle' ? 'circle' : iconName}</span>
+                          <div style="position: absolute; top: 5px; left: 6px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
+                            ${iconInner}
+                          </div>
                         </div>
                     `;
                     layer.setIcon(L.divIcon({
                         html: pinHtml,
                         className: 'custom-map-pin',
                         iconSize: [30, 38],
-                        iconAnchor: [15, 38],
-                        popupAnchor: [0, -38]
+                        iconAnchor: [15, 37],
+                        popupAnchor: [0, -36]
                     }));
                 }
             });
