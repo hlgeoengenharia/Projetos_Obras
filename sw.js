@@ -146,10 +146,11 @@ self.addEventListener('fetch', (event) => {
                             return fetch(request);
                         })
                         .catch(() => {
-                            return new Response('<!DOCTYPE html><html><body><p>Recarregando...</p><script>setTimeout(()=>location.reload(), 1000);</script></body></html>', {
-                                status: 200,
-                                headers: { 'Content-Type': 'text/html; charset=utf-8' }
-                            });
+                            return caches.match('index.html')
+                                .then(cachedIndex => cachedIndex || new Response('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Modo Offline</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font-family:sans-serif;padding:24px;text-align:center;background:#0b1329;color:#fff;"><h3>Conexão Instável / Modo Offline</h3><p style="font-size:13px;color:#cbd5e1;">Seus dados continuam seguros no aparelho. O sistema reconectará automaticamente assim que o sinal estabilizar.</p></body></html>', {
+                                    status: 200,
+                                    headers: { 'Content-Type': 'text/html; charset=utf-8' }
+                                }));
                         });
                 }
                 return new Response('', { status: 408, statusText: 'Offline/Timeout' });

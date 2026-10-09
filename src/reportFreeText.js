@@ -401,7 +401,10 @@
                         ${bloco.titulo ? `
                             <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-1.5 flex items-center justify-between">
                                 <span class="cursor-text hover:bg-sky-50 px-1 rounded whitespace-pre-line" ondblclick="ReportBuilder.enableInlineEdit(this, ${index}, 'titulo')">${(esc(bloco.titulo)).replace(/\r?\n/g, '<br>')}</span>
-                                <span class="text-[10px] font-mono text-slate-400 no-print">Caixa de Texto Livre</span>
+                                <div class="flex items-center gap-1.5 no-print">
+                                    <button type="button" onclick="if(window.toggleHideFreeText) window.toggleHideFreeText('${bloco.id || index}')" class="text-[10px] text-slate-600 hover:text-red-600 bg-slate-50 hover:bg-red-50 border border-slate-200 hover:border-red-300 rounded px-1.5 py-0.5 cursor-pointer font-medium flex items-center gap-1 transition-colors shadow-2xs" title="Ocultar Caixa de Texto Livre do relatório"><span class="material-symbols-outlined text-[12px]">visibility_off</span>Ocultar</button>
+                                    <span class="text-[10px] font-mono text-slate-400">Caixa de Texto Livre</span>
+                                </div>
                             </div>
                         ` : ''}
 

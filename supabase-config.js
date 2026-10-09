@@ -38,9 +38,33 @@ try {
             }
         });
 
+        // Sincronização e proteção contra descarte de memória no mobile (Tab Discarding)
+        try {
+            const munFromSession = sessionStorage.getItem('municipio_ativo');
+            const munFromLocal = localStorage.getItem('municipio_ativo');
+            if (!munFromSession && munFromLocal) {
+                sessionStorage.setItem('municipio_ativo', munFromLocal);
+                const munNomeLocal = localStorage.getItem('municipio_ativo_nome');
+                if (munNomeLocal) sessionStorage.setItem('municipio_ativo_nome', munNomeLocal);
+            } else if (munFromSession && !munFromLocal) {
+                localStorage.setItem('municipio_ativo', munFromSession);
+                const munNomeSession = sessionStorage.getItem('municipio_ativo_nome');
+                if (munNomeSession) localStorage.setItem('municipio_ativo_nome', munNomeSession);
+            }
+        } catch(eStorage) {}
+
         // Verificação de integridade e existência de sessão no carregamento da página
         supabaseClient.auth.getSession().then(({ data, error }) => {
+            const isOfflineOrField = (typeof navigator !== 'undefined' && !navigator.onLine) || 
+                                     (typeof localStorage !== 'undefined' && localStorage.getItem('geogestor_modo_campo') === 'true');
+
             if (error || (!data?.session && !isPublicPage)) {
+                // Se estiver sem conexão ou em campo, NÃO expulsa para o login se houver dados salvos no aparelho
+                if (isOfflineOrField) {
+                    console.warn("[Supabase] Dispositivo offline/campo. Mantendo aplicação ativa com dados locais.");
+                    return;
+                }
+
                 if (!isPublicPage && !data?.session) {
                     sessionStorage.removeItem('municipio_ativo');
                     window.location.href = 'login.html';
@@ -64,7 +88,7 @@ try {
                 }
             }
         }).catch(err => {
-            console.warn("Erro ao verificar sessão Supabase:", err);
+            console.warn("Erro ao verificar sessão Supabase (falha de rede transitória):", err);
         });
 
     } else {

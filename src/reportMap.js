@@ -63,8 +63,8 @@
         const map = L.map(opts.container, { zoomControl: true, attributionControl: true, zoomSnap: 0.25, preferCanvas: true, maxZoom: 24, minZoom: 1, scrollWheelZoom: false });
         if (map.attributionControl && map.attributionControl.setPrefix) map.attributionControl.setPrefix(false);
 
-        // Rolagem inteligente: a rodinha do mouse rola a folha do relatório normalmente.
-        // O zoom via rodinha é ativado segurando Ctrl (ou Cmd), ou usando os controles +/- do mapa.
+        // Rolagem inteligente com opção de zoom direto via scroll da rodinha:
+        // Se cfg.scrollZoom !== false (ou com Ctrl/Cmd pressionado), o rolon aplica zoom no mapa diretamente.
         try {
             const mapContainerEl = typeof opts.container === 'string' ? (doc && doc.getElementById ? doc.getElementById(opts.container) : null) : opts.container;
             if (mapContainerEl && typeof mapContainerEl.addEventListener === 'function') {
@@ -73,7 +73,7 @@
                     if (!hintEl && doc && doc.createElement) {
                         hintEl = doc.createElement('div');
                         hintEl.className = 'map-scroll-hint no-print';
-                        hintEl.textContent = 'Use Ctrl + rolagem para aplicar zoom no mapa';
+                        hintEl.textContent = 'Use a rolagem do mouse para aplicar zoom no mapa';
                         hintEl.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(15,23,42,0.88);color:#fff;padding:6px 12px;border-radius:8px;font-size:11px;font-weight:600;pointer-events:none;z-index:1000;opacity:0;transition:opacity 0.2s ease;box-shadow:0 4px 12px rgba(0,0,0,0.3);white-space:nowrap;';
                         mapContainerEl.appendChild(hintEl);
                     }
@@ -85,7 +85,7 @@
                 };
 
                 mapContainerEl.addEventListener('wheel', (ev) => {
-                    if (ev.ctrlKey || ev.metaKey) {
+                    if (cfg.scrollZoom !== false || ev.ctrlKey || ev.metaKey) {
                         ev.preventDefault();
                         if (typeof map.getZoom === 'function' && typeof map.setZoom === 'function') {
                             const delta = ev.deltaY < 0 ? 0.5 : -0.5;
@@ -166,8 +166,13 @@
         }
 
         function addNeighborLabels(c) {
+            const cc = (cfg.pontos && cfg.pontos.colConf) ? cfg.pontos.colConf : null;
+            if (cc && cc.ativo) return; // Os confrontantes são exibidos exclusivamente nas divisas via applyPoints
             if (!cfg.rotulos.ativo) return;
-            function labelVal(props) {
+
+            function labelVal(feature) {
+                if (!feature) return '';
+                const props = feature.properties;
                 if (!props) return '';
                 const campos = (Array.isArray(cfg.rotulos.campos) && cfg.rotulos.campos.length)
                     ? cfg.rotulos.campos
@@ -212,7 +217,7 @@
             }
             const itens = [];
             c.features.forEach((x, i) => {
-                const val = labelVal(x.properties);
+                const val = labelVal(x);
                 if (val) itens.push({ x: x, i: i, val: val });
             });
             if (!itens.length || itens.length > MAX_ROTULOS) return;
@@ -240,19 +245,28 @@
 
         function redrawNeighborLabels() {
             clearNeighborLabels();
-            if (!cfg.camadasVizinhas) return;
+            const cc = (cfg.pontos && cfg.pontos.colConf) ? cfg.pontos.colConf : null;
+            if (cc && cc.ativo) return;
+            if (!cfg.camadasVizinhas || !cfg.rotulos.ativo) return;
             const on = new Set(cfg.camadasLigadas.map(String));
-            camadas.forEach(c => { if (on.has(String(c.id))) addNeighborLabels(c); });
+            camadas.forEach(c => {
+                if (on.has(String(c.id))) {
+                    addNeighborLabels(c);
+                }
+            });
         }
 
         function applyNeighbors() {
             clearNeighborLabels();
             Object.keys(state.neighbors).forEach(id => { map.removeLayer(state.neighbors[id]); delete state.neighbors[id]; });
-            if (!cfg.camadasVizinhas) return;
+            const cc = (cfg.pontos && cfg.pontos.colConf) ? cfg.pontos.colConf : null;
+            const useColConf = !!(cc && cc.ativo);
+            if (!cfg.camadasVizinhas && !useColConf) return;
             const on = new Set(cfg.camadasLigadas.map(String));
             camadas.forEach(c => {
-                if (!on.has(String(c.id))) return;
-                addNeighborLabels(c);
+                const isConf = useColConf && (cc.camadas || []).some(x => String(x.id) === String(c.id));
+                if (!on.has(String(c.id)) && !isConf) return;
+                if (!useColConf && cfg.rotulos.ativo && on.has(String(c.id))) addNeighborLabels(c);
                 const st = { color: c.color, weight: 1.5, fillColor: c.color, fillOpacity: 0.08, opacity: 0.9 };
                 const layer = L.geoJSON({ type: 'FeatureCollection', features: c.features }, {
                     style: () => st,
@@ -422,28 +436,53 @@
             const h = root.querySelector('.report-rot');
             const lab = root.querySelector(labelSel);
             if (!h || !lab || !h.addEventListener) return;
-            const stop = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
+            const stop = (ev) => { 
+                if (ev) {
+                    if (ev.stopPropagation) ev.stopPropagation();
+                    if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+                }
+            };
             ['mousedown', 'touchstart', 'click'].forEach(n => h.addEventListener(n, stop));
             h.addEventListener('dblclick', (ev) => { stop(ev); clear(); });
             h.addEventListener('pointerdown', (ev) => {
                 stop(ev);
                 if (ev.preventDefault) ev.preventDefault();
+                try { if (h.setPointerCapture) h.setPointerCapture(ev.pointerId); } catch(e) {}
                 if (mk.dragging && mk.dragging.disable) mk.dragging.disable();
                 if (lab.classList && lab.classList.add) lab.classList.add('rotating');
-                let deg = current();
+                let deg = current() || 0;
                 const move = (e) => {
+                    stop(e);
                     const r = lab.getBoundingClientRect();
                     deg = Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180 / Math.PI;
                     if (e.shiftKey) deg = Math.round(deg / 15) * 15;
                     lab.style.transform = labelTransform(deg);
                 };
-                const up = () => {
+                const up = (e) => {
+                    stop(e);
+                    try { if (h.releasePointerCapture) h.releasePointerCapture(ev.pointerId); } catch(e) {}
                     doc.removeEventListener('pointermove', move);
                     doc.removeEventListener('pointerup', up);
+                    if (lab.classList && lab.classList.remove) lab.classList.remove('rotating');
+                    if (mk.dragging && mk.dragging.enable) mk.dragging.enable();
                     commit(deg);
                 };
                 if (doc.addEventListener) { doc.addEventListener('pointermove', move); doc.addEventListener('pointerup', up); }
             });
+            // Rotação com a rodinha do mouse diretamente sobre o rótulo
+            lab.addEventListener('wheel', (ev) => {
+                if (ev.ctrlKey) return;
+                stop(ev);
+                if (ev.preventDefault) ev.preventDefault();
+                const step = ev.shiftKey ? 15 : (ev.altKey ? 1 : 5);
+                const delta = ev.deltaY < 0 ? step : -step;
+                let deg = (Number(current()) || 0) + delta;
+                deg = Math.round(deg * 10) / 10;
+                if (deg > 180) deg -= 360;
+                if (deg <= -180) deg += 360;
+                lab.style.transform = labelTransform(deg);
+                commit(deg);
+            }, { passive: false });
         }
 
         function setRotation(id, deg) {
@@ -476,7 +515,9 @@
                 const off = p || !it.off ? [0, 0] : it.off; // depois de arrastado, o texto fica exatamente onde foi solto
                 const rot = cfg.rotacoes[it.id] !== undefined ? cfg.rotacoes[it.id] : (it.ang || 0);
                 const dica = it.editado ? 'Editado (calculado: ' + it.padrao + ')' : 'Duplo clique para editar • arraste para mover';
-                const html = '<span class="report-measure-label' + (it.editado ? ' edited' : '') + '" style="left:' + off[0] + 'px;top:' + (it.dy + off[1]) + 'px;transform:' + labelTransform(rot) + ';' + estiloCss(cfg.medidas.estilo[it.grupo]) + corDoItem(it) + '" title="' + escapeHtml(dica) + '">' + escapeHtml(it.texto) + ROT_HANDLE + '</span>';
+                const szM = (/^(med|mseg):/.test(it.id)) ? (cfg.medicoes.tamanho || 10) : (cfg.medidas.tamanho || 10);
+                const szMCss = 'font-size:' + szM + 'px;line-height:' + Math.round(szM * 1.3) + 'px;';
+                const html = '<span class="report-measure-label' + (it.editado ? ' edited' : '') + '" style="left:' + off[0] + 'px;top:' + (it.dy + off[1]) + 'px;transform:' + labelTransform(rot) + ';' + szMCss + estiloCss(cfg.medidas.estilo[it.grupo]) + corDoItem(it) + '" title="' + escapeHtml(dica) + '">' + escapeHtml(it.texto) + ROT_HANDLE + '</span>';
                 const icon = L.divIcon({ className: 'report-measure', html: html, iconSize: [0, 0] });
                 const mk = L.marker(pos, { icon: icon, draggable: true, keyboard: false, zIndexOffset: 1000 });
                 mk.addTo(map);
@@ -516,8 +557,10 @@
                 else if (m.tipo === 'linha') {
                     addMedLayer(L.polyline(m.pts, { color: cfg.medicoes.cor, weight: 2.5, interactive: false }));
                     // número de cada vértice da linha (1, 2, 3...), ao lado de uma bolinha
+                    const szMed = cfg.medicoes.tamanho || 10;
+                    const szMedCss = 'font-size:' + szMed + 'px;line-height:' + Math.round(szMed * 1.3) + 'px;';
                     m.pts.forEach((p, k) => {
-                        const html = '<span class="report-point-dot" style="background:' + cfg.medicoes.cor + ';box-shadow:0 0 0 1px #164e63"></span><span class="report-point-label" style="left:10px;top:-10px;transform:translate(-50%,-50%);font-weight:700;color:' + cfg.medicoes.cor + ';text-shadow:' + haloDe(cfg.medicoes.cor) + '">' + (k + 1) + '</span>';
+                        const html = '<span class="report-point-dot" style="background:' + cfg.medicoes.cor + ';box-shadow:0 0 0 1px #164e63"></span><span class="report-point-label" style="left:10px;top:-10px;transform:translate(-50%,-50%);' + szMedCss + 'font-weight:700;color:' + cfg.medicoes.cor + ';text-shadow:' + haloDe(cfg.medicoes.cor) + '">' + (k + 1) + '</span>';
                         addMedLayer(L.marker(p, { icon: L.divIcon({ className: 'report-point', html: html, iconSize: [0, 0] }), interactive: false, keyboard: false, zIndexOffset: 1300 }));
                     });
                 } else addMedLayer(L.polygon(m.pts, { color: cfg.medicoes.cor, weight: 2.5, fillColor: cfg.medicoes.cor, fillOpacity: 0.2, interactive: false }));
@@ -1010,12 +1053,26 @@
             Object.keys(textos).forEach(k => { if ((mudouOrdem && /:(az|dist|or|cf)$/.test(k)) || (mudouSistema && /:c[0-9]$/.test(k)) || (mudouConf && /:cf$/.test(k))) delete textos[k]; });
             cfg.pontos = MT.normalizePontos(Object.assign({}, next, { textos: textos }));
             const vivos = new Set(cfg.pontos.ordem);
-            const solta = (m) => { const out = {}; Object.keys(m).forEach(k => { if (!/^v:/.test(k) || vivos.has(k)) out[k] = m[k]; }); return out; };
+            const solta = (m) => {
+                const out = {};
+                Object.keys(m).forEach(k => {
+                    if (k.indexOf('cf:') === 0) {
+                        const vid = k.slice(3);
+                        if (vivos.has(vid)) out[k] = m[k];
+                    } else if (/^v:/.test(k)) {
+                        if (vivos.has(k)) out[k] = m[k];
+                    } else {
+                        out[k] = m[k];
+                    }
+                });
+                return out;
+            };
             cfg.posicoes = solta(cfg.posicoes);
             cfg.rotacoes = solta(cfg.rotacoes);
         }
 
         function setPontos(patch) {
+            delete state.prCache;
             aplicarPontos(Object.assign({}, cfg.pontos, patch));
             apply();
         }
@@ -1033,7 +1090,8 @@
                 state.pts['h:' + v.id] = h;
             });
             // pontos marcados: a bolinha fica no vértice; o nome é um texto à parte (arrastar move, ↻ gira, dois cliques renomeiam)
-            pointRowsNow().rows.forEach(r => {
+            const prRows = pointRowsNow().rows;
+            prRows.forEach(r => {
                 const dot = L.marker([r.lat, r.lng], { icon: L.divIcon({ className: 'report-point', html: '<span class="report-point-dot"' + (cfg.pontos.cor !== MT.MAP_DEFAULTS.pontos.cor ? ' style="background:' + cfg.pontos.cor + '"' : '') + '></span>', iconSize: [0, 0] }), interactive: false, keyboard: false, zIndexOffset: 1400 });
                 dot.addTo(map);
                 state.pts['d:' + r.vid] = dot;
@@ -1041,7 +1099,9 @@
                 const pos = p ? [p.lat, p.lng] : [r.lat, r.lng];
                 const off = p ? [0, 0] : POINT_LABEL_OFFSET; // sem posição escolhida, o nome fica ao lado do ponto
                 const rot = cfg.rotacoes[r.vid] !== undefined ? cfg.rotacoes[r.vid] : 0;
-                const html = '<span class="report-point-label" style="left:' + off[0] + 'px;top:' + off[1] + 'px;transform:' + labelTransform(rot) + ';' + estiloCss(cfg.pontos.estilo) + corTexto(cfg.pontos.cor, MT.MAP_DEFAULTS.pontos.cor) + '" title="Duplo clique para renomear • arraste para mover">' + escapeHtml(r.titulo) + ROT_HANDLE + '</span>';
+                const szPts = cfg.pontos.tamanho || 10;
+                const szPtsCss = 'font-size:' + szPts + 'px !important;line-height:' + Math.round(szPts * 1.3) + 'px !important;';
+                const html = '<span class="report-point-label" style="left:' + off[0] + 'px;top:' + off[1] + 'px;transform:' + labelTransform(rot) + ';' + szPtsCss + estiloCss(cfg.pontos.estilo) + corTexto(cfg.pontos.cor, MT.MAP_DEFAULTS.pontos.cor) + '" title="Duplo clique para renomear • arraste para mover">' + escapeHtml(r.titulo) + ROT_HANDLE + '</span>';
                 const mk = L.marker(pos, { icon: L.divIcon({ className: 'report-point', html: html, iconSize: [0, 0] }), draggable: true, keyboard: false, zIndexOffset: 1500 });
                 mk.addTo(map);
                 mk.on('dblclick', (e) => {
@@ -1056,6 +1116,95 @@
                 state.pts['p:' + r.vid] = mk;
                 wireRotate(mk, '.report-point-label', () => rot, (deg) => setRotation(r.vid, deg), () => clearRotation(r.vid));
             });
+
+            // confrontantes nos trechos da divisa (memorial descritivo com coluna de confrontantes ativa)
+            const cc = (cfg.pontos && cfg.pontos.colConf) ? cfg.pontos.colConf : null;
+            const useColConf = !!(cc && cc.ativo && cfg.pontos.memorial);
+            if (useColConf) {
+                prRows.forEach(r => {
+                    const txtConf = String(r.confrontantes || '').trim();
+                    if (!txtConf || !r.trecho || r.trecho.length < 2) return;
+                    const cfId = 'cf:' + r.vid;
+                    const ptA_lnglat = [r.trecho[0][0], r.trecho[0][1]];
+                    const ptB_lnglat = [r.trecho[r.trecho.length - 1][0], r.trecho[r.trecho.length - 1][1]];
+                    const pA = [ptA_lnglat[1], ptA_lnglat[0]];
+                    const pB = [ptB_lnglat[1], ptB_lnglat[0]];
+                    let mid = [(pA[0] + pB[0]) / 2, (pA[1] + pB[1]) / 2];
+                    if (r.trecho.length > 2) {
+                        const midIdx = Math.floor(r.trecho.length / 2);
+                        mid = [r.trecho[midIdx][1], r.trecho[midIdx][0]];
+                    }
+                    const ang = typeof MT.edgeAngleCss === 'function' ? MT.edgeAngleCss(ptA_lnglat, ptB_lnglat) : 0;
+                    const acima = typeof MT.edgeOffsetAbove === 'function' ? MT.edgeOffsetAbove(ptA_lnglat, ptB_lnglat, 16) : [0, -16];
+                    const offDef = [-acima[0] * 1.3, -acima[1] * 1.3];
+                    const p = cfg.posicoes[cfId];
+                    const pos = p ? [p.lat, p.lng] : mid;
+                    const off = p ? [0, 0] : offDef;
+                    const rot = cfg.rotacoes[cfId] !== undefined ? cfg.rotacoes[cfId] : ang;
+                    const editado = !!(cfg.pontos.textos && cfg.pontos.textos[r.vid + ':cf']);
+                    const corConf = (cfg.rotulos && cfg.rotulos.cor) ? cfg.rotulos.cor : '#0f172a';
+                    const estiloConf = (cfg.rotulos && cfg.rotulos.estilo) ? estiloCss(cfg.rotulos.estilo) : '';
+                    const dica = 'Confrontante' + (editado ? ' (editado)' : '') + ' • Duplo clique para editar • arraste para mover • use a roda do mouse para girar';
+                    const szConf = Math.max(7, (cfg.pontos.tamanho || 10) - 1);
+                    const szConfCss = 'font-size:' + szConf + 'px !important;line-height:' + Math.round(szConf * 1.35) + 'px !important;';
+                    const html = '<span class="report-confrontante-label' + (editado ? ' edited' : '') + '" style="left:' + off[0] + 'px;top:' + off[1] + 'px;transform:' + labelTransform(rot) + ';' + szConfCss + estiloConf + corTexto(corConf, null) + '" title="' + escapeHtml(dica) + '">' + escapeHtml(txtConf) + ROT_HANDLE + '</span>';
+                    const mk = L.marker(pos, { icon: L.divIcon({ className: 'report-confrontante', html: html, iconSize: [0, 0] }), draggable: true, keyboard: false, zIndexOffset: 1450 });
+                    mk.addTo(map);
+                    mk.on('dblclick', (e) => {
+                        if (L.DomEvent && L.DomEvent.stopPropagation && e) L.DomEvent.stopPropagation(e);
+                        editInline(mk, '.report-confrontante-label', txtConf, (txt) => api.setTabelaTexto(r.vid + ':cf', txt), applyPoints);
+                    });
+                    mk.on('dragend', () => {
+                        const ll = mk.getLatLng();
+                        cfg.posicoes = Object.assign({}, cfg.posicoes, { [cfId]: { lat: ll.lat, lng: ll.lng } });
+                        notify();
+                    });
+                    state.pts[cfId] = mk;
+                    wireRotate(mk, '.report-confrontante-label', () => rot, (deg) => setRotation(cfId, deg), () => clearRotation(cfId));
+                });
+            }
+
+            // confrontantes pela tabela independente de confrontantes (quando ativa e memorial não usando coluna)
+            if (!useColConf && cfg.confrontantes && cfg.confrontantes.ativo) {
+                const cRows = api.confrontanteRows();
+                cRows.forEach(r => {
+                    const txtConf = String(r.confTexto || (r.confrontantes && r.confrontantes.length ? r.confrontantes.map(x => x.r || x.t).filter(Boolean).join('; ') : '')).trim();
+                    if (!txtConf || !r.coords || r.coords.length < 2) return;
+                    const cfId = 'cflado:' + r.id;
+                    const ptA_lnglat = [r.coords[0][0], r.coords[0][1]];
+                    const ptB_lnglat = [r.coords[1][0], r.coords[1][1]];
+                    const pA = [ptA_lnglat[1], ptA_lnglat[0]];
+                    const pB = [ptB_lnglat[1], ptB_lnglat[0]];
+                    const mid = [(pA[0] + pB[0]) / 2, (pA[1] + pB[1]) / 2];
+                    const ang = typeof MT.edgeAngleCss === 'function' ? MT.edgeAngleCss(ptA_lnglat, ptB_lnglat) : 0;
+                    const acima = typeof MT.edgeOffsetAbove === 'function' ? MT.edgeOffsetAbove(ptA_lnglat, ptB_lnglat, 16) : [0, -16];
+                    const offDef = [-acima[0] * 1.3, -acima[1] * 1.3];
+                    const p = cfg.posicoes[cfId];
+                    const pos = p ? [p.lat, p.lng] : mid;
+                    const off = p ? [0, 0] : offDef;
+                    const rot = cfg.rotacoes[cfId] !== undefined ? cfg.rotacoes[cfId] : ang;
+                    const editado = !!(cfg.confrontantes.textos && cfg.confrontantes.textos[r.id + ':conf']);
+                    const corConf = (cfg.rotulos && cfg.rotulos.cor) ? cfg.rotulos.cor : '#0f172a';
+                    const estiloConf = (cfg.rotulos && cfg.rotulos.estilo) ? estiloCss(cfg.rotulos.estilo) : '';
+                    const dica = 'Confrontante (' + (r.lado || r.rotuloLado) + ')' + (editado ? ' [editado]' : '') + ' • Duplo clique para editar • arraste para mover • use a roda do mouse para girar';
+                    const szConf = Math.max(7, (cfg.pontos.tamanho || 10) - 1);
+                    const szConfCss = 'font-size:' + szConf + 'px !important;line-height:' + Math.round(szConf * 1.35) + 'px !important;';
+                    const html = '<span class="report-confrontante-label' + (editado ? ' edited' : '') + '" style="left:' + off[0] + 'px;top:' + off[1] + 'px;transform:' + labelTransform(rot) + ';' + szConfCss + estiloConf + corTexto(corConf, null) + '" title="' + escapeHtml(dica) + '">' + escapeHtml(txtConf) + ROT_HANDLE + '</span>';
+                    const mk = L.marker(pos, { icon: L.divIcon({ className: 'report-confrontante', html: html, iconSize: [0, 0] }), draggable: true, keyboard: false, zIndexOffset: 1450 });
+                    mk.addTo(map);
+                    mk.on('dblclick', (e) => {
+                        if (L.DomEvent && L.DomEvent.stopPropagation && e) L.DomEvent.stopPropagation(e);
+                        editInline(mk, '.report-confrontante-label', txtConf, (txt) => api.setConfrontanteTexto(r.id + ':conf', txt), applyPoints);
+                    });
+                    mk.on('dragend', () => {
+                        const ll = mk.getLatLng();
+                        cfg.posicoes = Object.assign({}, cfg.posicoes, { [cfId]: { lat: ll.lat, lng: ll.lng } });
+                        notify();
+                    });
+                    state.pts[cfId] = mk;
+                    wireRotate(mk, '.report-confrontante-label', () => rot, (deg) => setRotation(cfId, deg), () => clearRotation(cfId));
+                });
+            }
         }
 
         // ------------------------------------------------------------ sobreposições (norte, escala, projeção, legenda)
@@ -1249,8 +1398,15 @@
             return { lat: c.lat, lng: c.lng, zoom: map.getZoom() };
         }
 
-        // ao mover/aproximar: escala, grade e a caixa do mapa de situação acompanham (sem notificar mudança de configuração)
-        function onView() { applyOverlays(); applyGrid(); applySituacao(); }
+        // ao mover/aproximar: escala, grade e a caixa do mapa de situação acompanham e salvam a vista atual (sem notificar mudança de configuração)
+        function onView() {
+            if (map && map.getCenter) {
+                cfg.vista = currentView();
+            }
+            applyOverlays();
+            applyGrid();
+            applySituacao();
+        }
         map.on('zoomend', onView);
         map.on('moveend', onView);
 
@@ -1259,9 +1415,13 @@
             projection: proj,
             kind,
             getConfig: () => JSON.parse(JSON.stringify(cfg)),
+            currentView,
             /** Muda partes da configuração e redesenha. `patch.destaque` é mesclado. */
             setConfig(patch) {
                 const next = Object.assign({}, cfg, patch || {});
+                if (!patch || patch.vista === undefined) {
+                    next.vista = cfg.vista || currentView();
+                }
                 next.destaque = Object.assign({}, cfg.destaque, (patch && patch.destaque) || {});
                 next.medidas = Object.assign({}, cfg.medidas, (patch && patch.medidas) || {});
                 next.pontos = Object.assign({}, cfg.pontos, (patch && patch.pontos) || {});
@@ -1309,6 +1469,8 @@
                 if (Array.isArray(novas)) {
                     novas.forEach(c => camadas.push(c));
                 }
+                delete state.prCache;
+                delete state.confCache;
                 apply();
             },
             /** Liga/desliga uma camada pelo id no mapa de localização (card próprio, independente das camadas do mapa principal). */
@@ -1601,7 +1763,7 @@
                 const limpo = MT.normalizeConfrontantes({ textos: { [chave]: texto } }).textos[chave];
                 if (limpo) textos[chave] = limpo; else delete textos[chave];
                 cfg.confrontantes = MT.normalizeConfrontantes(Object.assign({}, cfg.confrontantes, { textos: textos }));
-                notify();
+                apply();
             },
             /** Sobe (-1) ou desce (+1) uma linha da tabela de confrontantes. */
             moveConfrontante(id, dir) {
@@ -1704,7 +1866,12 @@
             /** Liga/desliga o modo de saída (impressão, PNG, Word): sem marcadores de vértice livres. */
             setExportMode(on) { if (state.exporting === !!on) return; state.exporting = !!on; applyPoints(); },
             /** Redesenha tudo (depois que a página trocou os elementos de sobreposição). */
-            refresh() { apply(); }
+            refresh() {
+                if (cfg.vista && map && map.setView) {
+                    try { map.setView([cfg.vista.lat, cfg.vista.lng], cfg.vista.zoom, { animate: false }); } catch(e) {}
+                }
+                apply();
+            }
         };
 
         frame();

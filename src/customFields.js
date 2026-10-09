@@ -945,7 +945,21 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
         </div>
         `;
     } else if (f.type === 'select') {
-        const optionsList = (f.options || '').split(',').map(o => o.trim()).filter(o => o !== '');
+        let optionsList = [];
+        if (Array.isArray(f.options)) {
+            optionsList = f.options.map(o => String(o).trim()).filter(Boolean);
+        } else if (typeof f.options === 'string') {
+            const raw = f.options.trim();
+            if (raw.startsWith('[') && raw.endsWith(']')) {
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed)) optionsList = parsed.map(o => String(o).trim()).filter(Boolean);
+                } catch (e) {}
+            }
+            if (!optionsList.length && raw && !raw.startsWith('[')) {
+                optionsList = raw.split(',').map(o => o.trim()).filter(Boolean);
+            }
+        }
         html += `
         <div class="relative w-full">
             <select data-key="${f.id}" class="feature-data-input w-full px-3 py-2 ${calcBgClass} border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-sm appearance-none cursor-pointer" ${calcDisabled} ${formulaAttr}>

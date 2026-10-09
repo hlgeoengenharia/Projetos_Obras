@@ -224,7 +224,7 @@ async function runScenario(cfg) {
         ok(`[${n}] folhas montadas`, /a4-page/.test(r.doc));
         ok(`[${n}] bloco do mini-mapa na folha`, /id="map-wrap"/.test(r.doc) && /id="interactive-report-map"/.test(r.doc));
         ok(`[${n}] Leaflet criado no contêiner do mapa`, r.mapsCreated.some(m => m.container === 'interactive-report-map'));
-        ok(`[${n}] painel "Mapa" existe e traz as seções`, /Configurações do Mapa/.test(r.panel) && !/Mapa do relatório/.test(r.panel) && ['Feição em destaque', 'Camadas ativas no mapa', 'Elementos do mapa', 'Mapa base', 'Pontos nos vértices', 'Medições no mapa', 'Análise temporal', 'Exportar'].every(s => r.panel.includes(s)) && (/Medição da feição|Medições na feição/.test(r.panel)));
+        ok(`[${n}] painel "Mapa" existe e traz as seções`, /Configurações do Mapa/.test(r.panel) && !/Mapa do relatório/.test(r.panel) && ['Configurações das Feições', 'Camadas ativas no mapa', 'Elementos do mapa', 'Mapa base', 'Pontos nos vértices', 'Medições no mapa', 'Análise temporal'].every(s => r.panel.includes(s)) && (/Medição da feição|Medições na feição/.test(r.panel)));
         if (c.payload.ortofotos && c.payload.ortofotos.length) ok(`[${n}] painel lista a ortofoto`, /Ortofoto_10-02-2026/.test(r.panel));
         const temporalLigada = JSON.stringify(c.payload.template.blocos[1].mapa).includes('"temporal"') || (c.ajustes && c.ajustes.temporal && c.ajustes.temporal.ativo);
         if (temporalLigada) ok(`[${n}] quadro da análise temporal na folha e mapa criado`, /Análise Multitemporal de Ortofotos/.test(r.doc) && r.mapsCreated.some(m => m.container && m.container.id === 'tmap-r1'));
@@ -254,9 +254,9 @@ async function runScenario(cfg) {
         const abertas = () => (r.panel_() .match(/data-sec="([a-z]+)" class="sec-body" style="display:block"/g) || []).map(s => /data-sec="([a-z]+)"/.exec(s)[1]);
         r.panel_ = () => r.registry['map-tools-panel']._html;
         const cabecalhos = (r.panel_().match(/data-sec-h="[a-z]+"/g) || []).length;
-        eq('sanfona: dez títulos', cabecalhos, 10);
-        eq('ordem fixa dos cards no painel (e, portanto, dos blocos na folha)', (r.panel_().match(/data-sec-h="([a-z]+)"/g) || []).map(s => /"([a-z]+)"/.exec(s)[1]), ['destaque', 'camadas', 'elementos', 'base', 'localizacao', 'medidas', 'pontos', 'extras', 'temporal', 'exportar']);
-        eq('sanfona: ao abrir só "Feição em destaque" está aberta', abertas(), ['destaque']);
+        eq('sanfona: nove títulos', cabecalhos, 9);
+        eq('ordem fixa dos cards no painel (e, portanto, dos blocos na folha)', (r.panel_().match(/data-sec-h="([a-z]+)"/g) || []).map(s => /"([a-z]+)"/.exec(s)[1]), ['destaque', 'camadas', 'elementos', 'base', 'localizacao', 'medidas', 'pontos', 'extras', 'temporal']);
+        eq('sanfona: ao abrir só "destaque" está aberta', abertas(), ['destaque']);
         r.sandbox.mapPanelSecao('medidas');
         r.sandbox.renderMapToolsPanel();
         eq('sanfona: abrir outra recolhe a anterior (e vale após redesenhar)', abertas(), ['medidas']);
@@ -659,15 +659,15 @@ async function runScenario(cfg) {
         eq('extras ligados: nenhum erro de execução', r.errors, []);
         ok('extras: tabela de confrontantes e análises entram na folha', /Confrontantes/.test(r.doc) && /Quadra E • Lote 02/.test(r.doc) && /Análises da Feição/.test(r.doc));
         ok('extras: o mapa de situação foi criado na caixa própria', r.mapsCreated.some(m => m.container && m.container.id === 'map-locator'));
-        ok('extras: painel traz as opções nos cards certos', /Medições no mapa/.test(r.panel) && !/Extras do mapa/.test(r.panel) && /Rótulos nas feições vizinhas/.test(r.panel) && /Tabela de confrontantes/.test(r.panel) && /Área do terreno/.test(r.panel) && /Muro/.test(r.panel));
+        ok('extras: painel traz as opções nos cards certos', /Medições no mapa/.test(r.panel) && !/Extras do mapa/.test(r.panel) && /Tabela de confrontantes/.test(r.panel) && /Área do terreno/.test(r.panel) && /Muro/.test(r.panel));
         {
             // conteúdo de cada card, na ordem em que aparecem
             const secs = {};
             const re = /data-sec-h="([a-z]+)"[\s\S]*?(?=data-sec-h=|map-panel-status)/g;
             let mm;
             while ((mm = re.exec(r.panel))) secs[mm[1]] = mm[0];
-            eq('cards do painel na ordem definida (fixa)', Object.keys(secs), ['destaque', 'camadas', 'elementos', 'base', 'localizacao', 'medidas', 'pontos', 'extras', 'temporal', 'exportar']);
-            ok('"Rótulos nas feições vizinhas" está em "Elementos do mapa"', (/Rótulos nas feições vizinhas/.test(secs.elementos) || /Rótulos nas feições vizinhas/.test(secs.camadas)) && !/Rótulos nas feições vizinhas/.test(secs.extras));
+            eq('cards do painel na ordem definida (fixa)', Object.keys(secs), ['destaque', 'camadas', 'elementos', 'base', 'localizacao', 'medidas', 'pontos', 'extras', 'temporal']);
+            ok('rótulos nas feições vizinhas não estão soltos em "Elementos do mapa"', !/Exibir rótulos no mapa/.test(secs.elementos) && !/Rótulos nas feições vizinhas/.test(secs.extras));
             ok('"Quadriculado UTM" está em "Mapa base"; "Mostrar o mapa de localização" tem card próprio, logo abaixo', /Quadriculado UTM/.test(secs.base) && !/Mapa de situação|Mostrar o mapa de localização/.test(secs.base) && /Mostrar o mapa de localização/.test(secs.localizacao) && !/Quadriculado UTM/.test(secs.extras));
             ok('"+ Anotação de texto" e as anotações (com N/I/S) estão em "Elementos do mapa"', /\+ Anotação de texto no centro do mapa/.test(secs.elementos) && /mapPanelNotaEstilo\('a1', 'n'\)/.test(secs.elementos) && !/Anotação de texto/.test(secs.extras));
             const iMem = secs.pontos.indexOf('Memorial (azimute e distância)'), iCol = secs.pontos.search(/Coluna (&quot;|")Confrontantes/), iTab = secs.pontos.indexOf('Tabela de confrontantes');

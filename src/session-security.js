@@ -424,9 +424,12 @@
             return;
         }
 
-        // Se estiver offline e o logout não for forçado manualmente, protege a sessão com bloqueio local
-        if (!force && isSystemOffline()) {
-            console.warn("🛡️ Dispositivo Offline detectado. Ativando Bloqueio Local em vez de logout para proteger a coleta de campo.");
+        // Se estiver offline ou em tela de mapa/coleta, protege a sessão com bloqueio local em vez de logout destrutivo
+        const loc = (typeof window !== 'undefined' && window.location) ? window.location : null;
+        const curPath = (loc && loc.pathname) ? String(loc.pathname).toLowerCase() : '';
+        const isMapScreen = curPath.endsWith('index.html') || curPath.endsWith('/') || (typeof window !== 'undefined' && (window.map || window.themes));
+        if (!force && (isSystemOffline() || isMapScreen)) {
+            console.warn("🛡️ Dispositivo em Campo / Tela de Mapa ativa. Ativando Bloqueio Local suave em vez de logout destrutivo para proteger coletas e camadas.");
             hideWarningModal();
             showOfflineLockModal();
             return;
@@ -509,7 +512,10 @@
 
         if (elapsed >= INACTIVITY_LIMIT_MS) {
             // Tempo esgotado (15 min)
-            if (isSystemOffline()) {
+            const loc = (typeof window !== 'undefined' && window.location) ? window.location : null;
+            const curPath = (loc && loc.pathname) ? String(loc.pathname).toLowerCase() : '';
+            const isMapScreen = curPath.endsWith('index.html') || curPath.endsWith('/') || (typeof window !== 'undefined' && (window.map || window.themes));
+            if (isSystemOffline() || isMapScreen) {
                 hideWarningModal();
                 showOfflineLockModal();
             } else {
@@ -642,27 +648,39 @@
             }
         }, 15000);
 
-        // Monitoramento de Deslocamento por GPS (Caminhar no terreno conta como atividade)
+        // Wake Lock para evitar tela apagando durante coleta em campo
+        let wakeLockSentinel = null;
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator && !wakeLockSentinel && document.visibilityState === 'visible') {
+                    wakeLockSentinel = await navigator.wakeLock.request('screen');
+                    wakeLockSentinel.addEventListener('release', () => { wakeLockSentinel = null; });
+                }
+            } catch(e) {}
+        }
+        requestWakeLock();
+
+        // Renovação imediata de atividade ao retornar da câmera nativa do celular ou reacender a tela
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible') {
+                recordActivity();
+                emitWorkingHeartbeat();
+                requestWakeLock();
+            }
+        });
+
+        // Monitoramento Contínuo por GPS: qualquer sinal recebido comprova operação de campo ativa
         if (typeof navigator !== 'undefined' && navigator.geolocation) {
             try {
                 navigator.geolocation.watchPosition(
                     function(pos) {
                         const lat = pos.coords.latitude;
                         const lng = pos.coords.longitude;
-                        if (lastGpsCoords) {
-                            const dLat = (lat - lastGpsCoords.lat) * 111320;
-                            const dLng = (lng - lastGpsCoords.lng) * (111320 * Math.cos(lat * (Math.PI / 180)));
-                            const dist = Math.sqrt(dLat * dLat + dLng * dLng);
-                            if (dist > 4) { // Deslocou mais de 4 metros no terreno
-                                lastGpsCoords = { lat, lng };
-                                recordActivity();
-                            }
-                        } else {
-                            lastGpsCoords = { lat, lng };
-                        }
+                        lastGpsCoords = { lat, lng };
+                        recordActivity(); // Qualquer leitura de GPS em campo renova a sessão
                     },
                     function() {},
-                    { enableHighAccuracy: true, maximumAge: 10000, timeout: 25000 }
+                    { enableHighAccuracy: true, maximumAge: 15000, timeout: 25000 }
                 );
             } catch(e) {}
         }

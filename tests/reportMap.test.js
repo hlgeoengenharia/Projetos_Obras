@@ -738,6 +738,24 @@ t = build({ mapa: { camadasLigadas: ['1'], rotulos: { ativo: true } } }, undefin
     b.ctl.setTabelaTexto('v:0:cf', 'Rua A');
     b.ctl.setTabelaTexto('v:1:or', 'Trecho leste');
     eq('texto do usuário na célula (confrontantes e orientação)', [b.ctl.pointRows().rows[0].confrontantes, b.ctl.pointRows().rows[1].orientacao], ['Rua A', 'Trecho leste']);
+
+    // confrontantes visíveis no mapa e sincronização bidirecional
+    const confMks = b.layersOf('marker').filter(m => /report-confrontante-label/.test(m.args.o.icon.html));
+    ok('confrontantes visíveis no mapa ao longo dos trechos', confMks.length >= 2);
+    ok('rótulo no mapa contém o texto calculado e o texto editado', confMks.some(m => /Fulano/.test(m.args.o.icon.html)) && confMks.some(m => /Rua A/.test(m.args.o.icon.html)));
+
+    // editar pelo mapa com duplo clique atualiza a tabela
+    const mkRuaA = confMks.find(m => /Rua A/.test(m.args.o.icon.html));
+    mkRuaA.handlers.dblclick({});
+    mkRuaA.span.children[0].value = 'Rua B';
+    mkRuaA.span.children[0].listeners.keydown({ key: 'Enter' });
+    eq('duplo clique no rótulo de confrontante no mapa atualiza a tabela', b.ctl.pointRows().rows[0].confrontantes, 'Rua B');
+
+    // arrastar o confrontante no mapa salva em posicoes
+    mkRuaA.latlng = { lat: -7.015, lng: -34.835 };
+    mkRuaA.handlers.dragend();
+    eq('arrastar confrontante no mapa salva posição', b.ctl.getConfig().posicoes['cf:v:0'], { lat: -7.015, lng: -34.835 });
+
     b.ctl.setColConf({ ativo: true, camadas: [{ id: 'V', campos: [], logradouro: false }], tolM: 3, distLogM: 30 });
     eq('mudar as camadas/campos descarta o texto escrito nas células de confrontantes; a orientação fica', [b.ctl.getConfig().pontos.textos['v:0:cf'], b.ctl.getConfig().pontos.textos['v:1:or']], [undefined, 'Trecho leste']);
     b.ctl.movePoint('v:3', -1);

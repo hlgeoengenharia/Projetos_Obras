@@ -178,9 +178,21 @@ function normalizeStatValue(val, fieldInfo = null) {
 
     // 3. Regra de opções oficiais do campo: se o campo tem options definidas, buscar correspondência case-insensitive
     if (fieldInfo && fieldInfo.options) {
-        const opts = (typeof fieldInfo.options === 'string' ? fieldInfo.options.split(',') : fieldInfo.options)
-            .map(o => String(o).trim())
-            .filter(o => o);
+        let opts = [];
+        if (Array.isArray(fieldInfo.options)) {
+            opts = fieldInfo.options.map(o => String(o).trim()).filter(Boolean);
+        } else if (typeof fieldInfo.options === 'string') {
+            const raw = fieldInfo.options.trim();
+            if (raw.startsWith('[') && raw.endsWith(']')) {
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed)) opts = parsed.map(o => String(o).trim()).filter(Boolean);
+                } catch (e) {}
+            }
+            if (!opts.length && raw && !raw.startsWith('[')) {
+                opts = raw.split(',').map(o => o.trim()).filter(Boolean);
+            }
+        }
         const matched = opts.find(o => o.toLowerCase() === lower);
         if (matched) return matched;
     }
@@ -4310,10 +4322,8 @@ async function loadThemeProperties(themeId, forceReload = false, skipMapRender =
         return; // Cache 100% válido e sincronizado!
     }
 
-    // Se o cache estava desatualizado ou forceReload ativo, limpa os dados antigos
-    if (shouldInvalidateCache || forceReload) {
-        theme.features = [];
-    }
+    // Preserva backup das feições existentes para não zerar a camada em caso de falha de rede/timeout
+    const backupFeatures = (theme.features && theme.features.length > 0) ? [...theme.features] : [];
 
     if (!supabaseClient) {
         if (!theme.features || theme.features.length === 0) {
@@ -4323,13 +4333,23 @@ async function loadThemeProperties(themeId, forceReload = false, skipMapRender =
     }
 
     try {
-        // Carga completa do tema (geometria + propriedades) pela rede:
+        // Carga completa do tema (geometria + propriedades) pela rede com proteção contra timeout 57014:
         const fetchStep = 1000;
-        const first = await runWithRetry(() => supabaseClient
+        let first = await runWithRetry(() => supabaseClient
             .from('feicoes')
-            .select('id, propriedades, geometria', { count: 'exact' })
+            .select('id, propriedades, geometria', { count: 'estimated' })
             .eq('theme_id', themeId)
-            .range(0, fetchStep - 1), 3);
+            .range(0, fetchStep - 1), 2);
+
+        // Se der timeout ou erro 500 no Supabase com contagem, tenta consulta direta sem count pesado:
+        if (first && first.error && (first.error.code === '57014' || (first.error.message && first.error.message.includes('timeout')))) {
+            console.warn(`[LoadTheme] Timeout 57014 ao buscar com count em "${themeId}". Tentando sem count pesado...`);
+            first = await runWithRetry(() => supabaseClient
+                .from('feicoes')
+                .select('id, propriedades, geometria')
+                .eq('theme_id', themeId)
+                .range(0, fetchStep - 1), 2);
+        }
 
         let hadPageError = !!first.error;
         if (first.error) console.error(`Erro ao buscar 1ª página de feições de "${themeId}":`, first.error);
@@ -4396,10 +4416,15 @@ async function loadThemeProperties(themeId, forceReload = false, skipMapRender =
             }
         });
 
-        // BLINDAGEM DE RECUPERAÇÃO: se o Supabase não retornou feições (banco vazio ou RLS)
+        // BLINDAGEM DE RECUPERAÇÃO: se o Supabase não retornou feições (banco vazio ou RLS ou timeout)
         if (allRows.length === 0 && (!theme.features || theme.features.length === 0)) {
-            // Se tínhamos feições no cache local, restaura imediatamente
-            if (cached && cached.features && cached.features.length > 0) {
+            if (backupFeatures && backupFeatures.length > 0) {
+                console.log(`[GeoEngineTurbo] Preservando ${backupFeatures.length} feições de backup para "${theme.name}"`);
+                theme.features = backupFeatures;
+                theme._propertiesFullyLoaded = true;
+                theme._geometryLoaded = true;
+                theme._cachedCount = theme.features.length;
+            } else if (cached && cached.features && cached.features.length > 0) {
                 console.log(`[GeoEngineTurbo] Preservando ${cached.features.length} feições do cache seguro para "${theme.name}"`);
                 theme.features = cached.features.map(f => ({
                     ...f,
@@ -5981,6 +6006,8 @@ function handleCustomIconUpload(input, previewContainerId, dataInputId, labelId)
           if (labelEl) {
             labelEl.innerText = file.name;
           }
+          const removeBtn = document.getElementById(dataInputId.startsWith('edit') ? 'edit-remove-custom-icon-btn' : 'new-remove-custom-icon-btn');
+          if (removeBtn) removeBtn.classList.remove('hidden');
         }
       };
       img.onerror = function() {
@@ -6245,12 +6272,15 @@ function openEditThemeModal(themeId, focusField = null) {
   document.getElementById('edit-theme-icon-input').value = iconVal;
   
   const option = availableIcons.find(o => o.val === iconVal) || availableIcons[0];
+  const removeBtn = document.getElementById('edit-remove-custom-icon-btn');
   if (customIconVal) {
     document.getElementById('edit-icon-preview-container').innerHTML = `<img src="${customIconVal}" class="w-5 h-5 object-contain rounded shrink-0"> <span id="edit-icon-label" class="text-sm truncate">Ícone Personalizado</span>`;
     document.getElementById('edit-theme-custom-icon-data').value = customIconVal;
+    if (removeBtn) removeBtn.classList.remove('hidden');
   } else {
     document.getElementById('edit-icon-preview-container').innerHTML = `<span class="material-symbols-outlined text-[20px] text-primary" id="edit-icon-preview">${option.val}</span><span id="edit-icon-label" class="text-sm">${option.label}</span>`;
     document.getElementById('edit-theme-custom-icon-data').value = '';
+    if (removeBtn) removeBtn.classList.add('hidden');
   }
   
   document.getElementById('edit-theme-modal').classList.remove('hidden');
@@ -6263,9 +6293,18 @@ function closeEditThemeModal() {
 
 function updateIconDropdownSelection(prefix, val) {
   const option = availableIcons.find(o => o.val === val) || availableIcons[0];
-  document.getElementById(`${prefix}-theme-icon-input`).value = option.val;
-  document.getElementById(`${prefix}-preview`).innerText = option.val;
-  document.getElementById(`${prefix}-label`).innerText = option.label;
+  const inputId = prefix === 'new' ? 'theme-icon-input' : 'edit-theme-icon-input';
+  const inputEl = document.getElementById(inputId);
+  if (inputEl) inputEl.value = option.val;
+  const container = document.getElementById(`${prefix}-icon-preview-container`);
+  if (container) {
+    container.innerHTML = `<span class="material-symbols-outlined text-[20px] text-primary" id="${prefix}-icon-preview">${option.val}</span><span id="${prefix}-icon-label" class="text-sm">${option.label}</span>`;
+  } else {
+    const prev = document.getElementById(`${prefix}-icon-preview`);
+    if (prev) prev.innerText = option.val;
+    const lab = document.getElementById(`${prefix}-icon-label`);
+    if (lab) lab.innerText = option.label;
+  }
 }
 
 function updateEditThemeFields() {
@@ -7390,9 +7429,21 @@ function updateValueMappings() {
             hasSelectMappings = true;
             
             // Get all options for this select field
-            const opts = (typeof field.options === 'string') 
-                ? field.options.split(',').map(o => o.trim()).filter(o => o)
-                : (Array.isArray(field.options) ? field.options : []);
+            let opts = [];
+            if (Array.isArray(field.options)) {
+                opts = field.options.map(o => String(o).trim()).filter(Boolean);
+            } else if (typeof field.options === 'string') {
+                const raw = field.options.trim();
+                if (raw.startsWith('[') && raw.endsWith(']')) {
+                    try {
+                        const parsed = JSON.parse(raw);
+                        if (Array.isArray(parsed)) opts = parsed.map(o => String(o).trim()).filter(Boolean);
+                    } catch (e) {}
+                }
+                if (!opts.length && raw && !raw.startsWith('[')) {
+                    opts = raw.split(',').map(o => o.trim()).filter(Boolean);
+                }
+            }
                 
             // Find all unique values in the imported GeoJSON for originalProp
             const uniqueValues = new Set();
@@ -7990,9 +8041,21 @@ async function confirmGlobalImport() {
                       tab.fields.forEach(field => {
                           formFieldsMap[field.id] = field.type;
                           if (field.type === 'select' && field.options) {
-                              const opts = (typeof field.options === 'string')
-                                  ? field.options.split(',').map(o => o.trim()).filter(o => o)
-                                  : (Array.isArray(field.options) ? field.options : []);
+                              let opts = [];
+                              if (Array.isArray(field.options)) {
+                                  opts = field.options.map(o => String(o).trim()).filter(Boolean);
+                              } else if (typeof field.options === 'string') {
+                                  const raw = field.options.trim();
+                                  if (raw.startsWith('[') && raw.endsWith(']')) {
+                                      try {
+                                          const parsed = JSON.parse(raw);
+                                          if (Array.isArray(parsed)) opts = parsed.map(o => String(o).trim()).filter(Boolean);
+                                      } catch (e) {}
+                                  }
+                                  if (!opts.length && raw && !raw.startsWith('[')) {
+                                      opts = raw.split(',').map(o => o.trim()).filter(Boolean);
+                                  }
+                              }
                               selectFieldOptionsMap[field.id] = opts;
                           }
                       });
@@ -8714,25 +8777,24 @@ async function saveFeatureData() {
       }
       console.log(`[OfflineSync] Dados da feição salvos localmente em modo offline.`);
   } else if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+      let isSessionActive = false;
       try {
           const { data: sessCheck } = await supabaseClient.auth.getSession();
-          if (!sessCheck || !sessCheck.session) {
-              if (window.SessionSecurity && window.SessionSecurity.isSystemOffline && window.SessionSecurity.isSystemOffline()) {
-                  if (window.OfflineSync) {
-                      if (idBanco) await window.OfflineSync.enqueueUpdate(themeId, idBanco, currentProps, activeFeatureLayer.feature.geometry);
-                      else await window.OfflineSync.enqueueCreate(themeId, activeFeatureLayer.feature);
-                  }
-              } else {
-                  alert('Sua sessão expirou por inatividade ou perda de conexão.\n\nVocê será redirecionado para a tela de login para reconectar com segurança.');
-                  sessionStorage.removeItem('municipio_ativo');
-                  window.location.href = 'login.html';
-                  return;
-              }
+          if (sessCheck && sessCheck.session) {
+              isSessionActive = true;
           }
       } catch(eAuth) {
+          console.warn('[FieldSave] Verificação de sessão falhou ou oscilou. Operando em modo de resiliência local/offline.', eAuth);
+      }
+
+      if (!isSessionActive) {
+          console.warn('[FieldSave] Conexão ou sessão do Supabase instável. Salvando na fila local offline para não interromper a coleta de campo.');
           if (window.OfflineSync) {
               if (idBanco) await window.OfflineSync.enqueueUpdate(themeId, idBanco, currentProps, activeFeatureLayer.feature.geometry);
               else await window.OfflineSync.enqueueCreate(themeId, activeFeatureLayer.feature);
+          }
+          if (typeof showToast === 'function') {
+              showToast('Sinal instável. Feição salva com segurança no aparelho e será sincronizada assim que a conexão restabelecer.', 'warning');
           }
       }
 
@@ -9401,11 +9463,46 @@ function setupIconDropdowns() {
 
 function selectIcon(prefix, val, label) {
   const inputId = prefix === 'new' ? 'theme-icon-input' : 'edit-theme-icon-input';
-  document.getElementById(inputId).value = val;
-  document.getElementById(`${prefix}-icon-preview`).innerText = val;
-  document.getElementById(`${prefix}-icon-label`).innerText = label;
-  document.getElementById(`${prefix}-icon-dropdown`).classList.add('hidden');
+  const iconInput = document.getElementById(inputId);
+  if (iconInput) iconInput.value = val;
+
+  // Limpa o custom icon para que a substituição de ícone tenha efeito real
+  const customInput = document.getElementById(prefix === 'new' ? 'theme-custom-icon-data' : 'edit-theme-custom-icon-data');
+  if (customInput) customInput.value = '';
+  const fileInput = document.getElementById(prefix === 'new' ? 'theme-custom-icon-file' : 'edit-theme-custom-icon-file');
+  if (fileInput) fileInput.value = '';
+  const removeBtn = document.getElementById(`${prefix}-remove-custom-icon-btn`);
+  if (removeBtn) removeBtn.classList.add('hidden');
+
+  // Restaura o preview container com o ícone selecionado
+  const previewContainer = document.getElementById(`${prefix}-icon-preview-container`);
+  if (previewContainer) {
+    previewContainer.innerHTML = `<span class="material-symbols-outlined text-[20px] text-primary" id="${prefix}-icon-preview">${val}</span><span id="${prefix}-icon-label" class="text-sm">${label}</span>`;
+  } else {
+    const previewEl = document.getElementById(`${prefix}-icon-preview`);
+    if (previewEl) previewEl.innerText = val;
+    const labelEl = document.getElementById(`${prefix}-icon-label`);
+    if (labelEl) labelEl.innerText = label;
+  }
+
+  const dropdown = document.getElementById(`${prefix}-icon-dropdown`);
+  if (dropdown) dropdown.classList.add('hidden');
 }
+
+function removeCustomIcon(prefix) {
+  const customInput = document.getElementById(prefix === 'new' ? 'theme-custom-icon-data' : 'edit-theme-custom-icon-data');
+  if (customInput) customInput.value = '';
+  const fileInput = document.getElementById(prefix === 'new' ? 'theme-custom-icon-file' : 'edit-theme-custom-icon-file');
+  if (fileInput) fileInput.value = '';
+  const removeBtn = document.getElementById(`${prefix}-remove-custom-icon-btn`);
+  if (removeBtn) removeBtn.classList.add('hidden');
+
+  const inputId = prefix === 'new' ? 'theme-icon-input' : 'edit-theme-icon-input';
+  const currentVal = (document.getElementById(inputId) && document.getElementById(inputId).value) || 'circle';
+  const opt = availableIcons.find(o => o.val === currentVal) || availableIcons[0];
+  selectIcon(prefix, opt.val, opt.label);
+}
+window.removeCustomIcon = removeCustomIcon;
 
 // --- AUTENTICAÇÃO ---
 // A segurança de verdade é imposta pelo RLS no banco (supabase_auth_setup.sql,
@@ -9420,21 +9517,36 @@ async function ensureAuthenticated() {
         return false;
     }
 
-    const { data } = await supabaseClient.auth.getSession();
-    if (!data || !data.session) {
-        window.location.href = 'login.html';
-        return false;
+    let session = null;
+    try {
+        const { data } = await supabaseClient.auth.getSession();
+        session = data && data.session;
+    } catch(e) {
+        console.warn('[Auth] Erro temporário ao consultar getSession (rede/offline):', e);
+    }
+
+    // Resiliência para campo: se offline ou falha de rede transitória e temos município salvo, não expulsa para o login
+    if (!session) {
+        const hasOfflineSession = !navigator.onLine || localStorage.getItem('geogestor_modo_campo') === 'true' || localStorage.getItem('geogestor_last_activity_ts');
+        if (!hasOfflineSession) {
+            window.location.href = 'login.html';
+            return false;
+        }
+        console.warn('[Auth] Modo campo/resiliência: prosseguindo com dados locais.');
     }
 
     // O mapa é sempre de UM município por vez — quem escolhe é a home.html.
-    // Sem essa escolha na sessão, não tem o que carregar aqui.
-    activeMunicipioId = sessionStorage.getItem('municipio_ativo');
-    if (!activeMunicipioId) {
+    // Suporte resiliente a Tab Discarding no celular: recupera do sessionStorage OU localStorage
+    activeMunicipioId = sessionStorage.getItem('municipio_ativo') || localStorage.getItem('municipio_ativo');
+    if (activeMunicipioId) {
+        sessionStorage.setItem('municipio_ativo', activeMunicipioId);
+        localStorage.setItem('municipio_ativo', activeMunicipioId);
+    } else {
         window.location.href = 'home.html';
         return false;
     }
 
-    const authUser = data.session.user;
+    const authUser = session ? session.user : null;
     let userMetaNome = '';
     if (authUser && authUser.user_metadata) {
         const meta = authUser.user_metadata;
@@ -9498,7 +9610,7 @@ async function ensureAuthenticated() {
             const { data: membro } = await supabaseClient
                 .from('municipio_membros')
                 .select('papel, status, entidade')
-                .eq('user_id', data.session.user.id)
+                .eq('user_id', authUser.id)
                 .eq('municipio_id', activeMunicipioId)
                 .eq('status', 'aprovado')
                 .maybeSingle();
@@ -9515,7 +9627,7 @@ async function ensureAuthenticated() {
                 const { count } = await supabaseClient
                     .from('municipio_membros')
                     .select('*', { count: 'exact', head: true })
-                    .eq('user_id', data.session.user.id)
+                    .eq('user_id', authUser.id)
                     .eq('status', 'aprovado');
                 window.userTotalMunicipiosAprovados = count || 1;
             } catch(e) {
@@ -9620,7 +9732,7 @@ async function ensureAuthenticated() {
     // Mapa local de permissões por tema indexado com case-insensitivity
     currentUserPermissions = {};
     try {
-        const { data: perms } = await supabaseClient.from('permissoes_camada').select('*').eq('user_id', data.session.user.id);
+        const { data: perms } = await supabaseClient.from('permissoes_camada').select('*').eq('user_id', authUser.id);
         (perms || []).forEach(p => { 
             const tid = String(p.theme_id).toLowerCase().trim();
             currentUserPermissions[tid] = p;
@@ -9633,7 +9745,7 @@ async function ensureAuthenticated() {
     // Permissão por aba de formulário (ver/editar dentro do card de uma camada)
     window.currentUserAbaPermissions = {};
     try {
-        const { data: abaPerms } = await supabaseClient.from('permissoes_aba').select('*').eq('user_id', data.session.user.id);
+        const { data: abaPerms } = await supabaseClient.from('permissoes_aba').select('*').eq('user_id', authUser.id);
         (abaPerms || []).forEach(p => { 
             const aid = `${p.form_id}:${p.tab_id}`.toLowerCase().trim();
             window.currentUserAbaPermissions[aid] = p;
@@ -10574,47 +10686,184 @@ function toggleMapType() {
 function zoomIn() { if (map) map.zoomIn(); }
 function zoomOut() { if (map) map.zoomOut(); }
 let myLocationMarker = null;
+let myLocationAccuracyCircle = null;
+let myLocationWatchId = null;
+let isTrackingLocation = false;
+let isFollowLocationActive = true;
+let hasAttachedMapDragListener = false;
 
 function goToMyLocation() {
   if (!map || !navigator.geolocation) {
-    alert("Geolocalização não suportada neste navegador.");
+    if (typeof showToast === 'function') {
+      showToast("Geolocalização não suportada neste dispositivo.", "error");
+    } else {
+      alert("Geolocalização não suportada neste dispositivo.");
+    }
     return;
   }
   
-  const btn = document.querySelector('button[onclick="goToMyLocation()"]');
-  if (btn) btn.classList.add('animate-pulse', 'opacity-50');
-  
-  navigator.geolocation.getCurrentPosition(function(position) {
-    if (btn) btn.classList.remove('animate-pulse', 'opacity-50');
-    
-    const lat = position.coords.latitude;
-    const lng = position.coords.longitude;
-    
-    map.setView([lat, lng], 18);
-    
-    if (myLocationMarker) {
-      myLocationMarker.setLatLng([lat, lng]);
-    } else {
-      const locationIcon = L.divIcon({
-        className: 'custom-location-icon bg-transparent border-none',
-        html: `<div class="relative w-5 h-5 flex items-center justify-center">
-                 <div class="absolute inset-0 bg-blue-500 rounded-full opacity-75 animate-ping"></div>
-                 <div class="relative w-4 h-4 bg-blue-500 border-2 border-white rounded-full shadow-md z-10"></div>
-               </div>`,
-        iconSize: [20, 20],
-        iconAnchor: [10, 10]
-      });
-      myLocationMarker = L.marker([lat, lng], { icon: locationIcon, zIndexOffset: 1000, interactive: false }).addTo(map);
+  const btn = document.getElementById('btn-my-location') || document.querySelector('button[onclick="goToMyLocation()"]');
+
+  // Se já está rastreando:
+  if (isTrackingLocation) {
+    // Se o usuário arrastou o mapa para outro local e clica no botão, recentraliza a câmera
+    if (!isFollowLocationActive && myLocationMarker) {
+      isFollowLocationActive = true;
+      const latlng = myLocationMarker.getLatLng();
+      map.panTo(latlng, { animate: true, duration: 0.8 });
+      if (typeof showToast === 'function') showToast("Câmera centralizada na sua localização.", "info");
+      return;
     }
-  }, function(error) {
-    if (btn) btn.classList.remove('animate-pulse', 'opacity-50');
-    console.error("Erro na geolocalização:", error);
-    alert("Não foi possível acessar sua localização. Verifique as permissões do navegador.");
-  }, {
-    enableHighAccuracy: true,
-    timeout: 10000,
-    maximumAge: 0
-  });
+
+    // Se já estiver centralizado ou clicar novamente, desativa o rastreamento em tempo real
+    stopLiveLocationTracking(btn);
+    return;
+  }
+
+  // Ativa o rastreamento em tempo real (LIVE)
+  startLiveLocationTracking(btn);
+}
+
+function startLiveLocationTracking(btn) {
+  isTrackingLocation = true;
+  isFollowLocationActive = true;
+
+  if (btn) {
+    btn.classList.add('bg-blue-600', 'text-white', 'shadow-[0_0_20px_rgba(37,99,235,0.7)]', 'border-blue-400', 'ring-2', 'ring-blue-400/60');
+    btn.classList.remove('bg-white/90', 'dark:bg-slate-900/90', 'text-blue-600', 'dark:text-blue-400');
+    btn.title = "Rastreamento em Tempo Real Ativo (Clique para recentralizar ou desativar)";
+    btn.innerHTML = `
+      <div class="relative flex items-center justify-center">
+        <span class="material-symbols-outlined text-[20px] sm:text-[22px] animate-spin-slow">my_location</span>
+        <span class="absolute -top-1.5 -right-1.5 flex h-2.5 w-2.5">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+        </span>
+      </div>
+    `;
+  }
+
+  if (typeof showToast === 'function') {
+    showToast("🎯 Rastreamento em tempo real ativado. Acompanhando sua movimentação no mapa...", "info");
+  }
+
+  // Se o usuário arrastar o mapa manualmente, desativa o auto-pan suavemente para não brigar com ele
+  if (!hasAttachedMapDragListener && map) {
+    map.on('dragstart', function() {
+      if (isTrackingLocation && isFollowLocationActive) {
+        isFollowLocationActive = false;
+      }
+    });
+    hasAttachedMapDragListener = true;
+  }
+
+  // Inicia rastreamento contínuo em tempo real via watchPosition
+  myLocationWatchId = navigator.geolocation.watchPosition(
+    function(position) {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      const accuracy = position.coords.accuracy || 0;
+      const heading = position.coords.heading;
+
+      // 1. Cria ou atualiza marcador pulsante com indicador direcional
+      const markerHtml = `
+        <div class="relative w-8 h-8 flex items-center justify-center pointer-events-none select-none">
+          <div class="absolute inset-0 bg-blue-500 rounded-full opacity-40 animate-ping"></div>
+          <div class="absolute inset-1.5 bg-blue-600/30 rounded-full animate-pulse border border-blue-400"></div>
+          <div class="relative w-4 h-4 bg-blue-600 border-2 border-white rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.4)] z-10 flex items-center justify-center">
+            ${(typeof heading === 'number' && !isNaN(heading)) ? '<div class="w-1.5 h-1.5 border-t-2 border-r-2 border-white transform rotate-45"></div>' : '<div class="w-1.5 h-1.5 bg-white rounded-full"></div>'}
+          </div>
+        </div>
+      `;
+
+      if (myLocationMarker) {
+        myLocationMarker.setLatLng([lat, lng]);
+        myLocationMarker.setIcon(L.divIcon({
+          className: 'custom-location-icon bg-transparent border-none',
+          html: markerHtml,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
+        }));
+      } else {
+        const locationIcon = L.divIcon({
+          className: 'custom-location-icon bg-transparent border-none',
+          html: markerHtml,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
+        });
+        myLocationMarker = L.marker([lat, lng], { icon: locationIcon, zIndexOffset: 1500, interactive: false }).addTo(map);
+      }
+
+      // 2. Atualiza ou cria o Círculo de Precisão do GPS (Accuracy Circle)
+      if (accuracy > 0) {
+        if (myLocationAccuracyCircle) {
+          myLocationAccuracyCircle.setLatLng([lat, lng]);
+          myLocationAccuracyCircle.setRadius(accuracy);
+        } else {
+          myLocationAccuracyCircle = L.circle([lat, lng], {
+            radius: accuracy,
+            color: '#3b82f6',
+            weight: 1.5,
+            opacity: 0.5,
+            fillColor: '#60a5fa',
+            fillOpacity: 0.12,
+            interactive: false
+          }).addTo(map);
+        }
+      }
+
+      // 3. Centralização da câmera (Follow Mode)
+      if (isFollowLocationActive) {
+        if (map.getZoom() < 17) {
+          map.setView([lat, lng], 18, { animate: true });
+        } else {
+          map.panTo([lat, lng], { animate: true, duration: 0.6 });
+        }
+      }
+
+      // 4. Renova atividade da sessão de segurança
+      if (window.SessionSecurity && typeof window.SessionSecurity.recordActivity === 'function') {
+        window.SessionSecurity.recordActivity();
+      }
+    },
+    function(error) {
+      console.warn("Erro no GPS em tempo real:", error);
+      if (error.code === 1) { // PERMISSION_DENIED
+        alert("Permissão de geolocalização negada. Ative o GPS nas permissões do navegador.");
+        stopLiveLocationTracking(btn);
+      }
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 15000
+    }
+  );
+}
+
+function stopLiveLocationTracking(btn) {
+  if (myLocationWatchId !== null && navigator.geolocation) {
+    navigator.geolocation.clearWatch(myLocationWatchId);
+    myLocationWatchId = null;
+  }
+  isTrackingLocation = false;
+  isFollowLocationActive = false;
+
+  if (myLocationAccuracyCircle && map) {
+    map.removeLayer(myLocationAccuracyCircle);
+    myLocationAccuracyCircle = null;
+  }
+
+  if (btn) {
+    btn.classList.remove('bg-blue-600', 'text-white', 'shadow-[0_0_20px_rgba(37,99,235,0.7)]', 'border-blue-400', 'ring-2', 'ring-blue-400/60');
+    btn.classList.add('bg-white/90', 'dark:bg-slate-900/90', 'text-blue-600', 'dark:text-blue-400');
+    btn.title = "Minha Localização (Clique para iniciar rastreamento em tempo real)";
+    btn.innerHTML = `<span class="material-symbols-outlined text-[20px] sm:text-[22px]">my_location</span>`;
+  }
+
+  if (typeof showToast === 'function') {
+    showToast("Rastreamento em tempo real desativado.", "info");
+  }
 }
 
 // Expose all functions to global scope for ESM
@@ -11410,11 +11659,14 @@ window.openLayerGeneralReport = async function() {
         alert('Configure o Relatório Geral desta camada primeiro: em Cadastros, edite o formulário e abra a aba "Relatório Geral".');
         return;
     }
-    // mesma garantia do Painel de Estatísticas (openStatsDashboard): força carregar TODAS as feições da camada antes
-    // de contar/filtrar — sem isso, o relatório contava só o que já estava em memória (ex.: 44 de 282), batendo
-    // errado com o Dashboard.
+    // Mesma garantia do Painel de Estatísticas (openStatsDashboard):
+    // Se a camada já possui feições carregadas em memória/cache, abre imediatamente em 0ms sem travar a interface!
+    // Só busca da rede se o tema ainda não tiver feições carregadas.
     if (typeof loadThemeProperties === 'function') {
-        try { await loadThemeProperties(theme.id, true); } catch (e) { console.warn('[Relatório Geral] Falha ao recarregar feições da camada antes do relatório:', e); }
+        const jaTemFeicoes = Array.isArray(theme.features) && theme.features.length > 0 && theme._propertiesFullyLoaded;
+        if (!jaTemFeicoes) {
+            try { await loadThemeProperties(theme.id, false); } catch (e) { console.warn('[Relatório Geral] Falha ao carregar feições da camada antes do relatório:', e); }
+        }
     }
     if (modelos.length === 1) { abrirRelatorioGeralComModelo(modelos[0], theme); return; }
     mostrarEscolhaRelatorioGeral(modelos, theme);

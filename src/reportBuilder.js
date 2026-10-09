@@ -5421,6 +5421,26 @@
         });
     }
 
+    // Sincronização em tempo real: quando o usuário salva o padrão do mapa na prévia (relatorio_view.html),
+    // atualiza imediatamente o modelo em edição no construtor para manter as configurações alinhadas.
+    if (typeof window !== 'undefined') {
+        window.addEventListener('message', function (ev) {
+            if (ev.data && ev.data.tipo === 'relatorio:padrao_mapa_salvo' && ev.data.templateId) {
+                if (currentTemplate && (currentTemplate.id === ev.data.templateId || currentTemplate.form_id === ev.data.templateId)) {
+                    let b = (currentTemplate.blocos || []).find(x => x.tipo === 'mapa_estatico');
+                    if (b) {
+                        b.mapa = JSON.parse(JSON.stringify(ev.data.mapa));
+                        if (ev.data.mapa.norte !== undefined) b.exibirNorte = !!ev.data.mapa.norte;
+                        if (ev.data.mapa.escala !== undefined) b.exibirEscala = !!ev.data.mapa.escala;
+                        if (ev.data.mapa.alturaMm) b.alturaMm = ev.data.mapa.alturaMm;
+                    }
+                    currentTemplate.config_mapa_padrao = JSON.parse(JSON.stringify(ev.data.mapa));
+                    updateSaveButtonState();
+                }
+            }
+        });
+    }
+
     // Exportação Global
     window.ReportBuilder = {
         initReportBuilderTab,

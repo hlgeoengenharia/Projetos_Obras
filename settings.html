@@ -613,7 +613,7 @@
              if (f.id === pureFieldId) {
                  fieldType = f.type;
                  if (['select', 'radio', 'checkbox'].includes(f.type) && f.options) {
-                     fieldOptions = f.options.split(',').map(o => o.trim()).filter(o => o);
+                     fieldOptions = parseDropdownOptions(f.options);
                  }
              }
           });
@@ -3804,7 +3804,7 @@
                   if(t.id !== activeTab.id) {
                       (t.fields || []).forEach(f => {
                            if(['text', 'number', 'sequence', 'phone', 'select', 'cpfcnpj', 'ipl', 'ipf', 'insc_imob_cabedelo', 'epol', 'epol_1n', 'rip', 'rip_1n'].includes(f.type)) {
-                              let optsJson = (typeof f.options === 'string') ? f.options.split(',').map(o => o.trim()).filter(o => o).join('|') : '';
+                              let optsJson = (typeof parseDropdownOptions === 'function') ? parseDropdownOptions(f.options).join('|') : ((typeof f.options === 'string') ? f.options.split(',').map(o => o.trim()).filter(o => o).join('|') : '');
                               optionsHtml += `<option value="${f.id}" data-opts="${optsJson}">[${t.title}] ${f.label || 'Campo Sem Nome'}</option>`;
                           }
                       });
@@ -4360,7 +4360,7 @@
             name: label.trim().toLowerCase().replace(/[^a-z0-9]/g, '_'),
             label: label.trim(),
             type: type,
-            options: type === 'select' ? options : '',
+            options: type === 'select' ? (typeof parseDropdownOptions === 'function' ? JSON.stringify(parseDropdownOptions(options)) : options) : '',
             formulaConfig: formulaConfig,
             showInSummary: showInSummary
          });
@@ -4656,7 +4656,8 @@
          syncActiveTabFields();
       };
       
-      div.innerHTML = `
+       const fOptionsHiddenVal = JSON.stringify(parseDropdownOptions(f.options)).replace(/"/g, '&quot;');
+       div.innerHTML = `
         <div class="relative group move-menu-container">
           <div class="cursor-grab pt-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-700 rounded p-1 transition-colors" onclick="toggleMoveMenu('${f.id}')" title="Arraste para reordenar, ou clique para mover para outra aba">
             <span class="material-symbols-outlined pointer-events-none">drag_indicator</span>
@@ -4721,7 +4722,7 @@
             <ul id="options-list-${f.id}" class="space-y-2 mb-3 min-h-[10px] dropdown-options-list empty:hidden">
               <!-- Options will be rendered here by JS -->
             </ul>
-            <input type="hidden" value="${f.options || ''}" class="field-options" id="hidden-options-${f.id}" />
+            <input type="hidden" value="${fOptionsHiddenVal}" class="field-options" id="hidden-options-${f.id}" />
             <div class="flex items-center gap-2 text-xs text-slate-400 mt-2">
                <span class="material-symbols-outlined text-[16px]">drag_indicator</span>
                <p>Arraste os itens pelo ícone à esquerda para reordená-los.</p>
@@ -4772,10 +4773,26 @@
     }
     
     // Dropdown Builder JS Helpers
+    function parseDropdownOptions(raw) {
+       if (!raw) return [];
+       if (Array.isArray(raw)) return raw.map(s => String(s).trim()).filter(Boolean);
+       if (typeof raw === 'string') {
+          const trimmed = raw.trim();
+          if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+             try {
+                const parsed = JSON.parse(trimmed);
+                if (Array.isArray(parsed)) return parsed.map(s => String(s).trim()).filter(Boolean);
+             } catch (e) {}
+          }
+          return trimmed.split(',').map(s => s.trim()).filter(Boolean);
+       }
+       return [];
+    }
+
     function getDropdownOptionsArray(fieldId) {
        const hiddenInput = document.getElementById(`hidden-options-${fieldId}`);
        if (!hiddenInput || !hiddenInput.value) return [];
-       return hiddenInput.value.split(',').map(s => s.trim()).filter(s => s !== '');
+       return parseDropdownOptions(hiddenInput.value);
     }
 
     function addDropdownOption(fieldId) {
@@ -4787,7 +4804,7 @@
        options.push(val);
        
        const hiddenInput = document.getElementById(`hidden-options-${fieldId}`);
-       hiddenInput.value = options.join(',');
+       hiddenInput.value = JSON.stringify(options);
        
        input.value = '';
        renderDropdownOptionsList(fieldId);
@@ -4798,7 +4815,7 @@
        options.splice(index, 1);
        
        const hiddenInput = document.getElementById(`hidden-options-${fieldId}`);
-       hiddenInput.value = options.join(',');
+       hiddenInput.value = JSON.stringify(options);
        
        renderDropdownOptionsList(fieldId);
     }
@@ -4832,7 +4849,7 @@
        options[index] = newVal;
        
        const hiddenInput = document.getElementById(`hidden-options-${fieldId}`);
-       hiddenInput.value = options.join(',');
+       hiddenInput.value = JSON.stringify(options);
        
        renderDropdownOptionsList(fieldId);
     }
@@ -4848,7 +4865,7 @@
            }
        });
        const hiddenInput = document.getElementById(`hidden-options-${fieldId}`);
-       hiddenInput.value = newOptions.join(',');
+       hiddenInput.value = JSON.stringify(newOptions);
     }
 
     function renderDropdownOptionsList(fieldId) {
@@ -4861,9 +4878,10 @@
        options.forEach((opt, index) => {
            const li = document.createElement('li');
            li.className = "flex items-center gap-2 bg-white dark:bg-slate-800/80 p-2 rounded border border-slate-200 dark:border-slate-700 shadow-sm group";
+           const escOpt = opt.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
            li.innerHTML = `
                <span class="material-symbols-outlined cursor-grab text-slate-300 hover:text-slate-500 active:cursor-grabbing text-[18px]">drag_indicator</span>
-               <span class="flex-1 text-sm text-slate-700 dark:text-slate-200 truncate option-text" title="${opt.replace(/"/g, '&quot;')}">${opt.replace(/</g, '&lt;')}</span>
+               <span class="flex-1 text-sm text-slate-700 dark:text-slate-200 truncate option-text" title="${escOpt}">${escOpt}</span>
                <button type="button" onclick="editDropdownOption('${fieldId}', ${index})" class="p-1 text-slate-400 hover:text-blue-500 rounded transition-colors tooltip" title="Editar">
                    <span class="material-symbols-outlined text-[16px]">edit</span>
                </button>
@@ -5604,7 +5622,7 @@
         const currentVal = document.getElementById(`edit-stat-cond-val-${suffix}`) ? document.getElementById(`edit-stat-cond-val-${suffix}`).value : '';
         
         if (type === 'select' && optsString) {
-            const optionsArray = optsString.split(',').map(o => o.trim()).filter(o => o);
+            const optionsArray = parseDropdownOptions(optsString);
             let html = `<select id="edit-stat-cond-val-${suffix}" class="w-full px-2.5 py-1.5 rounded-md border border-slate-300 dark:border-slate-600 text-xs bg-white dark:bg-slate-800 dark:text-white outline-none">`;
             html += `<option value="">Selecione a opção...</option>`;
             optionsArray.forEach(opt => {
@@ -5770,7 +5788,7 @@
             return;
         }
         
-        const options = field.options.split(',').map(o => o.trim()).filter(o => o);
+        const options = parseDropdownOptions(field.options);
         if (options.length === 0) {
             container.classList.add('hidden');
             return;

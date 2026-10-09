@@ -43,6 +43,7 @@
         anotacoes: [],                                                        // textos livres no mapa: { id, lat, lng, texto }
         analises: { largura: {} },                                            // largura (% da folha, 20 a 100) de cada card de "Análises da Feição": 'comp' (área cadastral x calculada) e 'med:N' (medições)
         medicoes: { itens: [], sistema: 'utm', aderencia: true, cor: '#0e7490' },             // ferramentas de medição do mapa principal: ponto, distância e área desenhados no relatório { id:'med:N', tipo, pts:[[lat,lng]...] }
+        scrollZoom: true,                        // permite zoom direto no mapa com o rolon (scroll) do mouse
         elementos: {},                                                        // posição dos elementos sobre o mapa (norte, escala, escalaTexto, projecao, legenda): deslocamento { dx, dy } em fração do tamanho do mapa
         legenda: { nomes: {}, ocultos: [] }                                   // legenda editável: nomes trocados e itens ocultos, por chave ('feicao' | 'c:<camada>')
     };
@@ -79,6 +80,7 @@
             norte: src.norte !== undefined ? !!src.norte : (legadoNorte !== undefined ? !!legadoNorte : d.norte),
             escala: src.escala !== undefined ? !!src.escala : (legadoEscala !== undefined ? !!legadoEscala : d.escala),
             projecao: src.projecao === undefined ? d.projecao : !!src.projecao,
+            scrollZoom: src.scrollZoom !== undefined ? !!src.scrollZoom : (d.scrollZoom !== undefined ? !!d.scrollZoom : true),
             alturaMm: clamp(src.alturaMm, 40, 400, d.alturaMm), // o limite real de cada folha é aplicado pelo visualizador
             vista: normalizeVista(src.vista),
             medidas: normalizeMedidas(src.medidas),
@@ -187,7 +189,9 @@
             const nome = typeof m.nome === 'string' ? m.nome.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
             itens.push(nome ? { id: m.id, tipo: m.tipo, pts: pts, nome: nome } : { id: m.id, tipo: m.tipo, pts: pts });
         });
-        return { itens, sistema: ['utm', 'geo_dec', 'geo_gms'].indexOf(x.sistema) >= 0 ? x.sistema : 'utm', aderencia: x.aderencia === undefined ? true : !!x.aderencia, cor: isHexColor(x.cor) ? x.cor : MAP_DEFAULTS.medicoes.cor };
+        const out = { itens, sistema: ['utm', 'geo_dec', 'geo_gms'].indexOf(x.sistema) >= 0 ? x.sistema : 'utm', aderencia: x.aderencia === undefined ? true : !!x.aderencia, cor: isHexColor(x.cor) ? x.cor : MAP_DEFAULTS.medicoes.cor };
+        if (x.tamanho !== undefined) out.tamanho = clamp(x.tamanho, 6, 24, 10);
+        return out;
     }
 
     /** Coordenadas nos três formatos do mapa principal (DEC, GMS e UTM). */
@@ -456,7 +460,7 @@
                 if (txt) textos[k] = txt;
             });
         }
-        return {
+        const out = {
             ativo: p.ativo === undefined ? d.ativo : !!p.ativo,
             sistema: COORD_SYSTEMS.some(s => s.id === p.sistema) ? p.sistema : d.sistema,
             tabela: p.tabela === undefined ? d.tabela : !!p.tabela,
@@ -468,6 +472,8 @@
             colConf: normalizeColConf(p.colConf),
             colunas: normalizeColunas(p.colunas)
         };
+        if (p.tamanho !== undefined) out.tamanho = clamp(p.tamanho, 6, 24, 10);
+        return out;
     }
 
     /** Estilo do texto no mapa: negrito, itálico e sublinhado (o que não vier usa o padrão). */
@@ -507,7 +513,7 @@
         const d = MAP_DEFAULTS.medidas;
         m = m || {};
         const est = m.estilo || {};
-        return {
+        const out = {
             ativo: m.ativo === undefined ? d.ativo : !!m.ativo,
             lados: m.lados === undefined ? d.lados : !!m.lados,
             total: m.total === undefined ? d.total : !!m.total,
@@ -515,6 +521,8 @@
             cor: isHexColor(m.cor) ? m.cor : d.cor,
             estilo: { lados: normalizeEstilo(est.lados, d.estilo.lados), total: normalizeEstilo(est.total, d.estilo.total), perimetro: normalizeEstilo(est.perimetro, d.estilo.perimetro) }
         };
+        if (m.tamanho !== undefined) out.tamanho = clamp(m.tamanho, 6, 24, 10);
+        return out;
     }
 
     /** Giro dos textos: graus no intervalo (-180, 180], uma casa decimal. */
@@ -1176,17 +1184,44 @@
         const props = (f && f.properties) || {};
         if (campos && campos.length) {
             return campos.map(k => {
-                const v1 = (props.f && props.f[k] !== undefined && props.f[k] !== null) ? props.f[k] : '';
-                const v2 = (props[k] !== undefined && props[k] !== null) ? props[k] : '';
-                return String(v1 || v2 || '').trim();
+                const lk = String(k || '').toLowerCase();
+                let val = '';
+                if (props.f) {
+                    if (props.f[k] !== undefined && props.f[k] !== null) val = props.f[k];
+                    else {
+                        const mk = Object.keys(props.f).find(x => x.toLowerCase() === lk);
+                        if (mk) val = props.f[mk];
+                    }
+                }
+                if (!val) {
+                    if (props[k] !== undefined && props[k] !== null) val = props[k];
+                    else {
+                        const mk = Object.keys(props).find(x => x.toLowerCase() === lk && x !== 'geometry');
+                        if (mk) val = props[mk];
+                    }
+                }
+                return String(val || '').trim();
             }).filter(Boolean).join(' — ');
         }
-        return [props.r, props.t].filter(Boolean).join(' — ');
+        const rt = [props.r, props.t].filter(Boolean).join(' — ');
+        if (rt) return rt;
+        const chavesUteis = Object.keys(props).filter(k => !/^(geometry|_|themeId|id_banco|f|r|t)$/i.test(k));
+        for (const k of chavesUteis) {
+            const v = props[k];
+            if (typeof v === 'string' && v.trim() && !/^[0-9a-f]{8}-[0-9a-f]{4}/i.test(v)) return v.trim();
+        }
+        if (props.f && typeof props.f === 'object') {
+            for (const k of Object.keys(props.f)) {
+                const v = props.f[k];
+                if (typeof v === 'string' && v.trim() && !/^[0-9a-f]{8}-[0-9a-f]{4}/i.test(v)) return v.trim();
+            }
+        }
+        return '';
     }
 
     /**
      * Quem confronta um trecho (poligonal entre dois pontos escolhidos, com os vértices do meio).
-     * Camadas comuns: feição que fica a até tolM do trecho em, no mínimo, 20% dele. Camadas de logradouros:
+     * Camadas comuns: feição que fica a até tolM do trecho em, no mínimo, 10% dele. Camadas de logradouros:
      * a feição mais próxima, até distLogM, do lado de fora do trecho (mesmo sem tocar). Sem ninguém: ''.
      * cc = { camadas: [{ id, campos, logradouro }], tolM, distLogM }; sinal = sentido do anel (+1 anti-horário), 0 = sem teste de lado.
      */
@@ -1205,7 +1240,8 @@
         (cc.camadas || []).forEach(sel => {
             const cam = (camadas || []).find(x => String(x.id) === String(sel.id));
             if (!cam || !Array.isArray(cam.features)) return;
-            const raio = sel.logradouro ? distLog : tol;
+            const isLog = !!(sel.logradouro || cam.kind === 'line' || cam.kind === 'linestring' || /rua|logradouro|via|avenida/i.test(cam.name || ''));
+            const raio = isLog ? distLog : tol;
             const area = expandBBoxMeters(caixa, raio + 1);
             const achados = [];
             cam.features.forEach(f => {
@@ -1213,7 +1249,7 @@
                 const bb = geometryBBox(f.geometry);
                 if (!bb || !bboxIntersects(bb, area)) return;
                 const parts = planarParts(f.geometry, proj);
-                if (!sel.logradouro) {
+                if (!isLog) {
                     const perto = amostras.filter(p => pointToPartsDist(p, parts) <= tol).length;
                     const fr = perto / amostras.length;
                     if (fr >= 0.2) achados.push({ f: f, chave: fr });
@@ -1476,7 +1512,7 @@
                     if (fr >= minFr) achados.push({ r: (v.f.properties && v.f.properties.r) || '', t: (v.f.properties && v.f.properties.t) || '', fracao: Math.round(fr * 100) / 100 });
                 });
                 achados.sort((x, y) => y.fracao - x.fracao);
-                rows.push({ id: 'lado:' + k, rotuloLado: 'L' + (k + 1), comprimento: len, azimute: azimuthDeg(a, b), confrontantes: achados.slice(0, 4) });
+                rows.push({ id: 'lado:' + k, rotuloLado: 'L' + (k + 1), comprimento: len, azimute: azimuthDeg(a, b), confrontantes: achados.slice(0, 4), coords: [a, b] });
             }
         });
         return rows;

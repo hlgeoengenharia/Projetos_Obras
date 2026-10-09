@@ -251,8 +251,8 @@
         .report-measure-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: #065f46; font: 10px/14px monospace; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff; cursor: move; }
         .report-measure-label.edited { color: #92400e; }
         /* ícone de girar: a área de clique é maior que o desenho e encosta no texto, para o mouse chegar até ele sem perdê-lo */
-        .report-rot { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); box-sizing: content-box; width: 18px; height: 18px; padding: 6px 6px 6px 10px; background: radial-gradient(circle closest-side, #0f172a 96%, transparent 100%); background-origin: content-box; background-clip: content-box; background-repeat: no-repeat; color: #fff; font: 13px/18px sans-serif; text-align: center; text-shadow: none; cursor: grab; display: none; }
-        .report-rot:active { cursor: grabbing; }        .report-measure-label:hover .report-rot, .report-point-label:hover .report-rot, .report-nlabel-l:hover .report-rot, .report-note-label:hover .report-rot, .rotating .report-rot { display: block; }
+        .report-rot { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); box-sizing: content-box; width: 18px; height: 18px; padding: 6px 6px 6px 10px; background: radial-gradient(circle closest-side, #0f172a 96%, transparent 100%); background-origin: content-box; background-clip: content-box; background-repeat: no-repeat; color: #fff; font: 13px/18px sans-serif; text-align: center; text-shadow: none; cursor: grab; display: none; z-index: 2000; pointer-events: auto; }
+        .report-rot:active { cursor: grabbing; }        .report-measure-label:hover .report-rot, .report-point-label:hover .report-rot, .report-nlabel-l:hover .report-rot, .report-confrontante-label:hover .report-rot, .report-note-label:hover .report-rot, .rotating .report-rot { display: block; }
         .report-tframe-title { display: flex; justify-content: space-between; gap: 6px; background: #0f172a; color: #fff; padding: 2px 7px; border-radius: 6px 6px 0 0; font: 700 9.5px/16px monospace; }
         .report-tframe-title span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .report-tframe-wrap { border: 1px solid #cbd5e1; border-top: 0; background: #e2e8f0; position: relative; overflow: hidden; border-radius: 0 0 6px 6px; }
@@ -282,7 +282,10 @@
         @media print { .report-vertex-handle, .report-locator-zoom-btns, .report-locator-resize-handle, .no-print { display: none !important; } }
         .report-point { background: transparent; border: 0; }
         .report-point-dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #dc2626; border: 2px solid #fff; box-shadow: 0 0 0 1px #7f1d1d; }
-        .report-point-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: #7f1d1d; font: 10px/14px monospace; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff; cursor: move; }
+        .report-point-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: #7f1d1d; font-family: monospace; font-size: 10px; line-height: 14px; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff; cursor: move; }
+        .report-confrontante { background: transparent; border: 0; }
+        .report-confrontante-label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: #0f172a; font-family: monospace; font-weight: 700; font-size: 8.5px; line-height: 12px; background: transparent; border: 0; border-radius: 0; padding: 0 2px; box-shadow: none; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0 0 2px #fff; cursor: move; }
+        .report-confrontante-label.edited { color: #0369a1; }
         .report-measure-input { width: 120px; font: 700 9px monospace; border: 1px solid #059669; border-radius: 3px; padding: 0 3px; outline: none; }
         @media print {
             .leaflet-control-zoom, #map-tools-panel, #map-tools-toggle, #pesquisa-tools-panel, #pesquisa-tools-toggle, .sidebar-column, #dica-viewer, header { display: none !important; }
@@ -408,6 +411,114 @@
             border-bottom-left-radius: 0 !important;
             border-bottom-right-radius: 0 !important;
             border-color: rgba(251,146,60,0.3) !important;
+        }
+
+        /* -------------------------------------------------------------
+           GRADIENTES TEMÁTICOS PARA AS SEÇÕES DE CONFIGURAÇÕES DO MAPA
+           Identificação visual instantânea por grupos sem sobrecarregar a tela
+        ------------------------------------------------------------- */
+        /* Tema Feições & Camadas: Verde Esmeralda */
+        #map-tools-panel h4.tema-feicoes {
+            background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+            border: 1px solid #a7f3d0;
+            border-left: 4px solid #10b981;
+            color: #065f46;
+        }
+        #map-tools-panel h4.tema-feicoes:hover { background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); color: #047857; }
+        #map-tools-panel h4.tema-feicoes.open { background: linear-gradient(135deg, #a7f3d0 0%, #6ee7b7 100%); color: #064e3b; border-color: #6ee7b7; }
+
+        .sidebar-column #map-tools-panel h4.tema-feicoes {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.16) 0%, rgba(6, 78, 59, 0.38) 100%) !important;
+            border: 1px solid rgba(16, 185, 129, 0.28) !important;
+            border-left: 4px solid #10b981 !important;
+            color: #6ee7b7 !important;
+        }
+        .sidebar-column #map-tools-panel h4.tema-feicoes:hover {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.26) 0%, rgba(6, 78, 59, 0.48) 100%) !important;
+            color: #a7f3d0 !important;
+        }
+        .sidebar-column #map-tools-panel h4.tema-feicoes.open {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.3) 0%, rgba(6, 78, 59, 0.58) 100%) !important;
+            color: #34d399 !important;
+            border-color: rgba(52, 211, 153, 0.5) !important;
+        }
+
+        /* Tema Composição Cartográfica & Base: Azul / Sky */
+        #map-tools-panel h4.tema-cartografia {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border: 1px solid #bae6fd;
+            border-left: 4px solid #0284c7;
+            color: #075985;
+        }
+        #map-tools-panel h4.tema-cartografia:hover { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); color: #0369a1; }
+        #map-tools-panel h4.tema-cartografia.open { background: linear-gradient(135deg, #bae6fd 0%, #7dd3fc 100%); color: #0c4a6e; border-color: #7dd3fc; }
+
+        .sidebar-column #map-tools-panel h4.tema-cartografia {
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.16) 0%, rgba(12, 74, 110, 0.38) 100%) !important;
+            border: 1px solid rgba(14, 165, 233, 0.28) !important;
+            border-left: 4px solid #0ea5e9 !important;
+            color: #7dd3fc !important;
+        }
+        .sidebar-column #map-tools-panel h4.tema-cartografia:hover {
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.26) 0%, rgba(12, 74, 110, 0.48) 100%) !important;
+            color: #bae6fd !important;
+        }
+        .sidebar-column #map-tools-panel h4.tema-cartografia.open {
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.3) 0%, rgba(12, 74, 110, 0.58) 100%) !important;
+            color: #38bdf8 !important;
+            border-color: rgba(56, 189, 248, 0.5) !important;
+        }
+
+        /* Tema Geometria, Vértices & Medições: Roxo / Violeta / Índigo */
+        #map-tools-panel h4.tema-geometria {
+            background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+            border: 1px solid #ddd6fe;
+            border-left: 4px solid #7c3aed;
+            color: #5b21b6;
+        }
+        #map-tools-panel h4.tema-geometria:hover { background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%); color: #6d28d9; }
+        #map-tools-panel h4.tema-geometria.open { background: linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%); color: #4c1d95; border-color: #c4b5fd; }
+
+        .sidebar-column #map-tools-panel h4.tema-geometria {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.16) 0%, rgba(76, 29, 149, 0.38) 100%) !important;
+            border: 1px solid rgba(139, 92, 246, 0.28) !important;
+            border-left: 4px solid #8b5cf6 !important;
+            color: #c4b5fd !important;
+        }
+        .sidebar-column #map-tools-panel h4.tema-geometria:hover {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.26) 0%, rgba(76, 29, 149, 0.48) 100%) !important;
+            color: #ddd6fe !important;
+        }
+        .sidebar-column #map-tools-panel h4.tema-geometria.open {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(76, 29, 149, 0.58) 100%) !important;
+            color: #a78bfa !important;
+            border-color: rgba(167, 139, 250, 0.5) !important;
+        }
+
+        /* Tema Análise Temporal Multidatas: Âmbar / Laranja */
+        #map-tools-panel h4.tema-temporal {
+            background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+            border: 1px solid #fde68a;
+            border-left: 4px solid #d97706;
+            color: #92400e;
+        }
+        #map-tools-panel h4.tema-temporal:hover { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); color: #b45309; }
+        #map-tools-panel h4.tema-temporal.open { background: linear-gradient(135deg, #fde68a 0%, #fcd34d 100%); color: #78350f; border-color: #fcd34d; }
+
+        .sidebar-column #map-tools-panel h4.tema-temporal {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.16) 0%, rgba(120, 53, 15, 0.38) 100%) !important;
+            border: 1px solid rgba(245, 158, 11, 0.28) !important;
+            border-left: 4px solid #f59e0b !important;
+            color: #fcd34d !important;
+        }
+        .sidebar-column #map-tools-panel h4.tema-temporal:hover {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.26) 0%, rgba(120, 53, 15, 0.48) 100%) !important;
+            color: #fef3c7 !important;
+        }
+        .sidebar-column #map-tools-panel h4.tema-temporal.open {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.3) 0%, rgba(120, 53, 15, 0.58) 100%) !important;
+            color: #fbbf24 !important;
+            border-color: rgba(251, 191, 36, 0.5) !important;
         }
         .sidebar-column #map-tools-panel .sec-body,
         .sidebar-column #pesquisa-tools-panel .sec-body {
@@ -780,6 +891,7 @@
         let emissaoTimer = null;
         let mapPanelOpen = null;       // painel "Mapa" aberto? (null = ainda não decidido; decide pela largura da tela)
         let lastPontosKey = '';
+        let lastMapCfgKey = '';
         let mapAlturaMm = null;
         let consultaAberta = false;   // formulário "Consultar Coordenadas" aberto no painel
         let consultaAba = 'dec';
@@ -1236,8 +1348,8 @@
             const d = document.createElement('div');
             d.id = 'aviso-previa';
             d.className = 'no-print';
-            d.style.cssText = 'position:fixed;left:16px;bottom:16px;z-index:1300;max-width:340px;background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:9px 12px;border-radius:10px;font:12px/1.35 sans-serif;box-shadow:0 6px 18px rgba(15,23,42,.18)';
-            d.innerHTML = '<b>PRÉVIA</b> — feição e dados de exemplo, com o modelo como está no construtor. Nada é salvo nem registrado, e o que for gerado aqui não tem validade como documento.';
+            d.style.cssText = 'position:fixed;left:16px;bottom:16px;z-index:1300;max-width:380px;background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:10px 14px;border-radius:10px;font:12px/1.4 sans-serif;box-shadow:0 6px 18px rgba(15,23,42,.18)';
+            d.innerHTML = '<b>PRÉVIA</b> — feição e dados de exemplo, com o modelo como está no construtor.<br><span style="color:#78350f">Configure o mapa no painel à direita e clique em <b>"Salvar como Padrão do Modelo"</b> para definir como as fichas cadastrais desta camada devem ser abertas.</span>';
             document.body.appendChild(d);
         }
 
@@ -1299,7 +1411,7 @@
         /** Monta o relatório a partir do payload (feição, modelo, camadas): folhas, blocos, mapa. */
         function desenharRelatorio() {
             const { templateId, formId, featureData, featureGeometry, template } = reportPayload;
-            if (reportPayload.preview && !EDICAO) mostrarAvisoPrevia();
+            if (emPrevia() && !EDICAO) mostrarAvisoPrevia();
             
             // Busca o modelo
             let templates = [];
@@ -1577,9 +1689,97 @@
                 const totalComFiltro = resolveFeatureListFull().length;
                 const totalSemFiltro = ultimoTotalSemFiltroGeral;
                 if (typeof totalSemFiltro === 'number' && totalSemFiltro !== totalComFiltro) {
+                    const stats = calcularEstatisticasComparativasFiltro();
+                    const pctFiltrado = stats.pctFiltrado;
+
+                    let metricasFiltroCardsHtml = `
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2 pt-2 border-t border-amber-200/80 text-[10.5px]">
+                            <div class="bg-white/95 p-2 rounded border border-amber-200 shadow-2xs">
+                                <div class="text-[9px] font-bold text-amber-800 uppercase tracking-wider">Universo Filtrado</div>
+                                <div class="text-base font-black text-slate-900 mt-0.5">${totalComFiltro} <span class="text-[10px] font-normal text-slate-500">feições</span></div>
+                                <div class="text-[9.5px] font-semibold text-amber-700 mt-0.5">${pctFiltrado.toFixed(1)}% da camada (${totalSemFiltro} total)</div>
+                            </div>
+                    `;
+
+                    if (stats.feicoesComAreaFiltrada > 0 && stats.areaTotalFiltrada > 0) {
+                        const areaFiltradaTxt = stats.areaTotalFiltrada >= 10000 ? `${MapTools.fmtNumber(stats.areaTotalFiltrada / 10000, 2)} ha` : `${MapTools.fmtNumber(stats.areaTotalFiltrada, 2)} m²`;
+                        const areaMediaTxt = `${MapTools.fmtNumber(stats.areaMediaFiltrada, 2)} m²`;
+                        const diffTxt = stats.diffAreaPct !== 0 ? `${stats.diffAreaPct > 0 ? '+' : ''}${stats.diffAreaPct.toFixed(1)}%` : '0%';
+                        metricasFiltroCardsHtml += `
+                            <div class="bg-white/95 p-2 rounded border border-amber-200 shadow-2xs">
+                                <div class="text-[9px] font-bold text-amber-800 uppercase tracking-wider">Área Delimitada</div>
+                                <div class="text-base font-black text-slate-900 mt-0.5">${areaFiltradaTxt}</div>
+                                <div class="text-[9.5px] font-semibold text-slate-600 mt-0.5">${stats.pctAreaTotal.toFixed(1)}% da área da camada</div>
+                            </div>
+                            <div class="bg-white/95 p-2 rounded border border-amber-200 shadow-2xs">
+                                <div class="text-[9px] font-bold text-amber-800 uppercase tracking-wider">Área Média no Filtro</div>
+                                <div class="text-base font-black text-slate-900 mt-0.5">${areaMediaTxt}</div>
+                                <div class="text-[9.5px] font-semibold text-amber-800 mt-0.5">${diffTxt} vs média geral</div>
+                            </div>
+                        `;
+                    } else if (stats.feicoesComLinhaFiltrado > 0 && stats.compTotalFiltradoKm > 0) {
+                        metricasFiltroCardsHtml += `
+                            <div class="bg-white/95 p-2 rounded border border-amber-200 shadow-2xs">
+                                <div class="text-[9px] font-bold text-amber-800 uppercase tracking-wider">Extensão Total</div>
+                                <div class="text-base font-black text-slate-900 mt-0.5">${MapTools.fmtNumber(stats.compTotalFiltradoKm, 2)} km</div>
+                                <div class="text-[9.5px] font-semibold text-slate-600 mt-0.5">${stats.pctCompTotal.toFixed(1)}% da extensão total</div>
+                            </div>
+                        `;
+                    }
+
+                    if (stats.statsNumericos && stats.statsNumericos.length) {
+                        const s0 = stats.statsNumericos[0];
+                        const prefix = s0.ehMoeda ? 'R$ ' : '';
+                        const diffTxt = s0.diffMedia !== 0 ? `${s0.diffMedia > 0 ? '+' : ''}${s0.diffMedia.toFixed(1)}%` : '0%';
+                        metricasFiltroCardsHtml += `
+                            <div class="bg-white/95 p-2 rounded border border-amber-200 shadow-2xs">
+                                <div class="text-[9px] font-bold text-amber-800 uppercase tracking-wider truncate" title="${escapeHtml(s0.label)}">${escapeHtml(s0.label)} (Média)</div>
+                                <div class="text-base font-black text-slate-900 mt-0.5">${prefix}${MapTools.fmtNumber(s0.mediaFiltrada, 2)}</div>
+                                <div class="text-[9.5px] font-semibold text-amber-800 mt-0.5">${diffTxt} vs média geral</div>
+                            </div>
+                        `;
+                    }
+
+                    if (stats.graficosStats && stats.graficosStats.length) {
+                        const g0 = stats.graficosStats[0];
+                        metricasFiltroCardsHtml += `
+                            <div class="bg-white/95 p-2 rounded border border-amber-200 shadow-2xs col-span-2 sm:col-span-1">
+                                <div class="text-[9px] font-bold text-amber-800 uppercase tracking-wider truncate" title="${escapeHtml(g0.titulo)}">${escapeHtml(g0.titulo)}</div>
+                                <div class="flex flex-wrap gap-1 mt-1">
+                                    ${g0.labels.slice(0, 3).map((l, li) => {
+                                        const qtd = g0.data[li] || 0;
+                                        const pct = g0.total > 0 ? ((qtd / g0.total) * 100).toFixed(0) : 0;
+                                        const cor = (g0.cores && g0.cores[l]) || CHART_COLORS[li % CHART_COLORS.length];
+                                        return `<span class="inline-flex items-center gap-1 text-[9px] font-medium bg-slate-100 px-1 py-0.5 rounded border border-slate-200"><span class="w-2 h-2 rounded-full inline-block" style="background:${cor}"></span><span>${escapeHtml(l)}: <b>${qtd}</b> (${pct}%)</span></span>`;
+                                    }).join('')}
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                    metricasFiltroCardsHtml += `</div>`;
+
                     avisoFiltroHtml = `
-                        <div class="page-break-avoid" style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:#9a3412">
-                            <b>Filtro ativo:</b> mostrando ${totalComFiltro} de ${totalSemFiltro} feições da camada. Para ver todas, abra "Configurações da Pesquisa" → "Filtro de feições" e clique em "Limpar filtro".
+                        <div class="page-break-avoid mb-3.5 p-3 bg-amber-50/95 border border-amber-300 rounded-lg shadow-2xs text-slate-800">
+                            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200/80 pb-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white font-bold text-[10px]">✓</span>
+                                    <span class="text-xs font-bold text-amber-900 uppercase tracking-wider">Recorte Estatístico do Filtro</span>
+                                    ${stats.descricaoFiltro ? `<span class="text-[11px] font-medium text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded border border-amber-300/60">${escapeHtml(stats.descricaoFiltro)}</span>` : ''}
+                                </div>
+                                <div class="text-[10px] text-amber-800 font-medium">
+                                    <b>Filtro ativo:</b> mostrando ${totalComFiltro} de ${totalSemFiltro} feições da camada. Para ver todas, abra "Configurações da Pesquisa" → "Filtro de feições" e clique em "Limpar filtro".
+                                </div>
+                            </div>
+                            ${metricasFiltroCardsHtml}
+                            <div class="no-print mt-2 pt-1.5 flex items-center justify-between text-[10px] text-amber-800 border-t border-amber-200/60">
+                                <span>Os gráficos, tabelas e mapas abaixo refletem exclusivamente este recorte filtrado.</span>
+                                <div class="flex items-center gap-2">
+                                    <button type="button" class="underline hover:text-amber-950 font-bold cursor-pointer" onclick="selecionarCamposPrincipaisGeral()">⚡ Inserir tabela de dados</button>
+                                    <span>•</span>
+                                    <button type="button" class="underline hover:text-amber-950 font-bold cursor-pointer" onclick="limparFiltroGeral()">Limpar filtro</button>
+                                </div>
+                            </div>
                         </div>`;
                 }
             }
@@ -1697,6 +1897,9 @@
         // conta as feições da camada, sem passar pelo filtro do modelo — só para o aviso "N de TOTAL feições"
         // saber quantas existiam ANTES do filtro cortar (não reaproveita a mesma lista filtrada por engano)
         let ultimoTotalSemFiltroGeral = null;
+        let _cachedThemeFeaturesResolvidas = null;
+        let _cachedThemeFeaturesId = null;
+        let _cachedThemeFeaturesLen = 0;
 
         function resolveFeatureListFull(ignorarFiltro) {
             // filtro do modelo (Relatório Geral): lido de tplAtual, que é a MESMA referência editada ao vivo pelo
@@ -1723,14 +1926,12 @@
                     const theme = opener.themes.find(t => String(t.id) === String(themeId));
                     if (theme && Array.isArray(theme.features)) {
                         if (!ignorarFiltro) ultimoTotalSemFiltroGeral = theme.features.length;
-                        // resolve cada campo pelo MESMO caminho do Painel de Estatísticas do mapa (getFeaturePropertyValue),
-                        // que entende fórmulas/1:N (ex.: "valor mais recente da vistoria") — sem isso, um campo assim
-                        // fica sempre vazio aqui (não existe como properties[id] bruto), quebrando tabela e filtro.
-                        // rawFeature guarda a feição ORIGINAL (não resolvida): os gráficos usam ela + computeChartAggregation
-                        // (também do opener) para contar exatamente como o Painel de Estatísticas conta, sem recalcular aqui.
-                        const resolvidas = theme.features.map(f => ({ properties: propriedadesResolvidasDaCamada(theme, f), geometry: f && f.geometry, rawFeature: f }));
-                        // filtro do modelo: aplicado ANTES do teto de segurança, para não descartar por engano
-                        // uma feição que casaria com o filtro só porque veio depois das primeiras LIMITE_FEICOES_GRAFICO
+                        if (!_cachedThemeFeaturesResolvidas || _cachedThemeFeaturesId !== String(themeId) || _cachedThemeFeaturesLen !== theme.features.length) {
+                            _cachedThemeFeaturesResolvidas = theme.features.map(f => ({ properties: propriedadesResolvidasDaCamada(theme, f), geometry: f && f.geometry, rawFeature: f }));
+                            _cachedThemeFeaturesId = String(themeId);
+                            _cachedThemeFeaturesLen = theme.features.length;
+                        }
+                        const resolvidas = _cachedThemeFeaturesResolvidas;
                         const fieldIndex = {};
                         (reportPayload.formFields || []).forEach(f => { if (f && f.id) fieldIndex[f.id] = f; });
                         const filtradas = temFiltro ? LayerFilter.filtrarFeatures(resolvidas, filtro, fieldIndex) : resolvidas;
@@ -1740,6 +1941,192 @@
                 }
             } catch (e) { /* sem janela de origem: fica sem dados */ }
             return [];
+        }
+
+        /**
+         * Estatísticas comparativas completas do filtro ativo em relação ao total da camada:
+         * - Contagem e % do universo amostral
+         * - Área somada e média (polígonos) vs média geral da camada e % da área
+         * - Extensão somada e média (linhas)
+         * - Totais e médias de campos numéricos / financeiros
+         * - Distribuição das categorias dos gráficos do dashboard dentro do filtro
+         */
+        function calcularEstatisticasComparativasFiltro() {
+            const filtro = (tplAtual && tplAtual.filtro) || (reportPayload && reportPayload.template && reportPayload.template.filtro);
+            const filtroLimpo = LayerFilter ? LayerFilter.normalizeFiltro(filtro) : null;
+            const temFiltro = !!(filtroLimpo && LayerFilter && !LayerFilter.filtroVazio(filtroLimpo));
+            const todas = resolveFeatureListFull(true);
+            const filtradas = resolveFeatureListFull();
+            const totalGeral = typeof ultimoTotalSemFiltroGeral === 'number' && ultimoTotalSemFiltroGeral > 0 ? ultimoTotalSemFiltroGeral : (todas.length || filtradas.length);
+            const totalFiltrado = filtradas.length;
+            const pctFiltrado = totalGeral > 0 ? (totalFiltrado / totalGeral * 100) : 100;
+
+            const fieldIndex = {};
+            (reportPayload.formFields || []).forEach(f => { if (f && f.id) fieldIndex[f.id] = f; });
+            const descricaoFiltro = temFiltro ? LayerFilter.descreverFiltro(filtroLimpo, fieldIndex) : '';
+
+            // 1. Áreas e Extensões
+            let areaTotalGeral = 0, feicoesComAreaGeral = 0;
+            let areaTotalFiltrada = 0, feicoesComAreaFiltrada = 0;
+            let compTotalGeralKm = 0, feicoesComLinhaGeral = 0;
+            let compTotalFiltradoKm = 0, feicoesComLinhaFiltrado = 0;
+
+            const extrairGeom = (f) => {
+                let a = (typeof f._areaM2 === 'number') ? f._areaM2 : 0;
+                let km = (typeof f._compKm === 'number') ? f._compKm : 0;
+                if (!a && !km && f && f.geometry) {
+                    const gType = f.geometry.type;
+                    if (gType === 'Polygon' || gType === 'MultiPolygon') {
+                        try { if (typeof turf !== 'undefined' && turf.area) a = turf.area(f.geometry); } catch (e) {}
+                    } else if (gType === 'LineString' || gType === 'MultiLineString') {
+                        try { if (typeof turf !== 'undefined' && turf.length) km = turf.length(f.geometry, { units: 'kilometers' }); } catch (e) {}
+                    }
+                }
+                if (!a && f && f.properties) {
+                    const p = f.properties;
+                    const valArea = p['area_m2'] || p['area'] || p['area_lote'] || p['area_terreno'] || p['area_construida'];
+                    if (valArea != null) {
+                        const num = typeof valArea === 'number' ? valArea : parseFloat(String(valArea).replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, ''));
+                        if (!isNaN(num) && num > 0) a = num;
+                    }
+                }
+                f._areaM2 = a;
+                f._compKm = km;
+                return { a, km };
+            };
+
+            todas.forEach(f => {
+                const { a, km } = extrairGeom(f);
+                if (a > 0) { areaTotalGeral += a; feicoesComAreaGeral++; }
+                if (km > 0) { compTotalGeralKm += km; feicoesComLinhaGeral++; }
+            });
+
+            filtradas.forEach(f => {
+                const { a, km } = extrairGeom(f);
+                if (a > 0) { areaTotalFiltrada += a; feicoesComAreaFiltrada++; }
+                if (km > 0) { compTotalFiltradoKm += km; feicoesComLinhaFiltrado++; }
+            });
+
+            const areaMediaGeral = feicoesComAreaGeral > 0 ? (areaTotalGeral / feicoesComAreaGeral) : 0;
+            const areaMediaFiltrada = feicoesComAreaFiltrada > 0 ? (areaTotalFiltrada / feicoesComAreaFiltrada) : 0;
+            const diffAreaPct = areaMediaGeral > 0 ? ((areaMediaFiltrada - areaMediaGeral) / areaMediaGeral * 100) : 0;
+            const pctAreaTotal = areaTotalGeral > 0 ? (areaTotalFiltrada / areaTotalGeral * 100) : 100;
+
+            const compMediaGeralM = feicoesComLinhaGeral > 0 ? (compTotalGeralKm * 1000 / feicoesComLinhaGeral) : 0;
+            const compMediaFiltradoM = feicoesComLinhaFiltrado > 0 ? (compTotalFiltradoKm * 1000 / feicoesComLinhaFiltrado) : 0;
+            const pctCompTotal = compTotalGeralKm > 0 ? (compTotalFiltradoKm / compTotalGeralKm * 100) : 100;
+
+            // 2. Campos numéricos (moeda, números)
+            const campos = (reportPayload && reportPayload.formFields) || [];
+            const camposNum = campos.filter(c => ['currency', 'moeda', 'number', 'volume_m3'].includes(String(c.type || '').toLowerCase()));
+            const statsNumericos = [];
+
+            camposNum.forEach(c => {
+                let somaGeral = 0, nGeral = 0;
+                todas.forEach(f => {
+                    const raw = f.properties ? f.properties[c.id] : undefined;
+                    const num = typeof raw === 'number' ? raw : parseFloat(String(raw == null ? '' : raw).replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, ''));
+                    if (!isNaN(num) && num > 0) { somaGeral += num; nGeral++; }
+                });
+                let somaFiltrada = 0, nFiltrado = 0;
+                filtradas.forEach(f => {
+                    const raw = f.properties ? f.properties[c.id] : undefined;
+                    const num = typeof raw === 'number' ? raw : parseFloat(String(raw == null ? '' : raw).replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, ''));
+                    if (!isNaN(num) && num > 0) { somaFiltrada += num; nFiltrado++; }
+                });
+                if (somaGeral > 0 || somaFiltrada > 0) {
+                    const mediaGeral = nGeral > 0 ? (somaGeral / nGeral) : 0;
+                    const mediaFiltrada = nFiltrado > 0 ? (somaFiltrada / nFiltrado) : 0;
+                    const diffMedia = mediaGeral > 0 ? ((mediaFiltrada - mediaGeral) / mediaGeral * 100) : 0;
+                    const pctSoma = somaGeral > 0 ? (somaFiltrada / somaGeral * 100) : 0;
+                    statsNumericos.push({
+                        campo: c,
+                        label: c.label || c.name || c.id,
+                        ehMoeda: ['currency', 'moeda'].includes(String(c.type || '').toLowerCase()),
+                        somaGeral, somaFiltrada, pctSoma,
+                        mediaGeral, mediaFiltrada, diffMedia,
+                        nFiltrado, nGeral
+                    });
+                }
+            });
+
+            // 3. Distribuição de gráficos no filtro
+            const catalogo = (reportPayload && Array.isArray(reportPayload.charts)) ? reportPayload.charts : [];
+            const graficosStats = [];
+            catalogo.forEach(g => {
+                const agg = aggregateChart(g);
+                if (agg && agg.labels && agg.labels.length && agg.total > 0) {
+                    graficosStats.push({
+                        id: g.id,
+                        titulo: g.title || g.fieldLabel || 'Gráfico',
+                        labels: agg.labels,
+                        data: agg.data,
+                        cores: agg.cores,
+                        total: agg.total
+                    });
+                }
+            });
+
+            return {
+                temFiltro, descricaoFiltro,
+                totalFiltrado, totalGeral, pctFiltrado,
+                feicoesComAreaFiltrada, feicoesComAreaGeral,
+                areaTotalFiltrada, areaTotalGeral, pctAreaTotal,
+                areaMediaFiltrada, areaMediaGeral, diffAreaPct,
+                feicoesComLinhaFiltrado, feicoesComLinhaGeral,
+                compTotalFiltradoKm, compTotalGeralKm, pctCompTotal,
+                compMediaFiltradoM, compMediaGeralM,
+                statsNumericos, graficosStats
+            };
+        }
+
+        /** Seleciona automaticamente os campos principais do formulário para a tabela de feições. */
+        function selecionarCamposPrincipaisGeral(origemGraficoId) {
+            let bloco = tabelaBlocoGeral(origemGraficoId);
+            if (!bloco) {
+                gerarTabelaGeral(origemGraficoId);
+                bloco = tabelaBlocoGeral(origemGraficoId);
+            }
+            if (!bloco) return;
+            const campos = (reportPayload && reportPayload.formFields) || [];
+            const filtro = (tplAtual && tplAtual.filtro) || {};
+            const camposFiltro = new Set();
+            (filtro.grupos || []).forEach(g => (g.condicoes || []).forEach(c => { if (c.field) camposFiltro.add(c.field); }));
+
+            const escolhidos = [];
+            camposFiltro.forEach(fid => {
+                if (campos.some(c => c.id === fid) && !escolhidos.includes(fid)) escolhidos.push(fid);
+            });
+            campos.forEach(c => {
+                if (escolhidos.length >= 6) return;
+                if (!escolhidos.includes(c.id) && !['hidden', 'password', 'file', 'photo'].includes(String(c.type || '').toLowerCase())) {
+                    escolhidos.push(c.id);
+                }
+            });
+            bloco.colunas = escolhidos;
+            aplicarPesquisaGeral();
+            renderPainelPesquisaGeral();
+        }
+
+        function marcarTodasColunasGeral(origemGraficoId) {
+            let bloco = tabelaBlocoGeral(origemGraficoId);
+            if (!bloco) {
+                gerarTabelaGeral(origemGraficoId);
+                bloco = tabelaBlocoGeral(origemGraficoId);
+            }
+            if (!bloco) return;
+            const campos = (reportPayload && reportPayload.formFields) || [];
+            bloco.colunas = campos.map(c => c.id);
+            aplicarPesquisaGeral();
+            renderPainelPesquisaGeral();
+        }
+
+        function desmarcarTodasColunasGeral(origemGraficoId) {
+            let bloco = tabelaBlocoGeral(origemGraficoId);
+            if (!bloco) return;
+            bloco.colunas = [];
+            aplicarPesquisaGeral();
+            renderPainelPesquisaGeral();
         }
 
         /**
@@ -2047,10 +2434,15 @@
             if (checked) {
                 if (mapaBlocoGeral(origemGraficoId)) { aplicarPesquisaGeral(); return; }
                 if (!Array.isArray(tplAtual.blocos)) tplAtual.blocos = [];
+                const catalogo = (reportPayload && Array.isArray(reportPayload.charts)) ? reportPayload.charts : [];
+                const g = origemGraficoId ? catalogo.find(c => c.id === origemGraficoId) : null;
                 tplAtual.blocos.push({
                     id: 'b_mapa_' + (origemGraficoId || 'geral') + '_' + Date.now(), tipo: 'mapa_feicoes',
                     titulo: origemGraficoId ? ('Mapa — ' + tituloDoGrafico(origemGraficoId)) : 'Mapa das Feições',
-                    origemGraficoId: origemGraficoId || undefined, cor: '#0ea5e9', exibirContagem: true,
+                    origemGraficoId: origemGraficoId || undefined,
+                    agruparPorCampo: g ? g.fieldId : undefined,
+                    exibirLegendaCores: true,
+                    cor: '#0ea5e9', exibirContagem: true,
                     baseMap: 'osm', quadriculado: false, alturaPx: 260
                 });
             } else {
@@ -2230,6 +2622,7 @@
                     ${/^ortofoto:/.test(blocoMapa.baseMap || '') ? '<div style="color:#64748b;line-height:1.35;margin-bottom:3px">A ortofoto fica sobre o satélite, que preenche o que ela não cobre.</div>' : ''}
                     ${chkRowPesquisa('pp-mapa-grade-' + esc(chave), 'Quadriculado UTM', !!blocoMapa.quadriculado, `updateMapaFeicoesConfigGeral('quadriculado', this.checked${origemArg})`)}
                     ${chkRowPesquisa('pp-mapa-contagem-' + esc(chave), 'Mostrar contagem de feições em cada grupo', blocoMapa.exibirContagem !== false, `updateMapaFeicoesConfigGeral('exibirContagem', this.checked${origemArg})`)}
+                    ${chkRowPesquisa('pp-mapa-legenda-' + esc(chave), 'Exibir legenda de cores do dashboard', blocoMapa.exibirLegendaCores !== false, `updateMapaFeicoesConfigGeral('exibirLegendaCores', this.checked${origemArg})`)}
                     <div style="font-weight:700;margin:6px 0 2px">Aproveitamento na Folha A4</div>
                     <select onchange="updateMapaFeicoesConfigGeral('layoutPreenchimento', this.value${origemArg})" style="width:100%;margin-bottom:3px">
                         <option value="auto2" ${(blocoMapa.layoutPreenchimento || 'auto2') === 'auto2' ? 'selected' : ''}>2 mapas por folha (Preenchimento Completo)</option>
@@ -2241,6 +2634,14 @@
                     <div style="font-weight:700;margin:6px 0 2px">Agrupar mapas por campo</div>
                     <select onchange="updateMapaFeicoesConfigGeral('agruparPorCampo', this.value || undefined${origemArg})" style="width:100%;margin-bottom:3px">
                         <option value="">Nenhum (agrupar por proximidade)</option>
+                        ${(() => {
+                            const catalogo = (reportPayload && Array.isArray(reportPayload.charts)) ? reportPayload.charts : [];
+                            const g = blocoMapa.origemGraficoId ? catalogo.find(c => c.id === blocoMapa.origemGraficoId) : null;
+                            if (g && g.fieldId) {
+                                return `<option value="${esc(g.fieldId)}" ${blocoMapa.agruparPorCampo === g.fieldId ? 'selected' : ''}>★ ${esc(g.fieldLabel || g.title)} (mesma ordem do gráfico)</option>`;
+                            }
+                            return '';
+                        })()}
                         ${optsCampos(blocoMapa.agruparPorCampo || '')}
                     </select>
                     <div style="color:#64748b;line-height:1.35;margin-bottom:3px">Ex.: escolhendo "Loteamento", cada mapa reúne só as feições de UM loteamento (um mapa por valor); acima de ${LIMITE_GRUPOS_CAMPO} valores distintos, escolha outro campo.</div>
@@ -2274,7 +2675,13 @@
                             <option value="padrao" ${blocoTabela.densidade === 'padrao' ? 'selected' : ''}>Padrão (~20 lin/folha)</option>
                         </select>
                     </div>
-                    ${revelado ? `<div style="max-height:160px;overflow-y:auto;margin-top:5px">${colunasChecklistHtml(camposList, colunas, origemGraficoId)}</div>` : ''}
+                    ${revelado ? `
+                        <div style="display:flex;gap:4px;margin:4px 0">
+                            <button type="button" class="act" style="flex:1;padding:3px 4px;font-size:10px" onclick="selecionarCamposPrincipaisGeral(${origemGraficoId ? `'${esc(origemGraficoId)}'` : ''})" title="Seleciona até 6 campos principais do formulário">⚡ Principais</button>
+                            <button type="button" class="act" style="flex:1;padding:3px 4px;font-size:10px" onclick="marcarTodasColunasGeral(${origemGraficoId ? `'${esc(origemGraficoId)}'` : ''})">Todos</button>
+                            <button type="button" class="act" style="flex:1;padding:3px 4px;font-size:10px" onclick="desmarcarTodasColunasGeral(${origemGraficoId ? `'${esc(origemGraficoId)}'` : ''})">Limpar</button>
+                        </div>
+                        <div style="max-height:160px;overflow-y:auto;margin-top:5px">${colunasChecklistHtml(camposList, colunas, origemGraficoId)}</div>` : ''}
                 </div>
                 <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #cbd5e1">
                     <button type="button" class="act" onclick="toggleMapaFeicoesGeral(${blocoMapa ? 'false' : 'true'}${origemArg})">${blocoMapa ? 'Remover mapa' : 'Gerar mapa'}</button>
@@ -2331,11 +2738,60 @@
                     <button type="button" class="act" onclick="addFiltroCondicaoGeral(${gIdx})" style="padding:4px;font-size:10px;margin-top:2px">+ condição (e)</button>
                 </div>`).join('') : '<div style="color:#64748b;font-style:italic;margin-bottom:5px">Sem filtro: considera todas as feições da camada.</div>';
 
-            // contagem AO VIVO (sem precisar redesenhar a folha) do rascunho atual do filtro, para decidir se já aplica
+            // contagem e estatísticas AO VIVO (sem precisar redesenhar a folha) do rascunho atual do filtro
             const filtroLimpo = LayerFilter.normalizeFiltro(filtro);
             const temFiltroAtivo = !LayerFilter.filtroVazio(filtroLimpo);
-            const totalFiltrado = resolveFeatureListFull().length;
+            const statsLive = calcularEstatisticasComparativasFiltro();
+            const totalFiltrado = statsLive.totalFiltrado;
+            const totalCamada = statsLive.totalGeral;
+            const pctFiltrado = statsLive.pctFiltrado;
             const contagemHtml = `<div style="color:#64748b;margin:6px 0 4px">${totalFiltrado} feiç${totalFiltrado === 1 ? 'ão casa' : 'ões casam'} com o filtro atual${temFiltroAtivo ? '' : ' (sem filtro: todas)'}.</div>`;
+
+            let liveStatsPanelHtml = '';
+            if (temFiltroAtivo) {
+                liveStatsPanelHtml = `
+                    <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px;margin:6px 0;color:#f8fafc">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+                            <span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#f59e0b">Resumo do Filtro</span>
+                            <span style="font-size:9.5px;font-weight:700;background:rgba(245,158,11,0.2);color:#f59e0b;padding:1px 5px;border-radius:6px">${pctFiltrado.toFixed(1)}% do total</span>
+                        </div>
+                        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:3px">
+                            <span style="font-size:16px;font-weight:800;color:#fff">${MapTools.fmtNumber(totalFiltrado, 0)} <span style="font-size:10px;font-weight:400;color:#94a3b8">feições</span></span>
+                            <span style="font-size:10px;color:#94a3b8">de ${MapTools.fmtNumber(totalCamada, 0)} na camada</span>
+                        </div>
+                        <div style="width:100%;height:3px;background:#334155;border-radius:2px;overflow:hidden;margin-bottom:5px">
+                            <div style="width:${Math.min(100, Math.max(0, pctFiltrado))}%;height:100%;background:#f59e0b"></div>
+                        </div>`;
+
+                if (statsLive.feicoesComAreaFiltrada > 0 && statsLive.areaTotalFiltrada > 0) {
+                    const areaFiltradaTxt = statsLive.areaTotalFiltrada >= 10000 ? `${MapTools.fmtNumber(statsLive.areaTotalFiltrada / 10000, 2)} ha` : `${MapTools.fmtNumber(statsLive.areaTotalFiltrada, 2)} m²`;
+                    const areaMediaTxt = `${MapTools.fmtNumber(statsLive.areaMediaFiltrada, 2)} m²`;
+                    const diffTxt = statsLive.diffAreaPct !== 0 ? ` (${statsLive.diffAreaPct > 0 ? '+' : ''}${statsLive.diffAreaPct.toFixed(1)}% vs média geral)` : '';
+                    liveStatsPanelHtml += `
+                        <div style="border-top:1px solid #1e293b;padding-top:4px;margin-top:3px;font-size:9.5px;color:#cbd5e1;line-height:1.35">
+                            <div><b>Área Total:</b> ${areaFiltradaTxt} <span style="color:#94a3b8">(${statsLive.pctAreaTotal.toFixed(1)}%)</span></div>
+                            <div><b>Área Média:</b> ${areaMediaTxt}<span style="color:#f59e0b">${diffTxt}</span></div>
+                        </div>`;
+                } else if (statsLive.feicoesComLinhaFiltrado > 0 && statsLive.compTotalFiltradoKm > 0) {
+                    liveStatsPanelHtml += `
+                        <div style="border-top:1px solid #1e293b;padding-top:4px;margin-top:3px;font-size:9.5px;color:#cbd5e1;line-height:1.35">
+                            <div><b>Extensão:</b> ${MapTools.fmtNumber(statsLive.compTotalFiltradoKm, 2)} km <span style="color:#94a3b8">(${statsLive.pctCompTotal.toFixed(1)}%)</span></div>
+                        </div>`;
+                }
+
+                if (statsLive.statsNumericos && statsLive.statsNumericos.length) {
+                    const s0 = statsLive.statsNumericos[0];
+                    const prefix = s0.ehMoeda ? 'R$ ' : '';
+                    const diffTxt = s0.diffMedia !== 0 ? ` (${s0.diffMedia > 0 ? '+' : ''}${s0.diffMedia.toFixed(1)}% vs geral)` : '';
+                    liveStatsPanelHtml += `
+                        <div style="border-top:1px solid #1e293b;padding-top:4px;margin-top:3px;font-size:9.5px;color:#cbd5e1;line-height:1.35">
+                            <div class="truncate"><b>${escapeHtml(s0.label)}:</b> ${prefix}${MapTools.fmtNumber(s0.somaFiltrada, 2)}</div>
+                            <div><b>Média no filtro:</b> ${prefix}${MapTools.fmtNumber(s0.mediaFiltrada, 2)}<span style="color:#f59e0b">${diffTxt}</span></div>
+                        </div>`;
+                }
+
+                liveStatsPanelHtml += `</div>`;
+            }
 
             // cada gráfico marcado vira seu próprio card, com o passo a passo de tabela/mapa dedicados a ele
             const graficosHtml = catalogo.length ? catalogo.map(g => {
@@ -2362,6 +2818,7 @@
                     ${gruposHtml}
                     <button type="button" class="act" onclick="addFiltroGrupoGeral()">+ grupo (ou)</button>
                     ${contagemHtml}
+                    ${liveStatsPanelHtml}
                     <button type="button" class="act primary" onclick="aplicarFiltroGeral()">${blocoTabela ? 'Aplicar filtro (atualizar tabela)' : 'Aplicar filtro'}</button>
                     ${passosTabelaMapaHtml(camposList, undefined)}
                     <div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.12)">
@@ -2531,15 +2988,15 @@
                     </div>`;
             }
 
-            // 1. Cálculo real de Áreas (polígonos) e Extensões (linhas)
+            // 1. Cálculo real de Áreas (polígonos) e Extensões (linhas) - com memoização por feição
             let areaTotalM2 = 0;
             let feicoesComArea = 0;
             let compTotalKm = 0;
             let feicoesComLinha = 0;
 
             features.forEach(f => {
-                let a = 0;
-                if (f && f.geometry) {
+                let a = (typeof f._areaM2 === 'number') ? f._areaM2 : 0;
+                if (!a && f && f.geometry) {
                     const gType = f.geometry.type;
                     if (gType === 'Polygon' || gType === 'MultiPolygon') {
                         try {
@@ -2568,22 +3025,28 @@
                         if (!isNaN(num) && num > 0) a = num;
                     }
                 }
+                f._areaM2 = a;
                 if (a > 0) {
                     areaTotalM2 += a;
                     feicoesComArea++;
                 }
             });
 
-            // 2. Busca campos numéricos financeiros/quantitativos adicionais no schema
+            // 2. Busca campos numéricos financeiros/quantitativos adicionais no schema (em uma única passada direta)
             const campos = (reportPayload && reportPayload.formFields) || [];
             let campoExtraNumerico = null;
             let aggExtraNumerico = null;
             const camposNum = campos.filter(c => ['currency', 'moeda', 'number', 'volume_m3'].includes(String(c.type || '').toLowerCase()));
             for (const c of camposNum) {
-                const a = agregacaoNumericaCampo(c.id);
-                if (a && a.soma > 0) {
+                let soma = 0, n = 0;
+                features.forEach(f => {
+                    const raw = f.properties ? f.properties[c.id] : undefined;
+                    const num = typeof raw === 'number' ? raw : parseFloat(String(raw == null ? '' : raw).replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, ''));
+                    if (!isNaN(num) && num > 0) { soma += num; n++; }
+                });
+                if (soma > 0) {
                     campoExtraNumerico = c;
-                    aggExtraNumerico = a;
+                    aggExtraNumerico = { soma, media: n ? soma / n : 0, n };
                     break;
                 }
             }
@@ -2738,7 +3201,10 @@
                 return `
                     <div class="mb-4 page-break-avoid">
                         <div class="text-xs font-bold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1 mb-2.5"><span class="whitespace-pre-line">${tituloBase}</span></div>
-                        <div class="p-4 text-center text-slate-400 italic text-xs border border-dashed border-slate-300 rounded-lg bg-slate-50/60">Nenhuma coluna escolhida. Escolha os campos no construtor (card "Tabela de Feições").</div>
+                        <div class="p-4 text-center text-slate-400 italic text-xs border border-dashed border-slate-300 rounded-lg bg-slate-50/60 flex flex-col items-center justify-center gap-2">
+                            <div>Nenhuma coluna escolhida. Escolha os campos no construtor (card "Tabela de Feições").</div>
+                            <button type="button" class="no-print act" onclick="selecionarCamposPrincipaisGeral('${escapeHtml(bloco.origemGraficoId || '')}')" style="margin-top:2px;background:#0f172a;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600">⚡ Inserir colunas principais agora</button>
+                        </div>
                     </div>`;
             }
             const registros = resolveFeatureList();
@@ -2762,11 +3228,129 @@
             const largurasPadrao = calcularLargurasColunasPadrao(cols);
             const larguraPadrao = cols.length ? (94 / cols.length) : 94; // fallback uniforme
             const colgroupHtml = `<colgroup><col style="width:34px">${cols.map(c => `<col data-field-id="${escapeHtml(c.id)}" style="width:${(larguras[c.id] || largurasPadrao[c.id] || larguraPadrao).toFixed(2)}%">`).join('')}</colgroup>`;
-            const rowsHtml = registros.map((props, i) => `
-                <tr data-split-row class="${i % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}" style="page-break-inside: avoid;">
-                    <td class="${pyTd} ${textTd} border-r border-slate-200 text-center font-mono text-slate-400">${i + 1}</td>
-                    ${cols.map(c => `<td class="${pyTd} ${textTd} border-r last:border-r-0 border-slate-200 whitespace-normal break-words text-slate-700">${escapeHtml(FieldFormatter.toText(props[c.id], c.campo))}</td>`).join('')}
-                </tr>`);
+            const catalogo = (reportPayload && Array.isArray(reportPayload.charts)) ? reportPayload.charts : [];
+            const gOrigem = bloco.origemGraficoId ? catalogo.find(c => c.id === bloco.origemGraficoId) : null;
+            let rowsHtml = [];
+
+            if (gOrigem && gOrigem.fieldId) {
+                const agg = aggregateChart(gOrigem);
+                const campoGId = gOrigem.fieldId;
+                const labels = (agg && agg.labels && agg.labels.length) ? agg.labels : [];
+                const cores = (agg && agg.cores) || {};
+
+                // Agrupa registros pelas categorias na mesma sequência do gráfico
+                const gruposPorCat = new Map();
+                labels.forEach(l => gruposPorCat.set(String(l).trim().toLowerCase(), { rotulo: l, registros: [] }));
+                const outrosRegistros = [];
+
+                registros.forEach(props => {
+                    const val = props && props[campoGId] !== undefined && props[campoGId] !== null ? String(props[campoGId]).trim().toLowerCase() : '';
+                    if (val && gruposPorCat.has(val)) {
+                        gruposPorCat.get(val).registros.push(props);
+                    } else {
+                        outrosRegistros.push(props);
+                    }
+                });
+
+                let numGlobal = 0;
+                labels.forEach((l, li) => {
+                    const grupo = gruposPorCat.get(String(l).trim().toLowerCase());
+                    if (!grupo || !grupo.registros.length) return;
+                    const cor = cores[l] || CHART_COLORS[li % CHART_COLORS.length];
+                    const pct = ((grupo.registros.length / registros.length) * 100).toFixed(1);
+                    // Linha de agrupamento (estilo harmonioso do relatório individual)
+                    rowsHtml.push(`
+                        <tr data-split-row class="bg-slate-100/95 border-y-2 border-slate-300 font-bold text-slate-800" style="page-break-inside: avoid;">
+                            <td colspan="${cols.length + 1}" class="${pyTh} text-[9.5px] uppercase tracking-wider text-slate-700">
+                                <div class="flex items-center justify-between">
+                                    <span class="inline-flex items-center gap-1.5 font-bold">
+                                        <span class="inline-block w-2.5 h-2.5 rounded-xs border border-slate-300 shadow-2xs flex-none" style="background:${cor}"></span>
+                                        <span>${escapeHtml(l)}</span>
+                                    </span>
+                                    <span class="font-mono text-slate-600 font-bold text-[9px]">${grupo.registros.length} feiç${grupo.registros.length === 1 ? 'ão' : 'ões'} (${pct}%)</span>
+                                </div>
+                            </td>
+                        </tr>`);
+                    grupo.registros.forEach((props, gi) => {
+                        numGlobal++;
+                        rowsHtml.push(`
+                            <tr data-split-row class="${gi % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}" style="page-break-inside: avoid;">
+                                <td class="${pyTd} ${textTd} border-r border-slate-200 text-center font-mono text-slate-400">${numGlobal}</td>
+                                ${cols.map(c => `<td class="${pyTd} ${textTd} border-r last:border-r-0 border-slate-200 whitespace-normal break-words text-slate-700">${escapeHtml(FieldFormatter.toText(props[c.id], c.campo))}</td>`).join('')}
+                            </tr>`);
+                    });
+                });
+
+                if (outrosRegistros.length) {
+                    const pctOutros = ((outrosRegistros.length / registros.length) * 100).toFixed(1);
+                    rowsHtml.push(`
+                        <tr data-split-row class="bg-slate-100/95 border-y-2 border-slate-300 font-bold text-slate-800" style="page-break-inside: avoid;">
+                            <td colspan="${cols.length + 1}" class="${pyTh} text-[9.5px] uppercase tracking-wider text-slate-700">
+                                <div class="flex items-center justify-between">
+                                    <span class="inline-flex items-center gap-1.5 font-bold">
+                                        <span class="inline-block w-2.5 h-2.5 rounded-xs border border-slate-300 shadow-2xs flex-none bg-slate-400"></span>
+                                        <span>Outros / Não informado</span>
+                                    </span>
+                                    <span class="font-mono text-slate-600 font-bold text-[9px]">${outrosRegistros.length} feiç${outrosRegistros.length === 1 ? 'ão' : 'ões'} (${pctOutros}%)</span>
+                                </div>
+                            </td>
+                        </tr>`);
+                    outrosRegistros.forEach((props, gi) => {
+                        numGlobal++;
+                        rowsHtml.push(`
+                            <tr data-split-row class="${gi % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}" style="page-break-inside: avoid;">
+                                <td class="${pyTd} ${textTd} border-r border-slate-200 text-center font-mono text-slate-400">${numGlobal}</td>
+                                ${cols.map(c => `<td class="${pyTd} ${textTd} border-r last:border-r-0 border-slate-200 whitespace-normal break-words text-slate-700">${escapeHtml(FieldFormatter.toText(props[c.id], c.campo))}</td>`).join('')}
+                            </tr>`);
+                    });
+                }
+
+                // Linha de Total Geral ao final
+                rowsHtml.push(`
+                    <tr data-split-row class="bg-slate-100 border-t-2 border-slate-400 font-bold text-slate-900" style="page-break-inside: avoid;">
+                        <td class="${pyTd} ${textTd} text-center font-mono font-bold">Total</td>
+                        <td colspan="${cols.length}" class="${pyTd} ${textTd}">
+                            <div class="flex items-center justify-between font-bold">
+                                <span>Total Geral</span>
+                                <span class="font-mono">${registros.length} feições (100%)</span>
+                            </div>
+                        </td>
+                    </tr>`);
+            } else {
+                rowsHtml = registros.map((props, i) => `
+                    <tr data-split-row class="${i % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}" style="page-break-inside: avoid;">
+                        <td class="${pyTd} ${textTd} border-r border-slate-200 text-center font-mono text-slate-400">${i + 1}</td>
+                        ${cols.map(c => `<td class="${pyTd} ${textTd} border-r last:border-r-0 border-slate-200 whitespace-normal break-words text-slate-700">${escapeHtml(FieldFormatter.toText(props[c.id], c.campo))}</td>`).join('')}
+                    </tr>`);
+
+                // Linha de Total Geral ao final da tabela geral
+                const totaisCols = cols.map(c => {
+                    const tipo = String((c.campo && c.campo.type) || '').toLowerCase();
+                    if (['currency', 'moeda', 'number', 'volume_m3'].includes(tipo)) {
+                        let s = 0, n = 0;
+                        registros.forEach(p => {
+                            const raw = p ? p[c.id] : undefined;
+                            const num = typeof raw === 'number' ? raw : parseFloat(String(raw == null ? '' : raw).replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, ''));
+                            if (!isNaN(num)) { s += num; n++; }
+                        });
+                        const ehMoeda = ['currency', 'moeda'].includes(tipo);
+                        const prefix = ehMoeda ? 'R$ ' : '';
+                        const med = n > 0 ? (s / n) : 0;
+                        return `<span class="block font-mono text-[9px] font-bold">Total: ${prefix}${MapTools.fmtNumber(s, 2)}</span><span class="block font-mono text-[8.5px] text-slate-500 font-normal">Média: ${prefix}${MapTools.fmtNumber(med, 2)}</span>`;
+                    }
+                    return '';
+                });
+                const temTotalCol = totaisCols.some(t => !!t);
+
+                rowsHtml.push(`
+                    <tr class="tf-total-row bg-slate-100 border-t-2 border-slate-400 font-bold text-slate-900" style="page-break-inside: avoid;">
+                        <td class="${pyTd} ${textTd} text-center font-mono font-bold">Total</td>
+                        ${temTotalCol 
+                            ? cols.map((c, ci) => `<td class="${pyTd} ${textTd} border-r last:border-r-0 border-slate-200">${totaisCols[ci] || (ci === 0 ? `<span class="font-bold">${registros.length} feições (100%)</span>` : '')}</td>`).join('')
+                            : `<td colspan="${cols.length}" class="${pyTd} ${textTd}"><div class="flex items-center justify-between font-bold"><span>Total Geral</span><span class="font-mono">${registros.length} feições (100%)</span></div></td>`
+                        }
+                    </tr>`);
+            }
             const theadHtml = `<thead><tr class="bg-slate-100 border-b-2 border-slate-300 text-slate-700">
                 <th class="${pyTh} ${textTh} font-bold uppercase border-r border-slate-200 text-center">#</th>
                 ${cols.map(c => `<th class="relative ${pyTh} ${textTh} font-bold uppercase border-r last:border-r-0 border-slate-200 whitespace-normal break-words">${escapeHtml(c.label)}<div class="tf-col-resize no-print" data-bloco-id="${escapeHtml(bloco.id)}" data-field-id="${escapeHtml(c.id)}" title="Arraste para ajustar a largura da coluna"></div></th>`).join('')}
@@ -2846,17 +3430,35 @@
          * @param {Array<string|undefined>} valores um valor por registro, na mesma ordem/índice dos registros
          * @returns {Array<{valor:string, idxs:number[]}>}
          */
-        function agruparPorValorCampoMapaFeicoes(valores) {
+        function agruparPorValorCampoMapaFeicoes(valores, ordemPersonalizada) {
             const grupos = new Map();
             (valores || []).forEach((v, i) => {
-                const chave = (v === undefined || v === null || String(v).trim() === '') ? '' : String(v);
+                const chave = (v === undefined || v === null || String(v).trim() === '') ? '' : String(v).trim();
                 if (!grupos.has(chave)) grupos.set(chave, []);
                 grupos.get(chave).push(i);
             });
-            const chaves = Array.from(grupos.keys()).sort((a, b) => {
-                if (a === '' || b === '') return a === b ? 0 : (a === '' ? 1 : -1); // vazio por último
-                return a.localeCompare(b, 'pt-BR', { sensitivity: 'base', numeric: true });
-            });
+            const chaves = Array.from(grupos.keys());
+            if (Array.isArray(ordemPersonalizada) && ordemPersonalizada.length) {
+                const mapPos = new Map();
+                ordemPersonalizada.forEach((cat, idx) => {
+                    const norm = String(cat || '').trim().toLowerCase();
+                    if (!mapPos.has(norm)) mapPos.set(norm, idx);
+                });
+                chaves.sort((a, b) => {
+                    const normA = a.toLowerCase();
+                    const normB = b.toLowerCase();
+                    const posA = mapPos.has(normA) ? mapPos.get(normA) : 9999;
+                    const posB = mapPos.has(normB) ? mapPos.get(normB) : 9999;
+                    if (posA !== posB) return posA - posB;
+                    if (a === '' || b === '') return a === b ? 0 : (a === '' ? 1 : -1);
+                    return a.localeCompare(b, 'pt-BR', { sensitivity: 'base', numeric: true });
+                });
+            } else {
+                chaves.sort((a, b) => {
+                    if (a === '' || b === '') return a === b ? 0 : (a === '' ? 1 : -1); // vazio por último
+                    return a.localeCompare(b, 'pt-BR', { sensitivity: 'base', numeric: true });
+                });
+            }
             return chaves.map(chave => ({ valor: chave === '' ? 'Não informado' : chave, idxs: grupos.get(chave) }));
         }
 
@@ -2919,14 +3521,42 @@
             alturaPx = Math.max(120, Math.min(850, Math.round(alturaPx)));
             const centros = registros.map(r => MapTools.bboxCenter(MapTools.geometryBBox(r.geometry)) || [0, 0]);
 
-            // agrupar por campo (ex.: um mapa por Loteamento) tem prioridade; dentro de cada valor, ainda pode
+            // agrupar por campo (ex.: um mapa por Fase da Investigação / Loteamento) tem prioridade; dentro de cada valor, ainda pode
             // precisar de mais de um mapa (muitas feições no mesmo valor) — sub-divide por proximidade nesse caso.
-            // sem agrupar por campo: zoom automático (cada mapa se ajusta ao seu grupo) ou zoom FIXO definido pelo
-            // usuário (o sistema "ladrilha" a área inteira no mesmo zoom, criando quantos mapas forem precisos)
+            const catalogo = (reportPayload && Array.isArray(reportPayload.charts)) ? reportPayload.charts : [];
+            const gOrigem = bloco.origemGraficoId ? catalogo.find(c => c.id === bloco.origemGraficoId) : (campoAgrupador ? catalogo.find(c => c.fieldId === campoAgrupador.id) : null);
+            let ordemGrafico = null;
+            let legendaDashboardHtml = '';
+            if (gOrigem) {
+                const agg = aggregateChart(gOrigem);
+                if (agg && Array.isArray(agg.labels) && agg.labels.length) {
+                    ordemGrafico = agg.labels;
+                    if (bloco.exibirLegendaCores !== false) {
+                        const totalG = agg.total || registros.length;
+                        legendaDashboardHtml = `
+                            <div class="mb-2.5 p-2 bg-slate-50 border border-slate-200 rounded-lg flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px]">
+                                <span class="font-bold text-slate-700 uppercase tracking-wider text-[9.5px]">${escapeHtml(gOrigem.title || gOrigem.fieldLabel || 'Legenda do Dashboard')}:</span>
+                                ${agg.labels.map((l, li) => {
+                                    const corL = (agg.cores && agg.cores[l]) || CHART_COLORS[li % CHART_COLORS.length];
+                                    const qtdL = agg.data[li] || 0;
+                                    const pctL = totalG ? ((qtdL / totalG) * 100).toFixed(1) : 0;
+                                    return `
+                                        <span class="inline-flex items-center gap-1 font-medium text-slate-800">
+                                            <span class="inline-block w-2.5 h-2.5 rounded-xs border border-slate-300 shadow-2xs flex-none" style="background:${corL}"></span>
+                                            <span>${escapeHtml(l)}</span>
+                                            <span class="text-slate-500 font-mono text-[9.5px]">(${qtdL} • ${pctL}%)</span>
+                                        </span>
+                                    `;
+                                }).join('')}
+                            </div>`;
+                    }
+                }
+            }
+
             let grupos, centrosFixos = null, legendas = null;
             if (campoAgrupador) {
                 const valores = registros.map(r => r.properties ? r.properties[campoAgrupador.id] : undefined);
-                const porValor = agruparPorValorCampoMapaFeicoes(valores);
+                const porValor = agruparPorValorCampoMapaFeicoes(valores, ordemGrafico);
                 const gruposFinais = [];
                 const legendasFinais = [];
                 porValor.forEach(g => {
@@ -2982,13 +3612,11 @@
                         <span class="whitespace-pre-line">${tituloBase}${isFirst ? '' : ' (continuação)'}</span>
                         <span class="text-[10px] font-mono text-slate-500 normal-case">${escapeHtml(meta)}</span>
                     </div>
+                    ${isFirst && legendaDashboardHtml ? legendaDashboardHtml : ''}
                     ${rows.join('')}
                 </div>`;
-            // altura de cada mini-mapa já é CONHECIDA (é a altura definida no bloco, não algo pra medir no DOM) —
-            // um Leaflet dentro de uma área escondida pra medição não tem tamanho real ainda, e medir dava um valor
-            // errado (o mapa "esticava" na folha de verdade sem a paginação prever isso e quebrar a página).
             const alturaLinha = alturaPx + (exibirContagem ? 20 : 0) + (legendas ? 20 : 0) + 16;
-            return { split: { rowsHtml, chunkHtml, rowHeightsFixas: grupos.map(() => alturaLinha), overheadFixo: 42 } };
+            return { split: { rowsHtml, chunkHtml, rowHeightsFixas: grupos.map(() => alturaLinha), overheadFixo: 42 + (legendaDashboardHtml ? 40 : 0) } };
         }
 
         const TILES_MAPA_FEICOES = {
@@ -3386,9 +4014,34 @@
             }
         };
 
+        function getHideFreeTextKey(blocoId) {
+            const tid = (renderArgs && renderArgs.tpl && renderArgs.tpl.id) || (renderArgs && renderArgs.templateId) || (reportPayload && reportPayload.templateId) || 'default';
+            const fid = (renderArgs && renderArgs.featureId) || (reportPayload && reportPayload.featureId) || (reportPayload && reportPayload.featureKey) || 'default';
+            return 'rpt_hidden_ftext_' + tid + '_' + fid + '_' + (blocoId || '0');
+        }
+
+        window.isFreeTextHidden = function(blocoId) {
+            try {
+                return localStorage.getItem(getHideFreeTextKey(blocoId)) === '1';
+            } catch (e) { return false; }
+        };
+
+        window.toggleHideFreeText = function(blocoId) {
+            const hidden = window.isFreeTextHidden(blocoId);
+            try {
+                if (hidden) localStorage.removeItem(getHideFreeTextKey(blocoId));
+                else localStorage.setItem(getHideFreeTextKey(blocoId), '1');
+            } catch (e) {}
+            scheduleRepaginate();
+        };
+
         window.restoreHiddenFields = function() {
             try { localStorage.removeItem(getHiddenFieldsKey()); } catch (e) {}
             try { localStorage.removeItem(getHideMapKey()); } catch (e) {}
+            try {
+                const prefix = 'rpt_hidden_ftext_';
+                Object.keys(localStorage).forEach(k => { if (k.startsWith(prefix)) localStorage.removeItem(k); });
+            } catch (e) {}
             scheduleRepaginate();
             if (typeof renderMapToolsPanel === 'function') {
                 setTimeout(renderMapToolsPanel, 50);
@@ -3487,6 +4140,20 @@
 
                 case 'caixa_texto_livre':
                 case 'texto_livre':
+                    if (window.isFreeTextHidden && window.isFreeTextHidden(bloco.id || idx)) {
+                        return `
+                            <div class="no-print mb-3 p-2.5 bg-amber-50 dark:bg-amber-950/30 border border-dashed border-amber-300 dark:border-amber-700 rounded-lg flex items-center justify-between gap-2 text-xs text-amber-900 dark:text-amber-200">
+                                <div class="flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-[18px] text-amber-600 dark:text-amber-400">visibility_off</span>
+                                    <span><strong>Caixa de texto livre ocultada:</strong> ${(escapeHtml(bloco.titulo || 'Texto Livre')).replace(/\r?\n/g, ' ')}</span>
+                                </div>
+                                <button type="button" onclick="toggleHideFreeText('${bloco.id || idx}')" class="text-[10px] font-bold px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white cursor-pointer transition shadow-2xs flex items-center gap-1.5" title="Restaurar visualização da Caixa de Texto Livre">
+                                    <span class="material-symbols-outlined text-[13px]">visibility</span>
+                                    Exibir texto livre
+                                </button>
+                            </div>
+                        `;
+                    }
                     if (EDICAO) return FreeText.renderEditor(bloco, idx);
                     return Blocks.renderFreeTextBlock(bloco, idx, featureData);
 
@@ -3569,7 +4236,15 @@
             return { tplId: String(tplId), key: String(key), formId: (reportPayload && reportPayload.formId) || '' };
         }
 
-        const emPrevia = () => !!(reportPayload && reportPayload.preview);
+        const emPrevia = () => {
+            if (reportPayload && reportPayload.preview) return true;
+            try {
+                const p = new URLSearchParams(window.location.search);
+                return p.get('previa') === '1' || p.get('preview') === '1';
+            } catch (e) {
+                return false;
+            }
+        };
 
         async function loadMapAjustes() {
             if (emPrevia()) return null; // prévia: sempre o padrão do modelo
@@ -3797,12 +4472,14 @@
             config.referencia.ativo = false;
             const camadas = (reportPayload && Array.isArray(reportPayload.camadasMapa)) ? reportPayload.camadasMapa : [];
 
-            if (Array.isArray(camadas) && camadas.length > 0 && (!config.camadasLigadas || config.camadasLigadas.length === 0)) {
+            const modeloDefiniuCamadas = mapBloco && mapBloco.mapa && Array.isArray(mapBloco.mapa.camadasLigadas);
+            if (!modeloDefiniuCamadas && Array.isArray(camadas) && camadas.length > 0 && (!config.camadasLigadas || config.camadasLigadas.length === 0)) {
                 config.camadasLigadas = camadas.map(c => String(c.id));
             }
 
             try {
                 lastPontosKey = blocosKey(config);
+                lastMapCfgKey = JSON.stringify(config);
                 mapController = ReportMap.create({ L, MapTools, container: 'interactive-report-map', geometry, camadas, onMeasureState: () => renderMapToolsPanel(), onMedicaoCriada: (id) => abrirModalTipoArea(id), ortofotos: (reportPayload && Array.isArray(reportPayload.ortofotos)) ? reportPayload.ortofotos : [], config, onChange: onMapChange });
                 const wrapEl = document.getElementById('map-wrap');
                 if (wrapEl) {
@@ -4243,16 +4920,41 @@
             return s;
         }
 
+        let autoSaveAjustesTimer = null;
+        function scheduleAutoSaveAjustes() {
+            clearTimeout(autoSaveAjustesTimer);
+            autoSaveAjustesTimer = setTimeout(async () => {
+                if (!mapController) return;
+                try {
+                    await persistMapAjustes(snapshotCompleto());
+                    const status = document.getElementById('map-panel-status');
+                    if (status) {
+                        status.style.color = '#34d399';
+                        status.textContent = '✅ Ajustes protegidos e salvos automaticamente.';
+                    }
+                } catch(e) {}
+            }, 600);
+        }
+
         // ---------------- pontos nos vértices: tabela (com memorial) e repaginação
         function onMapChange(cfg) {
             scheduleEmissao();
-            if (mapController && cfg.alturaMm !== mapAlturaMm) { aplicarAlturaMapa(cfg.alturaMm); renderMapToolsPanel(); }
-            const key = blocosKey(cfg);
-            if (key === lastPontosKey) return;
-            lastPontosKey = key;
-            if (!mapController) return; // ainda montando
+            if (mapController && cfg.alturaMm !== mapAlturaMm) { aplicarAlturaMapa(cfg.alturaMm); }
+            if (!mapController) return;
+
+            // scheduleAutoSaveAjustes();
+
+            const cfgKey = JSON.stringify(cfg);
+            if (cfgKey === lastMapCfgKey) return;
+            lastMapCfgKey = cfgKey;
+
             renderMapToolsPanel();
-            scheduleRepaginate();
+
+            const key = blocosKey(cfg);
+            if (key !== lastPontosKey) {
+                lastPontosKey = key;
+                scheduleRepaginate();
+            }
         }
 
         // ---- altura do mapa na folha: arrastar a borda inferior, digitar em mm ou preencher o espaço livre da folha
@@ -4260,9 +4962,10 @@
             const tpl = renderArgs && renderArgs.tpl;
             const d = PageSize.dims(tpl && tpl.config_pagina);
             const m = (tpl && tpl.config_pagina && tpl.config_pagina.margens_mm) || { top: 15, bottom: 15 };
-            // sobra da folha depois do cabeçalho, do rodapé, das margens e da caixa de dimensões que vem embaixo do mapa
-            const px = d.heightPx - Math.round(((m.top || 0) + (m.bottom || 0)) * 3.78) - 135 - 42 - 110;
-            return Math.max(60, Math.floor(px / 3.78));
+            // Permite estender o mapa até o final útil da folha para preencher todo o espaço disponível
+            const margensPx = Math.round(((m.top || 0) + (m.bottom || 0)) * 3.78);
+            const px = d.heightPx - margensPx - 175;
+            return Math.max(60, Math.min(225, Math.floor(px / 3.78)));
         }
         function mapaAlturaLimitada(mm) { return Math.round(Math.min(mapaAlturaMaxMm(), Math.max(40, Number(mm) || 0))); }
         /** Nova altura (mm) que aproveita o espaço livre (px) no fim da folha; nunca fora de [40, max]. */
@@ -4734,7 +5437,7 @@
                 elementos: {},
                 medidas: { ativo: true, cor: '#065f46', lados: true, total: true, perimetro: true, estilo: { lados: {}, total: {}, perimetro: {} } },
                 medicoes: { aderencia: true },
-                rotulos: { ativo: false, campo: '', estilo: {} },
+                rotulos: { ativo: false, campo: '', cor: '#0f172a', estilo: {} },
                 pontos: { ativo: false, cor: '#dc2626', memorial: false, tabela: false, sistema: 'utm', estilo: {}, colConf: { ativo: false, tolM: 2, distLogM: 20, camadas: [] }, confrontantes: { ativo: false, ordem: [], textos: {} } },
                 legenda: { nomes: {}, ocultos: [] },
                 comparacaoArea: { ativo: false, campo: '' },
@@ -4757,6 +5460,28 @@
             const nisNota = (n) => '<span class="nis">' + [['n', '<b>N</b>', 'Negrito'], ['i', '<i>I</i>', 'Itálico'], ['s', '<u>S</u>', 'Sublinhado']].map(([k, l, tt]) => `<button type="button" title="${tt}" class="${n.estilo && n.estilo[k] ? 'on' : ''}" onclick="mapPanelNotaEstilo('${esc(n.id)}', '${k}')">${l}</button>`).join('') + '</span>';
             const nis = (alvo, grupo, e) => '<span class="nis">' + [['n', '<b>N</b>', 'Negrito'], ['i', '<i>I</i>', 'Itálico'], ['s', '<u>S</u>', 'Sublinhado']].map(([k, l, t]) => `<button type="button" title="${t}" class="${(e && e[k]) ? 'on' : ''}" onclick="mapPanelEstilo('${alvo}', '${grupo}', '${k}')">${l}</button>`).join('') + '</span>';
             const chkN = (id, label, checked, handler, disabled, nisHtml) => `<div class="rowx"><label class="row ${disabled ? 'off' : ''}" style="flex:1;min-width:0"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="${handler}"> ${label}</label>${nisHtml}</div>`;
+            const corRow = (grupo, rotulo, valor) => {
+                let corValida = valor;
+                if (!corValida || typeof corValida !== 'string' || !/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(corValida)) {
+                    if (grupo === 'rotulos') corValida = '#0f172a';
+                    else if (grupo === 'medicoes') corValida = '#2563eb';
+                    else if (grupo === 'pontos') corValida = '#dc2626';
+                    else if (grupo === 'medidas') corValida = '#065f46';
+                    else corValida = '#10b981';
+                }
+                return '<label class="row" title="A cor do texto ganha um contorno que contrasta, para ler sobre o satélite">' + rotulo + ' <input type="color" value="' + esc(corValida) + '" onchange="mapPanelCor(\'' + grupo + '\', this.value)" style="width:34px;height:22px;padding:0;border:1px solid rgba(255,255,255,0.18);margin-left:auto"></label>';
+            };
+            const tamanhoRow = (grupo, rotulo, valorAtual, min = 7, max = 22, def = 10) => {
+                const val = Number(valorAtual) || def;
+                return '<div class="rowx" style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin:3px 0">' +
+                    '<span style="font-size:11px;color:#cbd5e1">' + rotulo + '</span>' +
+                    '<div style="display:flex;align-items:center;gap:3px">' +
+                        '<button type="button" title="Diminuir texto" onclick="mapPanelTamanho(\'' + grupo + '\', ' + Math.max(min, val - 1) + ')" style="border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.08);color:#f8fafc;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;cursor:pointer">A-</button>' +
+                        '<span style="font-size:10.5px;font-family:monospace;min-width:24px;text-align:center;color:#38bdf8;font-weight:600">' + val + 'px</span>' +
+                        '<button type="button" title="Aumentar texto" onclick="mapPanelTamanho(\'' + grupo + '\', ' + Math.min(max, val + 1) + ')" style="border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.08);color:#f8fafc;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;cursor:pointer">A+</button>' +
+                    '</div>' +
+                '</div>';
+            };
             const estM = (cfg.medidas && cfg.medidas.estilo) || { lados: {}, total: {}, perimetro: {} };
             const estTodos = { n: ['lados', 'total', 'perimetro'].every(g => estM[g] && estM[g].n), i: ['lados', 'total', 'perimetro'].every(g => estM[g] && estM[g].i), s: ['lados', 'total', 'perimetro'].every(g => estM[g] && estM[g].s) };
             const cams = camadasDoPayload();
@@ -4791,7 +5516,7 @@
                 const s = cc.camadas.find(x => x.id === String(c.id));
                 const campos = c.campos || [];
                 const detalhe = s ? `
-                    <label class="row" style="color:#f1f5f9;margin-top:4px" title="Ruas: vale a feição mais próxima, do lado de fora do trecho, mesmo sem tocar nele"><input type="checkbox" ${s.logradouro ? 'checked' : ''} onchange="mapPanelColConfLog('${esc(c.id)}', this.checked)"> Camada de logradouros (rua à frente)</label>
+                    <label class="row" style="display:none"><input type="checkbox" ${s.logradouro ? 'checked' : ''} onchange="mapPanelColConfLog('${esc(c.id)}', this.checked)"> Camada de logradouros (rua à frente)</label>
                     ${campos.length ? `<div style="max-height:110px;overflow:auto;border-top:1px solid rgba(255,255,255,0.1);margin-top:4px;padding-top:4px">${campos.map((fl, j) => {
                         const tabNome = fl.tabTitle || abaDoCampo(fl) || getFieldTabName(c, fl) || '';
                         return `<label class="row" style="color:#cbd5e1;font-size:11px"><input type="checkbox" ${s.campos.indexOf(fl.k) >= 0 ? 'checked' : ''} onchange="mapPanelColConfCampo('${esc(c.id)}', ${j}, this.checked)"> <span style="flex:1">${esc(fl.l)}</span>${tabNome ? `<span style="font-size:9.5px;color:#94a3b8;padding:1px 5px;background:rgba(255,255,255,0.08);border-radius:3px;flex:none">Aba: ${esc(tabNome)}</span>` : ''}</label>`;
@@ -4801,7 +5526,9 @@
             const colConfHtml = `
                 ${chk('mp-pts-cc', 'Coluna "Confrontantes" na tabela de pontos', cc.ativo, "mapPanelColConf('ativo', this.checked)", !cfg.pontos.memorial || !cams.length || kind !== 'polygon')}
                 ${!cfg.pontos.memorial ? '<div style="color:#94a3b8;line-height:1.35;margin-bottom:3px">Ligue o memorial para usar esta coluna.</div>' : ''}
-                ${cc.ativo && cfg.pontos.memorial ? `<div style="color:#94a3b8;line-height:1.35;margin:2px 0 3px">Escolha as camadas e, em cada uma, os campos. Cada confrontante é ligado ao trecho entre os dois pontos (com os vértices do meio); um trecho pode ter vários. Sem ninguém, a célula fica em branco para você preencher (dois cliques).</div>
+                ${cc.ativo && cfg.pontos.memorial ? `<div style="color:#34d399;font-size:10.5px;line-height:1.35;margin:3px 0 4px;display:flex;align-items:center;gap:4px"><span>🏷️</span> Rótulos das feições confrontantes exibidos no mapa</div>
+                    ${corRow('rotulos', 'Cor dos rótulos no mapa', cfg.rotulos.cor)}
+                    <div style="color:#94a3b8;line-height:1.35;margin:2px 0 3px">Escolha as camadas e, em cada uma, os campos. A mesma informação da tabela é exibida no mapa para cada confrontante vizinho.</div>
                     ${colConfCams}
                     <div style="display:flex;gap:6px;margin-top:3px">
                         <label style="flex:1;font-size:10px;color:#94a3b8">Divisa até (m)<input type="number" min="0.5" max="20" step="0.5" value="${cc.tolM}" onchange="mapPanelColConf('tolM', Number(this.value))" style="width:100%;padding:3px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;background:#0f172a;color:#f8fafc"></label>
@@ -4816,7 +5543,6 @@
                         <button type="button" title="Descer" onclick="mapPanelConfMover('${esc(r.id)}', 1)" ${i === confRows.length - 1 ? 'disabled' : ''} style="border:0;background:rgba(255,255,255,0.08);color:#cbd5e1;border-radius:4px;padding:1px 5px;cursor:pointer">▼</button>
                     </div>`).join('')}</div>
                 ${((cfg.confrontantes && cfg.confrontantes.ordem && cfg.confrontantes.ordem.length) || (cfg.confrontantes && cfg.confrontantes.textos && Object.keys(cfg.confrontantes.textos).length)) ? '<button type="button" class="act" style="margin-top:4px" onclick="mapPanelConfReset()">Restaurar nomes e ordem</button>' : ''}` : '';
-            const corRow = (grupo, rotulo, valor) => '<label class="row" title="A cor do texto ganha um contorno que contrasta, para ler sobre o satélite">' + rotulo + ' <input type="color" value="' + esc(valor) + '" onchange="mapPanelCor(\'' + grupo + '\', this.value)" style="width:34px;height:22px;padding:0;border:1px solid rgba(255,255,255,0.18);margin-left:auto"></label>';
             const legItens = (mapController && mapController.legendItems) ? mapController.legendItems() : [];
             const ds = (mapController && mapController.drawState) ? mapController.drawState() : { ativo: false, modo: null, vertices: [] };
             const medRows = (mapController && mapController.medicaoRows) ? mapController.medicaoRows() : [];
@@ -4854,6 +5580,7 @@
                 '<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">' + btnFerr('ponto', 'Coordenadas do Ponto') + btnFerr('linha', 'Distância (m)') + btnFerr('area', 'Área (m²)') + '<button type="button" class="act" style="' + (consultaAberta ? 'background:#059669;color:#fff;border-color:#059669;' : '') + '" onclick="mapPanelConsulta()">Consultar Coordenadas</button></div>' +
                 chk('mp-med-adr', 'Aderência (gruda nos contornos)', cfg.medicoes.aderencia, "mapPanelMedicoes('aderencia', this.checked)") +
                 corRow('medicoes', 'Cor das medições (linhas, áreas, pontos e textos)', cfg.medicoes.cor) +
+                tamanhoRow('medicoes', 'Tamanho do texto das medições', (cfg.medicoes && cfg.medicoes.tamanho) || 10) +
                 dicaDesenho + consultaHtml + medRows.map(linhaMed).join('') +
                 (medRows.length ? '<button type="button" class="act" style="margin-top:5px" onclick="mapPanelMedLimpar()">Limpar medições</button>' : '') +
                 '<div style="color:#94a3b8;line-height:1.35;margin:4px 0">Dois cliques no valor, no mapa, editam o texto; arraste para mover; ↻ para girar.</div>' +
@@ -5142,8 +5869,23 @@
                         ${statusTxt[x.status] ? `<span style="color:#f59e0b;font-size:10px">${statusTxt[x.status]}</span>` : ''}
                     </label>`).join('')}</div>` : '';
 
+            const toggleAllBtnHtml = `
+                <div style="display:flex;align-items:center;justify-content:space-between;margin:5px 0 3px">
+                    <span style="font-weight:700;font-size:10.5px;color:#94a3b8">Imagens da série:</span>
+                    <div style="display:flex;gap:4px">
+                        <button type="button" class="act" onclick="mapPanelTemporalToggleAll(true)" title="Ativar todas as ortofotos e satélites" style="padding:2px 7px;font-size:10px;display:flex;align-items:center;gap:3px;color:#34d399;background:rgba(52,211,153,0.1);border-color:rgba(52,211,153,0.3)">
+                            <span class="material-symbols-outlined" style="font-size:13px">visibility</span> Ativar todas
+                        </button>
+                        <button type="button" class="act" onclick="mapPanelTemporalToggleAll(false)" title="Desativar todas as imagens" style="padding:2px 7px;font-size:10px;display:flex;align-items:center;gap:3px;color:#f87171;background:rgba(248,113,113,0.1);border-color:rgba(248,113,113,0.3)">
+                            <span class="material-symbols-outlined" style="font-size:13px">visibility_off</span> Desativar todas
+                        </button>
+                    </div>
+                </div>
+            `;
+
             const temporalHtml = !tc
                 ? `${chk('mp-temp', 'Análise temporal (uma imagem por data)', false, "mapPanelTemporal('ativo', this.checked)")}
+                   ${toggleAllBtnHtml}
                    ${satHistoricoHtml}`
                 : `${chk('mp-temp', 'Análise temporal (uma imagem por data)', tcfg.ativo, "mapPanelTemporal('ativo', this.checked)")}
                     <div style="display:flex;gap:4px;margin:3px 0">
@@ -5157,6 +5899,7 @@
                     </div>
                     ${chk('mp-temp-cont', 'Contorno da feição', tcfg.contorno, "mapPanelTemporal('contorno', this.checked)")}
                     ${chk('mp-temp-sync', 'Mover um quadro move todos', tcfg.sincronizar, "mapPanelTemporal('sincronizar', this.checked)")}
+                    ${toggleAllBtnHtml}
                     ${ortofotosLocaisHtml}
                     ${satHistoricoHtml}`;
             const ortofotosBase = (reportPayload && Array.isArray(reportPayload.ortofotos)) ? reportPayload.ortofotos : [];
@@ -5233,6 +5976,20 @@
                 </div>
             ` : '');
 
+            const previaBannerHtml = emPrevia() ? `
+                <div class="mp-previa-salvar-box" style="margin: 8px 0 12px; padding: 10px 12px; background: linear-gradient(135deg, rgba(16,185,129,0.18) 0%, rgba(5,150,105,0.08) 100%); border: 1px solid #10b981; border-radius: 8px;">
+                    <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#34d399;margin-bottom:3px">
+                        <span>🗺️</span> Padrão da Ficha Individual
+                    </div>
+                    <div style="font-size:11px;color:#cbd5e1;line-height:1.35;margin-bottom:8px">
+                        Ajuste abaixo as opções de visualização do mapa. Ao clicar em <b>Salvar como Padrão</b>, este layout será o ponto de partida quando qualquer usuário abrir a ficha cadastral no mapa.
+                    </div>
+                    <button type="button" class="act primary" onclick="salvarPadraoDoModelo()" style="width:100%;background:#059669;border-color:#059669;color:#ffffff;padding:7px 10px;font-weight:700;font-size:12px;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;box-shadow:0 2px 6px rgba(5,150,105,0.25)">
+                        <span>💾</span> Salvar como Padrão do Modelo
+                    </button>
+                </div>
+            ` : '';
+
             panel.innerHTML = `
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #e2e8f0" class="panel-header">
                     <strong style="font-size:13px" class="panel-header-title">Configurações do Mapa</strong>
@@ -5241,18 +5998,21 @@
                 <div style="padding:0 12px 12px">
                     ${mapHiddenCardHtml}
                     ${seletorMapasHtml}
-                    <h4 data-sec-h="destaque" class="${secH('destaque')}" onclick="mapPanelSecao('destaque')">Feição em destaque<span class="chev">&#9662;</span></h4><div data-sec="destaque" class="sec-body" style="display:${secD('destaque')}">
+                    ${previaBannerHtml}
+
+                    <h4 data-sec-h="destaque" class="${secH('destaque')} tema-feicoes" onclick="mapPanelSecao('destaque')">Configurações das Feições<span class="chev">&#9662;</span></h4><div data-sec="destaque" class="sec-body" style="display:${secD('destaque')}">
                     ${chk('mp-destaque', 'Destacar a feição', cfg.destaque.ativo, "mapPanelDestaque('ativo', this.checked)")}
                     ${chk('mp-esmaecer', 'Esmaecer o entorno', cfg.destaque.esmaecerEntorno, "mapPanelDestaque('esmaecerEntorno', this.checked)", kind !== 'polygon')}
                     ${cfg.destaque.esmaecerEntorno && kind === 'polygon' ? `<label class="row">Intensidade do esmaecimento <input type="range" id="mp-esmaecer-int" min="10" max="95" value="${Math.round(cfg.destaque.opacidadeEntorno * 100)}" oninput="mapPanelDestaque('opacidadeEntorno', this.value / 100)" style="flex:1"></label>` : ''}
                     <label class="row">Cor <input type="color" value="${esc(cfg.destaque.cor || '#10b981')}" oninput="mapPanelDestaque('cor', this.value)" style="width:34px;height:22px;padding:0;border:1px solid #cbd5e1"></label>
                     <label class="row">Preenchimento <input type="range" min="0" max="90" value="${Math.round(cfg.destaque.preenchimento * 100)}" oninput="mapPanelDestaque('preenchimento', this.value / 100)" style="flex:1"></label>
                     </div>
-                    <h4 data-sec-h="camadas" class="${secH('camadas')}" onclick="mapPanelSecao('camadas')">Camadas ativas no mapa<span class="chev">&#9662;</span></h4><div data-sec="camadas" class="sec-body" style="display:${secD('camadas')}">
+                    <h4 data-sec-h="camadas" class="${secH('camadas')} tema-feicoes" onclick="mapPanelSecao('camadas')">Camadas ativas no mapa<span class="chev">&#9662;</span></h4><div data-sec="camadas" class="sec-body" style="display:${secD('camadas')}">
                     ${camadasHtml}
                     ${legendaHtml}
                     </div>
-<h4 data-sec-h="elementos" class="${secH('elementos')}" onclick="mapPanelSecao('elementos')">Elementos do mapa<span class="chev">&#9662;</span></h4><div data-sec="elementos" class="sec-body" style="display:${secD('elementos')}">
+
+                    <h4 data-sec-h="elementos" class="${secH('elementos')} tema-cartografia" onclick="mapPanelSecao('elementos')">Elementos do mapa<span class="chev">&#9662;</span></h4><div data-sec="elementos" class="sec-body" style="display:${secD('elementos')}">
                     <div style="margin-bottom:8px">
                         <div style="font-weight:700;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">
                             <span>Altura do mapa na folha</span>
@@ -5272,19 +6032,19 @@
                         </div>
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px">
                             <button type="button" class="act" style="padding:2px 6px;font-size:10px;color:#94a3b8" onclick="mapPanelAlturaPadrao()">Padrão (85 mm)</button>
-                            <span style="font-size:10px;color:#64748b">Ctrl + roda = zoom</span>
+                            <span style="font-size:10px;color:#38bdf8;font-weight:600">${cfg.scrollZoom !== false ? 'Rolo = Zoom ativo' : 'Ctrl + rolo = Zoom'}</span>
                         </div>
                         <div style="color:#94a3b8;line-height:1.35;margin-top:4px">Ou arraste a borda de baixo do mapa, na folha. A largura acompanha a folha (máx. ${mapaAlturaMaxMm()} mm).</div>
                     </div>
+                    ${chk('mp-scroll-zoom', 'Zoom com a roda do mouse (scroll)', cfg.scrollZoom !== false, "mapPanelSet('scrollZoom', this.checked)")}
                     ${chk('mp-norte', 'Norte', cfg.norte, "mapPanelSet('norte', this.checked)")}
                     ${chk('mp-escala', 'Escala', cfg.escala, "mapPanelSet('escala', this.checked)")}
                     ${chk('mp-proj', 'Sistema de projeção', cfg.projecao, "mapPanelSet('projecao', this.checked)")}
                     <div style="color:#94a3b8;line-height:1.35;margin:3px 0">Arraste, no mapa, o norte, a escala (barra e texto), a projeção e a legenda para mudar de lugar.</div>
                     ${Object.keys(cfg.elementos).length ? '<button type="button" class="act" style="margin-bottom:6px" onclick="mapPanelElementosReset()">Restaurar posições</button>' : ''}
-                    ${rotulosHtml}
                     ${notasHtml}
                     </div>
-<h4 data-sec-h="base" class="${secH('base')}" onclick="mapPanelSecao('base')">Mapa base<span class="chev">&#9662;</span></h4><div data-sec="base" class="sec-body" style="display:${secD('base')}">
+                    <h4 data-sec-h="base" class="${secH('base')} tema-cartografia" onclick="mapPanelSecao('base')">Mapa base<span class="chev">&#9662;</span></h4><div data-sec="base" class="sec-body" style="display:${secD('base')}">
                     <select onchange="mapPanelSet('baseMap', this.value)" style="width:100%;padding:5px;border:1px solid rgba(255,255,255,0.18);border-radius:8px;background:#1e293b;color:#f8fafc">
                         <option value="osm" ${cfg.baseMap === 'osm' ? 'selected' : ''}>Ruas (OpenStreetMap)</option>
                         <option value="satelite" ${cfg.baseMap === 'satelite' ? 'selected' : ''}>Satélite</option>
@@ -5294,21 +6054,24 @@
                     ${/^ortofoto:/.test(cfg.baseMap) ? '<div style="color:#94a3b8;line-height:1.35;margin-top:3px">A ortofoto fica sobre o satélite, que preenche o que ela não cobre.</div>' : ''}
                     ${situacaoGradeHtml}
                     </div>
-<h4 data-sec-h="localizacao" class="${secH('localizacao')}" onclick="mapPanelSecao('localizacao')">Mapa de localização<span class="chev">&#9662;</span></h4><div data-sec="localizacao" class="sec-body" style="display:${secD('localizacao')}">
+                    <h4 data-sec-h="localizacao" class="${secH('localizacao')} tema-cartografia" onclick="mapPanelSecao('localizacao')">Mapa de localização<span class="chev">&#9662;</span></h4><div data-sec="localizacao" class="sec-body" style="display:${secD('localizacao')}">
                     ${localizacaoHtml}
                     </div>
-<h4 data-sec-h="medidas" class="${secH('medidas')}" onclick="mapPanelSecao('medidas')">Medições na feição<span class="chev">&#9662;</span></h4><div data-sec="medidas" class="sec-body" style="display:${secD('medidas')}">
+
+                    <h4 data-sec-h="medidas" class="${secH('medidas')} tema-geometria" onclick="mapPanelSecao('medidas')">Medições na feição<span class="chev">&#9662;</span></h4><div data-sec="medidas" class="sec-body" style="display:${secD('medidas')}">
                     ${chk('mp-med', 'Mostrar medidas no mapa', cfg.medidas.ativo, "mapPanelMedidas('ativo', this.checked)")}
                     <span style="display:none">${nis('medidas', 'todos', estTodos)}</span>
                     ${corRow('medidas', 'Cor dos textos das medidas', cfg.medidas.cor)}
+                    ${tamanhoRow('medidas', 'Tamanho do texto das medidas', (cfg.medidas && cfg.medidas.tamanho) || 10)}
                     ${chkN('mp-med-lados', kind === 'line' ? 'Trechos' : 'Lados', cfg.medidas.lados, "mapPanelMedidas('lados', this.checked)", kind === 'point' || (mapController ? mapController.ladosOmitidos : false), nis('medidas', 'lados', estM.lados))}
                     ${chkN('mp-med-total', kind === 'polygon' ? 'Área' : (kind === 'line' ? 'Comprimento total' : 'Coordenada'), cfg.medidas.total, "mapPanelMedidas('total', this.checked)", false, nis('medidas', 'total', estM.total))}
                     ${chkN('mp-med-perim', 'Perímetro', cfg.medidas.perimetro, "mapPanelMedidas('perimetro', this.checked)", kind !== 'polygon', nis('medidas', 'perimetro', estM.perimetro))}
                     <div style="color:#94a3b8;line-height:1.35;margin:3px 0 4px">Os textos já saem alinhados às arestas. Dê <b>dois cliques</b> numa medida para editar o texto (vazio restaura o calculado); arraste para mudar de lugar; use o ícone ↻ (ao passar o mouse) para girar, e dois cliques nele voltam ao alinhamento automático.${(mapController && mapController.ladosOmitidos) ? ' <span style="color:#b45309">Mais de 80 lados: rótulos dos lados omitidos.</span>' : ''}</div>
                     <button type="button" class="act" onclick="mapPanelResetMedidas()">Restaurar medidas calculadas</button>
                     </div>
-                    <h4 data-sec-h="pontos" class="${secH('pontos')}" onclick="mapPanelSecao('pontos')">Pontos nos vértices<span class="chev">&#9662;</span></h4><div data-sec="pontos" class="sec-body" style="display:${secD('pontos')}">
+                    <h4 data-sec-h="pontos" class="${secH('pontos')} tema-geometria" onclick="mapPanelSecao('pontos')">Pontos nos vértices<span class="chev">&#9662;</span></h4><div data-sec="pontos" class="sec-body" style="display:${secD('pontos')}">
                     ${corRow('pontos', 'Cor dos pontos e dos nomes', cfg.pontos.cor)}
+                    ${tamanhoRow('pontos', 'Tamanho dos pontos e confrontantes', (cfg.pontos && cfg.pontos.tamanho) || 10)}
                     ${chkN('mp-pts', 'Marcar pontos nos vértices', cfg.pontos.ativo, "mapPanelPontos('ativo', this.checked)", mapController ? mapController.vertexCount === 0 : false, nis('pontos', '', cfg.pontos.estilo))}
                     <div style="color:#94a3b8;line-height:1.35;margin:2px 0 4px">Clique num vértice (círculo branco) para marcar. O nome do ponto pode ser arrastado, girado (ícone ↻) e renomeado com dois cliques. A tabela sai logo abaixo do mapa; dois cliques em qualquer texto dela para editar.${(mapController && mapController.verticesOmitidos) ? ' <span style="color:#b45309">Mais de 400 vértices: marcadores omitidos.</span>' : ''}</div>
                     <select onchange="mapPanelPontos('sistema', this.value)" style="width:100%;padding:5px;border:1px solid rgba(255,255,255,0.18);border-radius:8px;background:#1e293b;color:#f8fafc;margin-bottom:3px">
@@ -5330,21 +6093,30 @@
                             <button type="button" title="Remover" onclick="mapPanelRemover('${esc(r.vid)}')" style="border:0;background:none;cursor:pointer;color:#f87171;font-size:14px;line-height:1">×</button>
                         </div>`).join('')}</div>` : ''}
                     </div>
-                    <h4 data-sec-h="extras" class="${secH('extras')}" onclick="mapPanelSecao('extras')">Medições no mapa<span class="chev">&#9662;</span></h4><div data-sec="extras" class="sec-body" style="display:${secD('extras')}">
+                    <h4 data-sec-h="extras" class="${secH('extras')} tema-geometria" onclick="mapPanelSecao('extras')">Medições no mapa<span class="chev">&#9662;</span></h4><div data-sec="extras" class="sec-body" style="display:${secD('extras')}">
                     ${ferramentasHtml}
                     ${refAreaHtml}
                     </div>
-                    <h4 data-sec-h="temporal" class="${secH('temporal')}" onclick="mapPanelSecao('temporal')">Análise temporal (ortofotos)<span class="chev">&#9662;</span></h4><div data-sec="temporal" class="sec-body" style="display:${secD('temporal')}">
+
+                    <h4 data-sec-h="temporal" class="${secH('temporal')} tema-temporal" onclick="mapPanelSecao('temporal')">Análise temporal (ortofotos)<span class="chev">&#9662;</span></h4><div data-sec="temporal" class="sec-body" style="display:${secD('temporal')}">
                     ${temporalHtml}
                     </div>
-                    <h4 data-sec-h="exportar" class="${secH('exportar')}" onclick="mapPanelSecao('exportar')">Exportar<span class="chev">&#9662;</span></h4><div data-sec="exportar" class="sec-body" style="display:${secD('exportar')}">
-                    <button type="button" class="act" onclick="exportarMapaPng()">Salvar o mapa como imagem (PNG)</button>
-                    </div>
-                    <div style="display:flex;gap:6px;margin-top:12px">
-                        <button type="button" class="act primary" onclick="mapPanelSave()">Salvar ajustes</button>
+
+                    ${emPrevia() ? `
+                    <div style="display:flex;flex-direction:column;gap:6px;margin-top:14px">
+                        <button type="button" class="act primary" onclick="salvarPadraoDoModelo()" style="background:#059669;border-color:#059669;color:#ffffff;font-weight:700;padding:8px 12px;font-size:12px;display:flex;align-items:center;justify-content:center;gap:6px;box-shadow:0 2px 6px rgba(5,150,105,0.3)">
+                            <span>💾</span> Salvar como Padrão do Modelo
+                        </button>
                         <button type="button" class="act" onclick="mapPanelReset()">Restaurar</button>
                     </div>
-                    <div id="map-panel-status" style="margin-top:6px;color:#94a3b8;min-height:16px"></div>
+                    ` : `
+                    <div style="display:flex;gap:6px;margin-top:12px">
+                        <button type="button" class="act primary" onclick="mapPanelSave()" title="Salva os ajustes específicos desta feição">Salvar ajustes desta feição</button>
+                        <button type="button" class="act" onclick="mapPanelReset()" title="Restaura a visualização padrão definida no modelo">Restaurar</button>
+                    </div>
+                    <div style="font-size:10px;color:#64748b;margin-top:4px">Altere o que desejar para esta feição. Clique em 'Restaurar' para voltar ao padrão do modelo.</div>
+                    `}
+                    <div id="map-panel-status" style="margin-top:6px;color:#94a3b8;min-height:16px;font-size:11px;line-height:1.35"></div>
                 </div>`;
             panel.scrollTop = scrollTop;
             // só na primeira vez a largura da tela decide; depois vale o que o usuário abriu ou recolheu
@@ -5359,6 +6131,15 @@
             const toggle = document.getElementById('map-tools-toggle');
             const sidebar = document.getElementById('map-sidebar-column');
             const curTpl = (renderArgs && renderArgs.tpl) || (typeof reportPayload !== 'undefined' && reportPayload.template) || null;
+
+            // No Relatório Geral, a barra lateral pertence exclusivamente ao painel "Configurações da Pesquisa"
+            if (curTpl && curTpl.tipo === 'geral') {
+                if (panel) panel.style.display = 'none';
+                if (toggle) toggle.style.display = 'none';
+                applyPesquisaPanelVisibility();
+                return;
+            }
+
             const pranchaCfgObj = (curTpl && curTpl.prancha_topografica) || (mapBloco && mapBloco.mapa && mapBloco.mapa.prancha_topografica) || null;
             const temPrancha = !!(pranchaCfgObj && pranchaCfgObj.formato && pranchaCfgObj.formato !== 'none');
             const temPranchaInstances = !!(window._pranchaMapInstances && Object.keys(window._pranchaMapInstances).length > 0);
@@ -5380,10 +6161,21 @@
         let mapPanelSecaoAberta = 'destaque';
         function mapPanelSecao(id) {
             mapPanelSecaoAberta = mapPanelSecaoAberta === id ? null : id;
+            if (mapController && !emPrevia()) {
+                try { persistMapAjustes(snapshotCompleto()); } catch(e) {}
+            }
             const panel = document.getElementById('map-tools-panel');
             if (!panel) return;
             panel.querySelectorAll('[data-sec]').forEach(d => { d.style.display = d.getAttribute('data-sec') === mapPanelSecaoAberta ? 'block' : 'none'; });
             panel.querySelectorAll('[data-sec-h]').forEach(h => { h.classList.toggle('open', h.getAttribute('data-sec-h') === mapPanelSecaoAberta); });
+        }
+
+        if (typeof window !== 'undefined' && window.addEventListener) {
+            window.addEventListener('beforeunload', () => {
+                if (mapController && !emPrevia()) {
+                    try { persistMapAjustes(snapshotCompleto()); } catch(e) {}
+                }
+            });
         }
 
         // edição por duplo clique dos textos da tabela de pontos (título, nome, coordenadas, azimute, distância)
@@ -5496,16 +6288,66 @@
             const c = JSON.parse(JSON.stringify(mapController.getConfig().pontos.colConf));
             fn(c);
             mapController.setColConf(c);
+            scheduleRepaginate();
             renderMapToolsPanel();
         }
-        function mapPanelColConf(k, v) { colConfEditar(c => { c[k] = v; }); }
-        function mapPanelColConfCamada(id, on) { colConfEditar(c => { c.camadas = c.camadas.filter(x => x.id !== String(id)); if (on) c.camadas.push({ id: String(id), campos: [], logradouro: false }); }); }
+        function mapPanelColConf(k, v) {
+            colConfEditar(c => { c[k] = v; });
+            if (k === 'ativo' && mapController) {
+                mapController.setConfig({ camadasVizinhas: !!v });
+            }
+        }
+        function mapPanelColConfCamada(id, on) {
+            colConfEditar(c => {
+                c.camadas = c.camadas.filter(x => x.id !== String(id));
+                if (on) {
+                    const cam = camadasDoPayload().find(x => String(x.id) === String(id));
+                    let camposIniciais = [];
+                    if (cam && Array.isArray(cam.campos) && cam.campos.length) {
+                        camposIniciais = [cam.campos[0].k];
+                    }
+                    c.camadas.push({ id: String(id), campos: camposIniciais, logradouro: false });
+                }
+            });
+            if (mapController) {
+                const ligadas = new Set(mapController.getConfig().camadasLigadas.map(String));
+                if (on) ligadas.add(String(id));
+                mapController.setConfig({ camadasVizinhas: true, camadasLigadas: Array.from(ligadas) });
+            }
+        }
         function mapPanelColConfLog(id, on) { colConfEditar(c => { const s = c.camadas.find(x => x.id === String(id)); if (s) s.logradouro = !!on; }); }
         function mapPanelColConfCampo(id, j, on) {
             const cam = camadasDoPayload().find(x => String(x.id) === String(id));
             const k = cam && cam.campos && cam.campos[j] ? cam.campos[j].k : null;
             if (k === null) return;
-            colConfEditar(c => { const s = c.camadas.find(x => x.id === String(id)); if (s) s.campos = s.campos.filter(x => x !== k).concat(on ? [k] : []); });
+            colConfEditar(c => {
+                let s = c.camadas.find(x => x.id === String(id));
+                if (!s && on) {
+                    s = { id: String(id), campos: [], logradouro: false };
+                    c.camadas.push(s);
+                }
+                if (s) {
+                    s.campos = s.campos.filter(x => x !== k).concat(on ? [k] : []);
+                }
+            });
+            if (mapController) {
+                const ligadas = new Set(mapController.getConfig().camadasLigadas.map(String));
+                if (on) ligadas.add(String(id));
+                mapController.setConfig({ camadasVizinhas: true, camadasLigadas: Array.from(ligadas) });
+            }
+        }
+
+        function mapPanelTamanho(grupo, valor) {
+            if (!mapController) return;
+            const v = Math.max(6, Math.min(24, Math.round(Number(valor) || 10)));
+            if (grupo === 'medidas') {
+                mapController.setConfig({ medidas: { tamanho: v } });
+            } else if (grupo === 'pontos') {
+                mapController.setConfig({ pontos: { tamanho: v } });
+            } else if (grupo === 'medicoes') {
+                mapController.setConfig({ medicoes: { tamanho: v } });
+            }
+            renderMapToolsPanel();
         }
 
         function mapPanelConfMover(id, dir) { if (mapController) { mapController.moveConfrontante(id, dir); renderMapToolsPanel(); } }
@@ -5609,7 +6451,9 @@
             if (!mapController || !slot || !wrap) return;
             const ultimo = slot.lastElementChild;
             const limite = slot.getBoundingClientRect().bottom - (parseFloat(window.getComputedStyle(slot).paddingBottom) || 0);
-            const livre = limite - (ultimo ? ultimo.getBoundingClientRect().bottom : wrap.getBoundingClientRect().bottom);
+            const livreAbaixoUltimo = ultimo ? (limite - ultimo.getBoundingClientRect().bottom) : 0;
+            const livreAteFimFolha = limite - wrap.getBoundingClientRect().bottom;
+            const livre = (livreAbaixoUltimo > 12) ? livreAbaixoUltimo : livreAteFimFolha;
             mapController.setAltura(mapaAlturaPreenchida(mapAlturaMm !== null ? mapAlturaMm : 85, livre, mapaAlturaMaxMm()));
             renderMapToolsPanel();
         }
@@ -5721,6 +6565,22 @@
         function mapPanelSituacaoReset() { if (mapController) { mapController.resetSituacao(); renderMapToolsPanel(); } }
         function mapPanelTemporal(key, value) { if (temporalController) temporalController.setConfig({ [key]: key === 'colunas' ? Number(value) : value }); }
         function mapPanelOrtofoto(id, on) { if (temporalController) temporalController.toggle(id, on); }
+        function mapPanelTemporalToggleAll(on) {
+            if (!temporalController) return;
+            const tc = temporalController;
+            if (on) {
+                tc.setConfig({ ativo: true, excluidas: [] });
+            } else {
+                const todas = tc.list().map(x => String(x.id));
+                tc.setConfig({ excluidas: todas });
+            }
+            renderMapToolsPanel();
+            scheduleRepaginate();
+            scheduleEmissao();
+        }
+        function mapPanelFiltrarCategoria(cat) {
+            renderMapToolsPanel();
+        }
 
         const SATELLITE_CATALOG = {
             'sat-google-2026': {
@@ -5869,15 +6729,171 @@
             }
         }
 
+        async function salvarPadraoDoModelo() {
+            const status = document.getElementById('map-panel-status');
+            if (!mapController) return;
+            if (status) {
+                status.style.color = '#38bdf8';
+                status.textContent = 'Gravando configuração padrão do modelo…';
+            }
+
+            const snap = snapshotCompleto();
+            const cfg = mapController.getConfig();
+            if (mapAlturaMm !== null) {
+                snap.alturaMm = mapAlturaMm;
+            } else if (cfg && cfg.alturaMm) {
+                snap.alturaMm = cfg.alturaMm;
+            }
+
+            let targetTpl = tplAtual;
+            if (!targetTpl && reportPayload && reportPayload.template) {
+                targetTpl = reportPayload.template;
+            }
+            if (!targetTpl) {
+                try {
+                    const localTpls = JSON.parse(localStorage.getItem('constructive_report_templates') || '[]');
+                    const tId = (reportPayload && reportPayload.templateId) || (new URLSearchParams(window.location.search)).get('templateId');
+                    targetTpl = localTpls.find(t => t.id === tId);
+                } catch(e) {}
+            }
+
+            if (!targetTpl) {
+                if (status) {
+                    status.style.color = '#f87171';
+                    status.textContent = 'Erro: Modelo de relatório não identificado para salvamento.';
+                }
+                return;
+            }
+
+            if (!Array.isArray(targetTpl.blocos)) targetTpl.blocos = [];
+            let blocoMapa = targetTpl.blocos.find(b => b.tipo === 'mapa_estatico');
+            if (!blocoMapa) {
+                blocoMapa = {
+                    id: 'mapa_' + Math.random().toString(36).substr(2, 7),
+                    tipo: 'mapa_estatico',
+                    titulo: 'Delimitação Cartográfica do Imóvel'
+                };
+                targetTpl.blocos.splice(1, 0, blocoMapa);
+            }
+
+            blocoMapa.mapa = JSON.parse(JSON.stringify(snap));
+            blocoMapa.exibirNorte = !!snap.norte;
+            blocoMapa.exibirEscala = !!snap.escala;
+            if (snap.alturaMm) blocoMapa.alturaMm = snap.alturaMm;
+
+            targetTpl.config_mapa_padrao = JSON.parse(JSON.stringify(snap));
+            targetTpl.updatedAt = new Date().toISOString();
+            tplAtual = targetTpl;
+
+            // 1. LocalStorage
+            try {
+                const stored = localStorage.getItem('constructive_report_templates');
+                let allTemplates = stored ? JSON.parse(stored) : [];
+                const idx = allTemplates.findIndex(t => t.id === targetTpl.id);
+                if (idx >= 0) {
+                    allTemplates[idx] = JSON.parse(JSON.stringify(targetTpl));
+                } else {
+                    allTemplates.push(JSON.parse(JSON.stringify(targetTpl)));
+                }
+                localStorage.setItem('constructive_report_templates', JSON.stringify(allTemplates));
+            } catch(eLocal) {
+                console.warn('[Viewer] Falha ao salvar template no localStorage:', eLocal);
+            }
+
+            // 2. ReportAdapter / Supabase
+            try {
+                const adapter = (typeof ReportAdapter !== 'undefined' && ReportAdapter) ||
+                                (window.opener && window.opener.ReportAdapter);
+                if (adapter && typeof adapter.saveReportTemplate === 'function') {
+                    await adapter.saveReportTemplate(targetTpl);
+                } else if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+                    await supabaseClient.from('relatorios_templates').upsert({
+                        id: targetTpl.id,
+                        form_id: targetTpl.form_id,
+                        nome: targetTpl.nome,
+                        tipo: targetTpl.tipo,
+                        disponibilizar_no_mapa: !!targetTpl.disponibilizar_no_mapa,
+                        blocos: targetTpl.blocos,
+                        config_pagina: targetTpl.config_pagina,
+                        updated_at: targetTpl.updatedAt
+                    });
+                }
+            } catch(eRemoto) {
+                console.warn('[Viewer] Falha ao salvar remotamente:', eRemoto);
+            }
+
+            // 3. Janela do Construtor (window.opener)
+            try {
+                if (window.opener && !window.opener.closed) {
+                    if (window.opener.currentTemplate && (window.opener.currentTemplate.id === targetTpl.id || window.opener.currentTemplate.form_id === targetTpl.form_id)) {
+                        const opB = (window.opener.currentTemplate.blocos || []).find(b => b.tipo === 'mapa_estatico');
+                        if (opB) {
+                            opB.mapa = JSON.parse(JSON.stringify(snap));
+                            opB.exibirNorte = !!snap.norte;
+                            opB.exibirEscala = !!snap.escala;
+                            if (snap.alturaMm) opB.alturaMm = snap.alturaMm;
+                        }
+                        window.opener.currentTemplate.config_mapa_padrao = JSON.parse(JSON.stringify(snap));
+                    }
+                    window.opener.postMessage({
+                        tipo: 'relatorio:padrao_mapa_salvo',
+                        templateId: targetTpl.id,
+                        mapa: snap
+                    }, '*');
+                }
+            } catch(eOpener) {}
+
+            mapBaseConfig = MapTools.normalizeMapConfig(blocoMapa);
+
+            if (status) {
+                status.style.color = '#34d399';
+                status.textContent = '✅ Padrão do modelo salvo com sucesso! As fichas cadastrais desta camada abrirão com esta visualização.';
+            }
+            mostrarToastPrevia('Padrão do modelo salvo com sucesso! As fichas cadastrais usarão este layout de mapa.');
+        }
+
+        function mostrarToastPrevia(mensagem) {
+            let t = document.getElementById('toast-previa-salvo');
+            if (!t) {
+                t = document.createElement('div');
+                t.id = 'toast-previa-salvo';
+                t.className = 'no-print';
+                t.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;background:#059669;color:#ffffff;padding:10px 18px;border-radius:10px;font:600 13px sans-serif;box-shadow:0 10px 25px rgba(0,0,0,0.25);display:flex;align-items:center;gap:8px;transition:opacity 0.3s, transform 0.3s;pointer-events:none;';
+                document.body.appendChild(t);
+            }
+            t.innerHTML = `<span>✅</span> ${escapeHtml(mensagem)}`;
+            t.style.opacity = '1';
+            t.style.transform = 'translateX(-50%) translateY(0)';
+            clearTimeout(window._toastPreviaTimer);
+            window._toastPreviaTimer = setTimeout(() => {
+                t.style.opacity = '0';
+                t.style.transform = 'translateX(-50%) translateY(-10px)';
+            }, 4000);
+        }
+
         async function mapPanelSave() {
             const status = document.getElementById('map-panel-status');
             if (!mapController) return;
-            if (emPrevia()) { if (status) status.textContent = 'Prévia com dados de exemplo: os ajustes não são salvos.'; return; }
-            if (status) status.textContent = 'Salvando…';
+            if (emPrevia()) {
+                if (status) {
+                    status.style.color = '#f59e0b';
+                    status.textContent = 'Prévia com dados de exemplo: os ajustes não são salvos. Para definir o padrão deste modelo, use o botão "Salvar como Padrão do Modelo".';
+                }
+                return;
+            }
+            if (status) {
+                status.style.color = '#94a3b8';
+                status.textContent = 'Salvando…';
+            }
             const r = await persistMapAjustes(snapshotCompleto());
             if (!status) return;
-            if (!r.ok) status.textContent = r.motivo === 'sem-feicao' ? 'Salve a feição no mapa antes de guardar ajustes.' : 'Não foi possível salvar.';
-            else status.textContent = r.remoto ? 'Ajustes salvos.' : 'Ajustes salvos neste navegador (servidor indisponível).';
+            if (!r.ok) {
+                status.style.color = '#f87171';
+                status.textContent = r.motivo === 'sem-feicao' ? 'Salve a feição no mapa antes de guardar ajustes.' : 'Não foi possível salvar.';
+            } else {
+                status.style.color = '#34d399';
+                status.textContent = r.remoto ? 'Ajustes salvos.' : 'Ajustes salvos neste navegador (servidor indisponível).';
+            }
         }
 
         function mapPanelReset() {

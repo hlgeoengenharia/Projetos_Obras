@@ -602,6 +602,7 @@
                                     <span class="whitespace-pre-line">${(esc(bloco.titulo)).replace(/\r?\n/g, '<br>')}</span>
                                     <div class="no-print flex items-center gap-1.5">
                                         <button type="button" onmousedown="event.preventDefault(); if (window.ReportBuilder && window.ReportBuilder.showMentionDropdown) window.ReportBuilder.showMentionDropdown(${idx});" class="text-[10px] text-sky-600 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded px-1.5 py-0.5 cursor-pointer font-medium flex items-center gap-1 transition-colors" title="Inserir campo cadastral da feição (@)"><span class="material-symbols-outlined text-[12px]">alternate_email</span>Inserir campo (@)</button>
+                                        <button type="button" onclick="if(window.toggleHideFreeText) window.toggleHideFreeText('${bloco.id || idx}')" class="text-[10px] text-slate-600 hover:text-red-600 bg-slate-50 hover:bg-red-50 border border-slate-200 hover:border-red-300 rounded px-1.5 py-0.5 cursor-pointer font-medium flex items-center gap-1 transition-colors shadow-2xs" title="Ocultar Caixa de Texto Livre do relatório"><span class="material-symbols-outlined text-[12px]">visibility_off</span>Ocultar</button>
                                         <span class="text-[10px] text-slate-400 font-normal">Clique para editar pontualmente</span>
                                     </div>
                                 </div>
