@@ -825,7 +825,7 @@
     }
 
     // Fallback: zoom direto se o Leaflet estiver acessível
-    if (window.map && alert.coords) {
+    if (window.map && typeof window.map.flyTo === 'function' && alert.coords) {
       window.map.flyTo(alert.coords, 18, { duration: 1.2 });
     }
   }
@@ -874,11 +874,16 @@
    * Renderiza os halos luminosos (Radar Glow) sobre as feições no Leaflet.
    */
   function updateMapHaloGlow() {
-    if (typeof window === 'undefined' || !window.map || typeof L === 'undefined') return;
+    if (typeof window === 'undefined' || !window.map || typeof window.map.addLayer !== 'function' || typeof L === 'undefined') return;
 
     if (!_haloLayerGroup) {
-      _haloLayerGroup = L.layerGroup().addTo(window.map);
+      _haloLayerGroup = L.layerGroup();
     }
+    try {
+      if (typeof window.map.hasLayer === 'function' && !window.map.hasLayer(_haloLayerGroup)) {
+        _haloLayerGroup.addTo(window.map);
+      }
+    } catch(e) {}
     _haloLayerGroup.clearLayers();
 
     _activeAlertsCache.forEach(alert => {
