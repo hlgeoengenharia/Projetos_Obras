@@ -293,6 +293,13 @@
         color: white !important;
       }
       
+      /* Cursor pointer para todas as feições interativas no mapa (Canvas e SVG) */
+      .leaflet-interactive,
+      canvas.leaflet-interactive,
+      .leaflet-container.leaflet-grab canvas.leaflet-interactive {
+        cursor: pointer !important;
+      }
+
       /* Adjust map z-index so it doesn't overlap frosted glass */
       .leaflet-control-container {
         z-index: 10 !important;

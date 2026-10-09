@@ -1730,6 +1730,86 @@ function initMap() {
   const isTouchActive = (typeof isTouchDevice !== 'undefined' && isTouchDevice) || ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
   const canvasRenderer = (typeof L.canvas === 'function') ? L.canvas({ padding: 0.5, tolerance: 35 }) : null;
 
+  if (canvasRenderer) {
+    canvasRenderer._handleMouseHover = function(e, point) {
+        if (this._mouseHoverThrottled) return;
+
+        let candidateHoveredLayer = null;
+        let activeThemeCandidate = null;
+
+        for (let order = this._drawFirst; order; order = order.next) {
+            const layer = order.layer;
+            if (layer.options && layer.options.interactive && layer._containsPoint(point)) {
+                candidateHoveredLayer = layer;
+                const featThemeId = layer.feature?.properties?.themeId || 
+                                    layer.feature?.properties?.theme_id || 
+                                    layer.feature?.themeId || 
+                                    layer.feature?.theme_id;
+                if (window.activeSelectionThemeId && featThemeId && 
+                    String(featThemeId).trim().toLowerCase() === String(window.activeSelectionThemeId).trim().toLowerCase()) {
+                    activeThemeCandidate = layer;
+                }
+            }
+        }
+
+        const hovered = activeThemeCandidate || candidateHoveredLayer;
+
+        if (hovered !== this._hoveredLayer) {
+            this._handleMouseOut(e);
+
+            if (hovered) {
+                if (L.DomUtil && this._container) L.DomUtil.addClass(this._container, 'leaflet-interactive');
+                if (map && map.getContainer()) map.getContainer().style.cursor = 'pointer';
+                if (this._container) this._container.style.cursor = 'pointer';
+                this._fireEvent([hovered], e, 'mouseover');
+                this._hoveredLayer = hovered;
+            }
+        }
+
+        if (this._hoveredLayer) {
+            this._fireEvent([this._hoveredLayer], e, 'mousemove');
+        }
+    };
+
+    canvasRenderer._handleMouseOut = function(e) {
+        const layer = this._hoveredLayer;
+        if (layer) {
+            if (L.DomUtil && this._container) L.DomUtil.removeClass(this._container, 'leaflet-interactive');
+            if (map && map.getContainer()) map.getContainer().style.cursor = '';
+            if (this._container) this._container.style.cursor = '';
+            this._fireEvent([layer], e, 'mouseout');
+            this._hoveredLayer = null;
+            this._mouseHoverThrottled = false;
+        }
+    };
+
+    canvasRenderer._onClick = function(e) {
+        const point = this._map.mouseEventToLayerPoint(e);
+        let candidateClickLayer = null;
+        let activeThemeCandidate = null;
+
+        for (let order = this._drawFirst; order; order = order.next) {
+            const layer = order.layer;
+            if (layer.options && layer.options.interactive && layer._containsPoint(point)) {
+                candidateClickLayer = layer;
+                const featThemeId = layer.feature?.properties?.themeId || 
+                                    layer.feature?.properties?.theme_id || 
+                                    layer.feature?.themeId || 
+                                    layer.feature?.theme_id;
+                if (window.activeSelectionThemeId && featThemeId && 
+                    String(featThemeId).trim().toLowerCase() === String(window.activeSelectionThemeId).trim().toLowerCase()) {
+                    activeThemeCandidate = layer;
+                }
+            }
+        }
+
+        const finalLayer = activeThemeCandidate || candidateClickLayer;
+        if (finalLayer) {
+            this._fireEvent([finalLayer], e);
+        }
+    };
+  }
+
   // Função universal para localizar linha de logradouro sob o toque/clique no mapa
   function findClosestLineLayer(latlng, maxPixels = 38) {
     if (!geojsonLayer || !map || !latlng || typeof map.latLngToLayerPoint !== 'function' || !L.LineUtil || typeof L.LineUtil.pointToSegmentDistance !== 'function') {
@@ -1801,8 +1881,8 @@ function initMap() {
       return true;
     },
     style: function(feature) {
-      const themeId = feature.properties.themeId;
-      const theme = themes.find(t => t.id === themeId);
+      const featThemeId = feature.properties?.themeId || feature.properties?.theme_id || feature.themeId || feature.theme_id;
+      const theme = themes.find(t => String(t.id).toLowerCase() === String(featThemeId).toLowerCase());
       let color = theme ? theme.color : '#333333';
       let opacity = theme && theme.opacity !== undefined ? theme.opacity : 0.4;
       let weight = theme && theme.weight !== undefined ? theme.weight : 2;
@@ -1998,8 +2078,8 @@ function initMap() {
       if (!feature.properties) feature.properties = {};
       if (!feature.properties._tempId) feature.properties._tempId = 'feat_' + Math.random().toString(36).substr(2, 9);
       
-      const themeId = feature.properties.themeId;
-      const theme = themes.find(t => t.id === themeId);
+      const featThemeId = feature.properties?.themeId || feature.properties?.theme_id || feature.themeId || feature.theme_id;
+      const theme = themes.find(t => String(t.id).toLowerCase() === String(featThemeId).toLowerCase());
       if (theme) {
         const disp1Key = theme.disp1 || 'Lote';
         const disp2Key = theme.disp2 || 'Quadra';
@@ -2159,6 +2239,13 @@ function initMap() {
         }
       }
       
+      layer.on('mouseover', function(e) {
+        if (map && map.getContainer()) map.getContainer().style.cursor = 'pointer';
+      });
+      layer.on('mouseout', function(e) {
+        if (map && map.getContainer()) map.getContainer().style.cursor = '';
+      });
+
       layer.on('click', async function(e) {
         if (window.isSelectingStreetViewCoordinate) {
             return; // bubble to map click
@@ -2194,17 +2281,35 @@ function initMap() {
             const nearLineLayer = findClosestLineLayer(e.latlng, 35);
             if (nearLineLayer && nearLineLayer !== layer) {
                 const lineThemeId = nearLineLayer.feature && nearLineLayer.feature.properties && String(nearLineLayer.feature.properties.themeId);
-                if (lineThemeId === window.activeSelectionThemeId) {
+                if (lineThemeId && window.activeSelectionThemeId && String(lineThemeId).trim().toLowerCase() === String(window.activeSelectionThemeId).trim().toLowerCase()) {
                     nearLineLayer.fire('click', e);
                     return;
                 }
             }
         }
 
-        const themeIdStr = String(feature.properties.themeId);
+        let featThemeId = feature.properties?.themeId || 
+                          feature.properties?.theme_id || 
+                          feature.themeId || 
+                          feature.theme_id;
+
+        // Se por algum motivo themeId não estiver no properties, busca o tema proprietário no array de temas
+        if (!featThemeId && typeof themes !== 'undefined' && Array.isArray(themes)) {
+            const ownerTheme = themes.find(t => 
+                t.features && t.features.some(f => f === feature || (f.properties && feature.properties && (f.properties._tempId === feature.properties._tempId || (f.properties.id_banco && f.properties.id_banco === feature.properties.id_banco))))
+            );
+            if (ownerTheme) {
+                featThemeId = ownerTheme.id;
+                if (!feature.properties) feature.properties = {};
+                feature.properties.themeId = ownerTheme.id;
+            }
+        }
+
+        const themeIdStr = featThemeId ? String(featThemeId).trim() : '';
+        const activeThemeIdStr = window.activeSelectionThemeId ? String(window.activeSelectionThemeId).trim() : '';
         
         // Trava de segurança: SÓ é permitido selecionar feições se a sua camada estiver selecionada no menu lateral
-        if (!window.activeSelectionThemeId) {
+        if (!activeThemeIdStr) {
             L.DomEvent.stopPropagation(e);
             if (typeof showWarningToast === 'function') {
                 showWarningToast("Selecione uma camada no menu lateral para que suas feições possam ser selecionadas.");
@@ -2215,9 +2320,9 @@ function initMap() {
         }
         
         // Bloqueia e avisa se a feição clicada pertence a outra camada diferente da selecionada no menu lateral
-        if (window.activeSelectionThemeId !== themeIdStr) {
+        if (activeThemeIdStr.toLowerCase() !== themeIdStr.toLowerCase()) {
             L.DomEvent.stopPropagation(e);
-            const currentTheme = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes.find(t => String(t.id) === themeIdStr) : null;
+            const currentTheme = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes.find(t => String(t.id).toLowerCase() === themeIdStr.toLowerCase()) : null;
             const themeName = currentTheme ? currentTheme.name : "outra camada";
             const msg = `Esta feição pertence à camada "${themeName}". Selecione-a no menu lateral para que suas feições sejam selecionadas.`;
             if (typeof showWarningToast === 'function') {
@@ -2276,11 +2381,55 @@ function initMap() {
     const isEditing = document.getElementById('geometry-edit-toolbar') && !document.getElementById('geometry-edit-toolbar').classList.contains('hidden');
     if (isDrawing || isEditing) return;
 
-    // Verifica se o toque no mapa ocorreu próximo a uma linha de logradouro da camada ativa (tolerância touch de 38px)
+    // 1. Verifica se o toque no mapa ocorreu próximo a uma linha de logradouro da camada ativa (tolerância touch de 38px)
     if (e.latlng && typeof findClosestLineLayer === 'function' && window.activeSelectionThemeId) {
         const closestLayer = findClosestLineLayer(e.latlng, 38);
-        if (closestLayer && closestLayer.feature && String(closestLayer.feature.properties?.themeId) === String(window.activeSelectionThemeId)) {
-            closestLayer.fire('click', e);
+        if (closestLayer && closestLayer.feature) {
+            const lThemeId = closestLayer.feature.properties?.themeId || closestLayer.feature.properties?.theme_id;
+            if (lThemeId && String(lThemeId).trim().toLowerCase() === String(window.activeSelectionThemeId).trim().toLowerCase()) {
+                closestLayer.fire('click', e);
+                return;
+            }
+        }
+    }
+
+    // 2. Fallback inteligente para Polígonos da camada ativa (ex: CTM-Municipal) se o clique caiu no interior do polígono
+    if (e.latlng && window.activeSelectionThemeId && geojsonLayer) {
+        let activePolyLayer = null;
+        const pt = e.latlng;
+        geojsonLayer.eachLayer(layer => {
+            if (activePolyLayer) return;
+            if (!layer.feature || !layer.feature.geometry) return;
+            const gType = layer.feature.geometry.type;
+            if (gType !== 'Polygon' && gType !== 'MultiPolygon') return;
+            const featThemeId = layer.feature.properties?.themeId || 
+                                layer.feature.properties?.theme_id || 
+                                layer.feature.themeId || 
+                                layer.feature.theme_id;
+            if (!featThemeId || String(featThemeId).trim().toLowerCase() !== String(window.activeSelectionThemeId).trim().toLowerCase()) return;
+            
+            // Verifica se o ponto clicado está contido nos bounds e no polígono
+            if (layer.getBounds && layer.getBounds().contains(pt)) {
+                if (typeof turf !== 'undefined' && turf.booleanPointInPolygon) {
+                    try {
+                        const ptTurf = turf.point([pt.lng, pt.lat]);
+                        if (turf.booleanPointInPolygon(ptTurf, layer.feature)) {
+                            activePolyLayer = layer;
+                        }
+                    } catch(eTurf) {}
+                } else if (typeof layer._containsPoint === 'function' && map) {
+                    try {
+                        const layerPt = map.latLngToLayerPoint(pt);
+                        if (layer._containsPoint(layerPt)) {
+                            activePolyLayer = layer;
+                        }
+                    } catch(eCont) {}
+                }
+            }
+        });
+
+        if (activePolyLayer) {
+            activePolyLayer.fire('click', e);
             return;
         }
     }
@@ -3764,11 +3913,13 @@ function updateThemeInteractivity() {
     if (window.activeSelectionThemeId) {
         styleTag.innerHTML = `
             .theme-feature { pointer-events: auto !important; cursor: pointer; }
+            .leaflet-interactive, canvas.leaflet-interactive, .leaflet-container.leaflet-grab canvas.leaflet-interactive { cursor: pointer !important; }
             .theme-${window.activeSelectionThemeId} { stroke-width: 3.5px !important; filter: drop-shadow(0 0 6px rgba(255,255,255,0.6)); }
         `;
     } else {
         styleTag.innerHTML = `
             .theme-feature { pointer-events: auto !important; cursor: pointer; }
+            .leaflet-interactive, canvas.leaflet-interactive, .leaflet-container.leaflet-grab canvas.leaflet-interactive { cursor: pointer !important; }
         `;
     }
 }
