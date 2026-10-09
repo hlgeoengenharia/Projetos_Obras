@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <linearGradient id="pDeckGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="100%" stop-color="#fde68a"/>
+    </linearGradient>
+    <filter id="pShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <!-- Círculo base -->
+  <circle cx="24" cy="24" r="22" fill="#ffffff" stroke="#d97706" stroke-width="2.5" filter="url(#pShadow)"/>
+  <!-- Tablado da passarela em perspectiva -->
+  <path d="M18,12 L30,12 L35,36 L13,36 Z" fill="url(#pDeckGrad)"/>
+  <!-- Réguas / tábuas de madeira da passarela -->
+  <line x1="17.5" y1="15" x2="30.5" y2="15" stroke="#b45309" stroke-width="1.4"/>
+  <line x1="17" y1="18" x2="31" y2="18" stroke="#b45309" stroke-width="1.4"/>
+  <line x1="16.5" y1="21" x2="31.5" y2="21" stroke="#b45309" stroke-width="1.5"/>
+  <line x1="16" y1="24" x2="32" y2="24" stroke="#b45309" stroke-width="1.6"/>
+  <line x1="15.5" y1="27" x2="32.5" y2="27" stroke="#b45309" stroke-width="1.8"/>
+  <line x1="15" y1="30" x2="33" y2="30" stroke="#b45309" stroke-width="2.0"/>
+  <line x1="14" y1="33" x2="34" y2="33" stroke="#b45309" stroke-width="2.2"/>
+  <!-- Corrimão / Guarda-corpo Esquerdo -->
+  <line x1="18" y1="12" x2="13" y2="36" stroke="#92400e" stroke-width="2.4" stroke-linecap="round"/>
+  <line x1="17" y1="9" x2="11.5" y2="33" stroke="#d97706" stroke-width="2.0" stroke-linecap="round"/>
+  <line x1="17" y1="9" x2="18" y2="13" stroke="#92400e" stroke-width="1.4"/>
+  <line x1="14.5" y1="20" x2="15.5" y2="24" stroke="#92400e" stroke-width="1.5"/>
+  <line x1="12" y1="31" x2="13" y2="35" stroke="#92400e" stroke-width="1.8"/>
+  <!-- Corrimão / Guarda-corpo Direito -->
+  <line x1="30" y1="12" x2="35" y2="36" stroke="#92400e" stroke-width="2.4" stroke-linecap="round"/>
+  <line x1="31" y1="9" x2="36.5" y2="33" stroke="#d97706" stroke-width="2.0" stroke-linecap="round"/>
+  <line x1="31" y1="9" x2="30" y2="13" stroke="#92400e" stroke-width="1.4"/>
+  <line x1="33.5" y1="20" x2="32.5" y2="24" stroke="#92400e" stroke-width="1.5"/>
+  <line x1="36" y1="31" x2="35" y2="35" stroke="#92400e" stroke-width="1.8"/>
+</svg>

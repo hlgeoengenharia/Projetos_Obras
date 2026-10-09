@@ -6385,11 +6385,13 @@ function openEditThemeModal(themeId, focusField = null) {
   const option = availableIcons.find(o => o.val === iconVal) || availableIcons[0];
   const removeBtn = document.getElementById('edit-remove-custom-icon-btn');
   if (customIconVal) {
-    document.getElementById('edit-icon-preview-container').innerHTML = `<img src="${customIconVal}" class="w-5 h-5 object-contain rounded shrink-0"> <span id="edit-icon-label" class="text-sm truncate">Ícone Personalizado</span>`;
+    const matchedPreset = availableIcons.find(o => o.customIconData && o.customIconData === customIconVal);
+    const labelText = matchedPreset ? matchedPreset.label : 'Ícone Personalizado';
+    document.getElementById('edit-icon-preview-container').innerHTML = `<img src="${customIconVal}" class="w-5 h-5 object-contain rounded shrink-0"> <span id="edit-icon-label" class="text-sm font-medium truncate">${labelText}</span>`;
     document.getElementById('edit-theme-custom-icon-data').value = customIconVal;
     if (removeBtn) removeBtn.classList.remove('hidden');
   } else {
-    document.getElementById('edit-icon-preview-container').innerHTML = `<span class="material-symbols-outlined text-[20px] text-primary" id="edit-icon-preview">${option.val}</span><span id="edit-icon-label" class="text-sm">${option.label}</span>`;
+    document.getElementById('edit-icon-preview-container').innerHTML = `<span class="material-symbols-outlined text-[20px] text-primary" id="edit-icon-preview">${option.val}</span><span id="edit-icon-label" class="text-sm font-medium truncate">${option.label}</span>`;
     document.getElementById('edit-theme-custom-icon-data').value = '';
     if (removeBtn) removeBtn.classList.add('hidden');
   }
@@ -6409,7 +6411,11 @@ function updateIconDropdownSelection(prefix, val) {
   if (inputEl) inputEl.value = option.val;
   const container = document.getElementById(`${prefix}-icon-preview-container`);
   if (container) {
-    container.innerHTML = `<span class="material-symbols-outlined text-[20px] text-primary" id="${prefix}-icon-preview">${option.val}</span><span id="${prefix}-icon-label" class="text-sm">${option.label}</span>`;
+    if (option.customIconData) {
+      container.innerHTML = `<img src="${option.customIconData}" class="w-5 h-5 object-contain rounded shrink-0"> <span id="${prefix}-icon-label" class="text-sm font-medium truncate">${option.label}</span>`;
+    } else {
+      container.innerHTML = `<span class="material-symbols-outlined text-[20px] text-primary" id="${prefix}-icon-preview">${option.val}</span><span id="${prefix}-icon-label" class="text-sm font-medium truncate">${option.label}</span>`;
+    }
   } else {
     const prev = document.getElementById(`${prefix}-icon-preview`);
     if (prev) prev.innerText = option.val;
@@ -9522,6 +9528,12 @@ async function deleteActiveFeature() {
 // --- ICON DROPDOWNS ---
 const availableIcons = [
   { val: 'circle', label: 'Círculo Básico' },
+  { val: 'barraca_tenda', label: 'Barracas / Tendas (Ícone Vetorial)', customIconData: 'assets/icons/barraca_tenda.svg' },
+  { val: 'passarela', label: 'Passarelas / Decks de Orla (Ícone Vetorial)', customIconData: 'assets/icons/passarela.svg' },
+  { val: 'camping', label: 'Barracas / Tendas / Gazebos (Pino)' },
+  { val: 'beach_access', label: 'Barracas de Praia / Guarda-sol (Pino)' },
+  { val: 'deck', label: 'Passarelas de Madeira / Deck (Pino)' },
+  { val: 'bridge', label: 'Passarelas / Pontes de Pedestres (Pino)' },
   { val: 'light', label: 'Poste / Iluminação Pública' },
   { val: 'bolt', label: 'Rede Elétrica / Energia' },
   { val: 'cell_tower', label: 'Torre / Telecomunicações' },
@@ -9549,16 +9561,26 @@ const availableIcons = [
 
 function setupIconDropdowns() {
   const buildOptions = (prefix) => {
-    return availableIcons.map(opt => `
-      <button type="button" onclick="selectIcon('${prefix}', '${opt.val}', '${opt.label}')" class="flex items-center gap-3 w-full px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-left transition-colors dark:text-slate-200">
-        <span class="material-symbols-outlined text-[20px] text-slate-600 dark:text-slate-300">${opt.val}</span> 
-        <span class="text-sm">${opt.label}</span>
-      </button>
-    `).join('');
+    return availableIcons.map(opt => {
+      let iconRender = '';
+      if (opt.customIconData) {
+        iconRender = `<img src="${opt.customIconData}" class="w-5 h-5 object-contain shrink-0" alt="${opt.label}">`;
+      } else {
+        iconRender = `<span class="material-symbols-outlined text-[20px] text-slate-600 dark:text-slate-300 shrink-0">${opt.val}</span>`;
+      }
+      return `
+        <button type="button" onclick="selectIcon('${prefix}', '${opt.val}', '${opt.label}')" class="flex items-center gap-3 w-full px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-left transition-colors dark:text-slate-200 cursor-pointer">
+          ${iconRender} 
+          <span class="text-sm font-medium truncate">${opt.label}</span>
+        </button>
+      `;
+    }).join('');
   };
 
-  document.getElementById('new-icon-options').innerHTML = buildOptions('new');
-  document.getElementById('edit-icon-options').innerHTML = buildOptions('edit');
+  const newOptionsEl = document.getElementById('new-icon-options');
+  if (newOptionsEl) newOptionsEl.innerHTML = buildOptions('new');
+  const editOptionsEl = document.getElementById('edit-icon-options');
+  if (editOptionsEl) editOptionsEl.innerHTML = buildOptions('edit');
 
   // Close dropdowns on outside click
   document.addEventListener('click', function(e) {
@@ -9577,23 +9599,37 @@ function selectIcon(prefix, val, label) {
   const iconInput = document.getElementById(inputId);
   if (iconInput) iconInput.value = val;
 
-  // Limpa o custom icon para que a substituição de ícone tenha efeito real
+  const opt = availableIcons.find(o => o.val === val);
   const customInput = document.getElementById(prefix === 'new' ? 'theme-custom-icon-data' : 'edit-theme-custom-icon-data');
-  if (customInput) customInput.value = '';
   const fileInput = document.getElementById(prefix === 'new' ? 'theme-custom-icon-file' : 'edit-theme-custom-icon-file');
-  if (fileInput) fileInput.value = '';
   const removeBtn = document.getElementById(`${prefix}-remove-custom-icon-btn`);
-  if (removeBtn) removeBtn.classList.add('hidden');
 
-  // Restaura o preview container com o ícone selecionado
-  const previewContainer = document.getElementById(`${prefix}-icon-preview-container`);
-  if (previewContainer) {
-    previewContainer.innerHTML = `<span class="material-symbols-outlined text-[20px] text-primary" id="${prefix}-icon-preview">${val}</span><span id="${prefix}-icon-label" class="text-sm">${label}</span>`;
+  // Se o item selecionado tiver um ícone customizado/vetorial predefinido
+  if (opt && opt.customIconData) {
+    if (customInput) customInput.value = opt.customIconData;
+    if (fileInput) fileInput.value = '';
+    if (removeBtn) removeBtn.classList.remove('hidden');
+
+    const previewContainer = document.getElementById(`${prefix}-icon-preview-container`);
+    if (previewContainer) {
+      previewContainer.innerHTML = `<img src="${opt.customIconData}" class="w-5 h-5 object-contain rounded shrink-0"> <span id="${prefix}-icon-label" class="text-sm font-medium truncate">${label}</span>`;
+    }
   } else {
-    const previewEl = document.getElementById(`${prefix}-icon-preview`);
-    if (previewEl) previewEl.innerText = val;
-    const labelEl = document.getElementById(`${prefix}-icon-label`);
-    if (labelEl) labelEl.innerText = label;
+    // Limpa o custom icon para que a substituição de ícone tenha efeito real
+    if (customInput) customInput.value = '';
+    if (fileInput) fileInput.value = '';
+    if (removeBtn) removeBtn.classList.add('hidden');
+
+    // Restaura o preview container com o ícone selecionado
+    const previewContainer = document.getElementById(`${prefix}-icon-preview-container`);
+    if (previewContainer) {
+      previewContainer.innerHTML = `<span class="material-symbols-outlined text-[20px] text-primary" id="${prefix}-icon-preview">${val}</span><span id="${prefix}-icon-label" class="text-sm">${label}</span>`;
+    } else {
+      const previewEl = document.getElementById(`${prefix}-icon-preview`);
+      if (previewEl) previewEl.innerText = val;
+      const labelEl = document.getElementById(`${prefix}-icon-label`);
+      if (labelEl) labelEl.innerText = label;
+    }
   }
 
   const dropdown = document.getElementById(`${prefix}-icon-dropdown`);
@@ -9609,7 +9645,10 @@ function removeCustomIcon(prefix) {
   if (removeBtn) removeBtn.classList.add('hidden');
 
   const inputId = prefix === 'new' ? 'theme-icon-input' : 'edit-theme-icon-input';
-  const currentVal = (document.getElementById(inputId) && document.getElementById(inputId).value) || 'circle';
+  let currentVal = (document.getElementById(inputId) && document.getElementById(inputId).value) || 'circle';
+  if (currentVal === 'barraca_tenda' || currentVal === 'passarela') {
+    currentVal = 'circle';
+  }
   const opt = availableIcons.find(o => o.val === currentVal) || availableIcons[0];
   selectIcon(prefix, opt.val, opt.label);
 }
