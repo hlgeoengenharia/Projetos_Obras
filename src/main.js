@@ -2187,37 +2187,45 @@ function initMap() {
             return;
         }
 
-        // Se o usuário tocou num polígono mas próximo a uma linha de logradouro (rua), prioriza a linha!
+        // Se o usuário tocou num polígono mas próximo a uma linha de logradouro (rua), prioriza a linha caso pertença à camada ativa
         const gType = feature.geometry ? feature.geometry.type : '';
         const isPolyGeom = gType === 'Polygon' || gType === 'MultiPolygon';
         if (isPolyGeom && e.latlng && typeof findClosestLineLayer === 'function') {
             const nearLineLayer = findClosestLineLayer(e.latlng, 35);
             if (nearLineLayer && nearLineLayer !== layer) {
-                nearLineLayer.fire('click', e);
-                return;
+                const lineThemeId = nearLineLayer.feature && nearLineLayer.feature.properties && String(nearLineLayer.feature.properties.themeId);
+                if (lineThemeId === window.activeSelectionThemeId) {
+                    nearLineLayer.fire('click', e);
+                    return;
+                }
             }
         }
 
         const themeIdStr = String(feature.properties.themeId);
         
-        // Auto-ativação fluida no celular/desktop: se a feição clicada pertence a uma camada visível,
-        // auto-seleciona a camada para que a feição abra imediatamente sem exigir abrir a barra lateral
-        if (!window.activeSelectionThemeId || window.activeSelectionThemeId !== themeIdStr) {
-            const currentTheme = themes.find(t => String(t.id) === themeIdStr);
-            if (currentTheme && currentTheme.visible !== false) {
-                if (typeof toggleSelectionTheme === 'function') {
-                    toggleSelectionTheme(themeIdStr, true);
-                }
-                if (typeof updateThemeInteractivity === 'function') {
-                    updateThemeInteractivity();
-                }
-            } else if (!window.activeSelectionThemeId) {
-                L.DomEvent.stopPropagation(e);
-                if (typeof showWarningToast === 'function') {
-                    showWarningToast("Selecione uma camada no menu lateral para que suas feições possam ser selecionadas.");
-                }
-                return;
+        // Trava de segurança: SÓ é permitido selecionar feições se a sua camada estiver selecionada no menu lateral
+        if (!window.activeSelectionThemeId) {
+            L.DomEvent.stopPropagation(e);
+            if (typeof showWarningToast === 'function') {
+                showWarningToast("Selecione uma camada no menu lateral para que suas feições possam ser selecionadas.");
+            } else if (typeof showToast === 'function') {
+                showToast("Selecione uma camada no menu lateral para que suas feições possam ser selecionadas.", "warning");
             }
+            return;
+        }
+        
+        // Bloqueia e avisa se a feição clicada pertence a outra camada diferente da selecionada no menu lateral
+        if (window.activeSelectionThemeId !== themeIdStr) {
+            L.DomEvent.stopPropagation(e);
+            const currentTheme = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes.find(t => String(t.id) === themeIdStr) : null;
+            const themeName = currentTheme ? currentTheme.name : "outra camada";
+            const msg = `Esta feição pertence à camada "${themeName}". Selecione-a no menu lateral para que suas feições sejam selecionadas.`;
+            if (typeof showWarningToast === 'function') {
+                showWarningToast(msg);
+            } else if (typeof showToast === 'function') {
+                showToast(msg, "warning");
+            }
+            return;
         }
 
         L.DomEvent.stopPropagation(e);
@@ -2268,10 +2276,10 @@ function initMap() {
     const isEditing = document.getElementById('geometry-edit-toolbar') && !document.getElementById('geometry-edit-toolbar').classList.contains('hidden');
     if (isDrawing || isEditing) return;
 
-    // Verifica se o toque no mapa ocorreu próximo a uma linha de logradouro (tolerância touch de 38px)
-    if (e.latlng && typeof findClosestLineLayer === 'function') {
+    // Verifica se o toque no mapa ocorreu próximo a uma linha de logradouro da camada ativa (tolerância touch de 38px)
+    if (e.latlng && typeof findClosestLineLayer === 'function' && window.activeSelectionThemeId) {
         const closestLayer = findClosestLineLayer(e.latlng, 38);
-        if (closestLayer) {
+        if (closestLayer && closestLayer.feature && String(closestLayer.feature.properties?.themeId) === String(window.activeSelectionThemeId)) {
             closestLayer.fire('click', e);
             return;
         }
