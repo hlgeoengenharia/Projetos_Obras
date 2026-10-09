@@ -1619,10 +1619,15 @@ function initMap() {
     }
   } catch(eIcon) {}
 
+  const isTouchDevice = (typeof window !== 'undefined' && (('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.innerWidth < 1024)));
+  window.isTouchDevice = isTouchDevice;
+
   map = L.map('map', {
     zoomControl: false, // We use our custom zoom buttons
     maxZoom: 24,
-    preferCanvas: true // Fixes html2canvas vector offset issues
+    preferCanvas: true, // Fixes html2canvas vector offset issues
+    tap: false, // CRÍTICO: desativa emulação de tap legada do Leaflet que bloqueia cliques em linhas/vetores no iOS Safari
+    tapTolerance: 24
   }).setView(initialCenter, initialZoom);
   window.map = map;
 
@@ -1721,8 +1726,9 @@ function initMap() {
     console.warn("Leaflet Geoman não foi carregado corretamente.");
   }
 
-  // Canvas Renderer acelerado por GPU para garantir 60 FPS contínuos e zero sobrecarga de nós DOM
-  const canvasRenderer = (typeof L.canvas === 'function') ? L.canvas({ padding: 0.5, tolerance: 8 }) : null;
+  // Canvas Renderer acelerado por GPU com tolerância touch adaptativa (24px no celular para fácil seleção de linhas)
+  const isTouchActive = (typeof isTouchDevice !== 'undefined' && isTouchDevice) || ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  const canvasRenderer = (typeof L.canvas === 'function') ? L.canvas({ padding: 0.5, tolerance: isTouchActive ? 24 : 10 }) : null;
 
   // Layer Group for all GeoJSON features
   geojsonLayer = L.geoJSON(null, {
@@ -1842,6 +1848,11 @@ function initMap() {
       const strokeVisible = !isStrokeZero;
       const fillVisible = shouldFill && !isFillZero && !isLineGeom && !isLineTheme;
 
+      let finalWeight = strokeVisible ? weight : 0;
+      if (isLineGeom && strokeVisible && (typeof isTouchActive !== 'undefined' ? isTouchActive : true)) {
+        finalWeight = Math.max(Number(weight) || 2, 3.5);
+      }
+
       return {
         stroke: strokeVisible,
         fill: fillVisible,
@@ -1849,9 +1860,10 @@ function initMap() {
         fillOpacity: fillVisible ? fillOpacity : 0,
         color: color,
         opacity: strokeVisible ? strokeOpacity : 0,
-        weight: strokeVisible ? weight : 0,
+        weight: finalWeight,
         dashArray: dashArray,
-        className: `theme-feature theme-${themeId}`
+        className: `theme-feature theme-${themeId}`,
+        interactive: true
       };
     },
     pointToLayer: function(feature, latlng) {
@@ -2149,24 +2161,24 @@ function initMap() {
 
         const themeIdStr = String(feature.properties.themeId);
         
-        // Trava de segurança: SÓ é permitido selecionar feições se a sua camada estiver selecionada no menu lateral
-        if (!window.activeSelectionThemeId) {
-            L.DomEvent.stopPropagation(e);
-            if (typeof showWarningToast === 'function') {
-                showWarningToast("Selecione uma camada no menu lateral para que suas feições possam ser selecionadas.");
-            }
-            return;
-        }
-        
-        // Bloqueia e avisa se a feição clicada pertence a outra camada diferente da selecionada no menu lateral
-        if (window.activeSelectionThemeId !== themeIdStr) {
-            L.DomEvent.stopPropagation(e);
+        // Auto-ativação fluida no celular/desktop: se a feição clicada pertence a uma camada visível,
+        // auto-seleciona a camada para que a feição abra imediatamente sem exigir abrir a barra lateral
+        if (!window.activeSelectionThemeId || window.activeSelectionThemeId !== themeIdStr) {
             const currentTheme = themes.find(t => String(t.id) === themeIdStr);
-            const themeName = currentTheme ? currentTheme.name : "outra camada";
-            if (typeof showWarningToast === 'function') {
-                showWarningToast(`Esta feição pertence à camada "${themeName}". Selecione-a no menu lateral para que suas feições sejam selecionadas.`);
+            if (currentTheme && currentTheme.visible !== false) {
+                if (typeof toggleSelectionTheme === 'function') {
+                    toggleSelectionTheme(themeIdStr, true);
+                }
+                if (typeof updateThemeInteractivity === 'function') {
+                    updateThemeInteractivity();
+                }
+            } else if (!window.activeSelectionThemeId) {
+                L.DomEvent.stopPropagation(e);
+                if (typeof showWarningToast === 'function') {
+                    showWarningToast("Selecione uma camada no menu lateral para que suas feições possam ser selecionadas.");
+                }
+                return;
             }
-            return;
         }
 
         L.DomEvent.stopPropagation(e);
@@ -3677,16 +3689,16 @@ function updateThemeInteractivity() {
         document.head.appendChild(styleTag);
     }
     
-    // Exclusividade de interação: apenas a camada selecionada no menu lateral
-    // tem feições clicáveis no mapa. Sem camada selecionada, nenhuma feição é clicável.
+    // Todas as camadas visíveis têm pointer-events ativos para permitir clique e toque no celular.
+    // A camada selecionada recebe reforço de contorno e brilho visual.
     if (window.activeSelectionThemeId) {
         styleTag.innerHTML = `
-            .theme-feature { pointer-events: none !important; cursor: default; }
-            .theme-${window.activeSelectionThemeId} { pointer-events: auto !important; cursor: pointer; stroke-width: 2.8px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.45)); }
+            .theme-feature { pointer-events: auto !important; cursor: pointer; }
+            .theme-${window.activeSelectionThemeId} { stroke-width: 3.5px !important; filter: drop-shadow(0 0 6px rgba(255,255,255,0.6)); }
         `;
     } else {
         styleTag.innerHTML = `
-            .theme-feature { pointer-events: none !important; cursor: default; }
+            .theme-feature { pointer-events: auto !important; cursor: pointer; }
         `;
     }
 }

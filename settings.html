@@ -3433,11 +3433,13 @@
                     statsConfig = row.schema.statsConfig;
                     entidade = row.schema.entidade || row.entidade;
                 }
+                const eventTriggers = (row.schema && (row.schema.eventTriggers || row.schema.event_triggers)) || [];
                 return {
                     id: row.id,
                     name: row.title,
                     tabs: tabs,
                     statsConfig: statsConfig,
+                    eventTriggers: eventTriggers,
                     entidade: entidade || row.entidade || null
                 };
             });
@@ -3523,7 +3525,12 @@
               .upsert({
                 id: form.id,
                 title: form.name,
-                schema: { tabs: form.tabs, statsConfig: form.statsConfig, entidade: resolvedEntidade },
+                schema: { 
+                  tabs: form.tabs, 
+                  statsConfig: form.statsConfig, 
+                  eventTriggers: form.eventTriggers || form.event_triggers || [], 
+                  entidade: resolvedEntidade 
+                },
                 municipio_id: activeMunicipioId
               });
             if (error) console.error('Erro ao salvar no Supabase:', error);
@@ -7338,7 +7345,35 @@
         alert('Este é apenas um ambiente de pré-visualização. Clique no botão de fechar para voltar.');
     };
 
+    // Helpers globais para o construtor de eventos
+    window.openTriggerModal = function(id) {
+        if (window.EventsBuilder && typeof window.EventsBuilder.openTriggerModal === 'function') {
+            window.EventsBuilder.openTriggerModal(id);
+        }
+    };
+    window.closeTriggerModal = function() {
+        if (window.EventsBuilder && typeof window.EventsBuilder.closeTriggerModal === 'function') {
+            window.EventsBuilder.closeTriggerModal();
+        }
+    };
+    window.saveTriggerConfig = function() {
+        if (window.EventsBuilder && typeof window.EventsBuilder.saveTriggerConfig === 'function') {
+            window.EventsBuilder.saveTriggerConfig();
+        }
+    };
+    window.deleteTriggerConfig = function(id) {
+        if (window.EventsBuilder && typeof window.EventsBuilder.deleteTriggerConfig === 'function') {
+            window.EventsBuilder.deleteTriggerConfig(id);
+        }
+    };
+    window.toggleTriggerStatus = function(id) {
+        if (window.EventsBuilder && typeof window.EventsBuilder.toggleTriggerStatus === 'function') {
+            window.EventsBuilder.toggleTriggerStatus(id);
+        }
+    };
+
   </script>
+  <script src="src/eventsBuilder.js"></script>
   <script src="src/auditLogger.js"></script>
   <script src="src/auditoria-gestao.js"></script>
   <script src="src/usuarios-gestao.js?v=20260915_filtro_entes_ativos"></script>

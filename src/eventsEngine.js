@@ -552,6 +552,477 @@
     return activeAlerts;
   }
 
+  // =========================================================================
+  // CAMADA DE INTERFACE GRÁFICA (UI) E INTEGRAÇÃO CARTOGRÁFICA LEAFLET
+  // =========================================================================
+
+  let _activeAlertsCache = [];
+  let _currentFilterTab = 'all';
+  let _isAlertFilterModeActive = false;
+  let _haloLayerGroup = null;
+  let _hasInjectedStyles = false;
+
+  /**
+   * Injeta os estilos de animação CSS de pulso (Radar Glow / Halo luminoso) no documento.
+   */
+  function injectRadarGlowStyles() {
+    if (_hasInjectedStyles || typeof document === 'undefined') return;
+    _hasInjectedStyles = true;
+
+    const style = document.createElement('style');
+    style.id = 'events-engine-radar-glow-styles';
+    style.textContent = `
+      @keyframes alert-radar-glow-critico {
+        0% { transform: scale(0.9); opacity: 0.85; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+        70% { transform: scale(1.4); opacity: 0.15; box-shadow: 0 0 0 16px rgba(239, 68, 68, 0); }
+        100% { transform: scale(1.6); opacity: 0; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+      }
+      @keyframes alert-radar-glow-atencao {
+        0% { transform: scale(0.9); opacity: 0.85; box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+        70% { transform: scale(1.4); opacity: 0.15; box-shadow: 0 0 0 14px rgba(245, 158, 11, 0); }
+        100% { transform: scale(1.6); opacity: 0; box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+      }
+      .alert-halo-critico {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: rgba(239, 68, 68, 0.45);
+        border: 2px solid #ef4444;
+        animation: alert-radar-glow-critico 1.8s infinite ease-out;
+        pointer-events: none;
+      }
+      .alert-halo-atencao {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: rgba(245, 158, 11, 0.45);
+        border: 2px solid #f59e0b;
+        animation: alert-radar-glow-atencao 2.2s infinite ease-out;
+        pointer-events: none;
+      }
+      .alert-halo-center-dot {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        border: 1.5px solid #ffffff;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  /**
+   * Recalcula os alertas ativos e atualiza a interface e mapa.
+   */
+  function refreshAlerts() {
+    if (typeof window === 'undefined') return [];
+    injectRadarGlowStyles();
+
+    const themesList = window.themes || [];
+    const formsList = window.forms || window.allForms || [];
+    const userProfile = window.currentUserProfile || (window.parent && window.parent.homeUserProfile) || null;
+
+    _activeAlertsCache = computeActiveAlerts(themesList, userProfile, formsList, {
+      includeDismissed: false,
+      includeSnoozed: false
+    });
+
+    updateAlertBadges();
+    renderAlertsDrawer();
+    updateMapHaloGlow();
+    checkEntryBanner();
+
+    return _activeAlertsCache;
+  }
+
+  /**
+   * Atualiza os contadores no badge do sininho (topbar) e no botão de filtro rápido do mapa.
+   */
+  function updateAlertBadges() {
+    if (typeof document === 'undefined') return;
+
+    const total = _activeAlertsCache.length;
+    const badge = document.getElementById('alerts-count-badge');
+    const subtitle = document.getElementById('alerts-drawer-subtitle');
+    const filterBtn = document.getElementById('btn-filter-alerts');
+    const filterCount = document.getElementById('btn-filter-alerts-count');
+
+    if (badge) {
+      if (total > 0) {
+        badge.innerText = total > 99 ? '99+' : String(total);
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
+    if (subtitle) {
+      if (total === 0) {
+        subtitle.innerText = 'Nenhum alerta pendente';
+      } else {
+        const criticos = _activeAlertsCache.filter(a => a.severity === 'critico').length;
+        subtitle.innerText = criticos > 0 ? `${total} ativo(s) (${criticos} crítico(s))` : `${total} monitoramento(s) ativo(s)`;
+      }
+    }
+
+    if (filterBtn && filterCount) {
+      filterCount.innerText = String(total);
+      if (total > 0) {
+        filterBtn.classList.remove('hidden');
+      } else if (!_isAlertFilterModeActive) {
+        filterBtn.classList.add('hidden');
+      }
+    }
+  }
+
+  /**
+   * Abre/fecha o Drawer (dropdown) de Alertas do Topbar.
+   */
+  function toggleAlertsDrawer(e) {
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+    const drawer = document.getElementById('alerts-drawer');
+    if (!drawer) return;
+
+    const isHidden = drawer.classList.contains('hidden');
+    if (isHidden) {
+      drawer.classList.remove('hidden');
+      renderAlertsDrawer();
+    } else {
+      drawer.classList.add('hidden');
+    }
+  }
+
+  /**
+   * Filtra os alertas exibidos no Drawer por aba de severidade.
+   */
+  function filterAlertsTab(tab) {
+    _currentFilterTab = tab || 'all';
+
+    const tabs = ['all', 'critico', 'atencao', 'info'];
+    tabs.forEach(t => {
+      const btn = document.getElementById(`alerts-tab-${t}`);
+      if (!btn) return;
+      if (t === _currentFilterTab) {
+        btn.className = 'px-2.5 py-1 rounded-lg bg-amber-500 text-white font-bold transition-all shadow-xs cursor-pointer';
+      } else {
+        btn.className = 'px-2.5 py-1 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer';
+      }
+    });
+
+    renderAlertsDrawer();
+  }
+
+  /**
+   * Renderiza a lista de cards de alertas dentro do Drawer.
+   */
+  function renderAlertsDrawer() {
+    const container = document.getElementById('alerts-list-container');
+    if (!container) return;
+
+    let items = _activeAlertsCache;
+    if (_currentFilterTab !== 'all') {
+      items = items.filter(a => a.severity === _currentFilterTab);
+    }
+
+    if (items.length === 0) {
+      container.innerHTML = `
+        <div class="py-10 text-center flex flex-col items-center justify-center text-slate-400">
+          <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-2.5 border border-emerald-500/20">
+            <span class="material-symbols-outlined text-[26px]">task_alt</span>
+          </div>
+          <p class="font-bold text-xs text-slate-700 dark:text-slate-300">Tudo em dia!</p>
+          <span class="text-[11px] text-slate-400 max-w-[240px] mt-0.5 leading-snug">
+            ${_currentFilterTab === 'all' ? 'Nenhum alerta de prazo ou periodicidade pendente neste momento.' : `Nenhum alerta na categoria selecionada.`}
+          </span>
+        </div>
+      `;
+      return;
+    }
+
+    let html = '';
+    items.forEach(alert => {
+      const isCrit = alert.severity === 'critico';
+      const isAten = alert.severity === 'atencao';
+
+      const borderClass = isCrit ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/30 dark:bg-rose-950/20' : 
+                          (isAten ? 'border-amber-300 dark:border-amber-900/60 bg-amber-50/30 dark:bg-amber-950/20' : 
+                                    'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900');
+
+      const badgeSeverityClass = isCrit ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30' :
+                                 (isAten ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30' :
+                                           'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30');
+
+      html += `
+        <div id="alert-card-${escapeAttr(alert.id)}" class="p-3.5 rounded-2xl border ${borderClass} shadow-xs hover:shadow-md transition-all space-y-2 group">
+          <div class="flex items-start justify-between gap-2">
+            <div class="flex items-center gap-1.5 flex-wrap min-w-0">
+              <span class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${badgeSeverityClass}">
+                ${alert.statusLabel}
+              </span>
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 truncate max-w-[170px]" title="${escapeAttr(alert.themeName)}">
+                <span class="w-2 h-2 rounded-full shrink-0" style="background-color: ${alert.themeColor}"></span>
+                <span class="truncate">${escapeHtml(alert.themeName)}</span>
+              </span>
+            </div>
+            <span class="text-[10px] font-mono font-bold text-slate-400 shrink-0">${alert.targetDateFormatted}</span>
+          </div>
+
+          <div>
+            <h5 class="text-xs font-bold text-slate-900 dark:text-white leading-tight truncate">
+              ${escapeHtml(alert.featureTitle)}
+            </h5>
+            <p class="text-[11px] text-slate-600 dark:text-slate-300 mt-1 leading-snug">
+              ${escapeHtml(alert.message)}
+            </p>
+          </div>
+
+          <div class="pt-2 border-t border-slate-200/50 dark:border-slate-800/60 flex items-center justify-between gap-1">
+            <button type="button" onclick="EventsEngine.locateAlertFeature('${escapeAttr(alert.id)}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-[11px] shadow-xs transition-all cursor-pointer">
+              <span class="material-symbols-outlined text-[14px]">my_location</span>
+              <span>Localizar</span>
+            </button>
+
+            <div class="flex items-center gap-1">
+              <button type="button" onclick="EventsEngine.acknowledgeAlert('${escapeAttr(alert.id)}')" class="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors tooltip cursor-pointer" title="Dar Ciente (Remover Notificação)">
+                <span class="material-symbols-outlined text-[16px]">done_all</span>
+              </button>
+              <button type="button" onclick="EventsEngine.snoozeAlertUi('${escapeAttr(alert.id)}', 7)" class="p-1.5 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors tooltip cursor-pointer" title="Adiar por 7 dias">
+                <span class="material-symbols-outlined text-[16px]">snooze</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+    container.innerHTML = html;
+  }
+
+  /**
+   * Localiza a feição no mapa e abre seus detalhes.
+   */
+  function locateAlertFeature(alertId) {
+    const alert = _activeAlertsCache.find(a => a.id === alertId);
+    if (!alert) return;
+
+    // Fecha o drawer de notificações para desobstruir a visão
+    const drawer = document.getElementById('alerts-drawer');
+    if (drawer) drawer.classList.add('hidden');
+
+    // Garante que o menu lateral do mapa não bloqueie a visualização
+    if (typeof window.closeSideDrawer === 'function') {
+      window.closeSideDrawer();
+    }
+
+    // Aciona a função global existente jumpToFeature
+    if (typeof window.jumpToFeature === 'function') {
+      window.jumpToFeature(alert.featureId);
+      return;
+    }
+
+    // Fallback: zoom direto se o Leaflet estiver acessível
+    if (window.map && alert.coords) {
+      window.map.flyTo(alert.coords, 18, { duration: 1.2 });
+    }
+  }
+
+  /**
+   * Marca alerta como ciente pelo usuário atual.
+   */
+  function acknowledgeAlert(alertId) {
+    const userProfile = window.currentUserProfile || null;
+    markAlertDismissed(alertId, userProfile ? userProfile.id : null);
+
+    const card = document.getElementById(`alert-card-${alertId}`);
+    if (card) {
+      card.style.transition = 'all 0.25s ease-out';
+      card.style.opacity = '0';
+      card.style.transform = 'scale(0.95)';
+      setTimeout(() => {
+        refreshAlerts();
+      }, 250);
+    } else {
+      refreshAlerts();
+    }
+  }
+
+  /**
+   * Adia o alerta por X dias.
+   */
+  function snoozeAlertUi(alertId, days = 7) {
+    const userProfile = window.currentUserProfile || null;
+    snoozeAlert(alertId, days, userProfile ? userProfile.id : null);
+
+    const card = document.getElementById(`alert-card-${alertId}`);
+    if (card) {
+      card.style.transition = 'all 0.25s ease-out';
+      card.style.opacity = '0';
+      card.style.transform = 'scale(0.95)';
+      setTimeout(() => {
+        refreshAlerts();
+      }, 250);
+    } else {
+      refreshAlerts();
+    }
+  }
+
+  /**
+   * Renderiza os halos luminosos (Radar Glow) sobre as feições no Leaflet.
+   */
+  function updateMapHaloGlow() {
+    if (typeof window === 'undefined' || !window.map || typeof L === 'undefined') return;
+
+    if (!_haloLayerGroup) {
+      _haloLayerGroup = L.layerGroup().addTo(window.map);
+    }
+    _haloLayerGroup.clearLayers();
+
+    _activeAlertsCache.forEach(alert => {
+      if (!alert.coords) return;
+      const isCrit = alert.severity === 'critico';
+      const haloClass = isCrit ? 'alert-halo-critico' : 'alert-halo-atencao';
+      const dotColor = isCrit ? '#ef4444' : '#f59e0b';
+
+      const icon = L.divIcon({
+        className: 'alert-halo-marker-container',
+        html: `
+          <div style="position: relative; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; cursor: pointer;" onclick="EventsEngine.locateAlertFeature('${escapeAttr(alert.id)}')">
+            <div class="${haloClass}"></div>
+            <div class="alert-halo-center-dot" style="background: ${dotColor};"></div>
+          </div>
+        `,
+        iconSize: [34, 34],
+        iconAnchor: [17, 17]
+      });
+
+      const marker = L.marker(alert.coords, { icon: icon, zIndexOffset: 800 });
+      marker.bindTooltip(`<b>${escapeHtml(alert.featureTitle)}</b><br><span style="color:${dotColor}">${escapeHtml(alert.statusLabel)}</span>`, {
+        direction: 'top',
+        offset: [0, -14],
+        className: 'alert-leaflet-tooltip'
+      });
+      _haloLayerGroup.addLayer(marker);
+    });
+  }
+
+  /**
+   * Alterna o modo de visualização "Mostrar Apenas Alertas Ativos" no mapa.
+   */
+  function toggleAlertFilterMode() {
+    _isAlertFilterModeActive = !_isAlertFilterModeActive;
+    const filterBtn = document.getElementById('btn-filter-alerts');
+
+    if (filterBtn) {
+      if (_isAlertFilterModeActive) {
+        filterBtn.classList.add('ring-2', 'ring-amber-500', 'bg-amber-500/20');
+      } else {
+        filterBtn.classList.remove('ring-2', 'ring-amber-500', 'bg-amber-500/20');
+      }
+    }
+
+    // Aplica transparência às feições não envolvidas em alertas
+    let styleTag = document.getElementById('alert-filter-mode-styles');
+    if (!styleTag) {
+      styleTag = document.createElement('style');
+      styleTag.id = 'alert-filter-mode-styles';
+      document.head.appendChild(styleTag);
+    }
+
+    if (_isAlertFilterModeActive) {
+      // Coleta os IDs de feições com alertas
+      const alertFids = new Set(_activeAlertsCache.map(a => String(a.featureId)));
+      styleTag.innerHTML = `
+        .theme-feature:not(.alert-halo-marker-container) { opacity: 0.15 !important; transition: opacity 0.3s; }
+      `;
+    } else {
+      styleTag.innerHTML = '';
+    }
+  }
+
+  /**
+   * Toast / Banner Inteligente de Entrada: Exibe resumo ao abrir o sistema se houver alertas críticos.
+   */
+  function checkEntryBanner() {
+    if (typeof document === 'undefined') return;
+    const criticos = _activeAlertsCache.filter(a => a.severity === 'critico');
+    if (criticos.length === 0) return;
+
+    // Verifica se o usuário optou por não ver hoje
+    const todayStr = new Date().toISOString().split('T')[0];
+    const dismissedKey = `geogestor_banner_entry_dismissed_${todayStr}`;
+    if (localStorage.getItem(dismissedKey)) return;
+
+    let banner = document.getElementById('entry-alerts-toast');
+    if (banner) return;
+
+    banner = document.createElement('div');
+    banner.id = 'entry-alerts-toast';
+    banner.className = 'fixed bottom-5 right-5 z-[200] max-w-sm bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-rose-300 dark:border-rose-900/60 rounded-2xl p-4 shadow-2xl flex flex-col gap-2.5 animate-in slide-in-from-bottom duration-300';
+    banner.innerHTML = `
+      <div class="flex items-start gap-3">
+        <div class="w-9 h-9 rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/20">
+          <span class="material-symbols-outlined text-[20px]">warning</span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <h5 class="text-xs font-bold text-slate-900 dark:text-white leading-tight">Atenção Operacional</h5>
+          <p class="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 leading-snug">
+            Existem <b>${criticos.length} evento(s) crítico(s) vencido(s)</b> aguardando manutenção ou renovação.
+          </p>
+        </div>
+        <button type="button" onclick="document.getElementById('entry-alerts-toast').remove()" class="text-slate-400 hover:text-slate-600 p-1">
+          <span class="material-symbols-outlined text-[16px]">close</span>
+        </button>
+      </div>
+      <div class="flex items-center justify-end gap-2 pt-1 border-t border-slate-100 dark:border-slate-800 text-[11px]">
+        <button type="button" onclick="localStorage.setItem('${dismissedKey}', '1'); document.getElementById('entry-alerts-toast').remove()" class="text-slate-400 hover:text-slate-600 px-2 py-1">
+          Não lembrar hoje
+        </button>
+        <button type="button" onclick="EventsEngine.toggleAlertsDrawer(); document.getElementById('entry-alerts-toast').remove()" class="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-xs">
+          Ver Alertas
+        </button>
+      </div>
+    `;
+    document.body.appendChild(banner);
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function escapeAttr(str) {
+    if (!str) return '';
+    return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  }
+
+  // Listener global: fecha o drawer ao clicar fora
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('click', function(e) {
+      const drawer = document.getElementById('alerts-drawer');
+      const btn = document.getElementById('btn-header-alerts');
+      if (!drawer || drawer.classList.contains('hidden')) return;
+      if (!drawer.contains(e.target) && (!btn || !btn.contains(e.target))) {
+        drawer.classList.add('hidden');
+      }
+    });
+  }
+
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    // Auto inicialização após o carregamento completo do mapa
+    window.addEventListener('load', () => {
+      setTimeout(refreshAlerts, 1500);
+    });
+  }
+
   // Exportação pública
   const EventsEngine = {
     parseDateSafe,
@@ -570,7 +1041,18 @@
     clearDismissedAlerts,
     computeActiveAlerts,
     evaluateAlerts: computeActiveAlerts,
-    markAsAcknowledged: markAlertDismissed
+    markAsAcknowledged: markAlertDismissed,
+    refreshAlerts,
+    applyMapAlertHighlights: updateMapHaloGlow,
+    toggleAlertsDrawer,
+    filterAlertsTab,
+    renderAlertsDrawer,
+    locateAlertFeature,
+    acknowledgeAlert,
+    snoozeAlertUi,
+    updateMapHaloGlow,
+    toggleAlertFilterMode,
+    checkEntryBanner
   };
 
   if (typeof module !== 'undefined' && module.exports) {
