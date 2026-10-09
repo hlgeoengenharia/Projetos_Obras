@@ -49,9 +49,11 @@ async function fetchDynamicForm() {
                 allForms = data.map(row => {
                     let tabs = row.schema;
                     let statsConfig = row.statsConfig;
+                    let eventTriggers = row.eventTriggers || row.event_triggers;
                     if (row.schema && !Array.isArray(row.schema) && row.schema.tabs) {
                         tabs = row.schema.tabs;
                         if (!statsConfig) statsConfig = row.schema.statsConfig;
+                        if (!eventTriggers) eventTriggers = row.schema.eventTriggers || row.schema.event_triggers;
                     }
                     return {
                         id: row.id,
@@ -60,6 +62,7 @@ async function fetchDynamicForm() {
                         schema: tabs,
                         tabs: tabs,
                         statsConfig: statsConfig,
+                        eventTriggers: eventTriggers || [],
                         created_at: row.created_at
                     };
                 });
@@ -68,6 +71,9 @@ async function fetchDynamicForm() {
                 populateFormSelects();
                 if (typeof renderThemes === 'function') renderThemes();
                 if (typeof loadAllFeaturesToMap === 'function') loadAllFeaturesToMap();
+                if (window.EventsEngine && typeof window.EventsEngine.refreshAlerts === 'function') {
+                    window.EventsEngine.refreshAlerts();
+                }
             }
         } catch(e) { console.error(e); }
     } else {
@@ -78,6 +84,9 @@ async function fetchDynamicForm() {
             populateFormSelects();
             if (typeof renderThemes === 'function') renderThemes();
             if (typeof loadAllFeaturesToMap === 'function') loadAllFeaturesToMap();
+            if (window.EventsEngine && typeof window.EventsEngine.refreshAlerts === 'function') {
+                window.EventsEngine.refreshAlerts();
+            }
         }
     }
 }
@@ -3485,6 +3494,9 @@ function loadAllFeaturesToMap() {
           }
       }
       if (typeof updateLabelsVisibility === 'function') updateLabelsVisibility();
+      if (window.EventsEngine && typeof window.EventsEngine.applyMapAlertHighlights === 'function') {
+          window.EventsEngine.applyMapAlertHighlights();
+      }
   };
 
   if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.renderFeaturesProgressive === 'function') {
@@ -9546,7 +9558,27 @@ async function ensureAuthenticated() {
         return false;
     }
 
-    const authUser = session ? session.user : null;
+    // Recupera usuário autenticado ou restaura do cache local (resiliência para modo campo/offline)
+    let cachedUser = null;
+    let cachedProfile = null;
+    try {
+        const rawCachedUser = localStorage.getItem('geogestor_user_cache');
+        if (rawCachedUser) cachedUser = JSON.parse(rawCachedUser);
+        const rawCachedProf = localStorage.getItem('geogestor_profile_cache');
+        if (rawCachedProf) cachedProfile = JSON.parse(rawCachedProf);
+    } catch(eCache) {}
+
+    const authUser = (session && session.user) || cachedUser || { id: 'offline_user', email: 'offline@geogestor.local', user_metadata: {} };
+    if (session && session.user) {
+        try {
+            localStorage.setItem('geogestor_user_cache', JSON.stringify({
+                id: session.user.id,
+                email: session.user.email,
+                user_metadata: session.user.user_metadata || {}
+            }));
+        } catch(eSave) {}
+    }
+
     let userMetaNome = '';
     if (authUser && authUser.user_metadata) {
         const meta = authUser.user_metadata;
@@ -9555,7 +9587,7 @@ async function ensureAuthenticated() {
             userMetaNome = `${meta.given_name || ''} ${meta.family_name || ''}`.trim();
         }
     }
-    if (!userMetaNome && supabaseClient.auth && typeof supabaseClient.auth.getUser === 'function') {
+    if (!userMetaNome && supabaseClient.auth && typeof supabaseClient.auth.getUser === 'function' && navigator.onLine) {
         try {
             const { data: freshUserResp } = await supabaseClient.auth.getUser();
             if (freshUserResp && freshUserResp.user && freshUserResp.user.user_metadata) {
@@ -9569,14 +9601,18 @@ async function ensureAuthenticated() {
     }
 
     try {
-        const { data: profile } = await supabaseClient
-            .from('profiles')
-            .select('*')
-            .eq('id', authUser.id)
-            .single();
-        currentUserProfile = profile || { id: authUser.id, super_admin: false };
+        if (authUser.id && authUser.id !== 'offline_user' && navigator.onLine) {
+            const { data: profile } = await supabaseClient
+                .from('profiles')
+                .select('*')
+                .eq('id', authUser.id)
+                .single();
+            currentUserProfile = profile || cachedProfile || { id: authUser.id, super_admin: false };
+        } else {
+            currentUserProfile = cachedProfile || { id: authUser.id || 'offline_user', super_admin: false };
+        }
     } catch (e) {
-        currentUserProfile = { id: authUser.id, super_admin: false };
+        currentUserProfile = cachedProfile || { id: authUser.id || 'offline_user', super_admin: false };
     }
 
     if (userMetaNome) {
@@ -9591,7 +9627,7 @@ async function ensureAuthenticated() {
 
     if (userMetaNome && isProfileNomeEmail) {
         currentUserProfile.nome = userMetaNome;
-        if (typeof navigator !== 'undefined' && navigator.onLine) {
+        if (typeof navigator !== 'undefined' && navigator.onLine && authUser.id !== 'offline_user') {
             try {
                 supabaseClient.from('profiles').update({ nome: userMetaNome }).eq('id', authUser.id).then(() => {}).catch(() => {});
             } catch (eSync) {}
@@ -9600,6 +9636,9 @@ async function ensureAuthenticated() {
         currentUserProfile.nome = userMetaNome || authUser.email;
     }
     window.currentUserProfile = currentUserProfile;
+    try {
+        localStorage.setItem('geogestor_profile_cache', JSON.stringify(currentUserProfile));
+    } catch(eProfSave) {}
 
     // Papel do usuário NO MUNICÍPIO ATIVO (não é mais global) — se o vínculo
     // não existir ou não estiver aprovado (ex: acesso revogado depois que
@@ -9607,35 +9646,44 @@ async function ensureAuthenticated() {
     currentMunicipioPapel = null;
     if (!currentUserProfile.super_admin) {
         try {
-            const { data: membro } = await supabaseClient
-                .from('municipio_membros')
-                .select('papel, status, entidade')
-                .eq('user_id', authUser.id)
-                .eq('municipio_id', activeMunicipioId)
-                .eq('status', 'aprovado')
-                .maybeSingle();
-            if (!membro) {
-                sessionStorage.removeItem('municipio_ativo');
-                window.location.href = 'home.html';
-                return false;
-            }
-            currentMunicipioPapel = membro.papel;
-            window.currentUserEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || (membro && membro.entidade) || '';
-
-            // Verifica quantos municípios este usuário tem liberados
-            try {
-                const { count } = await supabaseClient
+            if (navigator.onLine && authUser.id !== 'offline_user') {
+                const { data: membro } = await supabaseClient
                     .from('municipio_membros')
-                    .select('*', { count: 'exact', head: true })
+                    .select('papel, status, entidade')
                     .eq('user_id', authUser.id)
-                    .eq('status', 'aprovado');
-                window.userTotalMunicipiosAprovados = count || 1;
-            } catch(e) {
+                    .eq('municipio_id', activeMunicipioId)
+                    .eq('status', 'aprovado')
+                    .maybeSingle();
+                if (!membro && !localStorage.getItem('geogestor_modo_campo')) {
+                    sessionStorage.removeItem('municipio_ativo');
+                    window.location.href = 'home.html';
+                    return false;
+                }
+                currentMunicipioPapel = (membro && membro.papel) || 'operador';
+                window.currentUserEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || (membro && membro.entidade) || '';
+
+                // Verifica quantos municípios este usuário tem liberados
+                try {
+                    const { count } = await supabaseClient
+                        .from('municipio_membros')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('user_id', authUser.id)
+                        .eq('status', 'aprovado');
+                    window.userTotalMunicipiosAprovados = count || 1;
+                } catch(e) {
+                    window.userTotalMunicipiosAprovados = 1;
+                }
+            } else {
+                currentMunicipioPapel = 'operador';
+                window.currentUserEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || '';
                 window.userTotalMunicipiosAprovados = 1;
             }
         } catch (e) {
-            window.location.href = 'home.html';
-            return false;
+            if (!localStorage.getItem('geogestor_modo_campo') && navigator.onLine) {
+                window.location.href = 'home.html';
+                return false;
+            }
+            currentMunicipioPapel = 'operador';
         }
     } else {
         window.userTotalMunicipiosAprovados = 999;
@@ -9731,28 +9779,30 @@ async function ensureAuthenticated() {
 
     // Mapa local de permissões por tema indexado com case-insensitivity
     currentUserPermissions = {};
-    try {
-        const { data: perms } = await supabaseClient.from('permissoes_camada').select('*').eq('user_id', authUser.id);
-        (perms || []).forEach(p => { 
-            const tid = String(p.theme_id).toLowerCase().trim();
-            currentUserPermissions[tid] = p;
-            currentUserPermissions[p.theme_id] = p;
-        });
-    } catch (e) {
-        console.warn('Erro ao carregar permissoes_camada:', e);
-    }
-
-    // Permissão por aba de formulário (ver/editar dentro do card de uma camada)
     window.currentUserAbaPermissions = {};
-    try {
-        const { data: abaPerms } = await supabaseClient.from('permissoes_aba').select('*').eq('user_id', authUser.id);
-        (abaPerms || []).forEach(p => { 
-            const aid = `${p.form_id}:${p.tab_id}`.toLowerCase().trim();
-            window.currentUserAbaPermissions[aid] = p;
-            window.currentUserAbaPermissions[p.form_id + ':' + p.tab_id] = p;
-        });
-    } catch (e) {
-        console.warn('Erro ao carregar permissoes_aba:', e);
+    if (authUser && authUser.id && authUser.id !== 'offline_user' && navigator.onLine) {
+        try {
+            const { data: perms } = await supabaseClient.from('permissoes_camada').select('*').eq('user_id', authUser.id);
+            (perms || []).forEach(p => { 
+                const tid = String(p.theme_id).toLowerCase().trim();
+                currentUserPermissions[tid] = p;
+                currentUserPermissions[p.theme_id] = p;
+            });
+        } catch (e) {
+            console.warn('Erro ao carregar permissoes_camada:', e);
+        }
+
+        // Permissão por aba de formulário (ver/editar dentro do card de uma camada)
+        try {
+            const { data: abaPerms } = await supabaseClient.from('permissoes_aba').select('*').eq('user_id', authUser.id);
+            (abaPerms || []).forEach(p => { 
+                const aid = `${p.form_id}:${p.tab_id}`.toLowerCase().trim();
+                window.currentUserAbaPermissions[aid] = p;
+                window.currentUserAbaPermissions[p.form_id + ':' + p.tab_id] = p;
+            });
+        } catch (e) {
+            console.warn('Erro ao carregar permissoes_aba:', e);
+        }
     }
 
     if (typeof applyCurrentUserToProfileModal === 'function') applyCurrentUserToProfileModal();
@@ -10649,17 +10699,26 @@ window.updateSplashProgress = updateSplashProgress;
 window.hideSplashScreen = hideSplashScreen;
 
 window.addEventListener('DOMContentLoaded', async () => {
-  updateSplashProgress('🔐 Validando credenciais de acesso...', 15);
-  const authOk = await ensureAuthenticated();
-  if (!authOk) return;
+  try {
+    updateSplashProgress('🔐 Validando credenciais de acesso...', 15);
+    const authOk = await ensureAuthenticated();
+    if (!authOk) return;
 
-  updateSplashProgress('⚙️ Carregando formulários dinâmicos...', 35);
-  try { await fetchDynamicForm(); } catch(eForm) {}
+    updateSplashProgress('⚙️ Carregando formulários dinâmicos...', 35);
+    try { await fetchDynamicForm(); } catch(eForm) {}
 
-  updateSplashProgress('🗺️ Inicializando motor cartográfico...', 50);
-  initMap();
-  setupIconDropdowns();
-  setupSupabaseRealtime();
+    updateSplashProgress('🗺️ Inicializando motor cartográfico...', 50);
+    initMap();
+    setupIconDropdowns();
+    setupSupabaseRealtime();
+  } catch (errBootstrap) {
+    console.error('[App] Erro capturado no ciclo de bootstrap:', errBootstrap);
+    try {
+      initMap();
+      setupIconDropdowns();
+      hideSplashScreen();
+    } catch (eFallback) {}
+  }
 });
 
 // --- CONTROLES DE MAPA ORIGINAIS ---

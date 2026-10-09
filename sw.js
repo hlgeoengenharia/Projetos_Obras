@@ -1,5 +1,5 @@
 // sw.js — Service Worker do GeoGestor (Suporte a PWA e Modo Offline)
-const CACHE_NAME = 'geogestor-app-shell-v3';
+const CACHE_NAME = 'geogestor-app-shell-v5';
 
 const CORE_ASSETS = [
     './',
@@ -8,6 +8,7 @@ const CORE_ASSETS = [
     'public/favicon.svg',
     'supabase-config.js',
     'src/main.js',
+    'src/eventsEngine.js',
     'src/offline-sync.js',
     'src/session-security.js',
     'src/geo-engine-turbo.js',
@@ -24,7 +25,7 @@ const CORE_ASSETS = [
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            console.log('[ServiceWorker] Pré-carregando App Shell no cache offline...');
+            console.log('[ServiceWorker] Pré-carregando App Shell v5 no cache offline...');
             return cache.addAll(CORE_ASSETS.map(url => new Request(url, { cache: 'reload' })))
                 .catch((err) => console.warn('[ServiceWorker] Aviso ao carregar alguns assets:', err));
         }).then(() => self.skipWaiting())
@@ -37,7 +38,7 @@ self.addEventListener('activate', (event) => {
         caches.keys().then((keyList) => {
             return Promise.all(
                 keyList.map((key) => {
-                    if (key !== CACHE_NAME) {
+                    if (key !== CACHE_NAME && key !== TILE_CACHE_NAME) {
                         console.log('[ServiceWorker] Removendo cache legado:', key);
                         return caches.delete(key);
                     }
@@ -95,6 +96,26 @@ self.addEventListener('fetch', (event) => {
         return; // Deixa o navegador resolver normalmente
     }
 
+    // Para scripts da aplicação (.js): Network-First com fallback para cache offline (evita scripts antigos presos)
+    const isAppScript = url.origin === self.location.origin && (url.pathname.endsWith('.js') || url.pathname.includes('/src/'));
+    if (isAppScript) {
+        event.respondWith(
+            fetch(request).then((networkResponse) => {
+                if (networkResponse && networkResponse.status === 200) {
+                    const responseClone = networkResponse.clone();
+                    caches.open(CACHE_NAME).then((cache) => {
+                        cache.put(request, responseClone);
+                    });
+                }
+                return networkResponse;
+            }).catch(() => {
+                return caches.match(request, { ignoreSearch: true })
+                    .then(cached => cached || caches.match(url.pathname, { ignoreSearch: true }));
+            })
+        );
+        return;
+    }
+
     // Para requisições de navegação (HTML): Tenta rede, fallback para cache
     if (request.mode === 'navigate') {
         event.respondWith(
@@ -105,7 +126,7 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Para assets estáticos: Stale-While-Revalidate / Cache-First
+    // Para outros assets estáticos: Stale-While-Revalidate / Cache-First
     event.respondWith(
         caches.match(request).then((cachedResponse) => {
             if (cachedResponse) {

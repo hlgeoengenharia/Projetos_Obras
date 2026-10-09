@@ -41,6 +41,8 @@
 <script src="/src/reportFreeText.js?v=20261005b"></script>
 <script src="/src/reportPreview.js?v=20261005b"></script>
 <script src="/src/reportBuilder.js?v=20261005b"></script>
+<script src="/src/eventsEngine.js?v=20261009"></script>
+<script src="/src/eventsBuilder.js?v=20261009"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <style>
@@ -1328,6 +1330,10 @@
             <span class="material-symbols-outlined text-[18px]">summarize</span>
             <span>Relatório Geral</span>
           </button>
+          <button type="button" id="builder-nav-events" onclick="switchBuilderModule('events')" class="flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs sm:text-sm text-slate-600 dark:text-slate-300 bg-slate-100/70 dark:bg-slate-700/40 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-white/80 dark:hover:bg-slate-700/70 transition-all cursor-pointer" title="Configurar regras de monitoramento temporal, periodicidade e alertas para esta camada">
+            <span class="material-symbols-outlined text-[18px]">notifications_active</span>
+            <span>Eventos & Alertas</span>
+          </button>
         </div>
 
         <!-- MÓDULO 1: Campos do Formulário -->
@@ -1623,6 +1629,35 @@
         <div id="report-builder-container"></div>
       </div>
       <!-- Fim Módulo 3 (Relatórios) -->
+
+      <!-- MÓDULO 4: Monitoramento de Eventos, Prazos e Alertas Territoriais -->
+      <div id="builder-module-events" class="hidden">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 shadow-sm">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b border-slate-200/80 dark:border-slate-800 pb-5">
+            <div>
+              <div class="flex items-center gap-2 mb-1.5">
+                <span class="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-500 dark:text-amber-400 font-bold flex items-center justify-center border border-amber-500/20">
+                  <span class="material-symbols-outlined text-[22px]">notifications_active</span>
+                </span>
+                <h3 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Monitoramento de Prazos, Eventos & Alertas</h3>
+              </div>
+              <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
+                Configure regras preditivas de tempo (periodicidade de manutenção preventiva, vencimento de alvarás e licenças, renovações de certidões) para gerar alertas inteligentes no mapa e na barra superior.
+              </p>
+            </div>
+            <button type="button" onclick="openTriggerModal()" class="flex items-center gap-2 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs sm:text-sm shadow-md hover:shadow-lg transition-all cursor-pointer shrink-0">
+              <span class="material-symbols-outlined text-[19px]">add_alert</span>
+              <span>Novo Gatilho / Evento</span>
+            </button>
+          </div>
+
+          <!-- Lista de Gatilhos / Regras Configuradas -->
+          <div id="events-triggers-list" class="space-y-3.5">
+            <!-- Renderizado dinamicamente via renderEventTriggersBuilder() -->
+          </div>
+        </div>
+      </div>
+      <!-- Fim Módulo 4 (Eventos & Alertas) -->
       </div>
 
 
@@ -4371,14 +4406,17 @@
      function switchBuilderModule(moduleName) {
        // 'reports' = Relatório Individual; 'reports-geral' = Relatório Geral da camada (mesmo construtor, outro escopo)
        const isReportsModule = moduleName === 'reports' || moduleName === 'reports-geral';
+       const isEventsModule = moduleName === 'events';
        const navFields = document.getElementById('builder-nav-fields');
        const navDash = document.getElementById('builder-nav-dashboard');
        const navReports = document.getElementById('builder-nav-reports');
        const navReportsGeral = document.getElementById('builder-nav-reports-geral');
+       const navEvents = document.getElementById('builder-nav-events');
 
        const modFields = document.getElementById('builder-module-fields');
        const modDash = document.getElementById('builder-module-dashboard');
        const modReports = document.getElementById('builder-module-reports');
+       const modEvents = document.getElementById('builder-module-events');
 
        const activeNavClass = "flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs sm:text-sm text-primary dark:text-sky-400 bg-white dark:bg-slate-900 shadow-sm ring-1 ring-slate-300 dark:ring-sky-700 transition-all cursor-pointer";
        const inactiveNavClass = "flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs sm:text-sm text-slate-600 dark:text-slate-300 bg-slate-100/70 dark:bg-slate-700/40 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-white/80 dark:hover:bg-slate-700/70 transition-all cursor-pointer";
@@ -4387,14 +4425,20 @@
        if (navDash) navDash.className = (moduleName === 'dashboard') ? activeNavClass : inactiveNavClass;
        if (navReports) navReports.className = (moduleName === 'reports') ? activeNavClass : inactiveNavClass;
        if (navReportsGeral) navReportsGeral.className = (moduleName === 'reports-geral') ? activeNavClass : inactiveNavClass;
+       if (navEvents) navEvents.className = isEventsModule ? activeNavClass : inactiveNavClass;
 
        if (modFields) modFields.classList.toggle('hidden', moduleName !== 'fields');
        if (modDash) modDash.classList.toggle('hidden', moduleName !== 'dashboard');
        if (modReports) modReports.classList.toggle('hidden', !isReportsModule);
+       if (modEvents) modEvents.classList.toggle('hidden', !isEventsModule);
 
        if (isReportsModule && window.ReportBuilder && typeof window.ReportBuilder.initReportBuilderTab === 'function') {
            const formName = document.getElementById('form-name') ? document.getElementById('form-name').value : 'Formulário';
            window.ReportBuilder.initReportBuilderTab(currentFormId, formName, { scope: moduleName === 'reports-geral' ? 'geral' : 'individual' });
+       }
+
+       if (isEventsModule && window.EventsBuilder && typeof window.EventsBuilder.renderEventTriggersBuilder === 'function') {
+           window.EventsBuilder.renderEventTriggersBuilder();
        }
      }
 
@@ -4416,8 +4460,12 @@
       });
       
       window._currentFormStatsConfig = [];
+      window._currentFormEventTriggers = [];
       renderManualStats();
       renderBuilderTabs();
+      if (window.EventsBuilder && typeof window.EventsBuilder.renderEventTriggersBuilder === 'function') {
+        window.EventsBuilder.renderEventTriggersBuilder();
+      }
       
       document.getElementById('forms-view').classList.add('hidden');
       document.getElementById('form-builder-view').classList.remove('hidden');
@@ -4459,9 +4507,12 @@
       } else {
           window._currentFormStatsConfig = [];
       }
+      window._currentFormEventTriggers = (form.eventTriggers || form.event_triggers || []).map(t => ({...t}));
       renderManualStats();
-      
       renderBuilderTabs();
+      if (window.EventsBuilder && typeof window.EventsBuilder.renderEventTriggersBuilder === 'function') {
+        window.EventsBuilder.renderEventTriggersBuilder();
+      }
       
       document.getElementById('forms-view').classList.add('hidden');
       document.getElementById('form-builder-view').classList.remove('hidden');
@@ -4493,6 +4544,7 @@
       });
 
       const clonedStats = original.statsConfig ? JSON.parse(JSON.stringify(original.statsConfig)) : null;
+      const clonedEvents = original.eventTriggers ? JSON.parse(JSON.stringify(original.eventTriggers)) : (original.event_triggers ? JSON.parse(JSON.stringify(original.event_triggers)) : []);
       const userEntidade = (currentUserProfile && (currentUserProfile.entidade || currentUserProfile.entidade_nome)) || original.entidade || 'Prefeitura Municipal';
 
       const clonedForm = {
@@ -4500,6 +4552,7 @@
         name: newName,
         tabs: clonedTabs,
         statsConfig: clonedStats,
+        eventTriggers: clonedEvents,
         entidade: userEntidade
       };
 
@@ -4958,6 +5011,7 @@
         entidade: formEntidade,
         tabs: JSON.parse(JSON.stringify(builderTabs)),
         statsConfig: window._currentFormStatsConfig || null,
+        eventTriggers: window._currentFormEventTriggers || [],
         updatedAt: new Date().toISOString()
       };
 

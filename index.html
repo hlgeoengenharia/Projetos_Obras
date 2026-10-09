@@ -568,9 +568,45 @@
         animation: marker-pulse-halo 1.5s ease-in-out infinite;
         pointer-events: none;
       }
-      @keyframes marker-pulse-halo {
-        0%, 100% { transform: translateX(-50%) scale(0.85); opacity: 0.5; }
-        50% { transform: translateX(-50%) scale(1.4); opacity: 0.95; }
+      @keyframes alert-pulse-glow {
+        0%, 100% {
+          transform: scale(0.9);
+          opacity: 0.6;
+        }
+        50% {
+          transform: scale(1.6);
+          opacity: 0.15;
+        }
+      }
+      .alert-pulse-halo-critico {
+        position: absolute;
+        inset: -14px;
+        border-radius: 9999px;
+        background: radial-gradient(circle, rgba(239, 68, 68, 0.45) 0%, rgba(239, 68, 68, 0) 70%);
+        border: 2px solid rgba(239, 68, 68, 0.85);
+        animation: alert-pulse-glow 1.4s ease-in-out infinite;
+        pointer-events: none;
+        z-index: -1;
+      }
+      .alert-pulse-halo-atencao {
+        position: absolute;
+        inset: -14px;
+        border-radius: 9999px;
+        background: radial-gradient(circle, rgba(245, 158, 11, 0.45) 0%, rgba(245, 158, 11, 0) 70%);
+        border: 2px solid rgba(245, 158, 11, 0.85);
+        animation: alert-pulse-glow 1.8s ease-in-out infinite;
+        pointer-events: none;
+        z-index: -1;
+      }
+      .alert-pulse-halo-info {
+        position: absolute;
+        inset: -14px;
+        border-radius: 9999px;
+        background: radial-gradient(circle, rgba(16, 185, 129, 0.45) 0%, rgba(16, 185, 129, 0) 70%);
+        border: 2px solid rgba(16, 185, 129, 0.85);
+        animation: alert-pulse-glow 2.2s ease-in-out infinite;
+        pointer-events: none;
+        z-index: -1;
       }
     </style>
 
@@ -682,7 +718,60 @@
     </button>
   </div>
 </div>
-<div class="flex items-center justify-end gap-1 sm:gap-2.5 shrink-0">
+<div class="flex items-center justify-end gap-1 sm:gap-2 shrink-0">
+  <!-- Botão Central de Notificações / Alertas Temporais (Sininho 🔔) -->
+  <div class="relative inline-block">
+    <button id="btn-header-alerts" onclick="if(window.EventsEngine) window.EventsEngine.toggleAlertsDrawer(event)" class="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-full hover:bg-amber-500/15 text-slate-700 dark:text-slate-200 hover:text-amber-600 dark:hover:text-amber-400 transition-all flex items-center justify-center relative cursor-pointer tooltip tooltip-bottom shrink-0" title="Central de Eventos & Alertas">
+      <span class="material-symbols-outlined text-[19px] sm:text-[21px] md:text-[23px]">notifications</span>
+      <span id="alerts-count-badge" class="hidden absolute top-0.5 right-0.5 min-w-[17px] h-[17px] px-1 rounded-full bg-rose-500 text-white font-extrabold text-[10px] flex items-center justify-center border-2 border-white dark:border-slate-900 shadow-md animate-pulse">0</span>
+    </button>
+
+    <!-- Dropdown / Painel Suspenso de Alertas Ativos -->
+    <div id="alerts-drawer" class="hidden absolute top-full right-0 mt-2 w-[340px] sm:w-[420px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xl z-[150] overflow-hidden flex flex-col max-h-[80vh] transition-all animate-in fade-in zoom-in-95 duration-150">
+      <!-- Topo do Drawer -->
+      <div class="px-5 py-3.5 border-b border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between bg-slate-50/80 dark:bg-slate-950/60">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center border border-amber-500/20">
+            <span class="material-symbols-outlined text-[19px]">notifications_active</span>
+          </div>
+          <div>
+            <h4 class="text-sm font-bold text-slate-900 dark:text-white leading-tight">Eventos & Prazos</h4>
+            <span id="alerts-drawer-subtitle" class="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">Carregando monitoramento...</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-1">
+          <button type="button" onclick="if(window.EventsEngine) window.EventsEngine.toggleAlertsDrawer(event)" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer" title="Fechar">
+            <span class="material-symbols-outlined text-[18px]">close</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Filtros por Severidade -->
+      <div class="px-4 py-2 border-b border-slate-200/60 dark:border-slate-800/60 flex items-center gap-1.5 bg-slate-50/50 dark:bg-slate-900/50 overflow-x-auto text-[11px] font-semibold">
+        <button type="button" id="alerts-tab-all" onclick="if(window.EventsEngine) window.EventsEngine.filterAlertsTab('all')" class="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white transition-colors cursor-pointer">
+          Todos
+        </button>
+        <button type="button" id="alerts-tab-critico" onclick="if(window.EventsEngine) window.EventsEngine.filterAlertsTab('critico')" class="px-2.5 py-1 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer flex items-center gap-1">
+          <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+          Críticos
+        </button>
+        <button type="button" id="alerts-tab-atencao" onclick="if(window.EventsEngine) window.EventsEngine.filterAlertsTab('atencao')" class="px-2.5 py-1 rounded-lg text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors cursor-pointer flex items-center gap-1">
+          <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+          Atenção
+        </button>
+        <button type="button" id="alerts-tab-info" onclick="if(window.EventsEngine) window.EventsEngine.filterAlertsTab('info')" class="px-2.5 py-1 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors cursor-pointer flex items-center gap-1">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          Info
+        </button>
+      </div>
+
+      <!-- Lista Scrollável de Alertas -->
+      <div id="alerts-list-container" class="p-3 overflow-y-auto space-y-2.5 flex-1 custom-scrollbar text-xs">
+        <!-- Renderizado dinamicamente por EventsEngine -->
+      </div>
+    </div>
+  </div>
+
   <!-- Nome e Entidade do Usuário (à esquerda do perfil) -->
   <div class="hidden sm:flex flex-col items-end text-right min-w-0 select-none mr-0.5">
     <span id="header-user-display-name" class="text-xs md:text-sm font-bold text-slate-800 dark:text-slate-100 leading-tight truncate max-w-[130px] md:max-w-[190px]"></span>
@@ -701,10 +790,17 @@
 </div>
 </header>
 
-<!-- Botão Flutuante Menu de Camadas (Hamburguer) no Canto Superior Esquerdo abaixo da barra -->
-<div class="fixed top-[60px] sm:top-[62px] md:top-[74px] left-2 sm:left-2.5 md:left-4 z-[45] select-none">
+<!-- Botões Flutuantes no Canto Superior Esquerdo abaixo da barra: Menu de Camadas e Filtro de Alertas -->
+<div class="fixed top-[60px] sm:top-[62px] md:top-[74px] left-2 sm:left-2.5 md:left-4 z-[45] flex items-center gap-2 select-none">
   <button id="btn-floating-drawer-toggle" class="header-glass-card w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-2xl flex items-center justify-center text-slate-800 dark:text-slate-100 hover:bg-white/40 dark:hover:bg-white/10 transition-all tooltip tooltip-right cursor-pointer" onclick="window.toggleSideDrawer()" title="Menu de Camadas">
     <span class="material-symbols-outlined text-[19px] sm:text-[20px] md:text-[22px]">menu</span>
+  </button>
+
+  <!-- Botão de Filtro Rápido: Mostrar Apenas Alertas Ativos -->
+  <button id="btn-filter-alerts" onclick="if(window.EventsEngine) window.EventsEngine.toggleAlertFilterMode()" class="hidden header-glass-card h-8 sm:h-9 md:h-10 px-2.5 sm:px-3 rounded-2xl flex items-center gap-1.5 text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-500/15 transition-all tooltip tooltip-bottom cursor-pointer shadow-sm border border-amber-500/30" title="Filtrar Mapa: Ver Apenas Feições com Alertas Ativos">
+    <span class="material-symbols-outlined text-[18px] sm:text-[19px] animate-pulse">warning</span>
+    <span class="hidden md:inline" id="btn-filter-alerts-label">Alertas Ativos</span>
+    <span id="btn-filter-alerts-count" class="px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[10px] font-extrabold">0</span>
   </button>
 </div>
 
@@ -2966,7 +3062,8 @@
 <script src="src/customFields.js?v=20261008_sequence_phone_v8"></script>
 <script src="src/tableJoin.js"></script>
 <script src="src/geo-engine-turbo.js?v=20261006_turbo_speed_v7"></script>
-<script src="src/main.js?v=20261008_icon_replace_v9"></script>
+<script src="src/main.js?v=20261009_v5_events_fixed"></script>
+<script src="src/eventsEngine.js?v=20261009_v5_events_fixed"></script>
 <script src="src/spatialAnalytics.js?v=20260911b"></script>
 <script src="src/measurement.js"></script>
 <script src="src/cesium-integration.js"></script>
@@ -2985,6 +3082,9 @@
         window.addEventListener('load', function() {
             navigator.serviceWorker.register('sw.js').then(function(reg) {
                 console.log('[PWA] ServiceWorker registrado:', reg.scope);
+                if (reg && typeof reg.update === 'function') {
+                    reg.update();
+                }
             }).catch(function(err) {
                 console.warn('[PWA] ServiceWorker falhou ao registrar:', err);
             });
