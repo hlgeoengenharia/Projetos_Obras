@@ -42,7 +42,7 @@
 <script src="/src/reportPreview.js?v=20261005b"></script>
 <script src="/src/reportBuilder.js?v=20261005b"></script>
 <script src="/src/eventsEngine.js?v=20261009"></script>
-<script src="/src/eventsBuilder.js?v=20261009"></script>
+<script src="/src/eventsBuilder.js?v=20261010_v2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <style>
@@ -3716,6 +3716,7 @@
           }
           renderBuilderTabs();
        }
+       window.builderTabs = builderTabs;
     }
 
     function updateActiveTabName(newName) {
@@ -4408,6 +4409,7 @@
          });
        });
        activeTab.fields = fields;
+       window.builderTabs = builderTabs;
      }
 
      function switchBuilderModule(moduleName) {
@@ -4458,6 +4460,7 @@
       builderTabs = [
         { id: 'tab_' + Math.random().toString(36).substr(2, 9), title: 'Dados Principais', isPrimary: true, fields: [] }
       ];
+      window.builderTabs = builderTabs;
       activeBuilderTabId = builderTabs[0].id;
       
       // Default field
@@ -4507,6 +4510,7 @@
       if (builderTabs.length === 0) {
          builderTabs = [{ id: 'tab_' + Math.random().toString(36).substr(2, 9), title: 'Dados Principais', isPrimary: true, fields: [] }];
       }
+      window.builderTabs = builderTabs;
       activeBuilderTabId = builderTabs[0].isPrimary ? builderTabs[0].id : (builderTabs.find(t=>t.isPrimary) || builderTabs[0]).id;
       
       if (form.statsConfig) {
@@ -7371,9 +7375,14 @@
             window.EventsBuilder.toggleTriggerStatus(id);
         }
     };
+    window.toggleTutorialGuide = function() {
+        if (window.EventsBuilder && typeof window.EventsBuilder.toggleTutorialGuide === 'function') {
+            window.EventsBuilder.toggleTutorialGuide();
+        }
+    };
 
   </script>
-  <script src="src/eventsBuilder.js"></script>
+  <script src="src/eventsBuilder.js?v=20261010_v2"></script>
   <script src="src/auditLogger.js"></script>
   <script src="src/auditoria-gestao.js"></script>
   <script src="src/usuarios-gestao.js?v=20260915_filtro_entes_ativos"></script>
