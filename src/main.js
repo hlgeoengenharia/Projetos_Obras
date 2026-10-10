@@ -1730,8 +1730,12 @@ function initMap() {
   const isTouchActive = (typeof isTouchDevice !== 'undefined' && isTouchDevice) || ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
   const canvasRenderer = (typeof L.canvas === 'function') ? L.canvas({ padding: 0.5, tolerance: 35 }) : null;
 
-  if (canvasRenderer) {
-    canvasRenderer._handleMouseHover = function(e, point) {
+  if (typeof L !== 'undefined' && L.Canvas) {
+    if (L.Canvas.prototype.options) {
+      L.Canvas.prototype.options.tolerance = 25;
+    }
+
+    L.Canvas.prototype._handleMouseHover = function(e, point) {
         if (this._mouseHoverThrottled) return;
 
         let candidateHoveredLayer = null;
@@ -1759,7 +1763,10 @@ function initMap() {
 
             if (hovered) {
                 if (L.DomUtil && this._container) L.DomUtil.addClass(this._container, 'leaflet-interactive');
-                if (map && map.getContainer()) map.getContainer().style.cursor = 'pointer';
+                if (this._map && this._map.getContainer()) {
+                    this._map.getContainer().style.cursor = 'pointer';
+                    this._map.getContainer().classList.add('leaflet-feature-hovered');
+                }
                 if (this._container) this._container.style.cursor = 'pointer';
                 this._fireEvent([hovered], e, 'mouseover');
                 this._hoveredLayer = hovered;
@@ -1769,13 +1776,21 @@ function initMap() {
         if (this._hoveredLayer) {
             this._fireEvent([this._hoveredLayer], e, 'mousemove');
         }
+
+        this._mouseHoverThrottled = true;
+        setTimeout(() => {
+            this._mouseHoverThrottled = false;
+        }, 25);
     };
 
-    canvasRenderer._handleMouseOut = function(e) {
+    L.Canvas.prototype._handleMouseOut = function(e) {
         const layer = this._hoveredLayer;
         if (layer) {
             if (L.DomUtil && this._container) L.DomUtil.removeClass(this._container, 'leaflet-interactive');
-            if (map && map.getContainer()) map.getContainer().style.cursor = '';
+            if (this._map && this._map.getContainer()) {
+                this._map.getContainer().style.cursor = '';
+                this._map.getContainer().classList.remove('leaflet-feature-hovered');
+            }
             if (this._container) this._container.style.cursor = '';
             this._fireEvent([layer], e, 'mouseout');
             this._hoveredLayer = null;
@@ -1783,7 +1798,7 @@ function initMap() {
         }
     };
 
-    canvasRenderer._onClick = function(e) {
+    L.Canvas.prototype._onClick = function(e) {
         const point = this._map.mouseEventToLayerPoint(e);
         let candidateClickLayer = null;
         let activeThemeCandidate = null;
@@ -1808,6 +1823,12 @@ function initMap() {
             this._fireEvent([finalLayer], e);
         }
     };
+  }
+
+  if (canvasRenderer) {
+    canvasRenderer._handleMouseHover = L.Canvas.prototype._handleMouseHover;
+    canvasRenderer._handleMouseOut = L.Canvas.prototype._handleMouseOut;
+    canvasRenderer._onClick = L.Canvas.prototype._onClick;
   }
 
   // Função universal para localizar linha de logradouro sob o toque/clique no mapa
@@ -2469,6 +2490,87 @@ function initMap() {
     if (featureModal && !featureModal.classList.contains('hidden')) {
         closeFeatureInfoModal();
     }
+  });
+
+  // Detecção global de cursor pointer ao passar o mouse sobre feições vetoriais (linhas e polígonos)
+  let lastVectorHoverState = false;
+  map.on('mousemove', function(e) {
+    if (!map || !e.latlng) return;
+    
+    // Se estiver desenhando ou medindo, deixa a ferramenta controlar o cursor
+    const isDrawing = document.getElementById('drawing-toolbar') && !document.getElementById('drawing-toolbar').classList.contains('hidden');
+    const isEditing = document.getElementById('geometry-edit-toolbar') && !document.getElementById('geometry-edit-toolbar').classList.contains('hidden');
+    if (isDrawing || isEditing || (typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode)) return;
+
+    const mapContainer = map.getContainer();
+    if (!mapContainer) return;
+
+    let isOverFeature = false;
+
+    // 1. Verifica se qualquer renderer canvas já identificou layer sob o cursor
+    if (canvasRenderer && canvasRenderer._hoveredLayer) {
+        isOverFeature = true;
+    } else if (map._renderer && map._renderer._hoveredLayer) {
+        isOverFeature = true;
+    }
+
+    // 2. Proximidade com linhas de logradouros (ruas) - tolerância de 22px
+    if (!isOverFeature && typeof findClosestLineLayer === 'function') {
+        const nearLine = findClosestLineLayer(e.latlng, 22);
+        if (nearLine) {
+            isOverFeature = true;
+        }
+    }
+
+    // 3. Polígonos sob o cursor (busca rápida nos layers do geojsonLayer)
+    if (!isOverFeature && geojsonLayer) {
+        const pt = e.latlng;
+        const ptLayer = map.latLngToLayerPoint(pt);
+        geojsonLayer.eachLayer(layer => {
+            if (isOverFeature) return;
+            if (!layer.feature || !layer.feature.geometry) return;
+            const gType = layer.feature.geometry.type;
+            if (gType !== 'Polygon' && gType !== 'MultiPolygon') return;
+            if (layer.getBounds && layer.getBounds().contains(pt)) {
+                if (typeof layer._containsPoint === 'function' && layer._containsPoint(ptLayer)) {
+                    isOverFeature = true;
+                } else if (typeof turf !== 'undefined' && turf.booleanPointInPolygon) {
+                    try {
+                        const ptTurf = turf.point([pt.lng, pt.lat]);
+                        if (turf.booleanPointInPolygon(ptTurf, layer.feature)) {
+                            isOverFeature = true;
+                        }
+                    } catch(eT) {}
+                }
+            }
+        });
+    }
+
+    if (isOverFeature !== lastVectorHoverState) {
+        lastVectorHoverState = isOverFeature;
+        if (isOverFeature) {
+            mapContainer.style.cursor = 'pointer';
+            mapContainer.classList.add('leaflet-feature-hovered');
+            if (canvasRenderer && canvasRenderer._container) canvasRenderer._container.style.cursor = 'pointer';
+            if (map._renderer && map._renderer._container) map._renderer._container.style.cursor = 'pointer';
+        } else {
+            mapContainer.style.cursor = '';
+            mapContainer.classList.remove('leaflet-feature-hovered');
+            if (canvasRenderer && canvasRenderer._container) canvasRenderer._container.style.cursor = '';
+            if (map._renderer && map._renderer._container) map._renderer._container.style.cursor = '';
+        }
+    }
+  });
+
+  map.on('mouseout', function() {
+    lastVectorHoverState = false;
+    const mapContainer = map.getContainer();
+    if (mapContainer) {
+        mapContainer.style.cursor = '';
+        mapContainer.classList.remove('leaflet-feature-hovered');
+    }
+    if (canvasRenderer && canvasRenderer._container) canvasRenderer._container.style.cursor = '';
+    if (map._renderer && map._renderer._container) map._renderer._container.style.cursor = '';
   });
 
   // Processa a criação de feição com resposta imediata na UI (sem esperar rede) e salvamento em background
@@ -3944,13 +4046,13 @@ function updateThemeInteractivity() {
     if (window.activeSelectionThemeId) {
         styleTag.innerHTML = `
             .theme-feature { pointer-events: auto !important; cursor: pointer; }
-            .leaflet-interactive, canvas.leaflet-interactive, .leaflet-container.leaflet-grab canvas.leaflet-interactive { cursor: pointer !important; }
+            .leaflet-container.leaflet-feature-hovered, .leaflet-container.leaflet-feature-hovered.leaflet-grab, .leaflet-container.leaflet-feature-hovered canvas, .leaflet-container canvas.leaflet-interactive, .leaflet-interactive, canvas.leaflet-interactive, .leaflet-container.leaflet-grab canvas.leaflet-interactive { cursor: pointer !important; }
             .theme-${window.activeSelectionThemeId} { stroke-width: 3.5px !important; filter: drop-shadow(0 0 6px rgba(255,255,255,0.6)); }
         `;
     } else {
         styleTag.innerHTML = `
             .theme-feature { pointer-events: auto !important; cursor: pointer; }
-            .leaflet-interactive, canvas.leaflet-interactive, .leaflet-container.leaflet-grab canvas.leaflet-interactive { cursor: pointer !important; }
+            .leaflet-container.leaflet-feature-hovered, .leaflet-container.leaflet-feature-hovered.leaflet-grab, .leaflet-container.leaflet-feature-hovered canvas, .leaflet-container canvas.leaflet-interactive, .leaflet-interactive, canvas.leaflet-interactive, .leaflet-container.leaflet-grab canvas.leaflet-interactive { cursor: pointer !important; }
         `;
     }
 }

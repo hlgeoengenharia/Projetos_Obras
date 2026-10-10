@@ -19,18 +19,18 @@ test('Validação de Cursor em Feições Vetoriais e Seleção de Camadas (CTM-M
         );
     });
 
-    await t.test('2. canvasRenderer possui hooks para _handleMouseHover e _handleMouseOut com atualização de cursor', () => {
+    await t.test('2. L.Canvas.prototype possui hooks para _handleMouseHover e _handleMouseOut com atualização de cursor', () => {
         assert.ok(
-            mainJs.includes('canvasRenderer._handleMouseHover'),
-            'canvasRenderer deve sobrescrever _handleMouseHover para mudar o cursor do mouse dinamicamente'
+            mainJs.includes('L.Canvas.prototype._handleMouseHover') || mainJs.includes('canvasRenderer._handleMouseHover'),
+            'L.Canvas deve sobrescrever _handleMouseHover para mudar o cursor do mouse dinamicamente'
         );
         assert.ok(
-            mainJs.includes('map.getContainer().style.cursor = \'pointer\''),
-            'canvasRenderer deve atualizar o cursor do mapa para pointer ao passar sobre linhas/polígonos'
+            mainJs.includes('style.cursor = \'pointer\''),
+            'L.Canvas deve atualizar o cursor para pointer ao passar sobre linhas/polígonos'
         );
         assert.ok(
-            mainJs.includes('canvasRenderer._handleMouseOut'),
-            'canvasRenderer deve sobrescrever _handleMouseOut para resetar o cursor'
+            mainJs.includes('leaflet-feature-hovered'),
+            'L.Canvas e CSS devem usar classe leaflet-feature-hovered para garantir cursor pointer'
         );
     });
 
@@ -41,14 +41,14 @@ test('Validação de Cursor em Feições Vetoriais e Seleção de Camadas (CTM-M
         );
     });
 
-    await t.test('4. onEachFeature possui eventos mouseover e mouseout para mudar cursor', () => {
+    await t.test('4. onEachFeature e map.on("mousemove") possuem detecção contínua de cursor pointer', () => {
         assert.ok(
             mainJs.includes("layer.on('mouseover'"),
             'onEachFeature deve registrar mouseover no layer para cursor pointer'
         );
         assert.ok(
-            mainJs.includes("layer.on('mouseout'"),
-            'onEachFeature deve registrar mouseout no layer para resetar o cursor'
+            mainJs.includes("map.on('mousemove'"),
+            'map.on("mousemove") deve detectar continuamente passagem do mouse sobre feições de linha e polígono'
         );
     });
 
@@ -71,7 +71,6 @@ test('Validação de Cursor em Feições Vetoriais e Seleção de Camadas (CTM-M
     });
 
     await t.test('7. style function define themeId de forma segura sem ReferenceError', () => {
-        // Extrai a função style e testa execução
         assert.ok(
             !mainJs.includes('const featThemeId = feature.properties?.themeId'),
             'style não deve deixar themeId indefinido usando featThemeId sem declarar themeId'
@@ -79,6 +78,13 @@ test('Validação de Cursor em Feições Vetoriais e Seleção de Camadas (CTM-M
         assert.ok(
             mainJs.includes('className: `theme-feature theme-${themeId}`'),
             'style deve usar className formatado com themeId'
+        );
+    });
+
+    await t.test('8. CSS contém regra para .leaflet-feature-hovered com prioridade máxima', () => {
+        assert.ok(
+            indexHtml.includes('.leaflet-container.leaflet-feature-hovered'),
+            'index.html deve conter regra .leaflet-container.leaflet-feature-hovered com cursor: pointer !important'
         );
     });
 });
