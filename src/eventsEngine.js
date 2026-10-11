@@ -208,30 +208,66 @@
   }
 
   /**
-   * Interpolação de variáveis da mensagem: {nome}, {dias}, etc.
+   * Interpolação de variáveis da mensagem: @Nome, @Campos, cálculo dinâmico de tempo (dias/meses), etc.
    */
   function interpolateMessage(template, feature, trigger, ctx) {
     if (!template) return '';
     let msg = template;
     const props = (feature && feature.properties) || {};
 
-    // Substitui variáveis conhecidas de contexto
-    msg = msg.replace(/\{dias_restantes\}/gi, ctx.daysDiff >= 0 ? `${ctx.daysDiff} dias` : `${Math.abs(ctx.daysDiff)} dias em atraso`);
-    msg = msg.replace(/\{dias\}/gi, String(Math.abs(ctx.daysDiff)));
-    msg = msg.replace(/\{data_limite\}/gi, ctx.targetDateStr || '');
-    msg = msg.replace(/\{data_base\}/gi, ctx.baseDateStr || '');
-    msg = msg.replace(/\{nome_camada\}/gi, ctx.themeName || 'Camada');
+    // 1. Cálculo inteligente de tempo (dias / meses)
+    const diff = typeof ctx.daysDiff === 'number' ? ctx.daysDiff : 0;
+    const absDiff = Math.abs(diff);
 
-    // Substitui variáveis pelas propriedades da feição
+    let tempoTexto = '';
+    if (diff < 0) {
+      if (absDiff >= 60) {
+        const meses = Math.floor(absDiff / 30);
+        tempoTexto = meses > 1 ? `${meses} meses (${absDiff} dias)` : `${absDiff} dias`;
+      } else {
+        tempoTexto = `${absDiff} dias`;
+      }
+    } else if (diff === 0) {
+      tempoTexto = 'hoje';
+    } else {
+      if (absDiff >= 60) {
+        const meses = Math.floor(absDiff / 30);
+        tempoTexto = meses > 1 ? `${meses} meses (${absDiff} dias)` : `${absDiff} dias`;
+      } else {
+        tempoTexto = `${absDiff} dias`;
+      }
+    }
+
+    // 2. Substituição inteligente de expressões de tempo: "em x dias", "há x dias", etc.
+    msg = msg.replace(/\bem\s+[xX]\s+dias\b/gi, diff === 0 ? 'hoje' : `em ${tempoTexto}`);
+    msg = msg.replace(/\bhá\s+[xX]\s+dias\b/gi, `há ${tempoTexto}`);
+    msg = msg.replace(/\b[xX]\s+dias\b/gi, tempoTexto);
+
+    // 3. Substitui variáveis de contexto com @ e formato legado {tag}
+    msg = msg.replace(/\{dias_restantes\}|@dias_restantes|@Dias Restantes/gi, diff >= 0 ? (diff === 0 ? 'hoje' : `${diff} dias`) : `${absDiff} dias em atraso`);
+    msg = msg.replace(/\{dias\}|@dias|@Dias/gi, String(absDiff));
+    msg = msg.replace(/\{data_limite\}|@data_limite|@Data Limite/gi, ctx.targetDateStr || '');
+    msg = msg.replace(/\{data_base\}|@data_base|@Data Base/gi, ctx.baseDateStr || '');
+    msg = msg.replace(/\{nome_camada\}|@nome_camada|@Nome da Camada/gi, ctx.themeName || 'Camada');
+
+    // 4. Substitui @Nome com fallback resiliente para título da feição
+    const featTitle = ctx.featureTitle || getPropValue(feature, 'Nome') || getPropValue(feature, 'nome') || getPropValue(feature, 'logradouro') || '';
+    if (featTitle) {
+      msg = msg.replace(/@Nome\b|@nome\b|\{Nome\}|\{nome\}/g, String(featTitle));
+    }
+
+    // 5. Substitui propriedades da feição por @Campo ou {campo}
     Object.keys(props).forEach(k => {
       const v = props[k];
       if (typeof v === 'string' || typeof v === 'number') {
-        const regex = new RegExp(`\\{${k}\\}`, 'gi');
-        msg = msg.replace(regex, String(v));
+        const regexCurly = new RegExp(`\\{${k}\\}`, 'gi');
+        const regexAt = new RegExp(`@${k}\\b`, 'gi');
+        msg = msg.replace(regexCurly, String(v));
+        msg = msg.replace(regexAt, String(v));
       }
     });
 
-    // Se houver tags com rótulo ou chaves que não foram substituídas, limpa chaves vazias ou substitui por texto legível
+    // Limpa chaves não substituídas
     msg = msg.replace(/\{[a-zA-Z0-9_]+\}/g, '');
     return msg.trim();
   }
@@ -366,7 +402,19 @@
                        getPropValue(feature, 'descricao') ||
                        `Feição #${featId.toString().slice(-6)}`;
 
-    let message = interpolateMessage(trigger.mensagem || `Evento: {nome_camada} atingiu prazo estabelecido em {data_limite}.`, feature, trigger, ctx);
+    ctx.featureTitle = titleFeature;
+
+    // Seleciona o template de mensagem configurado para a severidade atual
+    let templateMsg = trigger.mensagem;
+    if (severity === 'critico') {
+      templateMsg = trigger.mensagem_critico || trigger.mensagem || '@Nome atingiu o prazo limite em x dias e requer manutenção/vistoria urgente.';
+    } else if (severity === 'atencao') {
+      templateMsg = trigger.mensagem_atencao || trigger.mensagem || 'Atenção: @Nome entrará em período de vencimento em x dias.';
+    } else {
+      templateMsg = trigger.mensagem_em_dia || trigger.mensagem || '@Nome está em conformidade com o cronograma regular.';
+    }
+
+    let message = interpolateMessage(templateMsg, feature, trigger, ctx);
 
     // Coordenadas para zoom / mapa
     let coords = null;

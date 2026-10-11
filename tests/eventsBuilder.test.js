@@ -75,4 +75,12 @@ console.log('  ✓ [PASS] Identificação resiliente de campos de data nas abas'
 assert(typeof EventsBuilder.onFilterFieldChanged === 'function', 'onFilterFieldChanged deve ser uma função exportada');
 console.log('  ✓ [PASS] onFilterFieldChanged devidamente exposto no EventsBuilder');
 
+// Testes de exportação do sistema de Menções (@) e Autocomplete
+assert(typeof EventsBuilder.openMentionMenu === 'function', 'openMentionMenu deve ser uma função');
+assert(typeof EventsBuilder.hideMentionMenu === 'function', 'hideMentionMenu deve ser uma função');
+assert(typeof EventsBuilder.handleMentionInput === 'function', 'handleMentionInput deve ser uma função');
+assert(typeof EventsBuilder.handleMentionKeyDown === 'function', 'handleMentionKeyDown deve ser uma função');
+assert(typeof EventsBuilder.insertMentionField === 'function', 'insertMentionField deve ser uma função');
+console.log('  ✓ [PASS] Métodos de menção (@) e autocomplete devidamente expostos no EventsBuilder');
+
 console.log('\n🎉 TODOS OS TESTES DO EVENTS BUILDER PASSARAM COM SUCESSO!\n');

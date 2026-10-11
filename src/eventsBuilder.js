@@ -358,8 +358,20 @@
     const sevInput = document.getElementById('trig-severidade');
     if (sevInput) sevInput.value = trigger ? (trigger.severidade || 'atencao') : 'atencao';
 
-    // Mensagem
-    document.getElementById('trig-msg').value = trigger ? (trigger.mensagem || '') : 'A feição {nome} atingiu o prazo estabelecido em {data_limite}.';
+    // Mensagens Personalizadas por Situação (Em Dia, Atenção, Crítico)
+    const padraoEmDia = '@Nome está em conformidade com o cronograma regular.';
+    const padraoAtencao = 'Atenção: @Nome entrará em período de vencimento em x dias.';
+    const padraoCritico = '@Nome atingiu o prazo limite em x dias e requer manutenção/vistoria urgente.';
+
+    const elEmDia = document.getElementById('trig-msg-em-dia');
+    const elAtencao = document.getElementById('trig-msg-atencao');
+    const elCritico = document.getElementById('trig-msg-critico');
+    const elMsgLegacy = document.getElementById('trig-msg');
+
+    if (elEmDia) elEmDia.value = (trigger && trigger.mensagem_em_dia) ? trigger.mensagem_em_dia : padraoEmDia;
+    if (elAtencao) elAtencao.value = (trigger && trigger.mensagem_atencao) ? trigger.mensagem_atencao : padraoAtencao;
+    if (elCritico) elCritico.value = (trigger && (trigger.mensagem_critico || trigger.mensagem)) ? (trigger.mensagem_critico || trigger.mensagem) : padraoCritico;
+    if (elMsgLegacy) elMsgLegacy.value = elCritico ? elCritico.value : padraoCritico;
 
     // Atualiza visibilidade dos blocos condicionais
     onTriggerTypeChanged();
@@ -462,41 +474,252 @@
       respSelect.innerHTML = optHtml;
     }
 
-    // Chips de Tags dinâmicas para mensagem
+    // Limpa container legado se existir
     const tagsContainer = document.getElementById('trig-msg-tags');
     if (tagsContainer) {
-      const standardTags = [
-        { tag: '{dias_restantes}', label: 'Dias Restantes' },
-        { tag: '{data_limite}', label: 'Data Limite' },
-        { tag: '{data_base}', label: 'Data Base' },
-        { tag: '{nome_camada}', label: 'Nome da Camada' }
-      ];
-      const customTags = allFields.slice(0, 8).map(f => ({
-        tag: `{${f.id}}`,
-        label: f.label
-      }));
+      tagsContainer.innerHTML = '';
+    }
+  }
 
-      const allTags = [...standardTags, ...customTags];
-      tagsContainer.innerHTML = allTags.map(t => `
-        <button type="button" onclick="EventsBuilder.insertMsgTag('${t.tag}')" class="px-2 py-0.5 rounded-md text-[10.5px] font-medium bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-amber-100 hover:text-amber-800 dark:hover:bg-amber-950/60 dark:hover:text-amber-300 transition-colors cursor-pointer">
-          ${escapeHtml(t.label)}
-        </button>
-      `).join('');
+  // Estado do dropdown de menção com @
+  let activeMentionState = {
+    targetId: null,
+    query: '',
+    selectedIndex: 0,
+    mentionStartPos: -1
+  };
+
+  /**
+   * Abre o dropdown de menção com @ ao clicar no botão "Inserir Campo".
+   */
+  function openMentionMenu(targetId) {
+    const textarea = document.getElementById(targetId);
+    if (!textarea) return;
+    textarea.focus();
+    const pos = textarea.selectionStart !== undefined ? textarea.selectionStart : textarea.value.length;
+    activeMentionState.targetId = targetId;
+    activeMentionState.query = '';
+    activeMentionState.selectedIndex = 0;
+    activeMentionState.mentionStartPos = pos;
+    renderMentionDropdown(targetId, '');
+  }
+
+  /**
+   * Fecha o dropdown flutuante de menções.
+   */
+  function hideMentionMenu() {
+    const dropdown = document.getElementById('trig-mention-dropdown');
+    if (dropdown) dropdown.classList.add('hidden');
+    activeMentionState.targetId = null;
+    activeMentionState.mentionStartPos = -1;
+  }
+
+  /**
+   * Detecta digitação no textarea para filtrar os campos cadastrais a partir de @.
+   */
+  function handleMentionInput(event, targetId) {
+    const textarea = document.getElementById(targetId);
+    if (!textarea) return;
+
+    const cursor = textarea.selectionStart;
+    const textBefore = textarea.value.slice(0, cursor);
+    const atMatch = textBefore.match(/@([\w\u00C0-\u017F\s]*)$/);
+
+    if (atMatch) {
+      activeMentionState.targetId = targetId;
+      activeMentionState.query = atMatch[1].trim();
+      activeMentionState.selectedIndex = 0;
+      activeMentionState.mentionStartPos = cursor - atMatch[0].length;
+      renderMentionDropdown(targetId, activeMentionState.query);
+      return;
+    }
+
+    hideMentionMenu();
+  }
+
+  /**
+   * Controla navegação por setas (cima/baixo), Enter, Tab e Escape no dropdown de menção @.
+   */
+  function handleMentionKeyDown(event, targetId) {
+    const dropdown = document.getElementById('trig-mention-dropdown');
+    if (!dropdown || dropdown.classList.contains('hidden')) return;
+
+    const items = dropdown.querySelectorAll('.trig-mention-item');
+    if (items.length === 0) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      activeMentionState.selectedIndex = (activeMentionState.selectedIndex + 1) % items.length;
+      updateMentionDropdownHighlight(items);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      activeMentionState.selectedIndex = (activeMentionState.selectedIndex - 1 + items.length) % items.length;
+      updateMentionDropdownHighlight(items);
+    } else if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      const activeItem = items[activeMentionState.selectedIndex];
+      if (activeItem) {
+        const fieldTag = activeItem.getAttribute('data-field-tag');
+        insertMentionField(fieldTag, targetId);
+      }
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      hideMentionMenu();
     }
   }
 
   /**
-   * Insere uma variável na mensagem personalizada.
+   * Atualiza destaque visual do item selecionado no dropdown de menção.
+   */
+  function updateMentionDropdownHighlight(items) {
+    items.forEach((item, idx) => {
+      if (idx === activeMentionState.selectedIndex) {
+        item.classList.add('bg-amber-100', 'dark:bg-amber-900/50', 'text-amber-900', 'dark:text-amber-200');
+        item.scrollIntoView({ block: 'nearest' });
+      } else {
+        item.classList.remove('bg-amber-100', 'dark:bg-amber-900/50', 'text-amber-900', 'dark:text-amber-200');
+      }
+    });
+  }
+
+  /**
+   * Renderiza a lista de campos disponíveis no dropdown de menções.
+   */
+  function renderMentionDropdown(targetId, query) {
+    let dropdown = document.getElementById('trig-mention-dropdown');
+    if (!dropdown) {
+      dropdown = document.createElement('div');
+      dropdown.id = 'trig-mention-dropdown';
+      dropdown.className = 'fixed z-[400] w-72 sm:w-80 max-h-64 overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl p-1.5 custom-scrollbar text-xs hidden';
+      document.body.appendChild(dropdown);
+
+      // Fecha ao clicar fora
+      document.addEventListener('click', (e) => {
+        if (!dropdown.contains(e.target) && !e.target.closest('#modal-event-trigger textarea') && !e.target.closest('button[onclick*="openMentionMenu"]')) {
+          hideMentionMenu();
+        }
+      });
+    }
+
+    const textarea = document.getElementById(targetId);
+    if (!textarea) return;
+
+    // Posiciona o dropdown imediatamente abaixo do textarea
+    const rect = textarea.getBoundingClientRect();
+    const topPos = Math.min(window.innerHeight - 260, rect.bottom + 4);
+    dropdown.style.left = `${Math.max(16, rect.left)}px`;
+    dropdown.style.top = `${topPos}px`;
+
+    // Campos nativos do monitoramento
+    const standardFields = [
+      { tag: '@Nome', label: 'Nome / Título da Feição', tab: 'Geral', icon: 'badge', type: 'título' },
+      { tag: '@data_limite', label: 'Data Limite Calculada', tab: 'Tempo', icon: 'event', type: 'data' },
+      { tag: '@dias_restantes', label: 'Contagem de Dias / Atraso', tab: 'Tempo', icon: 'schedule', type: 'tempo' },
+      { tag: '@nome_camada', label: 'Nome da Camada', tab: 'Geral', icon: 'layers', type: 'camada' }
+    ];
+
+    // Campos cadastrais do formulário atual
+    const formFields = getAllFieldsFromBuilder().map(f => ({
+      tag: `@${f.name || f.id || f.label}`,
+      label: f.label || f.name || f.id,
+      tab: f.tabTitle || 'Cadastral',
+      icon: (f.type === 'date' || f.type === 'datetime') ? 'calendar_today' : (f.type === 'number' ? 'tag' : 'edit_note'),
+      type: f.type || 'texto'
+    }));
+
+    const allFields = [...standardFields, ...formFields];
+
+    // Filtra pela busca
+    const q = (query || '').toLowerCase().trim();
+    const filtered = allFields.filter(f => {
+      if (!q) return true;
+      return f.label.toLowerCase().includes(q) || f.tag.toLowerCase().includes(q) || f.tab.toLowerCase().includes(q);
+    });
+
+    if (filtered.length === 0) {
+      dropdown.innerHTML = `
+        <div class="p-3 text-center text-slate-400 dark:text-slate-500 text-xs">
+          Nenhum campo encontrado para "@${escapeHtml(query)}"
+        </div>
+      `;
+      dropdown.classList.remove('hidden');
+      return;
+    }
+
+    activeMentionState.selectedIndex = 0;
+
+    let html = `
+      <div class="px-2.5 py-1.5 border-b border-slate-100 dark:border-slate-800 text-[10.5px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider flex items-center justify-between">
+        <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">alternate_email</span> Campos Cadastrais</span>
+        <span class="text-[9.5px] text-slate-400 font-normal">Use ↑↓ e Enter</span>
+      </div>
+      <div class="space-y-0.5 mt-1">
+    `;
+
+    filtered.forEach((f, idx) => {
+      const isSelected = idx === 0;
+      html += `
+        <div class="trig-mention-item flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ${isSelected ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-900 dark:text-amber-200' : 'text-slate-800 dark:text-slate-200'}"
+             data-field-tag="${escapeHtml(f.tag)}"
+             onclick="EventsBuilder.insertMentionField('${escapeHtml(f.tag)}', '${targetId}')">
+          <div class="flex items-center gap-2 truncate pr-2">
+            <span class="material-symbols-outlined text-[16px] text-amber-600 dark:text-amber-400 shrink-0">${f.icon}</span>
+            <div class="truncate">
+              <div class="font-bold text-xs truncate">${escapeHtml(f.tag)}</div>
+              <div class="text-[10px] text-slate-500 dark:text-slate-400 truncate">${escapeHtml(f.label)}</div>
+            </div>
+          </div>
+          <span class="text-[9.5px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium shrink-0">${escapeHtml(f.tab)}</span>
+        </div>
+      `;
+    });
+
+    html += `</div>`;
+    dropdown.innerHTML = html;
+    dropdown.classList.remove('hidden');
+  }
+
+  /**
+   * Insere o campo no textarea selecionado substituindo a menção @.
+   */
+  function insertMentionField(fieldTag, targetId) {
+    const textarea = document.getElementById(targetId);
+    if (!textarea) return;
+
+    const cursor = textarea.selectionStart !== undefined ? textarea.selectionStart : textarea.value.length;
+    const text = textarea.value;
+
+    let startPos = activeMentionState.mentionStartPos;
+    if (startPos < 0) {
+      const textBefore = text.slice(0, cursor);
+      const match = textBefore.match(/@([\w\u00C0-\u017F\s]*)$/);
+      startPos = match ? (cursor - match[0].length) : cursor;
+    }
+
+    const before = text.slice(0, startPos);
+    const after = text.slice(cursor);
+
+    const insertion = fieldTag + ' ';
+    textarea.value = before + insertion + after;
+
+    hideMentionMenu();
+    textarea.focus();
+    const newCursor = startPos + insertion.length;
+    textarea.selectionStart = textarea.selectionEnd = newCursor;
+  }
+
+  /**
+   * Método legado mantido para compatibilidade.
    */
   function insertMsgTag(tag) {
-    const textarea = document.getElementById('trig-msg');
-    if (!textarea) return;
-    const start = textarea.selectionStart || textarea.value.length;
-    const end = textarea.selectionEnd || textarea.value.length;
-    const text = textarea.value;
-    textarea.value = text.substring(0, start) + tag + text.substring(end);
-    textarea.focus();
-    textarea.selectionStart = textarea.selectionEnd = start + tag.length;
+    const target = activeMentionState.targetId ? document.getElementById(activeMentionState.targetId) : (document.getElementById('trig-msg-critico') || document.getElementById('trig-msg'));
+    if (!target) return;
+    const start = target.selectionStart || target.value.length;
+    const end = target.selectionEnd || target.value.length;
+    const text = target.value;
+    target.value = text.substring(0, start) + tag + text.substring(end);
+    target.focus();
+    target.selectionStart = target.selectionEnd = start + tag.length;
   }
 
   /**
@@ -624,7 +847,23 @@
 
     const sevInput = document.getElementById('trig-severidade');
     const severidade = (sevInput && sevInput.value) || 'atencao';
-    const mensagem = document.getElementById('trig-msg').value.trim() || 'A feição {nome} atingiu o prazo em {data_limite}.';
+
+    // 3 Mensagens Padronizadas / Personalizadas por Situação
+    const padraoEmDia = '@Nome está em conformidade com o cronograma regular.';
+    const padraoAtencao = 'Atenção: @Nome entrará em período de vencimento em x dias.';
+    const padraoCritico = '@Nome atingiu o prazo limite em x dias e requer manutenção/vistoria urgente.';
+
+    const elEmDia = document.getElementById('trig-msg-em-dia');
+    const elAtencao = document.getElementById('trig-msg-atencao');
+    const elCritico = document.getElementById('trig-msg-critico');
+
+    const msgEmDia = (elEmDia && elEmDia.value.trim()) || padraoEmDia;
+    const msgAtencao = (elAtencao && elAtencao.value.trim()) || padraoAtencao;
+    const msgCritico = (elCritico && elCritico.value.trim()) || padraoCritico;
+
+    // Sincroniza campo legado se presente
+    const elMsgLegacy = document.getElementById('trig-msg');
+    if (elMsgLegacy) elMsgLegacy.value = msgCritico;
 
     if (!Array.isArray(global._currentFormEventTriggers)) {
       global._currentFormEventTriggers = [];
@@ -647,7 +886,10 @@
       responsavel_id: respId,
       responsavel_nome: respNome,
       severidade: severidade,
-      mensagem: mensagem,
+      mensagem_em_dia: msgEmDia,
+      mensagem_atencao: msgAtencao,
+      mensagem_critico: msgCritico,
+      mensagem: msgCritico,
       ativo: true,
       updated_at: new Date().toISOString()
     };
@@ -879,48 +1121,68 @@
             </div>
           </div>
 
-          <!-- BLOCO 3: Explicação Completa de Mensagem do Alerta -->
+          <!-- BLOCO 3: Explicação Completa de Mensagens Personalizadas por Situação -->
           <div class="mt-3 p-3.5 rounded-2xl bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 shadow-2xs">
             <h5 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wide flex items-center gap-1.5 mb-2.5">
-              <span class="material-symbols-outlined text-[17px] text-sky-500 dark:text-sky-400">campaign</span>
-              <span>3. Como Funciona a "Mensagem do Alerta"?</span>
+              <span class="material-symbols-outlined text-[17px] text-amber-500 dark:text-amber-400">campaign</span>
+              <span>3. Como Funcionam as 3 Mensagens do Alerta e a Busca com @?</span>
             </h5>
             
             <p class="text-[11.5px] text-slate-600 dark:text-slate-300 mb-3 leading-relaxed">
-              A <b>Mensagem do Alerta</b> é o comunicado oficial que a equipe municipal e os fiscais verão quando a via ou feição entrar em período de aviso ou vencer. Ela é totalmente dinâmica: você escreve o texto uma única vez e o sistema preenche os dados específicos de cada rua automaticamente.
+              O sistema pré-preenche automaticamente <b>3 comunicados oficiais</b> para cada estágio de monitoramento da via ou feição. Você pode manter o texto padrão ou personalizar digitando <code class="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/50 text-amber-900 dark:text-amber-200 font-mono text-[11px] font-bold">@</code> para selecionar qualquer campo cadastral:
             </p>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
-              <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
-                <div class="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <span class="material-symbols-outlined text-[15px] text-emerald-500">notifications_active</span>
-                  <span>Onde esta mensagem aparece?</span>
+            <div class="space-y-2 mb-3">
+              <!-- Em Dia -->
+              <div class="p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60">
+                <div class="flex items-center justify-between text-xs font-bold text-emerald-800 dark:text-emerald-300 mb-1">
+                  <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> 🟢 Em Dia (Status Regular)</span>
+                  <span class="text-[10px] font-normal text-emerald-700 dark:text-emerald-400">Dentro do cronograma</span>
                 </div>
-                <ul class="text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
-                  <li>🔔 <b>Painel do Sino (Topo):</b> Lista todas as vias e notificações pendentes.</li>
-                  <li>🗺️ <b>Card no Mapa:</b> Quando o operador clica na rua ou feição alertada.</li>
-                  <li>📢 <b>Notificação ao Entrar:</b> Banner de boas-vindas com resumo de pendências.</li>
-                </ul>
+                <div class="text-[11px] text-slate-700 dark:text-slate-300 font-mono bg-white/70 dark:bg-slate-900/60 p-1.5 rounded-lg border border-emerald-100 dark:border-emerald-900/40">
+                  "@Nome está em conformidade com o cronograma regular."
+                </div>
               </div>
 
-              <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
-                <div class="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <span class="material-symbols-outlined text-[15px] text-amber-500">sell</span>
-                  <span>Tags Dinâmicas (Substituição Automática):</span>
+              <!-- Atenção -->
+              <div class="p-2.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60">
+                <div class="flex items-center justify-between text-xs font-bold text-amber-800 dark:text-amber-300 mb-1">
+                  <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> 🟡 Atenção (Aviso Prévio)</span>
+                  <span class="text-[10px] font-normal text-amber-700 dark:text-amber-400">Faltando ≤ dias configurados</span>
                 </div>
-                <div class="text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
-                  <div><code class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-amber-700 dark:text-amber-300 font-mono text-[10px]">{data_limite}</code> → Data calculada (ex: <i>02/07/2026</i>).</div>
-                  <div><code class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-amber-700 dark:text-amber-300 font-mono text-[10px]">{dias_restantes}</code> → "15 dias" ou "101 dias em atraso".</div>
-                  <div><code class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-amber-700 dark:text-amber-300 font-mono text-[10px]">{nome_camada}</code> → Nome da camada (ex: <i>Logradouro</i>).</div>
-                  <div><code class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-amber-700 dark:text-amber-300 font-mono text-[10px]">{Nome}</code> → Nome da feição/rua específica.</div>
+                <div class="text-[11px] text-slate-700 dark:text-slate-300 font-mono bg-white/70 dark:bg-slate-900/60 p-1.5 rounded-lg border border-amber-100 dark:border-amber-900/40">
+                  "Atenção: @Nome entrará em período de vencimento em x dias."
+                </div>
+              </div>
+
+              <!-- Crítico -->
+              <div class="p-2.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-800/60">
+                <div class="flex items-center justify-between text-xs font-bold text-rose-800 dark:text-rose-300 mb-1">
+                  <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> 🔴 Crítico (Atrasado / Vencido)</span>
+                  <span class="text-[10px] font-normal text-rose-700 dark:text-rose-400">Prazo ultrapassado</span>
+                </div>
+                <div class="text-[11px] text-slate-700 dark:text-slate-300 font-mono bg-white/70 dark:bg-slate-900/60 p-1.5 rounded-lg border border-rose-100 dark:border-rose-900/40">
+                  "@Nome atingiu o prazo limite em x dias e requer manutenção/vistoria urgente."
                 </div>
               </div>
             </div>
 
-            <div class="p-2.5 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-100 dark:border-sky-900/50 text-[11px] text-sky-900 dark:text-sky-200">
-              <span class="font-bold">💡 Exemplo Recomendado para Vias:</span>
-              <div class="font-mono text-[11px] mt-0.5 text-sky-800 dark:text-sky-300">
-                "A via {Nome} atingiu o ciclo sem manutenção em {data_limite} ({dias_restantes})."
+            <!-- Dicas de Autocomplete e Cálculo de Tempo -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-600 dark:text-slate-300 mb-3">
+              <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-y-1">
+                <div class="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[15px] text-amber-500">alternate_email</span>
+                  <span>Busca Rápida com @:</span>
+                </div>
+                <p>Digite <code class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-amber-700 dark:text-amber-300 font-mono text-[10.5px]">@</code> em qualquer mensagem para autocompletar qualquer campo do formulário (ex: <i>@Nome, @Bairro, @data_limite</i>).</p>
+              </div>
+
+              <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-y-1">
+                <div class="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[15px] text-sky-500">schedule</span>
+                  <span>Cálculo Automático de Tempo:</span>
+                </div>
+                <p>O termo <code class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-amber-700 dark:text-amber-300 font-mono text-[10.5px]">x dias</code> é calculado dinamicamente pelo sistema (ex: <i>"em 5 dias"</i>, <i>"há 3 meses (89 dias)"</i> ou <i>"hoje"</i>).</p>
               </div>
             </div>
 
@@ -1055,19 +1317,82 @@
             </div>
           </div>
 
-          <!-- Mensagem Personalizada do Alerta -->
-          <div>
-            <div class="flex justify-between items-center mb-1">
-              <label class="block text-xs font-bold text-slate-700 dark:text-slate-300">Mensagem do Alerta</label>
-              <span class="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">Clique nas tags abaixo para inserir no texto</span>
+          <!-- Mensagens Personalizadas do Alerta por Situação -->
+          <div class="space-y-3 pt-1">
+            <div class="flex justify-between items-baseline mb-0.5">
+              <label class="block text-xs font-bold text-slate-800 dark:text-slate-200">
+                Mensagens do Alerta por Situação
+              </label>
+              <span class="text-[11px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
+                <span class="material-symbols-outlined text-[13px]">alternate_email</span>
+                <span>Digite @ para buscar campos</span>
+              </span>
             </div>
-            <p class="text-[11px] text-slate-500 dark:text-slate-400 mb-2 leading-relaxed">
-              Texto exibido no <b>painel do sino (🔔 Eventos & Prazos)</b> e no <b>card da feição no mapa</b> quando o prazo vencer. Use as tags dinâmicas para preencher automaticamente os dados de cada feição:
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+              O sistema pré-configura as 3 mensagens abaixo. Você pode ajustar os textos livremente ou clicar em <b>@ Inserir Campo</b> para autocompletar qualquer dado cadastral da feição:
             </p>
-            <div id="trig-msg-tags" class="flex flex-wrap gap-1.5 mb-2">
-              <!-- Tags dinâmicas -->
+
+            <!-- 1. Em Dia (Status Regular) -->
+            <div class="p-3 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 space-y-2 transition-all shadow-2xs">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+                  <div>
+                    <span class="font-bold text-xs text-emerald-800 dark:text-emerald-300">🟢 Em Dia (Status Regular)</span>
+                    <span class="hidden sm:inline text-[10.5px] text-emerald-600/80 dark:text-emerald-400/80 ml-1.5">• Dentro do cronograma</span>
+                  </div>
+                </div>
+                <button type="button" onclick="EventsBuilder.openMentionMenu('trig-msg-em-dia')" class="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-emerald-100/90 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-800 transition-colors cursor-pointer border border-emerald-300/60 dark:border-emerald-700/60 shadow-2xs" title="Inserir campo cadastral usando @">
+                  <span class="material-symbols-outlined text-[13px]">alternate_email</span>
+                  <span>Inserir Campo</span>
+                </button>
+              </div>
+              <textarea id="trig-msg-em-dia" rows="2" oninput="EventsBuilder.handleMentionInput(event, 'trig-msg-em-dia')" onkeydown="EventsBuilder.handleMentionKeyDown(event, 'trig-msg-em-dia')" class="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none placeholder-slate-400" placeholder="@Nome está em conformidade com o cronograma regular."></textarea>
             </div>
-            <textarea id="trig-msg" rows="2" class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none" placeholder="Ex: A via {Nome} atingiu o ciclo sem manutenção em {data_limite} ({dias_restantes})."></textarea>
+
+            <!-- 2. Atenção (Aviso Prévio) -->
+            <div class="p-3 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 space-y-2 transition-all shadow-2xs">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>
+                  <div>
+                    <span class="font-bold text-xs text-amber-800 dark:text-amber-300">🟡 Atenção (Aviso Prévio)</span>
+                    <span class="hidden sm:inline text-[10.5px] text-amber-600/80 dark:text-amber-400/80 ml-1.5">• Faltando ≤ dias do aviso</span>
+                  </div>
+                </div>
+                <button type="button" onclick="EventsBuilder.openMentionMenu('trig-msg-atencao')" class="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-amber-100/90 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-800 transition-colors cursor-pointer border border-amber-300/60 dark:border-amber-700/60 shadow-2xs" title="Inserir campo cadastral usando @">
+                  <span class="material-symbols-outlined text-[13px]">alternate_email</span>
+                  <span>Inserir Campo</span>
+                </button>
+              </div>
+              <textarea id="trig-msg-atencao" rows="2" oninput="EventsBuilder.handleMentionInput(event, 'trig-msg-atencao')" onkeydown="EventsBuilder.handleMentionKeyDown(event, 'trig-msg-atencao')" class="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none placeholder-slate-400" placeholder="Atenção: @Nome entrará em período de vencimento em x dias."></textarea>
+            </div>
+
+            <!-- 3. Crítico (Atrasado / Vencido) -->
+            <div class="p-3 rounded-2xl bg-rose-50/60 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/60 space-y-2 transition-all shadow-2xs">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0"></span>
+                  <div>
+                    <span class="font-bold text-xs text-rose-800 dark:text-rose-300">🔴 Crítico (Atrasado / Vencido)</span>
+                    <span class="hidden sm:inline text-[10.5px] text-rose-600/80 dark:text-rose-400/80 ml-1.5">• Prazo limite ultrapassado</span>
+                  </div>
+                </div>
+                <button type="button" onclick="EventsBuilder.openMentionMenu('trig-msg-critico')" class="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-rose-100/90 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200 hover:bg-rose-200 dark:hover:bg-rose-800 transition-colors cursor-pointer border border-rose-300/60 dark:border-rose-700/60 shadow-2xs" title="Inserir campo cadastral usando @">
+                  <span class="material-symbols-outlined text-[13px]">alternate_email</span>
+                  <span>Inserir Campo</span>
+                </button>
+              </div>
+              <textarea id="trig-msg-critico" rows="2" oninput="EventsBuilder.handleMentionInput(event, 'trig-msg-critico')" onkeydown="EventsBuilder.handleMentionKeyDown(event, 'trig-msg-critico')" class="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-800 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-rose-500 focus:outline-none placeholder-slate-400" placeholder="@Nome atingiu o prazo limite em x dias e requer manutenção/vistoria urgente."></textarea>
+            </div>
+
+            <!-- Legenda Explicativa Inferior -->
+            <div class="p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-2">
+              <span class="material-symbols-outlined text-[16px] text-amber-500 shrink-0">auto_awesome</span>
+              <span>O sistema calcula automaticamente o tempo restante/atraso em <b>x dias</b> (ex: <i>"em 5 dias"</i> ou <i>"há 3 meses (89 dias)"</i>) e preenche os campos com <b>@</b>.</span>
+            </div>
+
+            <input type="hidden" id="trig-msg" value="">
           </div>
 
         </div>
@@ -1109,7 +1434,12 @@
     onTriggerTypeChanged,
     onRespTipoChanged,
     toggleTutorialGuide,
-    onFilterFieldChanged
+    onFilterFieldChanged,
+    openMentionMenu,
+    hideMentionMenu,
+    handleMentionInput,
+    handleMentionKeyDown,
+    insertMentionField
   };
 
   global.EventsBuilder = EventsBuilder;

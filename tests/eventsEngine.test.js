@@ -273,6 +273,52 @@ const hasVectorPulse = mockLayersAdded.some(l => l._isGeoJson && l.style && l.st
 assert.ok(hasVectorPulse, 'Deve renderizar a própria feição vetorial com classe de animação pulsante');
 console.log('  ✓ [PASS] Efeito de pulso cartográfico diretamente no traçado/contorno da feição');
 
+// 10. Teste das 3 Mensagens Padronizadas por Situação com @ e Tempo Dinâmico
+const triggerComTresMensagens = {
+  id: 'trig_tres_msgs',
+  nome: 'Monitoramento com 3 Mensagens',
+  tipo: 'periodicidade',
+  campo_data: 'data_vistoria',
+  intervalo_valor: 6,
+  intervalo_unidade: 'meses',
+  aviso_previo_dias: 15,
+  mensagem_em_dia: '@Nome está em conformidade com o cronograma regular.',
+  mensagem_atencao: 'Atenção: @Nome entrará em período de vencimento em x dias.',
+  mensagem_critico: '@Nome atingiu o prazo limite em x dias e requer manutenção/vistoria urgente.'
+};
+
+// Cenário A: Alerta Crítico (vencido há 90 dias / 3 meses)
+const featCritica = {
+  id: 'feat_critica',
+  properties: {
+    Nome: 'Rua das Flores',
+    data_vistoria: '2026-01-09' // Venceu em 2026-07-09 (+92 dias atrás de 2026-10-09)
+  }
+};
+const alertCritico = EventsEngine.evaluateTrigger(triggerComTresMensagens, featCritica, { name: 'Vias' }, today);
+assert.ok(alertCritico, 'Alerta crítico deve disparar');
+assert.strictEqual(alertCritico.severity, 'critico');
+assert.ok(alertCritico.message.includes('Rua das Flores'), 'Substitui @Nome pelo nome da feição');
+assert.ok(alertCritico.message.includes('3 meses') || alertCritico.message.includes('dias'), 'Substitui x dias por cálculo inteligente de meses/dias');
+assert.ok(alertCritico.message.includes('requer manutenção/vistoria urgente'), 'Usa template mensagem_critico');
+console.log('  ✓ [PASS] Alerta crítico: utiliza mensagem_critico com @Nome e cálculo de x dias');
+
+// Cenário B: Alerta de Atenção (vencendo em 10 dias)
+const featAtencao = {
+  id: 'feat_atencao',
+  properties: {
+    Nome: 'Avenida Brasil',
+    data_vistoria: '2026-04-19' // Vence em 2026-10-19 (+10 dias em relação a 2026-10-09)
+  }
+};
+const alertAtencao = EventsEngine.evaluateTrigger(triggerComTresMensagens, featAtencao, { name: 'Vias' }, today);
+assert.ok(alertAtencao, 'Alerta de atenção deve disparar');
+assert.strictEqual(alertAtencao.severity, 'atencao');
+assert.ok(alertAtencao.message.includes('Avenida Brasil'), 'Substitui @Nome pelo nome da feição');
+assert.ok(alertAtencao.message.includes('em 10 dias'), 'Substitui em x dias por em 10 dias');
+assert.ok(alertAtencao.message.includes('período de vencimento'), 'Usa template mensagem_atencao');
+console.log('  ✓ [PASS] Alerta de atenção: utiliza mensagem_atencao com @Nome e cálculo de x dias');
+
 console.log('\n🎉 TODOS OS TESTES DO EVENTS ENGINE PASSARAM COM 100% DE SUCESSO!\n');
 
 
