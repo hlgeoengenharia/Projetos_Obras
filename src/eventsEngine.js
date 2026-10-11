@@ -715,6 +715,11 @@
         70% { transform: scale(1.4); opacity: 0.15; box-shadow: 0 0 0 14px rgba(245, 158, 11, 0); }
         100% { transform: scale(1.6); opacity: 0; box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
       }
+      @keyframes alert-radar-glow-info {
+        0% { transform: scale(0.9); opacity: 0.85; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+        70% { transform: scale(1.4); opacity: 0.15; box-shadow: 0 0 0 14px rgba(16, 185, 129, 0); }
+        100% { transform: scale(1.6); opacity: 0; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+      }
       .alert-halo-critico {
         width: 32px;
         height: 32px;
@@ -733,6 +738,15 @@
         animation: alert-radar-glow-atencao 2.2s infinite ease-out;
         pointer-events: none;
       }
+      .alert-halo-info {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: rgba(16, 185, 129, 0.45);
+        border: 2px solid #10b981;
+        animation: alert-radar-glow-info 2.5s infinite ease-out;
+        pointer-events: none;
+      }
       .alert-halo-center-dot {
         position: absolute;
         top: 50%;
@@ -743,6 +757,86 @@
         border-radius: 50%;
         border: 1.5px solid #ffffff;
         box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+      }
+
+      /* Animações de pulso diretamente na geometria vetorial da feição */
+      @keyframes alert-vector-pulse-critico {
+        0% {
+          stroke-opacity: 0.95;
+          stroke-width: 6px;
+          fill-opacity: 0.2;
+          filter: drop-shadow(0 0 3px rgba(239, 68, 68, 0.85));
+        }
+        50% {
+          stroke-opacity: 0.45;
+          stroke-width: 10px;
+          fill-opacity: 0.45;
+          filter: drop-shadow(0 0 12px rgba(239, 68, 68, 1));
+        }
+        100% {
+          stroke-opacity: 0.95;
+          stroke-width: 6px;
+          fill-opacity: 0.2;
+          filter: drop-shadow(0 0 3px rgba(239, 68, 68, 0.85));
+        }
+      }
+      @keyframes alert-vector-pulse-atencao {
+        0% {
+          stroke-opacity: 0.95;
+          stroke-width: 5px;
+          fill-opacity: 0.18;
+          filter: drop-shadow(0 0 3px rgba(245, 158, 11, 0.85));
+        }
+        50% {
+          stroke-opacity: 0.45;
+          stroke-width: 9px;
+          fill-opacity: 0.4;
+          filter: drop-shadow(0 0 10px rgba(245, 158, 11, 1));
+        }
+        100% {
+          stroke-opacity: 0.95;
+          stroke-width: 5px;
+          fill-opacity: 0.18;
+          filter: drop-shadow(0 0 3px rgba(245, 158, 11, 0.85));
+        }
+      }
+      @keyframes alert-vector-pulse-info {
+        0% {
+          stroke-opacity: 0.95;
+          stroke-width: 5px;
+          fill-opacity: 0.15;
+          filter: drop-shadow(0 0 3px rgba(16, 185, 129, 0.85));
+        }
+        50% {
+          stroke-opacity: 0.45;
+          stroke-width: 8px;
+          fill-opacity: 0.35;
+          filter: drop-shadow(0 0 9px rgba(16, 185, 129, 1));
+        }
+        100% {
+          stroke-opacity: 0.95;
+          stroke-width: 5px;
+          fill-opacity: 0.15;
+          filter: drop-shadow(0 0 3px rgba(16, 185, 129, 0.85));
+        }
+      }
+      .alert-feature-pulse-critico {
+        stroke: #ef4444 !important;
+        animation: alert-vector-pulse-critico 1.8s infinite ease-in-out !important;
+        pointer-events: auto !important;
+        cursor: pointer !important;
+      }
+      .alert-feature-pulse-atencao {
+        stroke: #f59e0b !important;
+        animation: alert-vector-pulse-atencao 2.2s infinite ease-in-out !important;
+        pointer-events: auto !important;
+        cursor: pointer !important;
+      }
+      .alert-feature-pulse-info {
+        stroke: #10b981 !important;
+        animation: alert-vector-pulse-info 2.5s infinite ease-in-out !important;
+        pointer-events: auto !important;
+        cursor: pointer !important;
       }
     `;
     document.head.appendChild(style);
@@ -974,6 +1068,7 @@
    * Renderiza a lista de cards de alertas dentro do Drawer.
    */
   function renderAlertsDrawer() {
+    if (typeof document === 'undefined') return;
     const container = document.getElementById('alerts-list-container');
     if (!container) return;
 
@@ -1213,33 +1308,83 @@
     _haloLayerGroup.clearLayers();
 
     _activeAlertsCache.forEach(alert => {
-      // Quando marcado como ciente ou adiado pelo usuário, oculta o halo luminoso no mapa (continua no sino)
+      // Quando marcado como ciente ou adiado pelo usuário, oculta os efeitos visuais no mapa (continua no sino)
       if (alert.isDismissed) return;
       if (alert.isSnoozed) return;
-      if (!alert.coords) return;
+      if (!alert.coords && (!alert.feature || !alert.feature.geometry)) return;
+
       const isCrit = alert.severity === 'critico';
-      const haloClass = isCrit ? 'alert-halo-critico' : 'alert-halo-atencao';
-      const dotColor = isCrit ? '#ef4444' : '#f59e0b';
+      const isAten = alert.severity === 'atencao';
+      const haloClass = isCrit ? 'alert-halo-critico' : (isAten ? 'alert-halo-atencao' : 'alert-halo-info');
+      const pulseClass = isCrit ? 'alert-feature-pulse-critico' : (isAten ? 'alert-feature-pulse-atencao' : 'alert-feature-pulse-info');
+      const strokeColor = isCrit ? '#ef4444' : (isAten ? '#f59e0b' : '#10b981');
+      const dotColor = strokeColor;
+      const tooltipHtml = `<b>${escapeHtml(alert.featureTitle)}</b><br><span style="color:${dotColor}; font-weight:bold;">${escapeHtml(alert.statusLabel)}</span>`;
 
-      const icon = L.divIcon({
-        className: 'alert-halo-marker-container',
-        html: `
-          <div style="position: relative; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; cursor: pointer;" onclick="EventsEngine.locateAlertFeature('${escapeAttr(alert.id)}')">
-            <div class="${haloClass}"></div>
-            <div class="alert-halo-center-dot" style="background: ${dotColor};"></div>
-          </div>
-        `,
-        iconSize: [34, 34],
-        iconAnchor: [17, 17]
-      });
+      // 1. Renderiza o contorno / traçado da própria feição pulsando com a cor do sistema
+      if (alert.feature && alert.feature.geometry && typeof L.geoJSON === 'function') {
+        try {
+          const geomType = String(alert.feature.geometry.type || '').toLowerCase();
+          const isPolygon = geomType.includes('polygon');
+          const isLine = geomType.includes('line');
 
-      const marker = L.marker(alert.coords, { icon: icon, zIndexOffset: 800 });
-      marker.bindTooltip(`<b>${escapeHtml(alert.featureTitle)}</b><br><span style="color:${dotColor}">${escapeHtml(alert.statusLabel)}</span>`, {
-        direction: 'top',
-        offset: [0, -14],
-        className: 'alert-leaflet-tooltip'
-      });
-      _haloLayerGroup.addLayer(marker);
+          // Desenha a geometria para linhas e polígonos
+          if (isLine || isPolygon) {
+            const vectorLayer = L.geoJSON(alert.feature, {
+              style: function() {
+                return {
+                  color: strokeColor,
+                  weight: isPolygon ? 5 : 7,
+                  opacity: 0.95,
+                  fillColor: strokeColor,
+                  fillOpacity: isPolygon ? 0.25 : 0,
+                  className: pulseClass,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                  interactive: true
+                };
+              }
+            });
+
+            vectorLayer.on('click', () => {
+              EventsEngine.locateAlertFeature(alert.id);
+            });
+
+            vectorLayer.bindTooltip(tooltipHtml, {
+              direction: 'top',
+              offset: [0, -10],
+              className: 'alert-leaflet-tooltip'
+            });
+
+            _haloLayerGroup.addLayer(vectorLayer);
+          }
+        } catch(errGeo) {
+          console.warn('[EventsEngine] Falha ao renderizar vetor pulsante da feição:', errGeo);
+        }
+      }
+
+      // 2. Renderiza também o ponto / radar pulsante central para visualização em zoom afastado
+      if (alert.coords) {
+        const icon = L.divIcon({
+          className: 'alert-halo-marker-container',
+          html: `
+            <div style="position: relative; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; cursor: pointer;" onclick="EventsEngine.locateAlertFeature('${escapeAttr(alert.id)}')">
+              <div class="${haloClass}"></div>
+              <div class="alert-halo-center-dot" style="background: ${dotColor};"></div>
+            </div>
+          `,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17]
+        });
+
+        const marker = L.marker(alert.coords, { icon: icon, zIndexOffset: 850 });
+        marker.bindTooltip(tooltipHtml, {
+          direction: 'top',
+          offset: [0, -14],
+          className: 'alert-leaflet-tooltip'
+        });
+        _haloLayerGroup.addLayer(marker);
+      }
     });
   }
 

@@ -210,6 +210,69 @@ assert.strictEqual(typeof EventsEngine.initDraggableAlertsDrawer, 'function', 'i
 assert.strictEqual(typeof EventsEngine.unacknowledgeAlert, 'function', 'unacknowledgeAlert deve estar exportada');
 console.log('  ✓ [PASS] Métodos de interface (arrastar drawer e reversão de ciente) exportados');
 
+// 11. Renderização de pulso vetorial no mapa (linhas e polígonos)
+const mockLayersAdded = [];
+global.L = {
+  layerGroup: () => ({
+    addTo: () => {},
+    clearLayers: () => { mockLayersAdded.length = 0; },
+    addLayer: (layer) => { mockLayersAdded.push(layer); }
+  }),
+  geoJSON: (feat, opts) => {
+    const style = typeof opts.style === 'function' ? opts.style(feat) : opts.style;
+    return {
+      _isGeoJson: true,
+      feature: feat,
+      style: style,
+      on: () => {},
+      bindTooltip: () => {}
+    };
+  },
+  divIcon: (opts) => opts,
+  marker: (coords, opts) => ({
+    _isMarker: true,
+    coords: coords,
+    bindTooltip: () => {}
+  })
+};
+
+const featureLinhaVencida = {
+  id: 'feat_via_teste',
+  type: 'Feature',
+  geometry: {
+    type: 'LineString',
+    coordinates: [[-34.83, -7.02], [-34.84, -7.03]]
+  },
+  properties: {
+    logradouro: 'Avenida Principal',
+    data_ultima_manutencao: '2026-01-10'
+  }
+};
+
+global.window = {
+  map: {
+    addLayer: () => {},
+    hasLayer: () => true
+  },
+  themes: [
+    {
+      id: 'theme_vias_vetor',
+      name: 'Logradouros',
+      formId: 'form_logradouros',
+      features: [featureLinhaVencida]
+    }
+  ],
+  forms: mockForms,
+  currentUserProfile: userHelton
+};
+
+EventsEngine.refreshAlerts();
+EventsEngine.updateMapHaloGlow();
+
+const hasVectorPulse = mockLayersAdded.some(l => l._isGeoJson && l.style && l.style.className && l.style.className.includes('alert-feature-pulse'));
+assert.ok(hasVectorPulse, 'Deve renderizar a própria feição vetorial com classe de animação pulsante');
+console.log('  ✓ [PASS] Efeito de pulso cartográfico diretamente no traçado/contorno da feição');
+
 console.log('\n🎉 TODOS OS TESTES DO EVENTS ENGINE PASSARAM COM 100% DE SUCESSO!\n');
 
 
