@@ -724,48 +724,143 @@
         </div>
 
         <!-- Guia / Passo a Passo Retrátil -->
-        <div id="modal-trigger-tutorial" class="hidden border-b border-amber-200 dark:border-amber-800/60 bg-gradient-to-br from-amber-50 via-orange-50/50 to-amber-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 p-4 sm:p-5 shrink-0 overflow-y-auto max-h-56">
-          <div class="flex items-center justify-between mb-3">
+        <div id="modal-trigger-tutorial" class="hidden border-b border-amber-200 dark:border-amber-800/60 bg-gradient-to-br from-amber-50/90 via-orange-50/40 to-amber-50/70 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 p-4 sm:p-5 shrink-0 overflow-y-auto max-h-[380px] custom-scrollbar">
+          
+          <!-- Topo do Guia -->
+          <div class="flex items-center justify-between mb-3 border-b border-amber-200/60 dark:border-amber-800/40 pb-2.5">
             <div class="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold text-xs uppercase tracking-wider">
-              <span class="material-symbols-outlined text-[18px]">school</span>
-              <span>Passo a Passo: Como Criar um Gatilho de Monitoramento</span>
+              <span class="material-symbols-outlined text-[19px]">menu_book</span>
+              <span>Tutorial Completo: Como Configurar o Monitoramento Territorial</span>
             </div>
-            <button type="button" onclick="EventsBuilder.toggleTutorialGuide()" class="text-[11px] font-semibold text-amber-700 hover:text-amber-900 dark:text-amber-400 hover:underline cursor-pointer">
-              Fechar Guia
+            <button type="button" onclick="EventsBuilder.toggleTutorialGuide()" class="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200 hover:underline cursor-pointer">
+              <span>Fechar Guia</span>
+              <span class="material-symbols-outlined text-[15px]">expand_less</span>
             </button>
           </div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-            <div class="flex items-start gap-2 bg-white/70 dark:bg-slate-800/60 p-2.5 rounded-xl border border-amber-100 dark:border-slate-800">
-              <span class="w-5 h-5 rounded-full bg-amber-500 text-white font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">1</span>
-              <div>
-                <strong class="text-slate-900 dark:text-white">Evento:</strong> Dê um nome claro para o alerta (ex: <i>Manutenção Semestral</i>, <i>Vencimento de Alvará</i>).
+
+          <!-- BLOCO 1: Entenda os 3 Tipos de Monitoramento Temporal -->
+          <div class="mb-4">
+            <h5 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide flex items-center gap-1.5 mb-2.5">
+              <span class="material-symbols-outlined text-[16px] text-amber-600">tune</span>
+              <span>1. Para que serve cada "Tipo de Monitoramento"?</span>
+            </h5>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+              
+              <!-- Tipo 1: Periodicidade -->
+              <div class="p-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 border border-amber-200/70 dark:border-slate-700 shadow-2xs flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5 text-xs font-bold text-sky-700 dark:text-sky-300 mb-1">
+                    <span class="material-symbols-outlined text-[16px]">autorenew</span>
+                    <span>Periodicidade / Recorrência</span>
+                  </div>
+                  <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed mb-2">
+                    Para manutenções contínuas e vistorias que devem se <b>repetir ciclicamente</b> (a cada X meses ou dias).
+                  </p>
+                  <div class="text-[10.5px] bg-sky-50 dark:bg-sky-950/40 p-2 rounded-xl text-sky-900 dark:text-sky-200 border border-sky-100 dark:border-sky-900/50 space-y-1">
+                    <div><b>Cálculo:</b> Data do Último Registro + Ciclo</div>
+                    <div><b>Exemplos:</b> Manutenção de asfalto a cada 6 meses, vistoria de pontes a cada 1 ano, limpeza de bueiros a cada 90 dias.</div>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div class="flex items-start gap-2 bg-white/70 dark:bg-slate-800/60 p-2.5 rounded-xl border border-amber-100 dark:border-slate-800">
-              <span class="w-5 h-5 rounded-full bg-amber-500 text-white font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">2</span>
-              <div>
-                <strong class="text-slate-900 dark:text-white">Campo:</strong> Escolha o campo de data do formulário que servirá de marco inicial ou vencimento.
+
+              <!-- Tipo 2: Vencimento Direto -->
+              <div class="p-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 border border-amber-200/70 dark:border-slate-700 shadow-2xs flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 mb-1">
+                    <span class="material-symbols-outlined text-[16px]">event_available</span>
+                    <span>Vencimento Direto</span>
+                  </div>
+                  <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed mb-2">
+                    Quando o formulário <b>já possui a data final exata</b> em que o documento, alvará ou licença expira.
+                  </p>
+                  <div class="text-[10.5px] bg-emerald-50 dark:bg-emerald-950/40 p-2 rounded-xl text-emerald-900 dark:text-emerald-200 border border-emerald-100 dark:border-emerald-900/50 space-y-1">
+                    <div><b>Cálculo:</b> Compara a data de hoje diretamente com o campo de validade. Não soma prazos.</div>
+                    <div><b>Exemplos:</b> Validade do Alvará (ex: 31/12/2026), Licença Ambiental, Permissão de Uso de Quiosque.</div>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div class="flex items-start gap-2 bg-white/70 dark:bg-slate-800/60 p-2.5 rounded-xl border border-amber-100 dark:border-slate-800">
-              <span class="w-5 h-5 rounded-full bg-amber-500 text-white font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">3</span>
-              <div>
-                <strong class="text-slate-900 dark:text-white">Tipo & Periodicidade:</strong> Defina se o ciclo se repete (ex: a cada 6 meses) ou se é uma data de validade fixa.
+
+              <!-- Tipo 3: Validade Calculada -->
+              <div class="p-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 border border-amber-200/70 dark:border-slate-700 shadow-2xs flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5 text-xs font-bold text-purple-700 dark:text-purple-300 mb-1">
+                    <span class="material-symbols-outlined text-[16px]">calculate</span>
+                    <span>Validade Calculada</span>
+                  </div>
+                  <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed mb-2">
+                    Para prazos legais ou processuais contados a partir de um <b>ato inicial</b> (notificação, lavratura ou emissão).
+                  </p>
+                  <div class="text-[10.5px] bg-purple-50 dark:bg-purple-950/40 p-2 rounded-xl text-purple-900 dark:text-purple-200 border border-purple-100 dark:border-purple-900/50 space-y-1">
+                    <div><b>Cálculo:</b> Data de Emissão + Prazo Legal</div>
+                    <div><b>Exemplos:</b> Notificação de Obra com 15 dias para embargo, Auto de Infração com 30 dias para defesa.</div>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div class="flex items-start gap-2 bg-white/70 dark:bg-slate-800/60 p-2.5 rounded-xl border border-amber-100 dark:border-slate-800">
-              <span class="w-5 h-5 rounded-full bg-amber-500 text-white font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">4</span>
-              <div>
-                <strong class="text-slate-900 dark:text-white">Aviso Prévio:</strong> Quantos dias antes do prazo a equipe deve receber o alerta preventivo em amarelo (🟡).
-              </div>
-            </div>
-            <div class="flex items-start gap-2 bg-white/70 dark:bg-slate-800/60 p-2.5 rounded-xl border border-amber-100 dark:border-slate-800 sm:col-span-2">
-              <span class="w-5 h-5 rounded-full bg-amber-500 text-white font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">5</span>
-              <div>
-                <strong class="text-slate-900 dark:text-white">Atribuir Responsável:</strong> Direcione para sua unidade inteira, um técnico específico da equipe, um setor ou quem cadastrou a feição.
-              </div>
+
             </div>
           </div>
+
+          <!-- BLOCO 2: Exemplo Prático Passo a Passo (Vias de Asfalto com mais de 6 meses) -->
+          <div class="p-3.5 rounded-2xl bg-white/90 dark:bg-slate-850 border border-amber-300/80 dark:border-slate-700 shadow-xs">
+            <h5 class="text-xs font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wide flex items-center gap-1.5 mb-2.5">
+              <span class="material-symbols-outlined text-[16px] text-amber-600">lightbulb</span>
+              <span>2. Exemplo Prático: Monitorar Vias com Classificação "Asfalto" e +6 Meses sem Manutenção</span>
+            </h5>
+            
+            <div class="space-y-2 text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700">
+                  <span class="font-bold text-slate-900 dark:text-white">1. Evento:</span>
+                  <div class="text-[11.5px] text-slate-600 dark:text-slate-400">Informe um nome descritivo: <i>"Manutenção Semestral de Vias Asfálticas"</i>.</div>
+                </div>
+                <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700">
+                  <span class="font-bold text-slate-900 dark:text-white">2. Campo:</span>
+                  <div class="text-[11.5px] text-slate-600 dark:text-slate-400">Selecione o campo: <i>"[Infraestrutura] Data da última manutenção"</i>.</div>
+                </div>
+                <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700">
+                  <span class="font-bold text-slate-900 dark:text-white">3. Tipo de Monitoramento:</span>
+                  <div class="text-[11.5px] text-slate-600 dark:text-slate-400">Escolha <b>Periodicidade / Recorrência (a cada X meses/dias)</b>.</div>
+                </div>
+                <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700">
+                  <span class="font-bold text-slate-900 dark:text-white">4. Ciclo & Aviso Prévio:</span>
+                  <div class="text-[11.5px] text-slate-600 dark:text-slate-400">Ciclo: <b>6 Meses</b> | Aviso Prévio: <b>15 Dias</b> (para alertar em amarelo antes de vencer).</div>
+                </div>
+              </div>
+
+              <div class="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-[11.5px]">
+                <strong class="text-amber-900 dark:text-amber-200 flex items-center gap-1 mb-1">
+                  <span class="material-symbols-outlined text-[15px] text-amber-600">filter_alt</span>
+                  <span>5. Condição Adicional de Filtro (Sem erro de digitação):</span>
+                </strong>
+                <p class="text-slate-700 dark:text-slate-300">
+                  Selecione o campo <i>"[Infraestrutura] Classificação da via"</i>, operador <i>"Igual a (=)"</i> e no campo de valor selecione <b>"Asfalto" diretamente na lista de opções</b> gerada automaticamente pelo sistema!
+                </p>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
+                <div class="flex items-center gap-1.5 p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                  <span><b>🟢 Em Dia:</b> Menos de 5 meses e meio</span>
+                </div>
+                <div class="flex items-center gap-1.5 p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60">
+                  <span class="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+                  <span><b>🟡 Atenção:</b> Faltando ≤ 15 dias</span>
+                </div>
+                <div class="flex items-center gap-1.5 p-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/30 text-rose-800 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/60">
+                  <span class="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span>
+                  <span><b>🔴 Crítico:</b> Passou de 6 meses (+180 dias)</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-3 flex justify-end">
+              <button type="button" onclick="EventsBuilder.toggleTutorialGuide()" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer">
+                Entendi, voltar ao formulário
+              </button>
+            </div>
+          </div>
+
         </div>
 
         <!-- Body Scrollável: Cada informação em uma linha vertical independente (Relação de 1 a 8) -->
