@@ -825,39 +825,40 @@
           </div>
 
           <!-- BLOCO 2: Exemplo Prático Passo a Passo (Vias de Asfalto com mais de 6 meses) -->
-          <div class="p-3.5 rounded-2xl bg-white/90 dark:bg-slate-850 border border-amber-300/80 dark:border-slate-700 shadow-xs">
-            <h5 class="text-xs font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wide flex items-center gap-1.5 mb-2.5">
-              <span class="material-symbols-outlined text-[16px] text-amber-600">lightbulb</span>
+          <div class="p-3.5 rounded-2xl bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 shadow-2xs">
+            <h5 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wide flex items-center gap-1.5 mb-2.5">
+              <span class="material-symbols-outlined text-[17px] text-amber-500 dark:text-amber-400">lightbulb</span>
               <span>2. Exemplo Prático: Monitorar Vias com Classificação "Asfalto" e +6 Meses sem Manutenção</span>
             </h5>
             
             <div class="space-y-2 text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700">
+                <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80">
                   <span class="font-bold text-slate-900 dark:text-white">1. Evento:</span>
-                  <div class="text-[11.5px] text-slate-600 dark:text-slate-400">Informe um nome descritivo: <i>"Manutenção Semestral de Vias Asfálticas"</i>.</div>
+                  <div class="text-[11.5px] text-slate-600 dark:text-slate-300">Informe um nome descritivo: <i>"Manutenção Semestral de Vias Asfálticas"</i>.</div>
                 </div>
-                <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700">
+                <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80">
                   <span class="font-bold text-slate-900 dark:text-white">2. Campo:</span>
-                  <div class="text-[11.5px] text-slate-600 dark:text-slate-400">Selecione o campo: <i>"[Infraestrutura] Data da última manutenção"</i>.</div>
+                  <div class="text-[11.5px] text-slate-600 dark:text-slate-300">Selecione o campo: <i>"[Infraestrutura] Data da última manutenção"</i>.</div>
                 </div>
-                <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700">
+                <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80">
                   <span class="font-bold text-slate-900 dark:text-white">3. Tipo de Monitoramento:</span>
-                  <div class="text-[11.5px] text-slate-600 dark:text-slate-400">Escolha <b>Periodicidade / Recorrência (a cada X meses/dias)</b>.</div>
+                  <div class="text-[11.5px] text-slate-600 dark:text-slate-300">Escolha <b>Periodicidade / Recorrência (a cada X meses/dias)</b>.</div>
                 </div>
-                <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700">
+                <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80">
                   <span class="font-bold text-slate-900 dark:text-white">4. Ciclo & Aviso Prévio:</span>
-                  <div class="text-[11.5px] text-slate-600 dark:text-slate-400">Ciclo: <b>6 Meses</b> | Aviso Prévio: <b>15 Dias</b> (para alertar em amarelo antes de vencer).</div>
+                  <div class="text-[11.5px] text-slate-600 dark:text-slate-300">Ciclo: <b>6 Meses</b> | Aviso Prévio: <b>15 Dias</b> (para alertar em amarelo antes de vencer).</div>
                 </div>
               </div>
 
-              <div class="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-[11.5px]">
-                <strong class="text-amber-900 dark:text-amber-200 flex items-center gap-1 mb-1">
-                  <span class="material-symbols-outlined text-[15px] text-amber-600">filter_alt</span>
+              <!-- 5. Condição Adicional de Filtro: Fundo e tipografia perfeitamente legíveis -->
+              <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-[11.5px]">
+                <strong class="text-slate-900 dark:text-white flex items-center gap-1.5 mb-1.5 text-xs">
+                  <span class="material-symbols-outlined text-[16px] text-amber-500 dark:text-amber-400">filter_alt</span>
                   <span>5. Condição Adicional de Filtro (Sem erro de digitação):</span>
                 </strong>
-                <p class="text-slate-700 dark:text-slate-300">
-                  Selecione o campo <i>"[Infraestrutura] Classificação da via"</i>, operador <i>"Igual a (=)"</i> e no campo de valor selecione <b>"Asfalto" diretamente na lista de opções</b> gerada automaticamente pelo sistema!
+                <p class="text-slate-600 dark:text-slate-300">
+                  Selecione o campo <b class="text-slate-900 dark:text-white">"[Infraestrutura] Classificação da via"</b>, operador <b class="text-slate-900 dark:text-white">"Igual a (=)"</b> e no campo de valor selecione <b class="text-amber-600 dark:text-amber-400">"Asfalto" diretamente na lista de opções</b> gerada automaticamente pelo sistema!
                 </p>
               </div>
 
@@ -876,9 +877,55 @@
                 </div>
               </div>
             </div>
+          </div>
+
+          <!-- BLOCO 3: Explicação Completa de Mensagem do Alerta -->
+          <div class="mt-3 p-3.5 rounded-2xl bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 shadow-2xs">
+            <h5 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wide flex items-center gap-1.5 mb-2.5">
+              <span class="material-symbols-outlined text-[17px] text-sky-500 dark:text-sky-400">campaign</span>
+              <span>3. Como Funciona a "Mensagem do Alerta"?</span>
+            </h5>
+            
+            <p class="text-[11.5px] text-slate-600 dark:text-slate-300 mb-3 leading-relaxed">
+              A <b>Mensagem do Alerta</b> é o comunicado oficial que a equipe municipal e os fiscais verão quando a via ou feição entrar em período de aviso ou vencer. Ela é totalmente dinâmica: você escreve o texto uma única vez e o sistema preenche os dados específicos de cada rua automaticamente.
+            </p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+              <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
+                <div class="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[15px] text-emerald-500">notifications_active</span>
+                  <span>Onde esta mensagem aparece?</span>
+                </div>
+                <ul class="text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
+                  <li>🔔 <b>Painel do Sino (Topo):</b> Lista todas as vias e notificações pendentes.</li>
+                  <li>🗺️ <b>Card no Mapa:</b> Quando o operador clica na rua ou feição alertada.</li>
+                  <li>📢 <b>Notificação ao Entrar:</b> Banner de boas-vindas com resumo de pendências.</li>
+                </ul>
+              </div>
+
+              <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
+                <div class="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[15px] text-amber-500">sell</span>
+                  <span>Tags Dinâmicas (Substituição Automática):</span>
+                </div>
+                <div class="text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
+                  <div><code class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-amber-700 dark:text-amber-300 font-mono text-[10px]">{data_limite}</code> → Data calculada (ex: <i>02/07/2026</i>).</div>
+                  <div><code class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-amber-700 dark:text-amber-300 font-mono text-[10px]">{dias_restantes}</code> → "15 dias" ou "101 dias em atraso".</div>
+                  <div><code class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-amber-700 dark:text-amber-300 font-mono text-[10px]">{nome_camada}</code> → Nome da camada (ex: <i>Logradouro</i>).</div>
+                  <div><code class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-amber-700 dark:text-amber-300 font-mono text-[10px]">{Nome}</code> → Nome da feição/rua específica.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-2.5 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-100 dark:border-sky-900/50 text-[11px] text-sky-900 dark:text-sky-200">
+              <span class="font-bold">💡 Exemplo Recomendado para Vias:</span>
+              <div class="font-mono text-[11px] mt-0.5 text-sky-800 dark:text-sky-300">
+                "A via {Nome} atingiu o ciclo sem manutenção em {data_limite} ({dias_restantes})."
+              </div>
+            </div>
 
             <div class="mt-3 flex justify-end">
-              <button type="button" onclick="EventsBuilder.toggleTutorialGuide()" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer">
+              <button type="button" onclick="EventsBuilder.toggleTutorialGuide()" class="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer">
                 Entendi, voltar ao formulário
               </button>
             </div>
@@ -1012,12 +1059,15 @@
           <div>
             <div class="flex justify-between items-center mb-1">
               <label class="block text-xs font-bold text-slate-700 dark:text-slate-300">Mensagem do Alerta</label>
-              <span class="text-[11px] text-slate-400">Clique nas tags para inserir</span>
+              <span class="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">Clique nas tags abaixo para inserir no texto</span>
             </div>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 mb-2 leading-relaxed">
+              Texto exibido no <b>painel do sino (🔔 Eventos & Prazos)</b> e no <b>card da feição no mapa</b> quando o prazo vencer. Use as tags dinâmicas para preencher automaticamente os dados de cada feição:
+            </p>
             <div id="trig-msg-tags" class="flex flex-wrap gap-1.5 mb-2">
               <!-- Tags dinâmicas -->
             </div>
-            <textarea id="trig-msg" rows="2" class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none" placeholder="Ex: O logradouro {logradouro} atingiu o prazo limite de manutenção."></textarea>
+            <textarea id="trig-msg" rows="2" class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none" placeholder="Ex: A via {Nome} atingiu o ciclo sem manutenção em {data_limite} ({dias_restantes})."></textarea>
           </div>
 
         </div>
