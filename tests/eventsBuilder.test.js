@@ -71,4 +71,8 @@ assert.strictEqual(dateFields[0].name, 'data_vistoria');
 assert.strictEqual(dateFields[1].name, 'validade_alvara');
 console.log('  ✓ [PASS] Identificação resiliente de campos de data nas abas');
 
+// Teste de exportação da nova função de filtro
+assert(typeof EventsBuilder.onFilterFieldChanged === 'function', 'onFilterFieldChanged deve ser uma função exportada');
+console.log('  ✓ [PASS] onFilterFieldChanged devidamente exposto no EventsBuilder');
+
 console.log('\n🎉 TODOS OS TESTES DO EVENTS BUILDER PASSARAM COM SUCESSO!\n');

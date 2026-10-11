@@ -59,6 +59,25 @@
   }
 
   /**
+   * Utilitário para parsear opções de campos select (array, string JSON ou vírgula).
+   */
+  function parseFieldOptions(optionsRaw) {
+    if (!optionsRaw) return [];
+    if (Array.isArray(optionsRaw)) return optionsRaw.map(s => String(s).trim()).filter(Boolean);
+    if (typeof optionsRaw === 'string') {
+      const trimmed = optionsRaw.trim();
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) return parsed.map(s => String(s).trim()).filter(Boolean);
+        } catch (e) {}
+      }
+      return trimmed.split(',').map(s => s.trim()).filter(Boolean);
+    }
+    return [];
+  }
+
+  /**
    * Extrai todos os campos das abas ativas do construtor (para filtros e tags).
    */
   function getAllFieldsFromBuilder() {
@@ -72,7 +91,8 @@
           name: f.name || f.id,
           label: f.label || f.name || f.id,
           type: f.type || 'text',
-          tabTitle: tab.title || 'Aba'
+          tabTitle: tab.title || 'Aba',
+          options: parseFieldOptions(f.options)
         });
       });
     });
@@ -318,7 +338,7 @@
     // Filtro condicional
     document.getElementById('trig-filter-field').value = trigger ? (trigger.campo_filtro || '') : '';
     document.getElementById('trig-filter-op').value = trigger ? (trigger.filtro_operador || '=') : '=';
-    document.getElementById('trig-filter-val').value = trigger ? (trigger.filtro_valor || '') : '';
+    onFilterFieldChanged(trigger ? trigger.filtro_valor : '');
 
     // Responsável
     const respTipo = trigger ? (trigger.responsavel_tipo || 'todos') : 'todos';
@@ -506,6 +526,51 @@
   }
 
   /**
+   * Disparado quando altera o campo de filtro condicional.
+   * Se o campo selecionado possuir opções cadastradas (dropdown/select),
+   * substitui o input de texto por um <select> com as opções reais para evitar erros de digitação.
+   */
+  function onFilterFieldChanged(presetValue) {
+    const filterFieldSelect = document.getElementById('trig-filter-field');
+    const container = document.getElementById('trig-filter-val-container');
+    if (!filterFieldSelect || !container) return;
+
+    const selectedFieldId = filterFieldSelect.value;
+    const allFields = getAllFieldsFromBuilder();
+    const fieldObj = allFields.find(f => f.id === selectedFieldId || f.name === selectedFieldId || f.rawId === selectedFieldId);
+
+    const valToSet = presetValue !== undefined ? presetValue : (document.getElementById('trig-filter-val')?.value || '');
+
+    if (!selectedFieldId) {
+      container.innerHTML = `
+        <input type="text" id="trig-filter-val" disabled placeholder="(Sem filtro ativo)" class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800/40 text-slate-400 border border-slate-200 dark:border-slate-700 rounded-lg text-xs cursor-not-allowed">
+      `;
+      return;
+    }
+
+    const options = (fieldObj && Array.isArray(fieldObj.options)) ? fieldObj.options : [];
+    if (options.length > 0) {
+      // Campo de opções pré-definidas (Select): exibe <select> com as opções cadastradas
+      let optionsHtml = '<option value="">Selecione uma opção...</option>';
+      options.forEach(opt => {
+        const isSelected = String(opt).trim().toLowerCase() === String(valToSet).trim().toLowerCase();
+        optionsHtml += `<option value="${escapeHtml(opt)}" ${isSelected ? 'selected' : ''}>${escapeHtml(opt)}</option>`;
+      });
+
+      container.innerHTML = `
+        <select id="trig-filter-val" class="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none">
+          ${optionsHtml}
+        </select>
+      `;
+    } else {
+      // Campo de texto livre ou número
+      container.innerHTML = `
+        <input type="text" id="trig-filter-val" value="${escapeHtml(valToSet)}" placeholder="Ex: Digite o valor..." class="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none">
+      `;
+    }
+  }
+
+  /**
    * Salva as configurações do gatilho no formulário ativo.
    */
   function saveTriggerConfig() {
@@ -531,7 +596,8 @@
 
     const campoFiltro = document.getElementById('trig-filter-field').value || null;
     const filtroOperador = document.getElementById('trig-filter-op').value || '=';
-    const filtroValor = document.getElementById('trig-filter-val').value.trim() || null;
+    const filterValEl = document.getElementById('trig-filter-val');
+    const filtroValor = (filterValEl && filterValEl.value) ? filterValEl.value.trim() : null;
 
     const respTipo = document.getElementById('trig-resp-tipo').value;
     let respId = null;
@@ -753,16 +819,18 @@
             <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Condição Adicional de Filtro (Opcional)</label>
             <div class="p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-xl space-y-2">
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <select id="trig-filter-field" class="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                <select id="trig-filter-field" onchange="EventsBuilder.onFilterFieldChanged()" class="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none">
                   <!-- Populado dinamicamente -->
                 </select>
                 <select id="trig-filter-op" class="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none">
-                  <option value="!=">Diferente de (!=)</option>
                   <option value="=">Igual a (=)</option>
+                  <option value="!=">Diferente de (!=)</option>
                   <option value="contem">Contém</option>
                   <option value="nao_contem">Não Contém</option>
                 </select>
-                <input type="text" id="trig-filter-val" placeholder="Ex: Concluído" class="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                <div id="trig-filter-val-container">
+                  <input type="text" id="trig-filter-val" placeholder="Ex: Asfalto" class="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                </div>
               </div>
             </div>
           </div>
@@ -872,7 +940,8 @@
     insertMsgTag,
     onTriggerTypeChanged,
     onRespTipoChanged,
-    toggleTutorialGuide
+    toggleTutorialGuide,
+    onFilterFieldChanged
   };
 
   global.EventsBuilder = EventsBuilder;
