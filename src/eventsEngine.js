@@ -537,6 +537,20 @@
     }
   }
 
+  function unsnoozeAlert(alertId, userId) {
+    try {
+      const uId = resolveActiveUserId(userId);
+      const keyUser = `${STORAGE_SNOOZED_KEY}_${uId}`;
+      const map = getSnoozedMap(uId);
+      delete map[alertId];
+      localStorage.setItem(keyUser, JSON.stringify(map));
+      localStorage.setItem(STORAGE_SNOOZED_KEY, JSON.stringify(map));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   function isAlertDismissed(alertId, userId) {
     const map = getDismissedMap(userId);
     return Boolean(map[alertId]);
@@ -625,9 +639,15 @@
             // Verifica permissão do usuário
             if (!isAlertForUser(alert, currentUserProfile)) return;
 
-            // Verifica se o usuário já deu ciente ou se está em snooze
+            // Verifica se o usuário já deu ciente
             if (!options.includeDismissed && isAlertDismissed(alert.id, userId)) return;
-            if (!options.includeSnoozed && isAlertSnoozed(alert.id, userId)) return;
+
+            // Marca se o alerta está em adiamento no mapa (snoozed)
+            const isSnoozed = isAlertSnoozed(alert.id, userId);
+            alert.isSnoozed = isSnoozed;
+
+            // Só descarta se options.includeSnoozed for explicitamente false
+            if (options.includeSnoozed === false && isSnoozed) return;
 
             activeAlerts.push(alert);
           }
@@ -723,7 +743,7 @@
 
     _activeAlertsCache = computeActiveAlerts(themesList, userProfile, formsList, {
       includeDismissed: false,
-      includeSnoozed: false
+      includeSnoozed: true // Central do Sino sempre mantém todos os eventos ativos, mesmo que adiados no mapa
     });
 
     updateAlertBadges();
@@ -843,6 +863,7 @@
     items.forEach(alert => {
       const isCrit = alert.severity === 'critico';
       const isAten = alert.severity === 'atencao';
+      const isSnoozed = Boolean(alert.isSnoozed);
 
       const borderClass = isCrit ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/30 dark:bg-rose-950/20' : 
                           (isAten ? 'border-amber-300 dark:border-amber-900/60 bg-amber-50/30 dark:bg-amber-950/20' : 
@@ -859,6 +880,12 @@
               <span class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${badgeSeverityClass}">
                 ${alert.statusLabel}
               </span>
+              ${isSnoozed ? `
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30" title="Alerta mantido no sino, porém com destaque oculto no mapa temporariamente">
+                  <span class="material-symbols-outlined text-[12px]">visibility_off</span>
+                  <span>Oculto no mapa</span>
+                </span>
+              ` : ''}
               <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 truncate max-w-[170px]" title="${escapeAttr(alert.themeName)}">
                 <span class="w-2 h-2 rounded-full shrink-0" style="background-color: ${alert.themeColor}"></span>
                 <span class="truncate">${escapeHtml(alert.themeName)}</span>
@@ -886,9 +913,16 @@
               <button type="button" onclick="EventsEngine.acknowledgeAlert('${escapeAttr(alert.id)}')" class="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors tooltip cursor-pointer" title="Dar Ciente (Remover Notificação)">
                 <span class="material-symbols-outlined text-[16px]">done_all</span>
               </button>
-              <button type="button" onclick="EventsEngine.snoozeAlertUi('${escapeAttr(alert.id)}', 7)" class="p-1.5 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors tooltip cursor-pointer" title="Adiar por 7 dias">
-                <span class="material-symbols-outlined text-[16px]">snooze</span>
-              </button>
+              ${isSnoozed ? `
+                <button type="button" onclick="EventsEngine.unsnoozeAlertUi('${escapeAttr(alert.id)}')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-[11px] font-bold transition-colors cursor-pointer" title="Reativar exibição do destaque no mapa">
+                  <span class="material-symbols-outlined text-[15px]">visibility</span>
+                  <span>Reativar no mapa</span>
+                </button>
+              ` : `
+                <button type="button" onclick="EventsEngine.snoozeAlertUi('${escapeAttr(alert.id)}', 7)" class="p-1.5 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors tooltip cursor-pointer" title="Adiar por 7 dias (oculta apenas o destaque visual no mapa)">
+                  <span class="material-symbols-outlined text-[16px]">snooze</span>
+                </button>
+              `}
             </div>
           </div>
         </div>
@@ -947,23 +981,21 @@
   }
 
   /**
-   * Adia o alerta por X dias.
+   * Adia o destaque visual do alerta no mapa por X dias (mantém na Central do Sino).
    */
   function snoozeAlertUi(alertId, days = 7) {
     const userProfile = window.currentUserProfile || null;
     snoozeAlert(alertId, days, userProfile ? userProfile.id : null);
+    refreshAlerts();
+  }
 
-    const card = document.getElementById(`alert-card-${alertId}`);
-    if (card) {
-      card.style.transition = 'all 0.25s ease-out';
-      card.style.opacity = '0';
-      card.style.transform = 'scale(0.95)';
-      setTimeout(() => {
-        refreshAlerts();
-      }, 250);
-    } else {
-      refreshAlerts();
-    }
+  /**
+   * Reativa a exibição do destaque visual do alerta no mapa.
+   */
+  function unsnoozeAlertUi(alertId) {
+    const userProfile = window.currentUserProfile || null;
+    unsnoozeAlert(alertId, userProfile ? userProfile.id : null);
+    refreshAlerts();
   }
 
   /**
@@ -983,6 +1015,8 @@
     _haloLayerGroup.clearLayers();
 
     _activeAlertsCache.forEach(alert => {
+      // Quando adiado pelo usuário, oculta apenas o halo luminoso no mapa (continua no sino)
+      if (alert.isSnoozed) return;
       if (!alert.coords) return;
       const isCrit = alert.severity === 'critico';
       const haloClass = isCrit ? 'alert-halo-critico' : 'alert-halo-atencao';
@@ -1151,6 +1185,8 @@
     locateAlertFeature,
     acknowledgeAlert,
     snoozeAlertUi,
+    unsnoozeAlert,
+    unsnoozeAlertUi,
     updateMapHaloGlow,
     toggleAlertFilterMode,
     checkEntryBanner

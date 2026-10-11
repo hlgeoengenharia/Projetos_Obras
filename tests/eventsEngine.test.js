@@ -156,5 +156,33 @@ assert.strictEqual(alertUserCase.severity, 'critico', 'Status vencido deve ser c
 assert.ok(alertUserCase.message.includes('RUA ERIBALDO DA SILVA ARAUJO'), 'Mensagem deve conter o nome da via');
 console.log('  ✓ [PASS] Normalização resiliente: "DATA DA ÚLTIMA MANUTENÇÃO" identificado com sucesso');
 
+// 8. Teste de Snooze / Adiar (mantém no sino com isSnoozed=true, exclui apenas do mapa)
+if (typeof localStorage === 'undefined') {
+  const store = {};
+  global.localStorage = {
+    getItem: (k) => store[k] || null,
+    setItem: (k, v) => { store[k] = String(v); },
+    removeItem: (k) => { delete store[k]; }
+  };
+}
+
+EventsEngine.snoozeAlert('trig_manutencao_logradouro_feat_101', 7, 'usr-1');
+assert.strictEqual(EventsEngine.isAlertSnoozed('trig_manutencao_logradouro_feat_101', 'usr-1'), true, 'Alerta deve constar como adiado');
+
+// No sino: includeSnoozed: true -> Retorna o alerta e marca alert.isSnoozed = true
+const alertsNoSino = EventsEngine.computeActiveAlerts(mockThemes, userHelton, mockForms, { today, includeSnoozed: true });
+assert.strictEqual(alertsNoSino.length, 1, 'Deve continuar aparecendo no sino');
+assert.strictEqual(alertsNoSino[0].isSnoozed, true, 'Deve estar marcado como isSnoozed=true');
+
+// No mapa: includeSnoozed: false -> Exclui o alerta do mapa
+const alertsNoMapa = EventsEngine.computeActiveAlerts(mockThemes, userHelton, mockForms, { today, includeSnoozed: false });
+assert.strictEqual(alertsNoMapa.length, 0, 'Deve ser ocultado do mapa enquanto adiado');
+
+// Reativação
+EventsEngine.unsnoozeAlert('trig_manutencao_logradouro_feat_101', 'usr-1');
+assert.strictEqual(EventsEngine.isAlertSnoozed('trig_manutencao_logradouro_feat_101', 'usr-1'), false, 'Alerta não deve mais estar adiado após reativar');
+console.log('  ✓ [PASS] Snooze: mantido no sino com contagem e ocultado apenas do mapa');
+
 console.log('\n🎉 TODOS OS TESTES DO EVENTS ENGINE PASSARAM COM 100% DE SUCESSO!\n');
+
 
