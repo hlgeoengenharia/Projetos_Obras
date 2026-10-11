@@ -183,6 +183,33 @@ EventsEngine.unsnoozeAlert('trig_manutencao_logradouro_feat_101', 'usr-1');
 assert.strictEqual(EventsEngine.isAlertSnoozed('trig_manutencao_logradouro_feat_101', 'usr-1'), false, 'Alerta não deve mais estar adiado após reativar');
 console.log('  ✓ [PASS] Snooze: mantido no sino com contagem e ocultado apenas do mapa');
 
+// 9. Teste de Ciente e Reversão "Trazer de volta"
+EventsEngine.markAlertDismissed('trig_manutencao_logradouro_feat_101', 'usr-1');
+assert.strictEqual(EventsEngine.isAlertDismissed('trig_manutencao_logradouro_feat_101', 'usr-1'), true, 'Alerta deve estar marcado como ciente');
+
+// Alertas pendentes (sem includeDismissed) não devem incluir o alerta ciente
+const alertsPendentes = EventsEngine.computeActiveAlerts(mockThemes, userHelton, mockForms, { today, includeDismissed: false });
+assert.strictEqual(alertsPendentes.length, 0, 'Alerta ciente não deve estar na lista de pendentes');
+
+// Aba Ciente (com includeDismissed: true) inclui o alerta com alert.isDismissed = true
+const alertsAbaCiente = EventsEngine.computeActiveAlerts(mockThemes, userHelton, mockForms, { today, includeDismissed: true });
+assert.strictEqual(alertsAbaCiente.length, 1, 'Deve ser mantido no cache global para a aba Ciente');
+assert.strictEqual(alertsAbaCiente[0].isDismissed, true, 'Propriedade isDismissed deve ser true');
+
+// Ação do usuário: "Trazer de volta" (unmarkAlertDismissed)
+EventsEngine.unmarkAlertDismissed('trig_manutencao_logradouro_feat_101', 'usr-1');
+assert.strictEqual(EventsEngine.isAlertDismissed('trig_manutencao_logradouro_feat_101', 'usr-1'), false, 'Alerta não deve mais estar marcado como ciente');
+
+const alertsReativados = EventsEngine.computeActiveAlerts(mockThemes, userHelton, mockForms, { today, includeDismissed: false });
+assert.strictEqual(alertsReativados.length, 1, 'Alerta deve voltar para a lista de alertas ativos');
+assert.strictEqual(alertsReativados[0].isDismissed, false, 'Propriedade isDismissed deve ser false');
+console.log('  ✓ [PASS] Aba Ciente: arquivamento com Dar Ciente e restauração com Trazer de volta');
+
+// 10. Funções exportadas para manipulação e drag do Drawer
+assert.strictEqual(typeof EventsEngine.initDraggableAlertsDrawer, 'function', 'initDraggableAlertsDrawer deve estar exportada');
+assert.strictEqual(typeof EventsEngine.unacknowledgeAlert, 'function', 'unacknowledgeAlert deve estar exportada');
+console.log('  ✓ [PASS] Métodos de interface (arrastar drawer e reversão de ciente) exportados');
+
 console.log('\n🎉 TODOS OS TESTES DO EVENTS ENGINE PASSARAM COM 100% DE SUCESSO!\n');
 
 

@@ -761,16 +761,19 @@
       <span id="alerts-count-badge" class="hidden absolute top-0.5 right-0.5 min-w-[17px] h-[17px] px-1 rounded-full bg-rose-500 text-white font-extrabold text-[10px] flex items-center justify-center border-2 border-white dark:border-slate-900 shadow-md animate-pulse">0</span>
     </button>
 
-    <!-- Dropdown / Painel Suspenso de Alertas Ativos -->
-    <div id="alerts-drawer" class="hidden absolute top-full right-0 mt-2 w-[340px] sm:w-[420px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xl z-[150] overflow-hidden flex flex-col max-h-[80vh] transition-all animate-in fade-in zoom-in-95 duration-150">
-      <!-- Topo do Drawer -->
-      <div class="px-5 py-3.5 border-b border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between bg-slate-50/80 dark:bg-slate-950/60">
+    <!-- Dropdown / Painel Suspenso de Alertas Ativos (Arrastável, canto superior direito) -->
+    <div id="alerts-drawer" class="hidden fixed top-[72px] right-3 sm:right-6 w-[350px] sm:w-[430px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xl z-[150] overflow-hidden flex flex-col max-h-[82vh] transition-all animate-in fade-in zoom-in-95 duration-150">
+      <!-- Topo do Drawer (Arrastável) -->
+      <div id="alerts-drawer-header" class="px-5 py-3.5 border-b border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between bg-slate-50/80 dark:bg-slate-950/60 cursor-grab active:cursor-grabbing select-none" title="Clique e arraste para posicionar o painel onde preferir">
         <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center border border-amber-500/20">
+          <div class="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center border border-amber-500/20 shrink-0">
             <span class="material-symbols-outlined text-[19px]">notifications_active</span>
           </div>
-          <div>
-            <h4 class="text-sm font-bold text-slate-900 dark:text-white leading-tight">Eventos & Prazos</h4>
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5">
+              <h4 class="text-sm font-bold text-slate-900 dark:text-white leading-tight">Eventos & Prazos</h4>
+              <span class="material-symbols-outlined text-[14px] text-slate-400 opacity-60 cursor-grab" title="Arraste para mover o painel">drag_indicator</span>
+            </div>
             <span id="alerts-drawer-subtitle" class="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">Carregando monitoramento...</span>
           </div>
         </div>
@@ -781,7 +784,7 @@
         </div>
       </div>
 
-      <!-- Filtros por Severidade -->
+      <!-- Filtros por Severidade & Ciente -->
       <div class="px-4 py-2 border-b border-slate-200/60 dark:border-slate-800/60 flex items-center gap-1.5 bg-slate-50/50 dark:bg-slate-900/50 overflow-x-auto text-[11px] font-semibold">
         <button type="button" id="alerts-tab-all" onclick="if(window.EventsEngine) window.EventsEngine.filterAlertsTab('all')" class="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white transition-colors cursor-pointer">
           Todos
@@ -797,6 +800,11 @@
         <button type="button" id="alerts-tab-info" onclick="if(window.EventsEngine) window.EventsEngine.filterAlertsTab('info')" class="px-2.5 py-1 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors cursor-pointer flex items-center gap-1">
           <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
           Info
+        </button>
+        <button type="button" id="alerts-tab-ciente" onclick="if(window.EventsEngine) window.EventsEngine.filterAlertsTab('ciente')" class="px-2.5 py-1 rounded-lg text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors cursor-pointer flex items-center gap-1" title="Eventos marcados como ciente">
+          <span class="material-symbols-outlined text-[13px]">done_all</span>
+          <span>Ciente</span>
+          <span id="alerts-tab-ciente-badge" class="hidden px-1.5 py-0.2 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 text-[9.5px] font-bold">0</span>
         </button>
       </div>
 

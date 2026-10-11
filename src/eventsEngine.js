@@ -521,6 +521,22 @@
     }
   }
 
+  function unmarkAlertDismissed(alertId, userId) {
+    try {
+      const uId = resolveActiveUserId(userId);
+      const keyUser = `${STORAGE_DISMISSED_KEY}_${uId}`;
+      const keyDefault = `${STORAGE_DISMISSED_KEY}_default`;
+      const map = getDismissedMap(uId);
+      delete map[alertId];
+      localStorage.setItem(keyUser, JSON.stringify(map));
+      localStorage.setItem(keyDefault, JSON.stringify(map));
+      localStorage.setItem(STORAGE_DISMISSED_KEY, JSON.stringify(map));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   function snoozeAlert(alertId, days, userId) {
     try {
       const uId = resolveActiveUserId(userId);
@@ -640,7 +656,9 @@
             if (!isAlertForUser(alert, currentUserProfile)) return;
 
             // Verifica se o usuário já deu ciente
-            if (!options.includeDismissed && isAlertDismissed(alert.id, userId)) return;
+            const isDismissed = isAlertDismissed(alert.id, userId);
+            alert.isDismissed = Boolean(isDismissed);
+            if (!options.includeDismissed && isDismissed) return;
 
             // Marca se o alerta está em adiamento no mapa (snoozed)
             const isSnoozed = isAlertSnoozed(alert.id, userId);
@@ -742,7 +760,7 @@
     const userProfile = window.currentUserProfile || (window.parent && window.parent.homeUserProfile) || null;
 
     _activeAlertsCache = computeActiveAlerts(themesList, userProfile, formsList, {
-      includeDismissed: false,
+      includeDismissed: true, // Mantém alertas cientes no cache para a aba "Ciente"
       includeSnoozed: true // Central do Sino sempre mantém todos os eventos ativos, mesmo que adiados no mapa
     });
 
@@ -755,16 +773,20 @@
   }
 
   /**
-   * Atualiza os contadores no badge do sininho (topbar) e no botão de filtro rápido do mapa.
+   * Atualiza os contadores no badge do sininho (topbar), na aba Ciente e no botão de filtro rápido do mapa.
    */
   function updateAlertBadges() {
     if (typeof document === 'undefined') return;
 
-    const total = _activeAlertsCache.length;
+    const pendingAlerts = _activeAlertsCache.filter(a => !a.isDismissed);
+    const cienteAlerts = _activeAlertsCache.filter(a => a.isDismissed);
+
+    const total = pendingAlerts.length;
     const badge = document.getElementById('alerts-count-badge');
     const subtitle = document.getElementById('alerts-drawer-subtitle');
     const filterBtn = document.getElementById('btn-filter-alerts');
     const filterCount = document.getElementById('btn-filter-alerts-count');
+    const cienteBadge = document.getElementById('alerts-tab-ciente-badge');
 
     if (badge) {
       if (total > 0) {
@@ -775,11 +797,20 @@
       }
     }
 
-    if (subtitle) {
-      if (total === 0) {
-        subtitle.innerText = 'Nenhum alerta pendente';
+    if (cienteBadge) {
+      if (cienteAlerts.length > 0) {
+        cienteBadge.innerText = String(cienteAlerts.length);
+        cienteBadge.classList.remove('hidden');
       } else {
-        const criticos = _activeAlertsCache.filter(a => a.severity === 'critico').length;
+        cienteBadge.classList.add('hidden');
+      }
+    }
+
+    if (subtitle) {
+      const criticos = pendingAlerts.filter(a => a.severity === 'critico').length;
+      if (total === 0) {
+        subtitle.innerText = cienteAlerts.length > 0 ? `${cienteAlerts.length} evento(s) na aba Ciente` : 'Nenhum alerta pendente';
+      } else {
         subtitle.innerText = criticos > 0 ? `${total} ativo(s) (${criticos} crítico(s))` : `${total} monitoramento(s) ativo(s)`;
       }
     }
@@ -794,16 +825,109 @@
     }
   }
 
+  let _isDrawerDraggableInitialized = false;
+
+  /**
+   * Torna o card "Eventos & Prazos" arrastável na tela através do cabeçalho.
+   */
+  function initDraggableAlertsDrawer() {
+    if (typeof document === 'undefined') return;
+    const drawer = document.getElementById('alerts-drawer');
+    const header = document.getElementById('alerts-drawer-header');
+    if (!drawer || !header) return;
+    if (_isDrawerDraggableInitialized) return;
+    _isDrawerDraggableInitialized = true;
+
+    if (typeof window !== 'undefined' && typeof window.makeElementDraggable === 'function') {
+      window.makeElementDraggable(drawer, header);
+      return;
+    }
+
+    // Fallback nativo caso makeElementDraggable ainda não tenha sido registrado
+    if (typeof L !== 'undefined' && L.DomEvent) {
+      L.DomEvent.disableClickPropagation(drawer);
+      L.DomEvent.disableScrollPropagation(drawer);
+    }
+
+    header.style.cursor = 'grab';
+    header.style.userSelect = 'none';
+
+    let isDragging = false;
+    let shiftX = 0;
+    let shiftY = 0;
+
+    const onPointerDown = (e) => {
+      if (e.target.closest('button') || e.target.closest('input') || e.target.closest('select') || e.target.closest('a')) return;
+
+      isDragging = true;
+      header.style.cursor = 'grabbing';
+      try { header.setPointerCapture(e.pointerId); } catch(err) {}
+
+      const rect = drawer.getBoundingClientRect();
+      shiftX = e.clientX - rect.left;
+      shiftY = e.clientY - rect.top;
+
+      drawer.style.transition = 'none';
+      drawer.style.position = 'fixed';
+      drawer.style.transform = 'none';
+      drawer.style.margin = '0';
+      drawer.style.right = 'auto';
+      drawer.style.bottom = 'auto';
+      drawer.style.left = rect.left + 'px';
+      drawer.style.top = rect.top + 'px';
+
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const onPointerMove = (e) => {
+      if (!isDragging) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      let newX = e.clientX - shiftX;
+      let newY = e.clientY - shiftY;
+
+      const maxX = window.innerWidth - drawer.offsetWidth - 10;
+      const maxY = window.innerHeight - drawer.offsetHeight - 10;
+      newX = Math.max(10, Math.min(newX, maxX));
+      newY = Math.max(10, Math.min(newY, maxY));
+
+      drawer.style.left = newX + 'px';
+      drawer.style.top = newY + 'px';
+    };
+
+    const onPointerUp = (e) => {
+      if (isDragging) {
+        isDragging = false;
+        header.style.cursor = 'grab';
+        try { header.releasePointerCapture(e.pointerId); } catch(err) {}
+        drawer.style.transition = '';
+        document.body.style.userSelect = '';
+      }
+    };
+
+    header.addEventListener('pointerdown', onPointerDown);
+    header.addEventListener('pointermove', onPointerMove);
+    header.addEventListener('pointerup', onPointerUp);
+    header.addEventListener('pointercancel', onPointerUp);
+  }
+
   /**
    * Abre/fecha o Drawer (dropdown) de Alertas do Topbar.
    */
-  function toggleAlertsDrawer(e) {
+  function toggleAlertsDrawer(e, forceOpen = null) {
     if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
     const drawer = document.getElementById('alerts-drawer');
     if (!drawer) return;
 
+    initDraggableAlertsDrawer();
+
     const isHidden = drawer.classList.contains('hidden');
-    if (isHidden) {
+    const shouldOpen = (forceOpen !== null) ? Boolean(forceOpen) : isHidden;
+
+    if (shouldOpen) {
       drawer.classList.remove('hidden');
       refreshAlerts();
       renderAlertsDrawer();
@@ -813,19 +937,33 @@
   }
 
   /**
-   * Filtra os alertas exibidos no Drawer por aba de severidade.
+   * Filtra os alertas exibidos no Drawer por aba de severidade ou aba Ciente.
    */
   function filterAlertsTab(tab) {
     _currentFilterTab = tab || 'all';
 
-    const tabs = ['all', 'critico', 'atencao', 'info'];
+    const tabs = ['all', 'critico', 'atencao', 'info', 'ciente'];
     tabs.forEach(t => {
       const btn = document.getElementById(`alerts-tab-${t}`);
       if (!btn) return;
       if (t === _currentFilterTab) {
-        btn.className = 'px-2.5 py-1 rounded-lg bg-amber-500 text-white font-bold transition-all shadow-xs cursor-pointer';
+        if (t === 'ciente') {
+          btn.className = 'px-2.5 py-1 rounded-lg bg-blue-600 text-white font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1';
+        } else {
+          btn.className = 'px-2.5 py-1 rounded-lg bg-amber-500 text-white font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1';
+        }
       } else {
-        btn.className = 'px-2.5 py-1 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer';
+        if (t === 'all') {
+          btn.className = 'px-2.5 py-1 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer';
+        } else if (t === 'critico') {
+          btn.className = 'px-2.5 py-1 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer flex items-center gap-1';
+        } else if (t === 'atencao') {
+          btn.className = 'px-2.5 py-1 rounded-lg text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors cursor-pointer flex items-center gap-1';
+        } else if (t === 'info') {
+          btn.className = 'px-2.5 py-1 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors cursor-pointer flex items-center gap-1';
+        } else if (t === 'ciente') {
+          btn.className = 'px-2.5 py-1 rounded-lg text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors cursor-pointer flex items-center gap-1';
+        }
       }
     });
 
@@ -839,23 +977,44 @@
     const container = document.getElementById('alerts-list-container');
     if (!container) return;
 
-    let items = _activeAlertsCache;
-    if (_currentFilterTab !== 'all') {
-      items = items.filter(a => a.severity === _currentFilterTab);
+    let items = [];
+    if (_currentFilterTab === 'ciente') {
+      items = _activeAlertsCache.filter(a => a.isDismissed);
+    } else {
+      const pendingAlerts = _activeAlertsCache.filter(a => !a.isDismissed);
+      if (_currentFilterTab === 'all') {
+        items = pendingAlerts;
+      } else {
+        items = pendingAlerts.filter(a => a.severity === _currentFilterTab);
+      }
     }
 
     if (items.length === 0) {
-      container.innerHTML = `
-        <div class="py-10 text-center flex flex-col items-center justify-center text-slate-400">
-          <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-2.5 border border-emerald-500/20">
-            <span class="material-symbols-outlined text-[26px]">task_alt</span>
+      if (_currentFilterTab === 'ciente') {
+        container.innerHTML = `
+          <div class="py-10 text-center flex flex-col items-center justify-center text-slate-400">
+            <div class="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-500 flex items-center justify-center mb-2.5 border border-blue-500/20">
+              <span class="material-symbols-outlined text-[26px]">done_all</span>
+            </div>
+            <p class="font-bold text-xs text-slate-700 dark:text-slate-300">Nenhum evento na aba Ciente</p>
+            <span class="text-[11px] text-slate-400 max-w-[260px] mt-0.5 leading-snug">
+              Eventos que você der ciente ficam arquivados aqui para você consultar e, se desejar, trazer de volta para os alertas ativos.
+            </span>
           </div>
-          <p class="font-bold text-xs text-slate-700 dark:text-slate-300">Tudo em dia!</p>
-          <span class="text-[11px] text-slate-400 max-w-[240px] mt-0.5 leading-snug">
-            ${_currentFilterTab === 'all' ? 'Nenhum alerta de prazo ou periodicidade pendente neste momento.' : `Nenhum alerta na categoria selecionada.`}
-          </span>
-        </div>
-      `;
+        `;
+      } else {
+        container.innerHTML = `
+          <div class="py-10 text-center flex flex-col items-center justify-center text-slate-400">
+            <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-2.5 border border-emerald-500/20">
+              <span class="material-symbols-outlined text-[26px]">task_alt</span>
+            </div>
+            <p class="font-bold text-xs text-slate-700 dark:text-slate-300">Tudo em dia!</p>
+            <span class="text-[11px] text-slate-400 max-w-[240px] mt-0.5 leading-snug">
+              ${_currentFilterTab === 'all' ? 'Nenhum alerta de prazo ou periodicidade pendente neste momento.' : `Nenhum alerta na categoria selecionada.`}
+            </span>
+          </div>
+        `;
+      }
       return;
     }
 
@@ -864,10 +1023,12 @@
       const isCrit = alert.severity === 'critico';
       const isAten = alert.severity === 'atencao';
       const isSnoozed = Boolean(alert.isSnoozed);
+      const isDismissed = Boolean(alert.isDismissed);
 
-      const borderClass = isCrit ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/30 dark:bg-rose-950/20' : 
+      const borderClass = isDismissed ? 'border-blue-200 dark:border-blue-900/50 bg-blue-50/20 dark:bg-blue-950/20' :
+                          (isCrit ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/30 dark:bg-rose-950/20' : 
                           (isAten ? 'border-amber-300 dark:border-amber-900/60 bg-amber-50/30 dark:bg-amber-950/20' : 
-                                    'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900');
+                                    'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'));
 
       const badgeSeverityClass = isCrit ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30' :
                                  (isAten ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30' :
@@ -880,7 +1041,13 @@
               <span class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${badgeSeverityClass}">
                 ${alert.statusLabel}
               </span>
-              ${isSnoozed ? `
+              ${isDismissed ? `
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30" title="Evento registrado como ciente">
+                  <span class="material-symbols-outlined text-[12px]">done_all</span>
+                  <span>Ciente</span>
+                </span>
+              ` : ''}
+              ${(!isDismissed && isSnoozed) ? `
                 <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30" title="Alerta mantido no sino, porém com destaque oculto no mapa temporariamente">
                   <span class="material-symbols-outlined text-[12px]">visibility_off</span>
                   <span>Oculto no mapa</span>
@@ -910,18 +1077,25 @@
             </button>
 
             <div class="flex items-center gap-1">
-              <button type="button" onclick="EventsEngine.acknowledgeAlert('${escapeAttr(alert.id)}')" class="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors tooltip cursor-pointer" title="Dar Ciente (Remover Notificação)">
-                <span class="material-symbols-outlined text-[16px]">done_all</span>
-              </button>
-              ${isSnoozed ? `
-                <button type="button" onclick="EventsEngine.unsnoozeAlertUi('${escapeAttr(alert.id)}')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-[11px] font-bold transition-colors cursor-pointer" title="Reativar exibição do destaque no mapa">
-                  <span class="material-symbols-outlined text-[15px]">visibility</span>
-                  <span>Reativar no mapa</span>
+              ${isDismissed ? `
+                <button type="button" onclick="EventsEngine.unacknowledgeAlert('${escapeAttr(alert.id)}')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-amber-500 hover:text-white dark:hover:bg-amber-500 text-slate-700 dark:text-slate-200 font-bold text-[11px] shadow-xs transition-all cursor-pointer" title="Trazer este evento de volta para a lista de alertas ativos">
+                  <span class="material-symbols-outlined text-[15px]">undo</span>
+                  <span>Trazer de volta</span>
                 </button>
               ` : `
-                <button type="button" onclick="EventsEngine.snoozeAlertUi('${escapeAttr(alert.id)}', 7)" class="p-1.5 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors tooltip cursor-pointer" title="Adiar por 7 dias (oculta apenas o destaque visual no mapa)">
-                  <span class="material-symbols-outlined text-[16px]">snooze</span>
+                <button type="button" onclick="EventsEngine.acknowledgeAlert('${escapeAttr(alert.id)}')" class="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors tooltip cursor-pointer" title="Dar Ciente (Mover para a aba Ciente)">
+                  <span class="material-symbols-outlined text-[16px]">done_all</span>
                 </button>
+                ${isSnoozed ? `
+                  <button type="button" onclick="EventsEngine.unsnoozeAlertUi('${escapeAttr(alert.id)}')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-[11px] font-bold transition-colors cursor-pointer" title="Reativar exibição do destaque no mapa">
+                    <span class="material-symbols-outlined text-[15px]">visibility</span>
+                    <span>Reativar no mapa</span>
+                  </button>
+                ` : `
+                  <button type="button" onclick="EventsEngine.snoozeAlertUi('${escapeAttr(alert.id)}', 7)" class="p-1.5 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors tooltip cursor-pointer" title="Adiar por 7 dias (oculta apenas o destaque visual no mapa)">
+                    <span class="material-symbols-outlined text-[16px]">snooze</span>
+                  </button>
+                `}
               `}
             </div>
           </div>
@@ -961,7 +1135,7 @@
   }
 
   /**
-   * Marca alerta como ciente pelo usuário atual.
+   * Marca alerta como ciente pelo usuário atual (move para a aba Ciente).
    */
   function acknowledgeAlert(alertId) {
     const userProfile = window.currentUserProfile || null;
@@ -978,6 +1152,30 @@
     } else {
       refreshAlerts();
     }
+  }
+
+  /**
+   * Remove a marcação de ciente e traz o evento de volta para a lista de alertas ativos.
+   */
+  function unacknowledgeAlert(alertId) {
+    const userProfile = window.currentUserProfile || null;
+    unmarkAlertDismissed(alertId, userProfile ? userProfile.id : null);
+
+    const card = document.getElementById(`alert-card-${alertId}`);
+    if (card) {
+      card.style.transition = 'all 0.25s ease-out';
+      card.style.opacity = '0';
+      card.style.transform = 'scale(0.95)';
+      setTimeout(() => {
+        refreshAlerts();
+      }, 250);
+    } else {
+      refreshAlerts();
+    }
+  }
+
+  function unacknowledgeAlertUi(alertId) {
+    unacknowledgeAlert(alertId);
   }
 
   /**
@@ -1015,7 +1213,8 @@
     _haloLayerGroup.clearLayers();
 
     _activeAlertsCache.forEach(alert => {
-      // Quando adiado pelo usuário, oculta apenas o halo luminoso no mapa (continua no sino)
+      // Quando marcado como ciente ou adiado pelo usuário, oculta o halo luminoso no mapa (continua no sino)
+      if (alert.isDismissed) return;
       if (alert.isSnoozed) return;
       if (!alert.coords) return;
       const isCrit = alert.severity === 'critico';
@@ -1068,8 +1267,8 @@
     }
 
     if (_isAlertFilterModeActive) {
-      // Coleta os IDs de feições com alertas
-      const alertFids = new Set(_activeAlertsCache.map(a => String(a.featureId)));
+      // Coleta os IDs de feições com alertas pendentes
+      const alertFids = new Set(_activeAlertsCache.filter(a => !a.isDismissed).map(a => String(a.featureId)));
       styleTag.innerHTML = `
         .theme-feature:not(.alert-halo-marker-container) { opacity: 0.15 !important; transition: opacity 0.3s; }
       `;
@@ -1080,10 +1279,11 @@
 
   /**
    * Toast / Banner Inteligente de Entrada: Exibe resumo ao abrir o sistema se houver alertas críticos.
+   * Fechar este card não afeta o drawer de eventos.
    */
   function checkEntryBanner() {
     if (typeof document === 'undefined') return;
-    const criticos = _activeAlertsCache.filter(a => a.severity === 'critico');
+    const criticos = _activeAlertsCache.filter(a => !a.isDismissed && a.severity === 'critico');
     if (criticos.length === 0) return;
 
     // Verifica se o usuário optou por não ver hoje
@@ -1097,6 +1297,8 @@
     banner = document.createElement('div');
     banner.id = 'entry-alerts-toast';
     banner.className = 'fixed bottom-5 right-5 z-[200] max-w-sm bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-rose-300 dark:border-rose-900/60 rounded-2xl p-4 shadow-2xl flex flex-col gap-2.5 animate-in slide-in-from-bottom duration-300';
+    banner.addEventListener('click', (e) => e.stopPropagation());
+
     banner.innerHTML = `
       <div class="flex items-start gap-3">
         <div class="w-9 h-9 rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/20">
@@ -1108,15 +1310,15 @@
             Existem <b>${criticos.length} evento(s) crítico(s) vencido(s)</b> aguardando manutenção ou renovação.
           </p>
         </div>
-        <button type="button" onclick="document.getElementById('entry-alerts-toast').remove()" class="text-slate-400 hover:text-slate-600 p-1">
+        <button type="button" onclick="event.stopPropagation(); document.getElementById('entry-alerts-toast')?.remove();" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 cursor-pointer transition-colors" title="Fechar apenas este aviso">
           <span class="material-symbols-outlined text-[16px]">close</span>
         </button>
       </div>
       <div class="flex items-center justify-end gap-2 pt-1 border-t border-slate-100 dark:border-slate-800 text-[11px]">
-        <button type="button" onclick="localStorage.setItem('${dismissedKey}', '1'); document.getElementById('entry-alerts-toast').remove()" class="text-slate-400 hover:text-slate-600 px-2 py-1">
+        <button type="button" onclick="event.stopPropagation(); localStorage.setItem('${dismissedKey}', '1'); document.getElementById('entry-alerts-toast')?.remove();" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 px-2 py-1 cursor-pointer transition-colors">
           Não lembrar hoje
         </button>
-        <button type="button" onclick="EventsEngine.toggleAlertsDrawer(); document.getElementById('entry-alerts-toast').remove()" class="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-xs">
+        <button type="button" onclick="event.stopPropagation(); document.getElementById('entry-alerts-toast')?.remove(); EventsEngine.toggleAlertsDrawer(event, true);" class="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-xs cursor-pointer transition-colors">
           Ver Alertas
         </button>
       </div>
@@ -1139,9 +1341,12 @@
     return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#039;');
   }
 
-  // Listener global: fecha o drawer ao clicar fora
+  // Listener global: fecha o drawer ao clicar fora, sem interferir no card Atenção Operacional
   if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
     document.addEventListener('click', function(e) {
+      const toast = document.getElementById('entry-alerts-toast');
+      if (toast && toast.contains(e.target)) return;
+
       const drawer = document.getElementById('alerts-drawer');
       const btn = document.getElementById('btn-header-alerts');
       if (!drawer || drawer.classList.contains('hidden')) return;
@@ -1170,7 +1375,9 @@
     evaluateTrigger,
     isAlertForUser,
     markAlertDismissed,
+    unmarkAlertDismissed,
     snoozeAlert,
+    unsnoozeAlert,
     isAlertDismissed,
     isAlertSnoozed,
     clearDismissedAlerts,
@@ -1179,13 +1386,15 @@
     markAsAcknowledged: markAlertDismissed,
     refreshAlerts,
     applyMapAlertHighlights: updateMapHaloGlow,
+    initDraggableAlertsDrawer,
     toggleAlertsDrawer,
     filterAlertsTab,
     renderAlertsDrawer,
     locateAlertFeature,
     acknowledgeAlert,
+    unacknowledgeAlert,
+    unacknowledgeAlertUi,
     snoozeAlertUi,
-    unsnoozeAlert,
     unsnoozeAlertUi,
     updateMapHaloGlow,
     toggleAlertFilterMode,
