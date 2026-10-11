@@ -63,18 +63,102 @@
   }
 
   /**
-   * Extrai o valor de uma propriedade da feição de forma resiliente.
+   * Normaliza uma chave de propriedade ou rótulo de campo para comparação resiliente:
+   * Remove tags de abas prefixadas (ex: "[Infraestrutura]"), acentuação e caracteres não alfanuméricos.
    */
-  function getPropValue(feature, fieldKey) {
-    if (!feature || !feature.properties || !fieldKey) return null;
+  function normalizeKey(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/^\[[^\]]+\]\s*/, '') // Remove prefixos como [Infraestrutura]
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Remove acentos (Ú -> U, Ç -> C, Ã -> A)
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, ''); // Remove espaços, underscores, pontuação
+  }
+
+  /**
+   * Extrai o valor de uma propriedade da feição de forma resiliente:
+   * 1. Acesso direto por chave exata (p[fieldKey] ou p[fieldLabel])
+   * 2. Cruzamento com schema do formulário (busca por label, name e id)
+   * 3. Acesso case-insensitive
+   * 4. Acesso normalizado (ignora acentos, espaços vs underscores, maiúsculas/minúsculas)
+   */
+  function getPropValue(feature, fieldKey, fieldLabel, form) {
+    if (!feature || !feature.properties || (!fieldKey && !fieldLabel)) return null;
     const p = feature.properties;
-    if (p[fieldKey] !== undefined && p[fieldKey] !== null) return p[fieldKey];
-    
-    // Tenta encontrar por case-insensitive ou por id de campo dentro de arrays
-    const lowerKey = fieldKey.toLowerCase();
-    for (const k of Object.keys(p)) {
-      if (k.toLowerCase() === lowerKey) return p[k];
+
+    // 1. Acesso direto
+    if (fieldKey && p[fieldKey] !== undefined && p[fieldKey] !== null) return p[fieldKey];
+    if (fieldLabel && p[fieldLabel] !== undefined && p[fieldLabel] !== null) return p[fieldLabel];
+
+    // 2. Coleta lista de chaves candidatas
+    const candidates = new Set();
+    if (fieldKey) {
+      candidates.add(String(fieldKey));
+      const nK = normalizeKey(fieldKey);
+      if (nK) candidates.add(nK);
     }
+    if (fieldLabel) {
+      candidates.add(String(fieldLabel));
+      const nL = normalizeKey(fieldLabel);
+      if (nL) candidates.add(nL);
+    }
+
+    // Se temos o form, busca os aliases definidos no formulário (label, name, id)
+    if (form) {
+      const tabs = form.tabs || form.schema || [];
+      tabs.forEach(tab => {
+        (tab.fields || []).forEach(f => {
+          const matchId = fieldKey && (f.id === fieldKey || f.name === fieldKey);
+          const matchLabel = fieldLabel && (f.label === fieldLabel || normalizeKey(f.label) === normalizeKey(fieldLabel));
+          const matchNormKey = fieldKey && (normalizeKey(f.id) === normalizeKey(fieldKey) || normalizeKey(f.name) === normalizeKey(fieldKey));
+
+          if (matchId || matchLabel || matchNormKey) {
+            if (f.id) { candidates.add(String(f.id)); candidates.add(normalizeKey(f.id)); }
+            if (f.name) { candidates.add(String(f.name)); candidates.add(normalizeKey(f.name)); }
+            if (f.label) { candidates.add(String(f.label)); candidates.add(normalizeKey(f.label)); }
+          }
+        });
+      });
+    }
+
+    // 3. Varre as propriedades existentes na feição
+    const pKeys = Object.keys(p);
+
+    // 3a. Match case-insensitive direto
+    for (const k of pKeys) {
+      const kLower = k.toLowerCase();
+      for (const cand of candidates) {
+        if (cand && cand.toLowerCase() === kLower) {
+          if (p[k] !== undefined && p[k] !== null) return p[k];
+        }
+      }
+    }
+
+    // 3b. Match normalizado (sem acentos, sem underline, sem espaços)
+    for (const k of pKeys) {
+      const kNorm = normalizeKey(k);
+      if (!kNorm) continue;
+      for (const cand of candidates) {
+        const candNorm = normalizeKey(cand);
+        if (candNorm && kNorm === candNorm) {
+          if (p[k] !== undefined && p[k] !== null) return p[k];
+        }
+      }
+    }
+
+    // 3c. Match por contenção se tamanho significativo (>= 6 caracteres)
+    for (const k of pKeys) {
+      const kNorm = normalizeKey(k);
+      if (kNorm.length < 6) continue;
+      for (const cand of candidates) {
+        const candNorm = normalizeKey(cand);
+        if (candNorm && candNorm.length >= 6 && (kNorm.includes(candNorm) || candNorm.includes(kNorm))) {
+          if (p[k] !== undefined && p[k] !== null) return p[k];
+        }
+      }
+    }
+
     return null;
   }
 
@@ -155,19 +239,19 @@
   /**
    * Testa condição de filtro (se configurada no gatilho).
    */
-  function testFilterCondition(trigger, feature) {
+  function testFilterCondition(trigger, feature, form) {
     if (!trigger.campo_filtro || trigger.filtro_valor === undefined || trigger.filtro_valor === null || trigger.filtro_valor === '') {
       return true; // Sem filtro adicional
     }
-    const val = getPropValue(feature, trigger.campo_filtro);
+    const val = getPropValue(feature, trigger.campo_filtro, trigger.campo_filtro_label, form);
     const op = trigger.filtro_operador || '=';
     const target = String(trigger.filtro_valor).trim().toLowerCase();
     const current = String(val !== null && val !== undefined ? val : '').trim().toLowerCase();
 
-    if (op === '=' || op === '==') return current === target;
-    if (op === '!=' || op === '<>') return current !== target;
-    if (op === 'contem') return current.includes(target);
-    if (op === 'nao_contem') return !current.includes(target);
+    if (op === '=' || op === '==') return current === target || normalizeKey(current) === normalizeKey(target);
+    if (op === '!=' || op === '<>') return current !== target && normalizeKey(current) !== normalizeKey(target);
+    if (op === 'contem') return current.includes(target) || normalizeKey(current).includes(normalizeKey(target));
+    if (op === 'nao_contem') return !current.includes(target) && !normalizeKey(current).includes(normalizeKey(target));
     if (op === '>') return parseFloat(current) > parseFloat(target);
     if (op === '<') return parseFloat(current) < parseFloat(target);
     if (op === '>=') return parseFloat(current) >= parseFloat(target);
@@ -179,7 +263,7 @@
    * Avalia um gatilho individual contra uma feição.
    * Retorna null se não houver alerta ativo, ou um objeto de Alerta estruturado.
    */
-  function evaluateTrigger(trigger, feature, theme, todayDate) {
+  function evaluateTrigger(trigger, feature, theme, todayDate, form) {
     if (!trigger || !feature) return null;
     if (trigger.ativo === false) return null;
 
@@ -189,12 +273,12 @@
     today.setHours(0, 0, 0, 0);
 
     // 1. Testa filtro condicional
-    if (!testFilterCondition(trigger, feature)) {
+    if (!testFilterCondition(trigger, feature, form)) {
       return null;
     }
 
     // 2. Extrai data base
-    const rawBaseDate = getPropValue(feature, trigger.campo_data);
+    const rawBaseDate = getPropValue(feature, trigger.campo_data, trigger.campo_data_label, form);
     if (!rawBaseDate) return null;
     const baseDate = parseDateSafe(rawBaseDate);
     if (!baseDate) return null;
@@ -216,7 +300,7 @@
       let prazoVal = parseInt(trigger.intervalo_valor, 10);
       const campoPrazoName = trigger.campo_prazo || trigger.campo_prazo_valor;
       if (campoPrazoName) {
-        const propPrazo = getPropValue(feature, campoPrazoName);
+        const propPrazo = getPropValue(feature, campoPrazoName, trigger.campo_prazo_label, form);
         if (propPrazo !== null && propPrazo !== undefined && propPrazo !== '') {
           prazoVal = parseInt(propPrazo, 10);
         }
@@ -500,7 +584,8 @@
     const today = (options && options.today) || new Date();
 
     themes.forEach(theme => {
-      if (!theme || !theme.features || !theme.features.length) return;
+      const features = (theme && theme.features && theme.features.length) ? theme.features : ((theme && theme.geojson && Array.isArray(theme.geojson.features)) ? theme.geojson.features : []);
+      if (!Array.isArray(features) || features.length === 0) return;
 
       // Localiza o formulário associado à camada
       let form = null;
@@ -510,22 +595,32 @@
       if (!form && theme.form_id) {
         form = formsList.find(f => String(f.id) === String(theme.form_id));
       }
-      if (!form) {
-        // Tenta achar pelo nome ou título
-        form = formsList.find(f => f.name && theme.name && f.name.trim().toLowerCase() === theme.name.trim().toLowerCase());
+      if (!form && theme.cadastroType) {
+        form = formsList.find(f => String(f.id) === String(theme.cadastroType));
+      }
+      if (!form && theme.cadastro_type) {
+        form = formsList.find(f => String(f.id) === String(theme.cadastro_type));
+      }
+      if (!form && theme.name) {
+        // Tenta achar pelo nome ou título com normalização
+        const normTheme = normalizeKey(theme.name);
+        form = formsList.find(f => {
+          const fn = normalizeKey(f.name || f.title);
+          return fn && normTheme && (fn === normTheme || fn.includes(normTheme) || normTheme.includes(fn));
+        });
       }
 
-      if (!form) return;
-
-      const triggers = form.eventTriggers || form.event_triggers || [];
+      const triggers = (form && (form.eventTriggers || form.event_triggers)) ||
+                       theme.eventTriggers ||
+                       (theme.metadata && theme.metadata.eventTriggers) || [];
       if (!Array.isArray(triggers) || triggers.length === 0) return;
 
       // Avalia cada gatilho contra cada feição da camada
       triggers.forEach(trigger => {
         if (trigger.ativo === false) return;
 
-        theme.features.forEach(feature => {
-          const alert = evaluateTrigger(trigger, feature, theme, today);
+        features.forEach(feature => {
+          const alert = evaluateTrigger(trigger, feature, theme, today, form);
           if (alert) {
             // Verifica permissão do usuário
             if (!isAlertForUser(alert, currentUserProfile)) return;
@@ -690,6 +785,7 @@
     const isHidden = drawer.classList.contains('hidden');
     if (isHidden) {
       drawer.classList.remove('hidden');
+      refreshAlerts();
       renderAlertsDrawer();
     } else {
       drawer.classList.add('hidden');

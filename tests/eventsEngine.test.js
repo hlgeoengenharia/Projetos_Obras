@@ -127,4 +127,34 @@ assert.strictEqual(activeAlerts.length, 1, 'Deve retornar 1 alerta ativo');
 assert.strictEqual(activeAlerts[0].featureId, 'feat_101');
 console.log('  ✓ [PASS] computeActiveAlerts retorna lista ordenada e enriquecida');
 
+// 7. Teste de Normalização Resiliente de Propriedades (Caso Real: "DATA DA ÚLTIMA MANUTENÇÃO" vs "[Infraestrutura] Data da última manutenção")
+const triggerUserCase = {
+  id: 'trig_vias_manutencao',
+  nome: 'Manutenção de vias',
+  tipo: 'periodicidade',
+  campo_data: 'data_da_ultima_manutencao',
+  campo_data_label: '[Infraestrutura] Data da última manutenção',
+  intervalo_valor: 6,
+  intervalo_unidade: 'meses',
+  aviso_previo_dias: 15,
+  severidade: 'atencao',
+  mensagem: 'A via {Nome} está com manutenção pendente.'
+};
+
+const featureRuaEribaldo = {
+  id: 'feat_rua_eribaldo',
+  properties: {
+    'Nome': 'RUA ERIBALDO DA SILVA ARAUJO',
+    'DATA DA ÚLTIMA MANUTENÇÃO': '2026-01-02'
+  }
+};
+
+const alertUserCase = EventsEngine.evaluateTrigger(triggerUserCase, featureRuaEribaldo, { name: 'Logradouro' }, today);
+assert.ok(alertUserCase, 'Alerta da rua com manutenção em janeiro deve ser identificado com sucesso');
+assert.strictEqual(alertUserCase.isOverdue, true, 'Manutenção de janeiro de 2026 está vencida em outubro de 2026');
+assert.strictEqual(alertUserCase.severity, 'critico', 'Status vencido deve ser crítico');
+assert.ok(alertUserCase.message.includes('RUA ERIBALDO DA SILVA ARAUJO'), 'Mensagem deve conter o nome da via');
+console.log('  ✓ [PASS] Normalização resiliente: "DATA DA ÚLTIMA MANUTENÇÃO" identificado com sucesso');
+
 console.log('\n🎉 TODOS OS TESTES DO EVENTS ENGINE PASSARAM COM 100% DE SUCESSO!\n');
+

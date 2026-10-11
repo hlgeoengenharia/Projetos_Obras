@@ -187,7 +187,12 @@
       calculado: 'Validade Calculada'
     };
 
-    let html = '';
+    let html = `
+      <div class="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200 shadow-2xs">
+        <span class="material-symbols-outlined text-[18px] text-amber-600 shrink-0">check_circle</span>
+        <span><b>Lembrete:</b> Após adicionar ou alterar gatilhos, clique no botão verde <b>"Salvar Formulário"</b> (no canto superior) para gravar as regras no banco de dados e ativá-las no mapa.</span>
+      </div>
+    `;
     triggers.forEach((trig) => {
       const sev = sevStyles[trig.severidade] || sevStyles.atencao;
       const typeLabel = typeLabels[trig.tipo] || 'Temporal';
@@ -595,6 +600,8 @@
     const avisoPrevioDias = parseInt(document.getElementById('trig-aviso-dias').value, 10) || 15;
 
     const campoFiltro = document.getElementById('trig-filter-field').value || null;
+    const filterSelect = document.getElementById('trig-filter-field');
+    const campoFiltroLabel = (filterSelect && filterSelect.options[filterSelect.selectedIndex]) ? filterSelect.options[filterSelect.selectedIndex].text : campoFiltro;
     const filtroOperador = document.getElementById('trig-filter-op').value || '=';
     const filterValEl = document.getElementById('trig-filter-val');
     const filtroValor = (filterValEl && filterValEl.value) ? filterValEl.value.trim() : null;
@@ -633,6 +640,7 @@
       intervalo_unidade: intervaloUnidade,
       aviso_previo_dias: avisoPrevioDias,
       campo_filtro: campoFiltro,
+      campo_filtro_label: campoFiltroLabel,
       filtro_operador: filtroOperador,
       filtro_valor: filtroValor,
       responsavel_tipo: respTipo,
@@ -656,12 +664,27 @@
       global._currentFormEventTriggers.push(newTrigger);
     }
 
+    // Auto-sincroniza com formulário em memória e localStorage se disponível
+    try {
+      if (global.currentFormId && Array.isArray(global.forms)) {
+        const formObj = global.forms.find(f => f.id === global.currentFormId);
+        if (formObj) {
+          formObj.eventTriggers = global._currentFormEventTriggers;
+          if (typeof global.saveFormsToStorage === 'function') {
+            global.saveFormsToStorage();
+          }
+        }
+      }
+    } catch (eAuto) {
+      console.warn('Auto-save trigger to forms storage:', eAuto);
+    }
+
     closeTriggerModal();
     renderEventTriggersBuilder();
 
     // Notifica toast discreto
     if (typeof global.showStorageToast === 'function') {
-      global.showStorageToast(`Gatilho "${name}" salvo com sucesso!`);
+      global.showStorageToast(`Gatilho "${name}" salvo! Lembre-se de clicar em "Salvar Formulário" para persistir.`);
     }
   }
 
