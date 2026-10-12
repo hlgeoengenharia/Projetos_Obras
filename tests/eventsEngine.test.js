@@ -387,7 +387,9 @@ const alertCarolino = EventsEngine.evaluateTrigger(triggerComCampoSanitizado, fe
 assert.ok(alertCarolino, 'Alerta deve ser gerado');
 assert.ok(!alertCarolino.message.includes('@data_da__ltima_manutens_o'), 'Não deve sobrar a tag crua @data_da__ltima_manutens_o');
 assert.ok(alertCarolino.message.includes('14/01/2026'), 'Deve substituir pela data formatada 14/01/2026');
+assert.ok(!alertCarolino.message.includes('em atraso'), 'Não deve forçar a palavra "em atraso" dentro de @dias_restantes');
 console.log('  ✓ [PASS] Resolução perfeita de campo sanitizado @data_da__ltima_manutens_o formatando a data real');
+console.log('  ✓ [PASS] @dias_restantes entrega apenas o valor numérico puro calculado');
 
 console.log('\n🎉 TODOS OS TESTES DO EVENTS ENGINE PASSARAM COM 100% DE SUCESSO!\n');
 

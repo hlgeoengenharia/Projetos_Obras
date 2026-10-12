@@ -267,10 +267,8 @@
     msg = msg.replace(/@tempo\b/gi, tempoTexto);
 
     // 3. Substitui variáveis de contexto com @ e formato legado {tag}
-    // Evita duplicidade se o usuário escreveu "@dias_restantes dias"
-    msg = msg.replace(/\{dias_restantes\}\s*dias?|@dias_restantes\s*dias?|@Dias Restantes\s*dias?/gi, diff >= 0 ? (diff === 0 ? 'hoje' : `${diff} dias`) : `${absDiff} dias em atraso`);
-    msg = msg.replace(/\{dias_restantes\}|@dias_restantes|@Dias Restantes/gi, diff >= 0 ? (diff === 0 ? 'hoje' : `${diff} dias`) : `${absDiff} dias em atraso`);
-    msg = msg.replace(/\{dias\}|@dias|@Dias/gi, String(absDiff));
+    // @dias_restantes e @dias retornam estritamente o valor numérico puro calculado (ex: 102, 89, 2)
+    msg = msg.replace(/\{dias_restantes\}|@dias_restantes|@Dias Restantes|\{dias\}|@dias|@Dias/gi, String(absDiff));
     msg = msg.replace(/\{data_limite\}|@data_limite|@Data Limite/gi, ctx.targetDateStr || '');
     msg = msg.replace(/\{data_base\}|@data_base|@Data Base/gi, ctx.baseDateStr || '');
     msg = msg.replace(/\{nome_camada\}|@nome_camada|@Nome da Camada/gi, ctx.themeName || 'Camada');

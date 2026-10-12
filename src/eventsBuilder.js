@@ -614,7 +614,7 @@
     const standardFields = [
       { tag: '@Nome', label: 'Nome / Título da Feição', tab: 'Geral', icon: 'badge', type: 'título' },
       { tag: '@data_limite', label: 'Data Limite Calculada', tab: 'Tempo', icon: 'event', type: 'data' },
-      { tag: '@dias_restantes', label: 'Contagem de Dias / Atraso', tab: 'Tempo', icon: 'schedule', type: 'tempo' },
+      { tag: '@dias_restantes', label: 'Contagem de Dias (Número Calculado)', tab: 'Tempo', icon: 'schedule', type: 'número' },
       { tag: '@nome_camada', label: 'Nome da Camada', tab: 'Geral', icon: 'layers', type: 'camada' }
     ];
 
