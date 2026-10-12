@@ -1730,6 +1730,139 @@ function initMap() {
   const isTouchActive = (typeof isTouchDevice !== 'undefined' && isTouchDevice) || ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
   const canvasRenderer = (typeof L.canvas === 'function') ? L.canvas({ padding: 0.5, tolerance: 35 }) : null;
 
+  // Funções matemáticas puras de detecção de ponto em polígono / multipolígono (sem depender de bibliotecas externas)
+  function isPointInRing(lng, lat, ring) {
+    if (!ring || ring.length < 3) return false;
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const xi = ring[i][0];
+      const yi = ring[i][1];
+      const xj = ring[j][0];
+      const yj = ring[j][1];
+      const intersect = ((yi > lat) !== (yj > lat)) &&
+        (lng < (xj - xi) * (lat - yi) / (yj - yi + 1e-12) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  function isPointInPolygonCoordinates(lng, lat, polyCoords) {
+    if (!polyCoords || polyCoords.length === 0) return false;
+    const inExterior = isPointInRing(lng, lat, polyCoords[0]);
+    if (!inExterior) return false;
+    for (let i = 1; i < polyCoords.length; i++) {
+      if (isPointInRing(lng, lat, polyCoords[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function isPointInPolygonFeature(latlng, feature) {
+    if (!latlng || !feature || !feature.geometry) return false;
+    const geom = feature.geometry;
+    const lng = latlng.lng !== undefined ? latlng.lng : latlng[0];
+    const lat = latlng.lat !== undefined ? latlng.lat : latlng[1];
+
+    if (geom.type === 'Polygon') {
+      return isPointInPolygonCoordinates(lng, lat, geom.coordinates);
+    }
+    if (geom.type === 'MultiPolygon') {
+      const polys = geom.coordinates;
+      if (!Array.isArray(polys)) return false;
+      for (let i = 0; i < polys.length; i++) {
+        if (isPointInPolygonCoordinates(lng, lat, polys[i])) {
+          return true;
+        }
+      }
+      return false;
+    }
+    return false;
+  }
+  window.isPointInPolygonFeature = isPointInPolygonFeature;
+
+  function pointInPixelParts(p, parts) {
+    if (!parts || !parts.length) return false;
+    let inside = false;
+    function checkRings(item) {
+      if (!Array.isArray(item) || item.length === 0) return;
+      if (item[0] && typeof item[0].x === 'number' && typeof item[0].y === 'number') {
+        const ring = item;
+        for (let j = 0, len2 = ring.length, k = len2 - 1; j < len2; k = j++) {
+          const p1 = ring[j];
+          const p2 = ring[k];
+          if (((p1.y > p.y) !== (p2.y > p.y)) && 
+              (p.x < (p2.x - p1.x) * (p.y - p1.y) / (p2.y - p1.y + 1e-12) + p1.x)) {
+            inside = !inside;
+          }
+        }
+      } else {
+        for (let sub of item) {
+          checkRings(sub);
+        }
+      }
+    }
+    checkRings(parts);
+    return inside;
+  }
+  window.pointInPixelParts = pointInPixelParts;
+
+  function getLayerThemeId(layer) {
+    if (!layer || !layer.feature) return '';
+    const f = layer.feature;
+    let tid = f.properties?.themeId || f.properties?.theme_id || f.themeId || f.theme_id;
+    if (!tid && typeof themes !== 'undefined' && Array.isArray(themes)) {
+      const ownerTheme = themes.find(t => 
+        t.features && t.features.some(item => item === f || (item.properties && f.properties && (item.properties._tempId === f.properties._tempId || (item.properties.id_banco && f.properties.id_banco === f.properties.id_banco))))
+      );
+      if (ownerTheme) {
+        tid = ownerTheme.id;
+        if (!f.properties) f.properties = {};
+        f.properties.themeId = ownerTheme.id;
+      }
+    }
+    return tid ? String(tid).trim() : '';
+  }
+  window.getLayerThemeId = getLayerThemeId;
+
+  // Monkey-patch corretivo no L.Polygon do Leaflet:
+  // Corrige falhas nativas do Leaflet Canvas onde MultiPolygons e polígonos sem preenchimento falham no _containsPoint
+  if (typeof L !== 'undefined' && L.Polygon) {
+    const _origPolygonContainsPoint = L.Polygon.prototype._containsPoint;
+    L.Polygon.prototype._containsPoint = function(p) {
+      if (!this._pxBounds || !this._pxBounds.contains(p)) {
+        return false;
+      }
+      try {
+        if (_origPolygonContainsPoint && _origPolygonContainsPoint.call(this, p)) {
+          return true;
+        }
+      } catch(eOrig) {}
+
+      if (this._parts && this._parts.length > 0) {
+        try {
+          if (pointInPixelParts(p, this._parts)) {
+            return true;
+          }
+        } catch(eParts) {}
+      }
+
+      if (this.feature && this.feature.geometry) {
+        try {
+          const targetMap = this._map || (typeof map !== 'undefined' ? map : null);
+          if (targetMap && typeof targetMap.layerPointToLatLng === 'function') {
+            const latlng = targetMap.layerPointToLatLng(p);
+            if (isPointInPolygonFeature(latlng, this.feature)) {
+              return true;
+            }
+          }
+        } catch(eGeom) {}
+      }
+
+      return false;
+    };
+  }
+
   if (typeof L !== 'undefined' && L.Canvas) {
     if (L.Canvas.prototype.options) {
       L.Canvas.prototype.options.tolerance = 25;
@@ -1745,10 +1878,7 @@ function initMap() {
             const layer = order.layer;
             if (layer.options && layer.options.interactive && layer._containsPoint(point)) {
                 candidateHoveredLayer = layer;
-                const featThemeId = layer.feature?.properties?.themeId || 
-                                    layer.feature?.properties?.theme_id || 
-                                    layer.feature?.themeId || 
-                                    layer.feature?.theme_id;
+                const featThemeId = getLayerThemeId(layer);
                 if (window.activeSelectionThemeId && featThemeId && 
                     String(featThemeId).trim().toLowerCase() === String(window.activeSelectionThemeId).trim().toLowerCase()) {
                     activeThemeCandidate = layer;
@@ -1807,10 +1937,7 @@ function initMap() {
             const layer = order.layer;
             if (layer.options && layer.options.interactive && layer._containsPoint(point)) {
                 candidateClickLayer = layer;
-                const featThemeId = layer.feature?.properties?.themeId || 
-                                    layer.feature?.properties?.theme_id || 
-                                    layer.feature?.themeId || 
-                                    layer.feature?.theme_id;
+                const featThemeId = getLayerThemeId(layer);
                 if (window.activeSelectionThemeId && featThemeId && 
                     String(featThemeId).trim().toLowerCase() === String(window.activeSelectionThemeId).trim().toLowerCase()) {
                     activeThemeCandidate = layer;
@@ -2340,20 +2467,16 @@ function initMap() {
             }
         }
 
-        let featThemeId = feature.properties?.themeId || 
-                          feature.properties?.theme_id || 
-                          feature.themeId || 
-                          feature.theme_id;
+        let featThemeId = getLayerThemeId(layer);
 
-        // Se por algum motivo themeId não estiver no properties, busca o tema proprietário no array de temas
-        if (!featThemeId && typeof themes !== 'undefined' && Array.isArray(themes)) {
-            const ownerTheme = themes.find(t => 
-                t.features && t.features.some(f => f === feature || (f.properties && feature.properties && (f.properties._tempId === feature.properties._tempId || (f.properties.id_banco && f.properties.id_banco === feature.properties.id_banco))))
-            );
-            if (ownerTheme) {
-                featThemeId = ownerTheme.id;
+        // Se ainda assim não encontrou featThemeId, mas existe activeSelectionThemeId e a feição pertence ao tema ativo
+        if (!featThemeId && window.activeSelectionThemeId) {
+            const activeTheme = (typeof themes !== 'undefined' && Array.isArray(themes)) ? 
+                themes.find(t => String(t.id).toLowerCase() === String(window.activeSelectionThemeId).trim().toLowerCase()) : null;
+            if (activeTheme && activeTheme.features && activeTheme.features.some(f => f === feature || (f.properties && feature.properties && f.properties._tempId === feature.properties._tempId))) {
+                featThemeId = activeTheme.id;
                 if (!feature.properties) feature.properties = {};
-                feature.properties.themeId = ownerTheme.id;
+                feature.properties.themeId = activeTheme.id;
             }
         }
 
@@ -2437,7 +2560,7 @@ function initMap() {
     if (e.latlng && typeof findClosestLineLayer === 'function' && window.activeSelectionThemeId) {
         const closestLayer = findClosestLineLayer(e.latlng, 38);
         if (closestLayer && closestLayer.feature) {
-            const lThemeId = closestLayer.feature.properties?.themeId || closestLayer.feature.properties?.theme_id;
+            const lThemeId = getLayerThemeId(closestLayer);
             if (lThemeId && String(lThemeId).trim().toLowerCase() === String(window.activeSelectionThemeId).trim().toLowerCase()) {
                 closestLayer.fire('click', e);
                 return;
@@ -2454,21 +2577,13 @@ function initMap() {
             if (!layer.feature || !layer.feature.geometry) return;
             const gType = layer.feature.geometry.type;
             if (gType !== 'Polygon' && gType !== 'MultiPolygon') return;
-            const featThemeId = layer.feature.properties?.themeId || 
-                                layer.feature.properties?.theme_id || 
-                                layer.feature.themeId || 
-                                layer.feature.theme_id;
-            if (!featThemeId || String(featThemeId).trim().toLowerCase() !== String(window.activeSelectionThemeId).trim().toLowerCase()) return;
+            const featThemeId = getLayerThemeId(layer);
+            if (!featThemeId || featThemeId.toLowerCase() !== String(window.activeSelectionThemeId).trim().toLowerCase()) return;
             
-            // Verifica se o ponto clicado está contido nos bounds e no polígono
+            // Verifica se o ponto clicado está contido nos bounds e no polígono via Ray-Casting puro e preciso
             if (layer.getBounds && layer.getBounds().contains(pt)) {
-                if (typeof turf !== 'undefined' && turf.booleanPointInPolygon) {
-                    try {
-                        const ptTurf = turf.point([pt.lng, pt.lat]);
-                        if (turf.booleanPointInPolygon(ptTurf, layer.feature)) {
-                            activePolyLayer = layer;
-                        }
-                    } catch(eTurf) {}
+                if (isPointInPolygonFeature(pt, layer.feature)) {
+                    activePolyLayer = layer;
                 } else if (typeof layer._containsPoint === 'function' && map) {
                     try {
                         const layerPt = map.latLngToLayerPoint(pt);
@@ -2534,13 +2649,8 @@ function initMap() {
             if (layer.getBounds && layer.getBounds().contains(pt)) {
                 if (typeof layer._containsPoint === 'function' && layer._containsPoint(ptLayer)) {
                     isOverFeature = true;
-                } else if (typeof turf !== 'undefined' && turf.booleanPointInPolygon) {
-                    try {
-                        const ptTurf = turf.point([pt.lng, pt.lat]);
-                        if (turf.booleanPointInPolygon(ptTurf, layer.feature)) {
-                            isOverFeature = true;
-                        }
-                    } catch(eT) {}
+                } else if (isPointInPolygonFeature(pt, layer.feature)) {
+                    isOverFeature = true;
                 }
             }
         });

@@ -87,5 +87,28 @@ test('Validação de Cursor em Feições Vetoriais e Seleção de Camadas (CTM-M
             'index.html deve conter regra .leaflet-container.leaflet-feature-hovered com cursor: pointer !important'
         );
     });
+
+    await t.test('9. L.Polygon._containsPoint possui monkey-patch para MultiPolygons e layers sem preenchimento', () => {
+        assert.ok(
+            mainJs.includes('L.Polygon.prototype._containsPoint'),
+            'main.js deve conter monkey-patch corretivo para L.Polygon.prototype._containsPoint'
+        );
+        assert.ok(
+            mainJs.includes('pointInPixelParts'),
+            'main.js deve usar pointInPixelParts para descer recursivamente em partes de MultiPolygon'
+        );
+    });
+
+    await t.test('10. Funções geométricas puras isPointInPolygonFeature e getLayerThemeId estão implementadas', () => {
+        assert.ok(
+            mainJs.includes('function isPointInPolygonFeature'),
+            'main.js deve conter função matemática pura isPointInPolygonFeature sem dependências externas'
+        );
+        assert.ok(
+            mainJs.includes('function getLayerThemeId'),
+            'main.js deve conter getLayerThemeId para resolver themeId com resiliência máxima'
+        );
+    });
 });
+
 
