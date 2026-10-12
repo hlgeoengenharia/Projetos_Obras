@@ -416,6 +416,49 @@ EventsEngine.updateMapHaloGlow();
 assert.strictEqual(mockLayersAdded.length, 0, 'Não deve renderizar eventos no mapa quando o card Eventos & Prazos estiver fechado');
 console.log('  ✓ [PASS] Eventos no mapa fechados/limpos quando o card Eventos & Prazos está fechado');
 
+// 16. Teste de distinção exata entre @dias_prazo e @dias_decorridos
+const triggerDistincao = {
+  id: 'trig_distincao',
+  nome: 'Manutenção Semestral de Vias',
+  tipo: 'periodicidade',
+  campo_data: 'data_ultima_manutencao',
+  intervalo_valor: 6,
+  intervalo_unidade: 'meses',
+  aviso_previo_dias: 15,
+  severidade: 'atencao',
+  mensagem_atencao: '@Nome: faltam @dias_prazo dias para o vencimento. Totalizando @dias_decorridos dias desde a última manutenção.',
+  mensagem_critico: '@Nome: venceu há @dias_prazo dias. Totalizando @dias_decorridos dias desde a última manutenção.'
+};
+
+const featVitorinoCardoso = {
+  properties: {
+    Nome: 'RUA VITORINO CARDOSO',
+    data_ultima_manutencao: '2026-04-14'
+  }
+};
+
+const dateToday = new Date('2026-10-12T12:00:00Z');
+const alertVitorino = EventsEngine.evaluateTrigger(triggerDistincao, featVitorinoCardoso, { name: 'Logradouro' }, dateToday, mockFormVias);
+
+assert.ok(alertVitorino, 'Alerta de atenção deve ser gerado para Vitorino Cardoso');
+assert.ok(alertVitorino.message.includes('faltam 2 dias para o vencimento'), 'Deve indicar exatamente 2 dias restantes para o prazo de vencimento (@dias_prazo)');
+assert.ok(alertVitorino.message.includes('Totalizando 181 dias desde a última manutenção'), 'Deve indicar exatamente 181 dias corridos desde a última vistoria (@dias_decorridos)');
+console.log('  ✓ [PASS] @dias_prazo (2 dias) e @dias_decorridos (181 dias) calculados com distinção perfeita para RUA VITORINO CARDOSO');
+
+const featCarolinoCardoso = {
+  properties: {
+    Nome: 'RUA CAROLINO CARDOSO',
+    data_ultima_manutencao: '2026-01-15'
+  }
+};
+
+const alertCarolinoCardoso = EventsEngine.evaluateTrigger(triggerDistincao, featCarolinoCardoso, { name: 'Logradouro' }, dateToday, mockFormVias);
+assert.ok(alertCarolinoCardoso, 'Alerta crítico deve ser gerado para Carolino Cardoso');
+assert.ok(alertCarolinoCardoso.message.includes('venceu há 89 dias'), 'Deve indicar exatamente 89 dias de atraso do prazo de 6 meses (@dias_prazo)');
+assert.ok(alertCarolinoCardoso.message.includes('Totalizando 270 dias desde a última manutenção'), 'Deve indicar exatamente 270 dias corridos desde a vistoria (@dias_decorridos)');
+console.log('  ✓ [PASS] @dias_prazo (89 dias de atraso) e @dias_decorridos (270 dias corridos) calculados com distinção perfeita para RUA CAROLINO CARDOSO');
+
 console.log('\n🎉 TODOS OS TESTES DO EVENTS ENGINE PASSARAM COM 100% DE SUCESSO!\n');
+
 
 

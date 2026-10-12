@@ -81,6 +81,8 @@ assert(typeof EventsBuilder.hideMentionMenu === 'function', 'hideMentionMenu dev
 assert(typeof EventsBuilder.handleMentionInput === 'function', 'handleMentionInput deve ser uma função');
 assert(typeof EventsBuilder.handleMentionKeyDown === 'function', 'handleMentionKeyDown deve ser uma função');
 assert(typeof EventsBuilder.insertMentionField === 'function', 'insertMentionField deve ser uma função');
-console.log('  ✓ [PASS] Métodos de menção (@) e autocomplete devidamente expostos no EventsBuilder');
+assert(typeof EventsBuilder.updateDateCalcPreview === 'function', 'updateDateCalcPreview deve ser uma função exportada');
+console.log('  ✓ [PASS] Métodos de menção (@), autocomplete e cálculo de datas (@dias_decorridos) devidamente expostos no EventsBuilder');
 
 console.log('\n🎉 TODOS OS TESTES DO EVENTS BUILDER PASSARAM COM SUCESSO!\n');
+

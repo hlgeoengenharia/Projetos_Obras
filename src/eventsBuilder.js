@@ -373,11 +373,32 @@
     if (elCritico) elCritico.value = (trigger && (trigger.mensagem_critico || trigger.mensagem)) ? (trigger.mensagem_critico || trigger.mensagem) : padraoCritico;
     if (elMsgLegacy) elMsgLegacy.value = elCritico ? elCritico.value : padraoCritico;
 
+    // Cálculo personalizado de datas (Tempo Decorrido)
+    const elCalcOrigem = document.getElementById('trig-calc-origem');
+    const elCalcDestino = document.getElementById('trig-calc-destino');
+    if (elCalcOrigem) elCalcOrigem.value = trigger ? (trigger.calc_data_origem || 'hoje') : 'hoje';
+    if (elCalcDestino) elCalcDestino.value = trigger ? (trigger.calc_data_destino || trigger.campo_data || '') : (document.getElementById('trig-field-date')?.value || '');
+    updateDateCalcPreview();
+
     // Atualiza visibilidade dos blocos condicionais
     onTriggerTypeChanged();
     onRespTipoChanged();
 
     modal.classList.remove('hidden');
+  }
+
+  /**
+   * Atualiza a prévia textual do cálculo de diferença entre datas.
+   */
+  function updateDateCalcPreview() {
+    const sel1 = document.getElementById('trig-calc-origem');
+    const sel2 = document.getElementById('trig-calc-destino');
+    const previewEl = document.getElementById('trig-calc-preview-text');
+    if (!sel1 || !sel2 || !previewEl) return;
+
+    const t1 = sel1.options[sel1.selectedIndex]?.text || 'Data Atual (Hoje)';
+    const t2 = sel2.options[sel2.selectedIndex]?.text || 'Data Cadastrada';
+    previewEl.innerHTML = `💡 Cálculo: <b>${escapeHtml(t1)}</b> menos <b>${escapeHtml(t2)}</b> = dias decorridos reais.`;
   }
 
   /**
@@ -418,6 +439,20 @@
           <option value="${escapeHtml(f.id)}">[${escapeHtml(f.tabTitle)}] ${escapeHtml(f.label)}</option>
         `).join('');
       }
+    }
+
+    // Selects de Cálculo Personalizado entre Datas
+    const calcOrigemSelect = document.getElementById('trig-calc-origem');
+    const calcDestinoSelect = document.getElementById('trig-calc-destino');
+    if (calcOrigemSelect) {
+      calcOrigemSelect.innerHTML = '<option value="hoje">Data Atual (Hoje)</option>' + dateFields.map(f => `
+        <option value="${escapeHtml(f.id)}">[${escapeHtml(f.tabTitle)}] ${escapeHtml(f.label)}</option>
+      `).join('');
+    }
+    if (calcDestinoSelect) {
+      calcDestinoSelect.innerHTML = dateFields.map(f => `
+        <option value="${escapeHtml(f.id)}">[${escapeHtml(f.tabTitle)}] ${escapeHtml(f.label)}</option>
+      `).join('') + '<option value="hoje">Data Atual (Hoje)</option>';
     }
 
     // Select Campo Filtro
@@ -613,8 +648,11 @@
     // Campos nativos do monitoramento
     const standardFields = [
       { tag: '@Nome', label: 'Nome / Título da Feição', tab: 'Geral', icon: 'badge', type: 'título' },
-      { tag: '@data_limite', label: 'Data Limite Calculada', tab: 'Tempo', icon: 'event', type: 'data' },
-      { tag: '@dias_restantes', label: 'Contagem de Dias (Número Calculado)', tab: 'Tempo', icon: 'schedule', type: 'número' },
+      { tag: '@data_limite', label: 'Data Limite / Próximo Vencimento', tab: 'Tempo', icon: 'event', type: 'data' },
+      { tag: '@data_base', label: 'Data Base / Registrada', tab: 'Tempo', icon: 'calendar_today', type: 'data' },
+      { tag: '@dias_prazo', label: 'Prazo do Evento (Faltam X dias ou Atrasado há X dias)', tab: 'Tempo', icon: 'hourglass_top', type: 'prazo' },
+      { tag: '@dias_decorridos', label: 'Dias Decorridos (Hoje - Data Registrada / Comparação)', tab: 'Tempo', icon: 'history', type: 'decorrido' },
+      { tag: '@dias_restantes', label: 'Número de Dias do Prazo (Legado)', tab: 'Tempo', icon: 'schedule', type: 'número' },
       { tag: '@nome_camada', label: 'Nome da Camada', tab: 'Geral', icon: 'layers', type: 'camada' }
     ];
 
@@ -861,6 +899,9 @@
     const msgAtencao = (elAtencao && elAtencao.value.trim()) || padraoAtencao;
     const msgCritico = (elCritico && elCritico.value.trim()) || padraoCritico;
 
+    const calcDataOrigem = document.getElementById('trig-calc-origem') ? document.getElementById('trig-calc-origem').value : 'hoje';
+    const calcDataDestino = document.getElementById('trig-calc-destino') ? document.getElementById('trig-calc-destino').value : campoData;
+
     // Sincroniza campo legado se presente
     const elMsgLegacy = document.getElementById('trig-msg');
     if (elMsgLegacy) elMsgLegacy.value = msgCritico;
@@ -878,6 +919,8 @@
       intervalo_valor: intervaloValor,
       intervalo_unidade: intervaloUnidade,
       aviso_previo_dias: avisoPrevioDias,
+      calc_data_origem: calcDataOrigem,
+      calc_data_destino: calcDataDestino,
       campo_filtro: campoFiltro,
       campo_filtro_label: campoFiltroLabel,
       filtro_operador: filtroOperador,
@@ -1167,6 +1210,41 @@
               </div>
             </div>
 
+            <!-- Destaque Didático: Diferença entre @dias_prazo e @dias_decorridos -->
+            <div class="p-3.5 rounded-2xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-800/80 mb-3 space-y-2.5">
+              <div class="font-bold text-xs text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[17px] text-amber-600 dark:text-amber-400">help</span>
+                <span>Qual a diferença exata entre @dias_prazo e @dias_decorridos?</span>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                <div class="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-amber-200/80 dark:border-slate-700 space-y-1">
+                  <div class="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1">
+                    <span class="font-mono bg-amber-100 dark:bg-amber-900/60 px-1.5 py-0.5 rounded text-[10.5px]">@dias_prazo</span>
+                    <span>Prazo do Evento</span>
+                  </div>
+                  <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
+                    Mostra os <b>dias que faltam para o evento vencer</b> (ou dias de atraso se a data programada já expirou).
+                  </p>
+                  <div class="text-[10px] text-slate-500 dark:text-slate-400 font-mono bg-slate-50 dark:bg-slate-900 p-1 rounded">
+                    Ex: "Evento vence em <b>2</b> dias" ou "Venceu há <b>89</b> dias".
+                  </div>
+                </div>
+
+                <div class="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-amber-200/80 dark:border-slate-700 space-y-1">
+                  <div class="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
+                    <span class="font-mono bg-emerald-100 dark:bg-emerald-900/60 px-1.5 py-0.5 rounded text-[10.5px]">@dias_decorridos</span>
+                    <span>Tempo Real Passado</span>
+                  </div>
+                  <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
+                    Mostra os <b>dias reais corridos desde a data cadastrada</b> (ex: Data Atual menos Data da Última Vistoria).
+                  </p>
+                  <div class="text-[10px] text-slate-500 dark:text-slate-400 font-mono bg-slate-50 dark:bg-slate-900 p-1 rounded">
+                    Ex: "Última vistoria realizada há <b>181</b> dias".
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Dicas de Autocomplete e Cálculo de Tempo -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-600 dark:text-slate-300 mb-3">
               <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-y-1">
@@ -1174,7 +1252,7 @@
                   <span class="material-symbols-outlined text-[15px] text-amber-500">alternate_email</span>
                   <span>Busca Rápida com @:</span>
                 </div>
-                <p>Digite <code class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-amber-700 dark:text-amber-300 font-mono text-[10.5px]">@</code> em qualquer mensagem para autocompletar qualquer campo do formulário (ex: <i>@Nome, @Bairro, @data_limite</i>).</p>
+                <p>Digite <code class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-amber-700 dark:text-amber-300 font-mono text-[10.5px]">@</code> em qualquer mensagem para autocompletar qualquer campo do formulário (ex: <i>@Nome, @data_limite, @dias_prazo, @dias_decorridos</i>).</p>
               </div>
 
               <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-y-1">
@@ -1239,6 +1317,39 @@
           <div>
             <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Aviso Prévio (Antecedência em dias)</label>
             <input type="number" id="trig-aviso-dias" min="0" value="15" class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none" placeholder="Ex: 15 dias antes">
+          </div>
+
+          <!-- 6ª Linha: Cálculo de Diferença entre Datas (Tempo Decorrido) -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                Cálculo de Diferença entre Datas (Tempo Decorrido)
+              </label>
+              <span class="text-[10.5px] text-amber-600 dark:text-amber-400 font-semibold font-mono">Gera @dias_decorridos</span>
+            </div>
+            <div class="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-2xl space-y-2.5">
+              <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                Configure os dois campos de data para o sistema calcular os dias reais corridos entre eles (ex: dias passados desde a última vistoria até a data atual):
+              </p>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-[10.5px] font-semibold text-slate-600 dark:text-slate-300 mb-1">Data de Referência (De):</label>
+                  <select id="trig-calc-origem" onchange="EventsBuilder.updateDateCalcPreview()" class="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                    <option value="hoje">Data Atual (Hoje)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[10.5px] font-semibold text-slate-600 dark:text-slate-300 mb-1">Menos (-) Data Cadastrada:</label>
+                  <select id="trig-calc-destino" onchange="EventsBuilder.updateDateCalcPreview()" class="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                    <!-- Populado dinamicamente -->
+                  </select>
+                </div>
+              </div>
+              <div id="trig-calc-preview-box" class="p-2.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 text-[11px] text-amber-900 dark:text-amber-200 flex items-center justify-between">
+                <span id="trig-calc-preview-text">💡 Cálculo: Data Atual (Hoje) menos Data selecionada</span>
+                <span class="font-mono font-bold text-[10.5px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200">@dias_decorridos</span>
+              </div>
+            </div>
           </div>
 
           <!-- 6ª Linha: Condição Adicional de Filtro (Opcional) -->
@@ -1389,7 +1500,7 @@
             <!-- Legenda Explicativa Inferior -->
             <div class="p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-2">
               <span class="material-symbols-outlined text-[16px] text-amber-500 shrink-0">auto_awesome</span>
-              <span>O sistema calcula automaticamente o tempo restante/atraso em <b>x dias</b> (ex: <i>"em 5 dias"</i> ou <i>"há 3 meses (89 dias)"</i>) e preenche os campos com <b>@</b>.</span>
+              <span>Use <b>@dias_prazo</b> para os dias do prazo de vencimento (faltando ou atrasado) e <b>@dias_decorridos</b> para os dias reais passados desde a data cadastrada.</span>
             </div>
 
             <input type="hidden" id="trig-msg" value="">
@@ -1435,6 +1546,7 @@
     onRespTipoChanged,
     toggleTutorialGuide,
     onFilterFieldChanged,
+    updateDateCalcPreview,
     openMentionMenu,
     hideMentionMenu,
     handleMentionInput,

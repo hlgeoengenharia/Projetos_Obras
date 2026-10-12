@@ -267,7 +267,11 @@
     msg = msg.replace(/@tempo\b/gi, tempoTexto);
 
     // 3. Substitui variáveis de contexto com @ e formato legado {tag}
-    // @dias_restantes e @dias retornam estritamente o valor numérico puro calculado (ex: 102, 89, 2)
+    // @dias_prazo: número puro de dias do prazo de vencimento (faltando ou atrasado)
+    msg = msg.replace(/\{dias_prazo\}|@dias_prazo|@Dias Prazo/gi, String(absDiff));
+    // @dias_decorridos: número real de dias corridos entre as duas datas comparadas (ex: Hoje - Data da Última Manutenção)
+    msg = msg.replace(/\{dias_decorridos\}|@dias_decorridos|@Dias Decorridos/gi, String(ctx.diasDecorridos !== undefined ? ctx.diasDecorridos : absDiff));
+    // @dias_restantes e @dias mantidos para compatibilidade retroativa
     msg = msg.replace(/\{dias_restantes\}|@dias_restantes|@Dias Restantes|\{dias\}|@dias|@Dias/gi, String(absDiff));
     msg = msg.replace(/\{data_limite\}|@data_limite|@Data Limite/gi, ctx.targetDateStr || '');
     msg = msg.replace(/\{data_base\}|@data_base|@Data Base/gi, ctx.baseDateStr || '');
@@ -305,7 +309,7 @@
     // 6. Resolução resiliente de menções @campo restantes via getPropValue e cruzamento com formulário
     msg = msg.replace(/@([a-zA-Z0-9_\u00C0-\u017F]+)/g, (fullMatch, tag) => {
       const lower = tag.toLowerCase();
-      if (['nome', 'dias', 'dias_restantes', 'data_limite', 'data_base', 'nome_camada', 'tempo'].includes(lower)) {
+      if (['nome', 'dias', 'dias_restantes', 'dias_prazo', 'dias_decorridos', 'data_limite', 'data_base', 'nome_camada', 'tempo'].includes(lower)) {
         return fullMatch;
       }
 
@@ -460,8 +464,28 @@
       return `${dd}/${mm}/${yy}`;
     };
 
+    // Cálculo preciso de dias decorridos entre duas datas (ou Hoje vs Data Base por padrão)
+    let diasDecorridos = Math.round(Math.abs(today.getTime() - baseDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (trigger.calc_data_origem || trigger.calc_data_destino) {
+      const origRef = trigger.calc_data_origem || 'hoje';
+      const destRef = trigger.calc_data_destino || trigger.campo_data;
+
+      const getDateRef = (ref) => {
+        if (!ref || ref === 'hoje' || ref === 'today' || ref === 'data_atual') return today;
+        const val = getPropValue(feature, ref, ref, form);
+        return val ? parseDateSafe(val) : null;
+      };
+
+      const d1 = getDateRef(origRef);
+      const d2 = getDateRef(destRef);
+      if (d1 && d2) {
+        diasDecorridos = Math.round(Math.abs(d1.getTime() - d2.getTime()) / (1000 * 60 * 60 * 24));
+      }
+    }
+
     const ctx = {
       daysDiff,
+      diasDecorridos,
       targetDateStr: dateFmt(targetDate),
       baseDateStr: dateFmt(baseDate),
       themeName: (theme && theme.name) || 'Camada',
