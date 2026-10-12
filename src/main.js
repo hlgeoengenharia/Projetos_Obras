@@ -3858,8 +3858,12 @@ function loadAllFeaturesToMap() {
           }
       }
       if (typeof updateLabelsVisibility === 'function') updateLabelsVisibility();
-      if (window.EventsEngine && typeof window.EventsEngine.applyMapAlertHighlights === 'function') {
-          window.EventsEngine.applyMapAlertHighlights();
+      if (window.EventsEngine) {
+          if (typeof window.EventsEngine.refreshAlerts === 'function') {
+              window.EventsEngine.refreshAlerts();
+          } else if (typeof window.EventsEngine.applyMapAlertHighlights === 'function') {
+              window.EventsEngine.applyMapAlertHighlights();
+          }
       }
   };
 

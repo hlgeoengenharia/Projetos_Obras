@@ -391,6 +391,31 @@ assert.ok(!alertCarolino.message.includes('em atraso'), 'Não deve forçar a pal
 console.log('  ✓ [PASS] Resolução perfeita de campo sanitizado @data_da__ltima_manutens_o formatando a data real');
 console.log('  ✓ [PASS] @dias_restantes entrega apenas o valor numérico puro calculado');
 
+// 15. Teste de fechamento dos eventos no mapa ao fechar o card "Eventos & Prazos"
+assert.strictEqual(typeof EventsEngine.clearMapHaloGlow, 'function', 'clearMapHaloGlow deve estar exportada');
+assert.strictEqual(typeof EventsEngine.closeAlertsDrawer, 'function', 'closeAlertsDrawer deve estar exportada');
+
+// Simula drawer com a classe 'hidden' no DOM
+const mockDrawerElement = {
+  classList: {
+    contains: (cls) => cls === 'hidden',
+    add: () => {},
+    remove: () => {}
+  }
+};
+global.document = {
+  getElementById: (id) => {
+    if (id === 'alerts-drawer') return mockDrawerElement;
+    return null;
+  },
+  addEventListener: () => {}
+};
+
+mockLayersAdded.length = 0;
+EventsEngine.updateMapHaloGlow();
+assert.strictEqual(mockLayersAdded.length, 0, 'Não deve renderizar eventos no mapa quando o card Eventos & Prazos estiver fechado');
+console.log('  ✓ [PASS] Eventos no mapa fechados/limpos quando o card Eventos & Prazos está fechado');
+
 console.log('\n🎉 TODOS OS TESTES DO EVENTS ENGINE PASSARAM COM 100% DE SUCESSO!\n');
 
 

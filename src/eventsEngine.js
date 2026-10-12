@@ -836,7 +836,7 @@
    * Injeta os estilos de animação CSS de pulso (Radar Glow / Halo luminoso) no documento.
    */
   function injectRadarGlowStyles() {
-    if (_hasInjectedStyles || typeof document === 'undefined') return;
+    if (_hasInjectedStyles || typeof document === 'undefined' || typeof document.createElement !== 'function') return;
     _hasInjectedStyles = true;
 
     const style = document.createElement('style');
@@ -986,6 +986,8 @@
         font-family: inherit !important;
         backdrop-filter: blur(8px) !important;
         white-space: normal !important;
+        text-align: justify !important;
+        text-justify: inter-word !important;
       }
       .alert-leaflet-tooltip::before {
         border-top-color: rgba(255, 255, 255, 0.98) !important;
@@ -1185,9 +1187,18 @@
       drawer.classList.remove('hidden');
       refreshAlerts();
       renderAlertsDrawer();
+      updateMapHaloGlow();
     } else {
       drawer.classList.add('hidden');
+      clearMapHaloGlow();
     }
+  }
+
+  /**
+   * Fecha o card "Eventos & Prazos" e remove os eventos correspondentes do mapa.
+   */
+  function closeAlertsDrawer() {
+    toggleAlertsDrawer(null, false);
   }
 
   /**
@@ -1320,7 +1331,7 @@
             <h5 class="text-xs font-bold text-slate-900 dark:text-white leading-tight truncate">
               ${escapeHtml(alert.featureTitle)}
             </h5>
-            <p class="text-[11px] text-slate-600 dark:text-slate-300 mt-1 leading-snug">
+            <p class="text-[11px] text-slate-600 dark:text-slate-300 mt-1 leading-snug text-justify" style="text-align: justify; text-justify: inter-word;">
               ${escapeHtml(alert.message)}
             </p>
           </div>
@@ -1452,6 +1463,18 @@
   }
 
   /**
+   * Limpa e fecha todos os eventos destacados no mapa.
+   */
+  function clearMapHaloGlow() {
+    if (_haloLayerGroup) {
+      _haloLayerGroup.clearLayers();
+    }
+    if (typeof window !== 'undefined' && window.map && typeof window.map.closeTooltip === 'function') {
+      try { window.map.closeTooltip(); } catch(e) {}
+    }
+  }
+
+  /**
    * Renderiza os halos luminosos (Radar Glow) sobre as feições no Leaflet.
    */
   function updateMapHaloGlow() {
@@ -1466,6 +1489,14 @@
       }
     } catch(e) {}
     _haloLayerGroup.clearLayers();
+
+    // Se o card "Eventos & Prazos" estiver no DOM e estiver fechado, e o filtro rápido não estiver ativo:
+    // fecha os eventos no mapa (mantém o mapa limpo e desobstruído)
+    const drawer = (typeof document !== 'undefined') ? document.getElementById('alerts-drawer') : null;
+    if (drawer && drawer.classList.contains('hidden') && !_isAlertFilterModeActive) {
+      clearMapHaloGlow();
+      return;
+    }
 
     _activeAlertsCache.forEach(alert => {
       // Quando marcado como ciente ou adiado pelo usuário, oculta os efeitos visuais no mapa (continua no sino)
@@ -1494,7 +1525,7 @@
             ${escapeHtml(alert.featureTitle)}
           </div>
           ${alert.message ? `
-            <div style="font-size: 11px; color: ${msgColor}; line-height: 1.35; padding-top: 4px; border-top: 1px solid ${borderDivColor};">
+            <div style="font-size: 11px; color: ${msgColor}; line-height: 1.35; padding-top: 4px; border-top: 1px solid ${borderDivColor}; text-align: justify; text-justify: inter-word;">
               ${escapeHtml(alert.message)}
             </div>
           ` : ''}
@@ -1631,7 +1662,7 @@
         </div>
         <div class="flex-1 min-w-0">
           <h5 class="text-xs font-bold text-slate-900 dark:text-white leading-tight">Atenção Operacional</h5>
-          <p class="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 leading-snug">
+          <p class="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 leading-snug text-justify" style="text-align: justify; text-justify: inter-word;">
             Existem <b>${criticos.length} evento(s) crítico(s) vencido(s)</b> aguardando manutenção ou renovação.
           </p>
         </div>
@@ -1676,16 +1707,59 @@
       const btn = document.getElementById('btn-header-alerts');
       if (!drawer || drawer.classList.contains('hidden')) return;
       if (!drawer.contains(e.target) && (!btn || !btn.contains(e.target))) {
-        drawer.classList.add('hidden');
+        toggleAlertsDrawer(null, false);
       }
     });
   }
 
-  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-    // Auto inicialização após o carregamento completo do mapa
-    window.addEventListener('load', () => {
-      setTimeout(refreshAlerts, 1500);
+  let _lastCheckedThemeFeaturesCount = -1;
+
+  /**
+   * Checagem automática periódica e imediata: atualiza o badge do sininho
+   * assim que a página é acessada e conforme feições forem carregadas no mapa.
+   */
+  function runAutoAlertsCheck() {
+    if (typeof window === 'undefined' || typeof document === 'undefined' || typeof document.createElement !== 'function') return;
+    const themesList = window.themes || [];
+    let currentTotalFeatures = 0;
+    for (let i = 0; i < themesList.length; i++) {
+      if (themesList[i].features && Array.isArray(themesList[i].features)) {
+        currentTotalFeatures += themesList[i].features.length;
+      }
+    }
+
+    if (currentTotalFeatures !== _lastCheckedThemeFeaturesCount || _activeAlertsCache.length === 0) {
+      _lastCheckedThemeFeaturesCount = currentTotalFeatures;
+      refreshAlerts();
+    }
+  }
+
+  if (typeof window !== 'undefined' && typeof document !== 'undefined' && typeof document.createElement === 'function') {
+    // Escalonamento inteligente para exibir o total no sino logo no primeiro instante
+    [150, 600, 1500, 3000, 5500].forEach(delay => {
+      const timer = setTimeout(runAutoAlertsCheck, delay);
+      if (timer && typeof timer.unref === 'function') timer.unref();
     });
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', runAutoAlertsCheck);
+    }
+    if (typeof window.addEventListener === 'function') {
+      window.addEventListener('load', runAutoAlertsCheck);
+    }
+
+    // Monitor suave durante os primeiros 20 segundos após carga
+    let _pollTicks = 0;
+    const _initialPolling = setInterval(() => {
+      _pollTicks++;
+      runAutoAlertsCheck();
+      if (_pollTicks >= 10) {
+        clearInterval(_initialPolling);
+      }
+    }, 2000);
+    if (_initialPolling && typeof _initialPolling.unref === 'function') {
+      _initialPolling.unref();
+    }
   }
 
   // Exportação pública
@@ -1713,6 +1787,8 @@
     applyMapAlertHighlights: updateMapHaloGlow,
     initDraggableAlertsDrawer,
     toggleAlertsDrawer,
+    closeAlertsDrawer,
+    clearMapHaloGlow,
     filterAlertsTab,
     renderAlertsDrawer,
     locateAlertFeature,
