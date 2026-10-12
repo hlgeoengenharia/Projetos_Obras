@@ -36,11 +36,21 @@
       return isNaN(d.getTime()) ? null : d;
     }
 
-    // Formato ISO YYYY-MM-DD
-    const isoDate = new Date(s);
-    if (!isNaN(isoDate.getTime())) return isoDate;
+    // Formato ISO YYYY-MM-DD ou YYYY-MM-DD HH:MM (trata em horário local para não recuar 1 dia no fuso brasileiro)
+    const isoMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+    if (isoMatch) {
+      const ano = parseInt(isoMatch[1], 10);
+      const mes = parseInt(isoMatch[2], 10) - 1;
+      const dia = parseInt(isoMatch[3], 10);
+      const h = isoMatch[4] ? parseInt(isoMatch[4], 10) : 0;
+      const m = isoMatch[5] ? parseInt(isoMatch[5], 10) : 0;
+      const sec = isoMatch[6] ? parseInt(isoMatch[6], 10) : 0;
+      const d = new Date(ano, mes, dia, h, m, sec);
+      return isNaN(d.getTime()) ? null : d;
+    }
 
-    return null;
+    const fallbackDate = new Date(s);
+    return isNaN(fallbackDate.getTime()) ? null : fallbackDate;
   }
 
   /**
@@ -91,18 +101,28 @@
     if (fieldKey && p[fieldKey] !== undefined && p[fieldKey] !== null) return p[fieldKey];
     if (fieldLabel && p[fieldLabel] !== undefined && p[fieldLabel] !== null) return p[fieldLabel];
 
-    // 2. Coleta lista de chaves candidatas
+    // 2. Coleta lista de chaves candidatas com variações fonéticas e sem preposições
     const candidates = new Set();
-    if (fieldKey) {
-      candidates.add(String(fieldKey));
-      const nK = normalizeKey(fieldKey);
-      if (nK) candidates.add(nK);
-    }
-    if (fieldLabel) {
-      candidates.add(String(fieldLabel));
-      const nL = normalizeKey(fieldLabel);
-      if (nL) candidates.add(nL);
-    }
+    const addCandidateVariants = (text) => {
+      if (!text) return;
+      candidates.add(String(text));
+      const nK = normalizeKey(text);
+      if (nK) {
+        candidates.add(nK);
+        // Variação sem preposições comuns (da, de, do, dos, das)
+        const noPrep = nK.replace(/^(data)(da|de|do|dos|das)/, '$1').replace(/(da|de|do|dos|das)/g, '');
+        if (noPrep) candidates.add(noPrep);
+        // Variação tratando sanitização de 'ç'/'ção' como 's'/'so' vs 'c'/'cao'
+        const cVariant = nK.replace(/enso\b/, 'encao').replace(/senso\b/, 'sencao');
+        if (cVariant) {
+          candidates.add(cVariant);
+          candidates.add(cVariant.replace(/^(data)(da|de|do|dos|das)/, '$1').replace(/(da|de|do|dos|das)/g, ''));
+        }
+      }
+    };
+
+    if (fieldKey) addCandidateVariants(fieldKey);
+    if (fieldLabel) addCandidateVariants(fieldLabel);
 
     // Se temos o form, busca os aliases definidos no formulário (label, name, id)
     if (form) {
@@ -114,9 +134,9 @@
           const matchNormKey = fieldKey && (normalizeKey(f.id) === normalizeKey(fieldKey) || normalizeKey(f.name) === normalizeKey(fieldKey));
 
           if (matchId || matchLabel || matchNormKey) {
-            if (f.id) { candidates.add(String(f.id)); candidates.add(normalizeKey(f.id)); }
-            if (f.name) { candidates.add(String(f.name)); candidates.add(normalizeKey(f.name)); }
-            if (f.label) { candidates.add(String(f.label)); candidates.add(normalizeKey(f.label)); }
+            if (f.id) addCandidateVariants(f.id);
+            if (f.name) addCandidateVariants(f.name);
+            if (f.label) addCandidateVariants(f.label);
           }
         });
       });
@@ -247,6 +267,8 @@
     msg = msg.replace(/@tempo\b/gi, tempoTexto);
 
     // 3. Substitui variáveis de contexto com @ e formato legado {tag}
+    // Evita duplicidade se o usuário escreveu "@dias_restantes dias"
+    msg = msg.replace(/\{dias_restantes\}\s*dias?|@dias_restantes\s*dias?|@Dias Restantes\s*dias?/gi, diff >= 0 ? (diff === 0 ? 'hoje' : `${diff} dias`) : `${absDiff} dias em atraso`);
     msg = msg.replace(/\{dias_restantes\}|@dias_restantes|@Dias Restantes/gi, diff >= 0 ? (diff === 0 ? 'hoje' : `${diff} dias`) : `${absDiff} dias em atraso`);
     msg = msg.replace(/\{dias\}|@dias|@Dias/gi, String(absDiff));
     msg = msg.replace(/\{data_limite\}|@data_limite|@Data Limite/gi, ctx.targetDateStr || '');
@@ -259,15 +281,65 @@
       msg = msg.replace(/@Nome\b|@nome\b|\{Nome\}|\{nome\}/g, String(featTitle));
     }
 
-    // 5. Substitui propriedades da feição por @Campo ou {campo}
+    // Auxiliar para formatar datas ISO (YYYY-MM-DD...) em DD/MM/YYYY
+    const formatValue = (v) => {
+      if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) {
+        const parts = v.split('T')[0].split('-');
+        if (parts.length === 3) {
+          return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+      }
+      return String(v);
+    };
+
+    // 5. Substitui propriedades diretas da feição por @Campo ou {campo}
     Object.keys(props).forEach(k => {
       const v = props[k];
-      if (typeof v === 'string' || typeof v === 'number') {
+      if (v !== undefined && v !== null && (typeof v === 'string' || typeof v === 'number')) {
+        const fVal = formatValue(v);
         const regexCurly = new RegExp(`\\{${k}\\}`, 'gi');
         const regexAt = new RegExp(`@${k}\\b`, 'gi');
-        msg = msg.replace(regexCurly, String(v));
-        msg = msg.replace(regexAt, String(v));
+        msg = msg.replace(regexCurly, fVal);
+        msg = msg.replace(regexAt, fVal);
       }
+    });
+
+    // 6. Resolução resiliente de menções @campo restantes via getPropValue e cruzamento com formulário
+    msg = msg.replace(/@([a-zA-Z0-9_\u00C0-\u017F]+)/g, (fullMatch, tag) => {
+      const lower = tag.toLowerCase();
+      if (['nome', 'dias', 'dias_restantes', 'data_limite', 'data_base', 'nome_camada', 'tempo'].includes(lower)) {
+        return fullMatch;
+      }
+
+      // Se a tag corresponder ao campo de data base do gatilho (ex: data_da__ltima_manutens_o)
+      if (trigger && (trigger.campo_data === tag || normalizeKey(trigger.campo_data) === normalizeKey(tag))) {
+        return ctx.baseDateStr || fullMatch;
+      }
+
+      const activeForm = ctx.form || (typeof window !== 'undefined' && window.forms && window.forms.find(f => f.id === (trigger && trigger.formId)));
+      const propVal = getPropValue(feature, tag, tag, activeForm);
+      if (propVal !== null && propVal !== undefined && propVal !== '') {
+        return formatValue(propVal);
+      }
+
+      return fullMatch;
+    });
+
+    // 7. Resolução resiliente de {campo} restantes via getPropValue
+    msg = msg.replace(/\{([a-zA-Z0-9_\u00C0-\u017F]+)\}/g, (fullMatch, tag) => {
+      const lower = tag.toLowerCase();
+      if (['nome', 'dias', 'dias_restantes', 'data_limite', 'data_base', 'nome_camada', 'tempo'].includes(lower)) {
+        return fullMatch;
+      }
+      if (trigger && (trigger.campo_data === tag || normalizeKey(trigger.campo_data) === normalizeKey(tag))) {
+        return ctx.baseDateStr || '';
+      }
+      const activeForm = ctx.form || (typeof window !== 'undefined' && window.forms && window.forms.find(f => f.id === (trigger && trigger.formId)));
+      const propVal = getPropValue(feature, tag, tag, activeForm);
+      if (propVal !== null && propVal !== undefined && propVal !== '') {
+        return formatValue(propVal);
+      }
+      return '';
     });
 
     // Limpa chaves não substituídas
@@ -395,7 +467,8 @@
       targetDateStr: dateFmt(targetDate),
       baseDateStr: dateFmt(baseDate),
       themeName: (theme && theme.name) || 'Camada',
-      isOverdue
+      isOverdue,
+      form: form
     };
 
     let titleFeature = (theme && theme.disp1 && getPropValue(feature, theme.disp1)) ||
@@ -472,7 +545,9 @@
       daysDiff: daysDiff,
       isOverdue: isOverdue,
       status: isOverdue ? 'vencido' : 'proximo',
-      statusLabel: isOverdue ? `Atrasado há ${Math.abs(daysDiff)} dias` : (daysDiff === 0 ? 'Vence hoje' : `Vence em ${daysDiff} dias`),
+      statusLabel: isOverdue 
+        ? `Evento venceu há ${Math.abs(daysDiff)} ${Math.abs(daysDiff) === 1 ? 'dia' : 'dias'}`
+        : (daysDiff === 0 ? 'Evento vence hoje' : `Evento vence em ${daysDiff} ${daysDiff === 1 ? 'dia' : 'dias'}`),
       message: message,
       mensagemFormatada: message,
       featureId: featureId,

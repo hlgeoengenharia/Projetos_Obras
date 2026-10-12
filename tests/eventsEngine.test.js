@@ -7,7 +7,7 @@ const EventsEngine = require('../src/eventsEngine');
 console.log('🧪 Iniciando testes do EventsEngine...');
 
 // 1. Teste de Adição de Intervalo
-const baseDate = new Date('2026-04-09T00:00:00Z');
+const baseDate = new Date(2026, 3, 9, 0, 0, 0);
 const sixMonthsLater = EventsEngine.addInterval(baseDate, 6, 'meses');
 assert.strictEqual(sixMonthsLater.getFullYear(), 2026, 'Ano correto');
 assert.strictEqual(sixMonthsLater.getMonth(), 9, 'Mês correto (outubro = 9 no Date)');
@@ -34,7 +34,7 @@ const featureLogradouroVencido = {
   }
 };
 
-const today = new Date('2026-10-09T00:00:00Z');
+const today = new Date(2026, 9, 9, 0, 0, 0); // 09 de outubro de 2026
 const alert1 = EventsEngine.evaluateTrigger(triggerLogradouro, featureLogradouroVencido, { name: 'Logradouros' }, today);
 assert.ok(alert1, 'Alerta deve ser disparado');
 assert.strictEqual(alert1.isOverdue, true, 'Deve constar como atrasado/vencido');
@@ -345,6 +345,49 @@ assert.ok(alertLegado.message.includes('Rua Vitorino Cardoso'), 'Nome interpolad
 assert.ok(alertLegado.message.includes('em 2 dias'), 'Calcula dinamicamente a contagem dos dias restantes (em 2 dias)');
 assert.ok(alertLegado.message.includes('período de vencimento'), 'Assume novo padrão inteligente de Atenção');
 console.log('  ✓ [PASS] Gatilho legado: migrado automaticamente para o padrão de Atenção com contagem de dias');
+
+// Cenário D: Teste do novo formato de statusLabel ("Evento vence em 2 dias" e "Evento venceu há 89 dias")
+assert.strictEqual(alertLegado.statusLabel, 'Evento vence em 2 dias', 'StatusLabel de atenção deve ser "Evento vence em 2 dias"');
+assert.ok(alertCritico.statusLabel.includes('Evento venceu há'), 'StatusLabel de crítico deve ser "Evento venceu há x dias"');
+console.log('  ✓ [PASS] StatusLabel configurado como "Evento vence em x dias" e "Evento venceu há x dias"');
+
+// Cenário E: Teste de resolução de campo sanitizado do formulário (@data_da__ltima_manutens_o)
+const triggerComCampoSanitizado = {
+  id: 'trig_sanitizado',
+  nome: 'Manutenção',
+  tipo: 'periodicidade',
+  campo_data: 'data_da__ltima_manutens_o',
+  intervalo_valor: 6,
+  intervalo_unidade: 'meses',
+  aviso_previo_dias: 15,
+  mensagem_critico: 'Atenção: A última vistoria realizada em @Nome foi em @data_da__ltima_manutens_o . Totalizando @dias_restantes desde a última manutenção.'
+};
+
+const mockFormVias = {
+  id: 'form_vias',
+  tabs: [
+    {
+      title: 'Infraestrutura',
+      fields: [
+        { id: 'data_da__ltima_manutens_o', name: 'data_da__ltima_manutens_o', label: 'Data da última manutenção', type: 'date' }
+      ]
+    }
+  ]
+};
+
+const featCarolino = {
+  id: 'feat_carolino',
+  properties: {
+    Nome: 'RUA CAROLINO CARDOSO',
+    data_ultima_manutencao: '2026-01-14' // Propriedade no banco/feição
+  }
+};
+
+const alertCarolino = EventsEngine.evaluateTrigger(triggerComCampoSanitizado, featCarolino, { name: 'Logradouro' }, today, mockFormVias);
+assert.ok(alertCarolino, 'Alerta deve ser gerado');
+assert.ok(!alertCarolino.message.includes('@data_da__ltima_manutens_o'), 'Não deve sobrar a tag crua @data_da__ltima_manutens_o');
+assert.ok(alertCarolino.message.includes('14/01/2026'), 'Deve substituir pela data formatada 14/01/2026');
+console.log('  ✓ [PASS] Resolução perfeita de campo sanitizado @data_da__ltima_manutens_o formatando a data real');
 
 console.log('\n🎉 TODOS OS TESTES DO EVENTS ENGINE PASSARAM COM 100% DE SUCESSO!\n');
 
