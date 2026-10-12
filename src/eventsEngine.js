@@ -238,10 +238,13 @@
       }
     }
 
-    // 2. Substituição inteligente de expressões de tempo: "em x dias", "há x dias", etc.
-    msg = msg.replace(/\bem\s+[xX]\s+dias\b/gi, diff === 0 ? 'hoje' : `em ${tempoTexto}`);
-    msg = msg.replace(/\bhá\s+[xX]\s+dias\b/gi, `há ${tempoTexto}`);
-    msg = msg.replace(/\b[xX]\s+dias\b/gi, tempoTexto);
+    // 2. Substituição inteligente de expressões de tempo: "em x dias", "há x dias", "x dias", etc.
+    msg = msg.replace(/\bem\s+[xX]\s+dias?\b/gi, diff === 0 ? 'hoje' : `em ${tempoTexto}`);
+    msg = msg.replace(/\bhá\s+[xX]\s+dias?\b/gi, `há ${tempoTexto}`);
+    msg = msg.replace(/\b[xX]\s+dias?\/meses\b/gi, tempoTexto);
+    msg = msg.replace(/\b[xX]\s+meses\b/gi, tempoTexto);
+    msg = msg.replace(/\b[xX]\s+dias?\b/gi, tempoTexto);
+    msg = msg.replace(/@tempo\b/gi, tempoTexto);
 
     // 3. Substitui variáveis de contexto com @ e formato legado {tag}
     msg = msg.replace(/\{dias_restantes\}|@dias_restantes|@Dias Restantes/gi, diff >= 0 ? (diff === 0 ? 'hoje' : `${diff} dias`) : `${absDiff} dias em atraso`);
@@ -405,13 +408,26 @@
     ctx.featureTitle = titleFeature;
 
     // Seleciona o template de mensagem configurado para a severidade atual
-    let templateMsg = trigger.mensagem;
+    const defaultEmDia = '@Nome está em conformidade com o cronograma regular.';
+    const defaultAtencao = 'Atenção: @Nome entrará em período de vencimento em x dias.';
+    const defaultCritico = '@Nome atingiu o prazo limite em x dias e requer manutenção/vistoria urgente.';
+
+    // Identifica se a mensagem gravada é o antigo padrão genérico do sistema pré-existente
+    // Ex: "A feição {nome} atingiu o prazo estabelecido em {data_limite}."
+    const isLegacyDefaultTemplate = (str) => {
+      if (!str) return true;
+      const s = String(str).trim().toLowerCase();
+      return (s.includes('atingiu o prazo') && (s.includes('{data_limite}') || s.includes('@data_limite') || s.includes('estabelecido em'))) ||
+             (s.startsWith('a feição') && s.includes('atingiu o prazo'));
+    };
+
+    let templateMsg = '';
     if (severity === 'critico') {
-      templateMsg = trigger.mensagem_critico || trigger.mensagem || '@Nome atingiu o prazo limite em x dias e requer manutenção/vistoria urgente.';
+      templateMsg = trigger.mensagem_critico || (!isLegacyDefaultTemplate(trigger.mensagem) ? trigger.mensagem : defaultCritico) || defaultCritico;
     } else if (severity === 'atencao') {
-      templateMsg = trigger.mensagem_atencao || trigger.mensagem || 'Atenção: @Nome entrará em período de vencimento em x dias.';
+      templateMsg = trigger.mensagem_atencao || (!isLegacyDefaultTemplate(trigger.mensagem) && trigger.severidade === 'atencao' ? trigger.mensagem : defaultAtencao) || defaultAtencao;
     } else {
-      templateMsg = trigger.mensagem_em_dia || trigger.mensagem || '@Nome está em conformidade com o cronograma regular.';
+      templateMsg = trigger.mensagem_em_dia || (!isLegacyDefaultTemplate(trigger.mensagem) && trigger.severidade === 'info' ? trigger.mensagem : defaultEmDia) || defaultEmDia;
     }
 
     let message = interpolateMessage(templateMsg, feature, trigger, ctx);
@@ -885,6 +901,29 @@
         animation: alert-vector-pulse-info 2.5s infinite ease-in-out !important;
         pointer-events: auto !important;
         cursor: pointer !important;
+      }
+
+      /* Estilização dos Balões (Tooltips) de Alerta no Mapa */
+      .alert-leaflet-tooltip {
+        background: rgba(255, 255, 255, 0.98) !important;
+        border: 1px solid rgba(226, 232, 240, 0.95) !important;
+        border-radius: 14px !important;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+        padding: 8px 12px !important;
+        font-family: inherit !important;
+        backdrop-filter: blur(8px) !important;
+        white-space: normal !important;
+      }
+      .alert-leaflet-tooltip::before {
+        border-top-color: rgba(255, 255, 255, 0.98) !important;
+      }
+      .dark .alert-leaflet-tooltip {
+        background: rgba(15, 23, 42, 0.96) !important;
+        border-color: rgba(51, 65, 85, 0.85) !important;
+        color: #f8fafc !important;
+      }
+      .dark .alert-leaflet-tooltip::before {
+        border-top-color: rgba(15, 23, 42, 0.96) !important;
       }
     `;
     document.head.appendChild(style);
@@ -1367,7 +1406,27 @@
       const pulseClass = isCrit ? 'alert-feature-pulse-critico' : (isAten ? 'alert-feature-pulse-atencao' : 'alert-feature-pulse-info');
       const strokeColor = isCrit ? '#ef4444' : (isAten ? '#f59e0b' : '#10b981');
       const dotColor = strokeColor;
-      const tooltipHtml = `<b>${escapeHtml(alert.featureTitle)}</b><br><span style="color:${dotColor}; font-weight:bold;">${escapeHtml(alert.statusLabel)}</span>`;
+      const isDark = typeof document !== 'undefined' && document.documentElement && document.documentElement.classList.contains('dark');
+      const titleColor = isDark ? '#f8fafc' : '#0f172a';
+      const msgColor = isDark ? '#cbd5e1' : '#475569';
+      const borderDivColor = isDark ? 'rgba(51, 65, 85, 0.7)' : 'rgba(226, 232, 240, 0.9)';
+
+      const tooltipHtml = `
+        <div style="font-family: inherit; min-width: 190px; max-width: 290px; padding: 2px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px;">
+            <span style="font-weight: 800; font-size: 10.5px; text-transform: uppercase; color: ${dotColor}; letter-spacing: 0.5px;">${escapeHtml(alert.statusLabel)}</span>
+            <span style="font-size: 10px; font-weight: 700; opacity: 0.7; font-family: monospace;">${escapeHtml(alert.targetDateFormatted)}</span>
+          </div>
+          <div style="font-weight: 700; font-size: 12px; color: ${titleColor}; margin-bottom: 4px; line-height: 1.25;">
+            ${escapeHtml(alert.featureTitle)}
+          </div>
+          ${alert.message ? `
+            <div style="font-size: 11px; color: ${msgColor}; line-height: 1.35; padding-top: 4px; border-top: 1px solid ${borderDivColor};">
+              ${escapeHtml(alert.message)}
+            </div>
+          ` : ''}
+        </div>
+      `;
 
       // 1. Renderiza o contorno / traçado da própria feição pulsando com a cor do sistema
       if (alert.feature && alert.feature.geometry && typeof L.geoJSON === 'function') {

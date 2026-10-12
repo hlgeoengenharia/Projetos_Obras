@@ -319,6 +319,33 @@ assert.ok(alertAtencao.message.includes('em 10 dias'), 'Substitui em x dias por 
 assert.ok(alertAtencao.message.includes('período de vencimento'), 'Usa template mensagem_atencao');
 console.log('  ✓ [PASS] Alerta de atenção: utiliza mensagem_atencao com @Nome e cálculo de x dias');
 
+// Cenário C: Gatilho Legado (criado antes, com texto antigo "A feição {nome} atingiu o prazo estabelecido em {data_limite}.")
+const triggerLegado = {
+  id: 'trig_legado',
+  nome: 'Gatilho Antigo',
+  tipo: 'validade',
+  campo_data: 'data_validade',
+  aviso_previo_dias: 15,
+  severidade: 'atencao',
+  mensagem: 'A feição {nome} atingiu o prazo estabelecido em {data_limite}.' // Texto legado pré-existente
+};
+
+const featLegadaAtencao = {
+  id: 'feat_vitorino',
+  properties: {
+    Nome: 'Rua Vitorino Cardoso',
+    data_validade: '2026-10-11' // Faltam 2 dias em relação a 2026-10-09
+  }
+};
+
+const alertLegado = EventsEngine.evaluateTrigger(triggerLegado, featLegadaAtencao, { name: 'Logradouro' }, today);
+assert.ok(alertLegado, 'Alerta deve disparar');
+assert.strictEqual(alertLegado.severity, 'atencao');
+assert.ok(alertLegado.message.includes('Rua Vitorino Cardoso'), 'Nome interpolado');
+assert.ok(alertLegado.message.includes('em 2 dias'), 'Calcula dinamicamente a contagem dos dias restantes (em 2 dias)');
+assert.ok(alertLegado.message.includes('período de vencimento'), 'Assume novo padrão inteligente de Atenção');
+console.log('  ✓ [PASS] Gatilho legado: migrado automaticamente para o padrão de Atenção com contagem de dias');
+
 console.log('\n🎉 TODOS OS TESTES DO EVENTS ENGINE PASSARAM COM 100% DE SUCESSO!\n');
 
 
