@@ -1,5 +1,5 @@
 // sw.js — Service Worker do GeoGestor (Suporte a PWA e Modo Offline)
-const CACHE_NAME = 'geogestor-app-shell-v7';
+const CACHE_NAME = 'geogestor-app-shell-v8';
 
 const CORE_ASSETS = [
     './',

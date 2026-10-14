@@ -778,7 +778,7 @@
           </div>
         </div>
         <div class="flex items-center gap-1">
-          <button type="button" onclick="if(window.EventsEngine) window.EventsEngine.toggleAlertsDrawer(event)" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer" title="Fechar">
+          <button type="button" onclick="if(window.EventsEngine) window.EventsEngine.closeAlertsDrawer(event)" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer" title="Fechar">
             <span class="material-symbols-outlined text-[18px]">close</span>
           </button>
         </div>
@@ -3052,6 +3052,10 @@
                     <span class="material-symbols-outlined text-[17px]">analytics</span>
                     Curva ABC
                 </button>
+                <button id="orc-tab-btn-cpus" onclick="setOrcamentoTab('cpus')" class="px-4 py-2.5 text-xs font-medium text-slate-500 hover:text-slate-800 flex items-center gap-1.5 cursor-pointer">
+                    <span class="material-symbols-outlined text-[17px]">build_circle</span>
+                    Composições Próprias (CPU)
+                </button>
             </div>
 
             <div id="orcamento-loading-indicator" class="hidden items-center gap-2 text-xs text-sky-600 dark:text-sky-400 animate-pulse font-medium">
@@ -3075,7 +3079,11 @@
             <div class="flex items-center gap-2.5">
                 <button onclick="exportarPlanilhaExcel()" class="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all">
                     <span class="material-symbols-outlined text-emerald-600 text-[18px]">table_view</span>
-                    Exportar Planilha
+                    Exportar Excel (.XLSX)
+                </button>
+                <button onclick="abrirModalExportarPdf()" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm">
+                    <span class="material-symbols-outlined text-[18px]">picture_as_pdf</span>
+                    Exportar PDF
                 </button>
                 <button onclick="salvarOrcamentoLocalmente(); closeOrcamentoModal();" class="px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-bold shadow-sm flex items-center gap-1.5 cursor-pointer transition-all">
                     <span class="material-symbols-outlined text-[18px]">save</span>
@@ -3083,9 +3091,515 @@
                 </button>
             </div>
         </div>
-
     </div>
 </div>
+
+<!-- Modal de Seleção e Inserção de CPU na Macroetapa -->
+<div id="modal-selecao-cpu" class="fixed inset-0 z-[10001] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 hidden">
+            <div class="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[88vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                <div class="px-5 py-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                            <span class="material-symbols-outlined text-[20px]">build_circle</span>
+                        </span>
+                        <div>
+                            <h3 class="text-sm font-extrabold text-slate-800 dark:text-slate-100">Inserir Composição Própria (CPU)</h3>
+                            <p id="modal-selecao-cpu-subtitulo" class="text-xs text-slate-400">Selecione uma CPU cadastrada para adicionar à planilha</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="abrirEditorCpu(null, window.GeoOrcamento._etapaCpuOrigemId)" class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center gap-1 cursor-pointer transition-all shadow-xs">
+                            <span class="material-symbols-outlined text-[16px]">add</span>
+                            Criar Nova CPU
+                        </button>
+                        <button onclick="fecharModalSelecaoCpu()" class="w-7 h-7 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 flex items-center justify-center cursor-pointer">
+                            <span class="material-symbols-outlined text-[18px]">close</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Busca de CPUs -->
+                <div class="p-3 bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800/80">
+                    <div class="relative">
+                        <span class="absolute left-3 top-2.5 text-slate-400 material-symbols-outlined text-[16px]">search</span>
+                        <input type="text" id="input-filtro-selecao-cpu" oninput="filtrarListaSelecaoCpu(this.value)" placeholder="Filtrar por código ou descrição da CPU..." class="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:ring-1 focus:ring-amber-500">
+                    </div>
+                </div>
+
+                <!-- Lista de CPUs Disponíveis -->
+                <div id="modal-selecao-cpu-lista" class="flex-1 overflow-y-auto p-4 space-y-2.5 divide-y divide-slate-100 dark:divide-slate-800/60">
+                    <!-- Renderizado dinamicamente -->
+                </div>
+
+                <div class="px-5 py-3 bg-slate-100 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
+                    <span id="modal-selecao-cpu-contador">0 composições disponíveis</span>
+                    <button onclick="fecharModalSelecaoCpu()" class="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-bold transition-all cursor-pointer shadow-xs">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Editor / Construtor Completo de CPU -->
+        <div id="modal-editor-cpu" class="fixed inset-0 z-[10002] bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 hidden">
+            <div class="bg-white dark:bg-slate-900 w-full max-w-5xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                <div class="px-5 py-3.5 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-lg bg-primary/10 text-primary dark:text-sky-400 flex items-center justify-center">
+                            <span class="material-symbols-outlined text-[20px]">architecture</span>
+                        </span>
+                        <div>
+                            <h3 id="modal-editor-cpu-titulo" class="text-sm font-extrabold text-slate-800 dark:text-slate-100">Construtor de Composição Própria (CPU)</h3>
+                            <p class="text-xs text-slate-400">Engenharia de Custos Públicos • Índices de Consumo e Insumos da Caixa/SINAPI</p>
+                        </div>
+                    </div>
+                    <button onclick="fecharEditorCpu()" class="w-7 h-7 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 flex items-center justify-center cursor-pointer">
+                        <span class="material-symbols-outlined text-[18px]">close</span>
+                    </button>
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+                    <!-- Identificação da CPU -->
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+                        <div class="sm:col-span-1">
+                            <label class="block text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Código da CPU</label>
+                            <input type="text" id="cpu-form-codigo" placeholder="Ex: CPU-01" class="w-full px-3 py-1.5 text-xs font-mono font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:ring-1 focus:ring-primary">
+                        </div>
+                        <div class="sm:col-span-1">
+                            <label class="block text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Unidade de Medida</label>
+                            <select id="cpu-form-unidade" class="w-full px-2.5 py-1.5 text-xs font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:ring-1 focus:ring-primary">
+                                <option value="M²">M² (Metro Quadrado)</option>
+                                <option value="M³">M³ (Metro Cúbico)</option>
+                                <option value="UN">UN (Unidade)</option>
+                                <option value="M">M (Metro Linear)</option>
+                                <option value="KG">KG (Quilograma)</option>
+                                <option value="H">H (Hora)</option>
+                                <option value="VB">VB (Verba)</option>
+                                <option value="MES">MÊS (Mensal)</option>
+                            </select>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label class="block text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Agrupamento / Categoria</label>
+                            <input type="text" id="cpu-form-categoria" placeholder="Ex: Serviços Preliminares, Iluminação, Pavimentação..." class="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:ring-1 focus:ring-primary">
+                        </div>
+                        <div class="sm:col-span-4">
+                            <label class="block text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Descrição Técnica Oficial do Serviço</label>
+                            <textarea id="cpu-form-descricao" rows="2" placeholder="Descreva tecnicamente o serviço que será executado e suas especificações completas..." class="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:ring-1 focus:ring-primary"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Seção de Adição de Insumos -->
+                    <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
+                            <div>
+                                <h4 class="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                                    <span class="material-symbols-outlined text-emerald-500 text-[18px]">playlist_add</span>
+                                    Insumos e Composições Auxiliares Componentes
+                                </h4>
+                                <p class="text-[11px] text-slate-400">Adicione a mão de obra, materiais e equipamentos necessários para executar 1 unidade desta CPU</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" onclick="abrirModalCotacaoInsumo()" class="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/60 flex items-center gap-1 cursor-pointer transition-all shadow-xs">
+                                    <span class="material-symbols-outlined text-[15px]">edit_note</span>
+                                    + Insumo de Cotação de Mercado
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Barra de Busca SINAPI para Insumo da CPU -->
+                        <div class="relative">
+                            <span class="absolute left-3 top-2.5 text-slate-400 material-symbols-outlined text-[16px]">search</span>
+                            <input type="text" id="input-search-insumo-cpu" oninput="buscarInsumoSinapiCpuAutocomplete(this.value)" placeholder="Puxar insumo oficial do SINAPI (ex: 88316 servente, tubo pvc, cimento, eletricista, concreto)..." class="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-sky-300 dark:border-sky-800 bg-sky-50/30 dark:bg-sky-950/20 focus:ring-1 focus:ring-primary">
+                            <!-- Dropdown Autocomplete -->
+                            <div id="autocomplete-results-insumo-cpu" class="hidden absolute left-0 top-full mt-1 w-full max-h-60 overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-50 divide-y divide-slate-100 dark:divide-slate-800"></div>
+                        </div>
+
+                        <!-- Tabela de Insumos da CPU -->
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="border-b border-slate-200 dark:border-slate-800 text-[10px] font-bold text-slate-400 uppercase bg-slate-50/80 dark:bg-slate-800/40">
+                                        <th class="py-2 px-2.5 text-center">Tipo</th>
+                                        <th class="py-2 px-2.5">Código</th>
+                                        <th class="py-2 px-3">Descrição do Insumo / Serviço</th>
+                                        <th class="py-2 px-2 text-center">Und</th>
+                                        <th class="py-2 px-2.5 text-right w-24">Coeficiente</th>
+                                        <th class="py-2 px-2.5 text-right w-28">Preço Unit. (R$)</th>
+                                        <th class="py-2 px-2.5 text-right w-28">Custo Total (R$)</th>
+                                        <th class="py-2 px-2 text-center w-10"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabela-insumos-editor-cpu-body">
+                                    <!-- Itens da CPU -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Resumo dos Custos da CPU -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div class="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800">
+                            <span class="text-[10px] font-bold uppercase text-slate-400 block">Mão de Obra (MO)</span>
+                            <span id="cpu-total-mo" class="text-sm font-extrabold text-slate-800 dark:text-slate-100 font-mono">R$ 0,00</span>
+                        </div>
+                        <div class="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800">
+                            <span class="text-[10px] font-bold uppercase text-slate-400 block">Materiais (MAT)</span>
+                            <span id="cpu-total-mat" class="text-sm font-extrabold text-slate-800 dark:text-slate-100 font-mono">R$ 0,00</span>
+                        </div>
+                        <div class="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800">
+                            <span class="text-[10px] font-bold uppercase text-slate-400 block">Equipamentos (EQ)</span>
+                            <span id="cpu-total-eq" class="text-sm font-extrabold text-slate-800 dark:text-slate-100 font-mono">R$ 0,00</span>
+                        </div>
+                        <div class="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-300 dark:border-emerald-800">
+                            <span class="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300 block">Custo Direto (s/ BDI)</span>
+                            <span id="cpu-total-direto" class="text-base font-black text-emerald-700 dark:text-emerald-300 font-mono">R$ 0,00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer do Editor de CPU -->
+                <div class="px-5 py-3.5 bg-slate-100 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    <div class="text-xs text-slate-500">
+                        <span>Preço c/ BDI da Obra (<span id="cpu-bdi-taxa-label">24.80%</span>): </span>
+                        <strong id="cpu-preco-com-bdi-label" class="text-slate-800 dark:text-slate-100 font-mono text-sm ml-1">R$ 0,00</strong>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="fecharEditorCpu()" class="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-bold transition-all cursor-pointer shadow-xs">
+                            Cancelar
+                        </button>
+                        <button type="button" onclick="salvarEditorCpu()" class="px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-bold shadow-sm flex items-center gap-1.5 cursor-pointer">
+                            <span class="material-symbols-outlined text-[17px]">save</span>
+                            Salvar Composição
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Ficha Técnica Analítica da CPU (Visualização / Memória de Cálculo) -->
+        <div id="modal-ficha-cpu" class="fixed inset-0 z-[10003] bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 hidden">
+            <div class="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                <div class="px-5 py-3.5 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                            <span class="material-symbols-outlined text-[20px]">description</span>
+                        </span>
+                        <div>
+                            <h3 id="modal-ficha-cpu-titulo" class="text-sm font-extrabold text-slate-800 dark:text-slate-100">Ficha Técnica Analítica da Composição (CPU)</h3>
+                            <p class="text-xs text-slate-400">Memória de cálculo detalhada dos custos unitários diretos</p>
+                        </div>
+                    </div>
+                    <button onclick="fecharFichaTecnicaCpu()" class="w-7 h-7 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 flex items-center justify-center cursor-pointer">
+                        <span class="material-symbols-outlined text-[18px]">close</span>
+                    </button>
+                </div>
+                <div id="modal-ficha-cpu-corpo" class="flex-1 overflow-y-auto p-5 space-y-4">
+                    <!-- Renderizado dinamicamente -->
+                </div>
+                <div class="px-5 py-3 bg-slate-100 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end">
+                    <button onclick="fecharFichaTecnicaCpu()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold cursor-pointer transition-all">
+                        Fechar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Completo de Pesquisa e Cotação de Mercado (Lei 14.133/2021) -->
+        <div id="modal-cotacao-insumo" class="fixed inset-0 z-[10004] bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 hidden">
+            <div class="bg-white dark:bg-slate-900 w-full max-w-5xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[94vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                <!-- Cabeçalho -->
+                <div class="px-5 py-3.5 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                            <span class="material-symbols-outlined text-[20px]">request_quote</span>
+                        </span>
+                        <div>
+                            <h3 id="modal-cotacao-insumo-titulo" class="text-sm font-extrabold text-slate-800 dark:text-slate-100">Pesquisa de Preços de Mercado • Cotação de Insumo</h3>
+                            <p class="text-xs text-slate-400">Embasamento legal: Art. 23 da Lei 14.133/2021 e IN SEGES/ME 65/2021 (Pesquisa com fornecedores e lojas)</p>
+                        </div>
+                    </div>
+                    <button onclick="fecharModalCotacaoInsumo()" class="w-7 h-7 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 flex items-center justify-center cursor-pointer">
+                        <span class="material-symbols-outlined text-[18px]">close</span>
+                    </button>
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+                    <!-- Bloco 1: Identificação do Insumo -->
+                    <div class="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-700/60 pb-2">
+                            <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                                <span class="material-symbols-outlined text-primary text-[17px]">inventory_2</span>
+                                Identificação do Insumo ou Serviço Cotado
+                            </h4>
+                            <span class="text-[10px] text-slate-400">Origem: Cotação de Mercado Local</span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-6 gap-3">
+                            <div class="sm:col-span-1">
+                                <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Código</label>
+                                <input type="text" id="cot-insumo-codigo" placeholder="COT-01" class="w-full px-2.5 py-1.5 text-xs font-mono font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:ring-1 focus:ring-primary">
+                            </div>
+                            <div class="sm:col-span-1">
+                                <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Tipo</label>
+                                <select id="cot-insumo-tipo" class="w-full px-2 py-1.5 text-xs font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:ring-1 focus:ring-primary">
+                                    <option value="MAT">Material (MAT)</option>
+                                    <option value="MO">Mão de Obra (MO)</option>
+                                    <option value="EQ">Equipamento (EQ)</option>
+                                    <option value="COMP">Serviço Auxiliar</option>
+                                </select>
+                            </div>
+                            <div class="sm:col-span-1">
+                                <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Unidade</label>
+                                <input type="text" id="cot-insumo-unidade" value="UN" placeholder="UN, M², M..." class="w-full px-2.5 py-1.5 text-xs uppercase font-bold text-center rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:ring-1 focus:ring-primary">
+                            </div>
+                            <div class="sm:col-span-1">
+                                <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Coeficiente (Índice)</label>
+                                <input type="number" id="cot-insumo-coeficiente" min="0" step="any" value="1.0000" class="w-full px-2.5 py-1.5 text-xs font-mono font-bold text-right rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:ring-1 focus:ring-primary">
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Marca / Referência Sugerida</label>
+                                <input type="text" id="cot-insumo-marca" placeholder="Ex: Modelo de referência ou similar..." class="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:ring-1 focus:ring-primary">
+                            </div>
+                            <div class="sm:col-span-6">
+                                <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Descrição Técnica Detalhada do Insumo</label>
+                                <textarea id="cot-insumo-descricao" rows="2" placeholder="Especificação técnica completa com dimensões, normas ABNT aplicáveis, acabamento, etc..." class="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:ring-1 focus:ring-primary"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bloco 2: Painel de Fornecedores Cotados (Mínimo de 3) -->
+                    <div class="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                            <div>
+                                <h4 class="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                                    <span class="material-symbols-outlined text-amber-500 text-[18px]">store</span>
+                                    Empresas e Fontes de Preço Coletadas
+                                </h4>
+                                <p class="text-[11px] text-slate-400">Cadastre os orçamentos recebidos de empresas, propostas comerciais ou prints/links de sítios eletrônicos</p>
+                            </div>
+                            <button type="button" onclick="adicionarNovaCotacaoFornecedor()" class="px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
+                                <span class="material-symbols-outlined text-[16px]">add_business</span>
+                                + Adicionar Outro Fornecedor
+                            </button>
+                        </div>
+
+                        <!-- Container Dinâmico dos Cards de Cotação -->
+                        <div id="container-cotacoes-fornecedores" class="space-y-4">
+                            <!-- Renderizado via JS -->
+                        </div>
+                    </div>
+
+                    <!-- Bloco 3: Consolidação e Apuração Estatística do Preço -->
+                    <div class="bg-gradient-to-br from-emerald-500/5 to-teal-500/10 p-4 sm:p-5 rounded-2xl border border-emerald-300/60 dark:border-emerald-800/60 space-y-4">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-200/60 dark:border-emerald-900/60 pb-3">
+                            <div class="flex items-center gap-2">
+                                <span class="w-7 h-7 rounded-lg bg-emerald-500 text-white flex items-center justify-center font-bold text-xs">
+                                    <span class="material-symbols-outlined text-[16px]">calculate</span>
+                                </span>
+                                <div>
+                                    <h4 class="text-xs font-extrabold text-emerald-950 dark:text-emerald-100">Memória de Apuração do Preço de Referência</h4>
+                                    <p class="text-[11px] text-emerald-700 dark:text-emerald-300">Critério estatístico segundo a jurisprudência do TCU e Art. 23 da Lei 14.133/2021</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <label class="text-[11px] font-bold text-slate-600 dark:text-slate-300">Método Adotado:</label>
+                                <select id="cot-metodo-calculo" onchange="recalcularPrecoReferenciaCotacao()" class="px-2.5 py-1 text-xs font-bold rounded-lg border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-emerald-500">
+                                    <option value="MEDIANA">Mediana das Cotações (Recomendado TCU)</option>
+                                    <option value="MEDIA">Média Aritmética Simples</option>
+                                    <option value="MENOR">Menor Preço Válido</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div class="p-3 bg-white/80 dark:bg-slate-900/80 rounded-xl border border-emerald-200 dark:border-emerald-900/40">
+                                <span class="text-[10px] font-bold uppercase text-slate-400 block">Cotações Válidas</span>
+                                <span id="cot-resumo-qtd" class="text-base font-black text-slate-800 dark:text-slate-100 font-mono">0 / 3</span>
+                                <span id="cot-resumo-aviso-lei" class="text-[9.5px] text-amber-600 font-semibold block mt-0.5">Mínimo legal: 3 fontes</span>
+                            </div>
+                            <div class="p-3 bg-white/80 dark:bg-slate-900/80 rounded-xl border border-emerald-200 dark:border-emerald-900/40">
+                                <span class="text-[10px] font-bold uppercase text-slate-400 block">Menor Preço Ofertado</span>
+                                <span id="cot-resumo-min" class="text-base font-extrabold text-slate-700 dark:text-slate-200 font-mono">R$ 0,00</span>
+                            </div>
+                            <div class="p-3 bg-white/80 dark:bg-slate-900/80 rounded-xl border border-emerald-200 dark:border-emerald-900/40">
+                                <span class="text-[10px] font-bold uppercase text-slate-400 block">Maior Preço Ofertado</span>
+                                <span id="cot-resumo-max" class="text-base font-extrabold text-slate-700 dark:text-slate-200 font-mono">R$ 0,00</span>
+                            </div>
+                            <div class="p-3 bg-emerald-500/10 dark:bg-emerald-900/30 rounded-xl border-2 border-emerald-500">
+                                <span class="text-[10px] font-black uppercase text-emerald-800 dark:text-emerald-300 block">Preço de Referência Unitário</span>
+                                <span id="cot-resumo-preco-final" class="text-lg font-black text-emerald-700 dark:text-emerald-300 font-mono">R$ 0,00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer do Modal -->
+                <div class="px-5 py-3.5 bg-slate-100 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div class="flex items-center gap-2 text-xs text-slate-500">
+                        <span class="material-symbols-outlined text-emerald-600 text-[18px]">verified_user</span>
+                        <span>Pesquisa com documentação, links e orçamentos arquivados no projeto</span>
+                    </div>
+                    <div class="flex items-center gap-2 justify-end">
+                        <button type="button" onclick="fecharModalCotacaoInsumo()" class="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-bold transition-all cursor-pointer shadow-xs">
+                            Cancelar
+                        </button>
+                        <button type="button" onclick="salvarCotacaoInsumoParaCpu()" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm flex items-center gap-1.5 cursor-pointer transition-all">
+                            <span class="material-symbols-outlined text-[17px]">check_circle</span>
+                            Salvar e Inserir na Composição (CPU)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal de Exportação Oficial de PDF do Orçamento -->
+        <div id="modal-exportar-pdf" class="fixed inset-0 z-[10005] bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 hidden">
+            <div class="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                <!-- Cabeçalho -->
+                <div class="px-5 py-4 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+                            <span class="material-symbols-outlined text-[20px]">picture_as_pdf</span>
+                        </span>
+                        <div>
+                            <h3 class="text-sm font-extrabold text-slate-800 dark:text-slate-100">Exportar Orçamento Oficial (PDF)</h3>
+                            <p class="text-xs text-slate-400">Emissão oficial com cabeçalho institucional e parâmetros da Lei 14.133/2021</p>
+                        </div>
+                    </div>
+                    <button onclick="fecharModalExportarPdf()" class="w-7 h-7 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 flex items-center justify-center cursor-pointer">
+                        <span class="material-symbols-outlined text-[18px]">close</span>
+                    </button>
+                </div>
+
+                <!-- Corpo do Modal -->
+                <div class="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+                    <!-- Bloco 1: Logo e Identificação do Ente -->
+                    <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-700/60 pb-2">
+                            <h4 class="font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5 text-[11px]">
+                                <span class="material-symbols-outlined text-rose-500 text-[16px]">account_balance</span>
+                                Identificação do Ente & Brasão Oficial
+                            </h4>
+                            <span class="text-[10px] text-slate-400">Cabeçalho Institucional do Documento</span>
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row items-center gap-4">
+                            <!-- Logo / Brasão Preview & Upload -->
+                            <div class="flex flex-col items-center gap-2 shrink-0">
+                                <div class="w-20 h-20 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 flex items-center justify-center overflow-hidden p-1 shadow-inner relative group">
+                                    <img id="pdf-logo-preview" src="assets/logo.png" alt="Logo do Ente" class="max-w-full max-h-full object-contain">
+                                </div>
+                                <input type="file" id="pdf-input-file-logo" accept="image/*" class="hidden" onchange="carregarLogoEntePdf(this)">
+                                <div class="flex items-center gap-1">
+                                    <button type="button" onclick="document.getElementById('pdf-input-file-logo').click()" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 text-slate-700 dark:text-slate-200 cursor-pointer shadow-2xs flex items-center gap-1">
+                                        <span class="material-symbols-outlined text-[13px]">upload</span>
+                                        Trocar Logo
+                                    </button>
+                                    <button type="button" onclick="removerLogoEntePdf()" class="p-1 rounded-lg text-[10px] text-slate-400 hover:text-rose-500 cursor-pointer" title="Remover Logo">
+                                        <span class="material-symbols-outlined text-[14px]">delete</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Campos Institucionais -->
+                            <div class="flex-1 w-full space-y-2.5">
+                                <div>
+                                    <label class="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Ente Público / Município</label>
+                                    <input type="text" id="pdf-ente-nome" placeholder="PREFEITURA MUNICIPAL DE CABEDELO" class="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-slate-800 dark:text-slate-100">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Secretaria / Órgão Responsável</label>
+                                    <input type="text" id="pdf-secretaria-nome" placeholder="SECRETARIA MUNICIPAL DE INFRAESTRUTURA E OBRAS" class="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-medium text-slate-700 dark:text-slate-200">
+                                </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <div>
+                                        <label class="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Responsável Técnico (Orçamentista)</label>
+                                        <input type="text" id="pdf-resp-tecnico" placeholder="Eng. Responsável" class="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-medium text-slate-700 dark:text-slate-200">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Registro Profissional (CREA / CAU)</label>
+                                        <input type="text" id="pdf-registro-prof" placeholder="CREA-PB nº 12345/D" class="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono font-medium text-slate-700 dark:text-slate-200">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bloco 2: Tipo de Documento / Relatório -->
+                    <div class="space-y-2">
+                        <label class="block text-[10px] font-bold uppercase text-slate-400">Selecione o Modelo de Documento</label>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <!-- Opção 1: Sintética -->
+                            <div id="card-pdf-sintetica" onclick="selecionarTipoRelatorioPdf('SINTETICA')" class="relative flex flex-col p-3.5 rounded-xl border-2 border-primary bg-primary/10 shadow-sm cursor-pointer transition-all select-none">
+                                <div class="flex items-center justify-between mb-1.5">
+                                    <span class="font-extrabold text-xs text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                                        <div id="check-box-pdf-sintetica" class="w-4 h-4 rounded border flex items-center justify-center bg-primary border-primary text-white transition-all shadow-xs shrink-0">
+                                            <span class="material-symbols-outlined text-[13px] font-black leading-none select-none">check</span>
+                                        </div>
+                                        <input type="radio" id="radio-pdf-sintetica" name="pdf-tipo-relatorio" value="SINTETICA" checked class="sr-only">
+                                        Planilha Sintética
+                                    </span>
+                                    <span class="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300">Padrão Licitação</span>
+                                </div>
+                                <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                                    Quadro executivo com Macroetapas e Serviços (sem expandir insumos). Quantidades, unitários s/ BDI, unitários c/ BDI e preços totais.
+                                </p>
+                            </div>
+
+                            <!-- Opção 2: Caderno Completo -->
+                            <div id="card-pdf-completo" onclick="selecionarTipoRelatorioPdf('COMPLETO')" class="relative flex flex-col p-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-pointer transition-all hover:border-slate-300 dark:hover:border-slate-600 select-none">
+                                <div class="flex items-center justify-between mb-1.5">
+                                    <span class="font-extrabold text-xs text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                                        <div id="check-box-pdf-completo" class="w-4 h-4 rounded border flex items-center justify-center border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-800 text-transparent transition-all shadow-xs shrink-0">
+                                            <span class="material-symbols-outlined text-[13px] font-black leading-none select-none opacity-0">check</span>
+                                        </div>
+                                        <input type="radio" id="radio-pdf-completo" name="pdf-tipo-relatorio" value="COMPLETO" class="sr-only">
+                                        Caderno Completo
+                                    </span>
+                                    <span class="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">Dossiê Técnico</span>
+                                </div>
+                                <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                                    Dossiê técnico unificado: Planilha Sintética + Memória BDI (TCU) + Cronograma Físico-Financeiro + <strong>Fichas Analíticas de Insumos das Composições</strong>.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bloco 3: Opções de Formato e Assinaturas -->
+                    <div class="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 text-[11px]">
+                        <div class="flex items-center gap-4">
+                            <label class="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+                                <input type="checkbox" id="pdf-opt-assinaturas" checked class="rounded text-primary focus:ring-primary">
+                                Incluir Campos de Assinatura Oficial no rodapé
+                            </label>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-slate-400">Orientação:</span>
+                            <select id="pdf-opt-orientacao" class="px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-slate-700 dark:text-slate-300">
+                                <option value="portrait">Retrato (A4 Vertical)</option>
+                                <option value="landscape">Paisagem (A4 Horizontal)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rodapé do Modal -->
+                <div class="px-5 py-3.5 bg-slate-100 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    <span class="text-xs text-slate-400 flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[15px] text-rose-500">print</span>
+                        Impressão e download vetorizado em alta definição
+                    </span>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="fecharModalExportarPdf()" class="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-bold transition-all cursor-pointer shadow-xs">
+                            Cancelar
+                        </button>
+                        <button type="button" onclick="executarExportacaoPdf()" class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm flex items-center gap-1.5 cursor-pointer transition-all">
+                            <span class="material-symbols-outlined text-[18px]">print</span>
+                            Gerar & Imprimir PDF Oficial
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
 <script>
     window.addEventListener('DOMContentLoaded', () => {
@@ -3101,12 +3615,12 @@
 <script src="supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.1/dist-browser/geotiff.js"></script>
-<script src="src/formRenderer.js?v=20261009_high_contrast_cards_v3"></script>
-<script src="src/customFields.js?v=20261009_compact_cards_v1"></script>
+<script src="src/formRenderer.js?v=20261013_btn_planilha"></script>
+<script src="src/customFields.js?v=20261013_user_profile"></script>
 <script src="src/tableJoin.js"></script>
 <script src="src/geo-engine-turbo.js?v=20261006_turbo_speed_v7"></script>
-<script src="src/main.js?v=20261009_v11_vector_hover_cursor"></script>
-<script src="src/eventsEngine.js?v=20261009_v6_events_defensive"></script>
+<script src="src/main.js?v=20261013_v14_fixed_layer_events"></script>
+<script src="src/eventsEngine.js?v=20261013_v14_fixed_layer_events"></script>
 <script src="src/spatialAnalytics.js?v=20260911b"></script>
 <script src="src/measurement.js"></script>
 <script src="src/cesium-integration.js"></script>
@@ -3114,7 +3628,7 @@
 <script src="src/session-security.js"></script>
 <script src="src/offline-sync.js?v=20261009_v6_sync_fix"></script>
 <script src="src/swipe-comparator.js?v=20261003_feat_tile_resilience"></script>
-<script src="src/orcamento.js?v=20260910a"></script>
+<script src="src/orcamento.js?v=20261013_checkbox_v"></script>
 <script src="src/mapTools.js?v=20261005b"></script>
 <script src="src/fieldFormatter.js?v=20261005b"></script>
 <script src="src/reportData.js?v=20261005b"></script>

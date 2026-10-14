@@ -4109,6 +4109,11 @@ window.activeSelectionThemeId = null;
 function toggleSelectionTheme(themeId, forceState = null) {
     const tIdStr = String(themeId);
     
+    // Ao selecionar outra camada no menu lateral das camadas, fecha o card Eventos & Prazos e limpa os eventos do mapa
+    if (window.EventsEngine && typeof window.EventsEngine.clearEventsOnLayerSwitch === 'function') {
+        window.EventsEngine.clearEventsOnLayerSwitch();
+    }
+    
     if (forceState === true) {
         window.activeSelectionThemeId = tIdStr;
     } else if (forceState === false) {
@@ -4174,6 +4179,10 @@ window.updateThemeInteractivity = updateThemeInteractivity;
 window.toggleSelectionTheme = toggleSelectionTheme;
 
 function toggleThemeListAndSelection(themeId) {
+    // Ao alternar/selecionar camada no menu lateral, fecha expressamente o card Eventos & Prazos e limpa os eventos do mapa
+    if (window.EventsEngine && typeof window.EventsEngine.clearEventsOnLayerSwitch === 'function') {
+        window.EventsEngine.clearEventsOnLayerSwitch();
+    }
     const listEl = document.getElementById('list-' + themeId);
     if (!listEl) return;
     
@@ -4532,6 +4541,10 @@ function renderThemes() {
 }
 
 function toggleThemeVisibility(themeId, inputEl) {
+  // Ao alternar camada no menu lateral, fecha expressamente o card Eventos & Prazos e limpa os eventos do mapa
+  if (window.EventsEngine && typeof window.EventsEngine.clearEventsOnLayerSwitch === 'function') {
+      window.EventsEngine.clearEventsOnLayerSwitch();
+  }
   const theme = themes.find(t => t.id === themeId);
   if (!theme) return;
 

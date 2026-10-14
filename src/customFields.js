@@ -1,5 +1,53 @@
 // src/customFields.js
 
+// === OBTENÇÃO DINÂMICA DO NOME DE PERFIL DO USUÁRIO CADASTRADO ===
+function getCurrentUserProfileName() {
+    let prof = (typeof window !== 'undefined' && window.currentUserProfile) ? window.currentUserProfile : null;
+
+    if (!prof && typeof window !== 'undefined' && window.parent && window.parent.currentUserProfile) {
+        prof = window.parent.currentUserProfile;
+    }
+
+    if (!prof) {
+        try {
+            const cached = localStorage.getItem('geogestor_profile_cache');
+            if (cached) prof = JSON.parse(cached);
+        } catch(e) {}
+    }
+
+    if (prof) {
+        const name = (prof.nome_cadastro || prof.nome || '').trim();
+        if (name && !name.includes('@')) {
+            return name;
+        }
+    }
+
+    if (typeof document !== 'undefined') {
+        const headerNameEl = document.getElementById('header-user-display-name');
+        if (headerNameEl) {
+            const titleName = (headerNameEl.getAttribute('title') || '').trim();
+            if (titleName && !titleName.includes('@')) return titleName;
+            const textName = (headerNameEl.textContent || headerNameEl.innerText || '').trim();
+            if (textName && textName !== 'Usuário' && !textName.includes('@')) return textName;
+        }
+
+        const profileNameEl = document.getElementById('profile-user-name');
+        if (profileNameEl) {
+            const profName = (profileNameEl.textContent || profileNameEl.innerText || '').trim();
+            if (profName && profName !== 'Usuário Logado' && profName !== 'Usuário' && !profName.includes('@')) {
+                return profName;
+            }
+        }
+    }
+
+    if (prof && prof.nome) {
+        return String(prof.nome).trim();
+    }
+
+    return 'Usuário';
+}
+window.getCurrentUserProfileName = getCurrentUserProfileName;
+
 // === REGISTRO E VISUALIZAÇÃO SEGURA DE MÍDIAS / ANEXOS (ONLINE E OFFLINE) ===
 window._mediaAttachmentStore = window._mediaAttachmentStore || new Map();
 
@@ -541,6 +589,10 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
             }
         }
         
+        if (f.type === 'current_user' && (!formattedValue || formattedValue === 'Usuário Logado' || formattedValue === 'Usuário')) {
+            formattedValue = getCurrentUserProfileName();
+        }
+
         return `<div class="text-[12.5px] text-slate-800 dark:text-slate-200 break-words leading-tight">${formattedValue || '<span class="text-slate-400 dark:text-slate-500 opacity-50 tracking-widest font-normal">---</span>'}</div>`;
     }
 
@@ -876,8 +928,8 @@ function generateFeatureInputHtml(f, value, isFeatureEditMode) {
         }
         html += `<input type="text" data-key="${f.id}" value="${value}" readonly class="feature-data-input w-full px-3 py-2 bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none text-slate-600 dark:text-slate-400 text-sm cursor-not-allowed font-medium">`;
     } else if (f.type === 'current_user') {
-        if (!value) {
-            value = 'Usuário Logado';
+        if (!value || value === 'Usuário Logado' || value === 'Usuário') {
+            value = getCurrentUserProfileName();
         }
         html += `<input type="text" data-key="${f.id}" value="${value}" readonly class="feature-data-input w-full px-3 py-2 bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none text-slate-600 dark:text-slate-400 text-sm cursor-not-allowed font-medium">`;
     } else if (f.type === 'currency' || f.type === 'area_m2' || f.type === 'length_m' || f.type === 'volume_m3') {

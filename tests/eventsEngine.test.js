@@ -266,6 +266,19 @@ global.window = {
   currentUserProfile: userHelton
 };
 
+const mockDrawerOpenForTest = {
+  classList: {
+    contains: (cls) => false,
+    add: () => {},
+    remove: () => {}
+  }
+};
+global.document = {
+  getElementById: (id) => (id === 'alerts-drawer') ? mockDrawerOpenForTest : null,
+  addEventListener: () => {}
+};
+
+EventsEngine.toggleAlertsDrawer(null, true);
 EventsEngine.refreshAlerts();
 EventsEngine.updateMapHaloGlow();
 
@@ -457,6 +470,87 @@ assert.ok(alertCarolinoCardoso, 'Alerta crítico deve ser gerado para Carolino C
 assert.ok(alertCarolinoCardoso.message.includes('venceu há 89 dias'), 'Deve indicar exatamente 89 dias de atraso do prazo de 6 meses (@dias_prazo)');
 assert.ok(alertCarolinoCardoso.message.includes('Totalizando 270 dias desde a última manutenção'), 'Deve indicar exatamente 270 dias corridos desde a vistoria (@dias_decorridos)');
 console.log('  ✓ [PASS] @dias_prazo (89 dias de atraso) e @dias_decorridos (270 dias corridos) calculados com distinção perfeita para RUA CAROLINO CARDOSO');
+
+// 17. Teste de cálculo de centróides (Ponto, Linha, Polígono)
+assert.strictEqual(typeof EventsEngine.computeGeometryCentroid, 'function', 'computeGeometryCentroid deve estar exportada');
+
+// Ponto: [lng, lat] -> [lat, lng]
+const geomPoint = { type: 'Point', coordinates: [-34.83, -7.03] };
+const centroidPoint = EventsEngine.computeGeometryCentroid(geomPoint);
+assert.deepStrictEqual(centroidPoint, [-7.03, -34.83], 'Centróide do ponto deve ser [lat, lng]');
+
+// Linha: [p1, p2] -> ponto médio ponderado
+const geomLine = {
+  type: 'LineString',
+  coordinates: [
+    [-34.8300, -7.0300],
+    [-34.8300, -7.0400]
+  ]
+};
+const centroidLine = EventsEngine.computeGeometryCentroid(geomLine);
+assert.ok(centroidLine && Math.abs(centroidLine[0] - (-7.0350)) < 1e-4 && Math.abs(centroidLine[1] - (-34.8300)) < 1e-4, 'Centróide da linha deve estar no centro ponderado do traçado');
+
+// Polígono retangular: centróide 2D
+const geomPoly = {
+  type: 'Polygon',
+  coordinates: [[
+    [-34.84, -7.04],
+    [-34.82, -7.04],
+    [-34.82, -7.02],
+    [-34.84, -7.02],
+    [-34.84, -7.04]
+  ]]
+};
+const centroidPoly = EventsEngine.computeGeometryCentroid(geomPoly);
+assert.ok(centroidPoly && Math.abs(centroidPoly[0] - (-7.03)) < 1e-3 && Math.abs(centroidPoly[1] - (-34.83)) < 1e-3, 'Centróide do polígono deve coincidir com o centro geométrico');
+console.log('  ✓ [PASS] Cálculo do centróide preciso para Ponto, Linha e Polígono');
+
+// 18. Teste de troca de camada fechando eventos e card
+assert.strictEqual(typeof EventsEngine.clearEventsOnLayerSwitch, 'function', 'clearEventsOnLayerSwitch deve estar exportada');
+EventsEngine.clearEventsOnLayerSwitch();
+assert.strictEqual(mockLayersAdded.length, 0, 'clearEventsOnLayerSwitch deve limpar os halos e fechar os eventos no mapa');
+console.log('  ✓ [PASS] Troca de camada limpa halos e fecha eventos no mapa');
+
+// 19. Teste de persistência de fechamento: após fechar o card, chamadas subsequentes de updateMapHaloGlow NUNCA re-renderizam eventos
+mockLayersAdded.length = 0;
+EventsEngine.closeAlertsDrawer();
+EventsEngine.updateMapHaloGlow();
+assert.strictEqual(mockLayersAdded.length, 0, 'Após fechar o card, chamadas subsequentes de updateMapHaloGlow devem manter o mapa limpo');
+console.log('  ✓ [PASS] Persistência: mapa permanece 100% limpo em cliques/movimentos posteriores após fechar o card');
+
+// 20. Teste de filtro por camada ativa quando o card está aberto
+let drawerHiddenState = false;
+const dynamicDrawerEl = {
+  classList: {
+    contains: (cls) => cls === 'hidden' ? drawerHiddenState : false,
+    add: (cls) => { if (cls === 'hidden') drawerHiddenState = true; },
+    remove: (cls) => { if (cls === 'hidden') drawerHiddenState = false; }
+  }
+};
+global.document.getElementById = (id) => {
+  if (id === 'alerts-drawer') return dynamicDrawerEl;
+  return null;
+};
+
+// Abre o drawer expressamente
+EventsEngine.toggleAlertsDrawer(null, true);
+assert.strictEqual(drawerHiddenState, false, 'Drawer deve estar aberto');
+
+// Com camada 'obras' ativa no menu lateral, feições de 'logradouro' NÃO devem ser desenhadas no mapa
+global.window.activeSelectionThemeId = 'obras';
+mockLayersAdded.length = 0;
+EventsEngine.updateMapHaloGlow();
+// Como todos os alertas mockados são de 'Logradouro' / 'theme_vias_1', nenhum deve ser desenhado para 'obras'
+assert.strictEqual(mockLayersAdded.length, 0, 'Alertas de outra camada não devem aparecer no mapa quando a camada ativa for diferente');
+console.log('  ✓ [PASS] Alertas de outras camadas não poluem o mapa quando uma camada específica está selecionada');
+
+// Fecha o card pelo "x"
+EventsEngine.closeAlertsDrawer();
+assert.strictEqual(drawerHiddenState, true, 'Drawer deve estar fechado');
+mockLayersAdded.length = 0;
+EventsEngine.updateMapHaloGlow();
+assert.strictEqual(mockLayersAdded.length, 0, 'Com drawer fechado, mapa continua 100% limpo');
+console.log('  ✓ [PASS] Fechamento no "x" garante mapa limpo e drawer oculto');
 
 console.log('\n🎉 TODOS OS TESTES DO EVENTS ENGINE PASSARAM COM 100% DE SUCESSO!\n');
 

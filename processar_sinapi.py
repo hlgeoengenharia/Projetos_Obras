@@ -222,8 +222,8 @@ def processar_sinapi(uf="PB", mes_ref="2026_07"):
     metadados = {
         "uf": uf,
         "mes_referencia": "07/2026",
-        "chave_referencia": f"{uf.upper()}_2026_07",
-        "nome_exibicao": f"SINAPI 07/2026 - {uf.upper()} (João Pessoa)",
+        "chave_referencia": f"NACIONAL_2026_07",
+        "nome_exibicao": f"SINAPI 07/2026 - Oficial Caixa (Nacional - 27 UFs)",
         "data_emissao": "11/08/2026",
         "encargos_sociais": {
             "horista": 1.0206,

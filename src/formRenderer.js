@@ -122,12 +122,12 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
                     <span class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Valor Total Estimado:</span>
                     <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">SINAPI OFICIAL</span>
                 </div>
-                <div class="text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400">
+                <div id="card-orcamento-valor-total" class="text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400">
                     R$ ${valorTotal}
                 </div>
                 <button type="button" onclick="if (typeof openOrcamentoModal === 'function' && typeof activeFeatureLayer !== 'undefined') openOrcamentoModal(activeFeatureLayer); else if (typeof window.openOrcamentoModal === 'function') window.openOrcamentoModal();" class="w-full mt-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-emerald-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all">
                     <span class="material-symbols-outlined text-[19px]">calculate</span>
-                    Abrir / Editar Planilha Orçamentária
+                    Planilha Orçamentária
                 </button>
             </div>`;
         }

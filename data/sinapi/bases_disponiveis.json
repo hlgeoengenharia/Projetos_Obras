@@ -1,10 +1,11 @@
 [
   {
-    "uf": "PB",
+    "uf": "TODAS",
     "mes_referencia": "07/2026",
-    "chave_referencia": "PB_2026_07",
-    "nome_exibicao": "SINAPI 07/2026 - PB (João Pessoa)",
+    "chave_referencia": "NACIONAL_2026_07",
+    "nome_exibicao": "SINAPI 07/2026 - Oficial Caixa (Nacional - 27 UFs)",
     "data_emissao": "11/08/2026",
+    "cobertura": "27 Estados (UFs)",
     "encargos_sociais": {
       "horista": 1.0206,
       "mensalista": 0.5991

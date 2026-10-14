@@ -1110,7 +1110,7 @@
           </div>
 
           <!-- BLOCO 2: Exemplo Prático Passo a Passo (Vias de Asfalto com mais de 6 meses) -->
-          <div class="p-3.5 rounded-2xl bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 shadow-2xs">
+          <div class="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xs">
             <h5 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wide flex items-center gap-1.5 mb-2.5">
               <span class="material-symbols-outlined text-[17px] text-amber-500 dark:text-amber-400">lightbulb</span>
               <span>2. Exemplo Prático: Monitorar Vias com Classificação "Asfalto" e +6 Meses sem Manutenção</span>
@@ -1165,7 +1165,7 @@
           </div>
 
           <!-- BLOCO 3: Explicação Completa de Mensagens Personalizadas por Situação -->
-          <div class="mt-3 p-3.5 rounded-2xl bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 shadow-2xs">
+          <div class="mt-3 p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xs">
             <h5 class="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wide flex items-center gap-1.5 mb-2.5">
               <span class="material-symbols-outlined text-[17px] text-amber-500 dark:text-amber-400">campaign</span>
               <span>3. Como Funcionam as 3 Mensagens do Alerta e a Busca com @?</span>

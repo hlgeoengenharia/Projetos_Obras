@@ -373,6 +373,147 @@
   }
 
   /**
+   * Calcula com máxima precisão o centróide das feições (Ponto, Linha e/ou Polígono).
+   * Retorna [lat, lng] no padrão Leaflet.
+   */
+  function computeGeometryCentroid(geometry) {
+    if (!geometry || !geometry.type || !geometry.coordinates) return null;
+    const type = geometry.type;
+    const coords = geometry.coordinates;
+
+    if (type === 'Point' && Array.isArray(coords) && coords.length >= 2) {
+      return [coords[1], coords[0]];
+    }
+
+    if (type === 'MultiPoint' && Array.isArray(coords) && coords.length > 0) {
+      let lat = 0, lng = 0, count = 0;
+      coords.forEach(p => {
+        if (Array.isArray(p) && p.length >= 2) {
+          lng += p[0];
+          lat += p[1];
+          count++;
+        }
+      });
+      return count > 0 ? [lat / count, lng / count] : null;
+    }
+
+    function getLineCentroid(lineCoords) {
+      if (!Array.isArray(lineCoords) || lineCoords.length < 2) {
+        if (Array.isArray(lineCoords) && lineCoords[0]) return [lineCoords[0][1], lineCoords[0][0]];
+        return null;
+      }
+      let totalLen = 0, sumLat = 0, sumLng = 0;
+      for (let i = 0; i < lineCoords.length - 1; i++) {
+        const p1 = lineCoords[i], p2 = lineCoords[i + 1];
+        if (Array.isArray(p1) && Array.isArray(p2) && p1.length >= 2 && p2.length >= 2) {
+          const dLng = p2[0] - p1[0], dLat = p2[1] - p1[1];
+          const len = Math.hypot(dLng, dLat);
+          if (len > 0) {
+            totalLen += len;
+            sumLat += ((p1[1] + p2[1]) / 2) * len;
+            sumLng += ((p1[0] + p2[0]) / 2) * len;
+          }
+        }
+      }
+      if (totalLen > 0) return [sumLat / totalLen, sumLng / totalLen];
+      const mid = lineCoords[Math.floor(lineCoords.length / 2)] || lineCoords[0];
+      return mid ? [mid[1], mid[0]] : null;
+    }
+
+    if (type === 'LineString') {
+      return getLineCentroid(coords);
+    }
+
+    if (type === 'MultiLineString' && Array.isArray(coords)) {
+      let totalLen = 0, sumLat = 0, sumLng = 0;
+      coords.forEach(line => {
+        if (Array.isArray(line)) {
+          for (let i = 0; i < line.length - 1; i++) {
+            const p1 = line[i], p2 = line[i + 1];
+            if (Array.isArray(p1) && Array.isArray(p2) && p1.length >= 2 && p2.length >= 2) {
+              const len = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+              if (len > 0) {
+                totalLen += len;
+                sumLat += ((p1[1] + p2[1]) / 2) * len;
+                sumLng += ((p1[0] + p2[0]) / 2) * len;
+              }
+            }
+          }
+        }
+      });
+      if (totalLen > 0) return [sumLat / totalLen, sumLng / totalLen];
+      const firstLine = coords[0];
+      return firstLine && firstLine[0] ? [firstLine[0][1], firstLine[0][0]] : null;
+    }
+
+    function getPolygonCentroid(polyCoords) {
+      const ring = Array.isArray(polyCoords) ? polyCoords[0] : null;
+      if (!Array.isArray(ring) || ring.length < 3) return null;
+      let area = 0, cx = 0, cy = 0;
+      for (let i = 0; i < ring.length - 1; i++) {
+        const p1 = ring[i], p2 = ring[i + 1];
+        if (Array.isArray(p1) && Array.isArray(p2) && p1.length >= 2 && p2.length >= 2) {
+          const cross = (p1[0] * p2[1]) - (p2[0] * p1[1]);
+          area += cross;
+          cx += (p1[0] + p2[0]) * cross;
+          cy += (p1[1] + p2[1]) * cross;
+        }
+      }
+      area = area / 2;
+      if (Math.abs(area) > 1e-12) {
+        return [cy / (6 * area), cx / (6 * area)];
+      }
+      let sLat = 0, sLng = 0;
+      ring.forEach(p => { if (Array.isArray(p)) { sLng += p[0]; sLat += p[1]; } });
+      return [sLat / ring.length, sLng / ring.length];
+    }
+
+    if (type === 'Polygon') {
+      return getPolygonCentroid(coords);
+    }
+
+    if (type === 'MultiPolygon' && Array.isArray(coords)) {
+      let totalArea = 0, sumLat = 0, sumLng = 0;
+      coords.forEach(poly => {
+        const ring = Array.isArray(poly) ? poly[0] : null;
+        if (!Array.isArray(ring) || ring.length < 3) return;
+        let area = 0, cx = 0, cy = 0;
+        for (let i = 0; i < ring.length - 1; i++) {
+          const p1 = ring[i], p2 = ring[i + 1];
+          if (Array.isArray(p1) && Array.isArray(p2) && p1.length >= 2 && p2.length >= 2) {
+            const cross = (p1[0] * p2[1]) - (p2[0] * p1[1]);
+            area += cross;
+            cx += (p1[0] + p2[0]) * cross;
+            cy += (p1[1] + p2[1]) * cross;
+          }
+        }
+        area = Math.abs(area / 2);
+        if (area > 1e-12) {
+          totalArea += area;
+          sumLat += (cy / (6 * (area > 0 ? area : 1))) * area;
+          sumLng += (cx / (6 * (area > 0 ? area : 1))) * area;
+        }
+      });
+      if (totalArea > 0) return [sumLat / totalArea, sumLng / totalArea];
+      return getPolygonCentroid(coords[0]);
+    }
+
+    // Fallback genérico pelo Leaflet se disponível
+    if (typeof L !== 'undefined' && typeof L.geoJSON === 'function') {
+      try {
+        const l = L.geoJSON(geometry);
+        const b = l.getBounds();
+        if (b && b.isValid && b.isValid()) {
+          const c = b.getCenter();
+          return [c.lat, c.lng];
+        }
+      } catch(e) {}
+    }
+
+    return null;
+  }
+
+  /**
    * Avalia um gatilho individual contra uma feição.
    * Retorna null se não houver alerta ativo, ou um objeto de Alerta estruturado.
    */
@@ -527,22 +668,10 @@
 
     let message = interpolateMessage(templateMsg, feature, trigger, ctx);
 
-    // Coordenadas para zoom / mapa
+    // Coordenadas exatas do centróide geométrico para o ponto pulsante e zoom
     let coords = null;
     if (feature.geometry) {
-      const g = feature.geometry;
-      if (g.type === 'Point' && Array.isArray(g.coordinates)) {
-        coords = [g.coordinates[1], g.coordinates[0]];
-      } else if (g.coordinates && Array.isArray(g.coordinates)) {
-        // Pega o primeiro ponto do polígono/linha
-        const flatten = function(arr) {
-          return Array.isArray(arr[0]) ? flatten(arr[0]) : arr;
-        };
-        const firstPair = flatten(g.coordinates);
-        if (firstPair && firstPair.length >= 2) {
-          coords = [firstPair[1], firstPair[0]];
-        }
-      }
+      coords = computeGeometryCentroid(feature.geometry);
     }
 
     return {
@@ -853,6 +982,7 @@
   let _activeAlertsCache = [];
   let _currentFilterTab = 'all';
   let _isAlertFilterModeActive = false;
+  let _isEventsVisibleOnMap = false;
   let _haloLayerGroup = null;
   let _hasInjectedStyles = false;
 
@@ -1208,11 +1338,13 @@
     const shouldOpen = (forceOpen !== null) ? Boolean(forceOpen) : isHidden;
 
     if (shouldOpen) {
+      _isEventsVisibleOnMap = true;
       drawer.classList.remove('hidden');
       refreshAlerts();
       renderAlertsDrawer();
       updateMapHaloGlow();
     } else {
+      _isEventsVisibleOnMap = false;
       drawer.classList.add('hidden');
       clearMapHaloGlow();
     }
@@ -1221,8 +1353,36 @@
   /**
    * Fecha o card "Eventos & Prazos" e remove os eventos correspondentes do mapa.
    */
-  function closeAlertsDrawer() {
-    toggleAlertsDrawer(null, false);
+  function closeAlertsDrawer(e) {
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+    _isEventsVisibleOnMap = false;
+    _isAlertFilterModeActive = false;
+    const filterBtn = (typeof document !== 'undefined') ? document.getElementById('btn-filter-alerts') : null;
+    if (filterBtn) {
+      filterBtn.classList.remove('ring-2', 'ring-amber-500', 'bg-amber-500/20');
+    }
+    const drawer = (typeof document !== 'undefined') ? document.getElementById('alerts-drawer') : null;
+    if (drawer) {
+      drawer.classList.add('hidden');
+    }
+    clearMapHaloGlow();
+  }
+
+  /**
+   * Limpa os eventos do mapa e fecha o card quando o usuário seleciona outra camada no menu lateral.
+   */
+  function clearEventsOnLayerSwitch() {
+    _isEventsVisibleOnMap = false;
+    _isAlertFilterModeActive = false;
+    const filterBtn = (typeof document !== 'undefined') ? document.getElementById('btn-filter-alerts') : null;
+    if (filterBtn) {
+      filterBtn.classList.remove('ring-2', 'ring-amber-500', 'bg-amber-500/20');
+    }
+    const drawer = (typeof document !== 'undefined') ? document.getElementById('alerts-drawer') : null;
+    if (drawer) {
+      drawer.classList.add('hidden');
+    }
+    clearMapHaloGlow();
   }
 
   /**
@@ -1397,31 +1557,48 @@
   }
 
   /**
-   * Localiza a feição no mapa e abre seus detalhes.
+   * Localiza a feição no mapa e mantém o card Eventos & Prazos aberto com ponto pulsante no centróide.
    */
   function locateAlertFeature(alertId) {
     const alert = _activeAlertsCache.find(a => a.id === alertId);
     if (!alert) return;
 
-    // Fecha o drawer de notificações para desobstruir a visão
-    const drawer = document.getElementById('alerts-drawer');
-    if (drawer) drawer.classList.add('hidden');
+    // Mantém a visualização dos eventos expressamente ativa no mapa
+    _isEventsVisibleOnMap = true;
+    const drawer = (typeof document !== 'undefined') ? document.getElementById('alerts-drawer') : null;
+    if (drawer) {
+      drawer.classList.remove('hidden');
+    }
 
-    // Garante que o menu lateral do mapa não bloqueie a visualização
+    // Fecha o menu lateral de camadas caso esteja aberto e obstruindo
     if (typeof window.closeSideDrawer === 'function') {
       window.closeSideDrawer();
     }
 
-    // Aciona a função global existente jumpToFeature
-    if (typeof window.jumpToFeature === 'function') {
-      window.jumpToFeature(alert.featureId);
-      return;
+    // Calcula o centróide exato se necessário
+    const centroidCoords = alert.coords || (alert.feature && alert.feature.geometry ? computeGeometryCentroid(alert.feature.geometry) : null);
+
+    // Voa suavemente para os limites ou para o centróide da feição
+    if (window.map) {
+      if (alert.feature && alert.feature.geometry && typeof L !== 'undefined' && typeof L.geoJSON === 'function') {
+        try {
+          const tempLayer = L.geoJSON(alert.feature);
+          const bounds = tempLayer.getBounds();
+          if (bounds && bounds.isValid && bounds.isValid()) {
+            window.map.flyToBounds(bounds, { maxZoom: 18, duration: 1.2, padding: [60, 60] });
+          } else if (centroidCoords) {
+            window.map.flyTo(centroidCoords, 18, { duration: 1.2 });
+          }
+        } catch(e) {
+          if (centroidCoords) window.map.flyTo(centroidCoords, 18, { duration: 1.2 });
+        }
+      } else if (centroidCoords) {
+        window.map.flyTo(centroidCoords, 18, { duration: 1.2 });
+      }
     }
 
-    // Fallback: zoom direto se o Leaflet estiver acessível
-    if (window.map && typeof window.map.flyTo === 'function' && alert.coords) {
-      window.map.flyTo(alert.coords, 18, { duration: 1.2 });
-    }
+    // Garante que os pontos pulsantes continuem ativos no mapa
+    updateMapHaloGlow();
   }
 
   /**
@@ -1512,21 +1689,40 @@
         _haloLayerGroup.addTo(window.map);
       }
     } catch(e) {}
-    _haloLayerGroup.clearLayers();
-
-    // Se o card "Eventos & Prazos" estiver no DOM e estiver fechado, e o filtro rápido não estiver ativo:
-    // fecha os eventos no mapa (mantém o mapa limpo e desobstruído)
+    // REGRA ABSOLUTA DE CONTROLE DE VISIBILIDADE:
+    // Os eventos SÓ aparecem no mapa se o card "Eventos & Prazos" estiver expressamente aberto pelo usuário!
+    // Se o drawer estiver com a classe 'hidden' OU se _isEventsVisibleOnMap for falso:
+    // NENHUM evento deve ser renderizado no mapa em hipótese alguma (mantém o mapa 100% limpo).
     const drawer = (typeof document !== 'undefined') ? document.getElementById('alerts-drawer') : null;
-    if (drawer && drawer.classList.contains('hidden') && !_isAlertFilterModeActive) {
+    const isDrawerOpen = drawer ? !drawer.classList.contains('hidden') : false;
+
+    if (!_isEventsVisibleOnMap || !isDrawerOpen) {
+      _isEventsVisibleOnMap = false;
       clearMapHaloGlow();
       return;
     }
+
+    _haloLayerGroup.clearLayers();
+
+    // Se houver uma camada ativa selecionada no menu lateral (activeSelectionThemeId),
+    // apenas os eventos pertencentes à camada ativa são desenhados no mapa para não poluir
+    // com feições de outras camadas quando o usuário estiver em uma camada específica (ex: Obras).
+    const activeThemeId = (typeof window !== 'undefined' && window.activeSelectionThemeId)
+      ? String(window.activeSelectionThemeId).trim().toLowerCase()
+      : null;
 
     _activeAlertsCache.forEach(alert => {
       // Quando marcado como ciente ou adiado pelo usuário, oculta os efeitos visuais no mapa (continua no sino)
       if (alert.isDismissed) return;
       if (alert.isSnoozed) return;
       if (!alert.coords && (!alert.feature || !alert.feature.geometry)) return;
+
+      // Se uma camada estiver selecionada no menu lateral, exibe apenas os alertas dessa camada
+      if (activeThemeId && alert.themeId) {
+        if (String(alert.themeId).trim().toLowerCase() !== activeThemeId) {
+          return;
+        }
+      }
 
       const isCrit = alert.severity === 'critico';
       const isAten = alert.severity === 'atencao';
@@ -1598,8 +1794,9 @@
         }
       }
 
-      // 2. Renderiza também o ponto / radar pulsante central para visualização em zoom afastado
-      if (alert.coords) {
+      // 2. Renderiza também o ponto / radar pulsante central no CENTRÓIDE exato da feição (Ponto, Linha e/ou Polígono)
+      const centroidCoords = alert.coords || (alert.feature && alert.feature.geometry ? computeGeometryCentroid(alert.feature.geometry) : null);
+      if (centroidCoords) {
         const icon = L.divIcon({
           className: 'alert-halo-marker-container',
           html: `
@@ -1612,7 +1809,7 @@
           iconAnchor: [17, 17]
         });
 
-        const marker = L.marker(alert.coords, { icon: icon, zIndexOffset: 850 });
+        const marker = L.marker(centroidCoords, { icon: icon, zIndexOffset: 850 });
         marker.bindTooltip(tooltipHtml, {
           direction: 'top',
           offset: [0, -14],
@@ -1662,7 +1859,7 @@
    * Fechar este card não afeta o drawer de eventos.
    */
   function checkEntryBanner() {
-    if (typeof document === 'undefined') return;
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') return;
     const criticos = _activeAlertsCache.filter(a => !a.isDismissed && a.severity === 'critico');
     if (criticos.length === 0) return;
 
@@ -1721,20 +1918,8 @@
     return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#039;');
   }
 
-  // Listener global: fecha o drawer ao clicar fora, sem interferir no card Atenção Operacional
-  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
-    document.addEventListener('click', function(e) {
-      const toast = document.getElementById('entry-alerts-toast');
-      if (toast && toast.contains(e.target)) return;
-
-      const drawer = document.getElementById('alerts-drawer');
-      const btn = document.getElementById('btn-header-alerts');
-      if (!drawer || drawer.classList.contains('hidden')) return;
-      if (!drawer.contains(e.target) && (!btn || !btn.contains(e.target))) {
-        toggleAlertsDrawer(null, false);
-      }
-    });
-  }
+  // NOTA: O card 'Eventos & Prazos' e os eventos no mapa permanecem visíveis durante
+  // navegação/pan/zoom e cliques no mapa. Só fecham expressamente no 'x' do card ou ao trocar de camada.
 
   let _lastCheckedThemeFeaturesCount = -1;
 
@@ -1812,6 +1997,8 @@
     initDraggableAlertsDrawer,
     toggleAlertsDrawer,
     closeAlertsDrawer,
+    clearEventsOnLayerSwitch,
+    computeGeometryCentroid,
     clearMapHaloGlow,
     filterAlertsTab,
     renderAlertsDrawer,
