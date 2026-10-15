@@ -103,7 +103,7 @@
         const measureData = MT.computeMeasures(opts.geometry || null); // { itens, ladosOmitidos }
         const tileLayers = {};
         Object.keys(TILES).forEach(k => {
-            tileLayers[k] = L.tileLayer(TILES[k].url, { maxZoom: TILES[k].maxZoom, attribution: TILES[k].attribution, crossOrigin: true });
+            tileLayers[k] = L.tileLayer(TILES[k].url, { maxZoom: TILES[k].maxZoom, maxNativeZoom: TILES[k].maxNativeZoom || 19, attribution: TILES[k].attribution, crossOrigin: true });
         });
 
         const bbox = MT.geometryBBox(geometry);

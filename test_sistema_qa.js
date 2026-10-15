@@ -74,7 +74,8 @@ const jsFiles = [
     'src/customFields.js',
     'src/tableJoin.js',
     'src/reportAdapter.js',
-    'src/reportBuilder.js'
+    'src/reportBuilder.js',
+    'src/orcamento.js'
 ];
 
 jsFiles.forEach(file => {
@@ -1043,7 +1044,8 @@ assertTest('Mini-Mapa: o relatório gerado tem o painel "Mapa" (destaque, camada
     ['tests/viewerTables.test.js', 'Quadro Sintético e Laudo Analítico: colunas por campo, seleção de abas, quebra por linhas entre folhas, escape de HTML e aviso quando a aba escolhida não existe'],
     ['tests/layerFilter.test.js', 'Filtro profissional de feições: condições por tipo de campo (texto, número, data, lista), E dentro do grupo e OU entre grupos, contagem de resultados e descrição do filtro para o relatório'],
     ['tests/themesOrdering.test.js', 'Camadas: Persistência automática da ordem após arrastar e soltar (drag & drop) no menu lateral e restauração após reload'],
-    ['tests/layerFilterFields.test.js', 'Filtro de Camadas: Exibição das abas de origem dos campos e modal de personalização dos campos visíveis']
+    ['tests/layerFilterFields.test.js', 'Filtro de Camadas: Exibição das abas de origem dos campos e modal de personalização dos campos visíveis'],
+    ['tests/orcamentoSinapi.test.js', 'Orçamento SINAPI & Cronograma: Sincronização de Valor Total com BDI, remoção de selo oficial e precisão decimal no cronograma (sem truncamento)']
 ].forEach(([testFile, description]) => {
     let passed = true;
     let output = '';

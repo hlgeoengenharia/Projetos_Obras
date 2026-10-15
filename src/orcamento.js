@@ -192,14 +192,60 @@
     }
 
     // Abertura do Modal de Orçamento
+    // Sincroniza o valor total com BDI e os metadados do orçamento com o card da feição no mapa
+    function sincronizarCardOrcamento(orc) {
+        if (!orc) return;
+        const valFormatado = (orc.valorTotalComBdi || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const bdiStr = ((orc.bdiPercentual || 0) * 100).toFixed(2).replace('.', ',');
+
+        const cardValorEl = document.getElementById('card-orcamento-valor-total');
+        if (cardValorEl) {
+            cardValorEl.textContent = `R$ ${valFormatado}`;
+        }
+
+        const cardBdiEl = document.getElementById('card-orcamento-bdi-tag');
+        if (cardBdiEl) {
+            cardBdiEl.textContent = `Total com BDI (${bdiStr}%)`;
+        }
+
+        const activeFeat = window.GeoOrcamento.activeFeature || 
+            (typeof activeFeatureLayer !== 'undefined' ? activeFeatureLayer : 
+            (typeof window.activeFeatureLayer !== 'undefined' ? window.activeFeatureLayer : null));
+        
+        if (activeFeat && activeFeat.feature) {
+            const props = activeFeat.feature.properties = activeFeat.feature.properties || {};
+            props.orcamento_dados = JSON.stringify(orc);
+            props['Valor Total da Obra (R$)'] = valFormatado;
+            props['valor_total_obra'] = valFormatado;
+            props['BDI (%)'] = bdiStr + '%';
+            props['Data Base SINAPI'] = orc.dataBaseSinapi || '07/2026';
+        }
+
+        if (window.activeFeatureData && typeof window.activeFeatureData === 'object') {
+            window.activeFeatureData.orcamento_dados = JSON.stringify(orc);
+            window.activeFeatureData['Valor Total da Obra (R$)'] = valFormatado;
+            window.activeFeatureData['valor_total_obra'] = valFormatado;
+            window.activeFeatureData['BDI (%)'] = bdiStr + '%';
+        }
+        if (window.currentFormFeatureData && typeof window.currentFormFeatureData === 'object') {
+            window.currentFormFeatureData.orcamento_dados = JSON.stringify(orc);
+            window.currentFormFeatureData['Valor Total da Obra (R$)'] = valFormatado;
+            window.currentFormFeatureData['valor_total_obra'] = valFormatado;
+            window.currentFormFeatureData['BDI (%)'] = bdiStr + '%';
+        }
+    }
+    window.sincronizarCardOrcamento = sincronizarCardOrcamento;
+
+    // Abertura do Modal de Orçamento
     window.openOrcamentoModal = async function(featureLayer) {
-        if (!featureLayer || !featureLayer.feature) {
+        const feat = featureLayer || (typeof activeFeatureLayer !== 'undefined' ? activeFeatureLayer : (typeof window.activeFeatureLayer !== 'undefined' ? window.activeFeatureLayer : null));
+        if (!feat || !feat.feature) {
             alert('Selecione uma feição de obra no mapa para abrir o orçamento.');
             return;
         }
 
-        window.GeoOrcamento.activeFeature = featureLayer;
-        const props = featureLayer.feature.properties || {};
+        window.GeoOrcamento.activeFeature = feat;
+        const props = feat.feature.properties || {};
         
         // Tentar carregar orçamento existente salvo na feição ou no storage local
         let orc = null;
@@ -220,7 +266,14 @@
         }
 
         if (!orc) {
-            orc = criarNovoOrcamento(featureLayer);
+            const savedDef = localStorage.getItem('geogestor_orcamento_default');
+            if (savedDef) {
+                try { orc = JSON.parse(savedDef); } catch(e){}
+            }
+        }
+
+        if (!orc) {
+            orc = criarNovoOrcamento(feat);
         }
 
         if (!orc.cpus || orc.cpus.length === 0) {
@@ -229,6 +282,10 @@
 
         window.GeoOrcamento.orcamentoAtual = orc;
         window.GeoOrcamento.activeTab = 'planilha'; // Abre direto na planilha de custos
+
+        // Recalcular totais e sincronizar imediatamente com o card da feição
+        calcularTotais(orc);
+        sincronizarCardOrcamento(orc);
 
         // Abre o modal
         const modal = document.getElementById('orcamento-modal');
@@ -242,6 +299,7 @@
     };
 
     window.closeOrcamentoModal = function() {
+        salvarOrcamentoLocalmente();
         const modal = document.getElementById('orcamento-modal');
         if (modal) modal.classList.add('hidden');
     };
@@ -254,15 +312,16 @@
 
     // Recalcular totais da planilha
     function calcularTotais(orc) {
+        if (!orc) return orc;
         const bdi = orc.bdiPercentual || 0;
         let totalSemBdi = 0;
         let totalComBdi = 0;
 
-        orc.etapas.forEach(etp => {
+        (orc.etapas || []).forEach(etp => {
             let etpSemBdi = 0;
             let etpComBdi = 0;
 
-            etp.itens.forEach(it => {
+            (etp.itens || []).forEach(it => {
                 const q = parseFloat(it.quantidade) || 0;
                 const pSem = parseFloat(it.precoUnitarioSemBdi) || 0;
                 const pCom = pSem * (1 + bdi);
@@ -286,14 +345,16 @@
         orc.valorTotalComBdi = Math.round(totalComBdi * 100) / 100;
 
         // Calcular percentual de cada item
-        orc.etapas.forEach(etp => {
-            etp.itens.forEach(it => {
+        (orc.etapas || []).forEach(etp => {
+            (etp.itens || []).forEach(it => {
                 it.percentualObra = totalComBdi > 0 ? ((it.precoTotal / totalComBdi) * 100) : 0;
             });
         });
 
+        sincronizarCardOrcamento(orc);
         return orc;
     }
+    window.calcularTotaisOrcamento = calcularTotais;
 
     // RENDERIZAÇÃO COMPLETA DO MODAL
     function renderOrcamentoModal() {
@@ -1110,41 +1171,45 @@
         let linhasEtapas = '';
         const totaisMes = new Array(meses).fill(0);
 
-        orc.etapas.forEach(etp => {
+        (orc.etapas || []).forEach(etp => {
             const percList = (orc.cronograma && orc.cronograma.distribuicao && orc.cronograma.distribuicao[etp.id]) || new Array(meses).fill(0);
             
             let cellsFisico = '';
             let somaPerc = 0;
 
             for (let m = 0; m < meses; m++) {
-                const valPerc = (percList[m] || 0);
+                const rawPerc = percList[m];
+                const parsedVal = typeof rawPerc === 'string' ? parseFloat(rawPerc.replace(',', '.')) : parseFloat(rawPerc);
+                const valPerc = isNaN(parsedVal) ? 0 : Math.round(parsedVal * 100) / 100;
                 somaPerc += valPerc;
-                const valorMes = (etp.totalComBdi * valPerc) / 100;
+                
+                const valorMes = Math.round(((etp.totalComBdi * valPerc) / 100) * 100) / 100;
                 totaisMes[m] += valorMes;
 
                 cellsFisico += `
                 <td class="py-2 px-2 text-center border-l border-slate-100 dark:border-slate-800">
                     <div class="flex items-center justify-center gap-1">
-                        <input type="number" step="1" min="0" max="100" value="${valPerc}" onchange="atualizarPercentualCronograma('${etp.id}', ${m}, this.value)" class="w-16 text-center text-xs font-bold py-1 border rounded bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700">
+                        <input type="number" step="0.01" min="0" max="100" value="${valPerc > 0 ? Number(valPerc.toFixed(2)) : 0}" onchange="atualizarPercentualCronograma('${etp.id}', ${m}, this.value)" class="w-18 text-center text-xs font-bold py-1 border rounded bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary outline-hidden">
                         <span class="text-[10px] text-slate-400">%</span>
                     </div>
-                    <div class="text-[10px] font-mono text-slate-400 mt-0.5">
-                        R$ ${valorMes.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    <div class="text-[10px] font-mono font-medium text-slate-500 dark:text-slate-400 mt-0.5">
+                        R$ ${valorMes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                 </td>
                 `;
             }
 
-            const alertColor = Math.abs(somaPerc - 100) < 0.01 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 font-bold';
+            somaPerc = Math.round(somaPerc * 100) / 100;
+            const alertColor = Math.abs(somaPerc - 100) < 0.009 ? 'text-emerald-600 dark:text-emerald-400 font-extrabold' : 'text-rose-500 font-bold';
 
             linhasEtapas += `
-            <tr class="border-b border-slate-100 dark:border-slate-800 text-xs">
+            <tr class="border-b border-slate-100 dark:border-slate-800 text-xs hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors">
                 <td class="py-3 px-3 font-semibold text-slate-800 dark:text-slate-200">
                     ${etp.codigo} ${etp.nome}
-                    <div class="text-[11px] text-slate-400 font-mono">R$ ${etp.totalComBdi.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                    <div class="text-[11px] text-slate-400 font-mono">R$ ${etp.totalComBdi.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 </td>
-                <td class="py-3 px-2 text-center font-bold ${alertColor}">
-                    ${somaPerc.toFixed(1)}%
+                <td class="py-3 px-2 text-center ${alertColor}">
+                    ${somaPerc.toFixed(2)}%
                 </td>
                 ${cellsFisico}
             </tr>
@@ -1158,32 +1223,37 @@
         const totalGeral = orc.valorTotalComBdi || 1;
 
         for (let m = 0; m < meses; m++) {
-            const v = totaisMes[m];
+            const v = Math.round(totaisMes[m] * 100) / 100;
             acum += v;
-            const pMes = (v / totalGeral) * 100;
-            const pAcum = (acum / totalGeral) * 100;
+            acum = Math.round(acum * 100) / 100;
+            const pMes = totalGeral > 0 ? (v / totalGeral) * 100 : 0;
+            const pAcum = totalGeral > 0 ? (acum / totalGeral) * 100 : 0;
 
             cellsFinanceiro += `
             <td class="py-2.5 px-2 text-center border-l border-slate-200 dark:border-slate-800 font-mono">
-                <div class="font-bold text-xs text-slate-800 dark:text-slate-100">R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
-                <div class="text-[10px] text-slate-400">${pMes.toFixed(1)}%</div>
+                <div class="font-bold text-xs text-slate-800 dark:text-slate-100">R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                <div class="text-[10px] text-slate-400 font-semibold">${pMes.toFixed(2)}%</div>
             </td>
             `;
 
             cellsAcumulado += `
             <td class="py-2.5 px-2 text-center border-l border-slate-200 dark:border-slate-800 font-mono">
-                <div class="font-extrabold text-xs text-emerald-600 dark:text-emerald-400">R$ ${acum.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
-                <div class="text-[10px] font-bold text-slate-500">${pAcum.toFixed(1)}%</div>
+                <div class="font-extrabold text-xs text-emerald-600 dark:text-emerald-400">R$ ${acum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                <div class="text-[10px] font-bold text-slate-500">${pAcum.toFixed(2)}%</div>
             </td>
             `;
         }
+
+        const somaTotalFinanceiro = Math.round(totaisMes.reduce((a, b) => a + b, 0) * 100) / 100;
+        const percTotalFinanceiro = totalGeral > 0 ? (somaTotalFinanceiro / totalGeral) * 100 : 0;
+        const alertTotalGeral = Math.abs(percTotalFinanceiro - 100) < 0.009 ? 'text-emerald-600 dark:text-emerald-400 font-extrabold' : 'text-rose-500 font-bold';
 
         return `
         <div class="space-y-4">
             <div class="flex items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
                 <div>
                     <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">Cronograma de Execução Físico-Financeira</h3>
-                    <p class="text-xs text-slate-400">Distribua os percentuais de avanço físico de cada etapa ao longo dos meses.</p>
+                    <p class="text-xs text-slate-400">Distribua os percentuais de avanço físico de cada etapa ao longo dos meses com precisão decimal.</p>
                 </div>
                 <div class="flex items-center gap-2">
                     <span class="text-xs font-semibold text-slate-500">Prazo Previsto:</span>
@@ -1209,13 +1279,13 @@
                         <!-- Total Parcial Mês -->
                         <tr class="bg-slate-50/80 dark:bg-slate-800/40 border-t-2 border-slate-200 dark:border-slate-700 text-xs font-bold">
                             <td class="py-3 px-3 text-slate-700 dark:text-slate-300 uppercase">Desembolso Mensal</td>
-                            <td class="py-3 px-2 text-center font-extrabold text-primary">100%</td>
+                            <td class="py-3 px-2 text-center ${alertTotalGeral}">${percTotalFinanceiro.toFixed(2)}%</td>
                             ${cellsFinanceiro}
                         </tr>
                         <!-- Acumulado -->
                         <tr class="bg-slate-100/60 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700 text-xs font-bold">
                             <td class="py-3 px-3 text-emerald-700 dark:text-emerald-400 uppercase">Desembolso Acumulado</td>
-                            <td class="py-3 px-2 text-center text-slate-400">-</td>
+                            <td class="py-3 px-2 text-center text-slate-400 font-mono text-[11px]">${Math.min(100, percTotalFinanceiro).toFixed(2)}%</td>
                             ${cellsAcumulado}
                         </tr>
                     </tbody>
@@ -1224,6 +1294,7 @@
         </div>
         `;
     }
+    window.renderAbaCronograma = renderAbaCronograma;
 
     // ==========================================
     // ABA 4: CURVA ABC DE SERVIÇOS
@@ -3198,22 +3269,28 @@
         salvarOrcamentoLocalmente();
         renderOrcamentoModal();
     };
-
     window.atualizarPercentualCronograma = function(etapaId, mesIdx, val) {
         const orc = window.GeoOrcamento.orcamentoAtual;
+        if (!orc) return;
         if (!orc.cronograma) orc.cronograma = { meses: orc.prazoMeses || 6, distribuicao: {} };
         if (!orc.cronograma.distribuicao) orc.cronograma.distribuicao = {};
         if (!orc.cronograma.distribuicao[etapaId]) {
             orc.cronograma.distribuicao[etapaId] = new Array(orc.prazoMeses || 6).fill(0);
         }
 
-        orc.cronograma.distribuicao[etapaId][mesIdx] = parseFloat(val) || 0;
+        let parsed = typeof val === 'string' ? parseFloat(val.replace(',', '.')) : parseFloat(val);
+        if (isNaN(parsed) || parsed < 0) parsed = 0;
+        if (parsed > 100) parsed = 100;
+        const numVal = Math.round(parsed * 100) / 100;
+
+        orc.cronograma.distribuicao[etapaId][mesIdx] = numVal;
         salvarOrcamentoLocalmente();
         renderOrcamentoModal();
     };
 
     window.atualizarPrazoCronograma = function(meses) {
         const orc = window.GeoOrcamento.orcamentoAtual;
+        if (!orc) return;
         orc.prazoMeses = parseInt(meses, 10);
         salvarOrcamentoLocalmente();
         renderOrcamentoModal();
@@ -3227,29 +3304,26 @@
         calcularTotais(orc);
 
         // Salvar no storage com chave vinculada
-        const key = 'geogestor_orcamento_' + orc.featureId;
+        const featId = orc.featureId || (window.GeoOrcamento.activeFeature && window.GeoOrcamento.activeFeature.feature && (window.GeoOrcamento.activeFeature.feature.properties.id_banco || window.GeoOrcamento.activeFeature.feature.properties.id)) || 'default';
+        const key = 'geogestor_orcamento_' + featId;
         localStorage.setItem(key, JSON.stringify(orc));
+        localStorage.setItem('geogestor_orcamento_default', JSON.stringify(orc));
 
-        // Atualizar propriedades da feição se existir
-        if (window.GeoOrcamento.activeFeature && window.GeoOrcamento.activeFeature.feature) {
-            const props = window.GeoOrcamento.activeFeature.feature.properties || {};
-            props.orcamento_dados = JSON.stringify(orc);
-            const valFormatado = orc.valorTotalComBdi.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-            props['Valor Total da Obra (R$)'] = valFormatado;
-            props['valor_total_obra'] = valFormatado;
-            props['BDI (%)'] = (orc.bdiPercentual * 100).toFixed(2) + '%';
-            props['Data Base SINAPI'] = orc.dataBaseSinapi;
-
-            // Atualiza imediatamente o card da feição no mapa se estiver aberto
-            const cardValorEl = document.getElementById('card-orcamento-valor-total');
-            if (cardValorEl) {
-                cardValorEl.textContent = `R$ ${valFormatado}`;
+        if (window.GeoOrcamento.activeFeature && window.GeoOrcamento.activeFeature.feature && window.GeoOrcamento.activeFeature.feature.properties) {
+            const pId = window.GeoOrcamento.activeFeature.feature.properties.id_banco || window.GeoOrcamento.activeFeature.feature.properties.id;
+            if (pId && pId !== featId) {
+                localStorage.setItem('geogestor_orcamento_' + pId, JSON.stringify(orc));
             }
+        }
 
-            // Se a função de salvar feição existir no main.js, dispara
-            if (typeof window.saveFeatureToDatabase === 'function') {
-                window.saveFeatureToDatabase(window.GeoOrcamento.activeFeature).catch(console.warn);
-            }
+        sincronizarCardOrcamento(orc);
+
+        // Se a função de salvar feição existir no main.js, dispara
+        const activeFeat = window.GeoOrcamento.activeFeature || 
+            (typeof activeFeatureLayer !== 'undefined' ? activeFeatureLayer : 
+            (typeof window.activeFeatureLayer !== 'undefined' ? window.activeFeatureLayer : null));
+        if (activeFeat && typeof window.saveFeatureToDatabase === 'function') {
+            window.saveFeatureToDatabase(activeFeat).catch(console.warn);
         }
     }
     window.salvarOrcamentoLocalmente = salvarOrcamentoLocalmente;
@@ -3537,12 +3611,14 @@
                 const percList = (orc.cronograma && orc.cronograma.distribuicao && orc.cronograma.distribuicao[etp.id]) || new Array(meses).fill(0);
                 let cellsHtml = '';
                 for (let m = 0; m < meses; m++) {
-                    const perc = (percList[m] || 0);
-                    const val = (etp.totalComBdi * perc) / 100;
+                    const rawPerc = percList[m];
+                    const parsed = typeof rawPerc === 'string' ? parseFloat(rawPerc.replace(',', '.')) : parseFloat(rawPerc);
+                    const perc = isNaN(parsed) ? 0 : Math.round(parsed * 100) / 100;
+                    const val = Math.round(((etp.totalComBdi * perc) / 100) * 100) / 100;
                     cellsHtml += `
                     <td style="padding: 4px; text-align: center; border-left: 1px solid #e2e8f0; font-family: monospace; font-size: 9px;">
-                        <div>${perc}%</div>
-                        <div style="color: #64748b; font-size: 8.5px;">R$ ${val.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+                        <div style="font-weight: bold;">${perc.toFixed(2)}%</div>
+                        <div style="color: #475569; font-size: 8.5px;">R$ ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                     </td>`;
                 }
 

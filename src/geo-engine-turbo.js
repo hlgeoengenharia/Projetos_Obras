@@ -554,16 +554,104 @@
             return result;
         },
 
-        // Renderização em Chunks progressivos via requestAnimationFrame (Zero travamento de 60fps)
-        renderFeaturesProgressive(geojsonLayer, features, onComplete) {
+        // Renderização inteligente com reconciliação diferencial (Zero travamento / 60 FPS garantido)
+        renderFeaturesProgressive(geojsonLayer, features, onComplete, forceFullClear = false) {
             renderTaskCancelToken++;
             const currentToken = renderTaskCancelToken;
             
-            geojsonLayer.clearLayers();
-            if (!features || !features.length) {
+            if (!geojsonLayer) {
                 if (onComplete) onComplete();
                 return;
             }
+
+            if (!features || !features.length) {
+                geojsonLayer.clearLayers();
+                if (geojsonLayer._renderedFeatureKeys) geojsonLayer._renderedFeatureKeys.clear();
+                if (geojsonLayer._featureToLayerMap) geojsonLayer._featureToLayerMap.clear();
+                if (onComplete) onComplete();
+                return;
+            }
+
+            if (!geojsonLayer._renderedFeatureKeys || forceFullClear) {
+                geojsonLayer._renderedFeatureKeys = new Set();
+                geojsonLayer._featureToLayerMap = new Map();
+            }
+
+            const getFeatKey = (f) => {
+                if (!f) return null;
+                const p = f.properties;
+                if (p) {
+                    if (p._tempId) return String(p._tempId);
+                    if (p.id_banco) return 'db_' + String(p.id_banco);
+                }
+                if (f.id !== undefined && f.id !== null) return 'id_' + String(f.id);
+                return null;
+            };
+
+            const nextKeys = new Set();
+            const nextFeaturesMap = new Map();
+            let allHaveKeys = true;
+            for (let i = 0; i < features.length; i++) {
+                const f = features[i];
+                const k = getFeatKey(f);
+                if (k) {
+                    nextKeys.add(k);
+                    nextFeaturesMap.set(k, f);
+                } else {
+                    allHaveKeys = false;
+                }
+            }
+
+            // OTIMIZAÇÃO CRÍTICA: Se o conjunto de feições for 100% idêntico, pula a re-renderização
+            if (!forceFullClear && allHaveKeys && geojsonLayer._renderedFeatureKeys.size === nextKeys.size && nextKeys.size > 0) {
+                let matches = true;
+                for (const k of nextKeys) {
+                    if (!geojsonLayer._renderedFeatureKeys.has(k)) {
+                        matches = false;
+                        break;
+                    }
+                }
+                if (matches) {
+                    if (onComplete) onComplete();
+                    return;
+                }
+            }
+
+            // Remove da tela apenas camadas que saíram do viewport
+            if (!forceFullClear && geojsonLayer._featureToLayerMap && geojsonLayer._featureToLayerMap.size > 0) {
+                for (const [k, layer] of geojsonLayer._featureToLayerMap.entries()) {
+                    if (!nextKeys.has(k)) {
+                        try { geojsonLayer.removeLayer(layer); } catch(e) {}
+                        geojsonLayer._featureToLayerMap.delete(k);
+                        geojsonLayer._renderedFeatureKeys.delete(k);
+                    }
+                }
+            }
+
+            // Descobre apenas as feições novas a adicionar
+            let featuresToAdd;
+            if (forceFullClear || !geojsonLayer._renderedFeatureKeys || geojsonLayer._renderedFeatureKeys.size === 0) {
+                geojsonLayer.clearLayers();
+                geojsonLayer._renderedFeatureKeys = new Set();
+                geojsonLayer._featureToLayerMap = new Map();
+                featuresToAdd = features;
+            } else {
+                featuresToAdd = [];
+                for (const [k, f] of nextFeaturesMap.entries()) {
+                    if (!geojsonLayer._renderedFeatureKeys.has(k)) {
+                        featuresToAdd.push(f);
+                    }
+                }
+            }
+
+            if (featuresToAdd.length === 0) {
+                if (onComplete) onComplete();
+                return;
+            }
+
+            const scheduleFrame = (typeof requestAnimationFrame === 'function') 
+                ? requestAnimationFrame 
+                : (fn) => setTimeout(fn, 0);
 
             const CHUNK_SIZE = 350; // Quantidade de feições por frame (16ms)
             let index = 0;
@@ -571,8 +659,8 @@
             function renderChunk() {
                 if (currentToken !== renderTaskCancelToken) return; // Cancelado por nova renderização
 
-                const end = Math.min(index + CHUNK_SIZE, features.length);
-                const chunk = features.slice(index, end);
+                const end = Math.min(index + CHUNK_SIZE, featuresToAdd.length);
+                const chunk = featuresToAdd.slice(index, end);
                 try {
                     geojsonLayer.addData(chunk);
                 } catch(eChunk) {
@@ -585,16 +673,29 @@
                         }
                     }
                 }
+
+                // Registra camadas adicionadas
+                geojsonLayer.eachLayer(layer => {
+                    const f = layer.feature;
+                    if (f) {
+                        const k = getFeatKey(f);
+                        if (k && !geojsonLayer._renderedFeatureKeys.has(k)) {
+                            geojsonLayer._renderedFeatureKeys.add(k);
+                            geojsonLayer._featureToLayerMap.set(k, layer);
+                        }
+                    }
+                });
+
                 index = end;
 
-                if (index < features.length) {
-                    requestAnimationFrame(renderChunk);
+                if (index < featuresToAdd.length) {
+                    scheduleFrame(renderChunk);
                 } else {
                     if (onComplete) onComplete();
                 }
             }
 
-            // Inicia primeira fatia imediatamente
+            // Inicia primeira fatia
             renderChunk();
         }
     };

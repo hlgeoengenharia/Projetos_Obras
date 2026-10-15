@@ -1,5 +1,5 @@
 // sw.js — Service Worker do GeoGestor (Suporte a PWA e Modo Offline)
-const CACHE_NAME = 'geogestor-app-shell-v8';
+const CACHE_NAME = 'geogestor-app-shell-v10';
 
 const CORE_ASSETS = [
     './',
@@ -94,6 +94,11 @@ self.addEventListener('fetch', (event) => {
     // Requisições para APIs do Supabase (REST/Auth/Realtime): Network-first
     if (url.origin.includes('supabase.co') || request.method !== 'GET') {
         return; // Deixa o navegador resolver normalmente
+    }
+
+    // Provedores externos de mapas de base (OSM, Google, ArcGIS): deixa o navegador resolver nativamente via <img> sem bloqueios de CORS por fetch
+    if (url.origin.includes('openstreetmap.org') || url.origin.includes('google.com') || url.origin.includes('googleapis.com') || url.origin.includes('arcgisonline.com')) {
+        return;
     }
 
     // Para scripts da aplicação (.js): Network-First com fallback para cache offline (evita scripts antigos presos)

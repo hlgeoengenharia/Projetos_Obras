@@ -180,7 +180,7 @@
 
                     <!-- Dropdown flutuante para seleção de data (Abre acima do card principal) -->
                     <div id="swipe-date-dropdown"
-                         class="hidden absolute bottom-12 left-1/2 -translate-x-1/2 bg-slate-950/95 backdrop-blur-xl border border-white/20 py-2 px-1.5 rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.8)] z-40 max-h-56 overflow-y-auto min-w-[230px]">
+                         class="hidden absolute bottom-12 left-1/2 -translate-x-1/2 bg-slate-950/95 backdrop-blur-xl border border-white/20 py-2 px-1.5 rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.8)] z-40 max-h-56 overflow-y-auto min-w-[230px] overscroll-contain pointer-events-auto">
                         <!-- Lista de datas renderizada dinamicamente -->
                     </div>
                 </div>
@@ -240,6 +240,10 @@
         // 2. Rolagem do carrossel via mouse wheel (rola entre pares de datas)
         if (_mainCarouselEl) {
             _mainCarouselEl.addEventListener('wheel', (e) => {
+                // Se o mouse estiver sobre o dropdown de datas aberto, permite a rolagem normal da lista
+                if (_dateDropdownEl && !_dateDropdownEl.classList.contains('hidden') && _dateDropdownEl.contains(e.target)) {
+                    return;
+                }
                 e.preventDefault();
                 if (e.deltaY > 0 || e.deltaX > 0) {
                     stepNext();
@@ -250,10 +254,16 @@
 
             // Gesto de swipe em telas touch
             _mainCarouselEl.addEventListener('touchstart', (e) => {
+                if (_dateDropdownEl && !_dateDropdownEl.classList.contains('hidden') && _dateDropdownEl.contains(e.target)) {
+                    return;
+                }
                 _touchStartX = e.touches[0].clientX;
             }, { passive: true });
 
             _mainCarouselEl.addEventListener('touchend', (e) => {
+                if (_dateDropdownEl && !_dateDropdownEl.classList.contains('hidden') && _dateDropdownEl.contains(e.target)) {
+                    return;
+                }
                 const touchEndX = e.changedTouches[0].clientX;
                 const diff = touchEndX - _touchStartX;
                 if (diff < -35) {
@@ -261,6 +271,16 @@
                 } else if (diff > 35) {
                     stepPrev();
                 }
+            }, { passive: true });
+        }
+
+        // Impede que a rolagem dentro da lista de ortofotos propague para o mapa do Leaflet
+        if (_dateDropdownEl) {
+            if (typeof L !== 'undefined' && L.DomEvent && L.DomEvent.disableScrollPropagation) {
+                L.DomEvent.disableScrollPropagation(_dateDropdownEl);
+            }
+            _dateDropdownEl.addEventListener('wheel', (e) => {
+                e.stopPropagation();
             }, { passive: true });
         }
 
@@ -380,7 +400,7 @@
         const activeColor = targetSlot === 'left' ? 'text-emerald-400' : 'text-cyan-400';
 
         let html = `
-            <div class="px-2 py-1 mb-1 border-b border-white/10 flex items-center justify-between">
+            <div class="px-2 py-1 mb-1 border-b border-white/10 flex items-center justify-between sticky -top-2 bg-slate-950/95 backdrop-blur-md z-10">
                 <span class="text-[10px] font-bold uppercase tracking-wider ${activeColor}">${slotTitle}</span>
                 <button onclick="window.SwipeComparator.closeDateDropdown()" class="text-slate-400 hover:text-white p-0.5 rounded cursor-pointer">
                     <span class="material-symbols-outlined text-[13px]">close</span>

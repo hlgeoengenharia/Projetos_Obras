@@ -39,8 +39,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <!-- CesiumJS (GeoTIFF.js carregado mais abaixo, versão fixada) -->
-<link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
-<script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
+<link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet" media="print" onload="this.media='all'">
+<script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js" defer></script>
 <script id="tailwind-config">
       tailwind.config = {
         darkMode: "class",
@@ -439,15 +439,83 @@
         -webkit-user-select: none !important;
       }
 
-      /* Antipoluição visual de rótulos de polígonos/lotes (CTM, Quadras, Loteamentos)
-         "Se não der pra ficar dentro da feição não mostra, simples assim"
-         Em zoom < 18, um lote urbano tem poucos pixels na tela. Oculta 100% dos rótulos de polígonos. */
-      .map-zoom-low .polygon-feature-label,
-      .map-zoom-low .polygon-name-label,
-      .map-zoom-16 .polygon-feature-label,
-      .map-zoom-16 .polygon-name-label,
-      .map-zoom-17 .polygon-feature-label,
-      .map-zoom-17 .polygon-name-label {
+      /* Measurement Technical Point & Geoman Hint Marker Styles */
+      .custom-uber-point-marker,
+      .custom-tech-point-marker,
+      .custom-tech-point {
+        background: transparent !important;
+        border: none !important;
+      }
+      .leaflet-pm-hintMarker,
+      .leaflet-pm-hintMarker * {
+        pointer-events: none !important;
+      }
+
+      /* AutoCAD Osnap Glyphs */
+      .autocad-snap-container {
+        background: transparent !important;
+        border: none !important;
+        pointer-events: none !important;
+      }
+      .autocad-snap-vertex {
+        width: 14px;
+        height: 14px;
+        border: 2px solid #00ff66;
+        background: rgba(0, 255, 102, 0.25);
+        box-shadow: 0 0 8px #00ff66, inset 0 0 4px #00ff66;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        border-radius: 1px;
+      }
+      .autocad-snap-edge {
+        width: 14px;
+        height: 14px;
+        border: 2px solid #38bdf8;
+        background: rgba(56, 189, 248, 0.25);
+        box-shadow: 0 0 8px #38bdf8, inset 0 0 4px #38bdf8;
+        transform: translate(-50%, -50%) rotate(45deg);
+        pointer-events: none;
+      }
+      .autocad-snap-midpoint {
+        width: 0;
+        height: 0;
+        border-left: 7px solid transparent;
+        border-right: 7px solid transparent;
+        border-bottom: 14px solid #06b6d4;
+        filter: drop-shadow(0 0 6px #06b6d4);
+        transform: translate(-50%, -60%);
+        pointer-events: none;
+      }
+      .autocad-snap-badge {
+        position: absolute;
+        left: 16px;
+        top: -10px;
+        background: rgba(15, 23, 42, 0.92);
+        color: #00ff66;
+        font-size: 10px;
+        font-weight: 700;
+        font-family: monospace;
+        padding: 1px 6px;
+        border-radius: 4px;
+        border: 1px solid #00ff66;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+        white-space: nowrap;
+        pointer-events: none;
+        letter-spacing: 0.5px;
+      }
+      .autocad-snap-badge.edge {
+        color: #38bdf8;
+        border-color: #38bdf8;
+      }
+      .autocad-snap-badge.midpoint {
+        color: #06b6d4;
+        border-color: #06b6d4;
+      }
+
+      /* Antipoluição visual de rótulos de micro-lotes densos (CTM) em zoom baixo */
+      .map-zoom-low .ctm-lot-label,
+      .map-zoom-16 .ctm-lot-label,
+      .map-zoom-17 .ctm-lot-label {
         display: none !important;
         opacity: 0 !important;
         visibility: hidden !important;
@@ -1016,6 +1084,12 @@
         </div>
     </div>
 
+    <!-- Distância em tempo real pelo movimento do mouse -->
+    <div id="cad-live-dist-container" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 dark:bg-emerald-950/40 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-mono text-xs font-bold whitespace-nowrap" title="Distância em tempo real com o movimento do mouse">
+        <span class="text-[9px] uppercase font-sans text-slate-400 dark:text-slate-500 mr-0.5">Distância:</span>
+        <span id="meas-cad-dist-live" class="font-bold">0.00 m</span>
+    </div>
+
     <div class="relative flex items-center ml-1">
         <input type="text" id="cad-measure-input"
             class="w-24 px-2 py-1 text-xs font-mono font-bold rounded-lg bg-slate-50 dark:bg-slate-800 border border-emerald-400/80 dark:border-emerald-500/80 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400 text-right pr-6"
@@ -1030,13 +1104,20 @@
         <span>Inserir</span>
         <span class="material-symbols-outlined text-[13px]">keyboard_return</span>
     </button>
+
+    <button type="button" id="cad-measure-finish-btn" onclick="finishCurrentMeasurementDraw()"
+        class="flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-900/60 dark:hover:bg-emerald-900/80 active:scale-95 shadow-sm transition-all cursor-pointer border border-emerald-300/60 dark:border-emerald-600/40"
+        title="Concluir desenho (Clique duplo no mapa ou Enter)">
+        <span>Concluir</span>
+        <span class="material-symbols-outlined text-[14px]">done_all</span>
+    </button>
 </div>
 
 <!-- Measurement Panel Unified (Vertical Bottom-Right) -->
-<div id="measurement-panel" class="fixed bottom-6 right-4 sm:right-6 z-[1001] hidden flex items-end gap-2.5 transition-all duration-300">
+<div id="measurement-panel" class="fixed bottom-6 right-4 sm:right-6 z-[1001] hidden flex items-end gap-2.5 transition-all duration-300 pointer-events-none">
 
     <!-- Expandable Drawer Area (Opens to the left of the vertical toolbar) -->
-    <div id="meas-drawer-container" class="flex flex-col items-end">
+    <div id="meas-drawer-container" class="flex flex-col items-end pointer-events-auto">
 
         <!-- Geometry results drawer (Ponto / Linha / Área) -->
         <div id="meas-tab-geometry" class="hidden flex-col w-72 max-w-[calc(100vw-6rem)] bg-white/95 dark:bg-[#0B1120]/95 backdrop-blur-xl rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.35)] border border-slate-200/50 dark:border-white/10 overflow-hidden mb-0.5 animate-in fade-in slide-in-from-right-2 duration-200">
@@ -1182,16 +1263,16 @@
     </div>
 
     <!-- Vertical Toolbar Container -->
-    <div class="flex flex-col w-[70px] bg-white/95 dark:bg-[#0B1120]/95 backdrop-blur-xl rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.35)] border border-slate-200/50 dark:border-white/10 overflow-hidden select-none shrink-0">
+    <div class="flex flex-col w-[70px] bg-white/95 dark:bg-[#0B1120]/95 backdrop-blur-xl rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.35)] border border-slate-200/50 dark:border-white/10 overflow-hidden select-none shrink-0 pointer-events-auto">
 
         <!-- Header: Triangle icon & Close (X) icon side by side -->
         <div class="flex items-center justify-between px-2.5 py-2 border-b border-slate-200/50 dark:border-white/10 bg-slate-50/60 dark:bg-slate-800/50 cursor-move" id="measurement-panel-header" title="Arrastar">
-            <button type="button" onclick="toggleGeometryDrawer()" class="p-0.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-emerald-500 transition-colors cursor-pointer" title="Recolher / Expandir Pop-up">
+            <button type="button" onclick="event.stopPropagation(); toggleGeometryDrawer()" class="p-0.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-emerald-500 transition-colors cursor-pointer" title="Recolher / Expandir Pop-up">
                 <span class="material-symbols-outlined text-[19px]">square_foot</span>
             </button>
             <button type="button"
                 class="p-0.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors cursor-pointer"
-                onclick="closeMeasurementPanel()" title="Fechar">
+                onclick="event.stopPropagation(); closeMeasurementPanel()" title="Fechar">
                 <span class="material-symbols-outlined text-[17px]">close</span>
             </button>
         </div>
@@ -1200,7 +1281,7 @@
         <div class="flex flex-col items-center gap-1 p-1.5">
 
             <!-- Ponto -->
-            <button onclick="switchMeasurementMode('Marker')" id="meas-btn-Marker"
+            <button onclick="event.stopPropagation(); switchMeasurementMode('Marker')" id="meas-btn-Marker"
                 class="meas-tool-btn w-full flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl text-[10px] font-bold text-slate-500 dark:text-slate-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all cursor-pointer border border-transparent"
                 title="Coordenadas do Ponto">
                 <span class="material-symbols-outlined text-[18px]">location_on</span>
@@ -1208,7 +1289,7 @@
             </button>
 
             <!-- Linha -->
-            <button onclick="switchMeasurementMode('Line')" id="meas-btn-Line"
+            <button onclick="event.stopPropagation(); switchMeasurementMode('Line')" id="meas-btn-Line"
                 class="meas-tool-btn w-full flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl text-[10px] font-bold text-slate-500 dark:text-slate-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all cursor-pointer border border-transparent"
                 title="Medir Distância">
                 <span class="material-symbols-outlined text-[18px]">timeline</span>
@@ -1216,7 +1297,7 @@
             </button>
 
             <!-- Área -->
-            <button onclick="switchMeasurementMode('Polygon')" id="meas-btn-Polygon"
+            <button onclick="event.stopPropagation(); switchMeasurementMode('Polygon')" id="meas-btn-Polygon"
                 class="meas-tool-btn w-full flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl text-[10px] font-bold text-slate-500 dark:text-slate-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all cursor-pointer border border-transparent"
                 title="Medir Área">
                 <span class="material-symbols-outlined text-[18px]">pentagon</span>
@@ -1224,7 +1305,7 @@
             </button>
 
             <!-- Busca -->
-            <button onclick="switchMeasurementMode('CoordinateQuery');" data-action="selectMeasurementOption('CoordinateQuery')" id="meas-btn-CoordinateQuery"
+            <button onclick="event.stopPropagation(); switchMeasurementMode('CoordinateQuery');" data-action="selectMeasurementOption('CoordinateQuery')" id="meas-btn-CoordinateQuery"
                 class="meas-tool-btn w-full flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl text-[10px] font-bold text-slate-500 dark:text-slate-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400 transition-all cursor-pointer border border-transparent"
                 title="Buscar Coordenada">
                 <span class="material-symbols-outlined text-[18px]">travel_explore</span>
@@ -1303,12 +1384,132 @@
         </div>
     </button>
 
+    <button type="button" onclick="startExportSelectionModal()" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left cursor-pointer group">
+        <div class="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 group-hover:bg-amber-500 group-hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[18px]">file_download</span>
+        </div>
+        <div>
+            <div class="font-bold text-slate-800 dark:text-slate-100">Exportar seleção</div>
+            <div class="text-[10px] text-slate-400">KML, DXF ou GeoJSON</div>
+        </div>
+    </button>
+
     <div class="w-full h-px bg-slate-100 dark:bg-white/10 my-1"></div>
 
     <button type="button" onclick="clearMultiFeatureSelection()" class="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 transition-colors text-left cursor-pointer">
         <span class="material-symbols-outlined text-[16px]">close</span>
         <span class="font-semibold text-[11px]">Cancelar seleção (ESC)</span>
     </button>
+</div>
+
+<!-- Modal de Exportação de Feições Selecionadas (KML / DXF / GeoJSON com seleção de campos) -->
+<div id="export-selection-modal" class="fixed inset-0 z-[600] bg-black/60 backdrop-blur-xs hidden flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh] overflow-hidden">
+        <!-- Cabeçalho -->
+        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/60 shrink-0">
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-[20px]">file_download</span>
+                </div>
+                <div>
+                    <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">Exportar Feições Selecionadas</h3>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400" id="export-selection-subtitle">0 feição(ões) selecionada(s)</p>
+                </div>
+            </div>
+            <button type="button" onclick="closeExportSelectionModal()" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors cursor-pointer">
+                <span class="material-symbols-outlined text-[20px]">close</span>
+            </button>
+        </div>
+
+        <!-- Conteúdo Rolável -->
+        <div class="p-5 overflow-y-auto space-y-4 text-xs">
+            <!-- 1. Escolha do Formato -->
+            <div>
+                <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                    1. Formato de Arquivo
+                </label>
+                <div class="grid grid-cols-3 gap-2" id="export-format-buttons">
+                    <button type="button" onclick="setExportSelectionFormat('geojson')" id="btn-fmt-geojson" class="export-format-btn flex flex-col items-center justify-center p-2.5 rounded-xl border-2 border-emerald-500 bg-emerald-500/10 text-slate-800 dark:text-white font-bold transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-[22px] text-emerald-500 mb-0.5">data_object</span>
+                        <span class="text-xs">GeoJSON</span>
+                        <span class="text-[9px] font-normal text-slate-400">Padrão SIG</span>
+                    </button>
+                    <button type="button" onclick="setExportSelectionFormat('kml')" id="btn-fmt-kml" class="export-format-btn flex flex-col items-center justify-center p-2.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-300 font-bold hover:border-slate-400 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-[22px] text-blue-500 mb-0.5">public</span>
+                        <span class="text-xs">KML</span>
+                        <span class="text-[9px] font-normal text-slate-400">Google Earth</span>
+                    </button>
+                    <button type="button" onclick="setExportSelectionFormat('dxf')" id="btn-fmt-dxf" class="export-format-btn flex flex-col items-center justify-center p-2.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-300 font-bold hover:border-slate-400 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-[22px] text-amber-500 mb-0.5">architecture</span>
+                        <span class="text-xs">DXF</span>
+                        <span class="text-[9px] font-normal text-slate-400">AutoCAD CAD</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Opção de Coordenadas para DXF -->
+            <div id="export-dxf-coords-box" class="hidden p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200">
+                <div class="flex items-center justify-between gap-2">
+                    <div>
+                        <span class="font-bold text-xs block">Projeção CAD (DXF):</span>
+                        <span class="text-[10px] text-slate-500 dark:text-slate-400">Coordenadas métricas em metros para engenharia</span>
+                    </div>
+                    <select id="export-dxf-crs-select" class="px-2.5 py-1 text-xs rounded-lg bg-white dark:bg-slate-800 border border-amber-500/40 text-slate-800 dark:text-slate-100 font-semibold cursor-pointer">
+                        <option value="utm" selected>Métrico UTM (SIRGAS 2000)</option>
+                        <option value="wgs84">Geográfico (Graus WGS84)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 2. Seleção de Campos / Atributos -->
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <label class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        2. Campos a Salvar na Seleção
+                        <span id="export-fields-count-badge" class="ml-1 text-primary font-bold">(0)</span>
+                    </label>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="toggleAllExportFields(true)" class="text-[11px] font-semibold text-primary hover:underline cursor-pointer">Marcar Todos</button>
+                        <span class="text-slate-300 dark:text-slate-600">|</span>
+                        <button type="button" onclick="toggleAllExportFields(false)" class="text-[11px] font-semibold text-slate-500 hover:underline cursor-pointer">Desmarcar</button>
+                    </div>
+                </div>
+
+                <!-- Busca rápida de campos -->
+                <div class="relative mb-2">
+                    <span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+                    <input type="text" id="export-field-filter-input" oninput="filterExportFields(this.value)" placeholder="Buscar campos..." class="w-full pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary dark:text-white">
+                </div>
+
+                <!-- Container com Checkboxes -->
+                <div id="export-fields-list" class="max-h-48 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-xl divide-y divide-slate-100 dark:divide-slate-800/60 bg-slate-50/50 dark:bg-slate-900/50 p-1">
+                    <!-- Gerado dinamicamente -->
+                </div>
+            </div>
+
+            <!-- 3. Nome do Arquivo -->
+            <div>
+                <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                    3. Nome do Arquivo
+                </label>
+                <div class="flex items-center gap-1.5">
+                    <input type="text" id="export-selection-filename-input" class="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary dark:text-white text-xs font-mono font-medium" placeholder="nome_do_arquivo">
+                    <span id="export-filename-ext-label" class="px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-mono font-bold text-slate-600 dark:text-slate-300">.geojson</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rodapé do Modal -->
+        <div class="px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 flex items-center justify-between shrink-0">
+            <button type="button" onclick="closeExportSelectionModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer">
+                Cancelar
+            </button>
+            <button type="button" id="btn-execute-export-selection" onclick="executeExportSelectedFeatures()" class="px-5 py-2 rounded-xl text-xs font-bold text-white bg-primary hover:bg-primary/90 shadow-md shadow-primary/20 transition-all flex items-center gap-1.5 cursor-pointer">
+                <span class="material-symbols-outlined text-[16px]">download</span>
+                <span id="btn-execute-export-label">Exportar GeoJSON</span>
+            </button>
+        </div>
+    </div>
 </div>
 
 <!-- Target Theme Select Modal -->
@@ -1503,13 +1704,17 @@
         <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome do Tema</label>
         <input type="text" id="edit-theme-name-input" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:text-white">
       </div>
-      <div class="flex gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div class="flex-1">
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cor</label>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cor da Borda</label>
           <input type="color" id="edit-theme-color-input" class="w-full h-10 cursor-pointer rounded bg-slate-50 border-none">
         </div>
+        <div class="flex-1" id="edit-theme-fill-color-wrapper">
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cor do Fundo</label>
+          <input type="color" id="edit-theme-fill-color-input" class="w-full h-10 cursor-pointer rounded bg-slate-50 border-none">
+        </div>
         <div class="flex-1">
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Transparência da Aresta (<span id="edit-theme-stroke-opacity-val">100%</span>)</label>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Transparência Borda (<span id="edit-theme-stroke-opacity-val">100%</span>)</label>
           <input type="range" id="edit-theme-stroke-opacity-input" min="0" max="1" step="0.05" value="1" class="w-full mt-2 accent-primary" oninput="document.getElementById('edit-theme-stroke-opacity-val').textContent = Math.round(this.value * 100) + '%'">
         </div>
       </div>
@@ -3018,7 +3223,6 @@
                 <div class="min-w-0">
                     <div class="flex items-center gap-2">
                         <h2 id="orcamento-modal-title" class="text-sm sm:text-base font-extrabold text-slate-800 dark:text-slate-100 truncate">Orçamento de Obra Pública</h2>
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300">SINAPI OFICIAL</span>
                     </div>
                     <p id="orcamento-modal-subtitle" class="text-xs text-slate-400 truncate">Gerenciamento de Custos Diretos, BDI e Cronograma Físico-Financeiro</p>
                 </div>
@@ -3615,20 +3819,20 @@
 <script src="supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.1/dist-browser/geotiff.js"></script>
-<script src="src/formRenderer.js?v=20261013_btn_planilha"></script>
+<script src="src/formRenderer.js?v=20261014_orcamento_sync_v2"></script>
 <script src="src/customFields.js?v=20261013_user_profile"></script>
 <script src="src/tableJoin.js"></script>
 <script src="src/geo-engine-turbo.js?v=20261006_turbo_speed_v7"></script>
-<script src="src/main.js?v=20261013_v14_fixed_layer_events"></script>
+<script src="src/main.js?v=20261015_layer_marker_fix"></script>
 <script src="src/eventsEngine.js?v=20261013_v14_fixed_layer_events"></script>
 <script src="src/spatialAnalytics.js?v=20260911b"></script>
-<script src="src/measurement.js"></script>
+<script src="src/measurement.js?v=20261015_layer_marker_fix"></script>
 <script src="src/cesium-integration.js"></script>
 <script src="src/auditLogger.js"></script>
 <script src="src/session-security.js"></script>
 <script src="src/offline-sync.js?v=20261009_v6_sync_fix"></script>
-<script src="src/swipe-comparator.js?v=20261003_feat_tile_resilience"></script>
-<script src="src/orcamento.js?v=20261013_checkbox_v"></script>
+<script src="src/swipe-comparator.js?v=20261015_swipe_scroll_v1"></script>
+<script src="src/orcamento.js?v=20261014_cronograma_decimal_v2"></script>
 <script src="src/mapTools.js?v=20261005b"></script>
 <script src="src/fieldFormatter.js?v=20261005b"></script>
 <script src="src/reportData.js?v=20261005b"></script>
@@ -3682,8 +3886,6 @@
     }
     window.printActiveFeatureReport = printActiveFeatureReport;
 </script>
-</body>
-</html>
 <!-- Measurement Report Modal -->
 <div id="measurement-report-modal" class="fixed inset-0 z-[2000] hidden bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl w-[90vw] max-w-5xl h-[85vh] flex flex-col overflow-hidden relative">
@@ -3811,4 +4013,5 @@
         </div>
     </div>
 </div>
-
+</body>
+</html>

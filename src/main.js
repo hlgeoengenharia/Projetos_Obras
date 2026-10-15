@@ -327,6 +327,15 @@ function getFeaturePropertyValue(theme, feature, requestedKey) {
                }
            }
        }
+   } else if (reqNorm.includes('bairro')) {
+       const bAliases = ['bairro', 'nmbairro', 'nomebairro', 'nome_bairro', 'ds_bairro', 'cd_bairro', 'bairros'];
+       for (const alias of bAliases) {
+           for (const p in feature.properties) {
+               if (norm(p) === alias && isValidVal(feature.properties[p])) {
+                   return feature.properties[p];
+               }
+           }
+       }
    }
 
    // 7. FALLBACK: Se o campo direto na feição NÃO foi preenchido/atualizado,
@@ -996,7 +1005,7 @@ window.handleMultiFeatureContextMenu = function(e) {
     
     // Boundary collision detection
     const menuWidth = 265;
-    const menuHeight = 185;
+    const menuHeight = 245;
     if (clientX + menuWidth > window.innerWidth) clientX = window.innerWidth - menuWidth - 16;
     if (clientY + menuHeight > window.innerHeight) clientY = window.innerHeight - menuHeight - 16;
 
@@ -1013,7 +1022,7 @@ window.openMultiFeatureContextMenuFromHud = function() {
     window.handleMultiFeatureContextMenu({
         originalEvent: {
             clientX: Math.max(16, rect.left),
-            clientY: Math.max(16, rect.top - 190),
+            clientY: Math.max(16, rect.top - 250),
             preventDefault: () => {},
             stopPropagation: () => {}
         }
@@ -1470,6 +1479,470 @@ window.executeFeatureTransferWithMapping = async function() {
     }
 };
 
+// ==============================================================================
+// --- EXPORTAR SELEÇÃO DE FEIÇÕES (KML, DXF, GeoJSON com seleção de campos) ---
+// ==============================================================================
+let _currentExportSelectionFormat = 'geojson';
+let _currentExportSelectionFields = [];
+
+window.startExportSelectionModal = function() {
+    const ctxMenu = document.getElementById('multi-feature-context-menu');
+    if (ctxMenu) {
+        ctxMenu.classList.add('hidden');
+        ctxMenu.classList.remove('flex');
+    }
+
+    if (!window.selectedMultiFeatures || window.selectedMultiFeatures.length === 0) {
+        if (typeof showToast === 'function') {
+            showToast('Nenhuma feição selecionada para exportar.', 'warning');
+        } else {
+            alert('Nenhuma feição selecionada para exportar.');
+        }
+        return;
+    }
+
+    const theme = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes.find(t => String(t.id) === String(window.selectedMultiThemeId)) : null;
+    const themeName = theme ? theme.name : 'Camada';
+
+    // Subtítulo com contagem e camada
+    const subEl = document.getElementById('export-selection-subtitle');
+    if (subEl) {
+        subEl.innerText = `${window.selectedMultiFeatures.length} feição(ões) selecionada(s) de "${themeName}"`;
+    }
+
+    // Nome padrão do arquivo
+    const sanitizedTheme = themeName.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_{2,}/g, '_');
+    const today = new Date().toISOString().split('T')[0];
+    const filenameInput = document.getElementById('export-selection-filename-input');
+    if (filenameInput) {
+        filenameInput.value = `${sanitizedTheme}_selecao_${today}`;
+    }
+
+    // Coleta todos os campos disponíveis no tema e nas feições selecionadas
+    const allFieldsMap = new Map();
+
+    // 1. Campos do formulário/schema do tema
+    if (typeof getFieldsForTheme === 'function' && theme) {
+        const themeFields = getFieldsForTheme(theme);
+        themeFields.forEach(f => {
+            if (f.id && !f.id.startsWith('_') && f.id !== 'themeId' && f.id !== 'id_banco') {
+                allFieldsMap.set(f.id, {
+                    id: f.id,
+                    label: f.label || f.name || f.id
+                });
+            }
+        });
+    }
+
+    // 2. Campos presentes nas propriedades das feições selecionadas
+    window.selectedMultiFeatures.forEach(item => {
+        const props = (item.feature && item.feature.properties) || {};
+        Object.keys(props).forEach(k => {
+            if (!k.startsWith('_') && k !== 'themeId' && k !== 'id_banco' && !allFieldsMap.has(k)) {
+                allFieldsMap.set(k, {
+                    id: k,
+                    label: k
+                });
+            }
+        });
+    });
+
+    _currentExportSelectionFields = Array.from(allFieldsMap.values());
+
+    if (_currentExportSelectionFields.length === 0) {
+        _currentExportSelectionFields.push({ id: 'id', label: 'Identificador' });
+    }
+
+    // Amostra de valor para cada campo
+    const listEl = document.getElementById('export-fields-list');
+    if (listEl) {
+        listEl.innerHTML = _currentExportSelectionFields.map(f => {
+            let sampleVal = '';
+            for (const item of window.selectedMultiFeatures) {
+                const p = (item.feature && item.feature.properties) || {};
+                if (p[f.id] !== undefined && p[f.id] !== null && String(p[f.id]).trim() !== '') {
+                    sampleVal = String(p[f.id]).trim();
+                    break;
+                }
+            }
+
+            const cleanSample = sampleVal ? sampleVal.replace(/"/g, '&quot;') : '';
+
+            return `
+                <label class="flex items-center justify-between p-2 hover:bg-slate-100 dark:hover:bg-slate-800/60 rounded-lg cursor-pointer transition-colors select-none export-field-item" data-field-id="${f.id}" data-field-label="${f.label.toLowerCase()}">
+                    <div class="flex items-center gap-2.5 min-w-0 pr-2">
+                        <input type="checkbox" value="${f.id}" class="export-field-checkbox rounded text-primary focus:ring-primary w-4 h-4 cursor-pointer shrink-0" checked onchange="updateExportFieldsCount()">
+                        <div class="truncate">
+                            <span class="font-bold text-slate-800 dark:text-slate-200 text-xs block truncate">${f.label}</span>
+                            <span class="text-[10px] text-slate-400 font-mono block truncate">${f.id}</span>
+                        </div>
+                    </div>
+                    ${sampleVal ? `<span class="text-[10px] text-slate-500 dark:text-slate-400 bg-slate-200/50 dark:bg-slate-800 px-2 py-0.5 rounded truncate max-w-[140px] shrink-0" title="${cleanSample}">Ex: ${cleanSample}</span>` : ''}
+                </label>
+            `;
+        }).join('');
+    }
+
+    const filterInput = document.getElementById('export-field-filter-input');
+    if (filterInput) filterInput.value = '';
+
+    updateExportFieldsCount();
+    setExportSelectionFormat('geojson');
+
+    const modal = document.getElementById('export-selection-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+};
+
+window.closeExportSelectionModal = function() {
+    const modal = document.getElementById('export-selection-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+};
+
+window.setExportSelectionFormat = function(format) {
+    _currentExportSelectionFormat = format;
+
+    const btnGeo = document.getElementById('btn-fmt-geojson');
+    const btnKml = document.getElementById('btn-fmt-kml');
+    const btnDxf = document.getElementById('btn-fmt-dxf');
+
+    const activeCls = ['border-emerald-500', 'bg-emerald-500/10', 'text-slate-800', 'dark:text-white'];
+    const inactiveCls = ['border-slate-200', 'dark:border-slate-700', 'bg-slate-50', 'dark:bg-slate-800/40', 'text-slate-600', 'dark:text-slate-300'];
+
+    [btnGeo, btnKml, btnDxf].forEach(b => {
+        if (!b) return;
+        b.classList.remove(...activeCls);
+        b.classList.add(...inactiveCls);
+    });
+
+    let activeBtn = btnGeo;
+    let ext = '.geojson';
+    let btnText = 'Exportar GeoJSON';
+
+    if (format === 'kml') {
+        activeBtn = btnKml;
+        ext = '.kml';
+        btnText = 'Exportar KML';
+    } else if (format === 'dxf') {
+        activeBtn = btnDxf;
+        ext = '.dxf';
+        btnText = 'Exportar DXF';
+    }
+
+    if (activeBtn) {
+        activeBtn.classList.remove(...inactiveCls);
+        activeBtn.classList.add(...activeCls);
+    }
+
+    const extLabel = document.getElementById('export-filename-ext-label');
+    if (extLabel) extLabel.innerText = ext;
+
+    const btnExecLabel = document.getElementById('btn-execute-export-label');
+    if (btnExecLabel) btnExecLabel.innerText = btnText;
+
+    const dxfBox = document.getElementById('export-dxf-coords-box');
+    if (dxfBox) {
+        if (format === 'dxf') {
+            dxfBox.classList.remove('hidden');
+        } else {
+            dxfBox.classList.add('hidden');
+        }
+    }
+};
+
+window.toggleAllExportFields = function(check) {
+    const cbs = document.querySelectorAll('.export-field-checkbox');
+    cbs.forEach(cb => { cb.checked = check; });
+    updateExportFieldsCount();
+};
+
+window.updateExportFieldsCount = function() {
+    const cbs = document.querySelectorAll('.export-field-checkbox');
+    const checked = document.querySelectorAll('.export-field-checkbox:checked');
+    const badge = document.getElementById('export-fields-count-badge');
+    if (badge) {
+        badge.innerText = `(${checked.length}/${cbs.length} selecionados)`;
+    }
+};
+
+window.filterExportFields = function(query) {
+    const q = (query || '').toLowerCase().trim();
+    const items = document.querySelectorAll('.export-field-item');
+    items.forEach(it => {
+        const fId = (it.getAttribute('data-field-id') || '').toLowerCase();
+        const fLbl = (it.getAttribute('data-field-label') || '').toLowerCase();
+        if (!q || fId.includes(q) || fLbl.includes(q)) {
+            it.classList.remove('hidden');
+        } else {
+            it.classList.add('hidden');
+        }
+    });
+};
+
+window.executeExportSelectedFeatures = function() {
+    if (!window.selectedMultiFeatures || window.selectedMultiFeatures.length === 0) {
+        alert("Nenhuma feição selecionada.");
+        return;
+    }
+
+    const checkedBoxes = document.querySelectorAll('.export-field-checkbox:checked');
+    const selectedFieldIds = Array.from(checkedBoxes).map(cb => cb.value);
+
+    if (selectedFieldIds.length === 0) {
+        if (!confirm("Nenhum campo de atributo foi marcado. Deseja exportar apenas as geometrias sem atributos?")) {
+            return;
+        }
+    }
+
+    const theme = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes.find(t => String(t.id) === String(window.selectedMultiThemeId)) : null;
+    const themeName = theme ? theme.name : 'Camada';
+
+    const filenameInput = document.getElementById('export-selection-filename-input');
+    let baseFilename = (filenameInput && filenameInput.value.trim()) ? filenameInput.value.trim() : `selecao_${themeName}`;
+    baseFilename = baseFilename.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    const features = window.selectedMultiFeatures.map(item => JSON.parse(JSON.stringify(item.feature)));
+    const format = _currentExportSelectionFormat || 'geojson';
+
+    try {
+        if (format === 'geojson') {
+            const content = generateGeoJsonForExport(features, selectedFieldIds, themeName);
+            downloadExportBlob(content, `${baseFilename}.geojson`, 'application/geo+json;charset=utf-8');
+        } else if (format === 'kml') {
+            const content = generateKmlForExport(features, selectedFieldIds, themeName);
+            downloadExportBlob(content, `${baseFilename}.kml`, 'application/vnd.google-earth.kml+xml;charset=utf-8');
+        } else if (format === 'dxf') {
+            const crsSelect = document.getElementById('export-dxf-crs-select');
+            const crsMode = crsSelect ? crsSelect.value : 'utm';
+            const content = generateDxfForExport(features, selectedFieldIds, crsMode, themeName);
+            downloadExportBlob(content, `${baseFilename}.dxf`, 'application/dxf;charset=utf-8');
+        }
+
+        if (typeof showToast === 'function') {
+            showToast(`Exportação de ${features.length} feição(ões) concluída com sucesso (${format.toUpperCase()})!`, 'success');
+        } else if (typeof showToastAlert === 'function') {
+            showToastAlert(`Exportação de ${features.length} feição(ões) concluída (${format.toUpperCase()})!`, 'success');
+        }
+
+        closeExportSelectionModal();
+    } catch(err) {
+        console.error("Erro ao gerar exportação:", err);
+        alert("Ocorreu um erro ao exportar: " + (err.message || err));
+    }
+};
+
+function downloadExportBlob(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function generateGeoJsonForExport(features, selectedFieldIds, themeName) {
+    const outFeatures = features.map(feat => {
+        const filteredProps = {};
+        const origProps = feat.properties || {};
+        selectedFieldIds.forEach(fId => {
+            if (origProps[fId] !== undefined) {
+                filteredProps[fId] = origProps[fId];
+            }
+        });
+        return {
+            type: "Feature",
+            geometry: feat.geometry,
+            properties: filteredProps
+        };
+    });
+
+    const fc = {
+        type: "FeatureCollection",
+        name: themeName || "Export_Feicoes",
+        crs: {
+            type: "name",
+            properties: {
+                name: "urn:ogc:def:crs:OGC:1.3:CRS84"
+            }
+        },
+        features: outFeatures
+    };
+    return JSON.stringify(fc, null, 2);
+}
+
+function generateKmlForExport(features, selectedFieldIds, themeName) {
+    const esc = (s) => (s === null || s === undefined) ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    let kml = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n  <Document>\n    <name>${esc(themeName || 'Export_Feicoes')}</name>\n`;
+
+    kml += `    <Style id="exportPolyStyle">\n      <LineStyle><color>ff00ffff</color><width>2</width></LineStyle>\n      <PolyStyle><color>7f00ffff</color></PolyStyle>\n    </Style>\n`;
+    kml += `    <Style id="exportLineStyle">\n      <LineStyle><color>ffffaa00</color><width>3</width></LineStyle>\n    </Style>\n`;
+    kml += `    <Style id="exportPointStyle">\n      <IconStyle><color>ff00d4ff</color><scale>1.1</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle>\n    </Style>\n`;
+
+    features.forEach((feat, idx) => {
+        if (!feat || !feat.geometry) return;
+        const geom = feat.geometry;
+        const props = feat.properties || {};
+
+        let featName = `Feição ${idx + 1}`;
+        for (const fId of selectedFieldIds) {
+            if (props[fId]) { featName = props[fId]; break; }
+        }
+
+        let descRows = selectedFieldIds.map(fId => {
+            const val = props[fId] !== undefined ? props[fId] : '';
+            return `<tr><td style="font-weight:bold;padding:2px 6px;background:#f1f5f9;">${esc(fId)}</td><td style="padding:2px 6px;">${esc(val)}</td></tr>`;
+        }).join('');
+        let desc = `<table border="1" cellpadding="2" cellspacing="0" style="font-family:sans-serif;font-size:12px;border-collapse:collapse;border:1px solid #cbd5e1;">${descRows}</table>`;
+
+        let extData = '<ExtendedData>' + selectedFieldIds.map(fId => {
+            const val = props[fId] !== undefined ? props[fId] : '';
+            return `<Data name="${esc(fId)}"><value>${esc(val)}</value></Data>`;
+        }).join('') + '</ExtendedData>';
+
+        let geomXml = '';
+        let styleUrl = '#exportPolyStyle';
+
+        if (geom.type === 'Point') {
+            styleUrl = '#exportPointStyle';
+            geomXml = `<Point><coordinates>${geom.coordinates[0]},${geom.coordinates[1]},${geom.coordinates[2] || 0}</coordinates></Point>`;
+        } else if (geom.type === 'LineString') {
+            styleUrl = '#exportLineStyle';
+            const coords = geom.coordinates.map(c => `${c[0]},${c[1]},${c[2] || 0}`).join(' ');
+            geomXml = `<LineString><coordinates>${coords}</coordinates></LineString>`;
+        } else if (geom.type === 'Polygon') {
+            styleUrl = '#exportPolyStyle';
+            const outer = (geom.coordinates[0] || []).map(c => `${c[0]},${c[1]},${c[2] || 0}`).join(' ');
+            let inners = '';
+            for (let i = 1; i < geom.coordinates.length; i++) {
+                const ringCoords = geom.coordinates[i].map(c => `${c[0]},${c[1]},${c[2] || 0}`).join(' ');
+                inners += `<innerBoundaryIs><LinearRing><coordinates>${ringCoords}</coordinates></LinearRing></innerBoundaryIs>`;
+            }
+            geomXml = `<Polygon><outerBoundaryIs><LinearRing><coordinates>${outer}</coordinates></LinearRing></outerBoundaryIs>${inners}</Polygon>`;
+        } else if (geom.type === 'MultiPolygon') {
+            styleUrl = '#exportPolyStyle';
+            geomXml = '<MultiGeometry>' + geom.coordinates.map(poly => {
+                const outer = (poly[0] || []).map(c => `${c[0]},${c[1]},${c[2] || 0}`).join(' ');
+                return `<Polygon><outerBoundaryIs><LinearRing><coordinates>${outer}</coordinates></LinearRing></outerBoundaryIs></Polygon>`;
+            }).join('') + '</MultiGeometry>';
+        }
+
+        kml += `    <Placemark>\n      <name>${esc(featName)}</name>\n      <description><![CDATA[${desc}]]></description>\n      <styleUrl>${styleUrl}</styleUrl>\n      ${extData}\n      ${geomXml}\n    </Placemark>\n`;
+    });
+
+    kml += `  </Document>\n</kml>`;
+    return kml;
+}
+
+function generateDxfForExport(features, selectedFieldIds, crsMode, themeName) {
+    let cleanLayer = (themeName || 'FEICOES').replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
+    if (!cleanLayer) cleanLayer = 'FEICOES';
+
+    let out = [];
+    out.push("0", "SECTION", "2", "HEADER");
+    out.push("9", "$ACADVER", "1", "AC1009"); // AutoCAD R12 ASCII
+    out.push("0", "ENDSEC");
+
+    out.push("0", "SECTION", "2", "TABLES");
+    out.push("0", "TABLE", "2", "LAYER", "70", "2");
+    out.push("0", "LAYER", "2", "0", "70", "0", "62", "7", "6", "CONTINUOUS");
+    out.push("0", "LAYER", "2", cleanLayer, "70", "0", "62", "4", "6", "CONTINUOUS"); // Cyan
+    out.push("0", "LAYER", "2", cleanLayer + "_TEXTO", "70", "0", "62", "2", "6", "CONTINUOUS"); // Yellow
+    out.push("0", "ENDTAB");
+    out.push("0", "ENDSEC");
+
+    out.push("0", "SECTION", "2", "ENTITIES");
+
+    function projCoord(coord) {
+        const lng = coord[0];
+        const lat = coord[1];
+        if (crsMode === 'utm' && typeof proj4 !== 'undefined') {
+            const zone = Math.floor((lng + 180) / 6) + 1;
+            const epsg = `EPSG:319${zone < 10 ? '0' + zone : zone}`;
+            try {
+                if (proj4.defs(epsg)) {
+                    const p = proj4('EPSG:4326', epsg, [lng, lat]);
+                    return [p[0], p[1], coord[2] || 0];
+                }
+            } catch(e) {}
+        }
+        return [lng, lat, coord[2] || 0];
+    }
+
+    features.forEach((feat, idx) => {
+        if (!feat || !feat.geometry) return;
+        const geom = feat.geometry;
+        const props = feat.properties || {};
+
+        let mainLabel = `Feição ${idx + 1}`;
+        for (const fId of selectedFieldIds) {
+            if (props[fId]) {
+                mainLabel = `${props[fId]}`;
+                break;
+            }
+        }
+
+        if (geom.type === 'Point') {
+            const p = projCoord(geom.coordinates);
+            out.push("0", "POINT", "8", cleanLayer, "10", p[0].toFixed(4), "20", p[1].toFixed(4), "30", (p[2] || 0).toFixed(4));
+            out.push("0", "TEXT", "8", cleanLayer + "_TEXTO", "10", (p[0] + (crsMode === 'utm' ? 1.0 : 0.00001)).toFixed(4), "20", (p[1] + (crsMode === 'utm' ? 1.0 : 0.00001)).toFixed(4), "30", "0.0", "40", crsMode === 'utm' ? "1.5" : "0.00002", "1", String(mainLabel));
+        } else if (geom.type === 'LineString') {
+            out.push("0", "POLYLINE", "8", cleanLayer, "66", "1", "70", "0");
+            geom.coordinates.forEach(c => {
+                const p = projCoord(c);
+                out.push("0", "VERTEX", "8", cleanLayer, "10", p[0].toFixed(4), "20", p[1].toFixed(4), "30", (p[2] || 0).toFixed(4));
+            });
+            out.push("0", "SEQEND");
+        } else if (geom.type === 'MultiLineString') {
+            geom.coordinates.forEach(lineCoords => {
+                out.push("0", "POLYLINE", "8", cleanLayer, "66", "1", "70", "0");
+                lineCoords.forEach(c => {
+                    const p = projCoord(c);
+                    out.push("0", "VERTEX", "8", cleanLayer, "10", p[0].toFixed(4), "20", p[1].toFixed(4), "30", (p[2] || 0).toFixed(4));
+                });
+                out.push("0", "SEQEND");
+            });
+        } else if (geom.type === 'Polygon') {
+            geom.coordinates.forEach(ring => {
+                out.push("0", "POLYLINE", "8", cleanLayer, "66", "1", "70", "1"); // 70=1 is closed
+                ring.forEach(c => {
+                    const p = projCoord(c);
+                    out.push("0", "VERTEX", "8", cleanLayer, "10", p[0].toFixed(4), "20", p[1].toFixed(4), "30", (p[2] || 0).toFixed(4));
+                });
+                out.push("0", "SEQEND");
+            });
+            if (geom.coordinates[0] && geom.coordinates[0][0]) {
+                const p = projCoord(geom.coordinates[0][0]);
+                out.push("0", "TEXT", "8", cleanLayer + "_TEXTO", "10", p[0].toFixed(4), "20", p[1].toFixed(4), "30", "0.0", "40", crsMode === 'utm' ? "2.0" : "0.00003", "1", String(mainLabel));
+            }
+        } else if (geom.type === 'MultiPolygon') {
+            geom.coordinates.forEach(poly => {
+                poly.forEach(ring => {
+                    out.push("0", "POLYLINE", "8", cleanLayer, "66", "1", "70", "1");
+                    ring.forEach(c => {
+                        const p = projCoord(c);
+                        out.push("0", "VERTEX", "8", cleanLayer, "10", p[0].toFixed(4), "20", p[1].toFixed(4), "30", (p[2] || 0).toFixed(4));
+                    });
+                    out.push("0", "SEQEND");
+                });
+            });
+        }
+    });
+
+    out.push("0", "ENDSEC");
+    out.push("0", "EOF");
+    return out.join("\r\n");
+}
+// ==============================================================================
+
 // --- LEAFLET MAP ---
 function initMap() {
   let initialCenter = cabedeloCenter;
@@ -1871,6 +2344,21 @@ function initMap() {
     L.Canvas.prototype._handleMouseHover = function(e, point) {
         if (this._mouseHoverThrottled) return;
 
+        const isMeasuringActive = !!(
+            window.isMeasurementActive || 
+            (typeof window.currentMeasurementMode !== 'undefined' && window.currentMeasurementMode) ||
+            (typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode)
+        );
+        const isDrawingActive = typeof map !== 'undefined' && map && map.pm && 
+            typeof map.pm.globalDrawModeEnabled === 'function' && map.pm.globalDrawModeEnabled();
+
+        if (isMeasuringActive || isDrawingActive) {
+            if (this._hoveredLayer) {
+                this._handleMouseOut(e);
+            }
+            return;
+        }
+
         let candidateHoveredLayer = null;
         let activeThemeCandidate = null;
 
@@ -1929,6 +2417,20 @@ function initMap() {
     };
 
     L.Canvas.prototype._onClick = function(e) {
+        const isMeasuringActive = !!(
+            window.isMeasurementActive || 
+            (typeof window.currentMeasurementMode !== 'undefined' && window.currentMeasurementMode) ||
+            (typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode)
+        );
+        const isDrawingActive = typeof map !== 'undefined' && map && map.pm && 
+            typeof map.pm.globalDrawModeEnabled === 'function' && map.pm.globalDrawModeEnabled();
+
+        // Se estiver em modo de medição ou desenho, não aciona seleção de feição vetorial
+        if (isMeasuringActive || isDrawingActive) {
+            this._fireEvent(false, e);
+            return;
+        }
+
         const point = this._map.mouseEventToLayerPoint(e);
         let candidateClickLayer = null;
         let activeThemeCandidate = null;
@@ -1946,9 +2448,7 @@ function initMap() {
         }
 
         const finalLayer = activeThemeCandidate || candidateClickLayer;
-        if (finalLayer) {
-            this._fireEvent([finalLayer], e);
-        }
+        this._fireEvent(finalLayer ? [finalLayer] : false, e);
     };
   }
 
@@ -2000,7 +2500,51 @@ function initMap() {
     });
     return closestLayer;
   }
-  window.findClosestLineLayer = findClosestLineLayer;
+  // Construtor unificado do ícone de pino 3D personalizado da camada (utilizado no mapa e no Geoman draw)
+  window.getThemeMarkerDivIcon = function(theme, colorOverride) {
+    const color = colorOverride || (theme ? theme.color : '#0284c7');
+    const themeId = theme ? theme.id : 'default';
+    const iconName = theme && theme.icon ? theme.icon : 'location_on';
+    const customIconData = theme && theme.customIcon ? theme.customIcon : null;
+    const safeId = String(themeId).replace(/[^a-zA-Z0-9]/g, '_');
+
+    const iconHtml = customIconData
+      ? `<img src="${customIconData}" alt="${theme ? theme.name : 'Ícone'}" style="width: 14px; height: 14px; object-fit: contain; pointer-events: none; -webkit-user-drag: none; user-select: none;">`
+      : `<span class="material-symbols-outlined" style="color: ${color}; font-size: 15px; font-weight: bold; pointer-events: none;">${iconName === 'circle' ? 'circle' : iconName}</span>`;
+
+    const pinHtml = `
+      <div class="map-pin-touch-wrap" style="position: relative; width: 30px; height: 38px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+        <div class="map-pin-3d-marker" style="position: relative; width: 30px; height: 38px; cursor: pointer; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.35));">
+          <svg viewBox="0 0 30 38" width="30" height="38" style="display: block; overflow: visible; pointer-events: none;">
+            <defs>
+              <linearGradient id="grad_pin_${safeId}" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="${color}" />
+                <stop offset="100%" stop-color="#0f172a" stop-opacity="0.85" />
+              </linearGradient>
+            </defs>
+            <ellipse cx="15" cy="37" rx="5.5" ry="1.8" fill="rgba(0,0,0,0.25)" />
+            <path d="M15,1 C7.268,1 1,7.268 1,15 C1,23.8 15,36.5 15,36.5 C15,36.5 29,23.8 29,15 C29,7.268 22.732,1 15,1 Z" 
+                  fill="${color}" 
+                  stroke="#ffffff" 
+                  stroke-width="1.8" 
+                  stroke-linejoin="round" />
+            <circle cx="15" cy="14" r="8" fill="#ffffff" />
+          </svg>
+          <div style="position: absolute; top: 5px; left: 6px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
+            ${iconHtml}
+          </div>
+        </div>
+      </div>
+    `;
+
+    return L.divIcon({
+      className: `custom-div-icon theme-feature theme-${themeId}`,
+      html: pinHtml,
+      iconSize: [30, 38],
+      iconAnchor: [15, 37],
+      tooltipAnchor: [0, -36]
+    });
+  };
 
   // Layer Group for all GeoJSON features
   geojsonLayer = L.geoJSON(null, {
@@ -2136,10 +2680,12 @@ function initMap() {
         finalWeight = Math.max(Number(weight) || 2, isTouchActive ? (isCurrentActiveTheme ? 6 : 4.5) : 3.5);
       }
 
+      const finalFillColor = (theme && theme.fillColor) ? theme.fillColor : color;
+
       return {
         stroke: strokeVisible,
         fill: fillVisible,
-        fillColor: fillVisible ? color : 'transparent',
+        fillColor: fillVisible ? finalFillColor : 'transparent',
         fillOpacity: fillVisible ? fillOpacity : 0,
         color: color,
         opacity: strokeVisible ? strokeOpacity : 0,
@@ -2195,52 +2741,7 @@ function initMap() {
           }
       }
 
-      const iconName = theme && theme.icon ? theme.icon : 'location_on';
-      const customIconData = theme && theme.customIcon ? theme.customIcon : null;
-
-      // Todos os ícones (padrão ou personalizados) exibem o pino 3D com a ponta aguda voltada para o solo (iconAnchor: [15, 37])
-      const safeId = String(themeId).replace(/[^a-zA-Z0-9]/g, '_');
-      const iconHtml = customIconData
-        ? `<img src="${customIconData}" alt="${theme ? theme.name : 'Ícone'}" style="width: 14px; height: 14px; object-fit: contain; pointer-events: none; -webkit-user-drag: none; user-select: none;">`
-        : `<span class="material-symbols-outlined" style="color: ${color}; font-size: 15px; font-weight: bold; pointer-events: none;">${iconName === 'circle' ? 'circle' : iconName}</span>`;
-
-      const pinHtml = `
-        <div class="map-pin-touch-wrap" style="position: relative; width: 30px; height: 38px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
-          <div class="map-pin-3d-marker" style="position: relative; width: 30px; height: 38px; cursor: pointer; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.35));">
-            <svg viewBox="0 0 30 38" width="30" height="38" style="display: block; overflow: visible; pointer-events: none;">
-              <defs>
-                <linearGradient id="grad_pin_${safeId}" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stop-color="${color}" />
-                  <stop offset="100%" stop-color="#0f172a" stop-opacity="0.85" />
-                </linearGradient>
-              </defs>
-              <!-- Sombra de projeção no solo -->
-              <ellipse cx="15" cy="37" rx="5.5" ry="1.8" fill="rgba(0,0,0,0.25)" />
-              <!-- Pino 3D com formato de gota e ponta para baixo apontando para o solo -->
-              <path d="M15,1 C7.268,1 1,7.268 1,15 C1,23.8 15,36.5 15,36.5 C15,36.5 29,23.8 29,15 C29,7.268 22.732,1 15,1 Z" 
-                    fill="${color}" 
-                    stroke="#ffffff" 
-                    stroke-width="1.8" 
-                    stroke-linejoin="round" />
-              <!-- Círculo interior branco com relevo para acomodar o ícone -->
-              <circle cx="15" cy="14" r="8" fill="#ffffff" />
-            </svg>
-            <!-- Ícone da camada perfeitamente centralizado no círculo interior branco -->
-            <div style="position: absolute; top: 5px; left: 6px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
-              ${iconHtml}
-            </div>
-          </div>
-        </div>
-      `;
-
-      const customIcon = L.divIcon({
-        className: `custom-div-icon theme-feature theme-${themeId}`,
-        html: pinHtml,
-        iconSize: [30, 38],
-        iconAnchor: [15, 37],
-        tooltipAnchor: [0, -36]
-      });
-      return L.marker(latlng, { icon: customIcon });
+      return L.marker(latlng, { icon: window.getThemeMarkerDivIcon(theme, color) });
     },
     onEachFeature: function(feature, layer) {
       if (!feature.properties) feature.properties = {};
@@ -2260,8 +2761,20 @@ function initMap() {
       const featThemeId = themeId;
       const theme = themes.find(t => String(t.id).toLowerCase() === String(themeId).toLowerCase());
       if (theme) {
-        const disp1Key = theme.disp1 || 'Lote';
-        const disp2Key = theme.disp2 || 'Quadra';
+        let disp1Key = theme.disp1;
+        if (!disp1Key && feature.properties) {
+          const pKeys = Object.keys(feature.properties).filter(k => k !== 'themeId' && k !== '_tempId' && k !== 'id_banco');
+          disp1Key = theme.mainTitle || pKeys.find(k => /^(nome|bairro|nm_|ds_|lote|titulo|descricao)/i.test(k)) || pKeys[0] || 'Lote';
+        } else if (!disp1Key) {
+          disp1Key = theme.mainTitle || 'Lote';
+        }
+        let disp2Key = theme.disp2;
+        if (!disp2Key && feature.properties) {
+          const pKeys = Object.keys(feature.properties).filter(k => k !== 'themeId' && k !== '_tempId' && k !== 'id_banco' && k !== disp1Key);
+          disp2Key = pKeys.find(k => /^(quadra|setor|codigo|tipo|zona|categoria)/i.test(k)) || pKeys[0] || 'Quadra';
+        } else if (!disp2Key) {
+          disp2Key = 'Quadra';
+        }
         const disp1Label = getThemeFieldLabel(theme, disp1Key);
         const disp2Label = getThemeFieldLabel(theme, disp2Key);
         const disp1Val = getFeaturePropertyValue(theme, feature, disp1Key);
@@ -2340,6 +2853,13 @@ function initMap() {
           displayTxt = cleanVal1;
         } else if (cleanVal2) {
           displayTxt = cleanVal2;
+        } else if (theme.disp1Active !== false && !cleanVal1) {
+          // Fallback resiliente para camadas poligonais como Bairro quando Exibição 1 está ativa
+          const fbTitle = theme.mainTitle || (feature.properties ? Object.keys(feature.properties).find(k => /^(nome|bairro|nm_|ds_|titulo|descricao)/i.test(k) && feature.properties[k]) : null);
+          if (fbTitle) {
+            const fbVal = getFeaturePropertyValue(theme, feature, fbTitle);
+            if (fbVal) displayTxt = cleanLabelValue(fbVal);
+          }
         } else if (theme.mainTitle) {
           const mainVal = getFeaturePropertyValue(theme, feature, theme.mainTitle);
           if (mainVal) displayTxt = cleanLabelValue(mainVal);
@@ -2357,36 +2877,13 @@ function initMap() {
                   tooltipContent = `<div style="${rotationStyle}; ${maxWidthStyle}" class="map-feature-label street-feature-label" title="${displayTxt}">${displayTxt}</div>`;
               }
           } else {
-              // Para Polígonos/Lotes (ex: CTM-Municipal): "se não der pra ficar dentro da feição não mostra, simples assim"
-              // 1. Em zoom < 18, um lote urbano tem menos de ~15px de largura na tela (o texto nunca cabe).
-              // Não vincular tooltip economiza milhares de nós DOM e acelera instantaneamente o mapa.
-              if (currentZoom < 18) {
-                  tooltipContent = '';
-              } else {
-                  // 2. Em zoom >= 18, verifica se a feição na tela tem largura/altura suficientes para conter o texto
-                  let fitsInPolygon = true;
-                  if (layer.getBounds && typeof map !== 'undefined' && map) {
-                      try {
-                          const b = layer.getBounds();
-                          if (b && b.isValid && b.isValid()) {
-                              const nw = map.latLngToLayerPoint(b.getNorthWest());
-                              const se = map.latLngToLayerPoint(b.getSouthEast());
-                              const pxW = Math.abs(se.x - nw.x);
-                              const pxH = Math.abs(se.y - nw.y);
-                              const estW = Math.max(28, displayTxt.length * 7.5);
-                              const estH = 14;
-                              if (pxW < (estW + 4) || pxH < (estH + 4)) {
-                                  fitsInPolygon = false;
-                              }
-                          }
-                      } catch(eFit) { fitsInPolygon = false; }
-                  }
-                  if (fitsInPolygon) {
-                      tooltipContent = `<div class="map-feature-label polygon-feature-label" title="${displayTxt}">${displayTxt}</div>`;
-                  } else {
-                      tooltipContent = '';
-                  }
-              }
+              // Para Polígonos:
+              // Vincula o rótulo para que possa ser exibido dinamicamente.
+              // Micro-lotes densos (CTM) recebem a classe ctm-lot-label (ocultada por CSS em zoom < 18).
+              // Demais camadas (Bairro, Limite, Obras, etc.) são exibidas a partir de zoom 12.
+              const isSmallLotTheme = theme && (String(theme.id).toLowerCase().includes('ctm') || (theme.features && theme.features.length > 2000));
+              const lotClass = isSmallLotTheme ? 'ctm-lot-label' : '';
+              tooltipContent = `<div class="map-feature-label polygon-feature-label ${lotClass}" title="${displayTxt}">${displayTxt}</div>`;
           }
         }
         
@@ -2435,15 +2932,14 @@ function initMap() {
         const isDrawingActive = typeof map !== 'undefined' && map && map.pm && 
             typeof map.pm.globalDrawModeEnabled === 'function' && map.pm.globalDrawModeEnabled();
         const isDrawingTheme = !!(typeof editingThemeId !== 'undefined' && editingThemeId && isDrawingActive);
-        const isMeasuringDrawing = !!(
-            window.isMeasurementActive &&
-            typeof currentMeasurementMode !== 'undefined' &&
-            currentMeasurementMode &&
-            ['Marker', 'Line', 'Polygon'].includes(currentMeasurementMode) &&
-            isDrawingActive
+        const isMeasuring = !!(
+            window.isMeasurementActive || 
+            (typeof window.currentMeasurementMode !== 'undefined' && window.currentMeasurementMode) ||
+            (typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode)
         );
-        if (isDrawingTheme || isMeasuringDrawing) {
-            return; // bubble para a ferramenta de desenho/medição (Leaflet-Geoman PM)
+        const isMeasuringDrawing = !!(isMeasuring && isDrawingActive);
+        if (isDrawingTheme || isMeasuringDrawing || isDrawingActive || isMeasuring) {
+            return;
         }
         
         // Intercepta Ctrl + Clique para Multi-Seleção de feições
@@ -2529,6 +3025,7 @@ function initMap() {
       });
     }
   }).addTo(map);
+  window.geojsonLayer = geojsonLayer;
 
   updateThemeInteractivity();
 
@@ -2554,7 +3051,13 @@ function initMap() {
     // Não intercepta se o usuário estiver desenhando ou medindo
     const isDrawing = document.getElementById('drawing-toolbar') && !document.getElementById('drawing-toolbar').classList.contains('hidden');
     const isEditing = document.getElementById('geometry-edit-toolbar') && !document.getElementById('geometry-edit-toolbar').classList.contains('hidden');
-    if (isDrawing || isEditing) return;
+    const isMeasuringActive = !!(
+        window.isMeasurementActive || 
+        (typeof window.currentMeasurementMode !== 'undefined' && window.currentMeasurementMode) ||
+        (typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode) ||
+        (map && map.pm && typeof map.pm.globalDrawModeEnabled === 'function' && map.pm.globalDrawModeEnabled())
+    );
+    if (isDrawing || isEditing || isMeasuringActive) return;
 
     // 1. Verifica se o toque no mapa ocorreu próximo a uma linha de logradouro da camada ativa (tolerância touch de 38px)
     if (e.latlng && typeof findClosestLineLayer === 'function' && window.activeSelectionThemeId) {
@@ -2609,67 +3112,85 @@ function initMap() {
 
   // Detecção global de cursor pointer ao passar o mouse sobre feições vetoriais (linhas e polígonos)
   let lastVectorHoverState = false;
+  let hoverRafPending = false;
+  let lastHoverLatLng = null;
+
   map.on('mousemove', function(e) {
     if (!map || !e.latlng) return;
     
     // Se estiver desenhando ou medindo, deixa a ferramenta controlar o cursor
     const isDrawing = document.getElementById('drawing-toolbar') && !document.getElementById('drawing-toolbar').classList.contains('hidden');
     const isEditing = document.getElementById('geometry-edit-toolbar') && !document.getElementById('geometry-edit-toolbar').classList.contains('hidden');
-    if (isDrawing || isEditing || (typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode)) return;
+    const isMeasuring = !!(
+        window.isMeasurementActive || 
+        window.currentMeasurementMode || 
+        (typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode) ||
+        (map && map.pm && typeof map.pm.globalDrawModeEnabled === 'function' && map.pm.globalDrawModeEnabled())
+    );
+    if (isDrawing || isEditing || isMeasuring) return;
 
-    const mapContainer = map.getContainer();
-    if (!mapContainer) return;
+    lastHoverLatLng = e.latlng;
+    if (hoverRafPending) return;
+    hoverRafPending = true;
 
-    let isOverFeature = false;
+    requestAnimationFrame(() => {
+        hoverRafPending = false;
+        if (!map || !lastHoverLatLng) return;
 
-    // 1. Verifica se qualquer renderer canvas já identificou layer sob o cursor
-    if (canvasRenderer && canvasRenderer._hoveredLayer) {
-        isOverFeature = true;
-    } else if (map._renderer && map._renderer._hoveredLayer) {
-        isOverFeature = true;
-    }
+        const mapContainer = map.getContainer();
+        if (!mapContainer) return;
 
-    // 2. Proximidade com linhas de logradouros (ruas) - tolerância de 22px
-    if (!isOverFeature && typeof findClosestLineLayer === 'function') {
-        const nearLine = findClosestLineLayer(e.latlng, 22);
-        if (nearLine) {
+        let isOverFeature = false;
+
+        // 1. Verifica se qualquer renderer canvas já identificou layer sob o cursor
+        if (canvasRenderer && canvasRenderer._hoveredLayer) {
+            isOverFeature = true;
+        } else if (map._renderer && map._renderer._hoveredLayer) {
             isOverFeature = true;
         }
-    }
 
-    // 3. Polígonos sob o cursor (busca rápida nos layers do geojsonLayer)
-    if (!isOverFeature && geojsonLayer) {
-        const pt = e.latlng;
-        const ptLayer = map.latLngToLayerPoint(pt);
-        geojsonLayer.eachLayer(layer => {
-            if (isOverFeature) return;
-            if (!layer.feature || !layer.feature.geometry) return;
-            const gType = layer.feature.geometry.type;
-            if (gType !== 'Polygon' && gType !== 'MultiPolygon') return;
-            if (layer.getBounds && layer.getBounds().contains(pt)) {
-                if (typeof layer._containsPoint === 'function' && layer._containsPoint(ptLayer)) {
-                    isOverFeature = true;
-                } else if (isPointInPolygonFeature(pt, layer.feature)) {
-                    isOverFeature = true;
-                }
+        // 2. Proximidade com linhas de logradouros (ruas) - tolerância de 22px
+        if (!isOverFeature && typeof findClosestLineLayer === 'function') {
+            const nearLine = findClosestLineLayer(lastHoverLatLng, 22);
+            if (nearLine) {
+                isOverFeature = true;
             }
-        });
-    }
-
-    if (isOverFeature !== lastVectorHoverState) {
-        lastVectorHoverState = isOverFeature;
-        if (isOverFeature) {
-            mapContainer.style.cursor = 'pointer';
-            mapContainer.classList.add('leaflet-feature-hovered');
-            if (canvasRenderer && canvasRenderer._container) canvasRenderer._container.style.cursor = 'pointer';
-            if (map._renderer && map._renderer._container) map._renderer._container.style.cursor = 'pointer';
-        } else {
-            mapContainer.style.cursor = '';
-            mapContainer.classList.remove('leaflet-feature-hovered');
-            if (canvasRenderer && canvasRenderer._container) canvasRenderer._container.style.cursor = '';
-            if (map._renderer && map._renderer._container) map._renderer._container.style.cursor = '';
         }
-    }
+
+        // 3. Polígonos sob o cursor (busca rápida nos layers do geojsonLayer)
+        if (!isOverFeature && geojsonLayer) {
+            const pt = lastHoverLatLng;
+            const ptLayer = map.latLngToLayerPoint(pt);
+            geojsonLayer.eachLayer(layer => {
+                if (isOverFeature) return;
+                if (!layer.feature || !layer.feature.geometry) return;
+                const gType = layer.feature.geometry.type;
+                if (gType !== 'Polygon' && gType !== 'MultiPolygon') return;
+                if (layer.getBounds && layer.getBounds().contains(pt)) {
+                    if (typeof layer._containsPoint === 'function' && layer._containsPoint(ptLayer)) {
+                        isOverFeature = true;
+                    } else if (isPointInPolygonFeature(pt, layer.feature)) {
+                        isOverFeature = true;
+                    }
+                }
+            });
+        }
+
+        if (isOverFeature !== lastVectorHoverState) {
+            lastVectorHoverState = isOverFeature;
+            if (isOverFeature) {
+                mapContainer.style.cursor = 'pointer';
+                mapContainer.classList.add('leaflet-feature-hovered');
+                if (canvasRenderer && canvasRenderer._container) canvasRenderer._container.style.cursor = 'pointer';
+                if (map._renderer && map._renderer._container) map._renderer._container.style.cursor = 'pointer';
+            } else {
+                mapContainer.style.cursor = '';
+                mapContainer.classList.remove('leaflet-feature-hovered');
+                if (canvasRenderer && canvasRenderer._container) canvasRenderer._container.style.cursor = '';
+                if (map._renderer && map._renderer._container) map._renderer._container.style.cursor = '';
+            }
+        }
+    });
   });
 
   map.on('mouseout', function() {
@@ -2871,6 +3392,15 @@ function initMap() {
 
   let lastZoomCrossed18 = (typeof map !== 'undefined' && map) ? (map.getZoom() >= 18) : false;
   map.on('zoomend', function() {
+    const isMeasuring = !!(
+        window.isMeasurementActive || 
+        window.currentMeasurementMode || 
+        (typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode)
+    );
+    if (isMeasuring) {
+      updateLabelsVisibility();
+      return;
+    }
     const currentZ = map.getZoom();
     const isZ18OrMore = currentZ >= 18;
     if (isZ18OrMore !== lastZoomCrossed18) {
@@ -2889,7 +3419,12 @@ function initMap() {
       const editToolbar = document.getElementById('geometry-edit-toolbar');
       const isDrawing = drawingToolbar && !drawingToolbar.classList.contains('hidden');
       const isEditingGeom = editToolbar && !editToolbar.classList.contains('hidden');
-      if (isDrawing || isEditingGeom) return;
+      const isMeasuring = !!(
+          window.isMeasurementActive || 
+          window.currentMeasurementMode || 
+          (typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode)
+      );
+      if (isDrawing || isEditingGeom || isMeasuring) return;
       
       clearTimeout(moveEndTimer);
       moveEndTimer = setTimeout(() => {
@@ -2982,6 +3517,10 @@ function initMap() {
     if (remainingThemes.length > 0) {
         const scheduleIdleLoad = (idx) => {
             if (idx >= remainingThemes.length) return;
+            if (window.isMeasurementActive || (typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode)) {
+                setTimeout(() => scheduleIdleLoad(idx), 3000);
+                return;
+            }
             const runNext = async () => {
                 const targetTheme = remainingThemes[idx];
                 if (targetTheme && !targetTheme._propertiesFullyLoaded) {
@@ -2992,18 +3531,18 @@ function initMap() {
                     }
                 }
                 if (window.requestIdleCallback) {
-                    window.requestIdleCallback(() => scheduleIdleLoad(idx + 1), { timeout: 2000 });
+                    window.requestIdleCallback(() => scheduleIdleLoad(idx + 1), { timeout: 3000 });
                 } else {
-                    setTimeout(() => scheduleIdleLoad(idx + 1), 500);
+                    setTimeout(() => scheduleIdleLoad(idx + 1), 800);
                 }
             };
             if (window.requestIdleCallback) {
-                window.requestIdleCallback(runNext, { timeout: 2000 });
+                window.requestIdleCallback(runNext, { timeout: 3000 });
             } else {
-                setTimeout(runNext, 500);
+                setTimeout(runNext, 800);
             }
         };
-        setTimeout(() => scheduleIdleLoad(0), 1500);
+        setTimeout(() => scheduleIdleLoad(0), 3000);
     }
   });
   
@@ -3016,16 +3555,13 @@ function updateLabelsVisibility() {
     const currentZoom = map.getZoom();
     
     const tooltipPane = map.getPane('tooltipPane');
-    if (currentZoom < 14) {
+    if (currentZoom < 11) {
         if (tooltipPane) tooltipPane.style.display = 'none';
         return;
     } else {
         if (tooltipPane) tooltipPane.style.display = '';
     }
 
-    // Regra de ouro: se não der pra ficar dentro da feição não mostra.
-    // Polígonos/lotes urbanos: NUNCA aparecem em zoom < 18 (lote tem menos de ~15px na tela).
-    const isBelowPolygonZoom = currentZoom < 18;
     const mapBounds = (typeof map.getBounds === 'function') ? map.getBounds() : null;
 
     geojsonLayer.eachLayer(layer => {
@@ -3040,8 +3576,9 @@ function updateLabelsVisibility() {
         const isLineGeom = geomType === 'LineString' || geomType === 'MultiLineString';
         
         let isContourOrLineTheme = false;
+        let th = null;
         if (feat && feat.properties && feat.properties.themeId) {
-            const th = themes.find(t => t.id === feat.properties.themeId);
+            th = themes.find(t => t.id === feat.properties.themeId);
             if (th && (th.geometryType === 'Linha' || th.geometryType === 'LineString' || th.geometryType === 'MultiLineString' || (th.name && /curva.*n[íi]vel|isolin/i.test(th.name)) || th.fill === false)) {
                 isContourOrLineTheme = true;
             }
@@ -3055,8 +3592,12 @@ function updateLabelsVisibility() {
             return;
         }
 
-        // Se for polígono e o zoom for < 18: oculta imediatamente sem reflow
-        if (isBelowPolygonZoom) {
+        // Para polígonos: temas densos de micro-lotes (CTM) exigem zoom >= 17.5.
+        // Camadas de bairro, loteamentos ou feições gerais aparecem a partir de zoom 12!
+        const isSmallLotTheme = th && (String(th.id).toLowerCase().includes('ctm') || (th.features && th.features.length > 2000));
+        const minPolyZoom = isSmallLotTheme ? 17.5 : 12;
+
+        if (currentZoom < minPolyZoom) {
             if (tooltipEl.style.opacity !== '0') tooltipEl.style.opacity = '0';
             return;
         }
@@ -3077,13 +3618,19 @@ function updateLabelsVisibility() {
             return;
         }
 
+        // Camadas gerais (Bairros, Loteamentos, Obras, etc.): sempre exibe dentro do mapa a partir de zoom 12
+        if (!isSmallLotTheme) {
+            if (tooltipEl.style.opacity !== '1') tooltipEl.style.opacity = '1';
+            return;
+        }
+
         const nw = map.latLngToLayerPoint(bounds.getNorthWest());
         const se = map.latLngToLayerPoint(bounds.getSouthEast());
 
         const pxWidth = Math.abs(se.x - nw.x);
         const pxHeight = Math.abs(se.y - nw.y);
 
-        // Estimativa matemática vetorial baseada no texto (ZERO layout thrashing / sem offsetWidth)
+        // Estimativa matemática vetorial baseada no texto para micro-lotes (CTM)
         const textContent = tooltipEl.textContent || '';
         const estWidth = Math.max(28, textContent.length * 7.5);
         const estHeight = 14;
@@ -3199,12 +3746,12 @@ window.loadUserProjects = async function() {
             if (localTime > cloudTime || (!cloudHasLayers && localHasLayers)) {
                 // Sincroniza de volta para o Supabase em segundo plano
                 if (typeof supabaseClient !== 'undefined' && supabaseClient && currentUserId && isValidUUID(cloudProj.id)) {
-                    supabaseClient.from('user_projetos').update({
+                    Promise.resolve(supabaseClient.from('user_projetos').update({
                         camadas_ids: localProj.camadas_ids || [],
                         rasters_ids: localProj.rasters_ids || [],
                         camadas_visiveis: localProj.camadas_visiveis || [],
                         updated_at: localProj.updated_at || new Date().toISOString()
-                    }).eq('id', cloudProj.id).eq('user_id', currentUserId).catch(() => {});
+                    }).eq('id', cloudProj.id).eq('user_id', currentUserId)).catch(() => {});
                 }
                 return { ...cloudProj, ...localProj };
             }
@@ -3853,7 +4400,7 @@ window.saveCurrentWorkspaceState = async function() {
     window.updateProjectSelectDropdown();
 };
 
-function loadAllFeaturesToMap() {
+function loadAllFeaturesToMap(forceRefresh = false) {
   if (!geojsonLayer) return;
 
   const activeTempId = activeFeatureLayer && activeFeatureLayer.feature && activeFeatureLayer.feature.properties && activeFeatureLayer.feature.properties._tempId;
@@ -3869,7 +4416,11 @@ function loadAllFeaturesToMap() {
   themes.slice().reverse().forEach(theme => {
     if (typeof userCanOnTheme === 'function' && !userCanOnTheme(theme.id, 'ver')) return;
     if (theme.visible !== false) {
-      const withGeom = (theme.features || []).filter(f => f.geometry);
+      const withGeom = (theme.features || []).filter(f => {
+        if (!f || !f.geometry) return false;
+        if (f.properties && !f.properties.themeId) f.properties.themeId = theme.id;
+        return true;
+      });
       let toRender = withGeom;
 
       if (theme._activeFilterFids) {
@@ -3978,7 +4529,7 @@ function loadAllFeaturesToMap() {
   };
 
   if (window.GeoEngineTurbo && typeof window.GeoEngineTurbo.renderFeaturesProgressive === 'function') {
-      window.GeoEngineTurbo.renderFeaturesProgressive(geojsonLayer, allFeatures, onRenderFinished);
+      window.GeoEngineTurbo.renderFeaturesProgressive(geojsonLayer, allFeatures, onRenderFinished, forceRefresh);
   } else {
       geojsonLayer.clearLayers();
       if (allFeatures.length > 0) {
@@ -4846,30 +5397,85 @@ async function loadThemeProperties(themeId, forceReload = false, skipMapRender =
     }
 
     try {
-        // Carga completa do tema (geometria + propriedades) pela rede com proteção contra timeout 57014:
+        // Carga otimizada do tema (geometria + propriedades) pela rede:
+        // Evita Prefer: count=estimated no SELECT inicial para prevenir erro 500 do PostgREST
+        // decorrente de planejamento/EXPLAIN sob políticas de RLS e funções de segurança.
         const fetchStep = 1000;
         let first = await runWithRetry(() => supabaseClient
             .from('feicoes')
-            .select('id, propriedades, geometria', { count: 'estimated' })
+            .select('id, propriedades, geometria')
             .eq('theme_id', themeId)
             .range(0, fetchStep - 1), 2);
 
-        // Se der timeout ou erro 500 no Supabase com contagem, tenta consulta direta sem count pesado:
-        if (first && first.error && (first.error.code === '57014' || (first.error.message && first.error.message.includes('timeout')))) {
-            console.warn(`[LoadTheme] Timeout 57014 ao buscar com count em "${themeId}". Tentando sem count pesado...`);
-            first = await runWithRetry(() => supabaseClient
-                .from('feicoes')
-                .select('id, propriedades, geometria')
-                .eq('theme_id', themeId)
-                .range(0, fetchStep - 1), 2);
+        // Se houver erro na primeira tentativa (ex: erro 500 por payload excessivo de fotos base64, ou timeout),
+        // ativa particionamento inteligente em lotes menores seguros (25 feições por lote):
+        if (first && first.error) {
+            console.warn(`[LoadTheme] Lote grande falhou para "${themeId}" (${first.status || first.error.code || 'erro de rede'}). Ativando particionamento inteligente em lotes seguros...`);
+            let totalCount = 0;
+            try {
+                const cRes = await supabaseClient
+                    .from('feicoes')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('theme_id', themeId);
+                if (!cRes.error && typeof cRes.count === 'number') totalCount = cRes.count;
+            } catch(e) {}
+
+            if (totalCount > 0) {
+                const safeStep = 25;
+                const chunkBatches = [];
+                for (let from = 0; from < totalCount; from += safeStep) {
+                    const to = Math.min(from + safeStep - 1, totalCount - 1);
+                    chunkBatches.push({ from, to });
+                }
+                const chunkFns = chunkBatches.map(b => () => supabaseClient
+                    .from('feicoes')
+                    .select('id, propriedades, geometria')
+                    .eq('theme_id', themeId)
+                    .range(b.from, b.to));
+
+                const chunkResults = await runWithConcurrencyLimit(chunkFns, 2, 2);
+                const recoveredRows = [];
+                chunkResults.forEach(cr => {
+                    if (cr && cr.data && Array.isArray(cr.data)) recoveredRows.push(...cr.data);
+                });
+
+                if (recoveredRows.length > 0) {
+                    first = { data: recoveredRows, error: null, count: recoveredRows.length };
+                    console.log(`[LoadTheme] Recuperadas com sucesso ${recoveredRows.length} feições de "${themeId}" via particionamento seguro.`);
+                }
+            } else {
+                first = await runWithRetry(() => supabaseClient
+                    .from('feicoes')
+                    .select('id, propriedades, geometria')
+                    .eq('theme_id', themeId)
+                    .range(0, 49), 2);
+            }
         }
 
-        let hadPageError = !!first.error;
-        if (first.error) console.error(`Erro ao buscar 1ª página de feições de "${themeId}":`, first.error);
-        const allRows = first.error ? [] : (first.data || []);
-        const count = first.count;
+        let hadPageError = !first || !!first.error;
+        if (first && first.error) console.error(`Erro ao buscar 1ª página de feições de "${themeId}":`, first.error);
+        const allRows = (!first || first.error) ? [] : (first.data || []);
 
-        if (!first.error && count && count > fetchStep) {
+        // Define contagem total: se vieram menos feições que o limite da página (ex: 80 < 1000),
+        // todos os dados já foram obtidos nesta requisição única!
+        let count = allRows.length;
+        if (!hadPageError && allRows.length === fetchStep) {
+            // Pode haver páginas subsequentes (ex: temas cadastrais com > 1.000 feições).
+            // Obtém contagem exata com head: true (zero tráfego de dados de geometria):
+            try {
+                const countRes = await supabaseClient
+                    .from('feicoes')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('theme_id', themeId);
+                if (!countRes.error && typeof countRes.count === 'number' && countRes.count > 0) {
+                    count = countRes.count;
+                }
+            } catch (eCnt) {
+                console.warn(`[LoadTheme] Não foi possível obter contagem total exata para "${themeId}":`, eCnt);
+            }
+        }
+
+        if (!hadPageError && count && count > fetchStep) {
             const remainingPages = Math.ceil((count - fetchStep) / fetchStep);
             let pendingPages = [];
             for (let p = 1; p <= remainingPages; p++) {
@@ -6690,6 +7296,10 @@ function openEditThemeModal(themeId, focusField = null) {
   if (typeof populateFormSelects === 'function') populateFormSelects();
   document.getElementById('edit-theme-name-input').value = theme.name;
   document.getElementById('edit-theme-color-input').value = theme.color;
+  const fillColInput = document.getElementById('edit-theme-fill-color-input');
+  if (fillColInput) {
+    fillColInput.value = theme.fillColor || theme.color || '#3b82f6';
+  }
   
   const strokeOpacityVal = theme.strokeOpacity !== undefined ? theme.strokeOpacity : (theme.stroke_opacity !== undefined ? theme.stroke_opacity : 1);
   const strokeInput = document.getElementById('edit-theme-stroke-opacity-input');
@@ -6725,6 +7335,12 @@ function openEditThemeModal(themeId, focusField = null) {
     theme.geometryType === 'MultiLineString' || 
     (theme.name && /curva.*n[íi]vel|isolin/i.test(theme.name))
   );
+
+  const fillColWrapper = document.getElementById('edit-theme-fill-color-wrapper');
+  if (fillColWrapper) {
+    fillColWrapper.style.display = isLineTheme ? 'none' : '';
+  }
+
   const defaultFill = isLineTheme ? false : true;
   const fillInput = document.getElementById('edit-theme-fill-input');
   if (fillInput) {
@@ -6777,8 +7393,32 @@ function openEditThemeModal(themeId, focusField = null) {
   
   updateEditThemeFields();
   
-  document.getElementById('edit-theme-disp1-input').value = theme.disp1 || 'Lote';
-  document.getElementById('edit-theme-disp2-input').value = theme.disp2 || 'Quadra';
+  const disp1Sel = document.getElementById('edit-theme-disp1-input');
+  const disp2Sel = document.getElementById('edit-theme-disp2-input');
+  if (disp1Sel) {
+    if (theme.disp1) {
+      disp1Sel.value = theme.disp1;
+    } else if (theme.mainTitle) {
+      disp1Sel.value = theme.mainTitle;
+    } else if (disp1Sel.options.length > 1) {
+      let foundOption = false;
+      for (let i = 0; i < disp1Sel.options.length; i++) {
+        if (/^(nome|bairro|nm_|ds_|lote|titulo|descricao)/i.test(disp1Sel.options[i].value)) {
+          disp1Sel.selectedIndex = i;
+          foundOption = true;
+          break;
+        }
+      }
+      if (!foundOption) disp1Sel.selectedIndex = 1;
+    }
+  }
+  if (disp2Sel) {
+    if (theme.disp2) {
+      disp2Sel.value = theme.disp2;
+    } else if (disp2Sel.options.length > 2) {
+      disp2Sel.selectedIndex = 2;
+    }
+  }
   document.getElementById('edit-theme-main-title').value = theme.mainTitle || '';
   
   const iconVal = theme.icon || 'circle';
@@ -6876,6 +7516,8 @@ function updateEditThemeFields() {
 async function saveEditedTheme() {
   const name = document.getElementById('edit-theme-name-input').value;
   const color = document.getElementById('edit-theme-color-input').value;
+  const fillColorEl = document.getElementById('edit-theme-fill-color-input');
+  const fillColor = fillColorEl ? fillColorEl.value : color;
 
   const strokeOpacityEl = document.getElementById('edit-theme-stroke-opacity-input');
   const strokeOpacity = strokeOpacityEl ? parseFloat(strokeOpacityEl.value) : 1;
@@ -6903,6 +7545,7 @@ async function saveEditedTheme() {
   if (theme) {
     theme.name = name;
     theme.color = color;
+    theme.fillColor = fillColor;
     theme.strokeOpacity = isNaN(strokeOpacity) ? 1 : strokeOpacity;
     theme.fillOpacity = isNaN(fillOpacity) ? 0.4 : fillOpacity;
     theme.opacity = theme.fillOpacity;
@@ -6946,6 +7589,8 @@ async function saveEditedTheme() {
                     stroke_opacity: theme.strokeOpacity,
                     fillOpacity: theme.fillOpacity,
                     fill_opacity: theme.fillOpacity,
+                    fillColor: fillColor,
+                    fill_color: fillColor,
                     weight: weight,
                     dashed: dashed,
                     fill: fill,
@@ -6970,12 +7615,7 @@ async function saveEditedTheme() {
     const savedId = themeBeingEdited;
     window.activeSelectionThemeId = String(savedId);
     saveThemes();
-    if (geojsonLayer && typeof geojsonLayer.setStyle === 'function' && geojsonLayer.options && typeof geojsonLayer.options.style === 'function') {
-        geojsonLayer.setStyle(geojsonLayer.options.style);
-        if (typeof updateLabelsVisibility === 'function') updateLabelsVisibility();
-    } else {
-        loadAllFeaturesToMap(); // Update colors on the map
-    }
+    loadAllFeaturesToMap(); // Atualiza geometrias, cores de preenchimento e recria rótulos com exibição 1 e 2
     renderThemes();
     if (typeof populateFormSelects === 'function') populateFormSelects();
     if (typeof focusOnThemeCard === 'function') focusOnThemeCard(savedId);
@@ -7632,7 +8272,15 @@ function toggleSnapping() {
 
 function startEditingTheme(id, name, color, geomType) {
   editingThemeId = id;
+  window.editingThemeId = id;
   window.activeSelectionThemeId = String(id);
+
+  // Garantir que a medição seja interrompida se o usuário entrar em modo de desenho de camada
+  if (window.isMeasurementActive || (typeof currentMeasurementMode !== 'undefined' && currentMeasurementMode)) {
+    if (typeof stopMeasurementDraw === 'function') stopMeasurementDraw();
+    window.isMeasurementActive = false;
+    if (typeof currentMeasurementMode !== 'undefined') currentMeasurementMode = null;
+  }
   
   const theme = themes.find(t => String(t.id) === String(id));
   if (theme && theme.visible === false) {
@@ -7740,13 +8388,30 @@ function startEditingTheme(id, name, color, geomType) {
 }
 
 function setDrawingMode(mode) {
-  if (mode === 'marker') map.pm.enableDraw('Marker');
+  if (mode === 'marker') {
+    const curTheme = (typeof themes !== 'undefined' && Array.isArray(themes))
+      ? themes.find(t => String(t.id) === String(editingThemeId))
+      : null;
+    const customIcon = (typeof window.getThemeMarkerDivIcon === 'function' && curTheme)
+      ? window.getThemeMarkerDivIcon(curTheme)
+      : null;
+    if (customIcon) {
+      map.pm.enableDraw('Marker', {
+        markerStyle: {
+          icon: customIcon
+        }
+      });
+    } else {
+      map.pm.enableDraw('Marker');
+    }
+  }
   else if (mode === 'polyline') map.pm.enableDraw('Line');
   else if (mode === 'polygon') map.pm.enableDraw('Polygon');
 }
 
 function stopDrawingMode() {
   editingThemeId = null;
+  window.editingThemeId = null;
   map.pm.disableDraw();
   const toolbar = document.getElementById('drawing-toolbar');
   if (toolbar) {
@@ -9910,6 +10575,28 @@ async function deleteActiveFeature() {
       try {
           geojsonLayer.removeLayer(targetLayer);
       } catch(e){}
+  }
+
+  // Limpeza de segurança: remove qualquer marcador órfão de medição nesta coordenada
+  if (window.measurementLayerGroup && targetLayer) {
+      try {
+          let targetLatLng = null;
+          if (typeof targetLayer.getLatLng === 'function') {
+              targetLatLng = targetLayer.getLatLng();
+          } else if (targetFeature && targetFeature.geometry && targetFeature.geometry.type === 'Point') {
+              const coords = targetFeature.geometry.coordinates;
+              targetLatLng = L.latLng(coords[1], coords[0]);
+          }
+          if (targetLatLng) {
+              window.measurementLayerGroup.eachLayer(l => {
+                  if (l && typeof l.getLatLng === 'function') {
+                      if (l.getLatLng().distanceTo(targetLatLng) < 2.0) {
+                          window.measurementLayerGroup.removeLayer(l);
+                      }
+                  }
+              });
+          }
+      } catch(e) {}
   }
   
   if (typeof clearHighlight === 'function') {
@@ -12127,16 +12814,19 @@ window.openLayerStatsMenu = function(themeId) {
 
     renderLayerStatsMenuItems(themeId);
 
-    // Dispara recarga assíncrona para garantir dados frescos do Supabase
+    // Carrega feições apenas se ainda não estiverem disponíveis na memória
     if (typeof loadThemeProperties === 'function') {
-        loadThemeProperties(themeId, true).then(() => {
-            if (window.activeLayerStatsThemeId === themeId) {
-                renderLayerStatsMenuItems(themeId);
-                if (window.activeLayerStatIndex !== null && window.activeLayerStatIndex !== undefined) {
-                    openStatsDashboard(themeId, window.activeLayerStatIndex);
+        const jaTemFeicoes = Array.isArray(theme.features) && theme.features.length > 0 && theme._propertiesFullyLoaded;
+        if (!jaTemFeicoes) {
+            loadThemeProperties(themeId, false).then(() => {
+                if (window.activeLayerStatsThemeId === themeId) {
+                    renderLayerStatsMenuItems(themeId);
+                    if (window.activeLayerStatIndex !== null && window.activeLayerStatIndex !== undefined) {
+                        openStatsDashboard(themeId, window.activeLayerStatIndex);
+                    }
                 }
-            }
-        }).catch(e => console.warn('Erro ao atualizar estatísticas em segundo plano:', e));
+            }).catch(e => console.warn('Erro ao carregar estatísticas:', e));
+        }
     }
 
     // Posicionamento no canto superior direito (top: 10px, right: 10px)
@@ -12181,29 +12871,25 @@ window.renderLayerStatsMenuItems = function(themeId) {
     }
 
     let html = '';
+    const activeColor = theme.color || '#06b6d4';
     config.forEach((widget, idx) => {
         const isActive = (window.activeLayerStatIndex === idx);
         let iconHtml = widget.type === 'indicator' ? '123' : (widget.type === 'pie' || widget.type === 'donut' ? 'pie_chart' : 'bar_chart');
-        let typeLabel = widget.type === 'indicator' ? 'Indicador Numérico' : (widget.type === 'pie' ? 'Gráfico de Pizza' : (widget.type === 'donut' ? 'Gráfico de Rosca' : 'Gráfico de Barras'));
-        if (widget.fieldId) {
-            typeLabel += ` • ${widget.fieldId}`;
-        }
 
         html += `
-            <div class="w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between gap-3 cursor-pointer select-none ${isActive ? 'bg-cyan-500/15 border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.25)]' : 'bg-slate-800/60 border-slate-700/60 hover:border-slate-500 hover:bg-slate-700/60'}" onclick="selectLayerStat('${themeId}', ${idx})">
+            <div class="w-full text-left py-2 px-3 rounded-xl border transition-all flex items-center justify-between gap-3 cursor-pointer select-none ${isActive ? 'bg-cyan-500/15 border-cyan-500 shadow-[0_0_12px_rgba(6,182,212,0.25)]' : 'bg-slate-800/60 border-slate-700/60 hover:border-slate-500 hover:bg-slate-700/60'}" onclick="selectLayerStat('${themeId}', ${idx})">
                 <div class="flex items-center gap-2.5 overflow-hidden flex-1">
-                    <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isActive ? 'bg-cyan-500/30 text-cyan-300' : 'bg-cyan-500/15 text-cyan-400'}">
-                        <span class="material-symbols-outlined text-[18px]">${iconHtml}</span>
+                    <div class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${isActive ? 'bg-cyan-500/30 text-cyan-300' : 'bg-cyan-500/15 text-cyan-400'}">
+                        <span class="material-symbols-outlined text-[17px]">${iconHtml}</span>
                     </div>
                     <div class="truncate">
-                        <h4 class="text-xs font-bold ${isActive ? 'text-white' : 'text-slate-200'} truncate">${widget.title || 'Estatística'}</h4>
-                        <p class="text-[10px] text-slate-400 truncate mt-0.5">${typeLabel}</p>
+                        <h4 class="text-xs font-semibold ${isActive ? 'text-white' : 'text-slate-200'} truncate">${widget.title || 'Estatística'}</h4>
                     </div>
                 </div>
                 <div class="shrink-0 flex items-center">
-                    <span class="material-symbols-outlined text-[20px] ${isActive ? 'text-cyan-400' : 'text-slate-500 opacity-60'}">
-                        ${isActive ? 'radio_button_checked' : 'radio_button_unchecked'}
-                    </span>
+                    <div class="w-11 h-6 bg-slate-700/60 rounded-full relative transition-all duration-200" style="${isActive ? `background-color: ${activeColor}; box-shadow: 0 0 12px ${activeColor}90;` : ''}">
+                        <div class="absolute top-[2px] left-[2px] bg-white border border-gray-300 rounded-full h-5 w-5 shadow-sm transition-transform duration-200 ${isActive ? 'translate-x-5' : 'translate-x-0'}"></div>
+                    </div>
                 </div>
             </div>
         `;
@@ -12486,7 +13172,10 @@ async function openStatsDashboard(themeId, specificIndex) {
     }
 
     if (typeof loadThemeProperties === 'function') {
-        await loadThemeProperties(theme.id, true);
+        const jaTemFeicoes = Array.isArray(theme.features) && theme.features.length > 0 && theme._propertiesFullyLoaded;
+        if (!jaTemFeicoes) {
+            await loadThemeProperties(theme.id, false);
+        }
     }
     
     const features = theme.features || [];

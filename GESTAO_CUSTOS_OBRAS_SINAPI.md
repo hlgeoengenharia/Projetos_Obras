@@ -150,4 +150,45 @@ Segundo o **Art. 23 da Lei Federal 14.133/2021** e a **IN SEGES/ME nº 65/2021**
    - **Média Aritmética Simples:** Aplicável quando os preços apresentarem desvio padrão reduzido.
    - **Menor Preço Válido:** Adotado mediante justificativa técnica expressa no processo.
 
+---
+
+## 8. Atualizações Realizadas e Homologadas
+
+### 8.1. Sincronização em Tempo Real do Valor Total com BDI
+- **Problema Anterior:** Ao abrir o card de feição da obra no mapa, o campo *"Valor Total Estimado"* exibia `R$ 0,00` mesmo quando a planilha orçamentária já continha itens orçados (ex: `R$ 998,26`), gerando divergência entre o formulário lateral e o modal de orçamento.
+- **Solução Implementada:**
+  1. Criação da função bidirecional `sincronizarCardOrcamento(orc)` em `src/orcamento.js` e `src/formRenderer.js`.
+  2. Ao carregar a feição ou modificar qualquer item/quantidade/BDI na planilha, o valor com BDI é sincronizado instantaneamente no elemento DOM `#card-orcamento-valor-total` com formatação oficial brasileira (`minimumFractionDigits: 2, maximumFractionDigits: 2`).
+  3. Atualização automática dos atributos da feição (`Valor Total da Obra (R$)`, `valor_total_obra`, `BDI (%)` e `orcamento_dados`), assegurando persistência no Supabase e no `localStorage`.
+
+### 8.2. Remoção do Selo "SINAPI OFICIAL" e Inclusão da Tag Dinâmica de BDI
+- **Problema Anterior:** Existia um badge estático `SINAPI OFICIAL` no card da aba de orçamento da feição e no cabeçalho do modal, inadequado para obras que combinam itens do SINAPI com CPUs próprias e cotações de mercado.
+- **Solução Implementada:**
+  1. Remoção do selo estático de `src/formRenderer.js` e de `index.html`.
+  2. Substituição no card pelo indicativo visual e dinâmico `#card-orcamento-bdi-tag`, exibindo a alíquota exata calculada (ex: `Total com BDI (24,80%)`).
+
+### 8.3. Cronograma Físico-Financeiro com Precisão Decimal Exata (Sem Arredondamento)
+- **Problema Anterior:** O cronograma utilizava `step="1"` nos campos de avanço físico e formatava os valores monetários com `{ minimumFractionDigits: 0, maximumFractionDigits: 0 }`, arredondando valores reais como `R$ 99,83` para `R$ 100`, gerando discrepâncias contábeis nas medições mensais.
+- **Solução Implementada:**
+  1. Entrada fracionária com precisão de centésimos (`step="0.01"`, `min="0"`, `max="100"`), permitindo percentuais como `33,33%`, `12,50%`, etc.
+  2. Cálculo contábil exato dos valores monetários mensais por macroetapa:
+     $$\text{Valor do Mês} = \text{round}\left(\frac{\text{Total com BDI} \times \text{Percentual}}{100}, 2\right)$$
+  3. Exibição de todos os desembolsos mensais, desembolsos acumulados e percentuais totais com duas casas decimais tanto na tela quanto no relatório para impressão em PDF.
+  4. Validação e soma de consistência de 100.00% com realce visual em verde esmeralda quando fechado, e alerta em rosa caso haja divergência.
+
+### 8.4. Bateria de Testes Automatizados e Auditoria de Qualidade (QA Gatekeeper)
+- Criação da suíte unitária dedicada `tests/orcamentoSinapi.test.js` cobrindo 7 cenários críticos (cálculo de BDI, sincronização do card, precisão decimal no cronograma e exportação PDF).
+- Integração de `src/orcamento.js` e do teste unitário ao script master `test_sistema_qa.js`, totalizando **213 testes aprovados com 100% de sucesso**.
+
+### 8.5. Resolução do Erro Supabase HTTP 500 na Consulta de Feições
+- **Diagnóstico do Erro:**
+  A requisição `GET .../rest/v1/feicoes?select=id,propriedades,geometria&theme_id=eq.d00b...&offset=0&limit=1000` retornava `500 (Internal Server Error)` no PostgREST porque utilizava a opção `{ count: 'estimated' }`. Em tabelas com Row Level Security (RLS) e funções plpgsql (`public.tem_permissao`), o PostgreSQL tenta executar `EXPLAIN (FORMAT JSON)` para estimar contagens, o que falha ou atinge o `statement_timeout` no PostgREST sob RLS.
+- **Solução Implementada:**
+  1. No [src/main.js](file:///c:/Users/Windows%2011/Documents/Projetos/Projeto_V01/Projetos_Obras/src/main.js), a consulta inicial de feições da camada agora executa `.select('id, propriedades, geometria')` limpa, sem o cabeçalho `Prefer: count=estimated`.
+  2. Para camadas com até 1.000 feições (como "Ocupações Orla" com 80 registros), a primeira requisição já retorna 100% dos dados instantaneamente, dispensando requisições extras.
+  3. Para camadas extensas (> 1.000 feições, ex: CTM-Municipal), a contagem total para paginação é obtida de forma segura via requisição HEAD (`.select('id', { count: 'exact', head: true })`), que consome zero tráfego de dados e não dispara planejamento instável.
+  4. Implementação de retry automático e preservação do cache local (IndexedDB + GeoJSON local), assegurando resiliência total na interface gráfica sem qualquer erro no console.
+
+
+
 

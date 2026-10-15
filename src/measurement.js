@@ -3,22 +3,92 @@ let currentMeasurementMode = null;
 let pointCounter = 1;
 window.isMeasurementActive = false;
 window.isMeasurementSnappingEnabled = true;
+window._isHoveringMeasMarker = false;
+window._isDraggingMeasMarker = false;
+
+// Injeta CSS do marcador Uber e previne bordas/fundos indesejados
+if (typeof document !== 'undefined') {
+    const styleId = 'uber-point-marker-style';
+    let style = document.getElementById(styleId);
+    if (!style) {
+        style = document.createElement('style');
+        style.id = styleId;
+        document.head.appendChild(style);
+    }
+    style.innerHTML = `
+        .custom-uber-point-marker {
+            background: transparent !important;
+            border: none !important;
+            cursor: grab;
+        }
+        .custom-uber-point-marker.meas-marker-dragging {
+            cursor: grabbing !important;
+            filter: drop-shadow(0 14px 22px rgba(0,0,0,0.75)) brightness(1.2) !important;
+            z-index: 100000 !important;
+        }
+        .custom-uber-point-marker.meas-marker-dragging > div {
+            transform: scale(1.15) !important;
+            transition: transform 0.15s ease-out;
+        }
+        .leaflet-pm-hintMarker.custom-uber-point-marker,
+        .meas-live-dist-icon,
+        .meas-live-dist-icon *,
+        .custom-uber-live-cursor,
+        .custom-uber-live-cursor *,
+        .autocad-snap-container,
+        .autocad-snap-container * {
+            pointer-events: none !important;
+        }
+    `;
+}
+
+function getTechPointIcon(label) {
+    const num = label !== undefined ? String(label).padStart(2, '0') : String(pointCounter).padStart(2, '0');
+    return L.divIcon({
+        className: 'custom-uber-point-marker',
+        html: `
+            <div style="position: relative; width: 28px; height: 38px; pointer-events: none; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.55)); transform: translate3d(0,0,0);">
+                <svg width="28" height="38" viewBox="0 0 28 38" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: block;">
+                    <path d="M14 38C14 38 27 23 27 14C27 6.8203 21.1797 1 14 1C6.8203 1 1 6.8203 1 14C1 23 14 38 14 38Z" fill="#2563eb" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
+                    <circle cx="14" cy="14" r="5.5" fill="#ffffff"/>
+                    <circle cx="14" cy="14" r="3" fill="#1d4ed8"/>
+                </svg>
+                <div style="position: absolute; top: -14px; left: 50%; transform: translateX(-50%); background: #0f172a; color: #38bdf8; font-family: monospace; font-size: 10px; font-weight: 900; padding: 1px 5px; border-radius: 4px; border: 1.5px solid #38bdf8; box-shadow: 0 2px 5px rgba(0,0,0,0.6); white-space: nowrap; pointer-events: none; letter-spacing: 0.5px;">
+                    P${num}
+                </div>
+            </div>
+        `,
+        iconSize: [28, 38],
+        iconAnchor: [14, 38],
+        popupAnchor: [0, -38]
+    });
+}
 
 window.toggleMeasurementSnapping = function() {
     window.isMeasurementSnappingEnabled = !window.isMeasurementSnappingEnabled;
     const btn = document.getElementById('btn-measure-snap');
-    if (window.isMeasurementSnappingEnabled) {
-        btn.classList.add('text-emerald-600', 'dark:text-emerald-400');
-        btn.classList.remove('text-slate-600', 'dark:text-slate-300');
-        btn.title = "Aderência Ativada";
-    } else {
-        btn.classList.remove('text-emerald-600', 'dark:text-emerald-400');
-        btn.classList.add('text-slate-600', 'dark:text-slate-300');
-        btn.title = "Aderência Desativada";
+    if (btn) {
+        if (window.isMeasurementSnappingEnabled) {
+            btn.classList.add('text-emerald-600', 'dark:text-emerald-400');
+            btn.classList.remove('text-slate-600', 'dark:text-slate-300');
+            btn.title = "Aderência Ativada";
+        } else {
+            btn.classList.remove('text-emerald-600', 'dark:text-emerald-400');
+            btn.classList.add('text-slate-600', 'dark:text-slate-300');
+            btn.title = "Aderência Desativada";
+        }
+    }
+    if (!window.isMeasurementSnappingEnabled && typeof hideAutoCadSnap === 'function') {
+        hideAutoCadSnap();
     }
     
-    if (currentMeasurementMode && map && map.pm) {
-        map.pm.setGlobalOptions({ snappable: window.isMeasurementSnappingEnabled });
+    if (map && map.pm) {
+        const snapOpt = { 
+            snappable: window.isMeasurementSnappingEnabled,
+            snapDistance: 15
+        };
+        if (measurementLayerGroup) snapOpt.snapLayers = [measurementLayerGroup];
+        map.pm.setGlobalOptions(snapOpt);
     }
 };
 
@@ -47,26 +117,14 @@ window.selectMeasurementOption = function(type) {
         return;
     }
 
-    if (type === 'CoordinateQuery') {
-        const panel = document.getElementById('measurement-panel');
-        if (panel && panel.classList.contains('hidden')) {
-            panel.classList.remove('hidden');
-        }
-        if (typeof openCoordinateQueryPanel === 'function') {
-            openCoordinateQueryPanel();
-        }
-        return;
-    }
-
-    // Se o painel de consulta de coordenadas estiver aberto, fecha-o
-    closeCoordinateQueryPanel();
-
     const panel = document.getElementById('measurement-panel');
     if (panel && panel.classList.contains('hidden')) {
         toggleMeasurementPanel();
     }
 
-    if (typeof startMeasurementDraw === 'function') {
+    if (typeof window.switchMeasurementMode === 'function') {
+        window.switchMeasurementMode(type);
+    } else if (typeof startMeasurementDraw === 'function') {
         startMeasurementDraw(type);
     }
 };
@@ -83,21 +141,30 @@ document.addEventListener('click', (e) => {
 
 function toggleMeasurementPanel() {
     const panel = document.getElementById('measurement-panel');
+    if (!panel) return;
     if (panel.classList.contains('hidden')) {
         // Open
         panel.classList.remove('hidden');
         if (!measurementLayerGroup) {
             measurementLayerGroup = L.featureGroup().addTo(map);
         }
+        window.measurementLayerGroup = measurementLayerGroup;
         window.isMeasurementActive = true;
         
-        // Garante que todas as medições fiquem estáticas (sem mover pontos ou vértices)
+        // Re-enable editing on existing measurement layers (scoped only to measurementLayerGroup for snapping!)
+        const snapLayersList = (measurementLayerGroup && measurementLayerGroup.getLayers().length > 0) ? [measurementLayerGroup] : [];
         measurementLayerGroup.eachLayer(l => {
-            if (l.pm && typeof l.pm.disable === 'function') {
-                l.pm.disable();
+            if (l.pm && typeof l.pm.enable === 'function') {
+                l.pm.enable({
+                    allowSelfIntersection: true,
+                    preventMarkerRemoval: false,
+                    snappable: window.isMeasurementSnappingEnabled,
+                    snapLayers: snapLayersList,
+                    draggable: true
+                });
             }
-            if (l.dragging && typeof l.dragging.disable === 'function') {
-                l.dragging.disable();
+            if (l.dragging && typeof l.dragging.enable === 'function') {
+                l.dragging.enable();
             }
         });
         
@@ -105,6 +172,20 @@ function toggleMeasurementPanel() {
         if (!window.isMeasurementDragInitialized) {
             initMeasurementPanelDrag();
             window.isMeasurementDragInitialized = true;
+        }
+
+        // Previne vazamento de cliques e rolagem do painel para o mapa Leaflet
+        if (window.L && L.DomEvent) {
+            const drawer = document.getElementById('meas-drawer-container');
+            if (drawer) {
+                L.DomEvent.disableClickPropagation(drawer);
+                L.DomEvent.disableScrollPropagation(drawer);
+            }
+            const interactiveElements = panel.querySelectorAll('.pointer-events-auto');
+            interactiveElements.forEach(el => {
+                L.DomEvent.disableClickPropagation(el);
+                L.DomEvent.disableScrollPropagation(el);
+            });
         }
     } else {
         // Close
@@ -138,10 +219,782 @@ window.togglePrintViewfinder = function() {
     }
 }
 
-// CAD Exact Measure Input State
+// CAD Exact Measure Input & AutoCAD Osnap State
 let lastDrawnVertex = null;
 let currentMouseLatLng = null;
 let cadActiveShape = null;
+let autocadSnapMarker = null;
+let currentSnapResult = null;
+let uberLiveCursorMarker = null;
+let cadTargetDirectionLatLng = null;
+let isCadDirectionLocked = false;
+
+// GIS Measurement State Machine (Reference: Leaflet.PolylineMeasure & leaflet-measure)
+let activeMeasurePoints = [];
+let activeMeasurePreviewGroup = null;
+let committedSegmentsLine = null;
+let rubberbandLine = null;
+let rubberbandPolygon = null;
+let activeAnchorMarkers = [];
+let lockedVertexPreviewMarker = null;
+let lastClickTimestamp = 0;
+let lastClickLatLng = null;
+
+let measSvgRenderer = null;
+function getMeasSvgRenderer() {
+    if (!measSvgRenderer && typeof L !== 'undefined' && typeof L.svg === 'function') {
+        try {
+            measSvgRenderer = L.svg();
+        } catch(e) {}
+    }
+    return measSvgRenderer;
+}
+
+let liveDistanceMarker = null;
+
+function updateLiveDistanceTooltip(latlng, segmentDist, totalDist, isLocked = false) {
+    if (!map || !latlng) {
+        hideLiveDistanceTooltip();
+        return;
+    }
+    const distText = isLocked 
+        ? `🔒 ${segmentDist.toFixed(2)} m` 
+        : `${segmentDist.toFixed(2)} m`;
+    
+    const extraText = (totalDist && totalDist > segmentDist)
+        ? ` <span style="opacity:0.65;font-size:9.5px;">(Total: ${totalDist.toFixed(2)} m)</span>`
+        : '';
+
+    const html = `
+        <div style="background: rgba(15, 23, 42, 0.90); backdrop-filter: blur(8px); color: #10b981; font-family: monospace; font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 6px; border: 1.5px solid rgba(16, 185, 129, 0.5); box-shadow: 0 4px 14px rgba(0,0,0,0.5); white-space: nowrap; pointer-events: none; letter-spacing: 0.3px; transform: translate3d(12px, -12px, 0);">
+            📏 ${distText}${extraText}
+        </div>
+    `;
+
+    if (!liveDistanceMarker) {
+        liveDistanceMarker = L.marker(latlng, {
+            icon: L.divIcon({
+                className: 'meas-live-dist-icon',
+                html: html,
+                iconSize: [0, 0],
+                iconAnchor: [0, 0]
+            }),
+            interactive: false
+        });
+        if (activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.addLayer === 'function') {
+            activeMeasurePreviewGroup.addLayer(liveDistanceMarker);
+        }
+    } else {
+        if (activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.hasLayer === 'function' && !activeMeasurePreviewGroup.hasLayer(liveDistanceMarker)) {
+            activeMeasurePreviewGroup.addLayer(liveDistanceMarker);
+        }
+        if (typeof liveDistanceMarker.setLatLng === 'function') {
+            liveDistanceMarker.setLatLng(latlng);
+        }
+        if (liveDistanceMarker._icon) {
+            liveDistanceMarker._icon.innerHTML = html;
+        } else if (typeof liveDistanceMarker.setIcon === 'function') {
+            liveDistanceMarker.setIcon(L.divIcon({
+                className: 'meas-live-dist-icon',
+                html: html,
+                iconSize: [0, 0],
+                iconAnchor: [0, 0]
+            }));
+        }
+    }
+    const el = (liveDistanceMarker && liveDistanceMarker.getElement) ? liveDistanceMarker.getElement() : (liveDistanceMarker ? liveDistanceMarker._icon : null);
+    if (el) {
+        el.style.pointerEvents = 'none';
+    }
+}
+
+function hideLiveDistanceTooltip() {
+    if (liveDistanceMarker && activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.hasLayer === 'function' && activeMeasurePreviewGroup.hasLayer(liveDistanceMarker)) {
+        activeMeasurePreviewGroup.removeLayer(liveDistanceMarker);
+    }
+}
+
+function initMeasurePreviewGroup() {
+    if (!map) return;
+    if (!activeMeasurePreviewGroup) {
+        activeMeasurePreviewGroup = L.featureGroup().addTo(map);
+    } else if (!map.hasLayer(activeMeasurePreviewGroup)) {
+        activeMeasurePreviewGroup.addTo(map);
+    }
+}
+
+function clearActiveMeasurePreview() {
+    activeMeasurePoints = [];
+    hideLiveDistanceTooltip();
+    if (activeMeasurePreviewGroup) {
+        activeMeasurePreviewGroup.clearLayers();
+    }
+    committedSegmentsLine = null;
+    rubberbandLine = null;
+    rubberbandPolygon = null;
+    lockedVertexPreviewMarker = null;
+    activeAnchorMarkers = [];
+}
+
+function hideRubberband() {
+    hideLiveDistanceTooltip();
+    if (rubberbandLine && activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.hasLayer === 'function' && activeMeasurePreviewGroup.hasLayer(rubberbandLine)) {
+        activeMeasurePreviewGroup.removeLayer(rubberbandLine);
+    }
+    if (rubberbandPolygon && activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.hasLayer === 'function' && activeMeasurePreviewGroup.hasLayer(rubberbandPolygon)) {
+        activeMeasurePreviewGroup.removeLayer(rubberbandPolygon);
+    }
+    if (lockedVertexPreviewMarker && activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.hasLayer === 'function' && activeMeasurePreviewGroup.hasLayer(lockedVertexPreviewMarker)) {
+        activeMeasurePreviewGroup.removeLayer(lockedVertexPreviewMarker);
+    }
+}
+
+function addActiveAnchorMarker(latlng) {
+    if (!map || !latlng) return;
+    initMeasurePreviewGroup();
+    if (typeof L.circleMarker === 'function') {
+        const anchor = L.circleMarker(latlng, {
+            radius: 5,
+            color: '#10b981',
+            weight: 2,
+            fillColor: '#ffffff',
+            fillOpacity: 1,
+            renderer: getMeasSvgRenderer(),
+            interactive: false
+        });
+        if (typeof anchor.addTo === 'function') {
+            anchor.addTo(activeMeasurePreviewGroup);
+        } else if (activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.addLayer === 'function') {
+            activeMeasurePreviewGroup.addLayer(anchor);
+        }
+        activeAnchorMarkers.push(anchor);
+    }
+}
+
+function getLockedCadMeasure() {
+    const inp = document.getElementById('cad-measure-input');
+    if (!inp) return null;
+    const raw = String(inp.value).trim().replace(',', '.');
+    const val = parseFloat(raw);
+    return (!isNaN(val) && val > 0) ? val : null;
+}
+
+function updateRubberband(effectiveLatLng) {
+    if (!map || !effectiveLatLng || activeMeasurePoints.length === 0) {
+        hideRubberband();
+        return;
+    }
+    initMeasurePreviewGroup();
+
+    // Se houver uma medida digitada no card Medida Exata, trava o comprimento da aresta
+    let finalTargetLatLng = effectiveLatLng;
+    const lockedMeters = getLockedCadMeasure();
+    const lastOrigin = activeMeasurePoints[activeMeasurePoints.length - 1];
+    if (lockedMeters && lastOrigin) {
+        const dest = getDestinationLatLng(lastOrigin, effectiveLatLng, lockedMeters);
+        if (dest) {
+            finalTargetLatLng = dest;
+        }
+    }
+
+    // Indicador visual na ponta da aresta com medida travada
+    if (lockedMeters && lastOrigin && finalTargetLatLng) {
+        if (!lockedVertexPreviewMarker) {
+            lockedVertexPreviewMarker = L.circleMarker(finalTargetLatLng, {
+                radius: 6,
+                color: '#059669',
+                weight: 2,
+                fillColor: '#34d399',
+                fillOpacity: 0.9,
+                renderer: getMeasSvgRenderer(),
+                interactive: false
+            });
+            if (activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.addLayer === 'function') {
+                activeMeasurePreviewGroup.addLayer(lockedVertexPreviewMarker);
+            }
+        } else {
+            if (activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.hasLayer === 'function' && !activeMeasurePreviewGroup.hasLayer(lockedVertexPreviewMarker)) {
+                activeMeasurePreviewGroup.addLayer(lockedVertexPreviewMarker);
+            }
+            if (typeof lockedVertexPreviewMarker.setLatLng === 'function') {
+                lockedVertexPreviewMarker.setLatLng(finalTargetLatLng);
+            }
+        }
+    } else if (lockedVertexPreviewMarker && activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.hasLayer === 'function' && activeMeasurePreviewGroup.hasLayer(lockedVertexPreviewMarker)) {
+        activeMeasurePreviewGroup.removeLayer(lockedVertexPreviewMarker);
+    }
+
+    // 1. Renderiza segmentos já confirmados com linha sólida
+    if (activeMeasurePoints.length > 1) {
+        if (!committedSegmentsLine) {
+            committedSegmentsLine = L.polyline(activeMeasurePoints, {
+                color: '#10b981',
+                weight: 2.5,
+                renderer: getMeasSvgRenderer(),
+                interactive: false
+            });
+            if (typeof committedSegmentsLine.addTo === 'function') {
+                committedSegmentsLine.addTo(activeMeasurePreviewGroup);
+            } else if (activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.addLayer === 'function') {
+                activeMeasurePreviewGroup.addLayer(committedSegmentsLine);
+            }
+        } else {
+            if (activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.hasLayer === 'function' && !activeMeasurePreviewGroup.hasLayer(committedSegmentsLine)) {
+                if (typeof committedSegmentsLine.addTo === 'function') {
+                    committedSegmentsLine.addTo(activeMeasurePreviewGroup);
+                } else if (typeof activeMeasurePreviewGroup.addLayer === 'function') {
+                    activeMeasurePreviewGroup.addLayer(committedSegmentsLine);
+                }
+            }
+            if (typeof committedSegmentsLine.setLatLngs === 'function') {
+                committedSegmentsLine.setLatLngs(activeMeasurePoints);
+            }
+        }
+    }
+
+    // 2. Renderiza apenas a aresta dinâmica/elástica do último vértice até o cursor (tracejada)
+    if (currentMeasurementMode === 'Line') {
+        const rubberPts = [lastOrigin, finalTargetLatLng];
+        if (!rubberbandLine) {
+            rubberbandLine = L.polyline(rubberPts, {
+                color: '#10b981',
+                weight: 2.5,
+                dashArray: '6, 6',
+                renderer: getMeasSvgRenderer(),
+                interactive: false
+            });
+            if (typeof rubberbandLine.addTo === 'function') {
+                rubberbandLine.addTo(activeMeasurePreviewGroup);
+            } else if (activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.addLayer === 'function') {
+                activeMeasurePreviewGroup.addLayer(rubberbandLine);
+            }
+        } else {
+            if (activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.hasLayer === 'function' && !activeMeasurePreviewGroup.hasLayer(rubberbandLine)) {
+                if (typeof rubberbandLine.addTo === 'function') {
+                    rubberbandLine.addTo(activeMeasurePreviewGroup);
+                } else if (typeof activeMeasurePreviewGroup.addLayer === 'function') {
+                    activeMeasurePreviewGroup.addLayer(rubberbandLine);
+                }
+            }
+            if (typeof rubberbandLine.setLatLngs === 'function') {
+                rubberbandLine.setLatLngs(rubberPts);
+            } else {
+                rubberbandLine._pts = rubberPts;
+            }
+        }
+        if (typeof rubberbandLine.bringToFront === 'function') {
+            rubberbandLine.bringToFront();
+        }
+        if (rubberbandPolygon && activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.hasLayer === 'function' && activeMeasurePreviewGroup.hasLayer(rubberbandPolygon)) {
+            activeMeasurePreviewGroup.removeLayer(rubberbandPolygon);
+        }
+    } else if (currentMeasurementMode === 'Polygon') {
+        const pts = [...activeMeasurePoints, finalTargetLatLng];
+        if (!rubberbandPolygon) {
+            rubberbandPolygon = L.polygon(pts, {
+                color: '#10b981',
+                fillColor: '#10b981',
+                fillOpacity: 0.2,
+                weight: 2,
+                dashArray: '5, 5',
+                renderer: getMeasSvgRenderer(),
+                interactive: false
+            });
+            if (typeof rubberbandPolygon.addTo === 'function') {
+                rubberbandPolygon.addTo(activeMeasurePreviewGroup);
+            } else if (activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.addLayer === 'function') {
+                activeMeasurePreviewGroup.addLayer(rubberbandPolygon);
+            }
+        } else {
+            if (activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.hasLayer === 'function' && !activeMeasurePreviewGroup.hasLayer(rubberbandPolygon)) {
+                if (typeof rubberbandPolygon.addTo === 'function') {
+                    rubberbandPolygon.addTo(activeMeasurePreviewGroup);
+                } else if (typeof activeMeasurePreviewGroup.addLayer === 'function') {
+                    activeMeasurePreviewGroup.addLayer(rubberbandPolygon);
+                }
+            }
+            if (typeof rubberbandPolygon.setLatLngs === 'function') {
+                rubberbandPolygon.setLatLngs(pts);
+            } else {
+                rubberbandPolygon._pts = pts;
+            }
+        }
+        if (typeof rubberbandPolygon.bringToFront === 'function') {
+            rubberbandPolygon.bringToFront();
+        }
+        if (rubberbandLine && activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.hasLayer === 'function' && activeMeasurePreviewGroup.hasLayer(rubberbandLine)) {
+            activeMeasurePreviewGroup.removeLayer(rubberbandLine);
+        }
+    }
+
+    // 3. Atualiza tooltip flutuante de distância dinâmica em tempo real
+    const liveDist = lastOrigin.distanceTo(finalTargetLatLng);
+    let totalDist = liveDist;
+    if (activeMeasurePoints.length > 1) {
+        let acc = 0;
+        for (let k = 0; k < activeMeasurePoints.length - 1; k++) {
+            acc += activeMeasurePoints[k].distanceTo(activeMeasurePoints[k + 1]);
+        }
+        totalDist = acc + liveDist;
+    }
+    updateLiveDistanceTooltip(finalTargetLatLng, liveDist, totalDist, !!lockedMeters);
+
+    // Sincroniza HUD inferior com a distância dinâmica em tempo real
+    updateCadMeasureHudLive(finalTargetLatLng);
+
+    if (activeMeasurePreviewGroup && typeof activeMeasurePreviewGroup.bringToFront === 'function') {
+        activeMeasurePreviewGroup.bringToFront();
+    }
+}
+
+function initAutoCadSnapMarker() {
+    if (autocadSnapMarker || !map) return;
+    const snapIcon = L.divIcon({
+        className: 'autocad-snap-container',
+        html: `
+            <div id="autocad-snap-glyph" class="autocad-snap-vertex"></div>
+            <div id="autocad-snap-badge" class="autocad-snap-badge">Vértice</div>
+        `,
+        iconSize: [0, 0],
+        iconAnchor: [0, 0]
+    });
+    autocadSnapMarker = L.marker([0, 0], {
+        icon: snapIcon,
+        interactive: false,
+        zIndexOffset: 100000
+    });
+}
+
+function showAutoCadSnap(latlng, type, label) {
+    if (!map || !latlng) return;
+    initAutoCadSnapMarker();
+    if (!map.hasLayer(autocadSnapMarker)) {
+        autocadSnapMarker.addTo(map);
+    }
+    autocadSnapMarker.setLatLng(latlng);
+    const el = autocadSnapMarker.getElement ? autocadSnapMarker.getElement() : null;
+    if (el) {
+        el.style.pointerEvents = 'none';
+        el.style.display = '';
+    }
+
+    const glyph = document.getElementById('autocad-snap-glyph');
+    const badge = document.getElementById('autocad-snap-badge');
+    if (glyph && badge) {
+        if (type === 'vertex' || type === 'close-polygon') {
+            glyph.className = 'autocad-snap-vertex';
+            badge.className = 'autocad-snap-badge';
+            badge.innerText = label || (type === 'close-polygon' ? 'Fechar Polígono' : 'Vértice');
+        } else if (type === 'midpoint') {
+            glyph.className = 'autocad-snap-midpoint';
+            badge.className = 'autocad-snap-badge midpoint';
+            badge.innerText = label || 'Ponto Médio';
+        } else {
+            glyph.className = 'autocad-snap-edge';
+            badge.className = 'autocad-snap-badge edge';
+            badge.innerText = label || 'Aresta';
+        }
+    }
+}
+
+function hideAutoCadSnap() {
+    if (autocadSnapMarker) {
+        const el = autocadSnapMarker.getElement ? autocadSnapMarker.getElement() : null;
+        if (el) el.style.display = 'none';
+        else if (map && map.hasLayer(autocadSnapMarker)) {
+            map.removeLayer(autocadSnapMarker);
+        }
+    }
+    currentSnapResult = null;
+}
+
+function findAutoCadSnap(mouseLatLng, vertexTolerancePx = 14, edgeTolerancePx = 8, midpointTolerancePx = 12) {
+    if (!window.isMeasurementSnappingEnabled || !map || !mouseLatLng) return null;
+    if (window._isAdjustingMeasPointWithReticle) return null;
+
+    const mousePt = map.latLngToContainerPoint(mouseLatLng);
+    let bestVertexSnap = null;
+    let minVertexDist = vertexTolerancePx;
+    let bestMidpointSnap = null;
+    let minMidpointDist = midpointTolerancePx;
+    let bestEdgeSnap = null;
+    let minEdgeDist = edgeTolerancePx;
+
+    // 1. Vértices da forma geométrica atualmente em desenho (Linha ou Polígono)
+    if (currentMeasurementMode === 'Polygon' || currentMeasurementMode === 'Line') {
+        const drawMode = currentMeasurementMode;
+        const pts = (activeMeasurePoints && activeMeasurePoints.length > 0)
+            ? activeMeasurePoints
+            : (() => {
+                const drawInstance = map.pm && map.pm.Draw && map.pm.Draw[drawMode];
+                if (drawInstance && drawInstance._layer) {
+                    const rawPts = drawInstance._layer.getLatLngs();
+                    return Array.isArray(rawPts[0]) ? rawPts[0] : rawPts;
+                }
+                return [];
+            })();
+
+        if (pts && pts.length > 0) {
+            // Fechamento de polígono se >= 3 pontos
+            if (drawMode === 'Polygon' && pts.length >= 3) {
+                const firstPt = pts[0];
+                const screenPt = map.latLngToContainerPoint(firstPt);
+                const dist = Math.hypot(mousePt.x - screenPt.x, mousePt.y - screenPt.y);
+                if (dist <= 24) {
+                    return {
+                        latlng: firstPt,
+                        type: 'close-polygon',
+                        label: 'Fechar Polígono'
+                    };
+                }
+            }
+            // Não faz snap no próprio vértice de onde a aresta está saindo (pts[pts.length - 1])
+            const checkLimit = pts.length > 1 ? pts.length - 1 : 0;
+            for (let i = 0; i < checkLimit; i++) {
+                const p = pts[i];
+                if (!p) continue;
+                const screenPt = map.latLngToContainerPoint(p);
+                const dist = Math.hypot(mousePt.x - screenPt.x, mousePt.y - screenPt.y);
+                if (dist < minVertexDist) {
+                    minVertexDist = dist;
+                    bestVertexSnap = {
+                        latlng: p,
+                        type: 'vertex',
+                        label: i === 0 && drawMode === 'Polygon' ? '1º Vértice' : `Vértice ${i + 1}`
+                    };
+                }
+            }
+        }
+    }
+
+    // 2. Camadas do grupo de medição (measurementLayerGroup)
+    if (measurementLayerGroup) {
+        measurementLayerGroup.eachLayer(layer => {
+            if (layer instanceof L.Marker) {
+                // Se estamos inserindo Pontos (Marker), NUNCA faz snap com outros marcadores de medição,
+                // eliminando o empilhamento/travamento de pontos na mesma coordenada.
+                if (currentMeasurementMode === 'Marker') return;
+
+                const p = layer.getLatLng();
+                const screenPt = map.latLngToContainerPoint(p);
+                const dist = Math.hypot(mousePt.x - screenPt.x, mousePt.y - screenPt.y);
+                if (dist < minVertexDist) {
+                    minVertexDist = dist;
+                    bestVertexSnap = {
+                        latlng: p,
+                        type: 'vertex',
+                        label: layer.measurementData ? layer.measurementData.id || 'Ponto' : 'Ponto'
+                    };
+                }
+            } else if (typeof layer.getLatLngs === 'function') {
+                const raw = layer.getLatLngs();
+                const rings = Array.isArray(raw[0]) ? (Array.isArray(raw[0][0]) ? raw[0] : raw) : [raw];
+                rings.forEach(ring => {
+                    if (!Array.isArray(ring)) return;
+                    for (let i = 0; i < ring.length; i++) {
+                        const p = ring[i];
+                        if (!p || typeof p.lat !== 'number') continue;
+                        const screenPt = map.latLngToContainerPoint(p);
+                        const dist = Math.hypot(mousePt.x - screenPt.x, mousePt.y - screenPt.y);
+                        if (dist < minVertexDist) {
+                            minVertexDist = dist;
+                            bestVertexSnap = { latlng: p, type: 'vertex', label: 'Vértice' };
+                        }
+                    }
+                    const isClosed = layer instanceof L.Polygon;
+                    const segCount = isClosed ? ring.length : ring.length - 1;
+                    for (let i = 0; i < segCount; i++) {
+                        const p1 = ring[i];
+                        const p2 = ring[(i + 1) % ring.length];
+                        if (!p1 || !p2) continue;
+
+                        // Ponto Médio
+                        const midLatLng = L.latLng((p1.lat + p2.lat) / 2, (p1.lng + p2.lng) / 2);
+                        const midPt = map.latLngToContainerPoint(midLatLng);
+                        const distMid = Math.hypot(mousePt.x - midPt.x, mousePt.y - midPt.y);
+                        if (distMid < minMidpointDist) {
+                            minMidpointDist = distMid;
+                            bestMidpointSnap = {
+                                latlng: midLatLng,
+                                type: 'midpoint',
+                                label: 'Ponto Médio'
+                            };
+                        }
+
+                        // Aresta
+                        if (L.LineUtil && typeof L.LineUtil.pointToSegmentDistance === 'function') {
+                            const pt1 = map.latLngToContainerPoint(p1);
+                            const pt2 = map.latLngToContainerPoint(p2);
+                            const distEdge = L.LineUtil.pointToSegmentDistance(mousePt, pt1, pt2);
+                            if (distEdge < minEdgeDist) {
+                                minEdgeDist = distEdge;
+                                const closestPt = L.LineUtil.closestPointOnSegment(mousePt, pt1, pt2);
+                                bestEdgeSnap = {
+                                    latlng: map.containerPointToLatLng(closestPt),
+                                    type: 'edge',
+                                    label: 'Aresta'
+                                };
+                            }
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    // 3. Camadas GeoJSON vetoriais do mapa (CTM, Obras, Loteamentos, Logradouros, etc.)
+    const activeThemes = (typeof themes !== 'undefined' && Array.isArray(themes)) ? themes : (window.themes || []);
+    if (map && activeThemes.length > 0) {
+        const queryPx = Math.max(vertexTolerancePx, midpointTolerancePx, edgeTolerancePx) + 8;
+        const swLatLng = map.containerPointToLatLng(L.point(mousePt.x - queryPx, mousePt.y + queryPx));
+        const neLatLng = map.containerPointToLatLng(L.point(mousePt.x + queryPx, mousePt.y - queryPx));
+        const queryBounds = L.latLngBounds(swLatLng, neLatLng);
+        const west = queryBounds.getWest(), east = queryBounds.getEast();
+        const south = queryBounds.getSouth(), north = queryBounds.getNorth();
+
+        const checkSnapGeometry = (geom) => {
+            if (!geom || !geom.coordinates) return;
+            const type = geom.type;
+            const coords = geom.coordinates;
+            let rings = [];
+
+            if (type === 'Point') {
+                const p = L.latLng(coords[1], coords[0]);
+                const screenPt = map.latLngToContainerPoint(p);
+                const dist = Math.hypot(mousePt.x - screenPt.x, mousePt.y - screenPt.y);
+                if (dist < minVertexDist) {
+                    minVertexDist = dist;
+                    bestVertexSnap = { latlng: p, type: 'vertex', label: 'Ponto' };
+                }
+                return;
+            } else if (type === 'LineString') {
+                rings = [coords];
+            } else if (type === 'MultiLineString' || type === 'Polygon') {
+                rings = coords;
+            } else if (type === 'MultiPolygon') {
+                for (let r = 0; r < coords.length; r++) {
+                    if (Array.isArray(coords[r])) {
+                        rings.push(...coords[r]);
+                    }
+                }
+            }
+
+            for (let r = 0; r < rings.length; r++) {
+                const ring = rings[r];
+                if (!Array.isArray(ring)) continue;
+
+                // Vértices do anel/linha
+                for (let i = 0; i < ring.length; i++) {
+                    const c = ring[i];
+                    if (!c || c.length < 2) continue;
+                    // Pre-filtro instantâneo em O(1): elimina projeções desnecessárias fora da mira
+                    if (c[0] < west || c[0] > east || c[1] < south || c[1] > north) continue;
+
+                    const p = L.latLng(c[1], c[0]);
+                    const screenPt = map.latLngToContainerPoint(p);
+                    const dist = Math.hypot(mousePt.x - screenPt.x, mousePt.y - screenPt.y);
+                    if (dist < minVertexDist) {
+                        minVertexDist = dist;
+                        bestVertexSnap = { latlng: p, type: 'vertex', label: 'Vértice' };
+                    }
+                }
+
+                // Segmentos: Ponto Médio e Caminhamento pelas Arestas (apenas se nenhum vértice foi capturado na mira)
+                if (minVertexDist > vertexTolerancePx) {
+                    const isPoly = (type === 'Polygon' || type === 'MultiPolygon');
+                    const len = ring.length;
+                    const isFirstLastSame = len > 1 && ring[0][0] === ring[len - 1][0] && ring[0][1] === ring[len - 1][1];
+                    const segCount = (isPoly && !isFirstLastSame) ? len : len - 1;
+
+                    for (let i = 0; i < segCount; i++) {
+                        const c1 = ring[i];
+                        const c2 = ring[(i + 1) % len];
+                        if (!c1 || !c2 || c1.length < 2 || c2.length < 2) continue;
+
+                        // Pre-filtro instantâneo do segmento: ignora se o segmento inteiro estiver fora da mira
+                        const sMinX = Math.min(c1[0], c2[0]);
+                        const sMaxX = Math.max(c1[0], c2[0]);
+                        const sMinY = Math.min(c1[1], c2[1]);
+                        const sMaxY = Math.max(c1[1], c2[1]);
+                        if (sMaxX < west || sMinX > east || sMaxY < south || sMinY > north) continue;
+
+                        const p1 = L.latLng(c1[1], c1[0]);
+                        const p2 = L.latLng(c2[1], c2[0]);
+
+                        // Ponto Médio (Centro da linha)
+                        const midLatLng = L.latLng((c1[1] + c2[1]) / 2, (c1[0] + c2[0]) / 2);
+                        const midPt = map.latLngToContainerPoint(midLatLng);
+                        const distMid = Math.hypot(mousePt.x - midPt.x, mousePt.y - midPt.y);
+                        if (distMid < minMidpointDist) {
+                            minMidpointDist = distMid;
+                            bestMidpointSnap = {
+                                latlng: midLatLng,
+                                type: 'midpoint',
+                                label: 'Ponto Médio'
+                            };
+                        }
+
+                        // Aresta (Caminhamento sobre a linha)
+                        if (L.LineUtil && typeof L.LineUtil.pointToSegmentDistance === 'function') {
+                            const pt1 = map.latLngToContainerPoint(p1);
+                            const pt2 = map.latLngToContainerPoint(p2);
+                            const distEdge = L.LineUtil.pointToSegmentDistance(mousePt, pt1, pt2);
+                            if (distEdge < minEdgeDist) {
+                                minEdgeDist = distEdge;
+                                const closestPt = L.LineUtil.closestPointOnSegment(mousePt, pt1, pt2);
+                                bestEdgeSnap = {
+                                    latlng: map.containerPointToLatLng(closestPt),
+                                    type: 'edge',
+                                    label: 'Aresta'
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        for (let t = 0; t < activeThemes.length; t++) {
+            const theme = activeThemes[t];
+            if (!theme || theme.visible === false) continue;
+
+            let hits = null;
+            const hasSpatialTree = window.GeoEngineTurbo && typeof window.GeoEngineTurbo.hasThemeTree === 'function' && 
+                (window.GeoEngineTurbo.hasThemeTree(theme.id) || window.GeoEngineTurbo.hasThemeTree(String(theme.id)) || (typeof theme.id === 'string' && !isNaN(theme.id) && window.GeoEngineTurbo.hasThemeTree(Number(theme.id))));
+
+            if (hasSpatialTree && typeof window.GeoEngineTurbo.queryViewport === 'function') {
+                hits = window.GeoEngineTurbo.queryViewport(theme.id, queryBounds) ||
+                       window.GeoEngineTurbo.queryViewport(String(theme.id), queryBounds) ||
+                       (typeof theme.id === 'string' && !isNaN(theme.id) ? window.GeoEngineTurbo.queryViewport(Number(theme.id), queryBounds) : null);
+            }
+
+            // Fallback APENAS se o tema não possuir árvore espacial (hits === null)
+            if (hits === null && theme.features && Array.isArray(theme.features)) {
+                let themeBbox = theme._bbox;
+                if (!themeBbox && theme.features.length > 0 && typeof computeGeoJSONBbox === 'function') {
+                    for (let f of theme.features) {
+                        if (f && f.geometry) {
+                            const b = f.properties?._bbox || computeGeoJSONBbox(f.geometry);
+                            if (b) {
+                                if (!themeBbox) themeBbox = [...b];
+                                else {
+                                    themeBbox[0] = Math.min(themeBbox[0], b[0]);
+                                    themeBbox[1] = Math.min(themeBbox[1], b[1]);
+                                    themeBbox[2] = Math.max(themeBbox[2], b[2]);
+                                    themeBbox[3] = Math.max(themeBbox[3], b[3]);
+                                }
+                            }
+                        }
+                    }
+                    if (themeBbox) theme._bbox = themeBbox;
+                }
+                if (themeBbox && (themeBbox[2] < west || themeBbox[0] > east || themeBbox[3] < south || themeBbox[1] > north)) {
+                    continue; // Pula o tema inteiro instantaneamente em 0.0001ms se fora da mira
+                }
+
+                hits = theme.features.filter(f => {
+                    if (!f || !f.geometry) return false;
+                    let bbox = f.properties && f.properties._bbox;
+                    if (!bbox && typeof computeGeoJSONBbox === 'function') {
+                        bbox = computeGeoJSONBbox(f.geometry);
+                        if (f.properties) f.properties._bbox = bbox;
+                    }
+                    if (bbox) {
+                        return bbox[2] >= west && bbox[0] <= east && bbox[3] >= south && bbox[1] <= north;
+                    }
+                    if (f.geometry.type === 'Point' && Array.isArray(f.geometry.coordinates) && f.geometry.coordinates.length >= 2) {
+                        const cLng = f.geometry.coordinates[0], cLat = f.geometry.coordinates[1];
+                        return cLng >= west && cLng <= east && cLat >= south && cLat <= north;
+                    }
+                    return true;
+                });
+            }
+
+            if (hits && hits.length > 0) {
+                for (let h = 0; h < hits.length; h++) {
+                    if (hits[h] && hits[h].geometry) {
+                        checkSnapGeometry(hits[h].geometry);
+                        if (minVertexDist <= 4) break;
+                    }
+                }
+            }
+            if (minVertexDist <= 4) break;
+        }
+    }
+
+    // Hierarquia de aderência AutoCAD: Vértice > Ponto Médio > Aresta > Livre
+    if (bestVertexSnap && minVertexDist <= vertexTolerancePx) {
+        return bestVertexSnap;
+    }
+    if (bestMidpointSnap && minMidpointDist <= midpointTolerancePx) {
+        return bestMidpointSnap;
+    }
+    if (bestEdgeSnap && minEdgeDist <= edgeTolerancePx) {
+        return bestEdgeSnap;
+    }
+
+    return null;
+}
+
+function updateUberLiveCursor(targetLatLng) {
+    if (!map || currentMeasurementMode !== 'Marker' || !targetLatLng) {
+        hideUberLiveCursor();
+        return;
+    }
+    const pointLabel = String(pointCounter).padStart(2, '0');
+    if (!uberLiveCursorMarker) {
+        const pointIcon = getTechPointIcon(pointLabel);
+        uberLiveCursorMarker = L.marker(targetLatLng, {
+            icon: pointIcon,
+            interactive: false,
+            zIndexOffset: 99999
+        }).addTo(map);
+        uberLiveCursorMarker._currentLabel = pointLabel;
+    } else {
+        if (!map.hasLayer(uberLiveCursorMarker)) {
+            uberLiveCursorMarker.addTo(map);
+        }
+        const el = uberLiveCursorMarker.getElement ? uberLiveCursorMarker.getElement() : null;
+        if (el && el.style.display === 'none') {
+            el.style.display = '';
+        }
+        if (uberLiveCursorMarker._currentLabel !== pointLabel) {
+            uberLiveCursorMarker._currentLabel = pointLabel;
+            const pointIcon = getTechPointIcon(pointLabel);
+            if (typeof uberLiveCursorMarker.setIcon === 'function') {
+                uberLiveCursorMarker.setIcon(pointIcon);
+            }
+        }
+        uberLiveCursorMarker.setLatLng(targetLatLng);
+    }
+    const el = uberLiveCursorMarker.getElement ? uberLiveCursorMarker.getElement() : null;
+    if (el) {
+        el.style.pointerEvents = 'none';
+    }
+}
+
+function hideUberLiveCursor() {
+    if (uberLiveCursorMarker) {
+        const el = uberLiveCursorMarker.getElement ? uberLiveCursorMarker.getElement() : null;
+        if (el) {
+            el.style.display = 'none';
+        } else if (map && map.hasLayer(uberLiveCursorMarker)) {
+            map.removeLayer(uberLiveCursorMarker);
+        }
+    }
+}
+
+function createTechnicalPoint(latlng) {
+    if (!map || !latlng) return;
+    const pointLabel = String(pointCounter).padStart(2, '0');
+    const techIcon = getTechPointIcon(pointLabel);
+    const marker = L.marker(latlng, {
+        icon: techIcon,
+        draggable: true
+    });
+    // Dispara criação universal no Leaflet/Geoman
+    map.fire('pm:create', { shape: 'Marker', layer: marker });
+}
 
 function getDestinationLatLng(fromLatLng, toLatLng, distanceMeters) {
     if (!fromLatLng || !toLatLng || !distanceMeters || distanceMeters <= 0) return null;
@@ -185,15 +1038,47 @@ function getDestinationLatLng(fromLatLng, toLatLng, distanceMeters) {
 }
 
 function updateCadMeasureHudLive(mouseLatLng) {
-    if (!lastDrawnVertex || !mouseLatLng) return;
-    const dist = lastDrawnVertex.distanceTo(mouseLatLng);
-    const hintEl = document.getElementById('cad-hud-hint');
-    if (hintEl) {
-        hintEl.innerHTML = `Direcione com o mouse <span class="font-mono text-emerald-600 dark:text-emerald-400 font-bold">(cursor: ${dist.toFixed(2)} m)</span>`;
+    const origin = (activeMeasurePoints && activeMeasurePoints.length > 0)
+        ? activeMeasurePoints[activeMeasurePoints.length - 1]
+        : lastDrawnVertex;
+
+    if (!origin || !mouseLatLng) {
+        const instLive = document.getElementById('meas-cad-dist-live');
+        if (instLive) instLive.innerText = '0.00 m';
+        return;
     }
+    const dist = origin.distanceTo(mouseLatLng);
+    if (dist >= 0.2 && !isCadDirectionLocked) {
+        cadTargetDirectionLatLng = mouseLatLng;
+    }
+    const lockedVal = getLockedCadMeasure();
+    const hintEl = document.getElementById('cad-hud-hint');
     const instLive = document.getElementById('meas-cad-dist-live');
-    if (instLive) {
-        instLive.innerText = `${dist.toFixed(2)} m`;
+
+    let totalDist = dist;
+    if (activeMeasurePoints && activeMeasurePoints.length > 1) {
+        let acc = 0;
+        for (let k = 0; k < activeMeasurePoints.length - 1; k++) {
+            acc += activeMeasurePoints[k].distanceTo(activeMeasurePoints[k + 1]);
+        }
+        totalDist = acc + dist;
+    }
+
+    if (lockedVal > 0) {
+        if (hintEl) {
+            hintEl.innerHTML = `<span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold text-[8.5px]">Medida Travada: ${lockedVal.toFixed(2)} m</span> Mova o mouse na direção e clique no mapa para fixar`;
+        }
+        if (instLive) {
+            instLive.innerHTML = `<span class="text-emerald-500 font-bold">🔒 ${lockedVal.toFixed(2)} m</span>`;
+        }
+    } else {
+        if (hintEl) {
+            const totalMsg = (activeMeasurePoints && activeMeasurePoints.length > 1) ? ` | Total: ${totalDist.toFixed(2)} m` : '';
+            hintEl.innerHTML = `<span class="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-bold text-[8.5px]">Passo 2</span> Aponte a direção <span class="font-mono text-emerald-500 font-bold">(${dist.toFixed(2)} m${totalMsg})</span> ou digite a medida`;
+        }
+        if (instLive) {
+            instLive.innerText = `${dist.toFixed(2)} m`;
+        }
     }
 }
 
@@ -207,27 +1092,71 @@ function showCadMeasureHud(mode) {
     if (modeTag) {
         modeTag.innerText = mode === 'Polygon' ? 'Área' : 'Linha';
     }
+    const hintEl = document.getElementById('cad-hud-hint');
     const inp = document.getElementById('cad-measure-input');
-    if (inp) {
-        inp.value = '';
-        setTimeout(() => inp.focus(), 60);
+    const applyBtn = document.getElementById('cad-measure-apply-btn');
+    const instLive = document.getElementById('meas-cad-dist-live');
+
+    const origin = (activeMeasurePoints && activeMeasurePoints.length > 0)
+        ? activeMeasurePoints[activeMeasurePoints.length - 1]
+        : lastDrawnVertex;
+
+    if (!origin) {
+        if (hintEl) {
+            hintEl.innerHTML = `<span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-500 font-bold text-[8.5px]">Passo 1</span> Clique no mapa para marcar o ponto inicial`;
+        }
+        if (inp) {
+            inp.placeholder = 'Aguardando 1º ponto...';
+            inp.value = '';
+        }
+        if (instLive) {
+            instLive.innerText = '0.00 m';
+        }
+        if (applyBtn) {
+            applyBtn.title = 'Clique no mapa para marcar o ponto inicial';
+        }
+    } else {
+        const lockedVal = getLockedCadMeasure();
+        if (lockedVal > 0) {
+            if (hintEl) {
+                hintEl.innerHTML = `<span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold text-[8.5px]">Medida Travada: ${lockedVal.toFixed(2)} m</span> Aponte a direção e clique no mapa para fixar`;
+            }
+            if (instLive) {
+                instLive.innerHTML = `<span class="text-emerald-500 font-bold">🔒 ${lockedVal.toFixed(2)} m</span>`;
+            }
+        } else {
+            if (hintEl) {
+                hintEl.innerHTML = `<span class="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-bold text-[8.5px]">Passo 2</span> Aponte a direção e digite a medida`;
+            }
+            if (inp && !inp.value) {
+                inp.placeholder = 'Ex: 25.00';
+            }
+            if (instLive && currentMouseLatLng) {
+                const dist = origin.distanceTo(currentMouseLatLng);
+                instLive.innerText = `${dist.toFixed(2)} m`;
+            }
+        }
+        if (applyBtn) {
+            applyBtn.title = 'Inserir segmento na direção do cursor (Enter)';
+        }
     }
-    const inst = document.getElementById('meas-instruction');
-    if (inst && (mode === 'Line' || mode === 'Polygon')) {
-        inst.innerHTML = `
-            <div class="flex flex-col gap-1.5">
-                <span class="text-slate-600 dark:text-slate-300 font-medium">Aponte o cursor na direção desejada:</span>
-                <div class="flex items-center gap-1.5">
-                    <div class="relative flex-1">
-                        <input type="text" id="meas-drawer-cad-input" placeholder="Ex: 35.00" class="w-full px-2 py-1 text-xs font-mono font-bold rounded bg-white dark:bg-slate-900 border border-emerald-400 text-slate-800 dark:text-slate-100 pr-5" onkeydown="if(event.key==='Enter') applyCadMeasureInput(this.value)">
-                        <span class="absolute right-1.5 top-1 text-[10px] font-bold text-slate-400 pointer-events-none">m</span>
-                    </div>
-                    <button type="button" onclick="applyCadMeasureInput(document.getElementById('meas-drawer-cad-input').value)" class="px-2 py-1 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded cursor-pointer">Inserir</button>
-                </div>
-                <span class="text-[9px] text-slate-400">Cursor: <span id="meas-cad-dist-live" class="font-mono text-emerald-500">0.00 m</span> | Ou clique no mapa.</span>
-            </div>
-        `;
-    }
+
+    bindCadMeasureInputEvents();
+}
+
+function bindCadMeasureInputEvents() {
+    const inp = document.getElementById('cad-measure-input');
+    if (!inp || inp._hasCadInputListener) return;
+    inp._hasCadInputListener = true;
+
+    inp.addEventListener('input', () => {
+        if (!lastDrawnVertex || activeMeasurePoints.length === 0) return;
+        const aim = cadTargetDirectionLatLng || currentMouseLatLng;
+        if (aim) {
+            updateRubberband(aim);
+            updateCadMeasureHudLive(aim);
+        }
+    });
 }
 
 function hideCadMeasureHud() {
@@ -238,15 +1167,31 @@ function hideCadMeasureHud() {
     }
     const inp = document.getElementById('cad-measure-input');
     if (inp) inp.value = '';
+    isCadDirectionLocked = false;
+    cadTargetDirectionLatLng = null;
 }
 
 window.applyCadMeasureInput = function(customVal) {
     if (!lastDrawnVertex) {
-        alert("Clique no mapa para marcar o primeiro ponto antes de inserir a medida.");
+        const hintEl = document.getElementById('cad-hud-hint');
+        if (hintEl) {
+            hintEl.innerHTML = `<span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-500 font-bold text-[8.5px]">Passo 1</span> Clique no mapa primeiro para marcar o ponto inicial!`;
+        }
+        if (typeof showToast === 'function') {
+            showToast("Passo 1: Clique no mapa para marcar o ponto inicial antes de inserir a medida.", "warning");
+        }
         return;
     }
-    if (!currentMouseLatLng) {
-        alert("Mova o cursor do mouse na direção desejada para aplicar a medida.");
+
+    let aimLatLng = cadTargetDirectionLatLng || currentMouseLatLng;
+    if (!aimLatLng || (lastDrawnVertex && aimLatLng.distanceTo(lastDrawnVertex) < 0.2)) {
+        const hintEl = document.getElementById('cad-hud-hint');
+        if (hintEl) {
+            hintEl.innerHTML = `<span class="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-bold text-[8.5px]">Passo 2</span> Aponte o cursor no mapa na direção desejada antes de inserir`;
+        }
+        if (typeof showToast === 'function') {
+            showToast("Passo 2: Aponte o cursor no mapa na direção desejada antes de inserir a medida.", "info");
+        }
         return;
     }
 
@@ -261,46 +1206,78 @@ window.applyCadMeasureInput = function(customVal) {
             setTimeout(() => input.classList.remove('ring-2', 'ring-rose-500'), 1000);
             input.focus();
         }
+        if (typeof showToast === 'function') {
+            showToast("Digite uma distância válida em metros (ex: 25 ou 35.5).", "warning");
+        }
         return;
     }
 
-    const targetLatLng = getDestinationLatLng(lastDrawnVertex, currentMouseLatLng, distMeters);
+    const targetLatLng = getDestinationLatLng(lastDrawnVertex, aimLatLng, distMeters);
     if (!targetLatLng) return;
 
-    const drawMode = currentMeasurementMode || cadActiveShape || 'Line';
-    const drawInstance = map && map.pm && map.pm.Draw && map.pm.Draw[drawMode];
+    activeMeasurePoints.push(targetLatLng);
+    addActiveAnchorMarker(targetLatLng);
+    lastDrawnVertex = targetLatLng;
+    isCadDirectionLocked = false;
+    cadTargetDirectionLatLng = null;
 
-    const fakeEvent = {
-        latlng: targetLatLng,
-        layerPoint: map.latLngToLayerPoint(targetLatLng),
-        containerPoint: map.latLngToContainerPoint(targetLatLng),
-        originalEvent: {}
-    };
-
-    if (drawInstance && typeof drawInstance._createVertex === 'function') {
-        drawInstance._createVertex(fakeEvent);
-    } else if (map) {
-        map.fire('click', fakeEvent);
+    if (typeof showToast === 'function') {
+        showToast(`Segmento de ${distMeters.toFixed(2)} m inserido com sucesso!`, "success");
     }
 
-    lastDrawnVertex = targetLatLng;
+    const hintEl = document.getElementById('cad-hud-hint');
+    if (hintEl) {
+        hintEl.innerHTML = `<span class="text-emerald-500 font-bold">✓ ${distMeters.toFixed(2)} m inseridos!</span> Aponte a próxima direção ou Concluir.`;
+    }
+
+    if (activeMeasurePoints.length > 1) {
+        if (!committedSegmentsLine) {
+            committedSegmentsLine = L.polyline(activeMeasurePoints, {
+                color: '#10b981',
+                weight: 2.5,
+                renderer: getMeasSvgRenderer(),
+                interactive: false
+            });
+            if (activeMeasurePreviewGroup) activeMeasurePreviewGroup.addLayer(committedSegmentsLine);
+        } else {
+            if (activeMeasurePreviewGroup && !activeMeasurePreviewGroup.hasLayer(committedSegmentsLine)) {
+                activeMeasurePreviewGroup.addLayer(committedSegmentsLine);
+            }
+            committedSegmentsLine.setLatLngs(activeMeasurePoints);
+        }
+    }
+
+    hideRubberband();
+
+    const instLive = document.getElementById('meas-cad-dist-live');
+    if (instLive) {
+        instLive.innerText = '0.00 m';
+    }
 
     if (input) {
         input.value = '';
-        setTimeout(() => input.focus(), 50);
-    }
-    const drawerInp = document.getElementById('meas-drawer-cad-input');
-    if (drawerInp) {
-        drawerInp.value = '';
+        input.placeholder = 'Próxima medida (m)...';
+        input.focus();
     }
 };
 
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
         const inp = document.getElementById('cad-measure-input');
-        if (inp && (document.activeElement === inp || inp.value.trim() !== '')) {
+        if (inp && inp.value.trim() !== '') {
             e.preventDefault();
             window.applyCadMeasureInput();
+            return;
+        }
+        if (window.isMeasurementActive && (currentMeasurementMode === 'Line' || currentMeasurementMode === 'Polygon')) {
+            e.preventDefault();
+            window.finishCurrentMeasurementDraw();
+            return;
+        }
+    }
+    if (e.key === 'Escape') {
+        if (window.isMeasurementActive) {
+            stopMeasurementDraw();
             return;
         }
     }
@@ -308,15 +1285,44 @@ document.addEventListener('keydown', (e) => {
         const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
         const isInputFocused = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select';
         if (!isInputFocused && ((e.key >= '0' && e.key <= '9') || e.key === '.' || e.key === ',')) {
+            isCadDirectionLocked = true;
             const inp = document.getElementById('cad-measure-input');
             if (inp) {
+                inp.value = e.key;
                 inp.focus();
+                e.preventDefault();
             }
         }
     }
 });
 
+if (typeof document !== 'undefined') {
+    const bindHudHover = () => {
+        const hud = document.getElementById('cad-measure-hud');
+        if (hud && !hud._hasDirectionLockListener) {
+            hud._hasDirectionLockListener = true;
+            hud.addEventListener('mouseenter', () => {
+                isCadDirectionLocked = true;
+            });
+            hud.addEventListener('mouseleave', () => {
+                const inp = document.getElementById('cad-measure-input');
+                if (!inp || (document.activeElement !== inp && !inp.value.trim())) {
+                    isCadDirectionLocked = false;
+                }
+            });
+        }
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bindHudHover);
+    } else {
+        bindHudHover();
+    }
+}
+
 function closeMeasurementPanel() {
+    if (typeof window.cancelUberMeasurementPointAdjustment === 'function') {
+        window.cancelUberMeasurementPointAdjustment();
+    }
     // Ao clicar no ícone "x", limpa todas as medições e encerra a ferramenta
     if (typeof window.clearAllMeasurements === 'function') {
         window.clearAllMeasurements();
@@ -325,6 +1331,10 @@ function closeMeasurementPanel() {
     lastDrawnVertex = null;
     currentMouseLatLng = null;
 
+    if (map && map.doubleClickZoom && typeof map.doubleClickZoom.enable === 'function') {
+        map.doubleClickZoom.enable();
+    }
+
     const panel = document.getElementById('measurement-panel');
     if (panel) panel.classList.add('hidden');
     stopMeasurementDraw();
@@ -332,36 +1342,10 @@ function closeMeasurementPanel() {
     window.currentMeasurementMode = null;
     currentMeasurementMode = null;
 
-    // Desativa completamente modos de desenho e modos globais no Geoman apenas se estiverem ativos
-    if (map && map.pm) {
-        try {
-            if (typeof map.pm.disableDraw === 'function') map.pm.disableDraw();
-            if (map.pm.Draw) {
-                ['Marker', 'CircleMarker', 'Line', 'Polygon', 'Rectangle', 'Circle', 'Cut', 'Text'].forEach(s => {
-                    if (map.pm.Draw[s] && typeof map.pm.Draw[s].disable === 'function') {
-                        try { map.pm.Draw[s].disable(); } catch(e) {}
-                    }
-                });
-            }
-            if (typeof map.pm.globalEditModeEnabled === 'function' && map.pm.globalEditModeEnabled()) {
-                try { map.pm.disableGlobalEditMode(); } catch(e) {}
-            }
-            if (typeof map.pm.globalDragModeEnabled === 'function' && map.pm.globalDragModeEnabled()) {
-                try { map.pm.disableGlobalDragMode(); } catch(e) {}
-            }
-            if (typeof map.pm.globalRemovalModeEnabled === 'function' && map.pm.globalRemovalModeEnabled()) {
-                try { map.pm.disableGlobalRemovalMode(); } catch(e) {}
-            }
-            if (typeof map.pm.globalRotateModeEnabled === 'function' && map.pm.globalRotateModeEnabled()) {
-                try { map.pm.disableGlobalRotateMode(); } catch(e) {}
-            }
-        } catch(e) {
-            // Silently ignore geoman teardown edge cases
-        }
-    }
+
 
     // Disable pm vertex editing on existing layers while panel is closed
-    if (measurementLayerGroup) {
+    if (measurementLayerGroup && typeof measurementLayerGroup.eachLayer === 'function') {
         measurementLayerGroup.eachLayer(l => {
             if (l.pm && typeof l.pm.disable === 'function') {
                 try { l.pm.disable(); } catch(e) {}
@@ -412,7 +1396,14 @@ function resetMeasurementResults() {
 }
 
 window.clearAllMeasurements = function() {
+    if (typeof window.cancelUberMeasurementPointAdjustment === 'function') {
+        window.cancelUberMeasurementPointAdjustment();
+    }
     pointCounter = 1; // Reset counter
+    window._isHoveringMeasMarker = false;
+    window._isDraggingMeasMarker = false;
+    window._isAdjustingMeasPointWithReticle = false;
+    clearActiveMeasurePreview();
 
     // 1. Interrompe e cancela imediatamente qualquer desenho ativo no Geoman / Leaflet
     if (map && map.pm) {
@@ -423,7 +1414,7 @@ window.clearAllMeasurements = function() {
     stopMeasurementDraw();
 
     // 2. Limpa todas as camadas salvas no grupo de medição
-    if (measurementLayerGroup) {
+    if (measurementLayerGroup && typeof measurementLayerGroup.eachLayer === 'function') {
         measurementLayerGroup.eachLayer(l => {
             if (l.pm && typeof l.pm.disable === 'function') {
                 try { l.pm.disable(); } catch(e) {}
@@ -491,27 +1482,129 @@ window.fitMapToMeasurements = function() {
     }
 };
 
-function stopMeasurementDraw() {
-    if (map && map.pm) {
-        try {
-            if (typeof map.pm.disableDraw === 'function') map.pm.disableDraw();
-            if (map.pm.Draw) {
-                ['Marker', 'CircleMarker', 'Line', 'Polygon', 'Rectangle', 'Circle', 'Cut', 'Text'].forEach(s => {
-                    if (map.pm.Draw[s] && typeof map.pm.Draw[s].disable === 'function') {
-                        map.pm.Draw[s].disable();
-                    }
-                });
-            }
-        } catch(e) {}
+window.finishCurrentMeasurementDraw = function() {
+    const drawMode = currentMeasurementMode || cadActiveShape || 'Polygon';
+    let pts = (activeMeasurePoints && activeMeasurePoints.length > 0) ? [...activeMeasurePoints] : null;
+    const drawInstance = map && map.pm && map.pm.Draw && map.pm.Draw[drawMode];
+
+    if (!pts && drawInstance && drawInstance._layer) {
+        const rawPts = drawInstance._layer.getLatLngs();
+        pts = Array.isArray(rawPts[0]) ? rawPts[0] : rawPts;
     }
+
+    if (drawMode === 'Polygon') {
+        if (pts && pts.length >= 3) {
+            const poly = L.polygon(pts, {
+                color: '#10b981',
+                fillColor: '#10b981',
+                fillOpacity: 0.25,
+                weight: 2.5
+            });
+            clearActiveMeasurePreview();
+            if (map && map.pm) {
+                try { map.pm.disableDraw(); } catch(e) {}
+            }
+            map.fire('pm:create', { shape: 'Polygon', layer: poly });
+        } else {
+            if (typeof showToast === 'function') {
+                showToast('Adicione pelo menos 3 pontos para formar uma área.', 'warning');
+            } else if (typeof alert === 'function') {
+                alert('Adicione pelo menos 3 pontos para formar uma área.');
+            }
+        }
+    } else if (drawMode === 'Line') {
+        if (pts && pts.length >= 2) {
+            const line = L.polyline(pts, {
+                color: '#10b981',
+                weight: 2.5
+            });
+            clearActiveMeasurePreview();
+            if (map && map.pm) {
+                try { map.pm.disableDraw(); } catch(e) {}
+            }
+            map.fire('pm:create', { shape: 'Line', layer: line });
+        } else {
+            if (typeof showToast === 'function') {
+                showToast('Adicione pelo menos 2 pontos para formar uma linha.', 'warning');
+            } else if (typeof alert === 'function') {
+                alert('Adicione pelo menos 2 pontos para formar uma linha.');
+            }
+        }
+    } else if (drawInstance && typeof drawInstance._finishShape === 'function') {
+        drawInstance._finishShape();
+    } else if (map && map.pm) {
+        map.pm.disableDraw();
+    }
+};
+
+window.cancelUberMeasurementPointAdjustment = function() {
+    if (typeof window._activePointFinishAdjust === 'function') {
+        const fn = window._activePointFinishAdjust;
+        window._activePointFinishAdjust = null;
+        try { fn(false); } catch(e) {}
+    }
+    window._isAdjustingMeasPointWithReticle = false;
+    window._isDraggingMeasMarker = false;
+    window._isHoveringMeasMarker = false;
+    const reticleOverlay = document.getElementById('point-adjust-center-reticle');
+    if (reticleOverlay) {
+        reticleOverlay.classList.add('hidden');
+        reticleOverlay.classList.remove('flex');
+    }
+    const banner = document.getElementById('meas-point-adjust-banner');
+    if (banner) banner.classList.add('hidden');
+};
+
+function stopMeasurementDraw() {
+    if (typeof window.cancelUberMeasurementPointAdjustment === 'function') {
+        window.cancelUberMeasurementPointAdjustment();
+    }
+    window._isHoveringMeasMarker = false;
+    window._isDraggingMeasMarker = false;
+    window._isAdjustingMeasPointWithReticle = false;
+    hideAutoCadSnap();
+    hideUberLiveCursor();
     hideCadMeasureHud();
+    clearActiveMeasurePreview();
     lastDrawnVertex = null;
+    currentMouseLatLng = null;
+    cadTargetDirectionLatLng = null;
+    isCadDirectionLocked = false;
     currentMeasurementMode = null;
     window.currentMeasurementMode = null;
+    window.isMeasurementActive = false;
+
+    if (map && map.pm) {
+        try {
+            map.pm.disableDraw();
+        } catch(e) {}
+        if (map.pm.Draw) {
+            const shapes = ['Marker', 'CircleMarker', 'Line', 'Polygon', 'Rectangle', 'Circle', 'Cut'];
+            shapes.forEach(s => {
+                const inst = map.pm.Draw[s];
+                if (inst && typeof inst.disable === 'function' && inst.enabled && inst.enabled()) {
+                    try { inst.disable(); } catch(e) {}
+                }
+            });
+        }
+    }
+    if (map && map.doubleClickZoom && typeof map.doubleClickZoom.enable === 'function') {
+        map.doubleClickZoom.enable();
+    }
     
     // Enable other map interactions
     const mapEl = document.getElementById('map');
     if (mapEl) mapEl.style.cursor = '';
+
+    ['Marker', 'Line', 'Polygon'].forEach(m => {
+        const btn = document.getElementById('meas-btn-' + m);
+        if (btn) {
+            btn.classList.remove(
+                'bg-emerald-50', 'dark:bg-emerald-900/30', 'text-emerald-600', 'dark:text-emerald-400', 'border-emerald-300/60', 'dark:border-emerald-600/40'
+            );
+            btn.classList.add('border-transparent');
+        }
+    });
 }
 
 // --- DRAG LOGIC FOR MEASUREMENT PANEL ---
@@ -575,6 +1668,9 @@ function formatArea(sqMeters) {
 }
 
 function startMeasurementDraw(shape) {
+    if (typeof window.cancelUberMeasurementPointAdjustment === 'function') {
+        window.cancelUberMeasurementPointAdjustment();
+    }
     if (!map || !map.pm) return;
     
     const validShapes = ['Marker', 'CircleMarker', 'Line', 'Polygon', 'Rectangle', 'Circle', 'Cut', 'Text'];
@@ -586,36 +1682,120 @@ function startMeasurementDraw(shape) {
     
     stopMeasurementDraw();
     currentMeasurementMode = shape;
+    window.currentMeasurementMode = shape;
+    window.isMeasurementActive = true;
     cadActiveShape = shape;
     lastDrawnVertex = null;
     currentMouseLatLng = null;
     hideCadMeasureHud();
+    clearActiveMeasurePreview();
+
+    // Disable pm vertex editing & dragging on existing layers while drawing new shape
+    if (measurementLayerGroup && typeof measurementLayerGroup.eachLayer === 'function') {
+        measurementLayerGroup.eachLayer(l => {
+            if (l.pm && typeof l.pm.disable === 'function') {
+                try { l.pm.disable(); } catch(e) {}
+            }
+            if (l.dragging && typeof l.dragging.disable === 'function') {
+                try { l.dragging.disable(); } catch(e) {}
+            }
+        });
+    }
+
+    // Disable doubleClickZoom so double clicking finishes line/polygon without zooming
+    if (map.doubleClickZoom && typeof map.doubleClickZoom.disable === 'function') {
+        map.doubleClickZoom.disable();
+    }
+
+    // Keep active button highlighted
+    ['Marker', 'Line', 'Polygon', 'CoordinateQuery'].forEach(m => {
+        const btn = document.getElementById('meas-btn-' + m);
+        if (btn) {
+            if (m === shape) {
+                btn.classList.remove('border-transparent');
+                btn.classList.add('bg-emerald-50', 'dark:bg-emerald-900/30', 'text-emerald-600', 'dark:text-emerald-400', 'border-emerald-300/60', 'dark:border-emerald-600/40');
+            } else {
+                btn.classList.remove(
+                    'bg-emerald-50', 'dark:bg-emerald-900/30', 'text-emerald-600', 'dark:text-emerald-400', 'border-emerald-300/60', 'dark:border-emerald-600/40',
+                    'bg-blue-50', 'dark:bg-blue-900/30', 'text-blue-600', 'dark:text-blue-400', 'border-blue-300/60', 'dark:border-blue-600/40'
+                );
+                btn.classList.add('border-transparent');
+            }
+        }
+    });
     
     let inst = document.getElementById('meas-instruction');
     if(inst) {
         if (shape === 'Marker') {
-            inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no mapa para inserir pontos consecutivos.<br><span class="text-[9px] text-slate-400">Botão direito para excluir.</span></span>';
+            inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no mapa para inserir pontos consecutivos.<br><span class="text-[9px] text-slate-400">Arraste para mover | Botão direito para excluir.</span></span>';
         } else if (shape === 'Line') {
-            inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no 1º ponto para iniciar a linha.<br><span class="text-[9px] text-slate-400">Aponte o cursor na direção e digite a medida exata (Enter para inserir).</span></span>';
+            inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no mapa para traçar a linha (clique duplo finaliza).<br><span class="text-[9px] text-slate-400">Aponte o cursor na direção e digite a medida exata (Enter para inserir).<br>Arraste vértices para ajustar | Botão direito no vértice para excluir.</span></span>';
         } else if (shape === 'Polygon') {
-            inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no 1º ponto para iniciar a área.<br><span class="text-[9px] text-slate-400">Aponte o cursor na direção e digite a medida exata (Enter para inserir).</span></span>';
+            inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no mapa para traçar a área (clique no 1º ponto ou clique duplo para fechar).<br><span class="text-[9px] text-slate-400">Aponte o cursor na direção e digite a medida exata (Enter para inserir).<br>Arraste vértices para ajustar | Botão direito no vértice para excluir.</span></span>';
         } else {
             inst.innerHTML = '<span class="text-slate-600 dark:text-slate-300 font-medium">Clique no mapa para medir...</span>';
         }
         inst.classList.remove('hidden');
     }
-    
-    map.pm.enableDraw(shape, {
+
+    const snapLayersList = (measurementLayerGroup && measurementLayerGroup.getLayers().length > 0) ? [measurementLayerGroup] : [];
+
+    const drawOptions = {
         snappable: window.isMeasurementSnappingEnabled,
-        snapDistance: 20,
-        hintlineStyle: { color: '#10b981', dashArray: '5,5' },
-        templineStyle: { color: '#10b981' },
+        snapDistance: 15,
+        snapLayers: snapLayersList,
+        cursorMarker: true,
+        allowSelfIntersection: true,
+        hintlineStyle: { color: '#10b981', dashArray: '5,5', weight: 2 },
+        templineStyle: { color: '#10b981', weight: 2.5 },
         pathOptions: {
             color: '#10b981',
             fillColor: '#10b981',
-            fillOpacity: 0.3
+            fillOpacity: 0.25,
+            weight: 2.5
         }
-    });
+    };
+
+    if (shape === 'Line' || shape === 'Polygon') {
+        drawOptions.finishOn = 'dblclick';
+    }
+
+    const mapEl = document.getElementById('map');
+    if (mapEl) mapEl.style.cursor = 'crosshair';
+
+    if (shape === 'Marker') {
+        drawOptions.continueDrawing = false;
+        const pointLabel = String(pointCounter).padStart(2, '0');
+        const pointIcon = getTechPointIcon(pointLabel);
+        drawOptions.markerStyle = {
+            icon: pointIcon
+        };
+        if (map.pm) {
+            try { map.pm.disableDraw(); } catch(e) {}
+        }
+        if (currentMouseLatLng) {
+            updateUberLiveCursor(currentMouseLatLng);
+        } else {
+            hideUberLiveCursor();
+        }
+        return;
+    }
+
+    hideUberLiveCursor();
+    if (map.pm) {
+        try { map.pm.disableDraw(); } catch(e) {}
+    }
+
+    if (shape === 'Line' || shape === 'Polygon') {
+        initMeasurePreviewGroup();
+        clearActiveMeasurePreview();
+        activeMeasurePoints = [];
+        lastDrawnVertex = null;
+        cadActiveShape = shape;
+        showCadMeasureHud(shape);
+    } else {
+        hideCadMeasureHud();
+    }
 }
 
 // Listen for draw events
@@ -628,11 +1808,68 @@ if (typeof map !== 'undefined' && map && typeof map.on === 'function') {
     });
 }
 
+function handleMapClickCoordinateQuery(latlng) {
+    if (!latlng) return;
+    const lat = latlng.lat;
+    const lng = latlng.lng;
+
+    // Preenche campos DEC
+    const decLatInput = document.getElementById('input-coord-dec-lat');
+    const decLngInput = document.getElementById('input-coord-dec-lng');
+    if (decLatInput) decLatInput.value = lat.toFixed(6);
+    if (decLngInput) decLngInput.value = lng.toFixed(6);
+
+    // Preenche campos GMS
+    const latAbs = Math.abs(lat);
+    const latDeg = Math.floor(latAbs);
+    const latMin = Math.floor((latAbs - latDeg) * 60);
+    const latSec = ((latAbs - latDeg - latMin / 60) * 3600).toFixed(2);
+    const latDir = lat >= 0 ? 'N' : 'S';
+
+    const lngAbs = Math.abs(lng);
+    const lngDeg = Math.floor(lngAbs);
+    const lngMin = Math.floor((lngAbs - lngDeg) * 60);
+    const lngSec = ((lngAbs - lngDeg - lngMin / 60) * 3600).toFixed(2);
+    const lngDir = lng >= 0 ? 'E' : 'W';
+
+    if (document.getElementById('input-coord-gms-lat-deg')) document.getElementById('input-coord-gms-lat-deg').value = latDeg;
+    if (document.getElementById('input-coord-gms-lat-min')) document.getElementById('input-coord-gms-lat-min').value = latMin;
+    if (document.getElementById('input-coord-gms-lat-sec')) document.getElementById('input-coord-gms-lat-sec').value = latSec;
+    if (document.getElementById('input-coord-gms-lat-dir')) document.getElementById('input-coord-gms-lat-dir').value = latDir;
+
+    if (document.getElementById('input-coord-gms-lng-deg')) document.getElementById('input-coord-gms-lng-deg').value = lngDeg;
+    if (document.getElementById('input-coord-gms-lng-min')) document.getElementById('input-coord-gms-lng-min').value = lngMin;
+    if (document.getElementById('input-coord-gms-lng-sec')) document.getElementById('input-coord-gms-lng-sec').value = lngSec;
+    if (document.getElementById('input-coord-gms-lng-dir')) document.getElementById('input-coord-gms-lng-dir').value = lngDir;
+
+    // Preenche campos UTM se proj4 disponível
+    if (typeof proj4 !== 'undefined') {
+        const zone = Math.floor((lng + 180) / 6) + 1;
+        const isNorth = lat >= 0;
+        const projStr = `+proj=utm +zone=${zone} ${isNorth ? '+north' : '+south'} +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`;
+        try {
+            const coords = proj4('EPSG:4326', projStr, [lng, lat]);
+            if (coords && coords.length >= 2) {
+                if (document.getElementById('input-coord-utm-x')) document.getElementById('input-coord-utm-x').value = coords[0].toFixed(2);
+                if (document.getElementById('input-coord-utm-y')) document.getElementById('input-coord-utm-y').value = coords[1].toFixed(2);
+                if (document.getElementById('input-coord-utm-zone')) document.getElementById('input-coord-utm-zone').value = String(zone);
+            }
+        } catch(e) {}
+    }
+
+    // Executa a localização para exibir o pin e o card de resultado
+    if (typeof window.locateCoordinatesOnMap === 'function') {
+        window.locateCoordinatesOnMap();
+    }
+}
+
 function setupMeasurementEvents() {
     if (typeof map === 'undefined' || !map || typeof map.on !== 'function') {
-        setTimeout(setupMeasurementEvents, 500);
+        setTimeout(setupMeasurementEvents, 300);
         return;
     }
+    if (window._isMeasurementEventsSetup) return;
+    window._isMeasurementEventsSetup = true;
 
     map.on('pm:drawstart', (e) => {
         if (currentMeasurementMode === 'Line' || currentMeasurementMode === 'Polygon') {
@@ -656,43 +1893,274 @@ function setupMeasurementEvents() {
         }
     });
 
+    let measMouseMoveRaf = null;
+
     map.on('mousemove', (e) => {
+        if (!e || !e.latlng) return;
         currentMouseLatLng = e.latlng;
-        if (lastDrawnVertex && (currentMeasurementMode === 'Line' || currentMeasurementMode === 'Polygon')) {
-            updateCadMeasureHudLive(e.latlng);
+
+        // Auto-limpeza de guarda de hover caso o mouse não esteja sobre um marcador existente
+        if (window._isHoveringMeasMarker && measurementLayerGroup) {
+            let isNearMarker = false;
+            const mouseScreenPt = (typeof map.latLngToContainerPoint === 'function') ? map.latLngToContainerPoint(e.latlng) : null;
+            if (mouseScreenPt) {
+                measurementLayerGroup.eachLayer(l => {
+                    if (l instanceof L.Marker && typeof l.getLatLng === 'function') {
+                        const mPt = map.latLngToContainerPoint(l.getLatLng());
+                        if (Math.hypot(mouseScreenPt.x - mPt.x, mouseScreenPt.y - mPt.y) <= 22) {
+                            isNearMarker = true;
+                        }
+                    }
+                });
+            }
+            if (!isNearMarker) {
+                window._isHoveringMeasMarker = false;
+            }
+        }
+
+        if (window._isAdjustingMeasPointWithReticle) {
+            hideAutoCadSnap();
+            hideUberLiveCursor();
+            return;
+        }
+
+        if (window.isMeasurementActive && currentMeasurementMode) {
+            const processMouseMove = (targetCoord) => {
+                const snap = findAutoCadSnap(targetCoord);
+                currentSnapResult = snap;
+                const effectiveLatLng = snap ? snap.latlng : targetCoord;
+
+                if (snap) {
+                    showAutoCadSnap(snap.latlng, snap.type, snap.label);
+                } else {
+                    hideAutoCadSnap();
+                }
+
+                if (currentMeasurementMode === 'Marker') {
+                    updateUberLiveCursor(effectiveLatLng);
+                }
+
+                if (currentMeasurementMode === 'Line' || currentMeasurementMode === 'Polygon') {
+                    if (!isCadDirectionLocked) {
+                        cadTargetDirectionLatLng = effectiveLatLng;
+                    }
+
+                    // Renderiza rubberband dinâmico a partir dos pontos fixados até o cursor
+                    if (activeMeasurePoints.length > 0) {
+                        updateRubberband(effectiveLatLng);
+                    }
+
+                    if (lastDrawnVertex || activeMeasurePoints.length > 0) {
+                        updateCadMeasureHudLive(effectiveLatLng);
+                    }
+                }
+            };
+
+            // No ambiente de teste roda sincrono; no browser usa rAF para fluidez 60fps
+            if (typeof requestAnimationFrame !== 'function') {
+                processMouseMove(e.latlng);
+            } else {
+                if (measMouseMoveRaf) return;
+                measMouseMoveRaf = requestAnimationFrame(() => {
+                    measMouseMoveRaf = null;
+                    if (!map || !currentMouseLatLng) return;
+                    processMouseMove(currentMouseLatLng);
+                });
+            }
+        } else {
+            hideAutoCadSnap();
+            hideUberLiveCursor();
+        }
+    });
+
+    const mapContainer = (map && typeof map.getContainer === 'function') ? map.getContainer() : null;
+    if (mapContainer && !mapContainer._hasMeasMouseLeaveListener) {
+        mapContainer._hasMeasMouseLeaveListener = true;
+        mapContainer.addEventListener('mouseleave', () => {
+            hideAutoCadSnap();
+            hideUberLiveCursor();
+        });
+        mapContainer.addEventListener('mouseenter', () => {
+            if (window.isMeasurementActive && currentMeasurementMode === 'Marker' && currentMouseLatLng) {
+                updateUberLiveCursor(currentMouseLatLng);
+            }
+        });
+    }
+
+    map.on('dblclick', (e) => {
+        if (currentMeasurementMode === 'Polygon' || currentMeasurementMode === 'Line') {
+            if (e && e.originalEvent) {
+                L.DomEvent.stop(e.originalEvent);
+            }
+            finishCurrentMeasurementDraw();
         }
     });
 
     map.on('click', (e) => {
-        if (currentMeasurementMode === 'Line' || currentMeasurementMode === 'Polygon') {
-            setTimeout(() => {
-                const drawInstance = map && map.pm && map.pm.Draw && map.pm.Draw[currentMeasurementMode];
-                if (drawInstance && drawInstance._layer) {
-                    const latlngs = drawInstance._layer.getLatLngs();
-                    const pts = Array.isArray(latlngs[0]) ? latlngs[0] : latlngs;
-                    if (pts && pts.length > 0) {
-                        lastDrawnVertex = pts[pts.length - 1];
-                        showCadMeasureHud(currentMeasurementMode);
+        if (!e || !e.latlng) return;
+
+        // Auto-limpeza de guarda de hover se o clique ocorreu fora da área do marcador
+        if (window._isHoveringMeasMarker && measurementLayerGroup) {
+            let isNearMarker = false;
+            const mouseScreenPt = (typeof map.latLngToContainerPoint === 'function') ? map.latLngToContainerPoint(e.latlng) : null;
+            if (mouseScreenPt) {
+                measurementLayerGroup.eachLayer(l => {
+                    if (l instanceof L.Marker && typeof l.getLatLng === 'function') {
+                        const mPt = map.latLngToContainerPoint(l.getLatLng());
+                        if (Math.hypot(mouseScreenPt.x - mPt.x, mouseScreenPt.y - mPt.y) <= 22) {
+                            isNearMarker = true;
+                        }
                     }
-                } else if (!lastDrawnVertex && e.latlng) {
-                    lastDrawnVertex = e.latlng;
-                    showCadMeasureHud(currentMeasurementMode);
+                });
+            }
+            if (!isNearMarker) {
+                window._isHoveringMeasMarker = false;
+            }
+        }
+
+        if (window._isHoveringMeasMarker || window._isDraggingMeasMarker) return;
+        if (window._isAdjustingMeasPointWithReticle) return;
+
+        // Debounce de cliques duplicados (evita duplo disparo em canvas _fireEvent / DOM bubbling)
+        const now = Date.now();
+        if (lastClickLatLng && (now - lastClickTimestamp < 120)) {
+            const dLat = Math.abs(e.latlng.lat - lastClickLatLng.lat);
+            const dLng = Math.abs(e.latlng.lng - lastClickLatLng.lng);
+            if (dLat < 0.00001 && dLng < 0.00001) {
+                return;
+            }
+        }
+        lastClickTimestamp = now;
+        lastClickLatLng = e.latlng;
+
+        // Calcula snap exatamente na coordenada do clique para nunca usar resultado desatualizado
+        const snap = findAutoCadSnap(e.latlng);
+        currentSnapResult = snap;
+        const targetLatLng = snap ? snap.latlng : e.latlng;
+
+        if (snap) {
+            e.latlng = targetLatLng;
+            if (typeof map.latLngToLayerPoint === 'function') {
+                e.layerPoint = map.latLngToLayerPoint(targetLatLng);
+            }
+            if (typeof map.latLngToContainerPoint === 'function') {
+                e.containerPoint = map.latLngToContainerPoint(targetLatLng);
+            }
+        }
+
+        // Modo Consulta de Coordenadas ("Busca")
+        if (currentMeasurementMode === 'CoordinateQuery') {
+            handleMapClickCoordinateQuery(targetLatLng);
+            return;
+        }
+
+        // Modo Ponto ("Marker") - inserção imediata e acompanhamento contínuo
+        if (currentMeasurementMode === 'Marker') {
+            createTechnicalPoint(targetLatLng);
+            hideAutoCadSnap();
+            currentSnapResult = null;
+            return;
+        }
+
+        // Modo Área ("Polygon") ou Linha ("Line"):
+        if (currentMeasurementMode === 'Polygon' || currentMeasurementMode === 'Line') {
+            // Se for polígono e o usuário clicou no primeiro vértice para fechar:
+            if (currentMeasurementMode === 'Polygon' && activeMeasurePoints.length >= 3) {
+                const firstPt = activeMeasurePoints[0];
+                let isClosing = false;
+                if (snap && snap.type === 'close-polygon') {
+                    isClosing = true;
+                } else if (map && typeof map.latLngToContainerPoint === 'function') {
+                    const screenPt = map.latLngToContainerPoint(firstPt);
+                    const clickPt = map.latLngToContainerPoint(e.latlng);
+                    const distToFirst = Math.hypot(clickPt.x - screenPt.x, clickPt.y - screenPt.y);
+                    if (distToFirst <= 26) {
+                        isClosing = true;
+                    }
                 }
-            }, 60);
+                if (isClosing) {
+                    finishCurrentMeasurementDraw();
+                    return;
+                }
+            }
+
+            // Verifica se há uma medida digitada travando o comprimento da aresta
+            let vertexToCommit = targetLatLng;
+            const lockedMeters = getLockedCadMeasure();
+            if (lockedMeters && lastDrawnVertex) {
+                const lockedDest = getDestinationLatLng(lastDrawnVertex, targetLatLng, lockedMeters);
+                if (lockedDest) {
+                    vertexToCommit = lockedDest;
+                }
+                const inp = document.getElementById('cad-measure-input');
+                if (inp) {
+                    inp.value = '';
+                    inp.placeholder = 'Próxima medida (m)...';
+                }
+                if (typeof showToast === 'function') {
+                    showToast(`Aresta de ${lockedMeters.toFixed(2)} m fixada!`, 'success');
+                }
+            }
+
+            // Adiciona vértice à lista de pontos da geometria
+            activeMeasurePoints.push(vertexToCommit);
+            addActiveAnchorMarker(vertexToCommit);
+            lastDrawnVertex = vertexToCommit;
+
+            // Atualiza linha de segmentos confirmados
+            if (activeMeasurePoints.length > 1) {
+                if (!committedSegmentsLine) {
+                    committedSegmentsLine = L.polyline(activeMeasurePoints, {
+                        color: '#10b981',
+                        weight: 2.5,
+                        renderer: getMeasSvgRenderer(),
+                        interactive: false
+                    });
+                    if (activeMeasurePreviewGroup) activeMeasurePreviewGroup.addLayer(committedSegmentsLine);
+                } else {
+                    if (activeMeasurePreviewGroup && !activeMeasurePreviewGroup.hasLayer(committedSegmentsLine)) {
+                        activeMeasurePreviewGroup.addLayer(committedSegmentsLine);
+                    }
+                    committedSegmentsLine.setLatLngs(activeMeasurePoints);
+                }
+            }
+
+            // Oculta rubberband imediatamente para a linha terminar exatamente no vértice fixado
+            hideRubberband();
+
+            showCadMeasureHud(currentMeasurementMode);
+            const hintEl = document.getElementById('cad-hud-hint');
+            if (hintEl) {
+                hintEl.innerHTML = `<span class="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-bold text-[8.5px]">Passo 2</span> Aponte o cursor na direção da próxima aresta ou clique duplo para concluir`;
+            }
+            const instLive = document.getElementById('meas-cad-dist-live');
+            if (instLive) {
+                instLive.innerText = '0.00 m';
+            }
+            return;
         }
     });
     
     map.on('pm:create', (e) => {
+        // Se a medição NÃO estiver ativa, ou se estivermos desenhando feição de camada, NÃO interceptar!
+        if (!window.isMeasurementActive || !currentMeasurementMode) {
+            return;
+        }
+        if ((typeof editingThemeId !== 'undefined' && editingThemeId) || window.editingThemeId) {
+            return;
+        }
+
         hideCadMeasureHud();
         lastDrawnVertex = null;
-        if (!currentMeasurementMode) return;
+        const currentShape = currentMeasurementMode || cadActiveShape || e.shape || 'Polygon';
+        if (!e.layer) return;
         
         const layer = e.layer;
-        const currentShape = e.shape || currentMeasurementMode;
         
         if (!measurementLayerGroup) {
             measurementLayerGroup = L.featureGroup().addTo(map);
         }
+        window.measurementLayerGroup = measurementLayerGroup;
         measurementLayerGroup.addLayer(layer);
         
         const list = document.getElementById('meas-features-list');
@@ -701,6 +2169,8 @@ function setupMeasurementEvents() {
 
         // Function to delete this specific layer and its card
         const deleteFeature = () => {
+            window._isHoveringMeasMarker = false;
+            window._isDraggingMeasMarker = false;
             if (layer.pm && typeof layer.pm.disable === 'function') {
                 layer.pm.disable();
             }
@@ -728,11 +2198,35 @@ function setupMeasurementEvents() {
 
         try {
             if (currentShape === 'Polygon') {
-                if (layer.pm && typeof layer.pm.disable === 'function') {
-                    layer.pm.disable();
+                const snapLayersList = (measurementLayerGroup && measurementLayerGroup.getLayers().length > 0) ? [measurementLayerGroup] : [];
+                // Enable Geoman vertex editing & vertex deletion & whole shape dragging
+                if (layer.pm) {
+                    layer.pm.enable({
+                        allowSelfIntersection: true,
+                        preventMarkerRemoval: false,
+                        snappable: window.isMeasurementSnappingEnabled,
+                        snapLayers: snapLayersList,
+                        draggable: true
+                    });
                 }
 
-                layer.bindTooltip('Polígono', { sticky: true });
+                layer.on('click', (ev) => {
+                    if (window.isMeasurementActive && (currentMeasurementMode === 'Line' || currentMeasurementMode === 'Polygon' || currentMeasurementMode === 'Marker')) {
+                        return;
+                    }
+                    if (ev) L.DomEvent.stopPropagation(ev);
+                    if (layer.pm && !layer.pm.enabled()) {
+                        layer.pm.enable({
+                            allowSelfIntersection: true,
+                            preventMarkerRemoval: false,
+                            snappable: window.isMeasurementSnappingEnabled,
+                            snapLayers: snapLayersList,
+                            draggable: true
+                        });
+                    }
+                });
+
+                layer.bindTooltip('Polígono <span style="font-size:9px;opacity:0.75;">(Arraste vértices / Botão direito no vértice p/ excluir)</span>', { sticky: true });
 
                 const renderPolygon = () => {
                     const geojson = layer.toGeoJSON();
@@ -749,6 +2243,13 @@ function setupMeasurementEvents() {
                     const decStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
                     const dmsStr = typeof formatDMS === 'function' ? formatDMS(lat, lng) : 'N/A';
                     const utmStr = typeof formatUTM === 'function' ? formatUTM(lat, lng) : 'N/A';
+
+                    layer.measurementData = {
+                        type: 'Polygon',
+                        area: area,
+                        perimeter: perimeter,
+                        centroid: { lat, lng, dec: decStr, dms: dmsStr, utm: utmStr }
+                    };
 
                     contentBox.innerHTML = `
                         <div class="grid grid-cols-2 gap-x-3 gap-y-2 w-full text-left mt-0.5">
@@ -769,14 +2270,41 @@ function setupMeasurementEvents() {
                 renderPolygon();
                 layer.on('pm:edit', renderPolygon);
                 layer.on('pm:vertexremoved', renderPolygon);
+                layer.on('pm:markerdrag', renderPolygon);
                 layer.on('pm:markerdragend', renderPolygon);
+                layer.on('pm:drag', renderPolygon);
+                layer.on('pm:dragend', renderPolygon);
 
             } else if (currentShape === 'Line') {
-                if (layer.pm && typeof layer.pm.disable === 'function') {
-                    layer.pm.disable();
+                const snapLayersList = (measurementLayerGroup && measurementLayerGroup.getLayers().length > 0) ? [measurementLayerGroup] : [];
+                // Enable Geoman vertex editing & vertex deletion & whole shape dragging
+                if (layer.pm) {
+                    layer.pm.enable({
+                        allowSelfIntersection: true,
+                        preventMarkerRemoval: false,
+                        snappable: window.isMeasurementSnappingEnabled,
+                        snapLayers: snapLayersList,
+                        draggable: true
+                    });
                 }
 
-                layer.bindTooltip('Linha', { sticky: true });
+                layer.on('click', (ev) => {
+                    if (window.isMeasurementActive && (currentMeasurementMode === 'Line' || currentMeasurementMode === 'Polygon' || currentMeasurementMode === 'Marker')) {
+                        return;
+                    }
+                    if (ev) L.DomEvent.stopPropagation(ev);
+                    if (layer.pm && !layer.pm.enabled()) {
+                        layer.pm.enable({
+                            allowSelfIntersection: true,
+                            preventMarkerRemoval: false,
+                            snappable: window.isMeasurementSnappingEnabled,
+                            snapLayers: snapLayersList,
+                            draggable: true
+                        });
+                    }
+                });
+
+                layer.bindTooltip('Linha <span style="font-size:9px;opacity:0.75;">(Arraste vértices / Botão direito no vértice p/ excluir)</span>', { sticky: true });
 
                 const renderLine = () => {
                     const geojson = layer.toGeoJSON();
@@ -792,6 +2320,12 @@ function setupMeasurementEvents() {
                     const decStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
                     const dmsStr = typeof formatDMS === 'function' ? formatDMS(lat, lng) : 'N/A';
                     const utmStr = typeof formatUTM === 'function' ? formatUTM(lat, lng) : 'N/A';
+
+                    layer.measurementData = {
+                        type: 'Line',
+                        length: length,
+                        centroid: { lat, lng, dec: decStr, dms: dmsStr, utm: utmStr }
+                    };
 
                     contentBox.innerHTML = `
                         <div class="grid grid-cols-1 gap-y-2 w-full text-left mt-0.5">
@@ -811,34 +2345,41 @@ function setupMeasurementEvents() {
                 renderLine();
                 layer.on('pm:edit', renderLine);
                 layer.on('pm:vertexremoved', renderLine);
+                layer.on('pm:markerdrag', renderLine);
                 layer.on('pm:markerdragend', renderLine);
+                layer.on('pm:drag', renderLine);
+                layer.on('pm:dragend', renderLine);
 
             } else if (currentShape === 'Marker') {
                 const pointLabel = String(pointCounter).padStart(2, '0');
                 pointCounter++;
 
-                const techIcon = L.divIcon({
-                    className: 'custom-tech-point',
-                    html: `<div style="width: 14px; height: 14px; border: 2px solid black; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: transparent; position: relative;">
-                               <div style="width: 4px; height: 4px; background: black; border-radius: 50%;"></div>
-                               <span style="position: absolute; top: -16px; left: 10px; font-weight: 900; font-family: monospace; font-size: 13px; color: black; text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff;">P${pointLabel}</span>
-                           </div>`,
-                    iconSize: [14, 14],
-                    iconAnchor: [7, 7]
-                });
+                const techIcon = getTechPointIcon(pointLabel);
                 layer.setIcon(techIcon);
 
-                // Pontos em index.html são estáticos e fixos (não arrastáveis)
-                if (layer.dragging && typeof layer.dragging.disable === 'function') {
-                    layer.dragging.disable();
-                }
+                const snapLayersList = (measurementLayerGroup && measurementLayerGroup.getLayers().length > 0) ? [measurementLayerGroup] : [];
+
                 if (layer.pm && typeof layer.pm.disable === 'function') {
                     layer.pm.disable();
                 }
 
-                // Prevent click propagation on mousedown so clicking existing marker doesn't spawn new marker
-                layer.on('mousedown', (ev) => {
-                    if (ev) L.DomEvent.stopPropagation(ev);
+                // Handlers for clean hover and drag WITHOUT popup or ghost live cursor
+                layer.on('mouseover', () => {
+                    if (currentMeasurementMode === 'Marker') {
+                        window._isHoveringMeasMarker = true;
+                        hideUberLiveCursor();
+                        hideAutoCadSnap();
+                        if (layer._icon) {
+                            layer._icon.style.cursor = 'grab';
+                        }
+                    }
+                });
+
+                layer.on('mouseout', () => {
+                    window._isHoveringMeasMarker = false;
+                    if (window.isMeasurementActive && currentMeasurementMode === 'Marker' && !window._isDraggingMeasMarker && currentMouseLatLng) {
+                        updateUberLiveCursor(currentMouseLatLng);
+                    }
                 });
 
                 // Right-click on marker deletes it directly
@@ -847,35 +2388,95 @@ function setupMeasurementEvents() {
                     deleteFeature();
                 });
 
-                layer.bindTooltip(`P${pointLabel} <span style="font-size:9px;opacity:0.75;">(Botão direito p/ excluir)</span>`, {
-                    direction: 'top',
-                    offset: [0, -10]
-                });
+                const pos = layer.getLatLng();
+                const initLat = pos.lat;
+                const initLng = pos.lng;
+                const initDec = `${initLat.toFixed(6)}, ${initLng.toFixed(6)}`;
+                const initDms = typeof formatDMS === 'function' ? formatDMS(initLat, initLng) : 'N/A';
+                const initUtm = typeof formatUTM === 'function' ? formatUTM(initLat, initLng) : 'N/A';
+
+                layer.measurementData = {
+                    type: 'Point',
+                    id: `P${pointLabel}`,
+                    label: `P${pointLabel}`,
+                    lat: initLat,
+                    lng: initLng,
+                    utm: initUtm
+                };
 
                 const renderMarker = () => {
-                    const pos = layer.getLatLng();
-                    const lat = pos.lat;
-                    const lng = pos.lng;
-                    const decStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-                    const dmsStr = typeof formatDMS === 'function' ? formatDMS(lat, lng) : 'N/A';
-                    const utmStr = typeof formatUTM === 'function' ? formatUTM(lat, lng) : 'N/A';
+                    const curPos = layer.getLatLng();
+                    const curLat = curPos.lat;
+                    const curLng = curPos.lng;
+                    const curDec = `${curLat.toFixed(6)}, ${curLng.toFixed(6)}`;
+                    const curDms = typeof formatDMS === 'function' ? formatDMS(curLat, curLng) : 'N/A';
+                    const curUtm = typeof formatUTM === 'function' ? formatUTM(curLat, curLng) : 'N/A';
+
+                    layer.measurementData.lat = curLat;
+                    layer.measurementData.lng = curLng;
+                    layer.measurementData.dec = curDec;
+                    layer.measurementData.dms = curDms;
+                    layer.measurementData.utm = curUtm;
 
                     contentBox.innerHTML = `
                         <div class="flex flex-col w-full text-left mt-0.5">
                             <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Ponto Técnico (P${pointLabel})</span>
                             <div class="flex flex-col gap-0.5 text-[10px] font-mono text-slate-600 dark:text-slate-300">
-                                <div class="flex items-center gap-1.5"><span class="text-[8px] font-bold text-slate-400 w-6">DEC</span><span>${decStr}</span></div>
-                                <div class="flex items-center gap-1.5"><span class="text-[8px] font-bold text-slate-400 w-6">GMS</span><span>${dmsStr}</span></div>
-                                <div class="flex items-center gap-1.5"><span class="text-[8px] font-bold text-slate-400 w-6">UTM</span><span>${utmStr}</span></div>
+                                <div class="flex items-center gap-1.5"><span class="text-[8px] font-bold text-slate-400 w-6">DEC</span><span>${curDec}</span></div>
+                                <div class="flex items-center gap-1.5"><span class="text-[8px] font-bold text-slate-400 w-6">GMS</span><span>${curDms}</span></div>
+                                <div class="flex items-center gap-1.5"><span class="text-[8px] font-bold text-slate-400 w-6">UTM</span><span>${curUtm}</span></div>
                             </div>
                         </div>
                     `;
                 };
 
-                renderMarker();
-                layer.on('drag', renderMarker);
-                layer.on('dragend', renderMarker);
+                // Native Leaflet drag handling
+                if (layer.dragging && typeof layer.dragging.enable === 'function') {
+                    layer.dragging.enable();
+                }
+
+                layer.on('dragstart', () => {
+                    window._isDraggingMeasMarker = true;
+                    hideUberLiveCursor();
+                    hideAutoCadSnap();
+                    if (layer._icon) {
+                        layer._icon.style.cursor = 'grabbing';
+                        layer._icon.classList.add('meas-marker-dragging');
+                    }
+                });
+
+                layer.on('drag', () => {
+                    hideUberLiveCursor();
+                    renderMarker();
+                });
+
+                layer.on('dragend', () => {
+                    window._isDraggingMeasMarker = false;
+                    window._isHoveringMeasMarker = false;
+                    if (layer._icon) {
+                        layer._icon.style.cursor = 'grab';
+                        layer._icon.classList.remove('meas-marker-dragging');
+                    }
+                    renderMarker();
+                });
+
                 layer.on('pm:dragend', renderMarker);
+
+                // Evita que o clique sobre marcador existente dispare novo ponto no mapa
+                layer.on('mousedown', () => {
+                    if (currentMeasurementMode === 'Marker') {
+                        hideUberLiveCursor();
+                    }
+                });
+
+                layer.on('click', (ev) => {
+                    if (currentMeasurementMode === 'Marker') {
+                        if (ev) L.DomEvent.stopPropagation(ev);
+                        hideUberLiveCursor();
+                    }
+                });
+
+                renderMarker();
             }
 
             if (list) {
@@ -896,14 +2497,10 @@ function setupMeasurementEvents() {
 
         // CONTINUOUS DRAWING FOR MARKER VS STOP FOR LINE/POLYGON
         if (currentMeasurementMode === 'Marker') {
-            setTimeout(() => {
-                if (currentMeasurementMode === 'Marker' && map && map.pm) {
-                    map.pm.enableDraw('Marker', {
-                        snappable: window.isMeasurementSnappingEnabled,
-                        snapDistance: 20
-                    });
-                }
-            }, 60);
+            // Suporte a inserção contínua de pontos técnicos (P01, P02...) via startMeasurementDraw('Marker')
+            if (currentMouseLatLng) {
+                updateUberLiveCursor(currentMouseLatLng);
+            }
         } else {
             // For Line and Polygon, stop draw mode after completing so user can immediately adjust vertices
             stopMeasurementDraw();
@@ -962,6 +2559,12 @@ function saveMeasurementPDF() {
 
     measurementLayerGroup.eachLayer(layer => {
         const geojson = layer.toGeoJSON();
+        if (layer.measurementData) {
+            geojson.properties = {
+                ...(geojson.properties || {}),
+                ...layer.measurementData
+            };
+        }
         features.push(geojson);
     });
 
@@ -1029,37 +2632,29 @@ function saveMeasurementPDF() {
     // Compartilha objeto completo diretamente na memória (sem limite de 5MB do localStorage)
     window._measurementReportData = reportData;
 
-    // Salva versão leve no localStorage com tratamento seguro contra QuotaExceededError
+    // Salva versão leve no localStorage (apenas medições e metadados básicos das camadas)
     try {
         const lightweightData = {
             ...reportData,
-            camadasVetoriais: reportData.camadasVetoriais.map(cv => ({
+            camadasVetoriais: (reportData.camadasVetoriais || []).map(cv => ({
                 id: cv.id,
                 nome: cv.nome,
                 cor: cv.cor,
                 visivel: cv.visivel,
-                // Mantém apenas uma amostra segura de feições no localStorage para não estourar a cota
-                features: (cv.features || []).slice(0, 100)
+                features: []
             }))
         };
         localStorage.setItem('measurement_report_data', JSON.stringify(lightweightData));
     } catch(eQuota) {
-        console.warn('[saveMeasurementPDF] localStorage com cota cheia. Salvando apenas metadados:', eQuota);
+        // Fallback silencioso: relatorio.html carregará diretamente de window.opener._measurementReportData
         try {
-            const metaOnlyData = {
-                ...reportData,
-                camadasVetoriais: reportData.camadasVetoriais.map(cv => ({
-                    id: cv.id,
-                    nome: cv.nome,
-                    cor: cv.cor,
-                    visivel: cv.visivel,
-                    features: []
-                }))
+            const minData = {
+                userName: reportData.userName,
+                entidadeName: reportData.entidadeName,
+                features: reportData.features || []
             };
-            localStorage.setItem('measurement_report_data', JSON.stringify(metaOnlyData));
-        } catch(eFatal) {
-            console.warn('[saveMeasurementPDF] Não foi possível persistir no localStorage; relatório usará window.opener:', eFatal);
-        }
+            localStorage.setItem('measurement_report_data', JSON.stringify(minData));
+        } catch(eFatal) {}
     }
     
     if (btn) btn.innerHTML = originalText;
@@ -1428,6 +3023,7 @@ window.locateCoordinatesOnMap = function() {
         });
 
         coordinateQueryMarker = L.marker([lat, lng], { icon: queryMarkerIcon }).addTo(map);
+        window.coordinateQueryMarker = coordinateQueryMarker;
 
         // Navega suavemente até o ponto com zoom aproximado
         map.flyTo([lat, lng], 18, { duration: 1.2 });
@@ -1560,6 +3156,12 @@ window.toggleGeometryDrawer = function() {
 };
 
 window.collapseMeasurementDrawer = function() {
+    if (typeof window.cancelUberMeasurementPointAdjustment === 'function') {
+        window.cancelUberMeasurementPointAdjustment();
+    }
+    if (typeof window.clearAllMeasurements === 'function') {
+        window.clearAllMeasurements();
+    }
     const geoTab = document.getElementById('meas-tab-geometry');
     const coordTab = document.getElementById('meas-tab-coord-query');
     if (geoTab) {
@@ -1585,9 +3187,14 @@ window.collapseMeasurementDrawer = function() {
         stopMeasurementDraw();
     }
     currentMeasurementMode = null;
+    window.currentMeasurementMode = null;
+    window.isMeasurementActive = false;
 };
 
 window.switchMeasurementMode = function(mode) {
+    if (typeof window.cancelUberMeasurementPointAdjustment === 'function') {
+        window.cancelUberMeasurementPointAdjustment();
+    }
     if (!mode || mode === 'null' || mode === 'undefined') {
         window.collapseMeasurementDrawer();
         return;
@@ -1633,16 +3240,46 @@ window.switchMeasurementMode = function(mode) {
             stopMeasurementDraw();
         }
         currentMeasurementMode = null;
+        window.currentMeasurementMode = null;
         return;
     }
 
+    if (typeof stopMeasurementDraw === 'function') {
+        stopMeasurementDraw();
+    }
+
     currentMeasurementMode = mode;
+    window.currentMeasurementMode = mode;
+    window.isMeasurementActive = true;
+    window._isHoveringMeasMarker = false;
+    window._isDraggingMeasMarker = false;
+
+    // Desativa edição e arraste de todas as camadas existentes para não interferir na nova ferramenta
+    if (measurementLayerGroup && typeof measurementLayerGroup.eachLayer === 'function') {
+        measurementLayerGroup.eachLayer(l => {
+            if (l.pm && typeof l.pm.disable === 'function') {
+                try { l.pm.disable(); } catch(e) {}
+            }
+            if (l.dragging && typeof l.dragging.disable === 'function') {
+                try { l.dragging.disable(); } catch(e) {}
+            }
+        });
+    }
+
+    // Se o modo selecionado for Marker, habilita o arraste dos marcadores técnicos existentes
+    if (mode === 'Marker' && measurementLayerGroup && typeof measurementLayerGroup.eachLayer === 'function') {
+        measurementLayerGroup.eachLayer(l => {
+            if (l instanceof L.Marker && l.dragging && typeof l.dragging.enable === 'function') {
+                try { l.dragging.enable(); } catch(e) {}
+            }
+        });
+    }
 
     if (mode === 'CoordinateQuery') {
-        if (typeof stopMeasurementDraw === 'function') {
-            stopMeasurementDraw();
+        if (geoTab) {
+            geoTab.classList.add('hidden');
+            geoTab.classList.remove('flex');
         }
-        // Show search drawer
         if (coordTab) {
             coordTab.classList.remove('hidden');
             coordTab.classList.add('flex');
@@ -1657,7 +3294,10 @@ window.switchMeasurementMode = function(mode) {
             if (firstInput) firstInput.focus();
         }, 100);
     } else {
-        // Show geometry results drawer
+        if (coordTab) {
+            coordTab.classList.add('hidden');
+            coordTab.classList.remove('flex');
+        }
         if (geoTab) {
             geoTab.classList.remove('hidden');
             geoTab.classList.add('flex');
@@ -1667,9 +3307,8 @@ window.switchMeasurementMode = function(mode) {
             btn.classList.remove('border-transparent');
             btn.classList.add('bg-emerald-50', 'dark:bg-emerald-900/30', 'text-emerald-600', 'dark:text-emerald-400', 'border-emerald-300/60', 'dark:border-emerald-600/40');
         }
-        // Trigger the drawing engine
-        if (typeof window.selectMeasurementOption === 'function') {
-            window.selectMeasurementOption(mode);
+        if (typeof startMeasurementDraw === 'function') {
+            startMeasurementDraw(mode);
         }
     }
 };

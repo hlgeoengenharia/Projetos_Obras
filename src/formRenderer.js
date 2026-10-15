@@ -115,12 +115,76 @@ window.renderDynamicForm = function(formConfig, featureData, isEditMode, contain
 
         // Se for a aba nativa de Orçamento de Obras, renderiza o card oficial de cálculo e acesso à planilha
         if (isOrcamento) {
-            const valorTotal = featureData['Valor Total da Obra (R$)'] || featureData['valor_total_obra'] || featureData['Valor Total'] || '0,00';
+            let valorTotal = '0,00';
+            let bdiPercentualFormatado = '24,80%';
+            
+            // Tenta obter do orçamento já salvo na feição ou no storage local
+            let orc = null;
+            if (featureData.orcamento_dados) {
+                try {
+                    orc = typeof featureData.orcamento_dados === 'string' ? JSON.parse(featureData.orcamento_dados) : featureData.orcamento_dados;
+                } catch(e) {}
+            }
+            if (!orc) {
+                const featId = featureData.id_banco || featureData.id || featureData._tempId;
+                if (featId) {
+                    const saved = localStorage.getItem('geogestor_orcamento_' + featId);
+                    if (saved) {
+                        try { orc = JSON.parse(saved); } catch(e){}
+                    }
+                }
+            }
+            if (!orc) {
+                const savedDef = localStorage.getItem('geogestor_orcamento_default');
+                if (savedDef) {
+                    try { orc = JSON.parse(savedDef); } catch(e){}
+                }
+            }
+
+            if (orc) {
+                if (typeof window.calcularTotaisOrcamento === 'function') {
+                    window.calcularTotaisOrcamento(orc);
+                } else if (orc.etapas && orc.bdiPercentual != null) {
+                    let totCom = 0;
+                    orc.etapas.forEach(etp => {
+                        let etpTot = 0;
+                        (etp.itens || []).forEach(it => {
+                            const q = parseFloat(it.quantidade) || 0;
+                            const pSem = parseFloat(it.precoUnitarioSemBdi) || 0;
+                            etpTot += q * pSem * (1 + (orc.bdiPercentual || 0));
+                        });
+                        totCom += etpTot;
+                    });
+                    orc.valorTotalComBdi = Math.round(totCom * 100) / 100;
+                }
+
+                if (orc.valorTotalComBdi != null && orc.valorTotalComBdi > 0) {
+                    valorTotal = orc.valorTotalComBdi.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                }
+                if (orc.bdiPercentual != null) {
+                    bdiPercentualFormatado = (orc.bdiPercentual * 100).toFixed(2).replace('.', ',') + '%';
+                }
+            } else {
+                const rawVal = featureData['Valor Total da Obra (R$)'] || featureData['valor_total_obra'] || featureData['Valor Total'];
+                if (rawVal) {
+                    const cleanVal = String(rawVal).replace('R$', '').trim();
+                    const numVal = parseFloat(cleanVal.replace(/\./g, '').replace(',', '.'));
+                    if (!isNaN(numVal) && numVal > 0) {
+                        valorTotal = numVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    } else if (cleanVal) {
+                        valorTotal = cleanVal;
+                    }
+                }
+                if (featureData['BDI (%)']) {
+                    bdiPercentualFormatado = String(featureData['BDI (%)']).trim();
+                }
+            }
+
             html += `
             <div class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-emerald-500/30 flex flex-col gap-3 shadow-xs mb-3">
                 <div class="flex items-center justify-between">
                     <span class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Valor Total Estimado:</span>
-                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">SINAPI OFICIAL</span>
+                    <span id="card-orcamento-bdi-tag" class="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-0.5 rounded-full border border-emerald-500/20">Total com BDI (${bdiPercentualFormatado})</span>
                 </div>
                 <div id="card-orcamento-valor-total" class="text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400">
                     R$ ${valorTotal}

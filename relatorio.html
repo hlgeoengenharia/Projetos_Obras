@@ -391,9 +391,31 @@
         </div>
     </div>
     <div class="flex items-center gap-2">
-        <button class="bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-xs uppercase py-2 px-3.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-md transition-all" onclick="exportMeasurementsKML()" title="Exportar medições para arquivos KML (Google Earth / QGIS)">
-            <span class="material-symbols-outlined text-base">download</span> Exportar KML
-        </button>
+        <!-- Dropdown Exportar KML / GeoJSON -->
+        <div class="relative inline-block text-left" id="report-export-dropdown-container">
+            <button type="button" id="btn-export-kml-dropdown" onclick="toggleReportExportMenu(event)" class="bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-xs uppercase py-2 px-3 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-md transition-all" title="Clique para expandir opções de exportação (KML ou GeoJSON)">
+                <span class="material-symbols-outlined text-base">download</span>
+                <span>Exportar</span>
+                <span class="material-symbols-outlined text-base transition-transform duration-200" id="report-export-arrow">expand_more</span>
+            </button>
+            <div id="report-export-menu" class="hidden absolute right-0 mt-1.5 w-52 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <button type="button" onclick="selectReportExport('kml')" class="w-full text-left px-3.5 py-2.5 text-xs text-slate-200 hover:bg-blue-600/30 hover:text-white flex items-center gap-2.5 transition-colors cursor-pointer group">
+                    <span class="material-symbols-outlined text-base text-emerald-400 group-hover:scale-110 transition-transform">public</span>
+                    <div>
+                        <div class="font-bold text-slate-100">Exportar KML</div>
+                        <div class="text-[10px] text-slate-400">Google Earth / QGIS (.kml)</div>
+                    </div>
+                </button>
+                <div class="h-px bg-slate-800 my-0.5"></div>
+                <button type="button" onclick="selectReportExport('geojson')" class="w-full text-left px-3.5 py-2.5 text-xs text-slate-200 hover:bg-blue-600/30 hover:text-white flex items-center gap-2.5 transition-colors cursor-pointer group">
+                    <span class="material-symbols-outlined text-base text-cyan-400 group-hover:scale-110 transition-transform">data_object</span>
+                    <div>
+                        <div class="font-bold text-slate-100">Exportar GeoJSON</div>
+                        <div class="text-[10px] text-slate-400">Padrão Vetorial SIG (.geojson)</div>
+                    </div>
+                </button>
+            </div>
+        </div>
         <button class="bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs uppercase py-2 px-4 rounded-lg flex items-center gap-2 cursor-pointer shadow-md transition-all" onclick="prepareAndPrint()">
             <span class="material-symbols-outlined text-base">print</span> Imprimir / PDF
         </button>
@@ -1828,8 +1850,136 @@
         });
     };
 
+    window.toggleReportExportMenu = function(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        const menu = document.getElementById('report-export-menu');
+        const arrow = document.getElementById('report-export-arrow');
+        if (!menu) return;
+        const isHidden = menu.classList.contains('hidden');
+        if (isHidden) {
+            menu.classList.remove('hidden');
+            if (arrow) arrow.style.transform = 'rotate(180deg)';
+        } else {
+            menu.classList.add('hidden');
+            if (arrow) arrow.style.transform = '';
+        }
+    };
+
+    window.closeReportExportMenu = function() {
+        const menu = document.getElementById('report-export-menu');
+        const arrow = document.getElementById('report-export-arrow');
+        if (menu) menu.classList.add('hidden');
+        if (arrow) arrow.style.transform = '';
+    };
+
+    document.addEventListener('click', (e) => {
+        const container = document.getElementById('report-export-dropdown-container');
+        if (container && !container.contains(e.target)) {
+            window.closeReportExportMenu();
+        }
+    });
+
+    window.selectReportExport = function(type) {
+        window.closeReportExportMenu();
+        if (type === 'kml') {
+            window.exportMeasurementsKML();
+        } else if (type === 'geojson') {
+            window.exportMeasurementsGeoJSON();
+        }
+    };
+
     window.exportMeasurementsKML = function() {
         window.openKmlExportModal();
+    };
+
+    window.exportMeasurementsGeoJSON = function() {
+        const data = window._reportRawData || {};
+        const features = data.features || [];
+
+        if (!features || features.length === 0) {
+            alert("Nenhuma medição encontrada para exportar.");
+            return;
+        }
+
+        const munEl = document.getElementById('report-entidade-name');
+        const mun = (munEl ? munEl.textContent.trim() : 'GeoGestor').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const dataHoje = new Date().toISOString().split('T')[0];
+
+        let polyCount = 0;
+        let lineCount = 0;
+        let pointCount = 0;
+
+        const enrichedFeatures = features.map(f => {
+            if (!f || !f.geometry) return null;
+            const geom = f.geometry;
+            const props = Object.assign({}, f.properties || {});
+
+            if (geom.type === 'Polygon' || geom.type === 'MultiPolygon') {
+                polyCount++;
+                if (!props.nome) props.nome = `Polígono ${String(polyCount).padStart(2, '0')}`;
+                if (typeof turf !== 'undefined') {
+                    try {
+                        const area = turf.area(f);
+                        const perim = turf.length(f, { units: 'meters' });
+                        props.area_m2 = Number(area.toFixed(2));
+                        props.area_ha = Number((area / 10000).toFixed(4));
+                        props.perimetro_m = Number(perim.toFixed(2));
+                    } catch(err) {}
+                }
+            } else if (geom.type === 'LineString' || geom.type === 'MultiLineString') {
+                lineCount++;
+                if (!props.nome) props.nome = `Linha ${String(lineCount).padStart(2, '0')}`;
+                if (typeof turf !== 'undefined') {
+                    try {
+                        const len = turf.length(f, { units: 'meters' });
+                        props.comprimento_m = Number(len.toFixed(2));
+                    } catch(err) {}
+                }
+            } else if (geom.type === 'Point') {
+                pointCount++;
+                if (!props.nome) props.nome = `Ponto P${String(pointCount).padStart(2, '0')}`;
+                const c = geom.coordinates;
+                props.latitude = Number(c[1].toFixed(7));
+                props.longitude = Number(c[0].toFixed(7));
+                const utmX = Number((500000 + (c[0] - (-35)) * 111319).toFixed(2));
+                const utmY = Number((10000000 + (c[1]) * 110574).toFixed(2));
+                props.utm_leste = utmX;
+                props.utm_norte = utmY;
+                props.utm_zona = '25S';
+            }
+
+            return {
+                type: "Feature",
+                geometry: geom,
+                properties: props
+            };
+        }).filter(Boolean);
+
+        const geojsonObj = {
+            type: "FeatureCollection",
+            name: `Medicoes_${mun}_${dataHoje}`,
+            crs: {
+                type: "name",
+                properties: {
+                    name: "urn:ogc:def:crs:OGC:1.3:CRS84"
+                }
+            },
+            features: enrichedFeatures
+        };
+
+        const jsonStr = JSON.stringify(geojsonObj, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/geo+json;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `medicoes_${mun}_${dataHoje}.geojson`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
     };
     
     let layerSatellite, layerOSM, layerOrto;
