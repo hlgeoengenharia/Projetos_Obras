@@ -44,6 +44,26 @@
     border: 1px solid rgba(226, 232, 240, 0.6);
   }
   html.dark .card { background-color: #1e293b; border-color: rgba(51, 65, 85, 0.6); box-shadow: none; }
+  
+  /* Sistema de Design Compacto e Alto Contraste (Builder Pattern) */
+  html.light .builder-card {
+    background-color: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06) !important;
+  }
+  html.dark .builder-card {
+    background-color: #1e293b !important;
+    border: 1px solid #334155 !important;
+  }
+  html.light .builder-subcard {
+    background-color: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+  }
+  html.dark .builder-subcard {
+    background-color: #0f172a !important;
+    border: 1px solid #1e293b !important;
+  }
+
   .municipio-card { transition: transform .15s ease, box-shadow .15s ease; }
   .municipio-card:hover { transform: translateY(-2px); }
 
@@ -249,6 +269,9 @@
 
     <!-- Canto Direito: [ Nome + Ente ] [ Perfil ] [ Configurações Globais ] -->
     <div class="flex items-center gap-1.5 sm:gap-2.5 ml-auto shrink-0">
+      <!-- Botão de Vistoria de Campo do Fiscal (dinâmico via fiscalTracker.js) -->
+      <div id="fiscal-tracker-header-container" class="shrink-0"></div>
+
       <!-- Nome e Entidade do Usuário (à esquerda do perfil) -->
       <div class="hidden sm:flex flex-col items-end text-right min-w-0 select-none mr-0.5">
         <span class="header-user-display-name text-xs md:text-sm font-bold text-slate-800 dark:text-slate-100 leading-tight truncate max-w-[130px] md:max-w-[190px]"></span>
@@ -337,6 +360,9 @@
 
     <!-- Canto Direito: [ Nome + Ente ] [ Perfil ] [ Configurações Globais ] -->
     <div class="shrink-0 ml-auto flex items-center gap-1.5 sm:gap-2.5">
+      <!-- Botão de Vistoria de Campo do Fiscal (dinâmico via fiscalTracker.js) -->
+      <div id="fiscal-tracker-header-container-mun" class="shrink-0"></div>
+
       <!-- Nome e Entidade do Usuário (à esquerda do perfil) -->
       <div class="hidden sm:flex flex-col items-end text-right min-w-0 select-none mr-0.5">
         <span class="header-user-display-name text-xs md:text-sm font-bold text-slate-800 dark:text-slate-100 leading-tight truncate max-w-[130px] md:max-w-[190px]"></span>
@@ -596,8 +622,13 @@
 
   <!-- Solicitações pendentes (só super_admin) -->
   <section id="pending-section" class="tab-content h-full overflow-y-auto pr-1">
-    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Solicitações Pendentes</h2>
-    <div id="pending-list" class="flex flex-col gap-2"></div>
+    <div class="flex items-center justify-between mb-2.5">
+      <h2 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+        <span class="material-symbols-outlined text-[16px] text-primary">person_add</span>
+        Solicitações Pendentes
+      </h2>
+    </div>
+    <div id="pending-list" class="flex flex-col gap-2.5"></div>
   </section>
 
 
@@ -1030,6 +1061,20 @@
             <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-teal-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
           </div>
           <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Registros e logs de ações</p>
+        </div>
+      </button>
+
+      <!-- Card 9: MONITORAMENTO -->
+      <button onclick="switchMunicipioTab('monitoramento')" class="group relative flex items-center gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-sky-500/60 dark:hover:border-sky-500/60 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-200 text-left w-full sm:w-[calc(50%-0.6rem)] lg:w-[calc(33.333%-0.9rem)] cursor-pointer">
+        <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-sky-500/10 dark:bg-sky-500/20 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+          <span class="material-symbols-outlined text-[24px] sm:text-[26px]">radar</span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between gap-1">
+            <h3 class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors uppercase tracking-wider truncate">Monitoramento</h3>
+            <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 group-hover:text-sky-500 group-hover:translate-x-1 transition-all text-[18px]">chevron_right</span>
+          </div>
+          <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Fiscais e vistorias em tempo real</p>
         </div>
       </button>
     </div>
@@ -1835,7 +1880,8 @@ window.switchMunicipioTab = function(sectionOrTab, btn) {
         'storage': 'Arquivos',
         'usuarios': 'Usuários',
         'auditoria': 'Auditoria',
-        'pending-section': 'Solicitações'
+        'pending-section': 'Solicitações',
+        'monitoramento': 'Monitoramento'
     };
     const tabLabel = (TAB_NAMES[sectionOrTab] || sectionOrTab).toUpperCase();
 
@@ -1895,7 +1941,7 @@ window.switchMunicipioTab = function(sectionOrTab, btn) {
         badgeEl.classList.remove('flex');
     }
 
-    const SETTINGS_TABS = ['cadastros', 'estatistica', 'layout', 'storage', 'usuarios', 'auditoria'];
+    const SETTINGS_TABS = ['cadastros', 'estatistica', 'layout', 'storage', 'usuarios', 'auditoria', 'monitoramento'];
 
     if (SETTINGS_TABS.includes(sectionOrTab)) {
         document.querySelectorAll('main > section:not(#settings-frame-section)').forEach(s => s.classList.remove('active'));
@@ -3497,15 +3543,15 @@ async function init() {
             }).join('');
 
             return `
-            <div class="card rounded-2xl p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex flex-col gap-4" data-usuario-card-solicitacao="${u.user_id}" data-entidade="${(u.entidade || '').replace(/"/g, '&quot;')}" data-cargo="${(u.cargo || '').replace(/"/g, '&quot;')}">
+            <div class="builder-card rounded-lg p-3 sm:p-3.5 flex flex-col gap-3 transition-all shadow-xs" data-usuario-card-solicitacao="${u.user_id}" data-entidade="${(u.entidade || '').replace(/"/g, '&quot;')}" data-cargo="${(u.cargo || '').replace(/"/g, '&quot;')}">
                 <!-- Cabeçalho do Usuário Solicitante -->
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2.5 border-b border-slate-200 dark:border-slate-800">
                     <div>
-                        <div class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                        <div class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                             ${u.nome}
                             <span class="text-xs font-normal text-slate-400">(${u.email})</span>
                         </div>
-                        <div class="text-xs text-slate-500 dark:text-slate-400 mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                        <div class="text-xs text-slate-600 dark:text-slate-300 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
                             <span><strong>Órgão/Entidade:</strong> ${u.entidade}</span>
                             ${tagEntidadeHtml}
                             <span>•</span>
@@ -3515,32 +3561,32 @@ async function init() {
 
                     <div class="flex items-center gap-2 shrink-0">
                         <div class="flex flex-col gap-0.5">
-                            <label for="${selectId}" class="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Nível de Acesso</label>
-                            <select id="${selectId}" class="text-xs font-semibold border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-primary text-slate-700 dark:text-slate-200">
+                            <label for="${selectId}" class="text-[9px] font-bold text-slate-500 uppercase tracking-wide">Nível de Acesso</label>
+                            <select id="${selectId}" class="text-xs font-semibold border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary text-slate-700 dark:text-slate-200">
                                 ${papelOptions}
                             </select>
                         </div>
-                        <button onclick="decidirSolicitacoesUsuario('${u.user_id}', true, '${selectId}')" class="text-xs bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-1">
-                            <span class="material-symbols-outlined text-[16px]">check</span> Aprovar
+                        <button onclick="decidirSolicitacoesUsuario('${u.user_id}', true, '${selectId}')" class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg shadow-xs transition-colors flex items-center gap-1 cursor-pointer">
+                            <span class="material-symbols-outlined text-[15px]">check</span> Aprovar
                         </button>
-                        <button onclick="decidirSolicitacoesUsuario('${u.user_id}', false, '${selectId}')" class="text-xs bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold px-3.5 py-2 rounded-lg transition-colors flex items-center gap-1">
-                            <span class="material-symbols-outlined text-[16px]">close</span> Rejeitar
+                        <button onclick="decidirSolicitacoesUsuario('${u.user_id}', false, '${selectId}')" class="text-xs bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer">
+                            <span class="material-symbols-outlined text-[15px]">close</span> Rejeitar
                         </button>
                     </div>
                 </div>
 
                 <!-- Relação de Municípios para Ativar/Desativar -->
                 <div>
-                    <div class="flex items-center justify-between mb-2">
-                        <label class="text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                            <span class="material-symbols-outlined text-primary text-[18px]">location_city</span>
+                    <div class="flex items-center justify-between mb-1.5">
+                        <label class="text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1">
+                            <span class="material-symbols-outlined text-primary text-[15px]">location_city</span>
                             ${isMunicipal ? 'Município Solicitado (Entidade Municipal)' : 'Municípios Liberados para Acesso'}
                         </label>
-                        <span class="text-[11px] text-slate-400">
-                            ${isMunicipal ? 'Usuário de ente municipal é restrito exclusivamente ao seu município de atuação' : 'Ative ou desative os municípios para este usuário'}
+                        <span class="text-[10px] text-slate-400">
+                            ${isMunicipal ? 'Restrito exclusivamente ao seu município de atuação' : 'Ative ou desative os municípios para este usuário'}
                         </span>
                     </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-950/40 p-3 rounded-xl border border-slate-200 dark:border-slate-800/80">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-950/40 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
                         ${municipiosCheckboxesHtml}
                     </div>
                 </div>
@@ -4284,6 +4330,7 @@ window.filterMunicipiosList = function(query) {
 init();
 </script>
 <script src="src/auditLogger.js"></script>
+<script src="src/fiscalTracker.js"></script>
 <script src="src/interinstitutional-search.js?v=20260924_rpc"></script>
 <script src="src/usuarios-gestao.js?v=20260915_filtro_entes_ativos"></script>
 <script src="src/session-security.js"></script>

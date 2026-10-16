@@ -249,52 +249,52 @@
       }
 
       html += `
-        <div class="p-4 sm:p-5 rounded-2xl border ${isAtivo ? 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/70' : 'border-dashed border-slate-300 dark:border-slate-800/80 bg-slate-50/60 dark:bg-slate-900/30 opacity-75'} shadow-xs hover:shadow-md transition-all group">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
-            <div class="flex items-center gap-2.5 flex-wrap min-w-0">
-              <span class="w-2.5 h-2.5 rounded-full ${isAtivo ? 'bg-amber-500 animate-pulse' : 'bg-slate-400'} shrink-0"></span>
-              <h4 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
+        <div class="p-3 rounded-lg border ${isAtivo ? 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900' : 'border-dashed border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 opacity-80'} shadow-xs hover:border-slate-400 transition-all group">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+            <div class="flex items-center gap-2 flex-wrap min-w-0">
+              <span class="w-2 h-2 rounded-full ${isAtivo ? 'bg-amber-500 animate-pulse' : 'bg-slate-400'} shrink-0"></span>
+              <h4 class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
                 ${escapeHtml(trig.nome)}
               </h4>
-              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold ${sev.badge}">
-                <span class="w-1.5 h-1.5 rounded-full ${sev.dot} mr-1.5"></span>
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${sev.badge}">
+                <span class="w-1.5 h-1.5 rounded-full ${sev.dot} mr-1"></span>
                 ${sev.label}
               </span>
-              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10.5px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+              <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
                 ${typeLabel}
               </span>
             </div>
 
             <!-- Ações -->
             <div class="flex items-center gap-1 self-end sm:self-auto shrink-0">
-              <button type="button" onclick="EventsBuilder.toggleTriggerStatus('${trig.id}')" class="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${isAtivo ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20' : 'bg-slate-200 dark:bg-slate-800 text-slate-500 hover:bg-slate-300'}" title="${isAtivo ? 'Gatilho Ativo' : 'Gatilho Desativado'}">
-                <span class="material-symbols-outlined text-[15px]">${isAtivo ? 'toggle_on' : 'toggle_off'}</span>
+              <button type="button" onclick="EventsBuilder.toggleTriggerStatus('${trig.id}')" class="px-2 py-0.5 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer ${isAtivo ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20' : 'bg-slate-200 dark:bg-slate-800 text-slate-500 hover:bg-slate-300'}" title="${isAtivo ? 'Gatilho Ativo' : 'Gatilho Desativado'}">
+                <span class="material-symbols-outlined text-[14px]">${isAtivo ? 'toggle_on' : 'toggle_off'}</span>
                 <span>${isAtivo ? 'Ativo' : 'Pausado'}</span>
               </button>
-              <button type="button" onclick="EventsBuilder.openTriggerModal('${trig.id}')" class="p-1.5 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 dark:hover:text-amber-400 transition-colors cursor-pointer" title="Editar Regra">
-                <span class="material-symbols-outlined text-[18px]">edit</span>
+              <button type="button" onclick="EventsBuilder.openTriggerModal('${trig.id}')" class="p-1 rounded-md text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 dark:hover:text-amber-400 transition-colors cursor-pointer" title="Editar Regra">
+                <span class="material-symbols-outlined text-[16px]">edit</span>
               </button>
-              <button type="button" onclick="EventsBuilder.deleteTriggerConfig('${trig.id}')" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 transition-colors cursor-pointer" title="Excluir Regra">
-                <span class="material-symbols-outlined text-[18px]">delete</span>
+              <button type="button" onclick="EventsBuilder.deleteTriggerConfig('${trig.id}')" class="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 transition-colors cursor-pointer" title="Excluir Regra">
+                <span class="material-symbols-outlined text-[16px]">delete</span>
               </button>
             </div>
           </div>
 
           <!-- Resumo da Regra -->
-          <div class="text-xs text-slate-600 dark:text-slate-300 mb-2.5 flex items-center gap-1.5 flex-wrap">
-            <span class="material-symbols-outlined text-[16px] text-amber-500">schedule</span>
+          <div class="text-xs text-slate-600 dark:text-slate-300 mb-2 flex items-center gap-1.5 flex-wrap">
+            <span class="material-symbols-outlined text-[15px] text-amber-500">schedule</span>
             <span>${resumoRegra}</span>
           </div>
 
           <!-- Badges de Destinatário e Filtro -->
-          <div class="flex flex-wrap items-center gap-2 mb-3">
+          <div class="flex flex-wrap items-center gap-1.5 mb-2">
             ${respChip}
             ${filtroChip}
           </div>
 
           <!-- Template da Mensagem -->
-          <div class="bg-slate-50 dark:bg-slate-950/50 border border-slate-200/80 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-600 dark:text-slate-300 italic flex items-start gap-2">
-            <span class="material-symbols-outlined text-[16px] text-slate-400 not-italic shrink-0 mt-0.5">chat_bubble_outline</span>
+          <div class="bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-md px-2.5 py-1.5 text-xs text-slate-600 dark:text-slate-300 italic flex items-start gap-1.5">
+            <span class="material-symbols-outlined text-[15px] text-slate-400 not-italic shrink-0 mt-0.5">chat_bubble_outline</span>
             <span class="truncate-2-lines">${escapeHtml(trig.mensagem || 'Notificação padrão do sistema.')}</span>
           </div>
         </div>

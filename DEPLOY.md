@@ -35,18 +35,25 @@ git status
 ```
 > Certifique-se de que está na branch `main` e de que nenhum arquivo indesejado (como senhas, pastas temporárias ou rascunhos pessoais) esteja sendo incluído.
 
-### Passo 2.2: Adicione os arquivos ao commit
+### Passo 2.2: Execute a auditoria de proteção pré-commit (Recomendado)
+Antes de commitar, valide que todas as funcionalidades do sistema continuam 100% íntegras:
+```bash
+.\verificar_sistema.bat
+```
+*(Você também pode dar um duplo clique no arquivo `verificar_sistema.bat` na pasta raiz. Ele verifica sintaxe JS, roda todos os testes de isolamento de ferramentas e executa mais de 210 testes de QA. O Git também executará esse guardião automaticamente antes de aceitar qualquer commit).*
+
+### Passo 2.3: Adicione os arquivos ao commit
 ```bash
 git add .
 ```
 
-### Passo 2.3: Registre o commit com uma mensagem descritiva
+### Passo 2.4: Registre o commit com uma mensagem descritiva
 ```bash
 git commit -m "feat: correcao de permissoes de abas e sincronizacao de entes"
 ```
 *(Substitua a mensagem entre aspas pelo resumo das alterações que você realizou)*
 
-### Passo 2.4: Envie para o GitHub (Disparo automático do Deploy na Vercel)
+### Passo 2.5: Envie para o GitHub (Disparo automático do Deploy na Vercel)
 ```bash
 git push origin main
 ```

@@ -3,11 +3,27 @@
 echo "=============================================================================="
 echo " 🛡️  Iniciando bateria de testes pré-commit (QA Gatekeeper)..."
 echo "=============================================================================="
-node test_sistema_qa.js
 
-STATUS=$?
-if [ $STATUS -ne 0 ]; then
-    echo ""
+echo "🔍 [1/3] Verificando sintaxe dos scripts principais..."
+node -c src/main.js || exit 1
+node -c src/measurement.js || exit 1
+node -c src/swipe-comparator.js || exit 1
+node -c src/eventsEngine.js || exit 1
+node -c src/formRenderer.js || exit 1
+node -c src/reportMap.js || exit 1
+
+echo "🧪 [2/3] Executando testes unitários e de isolamento de ferramentas..."
+node --test tests/*.test.js
+STATUS_TESTS=$?
+if [ $STATUS_TESTS -ne 0 ]; then
+    echo "❌ Commit abortado: falhas nos testes unitários/regressão."
+    exit 1
+fi
+
+echo "📋 [3/3] Executando auditoria geral do sistema (210+ verificações)..."
+node test_sistema_qa.js
+STATUS_QA=$?
+if [ $STATUS_QA -ne 0 ]; then
     echo "❌ Commit abortado devido a falhas na auditoria do sistema."
     echo "Corrija as inconsistências antes de efetuar o commit."
     exit 1

@@ -10060,6 +10060,11 @@ async function saveFeatureData() {
                   }
               }
           }
+
+          // Notifica o rastreador de fiscais de campo para telemetria em tempo real
+          if (window.fiscalTracker && typeof window.fiscalTracker.registrarVistoria === 'function') {
+              window.fiscalTracker.registrarVistoria(idBanco, themeId, currentProps);
+          }
       } catch (eDb) {
           console.error('Erro de conexão ao salvar feição, salvando offline:', eDb);
           if (window.OfflineSync) {

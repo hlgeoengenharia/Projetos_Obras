@@ -138,31 +138,31 @@
         container.innerHTML = `
             <div class="flex flex-col gap-6 w-full font-sans">
                 <!-- 1. BARRA SUPERIOR DE AÇÕES E VÍNCULO COM O MAPA -->
-                <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 sm:p-5 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-                    <div class="flex flex-wrap items-center gap-3 flex-1">
+                <div class="builder-card bg-white dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-700 p-2.5 sm:p-3 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-2.5">
+                    <div class="flex flex-wrap items-center gap-2.5 flex-1">
                         <!-- Seletor de Modelo -->
-                        <div class="flex flex-col min-w-[180px]">
+                        <div class="flex flex-col min-w-[170px]">
                             <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Modelo de Relatório</label>
-                            <select id="rpt-select-template" onchange="ReportBuilder.onTemplateChange(this.value)" class="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold dark:text-white focus:ring-2 focus:ring-primary/40 focus:outline-none">
+                            <select id="rpt-select-template" onchange="ReportBuilder.onTemplateChange(this.value)" class="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md text-xs font-bold dark:text-white focus:ring-1 focus:ring-primary/40 focus:outline-none">
                                 ${templates.map(t => `<option value="${t.id}" ${t.id === currentTemplate.id ? 'selected' : ''}>${escapeHtml(t.nome && t.nome.trim() ? t.nome : '(sem nome)')} (${t.tipo === 'geral' ? 'Relatório Geral da Camada' : 'Ficha Individual'})</option>`).join('')}
                                 <option value="__new__">+ Criar Novo Modelo de Relatório...</option>
                             </select>
                         </div>
 
                         <!-- Nome do Relatório -->
-                        <div class="flex flex-col flex-1 min-w-[200px]">
+                        <div class="flex flex-col flex-1 min-w-[190px]">
                             <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Nome do Documento</label>
-                            <input type="text" id="rpt-template-name" value="${escapeHtml(currentTemplate.nome)}" oninput="ReportBuilder.updateTemplateName(this.value)" class="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold dark:text-white focus:ring-2 focus:ring-primary/40 focus:outline-none" placeholder="Ex: Ficha Cadastral Oficial..." />
+                            <input type="text" id="rpt-template-name" value="${escapeHtml(currentTemplate.nome)}" oninput="ReportBuilder.updateTemplateName(this.value)" class="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md text-xs font-bold dark:text-white focus:ring-1 focus:ring-primary/40 focus:outline-none" placeholder="Ex: Ficha Cadastral Oficial..." />
                         </div>
 
                         <!-- VÍNCULO COM O POPUP DO MAPA: EM QUAL ABA EXIBIR O ATALHO (só fichas individuais) -->
                         ${isGeral ? '' : `
-                        <div class="flex flex-col min-w-[220px]">
+                        <div class="flex flex-col min-w-[210px]">
                             <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
-                                <span class="material-symbols-outlined text-[14px] text-primary dark:text-sky-400">near_me</span>
+                                <span class="material-symbols-outlined text-[13px] text-primary dark:text-sky-400">near_me</span>
                                 <span>Atalho no Popup da Feição</span>
                             </label>
-                            <select id="rpt-select-atalho-aba" onchange="ReportBuilder.updateAtalhoAba(this.value)" class="px-3 py-2 bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700/60 rounded-xl text-xs font-bold text-emerald-900 dark:text-emerald-200 focus:ring-2 focus:ring-emerald-500/40 focus:outline-none">
+                            <select id="rpt-select-atalho-aba" onchange="ReportBuilder.updateAtalhoAba(this.value)" class="px-2.5 py-1.5 bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700/60 rounded-md text-xs font-bold text-emerald-900 dark:text-emerald-200 focus:ring-1 focus:ring-emerald-500/40 focus:outline-none">
                                 ${!currentTemplate.atalho_aba ? `<option value="" disabled selected>Selecione onde exibir o atalho...</option>` : ''}
                                 <option value="header" ${currentTemplate.atalho_aba === 'header' ? 'selected' : ''}>📌 Cabeçalho do Card (Topo Geral)</option>
                                 <option value="todas" ${currentTemplate.atalho_aba === 'todas' ? 'selected' : ''}>🌐 Em Todas as Abas da Feição</option>
@@ -176,51 +176,51 @@
                     </div>
 
                     <!-- Botões de Ação -->
-                    <div class="flex items-center gap-2 self-end xl:self-center shrink-0">
+                    <div class="flex items-center gap-1.5 self-end xl:self-center shrink-0">
                         ${isGeral ? `
                         <div class="flex flex-col">
                             <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Folha</label>
-                            <div class="inline-flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700" title="Tamanho do papel do relatório geral">
-                                <button type="button" onclick="ReportBuilder.setPageSize('A4')" class="px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${pd.name === 'A4' ? 'bg-primary text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-primary'}">A4</button>
-                                <button type="button" onclick="ReportBuilder.setPageSize('A3')" class="px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${pd.name === 'A3' ? 'bg-primary text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-primary'}">A3</button>
+                            <div class="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-300 dark:border-slate-700" title="Tamanho do papel do relatório geral">
+                                <button type="button" onclick="ReportBuilder.setPageSize('A4')" class="px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${pd.name === 'A4' ? 'bg-primary text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-primary'}">A4</button>
+                                <button type="button" onclick="ReportBuilder.setPageSize('A3')" class="px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${pd.name === 'A3' ? 'bg-primary text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-primary'}">A3</button>
                             </div>
                         </div>
                         ` : `
                         <div class="flex flex-col">
                             <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Folha</label>
-                            <div class="inline-flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700" title="Tamanho do papel da ficha individual (A4 padrão oficial)">
-                                <span class="px-3 py-1 rounded-lg text-xs font-bold bg-primary text-white shadow-xs">A4</span>
+                            <div class="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-300 dark:border-slate-700" title="Tamanho do papel da ficha individual (A4 padrão oficial)">
+                                <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-primary text-white shadow-xs">A4</span>
                             </div>
                         </div>
                         `}
-                        <button type="button" onclick="ReportBuilder.previewReal()" class="flex items-center gap-1.5 px-4 py-2.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer" title="${isGeral ? 'Abre o relatório de verdade com uma lista de exemplo (várias feições) e o modelo como está agora, sem precisar salvar' : 'Abre o relatório de verdade (o mesmo da impressão, do PDF e do Word) com uma feição de teste e o modelo como está agora, sem precisar salvar'}">
-                            <span class="material-symbols-outlined text-[18px]">visibility</span>
+                        <button type="button" onclick="ReportBuilder.previewReal()" class="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 rounded-md text-xs font-bold transition-all shadow-xs cursor-pointer" title="${isGeral ? 'Abre o relatório de verdade com uma lista de exemplo (várias feições) e o modelo como está agora, sem precisar salvar' : 'Abre o relatório de verdade (o mesmo da impressão, do PDF e do Word) com uma feição de teste e o modelo como está agora, sem precisar salvar'}">
+                            <span class="material-symbols-outlined text-[16px]">visibility</span>
                             <span>Preview</span>
                         </button>
-                        <button type="button" ${podeSalvar ? 'onclick="ReportBuilder.saveCurrentTemplate()"' : 'disabled'} id="rpt-btn-save-template" class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${podeSalvar ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer' : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed'}" title="${podeSalvar ? 'Salvar Modelo' : `Preencha ${isGeral ? 'o nome do documento' : 'o nome do documento e o atalho no popup da feição'} para salvar`}">
-                            <span class="material-symbols-outlined text-[18px]">save</span>
+                        <button type="button" ${podeSalvar ? 'onclick="ReportBuilder.saveCurrentTemplate()"' : 'disabled'} id="rpt-btn-save-template" class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${podeSalvar ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer' : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed'}" title="${podeSalvar ? 'Salvar Modelo' : `Preencha ${isGeral ? 'o nome do documento' : 'o nome do documento e o atalho no popup da feição'} para salvar`}">
+                            <span class="material-symbols-outlined text-[16px]">save</span>
                             <span>Salvar Modelo</span>
                         </button>
                         ${templates.length > 1 ? `
-                        <button type="button" onclick="ReportBuilder.deleteCurrentTemplate()" class="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl transition-all cursor-pointer" title="Excluir este modelo">
-                            <span class="material-symbols-outlined text-[19px]">delete</span>
+                        <button type="button" onclick="ReportBuilder.deleteCurrentTemplate()" class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-md transition-all cursor-pointer" title="Excluir este modelo">
+                            <span class="material-symbols-outlined text-[18px]">delete</span>
                         </button>` : ''}
                     </div>
                 </div>
 
                 <!-- Grid Principal: Acordeão Lateral (largura fixa otimizada) + Folha Virtual A4 Estilo Word (expande com o espaço disponível) -->
-                <div class="flex flex-col lg:flex-row gap-6 items-start w-full">
+                <div class="flex flex-col lg:flex-row gap-4 items-start w-full">
                     <!-- PAINEL ESQUERDO: ACORDEÃO DE CONFIGURAÇÃO PRÉVIA DOS BLOCOS (SEMPRE À VISTA DURANTE A ROLAGEM) -->
-                    <div class="w-full lg:w-[380px] xl:w-[410px] shrink-0 flex flex-col gap-3 select-none pr-1.5 custom-scrollbar" id="accordion-blocks-panel" style="position: sticky !important; top: 10px !important; z-index: 35; max-height: calc(100vh - 20px); overflow-y: auto !important; overflow-x: hidden !important; -webkit-overflow-scrolling: touch;">
+                    <div class="w-full lg:w-[380px] xl:w-[410px] shrink-0 flex flex-col gap-2.5 select-none pr-1 custom-scrollbar" id="accordion-blocks-panel" style="position: sticky !important; top: 10px !important; z-index: 35; max-height: calc(100vh - 20px); overflow-y: auto !important; overflow-x: hidden !important; -webkit-overflow-scrolling: touch;">
                         ${renderAccordionPanel(formId)}
                     </div>
 
                     <!-- PAINEL DIREITO: FOLHA VIRTUAL A4 (ESTILO WORD / PROCESSADOR DE TEXTO REAL) -->
                     <div class="flex-1 min-w-0 w-full flex flex-col items-center">
                         <!-- Barra de Status e Dica de Edição da Folha (Sticky no topo da rolagem com blur suave) -->
-                        <div class="w-full sticky top-0 z-30 mb-3 flex items-center justify-between px-3 py-2 text-xs bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm transition-all">
+                        <div class="w-full sticky top-0 z-30 mb-2.5 flex items-center justify-between px-3 py-1.5 text-xs bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-lg border border-slate-300 dark:border-slate-800 shadow-2xs transition-all">
                             <div class="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-                                <span class="material-symbols-outlined text-[17px] text-amber-500">edit_note</span>
+                                <span class="material-symbols-outlined text-[16px] text-amber-500">edit_note</span>
                                 <span class="font-bold">Folha ${pd.name} Interativa:</span>
                                 <span class="text-slate-400 text-[11px] hidden sm:inline">Dê duplo-clique em qualquer texto da folha para editar</span>
                             </div>
@@ -1634,20 +1634,20 @@
         const isOpen = (activeAccordionId === id);
         const cor = CORES_CARD[id] || COR_CARD_PADRAO;
         return `
-            <div class="${cor.corpo} shrink-0 w-full rounded-2xl border border-l-4 ${cor.barra} ${isOpen ? 'shadow-md ' + cor.borda : cor.borda} transition-all duration-200" style="flex-shrink: 0 !important; min-height: fit-content;" data-cor-card="${id}">
-                <button type="button" onclick="ReportBuilder.toggleAccordion('${id}')" class="w-full p-3.5 sm:p-4 flex items-center justify-between gap-3 text-left ${cor.cabecalho} hover:brightness-95 transition-colors select-none cursor-pointer shrink-0 rounded-t-2xl ${isOpen ? '' : 'rounded-b-2xl'}" title="${isOpen ? 'Clique para recolher este card' : 'Clique para acessar as configurações deste card'}">
-                    <div class="flex items-center gap-2.5 min-w-0">
-                        <div class="w-8 h-8 rounded-xl ${cor.icone} ${isOpen ? 'ring-2 ring-offset-1 ring-white/70' : ''} flex items-center justify-center shrink-0 transition-colors">
-                            <span class="material-symbols-outlined text-[18px]">${icon}</span>
+            <div class="${cor.corpo} shrink-0 w-full rounded-lg border border-l-4 ${cor.barra} ${isOpen ? 'shadow-xs ' + cor.borda : cor.borda} transition-all duration-200" style="flex-shrink: 0 !important; min-height: fit-content;" data-cor-card="${id}">
+                <button type="button" onclick="ReportBuilder.toggleAccordion('${id}')" class="w-full p-2.5 sm:p-3 flex items-center justify-between gap-2.5 text-left ${cor.cabecalho} hover:brightness-95 transition-colors select-none cursor-pointer shrink-0 rounded-t-lg ${isOpen ? '' : 'rounded-b-lg'}" title="${isOpen ? 'Clique para recolher este card' : 'Clique para acessar as configurações deste card'}">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <div class="w-7 h-7 rounded-md ${cor.icone} ${isOpen ? 'ring-2 ring-offset-1 ring-white/70' : ''} flex items-center justify-center shrink-0 transition-colors">
+                            <span class="material-symbols-outlined text-[16px]">${icon}</span>
                         </div>
                         <div class="min-w-0">
                             <span class="font-bold text-xs sm:text-sm ${cor.texto} block truncate">${title}</span>
                             ${badge ? `<span class="text-[9px] font-bold uppercase tracking-wider ${cor.texto} opacity-80">${badge}</span>` : ''}
                         </div>
                     </div>
-                    <span class="material-symbols-outlined text-[20px] text-slate-400 transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180 text-primary' : ''}">expand_more</span>
+                    <span class="material-symbols-outlined text-[18px] text-slate-400 transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180 text-primary' : ''}">expand_more</span>
                 </button>
-                <div class="p-4 pt-3 border-t ${cor.borda} ${isOpen ? 'block' : 'hidden'} custom-scrollbar" style="${isOpen ? 'max-height: min(72vh, 620px); overflow-y: auto !important; overflow-x: hidden !important; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;' : ''}">
+                <div class="p-3 pt-2.5 border-t ${cor.borda} ${isOpen ? 'block' : 'hidden'} custom-scrollbar" style="${isOpen ? 'max-height: min(72vh, 620px); overflow-y: auto !important; overflow-x: hidden !important; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;' : ''}">
                     ${content}
                 </div>
             </div>

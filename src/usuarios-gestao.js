@@ -1463,31 +1463,6 @@
             _selectedUnidadeEquipe = unidadesArr.length > 0 ? unidadesArr[0] : (semUnidadeCount > 0 ? '__sem_unidade__' : '');
         }
 
-        let unidadesHtml = '';
-        if (canNavigateUnidades && (unidadesMap.size > 0 || semUnidadeCount > 0)) {
-            unidadesHtml = `
-                <div class="mb-3.5 flex items-center gap-1.5 flex-wrap select-none bg-sky-50/60 dark:bg-sky-950/20 p-2 rounded-xl border border-sky-200/70 dark:border-sky-900/40">
-                    <span class="text-[11px] font-extrabold text-sky-700 dark:text-sky-300 uppercase tracking-wider px-1.5 flex items-center gap-1">
-                        <span class="material-symbols-outlined text-[15px]">apartment</span> Unidade:
-                    </span>
-                    ${unidadesArr.map(un => {
-                        const count = unidadesMap.get(un) || 0;
-                        const isSel = _selectedUnidadeEquipe && _selectedUnidadeEquipe.toLowerCase() === un.toLowerCase();
-                        return `
-                            <button type="button" onclick="window.UsuariosManager.setUnidadeEquipe('${un.replace(/'/g, "\\'")}')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${isSel ? 'bg-sky-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}">
-                                ${un} (${count})
-                            </button>
-                        `;
-                    }).join('')}
-                    ${semUnidadeCount > 0 ? `
-                        <button type="button" onclick="window.UsuariosManager.setUnidadeEquipe('__sem_unidade__')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${_selectedUnidadeEquipe === '__sem_unidade__' ? 'bg-slate-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-500 border border-dashed border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}">
-                            Sem Unidade (${semUnidadeCount})
-                        </button>
-                    ` : ''}
-                </div>
-            `;
-        }
-
         // Filtra por Unidade
         let usersDaUnidade = usersDoEnte;
         if (canNavigateUnidades) {
@@ -1516,26 +1491,60 @@
             _selectedSetorFiltro = setoresArr.length > 0 ? setoresArr[0] : (semSetorCount > 0 ? '__sem_setor__' : '');
         }
 
-        let setorFilterHtml = '';
-        if (availableSetores.size > 0 || semSetorCount > 0) {
-            setorFilterHtml = `
-                <div class="mb-3.5 flex items-center gap-1.5 flex-wrap select-none bg-slate-50 dark:bg-slate-800/40 p-2 rounded-xl border border-slate-200/80 dark:border-slate-800">
-                    <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-1 flex items-center gap-1">
-                        <span class="material-symbols-outlined text-[15px]">workspaces</span> Setor:
-                    </span>
-                    ${setoresArr.map(st => {
-                        const count = usersDaUnidade.filter(u => (u.profile?.setor || u.setor || '').trim().toLowerCase() === st.toLowerCase()).length;
-                        const isSelected = _selectedSetorFiltro && _selectedSetorFiltro.toLowerCase() === st.toLowerCase();
-                        return `
-                            <button type="button" onclick="window.UsuariosManager.setSetorFiltro('${st.replace(/'/g, "\\'")}')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${isSelected ? 'bg-purple-600 text-white shadow-xs' : 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/20 hover:bg-purple-500/20'}">
-                                ${st} (${count})
-                            </button>
-                        `;
-                    }).join('')}
-                    ${semSetorCount > 0 ? `
-                        <button type="button" onclick="window.UsuariosManager.setSetorFiltro('__sem_setor__')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${_selectedSetorFiltro === '__sem_setor__' ? 'bg-slate-600 text-white shadow-xs' : 'bg-slate-200/50 dark:bg-slate-800/80 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700'}">
-                            Sem Setor (${semSetorCount})
-                        </button>
+        // Barra Unificada e Compacta: Aproveita o espaço horizontal entre UNIDADE e SETOR
+        const hasUnidades = canNavigateUnidades && (unidadesMap.size > 0 || semUnidadeCount > 0);
+        const hasSetores = availableSetores.size > 0 || semSetorCount > 0;
+        let unidadeSetorBarHtml = '';
+
+        if (hasUnidades || hasSetores) {
+            unidadeSetorBarHtml = `
+                <div class="builder-card mb-2.5 p-2 rounded-lg flex flex-wrap items-center justify-between gap-2.5 shadow-xs">
+                    ${hasUnidades ? `
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="text-[11px] font-black text-sky-700 dark:text-sky-300 uppercase tracking-wider px-1 flex items-center gap-1 shrink-0">
+                                <span class="material-symbols-outlined text-[15px]">apartment</span> Unidade:
+                            </span>
+                            ${unidadesArr.map(un => {
+                                const count = unidadesMap.get(un) || 0;
+                                const isSel = _selectedUnidadeEquipe && _selectedUnidadeEquipe.toLowerCase() === un.toLowerCase();
+                                return `
+                                    <button type="button" onclick="window.UsuariosManager.setUnidadeEquipe('${un.replace(/'/g, "\\'")}')" class="px-2.5 py-0.5 rounded-md text-xs font-bold transition-all cursor-pointer ${isSel ? 'bg-sky-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}">
+                                        ${un} (${count})
+                                    </button>
+                                `;
+                            }).join('')}
+                            ${semUnidadeCount > 0 ? `
+                                <button type="button" onclick="window.UsuariosManager.setUnidadeEquipe('__sem_unidade__')" class="px-2.5 py-0.5 rounded-md text-xs font-bold transition-all cursor-pointer ${_selectedUnidadeEquipe === '__sem_unidade__' ? 'bg-slate-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-500 border border-dashed border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}">
+                                    Sem Unidade (${semUnidadeCount})
+                                </button>
+                            ` : ''}
+                        </div>
+                    ` : ''}
+
+                    ${hasUnidades && hasSetores ? `
+                        <div class="h-4 w-px bg-slate-300 dark:bg-slate-700 hidden lg:block shrink-0"></div>
+                    ` : ''}
+
+                    ${hasSetores ? `
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="text-[11px] font-black text-purple-700 dark:text-purple-300 uppercase tracking-wider px-1 flex items-center gap-1 shrink-0">
+                                <span class="material-symbols-outlined text-[15px]">workspaces</span> Setor:
+                            </span>
+                            ${setoresArr.map(st => {
+                                const count = usersDaUnidade.filter(u => (u.profile?.setor || u.setor || '').trim().toLowerCase() === st.toLowerCase()).length;
+                                const isSelected = _selectedSetorFiltro && _selectedSetorFiltro.toLowerCase() === st.toLowerCase();
+                                return `
+                                    <button type="button" onclick="window.UsuariosManager.setSetorFiltro('${st.replace(/'/g, "\\'")}')" class="px-2.5 py-0.5 rounded-md text-xs font-bold transition-all cursor-pointer ${isSelected ? 'bg-purple-600 text-white shadow-xs' : 'bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-900/40'}">
+                                        ${st} (${count})
+                                    </button>
+                                `;
+                            }).join('')}
+                            ${semSetorCount > 0 ? `
+                                <button type="button" onclick="window.UsuariosManager.setSetorFiltro('__sem_setor__')" class="px-2.5 py-0.5 rounded-md text-xs font-bold transition-all cursor-pointer ${_selectedSetorFiltro === '__sem_setor__' ? 'bg-slate-600 text-white shadow-xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border border-dashed border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'}">
+                                    Sem Setor (${semSetorCount})
+                                </button>
+                            ` : ''}
+                        </div>
                     ` : ''}
                 </div>
             `;
@@ -1565,9 +1574,8 @@
         if (usersFinal.length === 0) {
             container.innerHTML = `
                 ${entesHtml}
-                ${unidadesHtml}
-                ${setorFilterHtml}
-                <div class="p-8 text-center text-slate-400 text-sm italic bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/60 dark:border-slate-800 shadow-xs">
+                ${unidadeSetorBarHtml}
+                <div class="p-8 text-center text-slate-400 text-sm italic bg-white dark:bg-slate-900 rounded-lg border border-slate-300 dark:border-slate-800 shadow-xs">
                     ${query ? 'Nenhum membro corresponde a esta pesquisa.' : 'Nenhum usuário cadastrado neste filtro de órgão, unidade ou setor.'}
                 </div>
             `;
@@ -1575,7 +1583,7 @@
         }
 
         usersFinal.sort((a, b) => (a.profile?.nome || '').localeCompare((b.profile?.nome || ''), 'pt-BR', { sensitivity: 'base' }));
-        container.innerHTML = entesHtml + unidadesHtml + setorFilterHtml + usersFinal.map(u => renderUserCard(u)).join('');
+        container.innerHTML = entesHtml + unidadeSetorBarHtml + usersFinal.map(u => renderUserCard(u)).join('');
     }
 
     function renderUserCard(userObj) {
@@ -1588,6 +1596,7 @@
 
         const userUnidade = (perfil.unidade || userObj.unidade || '').trim();
         const userSetor = (perfil.setor || userObj.setor || '').trim();
+        const fiscalCampo = !!(perfil.fiscal_campo || userObj.fiscal_campo);
         const podeCriarCamadas = !!(perfil.pode_criar_camadas || userObj.pode_criar_camadas);
         const podeSubirOrtofotos = !!(perfil.pode_subir_ortofotos || userObj.pode_subir_ortofotos);
         const podeEstatisticaCruzada = !!(perfil.pode_estatistica_cruzada || userObj.pode_estatistica_cruzada);
@@ -2032,29 +2041,29 @@
 
         // Botões de Ação no topo
         const botoesAcaoHtml = isEditing ? `
-            <div class="flex items-center gap-2">
-                <button type="button" onclick="window.UsuariosManager.cancelarEdicao('${userId}')" class="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-sm">
-                    <span class="material-symbols-outlined text-[16px]">close</span> Cancelar
+            <div class="flex items-center gap-1.5">
+                <button type="button" onclick="window.UsuariosManager.cancelarEdicao('${userId}')" class="px-3 py-1 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-md text-xs font-bold transition-colors flex items-center gap-1 shadow-xs">
+                    <span class="material-symbols-outlined text-[15px]">close</span> Cancelar
                 </button>
-                <button type="button" onclick="window.UsuariosManager.salvarUsuario('${userId}')" class="px-4 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold shadow-md transition-colors flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-[16px]">save</span> Salvar
+                <button type="button" onclick="window.UsuariosManager.salvarUsuario('${userId}')" class="px-3.5 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded-md text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[15px]">save</span> Salvar
                 </button>
             </div>
         ` : `
-            <div class="flex items-center gap-2">
-                <button type="button" onclick="window.inspectUserLogs('${userId}')" class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border-2 border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs" title="Inspecionar e rastrear atividades deste usuário">
-                    <span class="material-symbols-outlined text-[16px] text-indigo-600 dark:text-indigo-400">manage_search</span> Inspecionar
+            <div class="flex items-center gap-1.5">
+                <button type="button" onclick="window.inspectUserLogs('${userId}')" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-md text-xs font-bold transition-all flex items-center gap-1 shadow-xs" title="Inspecionar e rastrear atividades deste usuário">
+                    <span class="material-symbols-outlined text-[15px] text-indigo-600 dark:text-indigo-400">manage_search</span> Inspecionar
                 </button>
-                <button type="button" onclick="window.UsuariosManager.iniciarEdicao('${userId}')" class="px-3.5 py-1.5 bg-white hover:bg-sky-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-400 border-2 border-slate-300 dark:border-slate-600 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs">
-                    <span class="material-symbols-outlined text-[16px] ${isPartnerPontoFocal ? 'text-cyan-600 dark:text-cyan-400' : 'text-sky-600 dark:text-sky-400'}">${isPartnerPontoFocal ? 'lock_open' : 'edit'}</span> ${isPartnerPontoFocal ? 'Gerenciar Acessos' : 'Editar'}
+                <button type="button" onclick="window.UsuariosManager.iniciarEdicao('${userId}')" class="px-2.5 py-1 bg-white hover:bg-sky-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-400 border border-slate-300 dark:border-slate-600 rounded-md text-xs font-bold transition-all flex items-center gap-1 shadow-xs">
+                    <span class="material-symbols-outlined text-[15px] ${isPartnerPontoFocal ? 'text-cyan-600 dark:text-cyan-400' : 'text-sky-600 dark:text-sky-400'}">${isPartnerPontoFocal ? 'lock_open' : 'edit'}</span> ${isPartnerPontoFocal ? 'Gerenciar Acessos' : 'Editar'}
                 </button>
             </div>
         `;
 
         return `
-            <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border-2 border-slate-300 dark:border-slate-700/90 shadow-md hover:shadow-lg mb-5 transition-all" data-user-card="${userId}" data-user-id="${userId}" data-selected-mun="${selectedMunId}">
+            <div class="builder-card rounded-lg p-2.5 sm:p-3 mb-2.5 transition-all" data-user-card="${userId}" data-user-id="${userId}" data-selected-mun="${selectedMunId}">
                 <!-- Cabeçalho do Card (Expansível ao Clicar) -->
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 select-none bg-slate-50/90 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 select-none bg-slate-50 dark:bg-slate-800/60 p-2 sm:p-2.5 rounded-lg border border-slate-200 dark:border-slate-700/60">
                     <div class="flex items-center gap-2.5 cursor-pointer min-w-0 flex-1" onclick="window.UsuariosManager.toggleUserCard('${userId}')">
                         <span id="user-chevron-${userId}" class="material-symbols-outlined text-[24px] text-slate-500 dark:text-slate-400 transition-transform duration-200 shrink-0 ${isEditing ? 'rotate-180' : ''}">expand_more</span>
                         <div class="min-w-0">
@@ -2070,6 +2079,11 @@
                                 ${userSetor ? `
                                     <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center gap-1" title="Setor: ${userSetor}">
                                         <span class="material-symbols-outlined text-[12px]">workspaces</span>${userSetor}
+                                    </span>
+                                ` : ''}
+                                ${fiscalCampo ? `
+                                    <span class="text-[9.5px] font-bold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 flex items-center gap-0.5" title="Fiscal de Campo habilitado para vistorias e telemetria">
+                                        <span class="material-symbols-outlined text-[11px]">assignment_ind</span>Fiscal de Campo
                                     </span>
                                 ` : ''}
                                 ${podeCriarCamadas ? `
@@ -2179,8 +2193,26 @@
                         </div>
                     </div>
 
-                    <!-- Delegação de Permissões Especiais (Criar Camadas, Subir Ortofotos e Estatística Cruzada) -->
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                    <!-- Delegação de Permissões Especiais (Fiscal de Campo, Criar Camadas, Subir Ortofotos e Estatística Cruzada) -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+                        <div class="p-3 rounded-xl border border-blue-200 dark:border-blue-800/80 bg-blue-50/70 dark:bg-blue-950/30 flex items-center justify-between gap-3 shadow-xs">
+                            <div class="flex items-center gap-2.5 min-w-0 pr-2">
+                                <div class="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/30">
+                                    <span class="material-symbols-outlined text-[18px]">assignment_ind</span>
+                                </div>
+                                <div class="flex flex-col min-w-0">
+                                    <span class="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                                        Fiscal de Campo
+                                    </span>
+                                    <span class="text-[10px] text-slate-500 dark:text-slate-400">Atuação e rastreio</span>
+                                </div>
+                            </div>
+                            <label class="relative inline-flex items-center ${isEditing ? 'cursor-pointer' : 'cursor-default'} shrink-0" title="Definir usuário como Fiscal de Campo para rastreamento de jornada e metas de produtividade">
+                                <input type="checkbox" class="user-fiscal-campo-check sr-only peer" ${fiscalCampo ? 'checked' : ''} ${!isEditing ? 'disabled' : ''}>
+                                <div class="w-9 h-5 bg-slate-300 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
+                            </label>
+                        </div>
+
                         <div class="p-3 rounded-xl border border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/70 dark:bg-emerald-950/30 flex items-center justify-between gap-3 shadow-xs">
                             <div class="flex items-center gap-2.5 min-w-0 pr-2">
                                 <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
@@ -2742,6 +2774,7 @@
                 const inputCargo = card.querySelector('.user-cargo-input')?.value?.trim();
                 const inputUnidade = card.querySelector('.user-unidade-input')?.value?.trim();
                 const inputSetor = card.querySelector('.user-setor-input')?.value?.trim();
+                const fiscalCampo = !!card.querySelector('.user-fiscal-campo-check')?.checked;
                 const podeCriarCamadas = !!card.querySelector('.user-pode-criar-camadas-check')?.checked;
                 const podeSubirOrtofotos = !!card.querySelector('.user-pode-subir-ortofotos-check')?.checked;
                 const podeEstatisticaCruzada = !!card.querySelector('.user-pode-estatistica-cruzada-check')?.checked;
@@ -2755,6 +2788,7 @@
                 }
 
                 const profileUpdatePayload = { 
+                    fiscal_campo: fiscalCampo,
                     ponto_focal: isPontoFocal,
                     pode_criar_camadas: podeCriarCamadas,
                     pode_subir_ortofotos: podeSubirOrtofotos,
@@ -2776,6 +2810,7 @@
                         console.warn('[UsuariosManager] Tentativa completa com profiles retornou erro:', profErr.message || profErr);
                         // Se falhou (ex: 400 Bad Request por incompatibilidade de tipo ou coluna ausente), aplica fallback seguro
                         const safePayload = {};
+                        if (profileUpdatePayload.fiscal_campo !== undefined) safePayload.fiscal_campo = profileUpdatePayload.fiscal_campo;
                         if (profileUpdatePayload.ponto_focal !== undefined) safePayload.ponto_focal = profileUpdatePayload.ponto_focal;
                         if (profileUpdatePayload.entidade !== undefined) safePayload.entidade = profileUpdatePayload.entidade;
                         if (profileUpdatePayload.cargo !== undefined) safePayload.cargo = profileUpdatePayload.cargo;
@@ -2809,6 +2844,7 @@
                 // Atualiza em memória imediatamente para que os dados e filtros reflitam sem recarregar a página
                 _allMembros.filter(m => m.user_id === userId).forEach(m => {
                     if (!m.profiles) m.profiles = {};
+                    m.profiles.fiscal_campo = fiscalCampo;
                     m.profiles.ponto_focal = isPontoFocal;
                     m.profiles.pode_criar_camadas = podeCriarCamadas;
                     m.profiles.pode_subir_ortofotos = podeSubirOrtofotos;
@@ -3031,6 +3067,42 @@
         }
     }
 
+    function abrirPerfilUsuario(userId) {
+        if (!userId) return;
+        // 1. Alterna para a aba de usuários caso não esteja nela
+        if (typeof window.switchTab === 'function') {
+            window.switchTab('usuarios');
+        } else if (typeof window.switchMunicipioTab === 'function') {
+            window.switchMunicipioTab('usuarios');
+        } else {
+            const tabBtn = document.querySelector('[data-tab="usuarios"]') || document.querySelector('button[onclick*="usuarios"]');
+            if (tabBtn) tabBtn.click();
+        }
+
+        // 2. Aguarda a aba renderizar ou estar visível para localizar o card
+        setTimeout(() => {
+            const card = document.querySelector(`[data-user-card="${userId}"]`) || document.getElementById(`user-card-${userId}`);
+            if (card) {
+                // Expande o corpo do card se estiver recolhido
+                const body = document.getElementById(`user-card-body-${userId}`);
+                if (body && body.classList.contains('hidden')) {
+                    toggleUserCard(userId);
+                }
+                // Habilita edição imediatamente para o Admin poder alterar permissões
+                if (!_editingUserIds.has(userId)) {
+                    iniciarEdicao(userId);
+                }
+                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                card.classList.add('ring-4', 'ring-sky-500', 'ring-offset-2');
+                setTimeout(() => {
+                    card.classList.remove('ring-4', 'ring-sky-500', 'ring-offset-2');
+                }, 3500);
+            } else {
+                console.warn('[UsuariosManager] Card do usuário não encontrado na lista atual:', userId);
+            }
+        }, 350);
+    }
+
     window.UsuariosManager = {
         init: initUsuariosManager,
         setMunicipio,
@@ -3051,10 +3123,12 @@
         switchMainTab,
         selectCompartilhadoFiltro,
         abrirNoMapa,
+        abrirPerfilUsuario,
         onSearch
     };
 
     window.filterUsersList = onSearch;
+    window.abrirPerfilUsuario = abrirPerfilUsuario;
 
     // Auto-carregamento imediato caso a aba de Usuários já esteja aberta ou no carregamento inicial
     try {
